@@ -23,6 +23,9 @@ pub struct PrefsRecord {
     pub number_format: String,
     pub date_format: String,
     pub time_format: String,
+    /// Settings' debug mode (spec 091): `hidden` (the switch is not shown —
+    /// and debug mode is off), `off` or `on`.
+    pub debug_mode: String,
 }
 
 /// One store write: `value: None` removes the key.
@@ -50,6 +53,7 @@ pub fn prefs_read(entries: HashMap<String, String>) -> PrefsRecord {
         number_format: read.number_format.to_owned(),
         date_format: read.date_format.to_owned(),
         time_format: read.time_format.to_owned(),
+        debug_mode: read.debug_mode.name().to_owned(),
     }
 }
 
@@ -73,6 +77,58 @@ pub fn prefs_text_scale_levels() -> Vec<TextScaleLevel> {
             factor: *factor,
         })
         .collect()
+}
+
+/// What to store under `vela.debugMode` for the revealed switch set `on`
+/// or off (spec 091).
+#[uniffi::export]
+pub fn prefs_debug_mode_value(on: bool) -> String {
+    prefs::DebugMode::switched(on)
+        .stored()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The count of taps on About's version so far (spec 091) — kept by the
+/// shell while About is open, handed back with every tap.
+#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Record)]
+pub struct VersionTaps {
+    pub count: u32,
+    pub last_ms: f64,
+}
+
+/// One tap's answer: the count to keep, and whether this tap revealed the
+/// debug-mode switch (store `prefs_debug_mode_value(false)` and say so once).
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct VersionTapAnswer {
+    pub taps: VersionTaps,
+    pub revealed: bool,
+}
+
+/// One tap on the version in About at `now_ms`, with the switch as it stands
+/// (`hidden` | `off` | `on`). The core's rule: seven taps, each within a
+/// second of the one before (spec 091).
+#[uniffi::export]
+pub fn prefs_version_tapped(
+    taps: VersionTaps,
+    now_ms: f64,
+    debug_mode: String,
+) -> VersionTapAnswer {
+    let (next, revealed) = prefs::version_tapped(
+        prefs::VersionTaps {
+            count: taps.count,
+            last_ms: taps.last_ms,
+        },
+        now_ms,
+        prefs::DebugMode::from_name(&debug_mode),
+    );
+    VersionTapAnswer {
+        taps: VersionTaps {
+            count: next.count,
+            last_ms: next.last_ms,
+        },
+        revealed,
+    }
 }
 
 /// The `vela.localePrefs` record for three formats.

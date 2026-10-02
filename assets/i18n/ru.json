@@ -1031,7 +1031,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
-  "sectionLinks": "Ссылки"
+  "sectionLinks": "Ссылки",
+  "debugMode": "Режим отладки",
+  "debugModeBody": "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+  "debugModeRevealed": "Режим отладки теперь доступен"
  },
  "clearSigning": {
   "title": "Тест Clear Signing",

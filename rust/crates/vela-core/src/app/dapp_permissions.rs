@@ -37,9 +37,11 @@
 //!   [`Event::PopupAccountSwitch`] when the wallet changes account, and reads
 //!   [`settle_on_close`] for the code a still-pending request is settled with;
 //! - **the origin-security helpers** — [`is_insecure_public_origin`] with its
-//!   fully-anchored IP exemptions, [`is_secure_context`] (who is offered the
-//!   wallet at all, spec 088) and [`origin_of`]. All are imported by
-//!   `dapp_browser` / `dapp_rpc`; none is re-implemented there.
+//!   fully-anchored IP exemptions, [`is_secure_context`] (spec 088),
+//!   [`offers_wallet`] (who is offered the wallet at all, debug mode included,
+//!   spec 091) with [`private_host_js`], its host rule written as JavaScript,
+//!   and [`origin_of`]. All are imported by `dapp_browser` / `dapp_rpc`; none
+//!   is re-implemented there.
 //!
 //! Ported line by line from:
 //!
@@ -852,17 +854,15 @@ pub fn is_insecure_public_origin(origin: &str) -> bool {
     }
 }
 
-/// Whether a page at `origin` is offered the wallet at all (spec 088 FR-004):
-/// `https`, or `http` on this device's own loopback — the web platform's
-/// "secure context", the same pair the Trusted Signer page is held to.
+/// Whether a page at `origin` is a secure context (spec 088 FR-004): `https`,
+/// or `http` on this device's own loopback — the web platform's "secure
+/// context", the same pair the Trusted Signer page is held to.
 ///
 /// Narrower than [`is_insecure_public_origin`] on purpose: a private-LAN
-/// `http` page is reachable by anyone on the same network, so it may load,
-/// but it gets no provider. A dApp under development is served on loopback
-/// (`adb reverse`, the simulator) or over https. The in-app browsers ask this
-/// once, in [`super::dapp_browser`], before any page message is read; the
-/// injected script checks `window.isSecureContext`, the platform's own
-/// spelling of the same rule.
+/// `http` page is reachable by anyone on the same network, so outside debug
+/// mode it may load but gets no provider ([`offers_wallet`]). A dApp under
+/// development is served on loopback (`adb reverse`, the simulator), over
+/// https, or — with debug mode on — over http on the developer's own network.
 ///
 /// Loopback is EXACT: `localhost`, a `*.localhost` name (RFC 6761 reserves
 /// them for loopback), a full `127.x.y.z` dotted quad, or `[::1]` — never
@@ -875,25 +875,60 @@ pub fn is_secure_context(origin: &str) -> bool {
     }
 }
 
+/// Whether a page at `origin` is offered the wallet (spec 091) — the ONE
+/// answer the in-app browsers' page gate ([`super::dapp_browser`]) and the
+/// script they inject ([`super::dapp_rpc::provider_script`]) both follow.
+///
+/// - Always: a secure context ([`is_secure_context`]).
+/// - With debug mode on (Settings → About, revealed by tapping the version
+///   [`crate::prefs::VERSION_TAPS`] times): also plain `http` on this
+///   device's own network — RFC 1918 and link-local IPv4, IPv6 unique-local
+///   and link-local, `.local` — matched exactly by
+///   [`is_loopback_or_private_host`], never by a name that only starts with
+///   those digits (`10.0.0.1.evil.com`).
+/// - Never: public `http`, debug mode or not; any other scheme; an origin
+///   that does not parse.
+pub fn offers_wallet(origin: &str, debug_mode: bool) -> bool {
+    is_secure_context(origin)
+        || (debug_mode
+            && matches!(
+                parse_origin(origin),
+                Some((scheme, host, _)) if scheme == "http" && is_loopback_or_private_host(&host)
+            ))
+}
+
 /// `localhost`, `*.localhost`, `127.0.0.0/8` as a full dotted quad, `[::1]`.
 fn is_loopback_host(host: &str) -> bool {
     let h = host.to_ascii_lowercase();
-    if h == "localhost" || h.ends_with(".localhost") || h == "[::1]" {
-        return true;
-    }
-    let parts: Vec<&str> = h.split('.').collect();
-    parts.len() == 4
-        && parts[0] == "127"
-        && parts.iter().all(|part| {
-            !part.is_empty()
-                && part.len() <= 3
-                && part.bytes().all(|b| b.is_ascii_digit())
-                && part.parse::<u16>().is_ok_and(|n| n <= 255)
-        })
+    h == "localhost"
+        || h.ends_with(".localhost")
+        || h == "[::1]"
+        || dotted_quad(&h).is_some_and(|[a, ..]| a == 127)
 }
 
+// The private-network rule as data (spec 091): [`is_loopback_or_private_host`]
+// reads these tables, and [`private_host_js`] writes them into the injected
+// script, so the page gate and the script decide from the same numbers.
+
+/// Hosts named exactly (lower-case, brackets stripped).
+const PRIVATE_NAMES: [&str; 2] = ["localhost", "::1"];
+/// Name suffixes that resolve only on the local link (mDNS).
+const PRIVATE_SUFFIXES: [&str; 1] = [".local"];
+/// IPv6: the first group, written as exactly four hex digits and a colon, in
+/// one of these ranges — `fc00::/7` unique-local and `fe80:` link-local.
+const PRIVATE_V6_FIRST_GROUP: [(u16, u16); 2] = [(0xfc00, 0xfdff), (0xfe80, 0xfe80)];
+/// IPv4, a complete dotted quad: `(first octet, second octet from, to)`.
+const PRIVATE_V4: [(u16, u16, u16); 5] = [
+    (127, 0, 255),   // loopback
+    (10, 0, 255),    // private
+    (192, 168, 168), // private
+    (172, 16, 31),   // private
+    (169, 254, 254), // link-local
+];
+
 /// A loopback / private-LAN / link-local host — the ONLY http origins exempt
-/// from the insecure-signing block.
+/// from the insecure-signing block, and the only ones debug mode offers the
+/// wallet to.
 ///
 /// Matches EXACT IPs only (a fully-anchored dotted quad or IPv6), never a
 /// hostname that merely starts with those digits: `10.0.0.1.evil.com` is a
@@ -906,50 +941,86 @@ fn is_loopback_or_private_host(host: &str) -> bool {
     let h = lower.strip_prefix('[').unwrap_or(&lower);
     let h = h.strip_suffix(']').unwrap_or(h);
 
-    if h == "localhost" || h.ends_with(".local") {
+    if PRIVATE_NAMES.contains(&h) || PRIVATE_SUFFIXES.iter().any(|suffix| h.ends_with(suffix)) {
         return true;
     }
-    // IPv6
-    if h == "::1" {
-        return true;
-    }
-    // fc00::/7 unique-local — `^f[cd][0-9a-f]{2}:` (h is already lowercase).
-    let bytes = h.as_bytes();
-    if bytes.len() >= 5
-        && bytes[0] == b'f'
-        && (bytes[1] == b'c' || bytes[1] == b'd')
-        && bytes[2].is_ascii_hexdigit()
-        && bytes[3].is_ascii_hexdigit()
-        && bytes[4] == b':'
-    {
-        return true;
-    }
-    if h.starts_with("fe80:") {
-        return true; // link-local
+    if let Some(group) = first_v6_group(h) {
+        return PRIVATE_V6_FIRST_GROUP
+            .iter()
+            .any(|&(from, to)| (from..=to).contains(&group));
     }
     // IPv4 — must be a COMPLETE dotted quad, each octet 0–255. Anything with
     // more (or fewer) labels is a hostname, not an IP.
-    let parts: Vec<&str> = h.split('.').collect();
-    if parts.len() != 4 {
-        return false;
-    }
-    let mut octets = [0u16; 4];
-    for (slot, part) in octets.iter_mut().zip(&parts) {
-        if part.is_empty() || part.len() > 3 || !part.bytes().all(|b| b.is_ascii_digit()) {
-            return false;
-        }
-        *slot = part.parse::<u16>().unwrap_or(999);
-    }
-    if octets.iter().any(|&n| n > 255) {
-        return false;
-    }
-    let (a, b) = (octets[0], octets[1]);
-    a == 127 // loopback
-        || a == 10 // private
-        || (a == 192 && b == 168) // private
-        || (a == 172 && (16..=31).contains(&b)) // private
-        || (a == 169 && b == 254) // link-local
+    dotted_quad(h).is_some_and(|[a, b, ..]| {
+        PRIVATE_V4
+            .iter()
+            .any(|&(first, from, to)| a == first && (from..=to).contains(&b))
+    })
 }
+
+/// `xxxx:…` — the first group of an IPv6 address when it is written as
+/// exactly four hex digits.
+fn first_v6_group(h: &str) -> Option<u16> {
+    let (group, _) = h.split_once(':')?;
+    if group.len() != 4 || !group.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    u16::from_str_radix(group, 16).ok()
+}
+
+/// A complete dotted quad: four decimal labels of one to three digits, each
+/// 0–255.
+fn dotted_quad(h: &str) -> Option<[u16; 4]> {
+    let mut octets = [0u16; 4];
+    let mut parts = h.split('.');
+    for slot in &mut octets {
+        let part = parts.next()?;
+        if part.is_empty() || part.len() > 3 || !part.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        *slot = part.parse::<u16>().ok().filter(|n| *n <= 255)?;
+    }
+    parts.next().is_none().then_some(octets)
+}
+
+/// [`is_loopback_or_private_host`] as a JavaScript function expression of one
+/// argument, a `location.hostname` (spec 091). It is written out of the same
+/// tables, so the script [`super::dapp_rpc::provider_script`] injects in
+/// debug mode and the page gate cannot disagree about a host; the web suite
+/// runs it against this rule on a table of hosts (`core-table.test.ts`).
+pub fn private_host_js() -> String {
+    PRIVATE_HOST_JS
+        .replace("__NAMES__", &serde_json::json!(PRIVATE_NAMES).to_string())
+        .replace(
+            "__SUFFIXES__",
+            &serde_json::json!(PRIVATE_SUFFIXES).to_string(),
+        )
+        .replace(
+            "__V6__",
+            &serde_json::json!(PRIVATE_V6_FIRST_GROUP).to_string(),
+        )
+        .replace("__V4__", &serde_json::json!(PRIVATE_V4).to_string())
+}
+
+/// What [`private_host_js`] writes, step for step the Rust above; the
+/// `__TABLE__` markers are the tables.
+const PRIVATE_HOST_JS: &str = r#"function (host) {
+		let h = String(host).toLowerCase();
+		if (h.startsWith('[')) h = h.slice(1);
+		if (h.endsWith(']')) h = h.slice(0, -1);
+		if (__NAMES__.includes(h) || __SUFFIXES__.some((s) => h.endsWith(s))) return true;
+		const v6 = /^([0-9a-f]{4}):/.exec(h);
+		if (v6) {
+			const group = parseInt(v6[1], 16);
+			return __V6__.some(([from, to]) => group >= from && group <= to);
+		}
+		const parts = h.split('.');
+		if (parts.length !== 4) return false;
+		if (!parts.every((p) => /^[0-9]{1,3}$/.test(p) && Number(p) <= 255)) return false;
+		const a = Number(parts[0]);
+		const b = Number(parts[1]);
+		return __V4__.some(([first, from, to]) => a === first && b >= from && b <= to);
+	}"#;
 
 // ---------------------------------------------------------------------------
 // Pure policy — URL → origin (`browser.tsx:66-73` `originOf`)

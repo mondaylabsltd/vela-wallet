@@ -1025,7 +1025,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
-  "sectionLinks": "Liên kết"
+  "sectionLinks": "Liên kết",
+  "debugMode": "Chế độ gỡ lỗi",
+  "debugModeBody": "Cho phép các trang http trong mạng cục bộ của bạn dùng ví. Chỉ dành cho phát triển.",
+  "debugModeRevealed": "Chế độ gỡ lỗi đã sẵn sàng"
  },
  "clearSigning": {
   "title": "Kiểm thử Clear Signing",

@@ -1025,7 +1025,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
-  "sectionLinks": "링크"
+  "sectionLinks": "링크",
+  "debugMode": "디버그 모드",
+  "debugModeBody": "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",
+  "debugModeRevealed": "이제 디버그 모드를 쓸 수 있습니다"
  },
  "clearSigning": {
   "title": "Clear Signing 테스트",

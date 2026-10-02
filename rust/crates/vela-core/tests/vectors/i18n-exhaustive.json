@@ -19,6 +19,9 @@
   "it"
  ],
  "keys": [
+  "about.debugMode",
+  "about.debugModeBody",
+  "about.debugModeRevealed",
   "about.footer",
   "about.linkGitHub",
   "about.linkSafeWallet",
@@ -1719,6 +1722,9 @@
  ],
  "values": {
   "en": [
+   "Debug mode",
+   "Lets http pages on your local network use the wallet. For development only.",
+   "Debug mode is now available",
    "Built with care. Your keys, your coins.",
    "GitHub",
    "Safe Wallet",
@@ -3418,6 +3424,9 @@
    "View on Explorer"
   ],
   "zh": [
+   "调试模式",
+   "让局域网内的 http 网页使用钱包。仅供开发使用。",
+   "调试模式已可用",
    "用心构建。您的密钥，您的资产。",
    "GitHub",
    "Safe Wallet",
@@ -5117,6 +5126,9 @@
    "在浏览器中查看"
   ],
   "zh-TW": [
+   "除錯模式",
+   "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",
+   "現在可以使用除錯模式了",
    "用心打造。您的金鑰，您的幣。",
    "GitHub",
    "Safe Wallet",
@@ -6816,6 +6828,9 @@
    "在區塊鏈瀏覽器查看"
   ],
   "zh-HK": [
+   "除錯模式",
+   "畀本地網絡上嘅 http 網頁用個錢包。只係開發用。",
+   "而家可以用除錯模式喇",
    "用心打造。你的密鑰，你的資產。",
    "GitHub",
    "Safe Wallet",
@@ -8515,6 +8530,9 @@
    "在區塊鏈瀏覽器中查看"
   ],
   "ja": [
+   "デバッグモード",
+   "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",
+   "デバッグモードが使えるようになりました",
    "心を込めて作りました。鍵もコインも、あなたのもの。",
    "GitHub",
    "Safe Wallet",
@@ -10214,6 +10232,9 @@
    "エクスプローラーで表示"
   ],
   "ko": [
+   "디버그 모드",
+   "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",
+   "이제 디버그 모드를 쓸 수 있습니다",
    "정성껏 만들었습니다. 내 키, 내 코인.",
    "GitHub",
    "Safe Wallet",
@@ -11913,6 +11934,9 @@
    "탐색기에서 보기"
   ],
   "vi": [
+   "Chế độ gỡ lỗi",
+   "Cho phép các trang http trong mạng cục bộ của bạn dùng ví. Chỉ dành cho phát triển.",
+   "Chế độ gỡ lỗi đã sẵn sàng",
    "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
    "GitHub",
    "Safe Wallet",
@@ -13612,6 +13636,9 @@
    "Xem trên Explorer"
   ],
   "id": [
+   "Mode debug",
+   "Izinkan halaman http di jaringan lokal Anda memakai dompet. Hanya untuk pengembangan.",
+   "Mode debug kini tersedia",
    "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
    "GitHub",
    "Safe Wallet",
@@ -15311,6 +15338,9 @@
    "Lihat di Explorer"
   ],
   "tr": [
+   "Hata ayıklama modu",
+   "Yerel ağınızdaki http sayfalarının cüzdanı kullanmasına izin verir. Yalnızca geliştirme için.",
+   "Hata ayıklama modu artık kullanılabilir",
    "Özenle yapıldı. Anahtarlarınız, paranız.",
    "GitHub",
    "Safe Wallet",
@@ -17010,6 +17040,9 @@
    "Blok Gezgininde Görüntüle"
   ],
   "es-MX": [
+   "Modo de depuración",
+   "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
+   "El modo de depuración ya está disponible",
    "Hecho con cariño. Tus llaves, tus monedas.",
    "GitHub",
    "Safe Wallet",
@@ -18709,6 +18742,9 @@
    "Ver en el explorador"
   ],
   "pt-BR": [
+   "Modo de depuração",
+   "Permite que páginas http da sua rede local usem a carteira. Só para desenvolvimento.",
+   "O modo de depuração já está disponível",
    "Feito com cuidado. Suas chaves, suas moedas.",
    "GitHub",
    "Safe Wallet",
@@ -20408,6 +20444,9 @@
    "Ver no Explorer"
   ],
   "fr": [
+   "Mode débogage",
+   "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",
+   "Le mode débogage est maintenant disponible",
    "Conçu avec soin. Vos clés, vos cryptos.",
    "GitHub",
    "Safe Wallet",
@@ -22107,6 +22146,9 @@
    "Voir sur l'explorateur"
   ],
   "de": [
+   "Debug-Modus",
+   "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+   "Der Debug-Modus ist jetzt verfügbar",
    "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
    "GitHub",
    "Safe Wallet",
@@ -23806,6 +23848,9 @@
    "Im Explorer ansehen"
   ],
   "ru": [
+   "Режим отладки",
+   "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+   "Режим отладки теперь доступен",
    "Сделано с заботой. Ваши ключи — ваши монеты.",
    "GitHub",
    "Safe Wallet",
@@ -25505,6 +25550,9 @@
    "Открыть в обозревателе"
   ],
   "it": [
+   "Modalità debug",
+   "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",
+   "La modalità debug è ora disponibile",
    "Realizzato con cura. Le tue chiavi, le tue cripto.",
    "GitHub",
    "Safe Wallet",
