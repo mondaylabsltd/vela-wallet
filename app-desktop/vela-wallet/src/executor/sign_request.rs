@@ -2734,7 +2734,7 @@ mod tests {
                 .collect();
             assert_eq!(facts[0], ("应用", "app.uniswap.org"));
             assert_eq!(facts[1].0, "网络");
-            assert_eq!(facts[2], ("交互合约", "0xd614…9c40"));
+            assert_eq!(facts[2], ("合约", "0xd614…9c40"));
             assert_eq!(
                 facts[3],
                 ("余额变化", "≈ \u{2212}0.1 USDC\n≈ +0.000037 ETH")

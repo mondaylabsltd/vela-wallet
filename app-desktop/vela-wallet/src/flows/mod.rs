@@ -258,10 +258,15 @@ pub struct FlowStrings {
     /// "App" — the site a dApp's transaction came from (083 H2), the word the
     /// web's connection detail uses.
     pub detail_app: SharedString,
-    /// A dApp record's detail facts (spec 093), each labelled by the key the
-    /// core's `FeedFact` names: the contract it called, the spender a grant
-    /// lets spend, the grant's cap and when it ends.
-    pub detail_interacting: SharedString,
+    /// "Contract" — what a dApp's call went to (083 F3): a router is not a
+    /// recipient. The token detail's label for a contract address, in every
+    /// language a noun: the signing sheet's "Interacting with" is progressive
+    /// in several ("Interactuando con", "Đang tương tác với"), which on a
+    /// finished record says the call is still under way (083 F3 review).
+    pub detail_contract: SharedString,
+    /// A dApp record's other detail facts (spec 093), each labelled by the
+    /// key the core's `FeedFact` names: the spender a grant lets spend, the
+    /// grant's cap and when it ends.
     pub detail_spender: SharedString,
     pub detail_spending_cap: SharedString,
     pub detail_expires: SharedString,
@@ -642,7 +647,7 @@ impl FlowStrings {
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),
-            detail_interacting: s("componentsUi.signing.interactingLabel"),
+            detail_contract: s("tokenDetail.labelContract"),
             detail_spender: s("componentsUi.signing.labelSpender"),
             detail_spending_cap: s("componentsUi.signingApprove.spendingCap"),
             detail_expires: s("componentsUi.signingApprove.expiresLabel"),

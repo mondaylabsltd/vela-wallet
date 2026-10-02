@@ -501,8 +501,13 @@ fn dapp_fact(
     match fact {
         FeedFact::Site { site } => plain(&s.detail_app, SharedString::from(site.clone())),
         FeedFact::Network { chain_id } => network_fact(*chain_id, &item.symbol, s),
+        // Who got the money (spec 082 RJ16): a plain send's recipient, or the
+        // one a token transfer names — never the token contract it was called
+        // on. The core names them as the row does.
+        FeedFact::Recipient { address, name } => party_fact(&s.detail_to, address, name.as_deref()),
+        // A call that paid nobody: the contract it went to (083 F3).
         FeedFact::Contract { address, name } => {
-            party_fact(&s.detail_interacting, address, name.as_deref())
+            party_fact(&s.detail_contract, address, name.as_deref())
         }
         FeedFact::Spender { address, name } => {
             party_fact(&s.detail_spender, address, name.as_deref())
@@ -580,8 +585,9 @@ fn content_label(content: FeedDappContent, s: &FlowStrings) -> SharedString {
     }
 }
 
-/// A contract or a spender: its built-in name when the wallet knows one,
-/// else its short address in the mono face — copyable either way, beside the
+/// A recipient, a contract or a spender: its name when the core gives one
+/// (the row's for a recipient, the built-in one for a contract), else its
+/// short address in the mono face — copyable either way, beside the
 /// identicon seeded by the address.
 fn party_fact(label: &SharedString, address: &str, name: Option<&str>) -> FactRow {
     FactRow {
@@ -5012,7 +5018,7 @@ mod tests {
             tx_hash: String::new(),
             from: "0xme".to_owned(),
             to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
-            to_name: None,
+            to_name: Some("Ann".to_owned()),
             value: "0x38d7ea4c68000".to_owned(),
             symbol: "xDAI".to_owned(),
             decimals: 18,
@@ -5054,17 +5060,29 @@ mod tests {
         assert_eq!(detail.note, None, "a transaction wears its chip");
         assert_eq!(detail.facts[0].label, s.detail_app);
         assert_eq!(detail.facts[0].value.as_ref(), "127.0.0.1:8137");
+        // A plain send names who got it, by the name the row knows them by,
+        // with the whole address on the copy button (spec 082 RJ16).
+        let paid = &detail.facts[2];
+        assert_eq!(
+            (&paid.label, paid.value.as_ref(), paid.mono),
+            (&s.detail_to, "Ann", false)
+        );
+        assert_eq!(
+            paid.copy.as_deref(),
+            Some("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")
+        );
     }
 
     /// Spec 082 RJ16 (G52, DX-W3): a relay-refused dApp record for a USDC
-    /// `transfer(0x7687…D141, 10^30)` offered the explorer for an op that
-    /// never reached the chain (its stored "tx hash" was the op hash). Stored
-    /// exactly as `sign_request::persist_record` writes it and read the
-    /// executor's way: there is nothing to open and no hash to show, and the
-    /// facts are the core's (spec 093) — the site, the network, the contract
-    /// the call went to, the date — never the op hash.
+    /// `transfer(0x7687…D141, 10^30)` named the token contract 0xDDAf…7A83
+    /// as 接收方 and offered the explorer for an op that never reached the
+    /// chain (its stored "tx hash" was the op hash). Stored exactly as
+    /// `sign_request::persist_record` writes it and read the executor's way:
+    /// the recipient is the transfer's, and there is nothing to open. A call
+    /// that is not a transfer names its contract, as the contract. Both are
+    /// the core's facts (spec 093), in its order, and neither shows a hash.
     #[test]
-    fn a_dapp_record_offers_no_explorer_without_a_tx() {
+    fn a_dapp_record_names_who_got_it_and_offers_no_explorer_without_a_tx() {
         use vela_core::app::activity_feed::{
             ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult,
         };
@@ -5159,30 +5177,40 @@ mod tests {
             refused.explorer_url.is_none(),
             "an op hash is not a transaction"
         );
-        for id in ["dapp-transfer", "dapp-swap"] {
+        for (id, party) in [
+            ("dapp-transfer", &s.detail_to),
+            ("dapp-swap", &s.detail_contract),
+        ] {
             let drawn = detail(id);
             let labels: Vec<&SharedString> = drawn.facts.iter().map(|fact| &fact.label).collect();
             assert_eq!(
                 labels,
-                vec![
-                    &s.detail_app,
-                    &s.detail_chain,
-                    &s.detail_interacting,
-                    &s.detail_date
-                ],
-                "{id}"
+                vec![&s.detail_app, &s.detail_chain, party, &s.detail_date],
+                "{id}: one party — who got the money, else the contract"
             );
             assert_eq!(drawn.facts[0].value.as_ref(), "127.0.0.1:8141", "{id}");
-            assert_eq!(
-                drawn.facts[2].copy.as_deref(),
-                Some(USDC.to_lowercase().as_str()),
-                "{id}: the address it went to"
-            );
             assert!(
                 !drawn.facts.iter().any(|fact| fact.label == s.detail_hash),
                 "{id}: no hash row for a transaction that never was"
             );
         }
+        let refused = detail("dapp-transfer");
+        assert_eq!(
+            refused.facts[2].value.as_ref(),
+            "0x7687…D141",
+            "the recipient, not the contract"
+        );
+        assert!(
+            refused.facts[2].copy.as_deref().is_some_and(
+                |copy| copy.eq_ignore_ascii_case("0x76875e38fc6bc2dedcaed807ce00782db5c0d141")
+            ),
+            "the whole address on the copy button"
+        );
+        assert_eq!(
+            detail("dapp-swap").facts[2].copy.as_deref(),
+            Some(USDC.to_lowercase().as_str()),
+            "the contract, as the contract"
+        );
     }
 
     #[test]
@@ -5418,7 +5446,7 @@ mod tests {
             .collect();
         assert_eq!(facts[0], ("应用", "app.uniswap.org"));
         assert_eq!(facts[1].0, "网络");
-        assert_eq!(facts[2], ("交互合约", "Uniswap Universal Router"));
+        assert_eq!(facts[2], ("合约", "Uniswap Universal Router"));
         assert_eq!(facts[3], ("余额变化", "≈ \u{2212}100 USDC\n≈ +0.03 ETH"));
         assert_eq!(facts[4].0, "日期");
         assert_eq!(facts.len(), 5);
@@ -5585,11 +5613,16 @@ mod tests {
             ("类型".to_owned(), "PermitSingle".to_owned(), false)
         );
         assert_eq!(kept.len(), 3, "a signature has no hash of either kind");
-        let none = lines_with(None);
-        assert_eq!(
-            none[1],
-            ("签名数据".to_owned(), s.content_missing.to_string(), true)
-        );
+        // Nothing kept — no record, or the core's `""` for a request whose
+        // shape alone was past the cut — says so.
+        for kept in [None, Some(""), Some("  ")] {
+            let none = lines_with(kept);
+            assert_eq!(
+                none[1],
+                ("签名数据".to_owned(), s.content_missing.to_string(), true),
+                "{kept:?}"
+            );
+        }
 
         let sign_in = open("dapp-3-siwe");
         assert_eq!(sign_in.title.as_ref(), "在 app.uniswap.org 登录");
