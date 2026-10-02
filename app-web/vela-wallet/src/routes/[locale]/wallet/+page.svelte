@@ -44,7 +44,6 @@
 	import type { ContactsView } from '$lib/core/generated/ContactsView';
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
 	import { preferences } from '$lib/services/preferences.svelte';
-	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
@@ -830,6 +829,9 @@
 					// 最大 was drawn on the token card and wired to nothing (spec 028
 					// Phase 9, T489); the core's rule fills it fee-aware.
 					max: () => sendSession?.dispatch({ type: 'tap_max' }),
+					// The token card goes back to the picker with the payee kept
+					// (issue 326) — only where the core offers it.
+					changeToken: () => sendSession?.dispatch({ type: 'change_token' }),
 					// ⇄ was the same kind of dead drawing (issue 197): the icon under
 					// the figure had no handler at all, so a person asking to type
 					// the amount in money got nothing back. The core owns the swap —
@@ -1260,29 +1262,6 @@
 	});
 
 	/**
-	 * Publish what an already-connected site may be told, whenever this wallet's
-	 * accounts change (spec 027 T332).
-	 *
-	 * A page that is already connected asks `eth_accounts` and `eth_chainId` on
-	 * every load, and the extension's service worker cannot run the core to
-	 * answer them. So `ext_cache` decides what the snapshot contains and this
-	 * stores it; the worker only reads. Off the extension there is no channel
-	 * and no storage to write to, and `publishExtSnapshot` is a no-op.
-	 */
-	$effect(() => {
-		const view = session.view;
-		if (view.loading || !inExtension()) return;
-		void publishExtSnapshot({
-			isLoading: false,
-			hasWallet: view.has_wallet,
-			accounts: view.accounts.map((row) => row.account),
-			active: view.accounts[view.active_index]?.account ?? null,
-			theme: 'dark',
-			locale: data.locale ?? 'en'
-		});
-	});
-
-	/**
 	 * The network catalog the worker answers reads and chain switches from —
 	 * built-in chains plus the custom networks a person added. Published once
 	 * the wallet is up, and again whenever the network list changes.
@@ -1293,9 +1272,11 @@
 		return subscribeNetworks(() => void publishExtChains());
 	});
 
-	// A connected site follows the active account, and old grants get the
-	// core's spelling — from the ROOT LAYOUT since 082 round 2 (G58), so a
-	// switch made on any screen reaches the site (`$lib/dapp/follow`).
+	// What an already-connected site may be told (the worker's snapshot), a
+	// connected site following the active account, and old grants getting the
+	// core's spelling — all from the ROOT LAYOUT (082 G58, 086 issue 315), so a
+	// switch made on any screen reaches the worker and the site
+	// (`$lib/dapp/follow`).
 
 	/**
 	 * Spec 082 G62: the network filter reaches the feed's CORE, which narrows

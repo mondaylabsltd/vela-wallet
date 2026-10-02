@@ -138,7 +138,10 @@
 		if (taking || disposed || owing || landing) return;
 		taking = true;
 		try {
-			await session.boot();
+			// Settled, not merely booted: mid-restore the session names nobody,
+			// and "which account may this site see?" is asked of the account
+			// the person is signed in to (spec 086, issue 315).
+			await session.settled();
 			let incoming: ExtensionRequest | null;
 			if (mode === 'panel') {
 				incoming = panelSurface.current;
