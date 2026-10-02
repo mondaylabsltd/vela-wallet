@@ -43,6 +43,15 @@ None of the four shells already did the right thing: every one opened only the f
   - Android `aChainThatNeverAnswersIsFailedAtTheDeadlineAndTheRestLand`, with `FakeRpcTransport(stall = …)`.
 - Simulator check: chaos `mode=stall` on every BNB Chain and Polygon host. The round settled 21 s after launch with `chains_failed chains=137,56`, and Home shows 「2 个网络暂时连不上」 (`agent092/shots/ios-stall-after-fix.png`).
 
+**CI #386: the iOS deadline needed the main actor.** The target is main-actor by default, so `TokenReads.bounded`'s timer task, and its one-shot flag, lived on the main actor. On a loaded runner the main actor is starved, so the 150 ms timer never ran and both tests hit their 60 s limit.
+- **Fix:** `bounded` is `nonisolated`. The read and the timer are two `Task.detached`, and the one answer is guarded by an `OSAllocatedUnfairLock`. No task group, which would wait for a read that never ends.
+- When the deadline wins, the read is cancelled; when the read wins, the timer is cancelled. `ChainResult` is a nonisolated `Sendable` value.
+- Tests: `ChainDeadlineTests` is no longer `@MainActor`.
+  - The never-answering read is now an hour-long cancellable sleep, and the test checks it was cancelled.
+  - New `theDeadlineFiresWhileTheMainActorIsHeld` holds the main actor for 3 s and checks the deadline answered in under 2.5 s.
+- Under the suite's load recipe (`TEST_RUNNER_VELA_TEST_LOAD_SECONDS=60` with `MainActorLoadTests`, plus `yes` × 12 cores), all five pass in 0.16 s (the held-main one in 3 s).
+- Android has no such dependency: the balance executor runs on the wallet scope's IO dispatcher, and `withTimeoutOrNull` times out through the coroutine scheduler, not the main looper.
+
 **Android: ✕ on a row's fix closed everything.**
 - Before: the wallet route sent the sheet's ✕ AND Material's own dismissal (swipe, scrim, Back) through one callback, "back to the list". Material calls that only after it has already hidden the sheet. Its path therefore left the list open but invisible, which looks like "the whole sheet closed, Home shown". Its re-reads kept running, and the next tap on the Home line changed nothing, because the state was already "list".
 - Now the two ways out are separate, as on the iPhone:
@@ -81,7 +90,7 @@ None of the four shells already did the right thing: every one opened only the f
 | web e2e `home-truth.e2e.ts` (chromium, own preview on :4192) | 5 / 5 |
 | desktop `cargo test` | 881 passed, 49 ignored (one pool test re-aimed: a 5xx is a node not reached); clippy has no warning on changed lines; fmt clean |
 | Android `testDebugUnitTest` | 921 passed, 0 failed; the instrumented `WalletRescueSheetTest` compiles (it runs on a device) |
-| iOS `VelaWalletTests` (own cloned iPhone 16 simulator) | 1,106 tests in 142 suites passed |
+| iOS `VelaWalletTests` (own cloned iPhone 16 simulator) | 1,131 tests in 146 suites passed (after the merge with main and the CI #386 fix) |
 | check-native-reachability / check-event-payloads / check-dead-controls | pass / 0 mismatches / 0 dead controls |
 
 ## Screenshots
