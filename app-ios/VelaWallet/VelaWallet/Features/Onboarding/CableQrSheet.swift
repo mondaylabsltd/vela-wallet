@@ -16,19 +16,21 @@ struct CableQrSheet: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let payload: String
+    /// Creating a key on the phone, or finding one there (087 F02): a sign-in
+    /// creates nothing, so its line is the scan itself.
+    let chooser: KeyChooser
 
     var body: some View {
+        let copy = methodCopy(.hybrid, chooser: chooser, loc: loc)
         VStack(spacing: Tokens.Space.s16) {
-            // Reusing the hybrid-method copy ("Phone or tablet" / "Scan a code
-            // …on a nearby device") rather than minting new corpus keys across
-            // 15 locales for a first cut; dedicated copy is an i18n-gate
-            // follow-up.
-            Text(loc.t(I18nKeys.Create.methodHybridTitle))
+            // The hybrid row's own words, as the chooser that opened this
+            // card drew them ("Phone or tablet" over the core's line).
+            Text(copy.title)
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
                 .multilineTextAlignment(.center)
 
-            Text(loc.t(I18nKeys.Create.methodHybridBody))
+            Text(copy.body)
                 .typeRole(Typography.body)
                 .foregroundStyle(theme.fgMuted)
                 .multilineTextAlignment(.center)

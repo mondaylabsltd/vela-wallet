@@ -115,9 +115,10 @@ describe('Community and the report, on the phone', () => {
 
 	it('ends Community → About → Send feedback, with the report the last row', async () => {
 		const view = await drawn('st1');
-		const rows = [...view.root.querySelectorAll<HTMLElement>('.scroll .row')].map((r) =>
-			r.querySelector('.title')?.textContent?.trim()
-		);
+		// Sign Out is a row too (issue #322), on its own after the list.
+		const rows = [...view.root.querySelectorAll<HTMLElement>('.scroll .row')]
+			.filter((r) => !r.closest('.sign-out'))
+			.map((r) => r.querySelector('.title')?.textContent?.trim());
 		expect(rows.slice(-5)).toEqual([
 			'X (Twitter)',
 			'Telegram',
@@ -219,5 +220,34 @@ describe('the settings row', () => {
 			// Drawn at the row glyph's 20, then inset to its middle 20/24.
 			expect(Math.round(mark.getBoundingClientRect().width)).toBe(17);
 		}
+	});
+});
+
+// Issue #322: Sign Out read as a caption — centred grey text under About, with
+// a bordered card below it that did look like a control.
+describe('Sign Out', () => {
+	it('is a settings row like its neighbours: glyph, title, chevron, the row height', async () => {
+		await import('../../app.css');
+		const signedOut: string[] = [];
+		const screen = render(SettingsHome, {
+			props: {
+				model: buildMobileState('st1', m, IDENTICON),
+				onsignout: () => signedOut.push('sign-out')
+			}
+		});
+		await tick();
+		const rows = [...screen.container.querySelectorAll<HTMLElement>('.scroll .row')];
+		const title = (row: HTMLElement) => row.querySelector('.title')?.textContent?.trim();
+		const signOut = rows.find((row) => title(row) === String(m.signOut.button));
+		const about = rows.find((row) => title(row) === String(m.about.title));
+		expect(signOut, 'Sign Out is drawn as a settings row').toBeTruthy();
+		expect(signOut?.tagName).toBe('BUTTON');
+		expect(signOut?.querySelector('.glyph svg'), 'it carries a glyph').toBeTruthy();
+		expect(signOut?.querySelector('.trailing svg'), 'it carries the chevron').toBeTruthy();
+		expect(signOut?.getBoundingClientRect().height).toBe(about?.getBoundingClientRect().height);
+
+		signOut?.click();
+		await tick();
+		expect(signedOut).toEqual(['sign-out']);
 	});
 });

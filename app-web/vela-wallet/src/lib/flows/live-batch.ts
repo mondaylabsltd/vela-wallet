@@ -194,9 +194,15 @@ export function liveBatchImport(
 			// `file_error` outlives a paste in the core (only the next pick
 			// clears it), and an error about a file above a list that parsed
 			// is an error about nothing.
+			// 087: a legacy code page says how to save the file, not "use a
+			// CSV" — which it is.
 			error:
 				batch.file_error && seen === 0
-					? `${m['send.batchImportFailedTitle']}. ${m['send.batchImportFailedBody']}`
+					? `${m['send.batchImportFailedTitle']}. ${
+							batch.file_failure === 'unsupported_encoding'
+								? m['contacts.importFailEncoding']
+								: m['send.batchImportFailedBody']
+						}`
 					: undefined
 		},
 		// The rate is the screen's real subject in fiat mode and it is editable

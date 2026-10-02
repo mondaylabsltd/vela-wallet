@@ -9,6 +9,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
+	import FactRow from '../ui/FactRow.svelte';
 	import FilterChipRow from '../ui/FilterChipRow.svelte';
 	import NoticeBanner from '../ui/NoticeBanner.svelte';
 	import SearchField from '../ui/SearchField.svelte';
@@ -38,6 +39,14 @@
 </script>
 
 <div class="pick">
+	<!-- Whom this is for, above what to send (issue 332): a scanned code or a
+	     contact lands here, and the person confirms the payee while choosing. -->
+	{#if model.recipient !== undefined}
+		<div class="recipient">
+			<FactRow fact={model.recipient} />
+		</div>
+	{/if}
+
 	<SearchField placeholder={model.searchPlaceholder} bind:value={query} />
 	<FilterChipRow options={model.filters} label={model.searchPlaceholder} onselect={onfilter} />
 
@@ -85,6 +94,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	.recipient {
+		border-bottom: var(--border-hairline) solid var(--color-border-base);
 	}
 
 	ul {

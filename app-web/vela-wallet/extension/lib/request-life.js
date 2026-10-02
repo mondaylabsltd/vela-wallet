@@ -128,9 +128,11 @@ export function withClaim(record, { phase, now, opHash, chainId }) {
  * The operation hash a request may already have been sent under (RJ2), or
  * `null`: only a record claimed for SUBMIT whose claim carried the hash. From
  * that claim on, the bytes may be on their way to the relay, so a request that
- * ends without its surface's answer is answered with this hash — ruling 1 +
- * RA2, "may have been sent" — and never 4900, which a dApp reads as "not sent"
- * and pays again. Before the hash exists nothing was sent, and 4900 is right.
+ * ends without its surface's answer is answered "not confirmed yet", naming
+ * this hash (`maybeSentPayload`; a batch: the hash is its id) — ruling 1 +
+ * RA2, "may have been sent", and 083 — and never 4900, which a dApp reads as
+ * "not sent" and pays again. Before the hash exists nothing was sent, and 4900
+ * is right.
  */
 export function maybeSentHash(record) {
 	if (!record || record.state !== 'claimed' || record.phase !== 'submit') return null;
@@ -198,9 +200,9 @@ export function callerOwns(record, caller) {
  *
  * Returns `[{ rid, action: 'settle', cause, answer? } | { rid, action: 'probe' }]`:
  * a probe asks the page, by `documentId`, whether it still owns the id
- * (`alive`) and keeps the record if it does. A settle carries `answer:
- * answer, opHash}` for a claimed submit that may have been sent (RJ2: see `maybeSentPayload`): the page
- * is told that hash, not 4900.
+ * (`alive`) and keeps the record if it does. A settle carries `answer` and
+ * `opHash` for a claimed submit that may have been sent (RJ2, 083): the page
+ * is told `maybeSentPayload` — "not confirmed yet" — not 4900.
  */
 export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindows, openWindows }) {
 	const plan = [];

@@ -2057,6 +2057,18 @@ mod tests {
             .unwrap_or_else(|| unreachable!("an unreadable file must say so"));
         assert!(notice.error);
         assert_eq!(notice.title, Some(s.batch_import_failed_title.clone()));
+        assert_eq!(notice.body, s.batch_import_failed_body);
+
+        // 087: a file in a legacy code page says how to save it.
+        let legacy = BatchView {
+            file_failure: Some(vela_core::app::batch_import::BatchFileFailure::UnsupportedEncoding),
+            ..batch.clone()
+        };
+        let notice = batch_import(&legacy, "USDT", &s)
+            .notice
+            .unwrap_or_else(|| unreachable!("a refused file must say so"));
+        assert_eq!(notice.body, s.batch_import_failed_encoding);
+        assert_ne!(notice.body, s.batch_import_failed_body);
 
         // Over balance: said on the total line, beside the figure it is
         // about (the web's `overText`) — not a second time as a notice.

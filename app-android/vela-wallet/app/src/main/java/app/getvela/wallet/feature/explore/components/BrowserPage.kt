@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import app.getvela.wallet.feature.browser.core.BrowserEngine
@@ -28,7 +29,13 @@ fun BrowserPage(engine: BrowserEngine, modifier: Modifier = Modifier) {
             onDispose { engine.detach() }
         }
         AndroidView(
-            modifier = modifier.fillMaxSize(),
+            // Clipped to its own slot (087 F21). Compose hosts the WebView in a
+            // holder that does NOT clip its child, and draws that holder straight
+            // into the screen's canvas; a WebView with no frame yet — a slow
+            // first load, before anything commits — paints its background with
+            // `drawColor`, which fills the whole clip. The page's white went over
+            // the address bar for the twenty seconds a stalled site took to fail.
+            modifier = modifier.fillMaxSize().clipToBounds(),
             factory = {
                 // A WebView is one view: whatever hosted it before lets it go.
                 (engine.webView.parent as? android.view.ViewGroup)?.removeView(engine.webView)

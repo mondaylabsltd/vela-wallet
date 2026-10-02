@@ -147,6 +147,38 @@ struct BrowserMemoryTests {
         #expect(room.favorites?.tiles.count == 2)
     }
 
+    /// Issue #330 (Android; iOS drew the same page): with Favorites and
+    /// Recent hidden, Explore showed the search field alone — the Favorites
+    /// heading's Edit was the only way to Manage groups, and it went with the
+    /// hidden section. The heading stays (no tiles), so hidden groups can
+    /// always be shown again; a page with no favourites yet keeps it too.
+    @Test func everyGroupHiddenKeepsTheWayBackToManageGroups() {
+        let history = BhistViewWire(entries: [entry("https://app.aave.com", "app.aave.com", title: "Aave")])
+        let me = (name: "Me", address: "0x88cca0eedbf2c4426110bbfc998f048689266894")
+        func page(_ explore: ExploreViewWire) -> ExploreHomeModel {
+            ExploreLive.home(explore: explore, history: history, dbr: .empty, engine: nil, identity: me, loc: loc())
+        }
+
+        let hidden = page(view(favorites: [site("https://app.uniswap.org", "app.uniswap.org")],
+                               favoritesHidden: true, recentHidden: true))
+        #expect(hidden.favorites?.action == loc().t("explore.edit"), "its Edit opens Manage groups")
+        #expect(hidden.favorites?.tiles.isEmpty == true, "a hidden Favorites draws no tiles")
+        #expect(hidden.groups.isEmpty)
+        #expect(hidden.empty == nil, "not the empty start page")
+
+        let favoritesOnly = page(view(favorites: [site("https://app.uniswap.org", "app.uniswap.org")],
+                                      favoritesHidden: true))
+        #expect(favoritesOnly.favorites?.action == loc().t("explore.edit"))
+        #expect(favoritesOnly.groups.map(\.id) == ["recent"], "Recent's heading offers Clear, never Manage")
+
+        let none = page(view(recentHidden: true))
+        #expect(none.favorites?.action == loc().t("explore.edit"), "no favourites yet: the heading stays")
+        #expect(none.favorites?.tiles.count == 1, "over its add tile")
+
+        let shown = page(view(favorites: [site("https://app.uniswap.org", "app.uniswap.org")]))
+        #expect(shown.favorites?.tiles.count == 2, "shown again, the tiles come back")
+    }
+
     /// A site's letter is the core's rule (spec 079): the host's first letter
     /// or digit after a leading `www.`, `app.` or `m.`, upper-cased.
     ///

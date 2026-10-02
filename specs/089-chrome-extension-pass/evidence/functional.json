@@ -1,0 +1,453 @@
+[
+ {
+  "check": "eth_accounts before connect → []",
+  "got": {
+   "ok": true,
+   "result": []
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_chainId before connect → hex",
+  "got": {
+   "ok": true,
+   "result": "0x1"
+  },
+  "ok": true
+ },
+ {
+  "check": "net_version → decimal string",
+  "got": {
+   "ok": true,
+   "result": "1"
+  },
+  "ok": true
+ },
+ {
+  "check": "personal_sign before connect → refused (4100)",
+  "got": {
+   "ok": false,
+   "code": 4100,
+   "message": "Connect Vela Wallet to this site first"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_blockNumber (read) before connect → forwarded to the catalog node",
+  "got": {
+   "ok": true,
+   "result": "0x18e34e0"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_accounts after connect → [signed-in]",
+  "got": {
+   "ok": true,
+   "result": [
+    "0xD400866e00B055B20752a826CD5C89b811de130b"
+   ]
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_requestAccounts again (connected) → instant, no window",
+  "got": {
+   "r": {
+    "ok": true,
+    "result": [
+     "0xD400866e00B055B20752a826CD5C89b811de130b"
+    ]
+   },
+   "flashed": true
+  },
+  "ok": false
+ },
+ {
+  "check": "wallet_requestPermissions (connected) → instant, no window",
+  "got": {
+   "r": {
+    "ok": true,
+    "result": [
+     {
+      "parentCapability": "eth_accounts"
+     }
+    ]
+   },
+   "flashed": true
+  },
+  "ok": false
+ },
+ {
+  "check": "wallet_getPermissions → eth_accounts cap",
+  "got": {
+   "ok": true,
+   "result": [
+    {
+     "parentCapability": "eth_accounts"
+    }
+   ]
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_coinbase → signed-in",
+  "got": {
+   "ok": true,
+   "result": "0xD400866e00B055B20752a826CD5C89b811de130b"
+  },
+  "ok": true
+ },
+ {
+  "check": "switch to Gnosis 0x64 → null, chainId follows",
+  "got": {
+   "r": {
+    "ok": true,
+    "result": null
+   },
+   "chainAfter": {
+    "ok": true,
+    "result": "0x64"
+   }
+  },
+  "ok": true
+ },
+ {
+  "check": "switch to unknown 0x539 → 4902",
+  "got": {
+   "ok": false,
+   "code": 4902,
+   "message": "Chain 1337 is not in Vela's networks"
+  },
+  "ok": true
+ },
+ {
+  "check": "switch malformed → -32602",
+  "got": {
+   "ok": false,
+   "code": -32602,
+   "message": "Expected [{ chainId }]"
+  },
+  "ok": true
+ },
+ {
+  "check": "addEthereumChain known 0x89 → switch",
+  "got": {
+   "r": {
+    "ok": true,
+    "result": null
+   },
+   "chainAfter2": {
+    "ok": true,
+    "result": "0x89"
+   }
+  },
+  "ok": true
+ },
+ {
+  "check": "addEthereumChain unknown → 4902, nothing added",
+  "got": {
+   "ok": false,
+   "code": 4902,
+   "message": "Add chain 123456 in Vela's network settings first"
+  },
+  "ok": true
+ },
+ {
+  "check": "chainChanged events heard",
+  "got": [
+   {
+    "event": "connect",
+    "data": {
+     "chainId": "0x1"
+    }
+   },
+   {
+    "event": "accountsChanged",
+    "data": [
+     "0xD400866e00B055B20752a826CD5C89b811de130b"
+    ]
+   },
+   {
+    "event": "chainChanged",
+    "data": "0x64"
+   },
+   {
+    "event": "chainChanged",
+    "data": "0x89"
+   },
+   {
+    "event": "chainChanged",
+    "data": "0x64"
+   }
+  ],
+  "ok": true
+ },
+ {
+  "check": "second tab same origin sees the site chain (0x64)",
+  "got": {
+   "ok": true,
+   "result": "0x64"
+  },
+  "ok": true
+ },
+ {
+  "check": "second tab same origin is connected",
+  "got": {
+   "ok": true,
+   "result": [
+    "0xD400866e00B055B20752a826CD5C89b811de130b"
+   ]
+  },
+  "ok": true
+ },
+ {
+  "check": "other origin is not connected → []",
+  "got": {
+   "ok": true,
+   "result": []
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_sign → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support eth_sign"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_signTransaction → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support eth_signTransaction"
+  },
+  "ok": true
+ },
+ {
+  "check": "personal_ecRecover → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support personal_ecRecover"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_subscribe → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support eth_subscribe"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_getCapabilities → documented",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support wallet_getCapabilities"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_getCallsStatus → documented",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support wallet_getCallsStatus"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_showCallsStatus → documented",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support wallet_showCallsStatus"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_registerOnboarding → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support wallet_registerOnboarding"
+  },
+  "ok": true
+ },
+ {
+  "check": "web3_sha3 → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support web3_sha3"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_getEncryptionPublicKey → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support eth_getEncryptionPublicKey"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_decrypt → 4200",
+  "got": {
+   "ok": false,
+   "code": 4200,
+   "message": "Vela does not support eth_decrypt"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_watchAsset (object params) → false",
+  "got": {
+   "ok": true,
+   "result": false
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_watchAsset (array params) → false",
+  "got": {
+   "ok": true,
+   "result": false
+  },
+  "ok": true
+ },
+ {
+  "check": "typed v4 with two documents → -32602, no window",
+  "got": {
+   "r": {
+    "ok": false,
+    "code": -32602,
+    "message": "Malformed request"
+   },
+   "w": false
+  },
+  "ok": true
+ },
+ {
+  "check": "typed v4 missing account → -32602",
+  "got": {
+   "ok": false,
+   "code": -32602,
+   "message": "Malformed request"
+  },
+  "ok": true
+ },
+ {
+  "check": "typed v4 swapped order → -32602",
+  "got": {
+   "ok": false,
+   "code": -32602,
+   "message": "Malformed request"
+  },
+  "ok": true
+ },
+ {
+  "check": "eth_signTypedData_v2 → refused",
+  "got": {
+   "ok": false,
+   "code": -32602,
+   "message": "Malformed request"
+  },
+  "ok": true
+ },
+ {
+  "check": "personal_sign for another address → refused",
+  "got": {
+   "ok": false,
+   "code": 4100,
+   "message": "The requested account is no longer authorized"
+  },
+  "ok": true
+ },
+ {
+  "check": "typed v4 for another address → refused",
+  "got": {
+   "ok": false,
+   "code": 4100,
+   "message": "The requested account is no longer authorized"
+  },
+  "ok": true
+ },
+ {
+  "check": "sendTransaction from another address → refused (window stayed open)",
+  "got": {
+   "text": "L\nlocalhost:5186\nGnosis\n\nSend\n\n−0.000000000000000001\nxDAI\n\nRecipient\n\n0x777777…777777\n0x7777777777777777777777777777777777777777\nTechnical details\nNetwork fee\n0.00306 xDAI · ≈$9.18\nSpeed\nFast\nSigning account\nParallel One\nSlide to confirm · Confirm send\nPARALLEL SPACE\nfixture passkey · test wallet",
+   "late": {
+    "ok": false,
+    "code": 4900,
+    "message": "The browser closed before the request finished"
+   }
+  },
+  "ok": false
+ },
+ {
+  "check": "SafeTx typed data → refused answer",
+  "got": {
+   "ok": false,
+   "code": 4100,
+   "message": "The requested account is no longer authorized"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_sendCalls window closed → 4900",
+  "got": {
+   "ok": false,
+   "code": 4900,
+   "message": "The browser closed before the request finished"
+  },
+  "ok": true
+ },
+ {
+  "check": "wallet_revokePermissions → [] + disconnect event",
+  "got": {
+   "r": {
+    "ok": true,
+    "result": null
+   },
+   "after": {
+    "ok": true,
+    "result": []
+   },
+   "last": [
+    {
+     "event": "chainChanged",
+     "data": "0x64"
+    },
+    {
+     "event": "accountsChanged",
+     "data": []
+    },
+    {
+     "event": "disconnect",
+     "data": {
+      "code": 4900,
+      "message": "Provider disconnected"
+     }
+    }
+   ]
+  },
+  "ok": true
+ },
+ {
+  "check": "revoked in tab 1 → tab 2 same origin also []",
+  "got": {
+   "ok": true,
+   "result": []
+  },
+  "ok": true
+ }
+]

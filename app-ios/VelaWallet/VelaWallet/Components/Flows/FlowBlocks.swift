@@ -104,7 +104,11 @@ struct QrCardView<Centre: View>: View {
                 // white rather than a theme surface that would flip underneath.
                 .background(Circle().fill(WalletGeometry.qrCard))
         }
-        .frame(width: WalletFlowGeometry.qrCard, height: WalletFlowGeometry.qrCard)
+        // Square, at the measured 344 — or the screen's width where that is
+        // less (issue #321): a fixed 344 ran past the gutters of a 375pt-wide
+        // phone, whose sheet then had to scroll to reach its last button.
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: WalletFlowGeometry.qrCard)
         // White in BOTH appearances: a code is read by a camera, and inverting
         // it in dark mode is the classic way to make one unscannable.
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r16).fill(WalletGeometry.qrCard))
@@ -581,20 +585,28 @@ struct TokenHeaderCardView: View {
 
     let token: SendTokenCardModel
     var onMax: () -> Void = {}
+    /// Issue #326: the card's own tap — back to the asset picker.
+    var onChange: (() -> Void)?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            TokenIconView(mark: token.mark)
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: token.symbol)
-                    .typeRole(Typography.rowTitle.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                Text(verbatim: token.detail)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
+            // The token, and — where the core allows it — the way to another
+            // one. Max stays its own button beside it: one tap, one meaning.
+            if let change = token.change, let onChange {
+                Button(action: onChange) {
+                    HStack(spacing: Tokens.Space.s12) {
+                        face
+                        LucideIcon(.chevronDown, size: LucideIconSize.checkmark)
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(change)
+                .accessibilityIdentifier("send.tokenCard")
+            } else {
+                face
             }
-            Spacer(minLength: Tokens.Space.s8)
             if let max = token.max {
                 Button(action: onMax) {
                     Text(verbatim: max)
@@ -610,6 +622,29 @@ struct TokenHeaderCardView: View {
         }
         .padding(Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+    }
+
+    /// The mark, the symbol and where it is held — the card's face.
+    private var face: some View {
+        HStack(spacing: Tokens.Space.s12) {
+            TokenIconView(mark: token.mark)
+            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                Text(verbatim: token.symbol)
+                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                // Where it is held and how much: the balance is the figure the
+                // amount is typed against, so the line wraps rather than
+                // cutting it (087 F28 — "Gnosis · 余额 0.1…" on an iPhone 11
+                // with a larger text size, the chevron beside it). One line
+                // at the default size; the figure never breaks.
+                Text(verbatim: token.detail)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Tokens.Space.s8)
+        }
     }
 }
 
@@ -645,6 +680,9 @@ struct RecipientFieldView: View {
                             .foregroundStyle(theme.fgBase)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            // The return key reads 完成 and puts the keyboard
+                            // away (087 F28) — an address is one line.
+                            .submitLabel(.done)
                             .accessibilityLabel(field.label)
                             // Named, so a test reaches THIS field rather than
                             // whichever one happens to come first in the tree —

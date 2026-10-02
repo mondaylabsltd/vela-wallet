@@ -145,6 +145,26 @@ export class FlowNav {
 		this.desktop = this.desktop.slice(0, -1);
 	}
 
+	/**
+	 * A sheet the person closed (✕, a drag, the scrim, Escape) takes its own
+	 * level with it — only when that level is the top, so a sheet the send
+	 * machine derives (never pushed) cannot pop the screen under it, and a
+	 * second report pops nothing. Left on the stack, the closed sheet stayed on
+	 * top: the next row tapped pushed the same step, which `push` ignores, so
+	 * the same row opened nothing and the first ‹ only took the invisible sheet
+	 * away (issue 328; iOS 082 X-HISTORY). The desktop stack drops the same
+	 * step's level when that step pushed one there.
+	 */
+	sheetClosed(state: FlowStateId): void {
+		if (this.mobileTop !== state) return;
+		this.mobile = this.mobile.slice(0, -1);
+		const step = Object.keys(MOBILE_STEPS).find((key) => MOBILE_STEPS[key] === state);
+		const desktop = step === undefined ? undefined : DESKTOP_STEPS[step];
+		if (desktop !== undefined && this.desktopTop === desktop) {
+			this.desktop = this.desktop.slice(0, -1);
+		}
+	}
+
 	close(): void {
 		this.mobile = [];
 		this.desktop = [];
