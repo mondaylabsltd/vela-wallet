@@ -257,6 +257,13 @@ export interface SigningStatus {
 	 * signature: closed then, a cancelled prompt would leave the page unanswered.
 	 */
 	closable: boolean;
+	/**
+	 * Spec 096 F8: the failure's own way out, labelled — Close (the page is
+	 * answered the failure now) and, when nothing was sent and it was no
+	 * refusal, Try again (`retry`, back to review). Absent while it is no
+	 * failure.
+	 */
+	actions?: { close: string; retry?: string };
 }
 
 export interface SigningModel {

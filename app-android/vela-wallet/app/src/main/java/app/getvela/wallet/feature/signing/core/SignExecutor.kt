@@ -412,40 +412,15 @@ class SignExecutor(
             uniffi.vela_core_uniffi.signMessageHash(method, paramsJson)
 
         /**
-         * The calls a request carries (the desktop's `calls_of`): one for
-         * `eth_sendTransaction`, many for `wallet_sendCalls` — and an empty
-         * batch is not a batch. Hex value on the wire, decimal to the core.
+         * The calls a request carries: one for `eth_sendTransaction`, many for
+         * `wallet_sendCalls` — every leg or none, and an empty batch is not a
+         * batch. The core's one reading (`tx_request::calls_of`, spec 096 F1),
+         * value in decimal to the submit: every shell used to read `value` its
+         * own way (this one accepted a negative bare string), and one request
+         * could be signed as different amounts on different shells.
          */
-        fun callsOf(method: String, paramsJson: String): List<UserOpCall>? {
-            val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return null
-            val first = params.optJSONObject(0) ?: return null
-            return when (method) {
-                "wallet_sendCalls" -> {
-                    val raw = first.optJSONArray("calls") ?: return null
-                    // Every leg or none: a leg this reader refuses refuses the
-                    // batch. Dropping it sent the others alone — a batch the
-                    // page never asked for, answered as if it had run.
-                    val calls = (0 until raw.length()).map { index -> raw.optJSONObject(index)?.let(::call) ?: return null }
-                    calls.takeIf { it.isNotEmpty() }
-                }
-                else -> call(first)?.let { listOf(it) }
-            }
-        }
-
-        private fun call(raw: JSONObject): UserOpCall? {
-            val to = raw.optString("to").ifBlank { return null }
-            // Spec 082 RC4/RC6: absent or a JSON null is zero (`optString` would
-            // read the text "null" and refuse the call); a value that is not a
-            // string — a JSON number — is refused, never read as hex text: the
-            // sheet showed no figure for it, and 1000 must not leave as 0x1000.
-            val valueHex = when (val value = raw.opt("value")) {
-                null, JSONObject.NULL -> "0x0"
-                is String -> value.ifBlank { "0x0" }
-                else -> return null
-            }
-            val value = valueHex.removePrefix("0x").ifEmpty { "0" }.toBigIntegerOrNull(16) ?: return null
-            return UserOpCall(to = to, value = value.toString(), data = raw.optString("data").ifBlank { "0x" })
-        }
+        fun callsOf(method: String, paramsJson: String): List<UserOpCall>? =
+            uniffi.vela_core_uniffi.dappRequestCalls(method, paramsJson)
 
         /**
          * The feed's row for a dApp's request (the desktop's `persist_record`,

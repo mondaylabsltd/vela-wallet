@@ -37,8 +37,14 @@
 	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import ConsentFacts from '$lib/dapp/ConsentFacts.svelte';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { shortenAddress } from '$lib/wallet/identity';
+	import { chainName } from '$lib/services/networks';
+	import { chainLogoURL } from '$lib/services/tokens-model';
 	import type { RequestMessages } from '$lib/dapp/messages';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
 	import {
 		answerRequest,
 		readRequest,
@@ -68,6 +74,8 @@
 	 * transaction is landing before it leaves.
 	 */
 	const HANDOFF_GRACE_MS = 6000;
+	/** How long an answered request window waits for the worker before closing itself. */
+	const WINDOW_CLOSE_BACKSTOP_MS = 5000;
 
 	let request = $state<ExtensionRequest | null>(null);
 	let stage = $state<RequestStage>({ kind: 'loading' });
@@ -155,7 +163,7 @@
 				// A window with no live request has nothing to show: it closes,
 				// rather than hard-coding a sentence the corpus does not have.
 				stage = { kind: 'loading' };
-				leave();
+				leave(true);
 				return;
 			}
 			request = incoming;
@@ -326,17 +334,24 @@
 	 * one at a time, so the page's single fee session is only ever asked about
 	 * one operation (026's one-owner rule).
 	 */
-	function leave(): void {
-		setTimeout(() => {
-			if (mode === 'window') {
-				window.close();
-				return;
-			}
-			// Never over a landing: a person watching their transaction is not
-			// interrupted by the next request. It waits, and this runs again when
-			// the receipt is dismissed.
-			if (!landing) void take();
-		}, 400);
+	function leave(nothingOwed = false): void {
+		setTimeout(
+			() => {
+				if (mode === 'window') {
+					window.close();
+					return;
+				}
+				// Never over a landing: a person watching their transaction is not
+				// interrupted by the next request. It waits, and this runs again when
+				// the receipt is dismissed.
+				if (!landing) void take();
+			},
+			// A window whose request was answered or withdrawn: the WORKER closes
+			// it, or hands it to the next request of the same site (spec 094 S7)
+			// — closing it from here first would end that request too. Only a
+			// backstop then; a window that found no request closes at once.
+			mode === 'window' && !nothingOwed ? WINDOW_CLOSE_BACKSTOP_MS : 400
+		);
 	}
 
 	async function onConnect(): Promise<void> {
@@ -380,11 +395,67 @@
 		leave();
 	}
 
+	/**
+	 * Nobody is signed in to this wallet (spec 094 S5) — the session machine's
+	 * own route, the one that sends the PANEL to the welcome. The window cannot
+	 * go there: it IS the request, and leaving it would answer the page. So it
+	 * says so and opens the welcome in a tab; the session follows the other
+	 * document's sign-in (`storage`), and the card turns into the consent with a
+	 * live Connect. Before this, Connect asked the core to grant nobody, which
+	 * threw, and the button did nothing at all.
+	 */
+	const needsWallet = $derived(
+		mode === 'window' && !session.view.loading && session.view.allowed_route !== 'wallet'
+	);
+
+	let wasWaitingForWallet = false;
+	$effect(() => {
+		// Signed in elsewhere while this window waited: bring it forward.
+		if (needsWallet) wasWaitingForWallet = true;
+		else if (wasWaitingForWallet) {
+			wasWaitingForWallet = false;
+			void focusOwnWindow();
+		}
+	});
+
+	function openOnboarding(create: boolean): void {
+		void openInBrowserTab(create ? `${locale}/create.html` : `${locale}.html`);
+	}
+
 	/** The consent card's own words, shared by both shapes. */
 	const cardTitle = $derived(request ? m.title.replace('{{host}}', hostLabel(request.origin)) : '');
+
+	/**
+	 * What a Connect shares (spec 096 F11): the account the core says the grant
+	 * pins (`consent_address`), named as the wallet names it, and the network
+	 * the grant is written on — the same `chainId` `approve` hands the core.
+	 */
+	const consentAccount = $derived.by(() => {
+		const address = stage.kind === 'consent' ? stage.address : null;
+		if (!address) return null;
+		const row = session.view.accounts.find(
+			(r) => r.account.address.toLowerCase() === address.toLowerCase()
+		);
+		return {
+			name: row?.account.name ?? '',
+			address,
+			short: shortenAddress(address),
+			identiconSvg: identiconSvgForClient(address)
+		};
+	});
+	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
 	/** Unused by the panel; the window draws its own preparing line. */
 	const showWindowChrome = $derived(mode === 'window' && stage.kind !== 'signing' && !landing);
 </script>
+
+{#snippet consentFacts()}
+	<ConsentFacts
+		accountLabel={m.accountLabel}
+		networkLabel={m.networkLabel}
+		account={consentAccount}
+		network={consentNetwork}
+	/>
+{/snippet}
 
 {#snippet actions()}
 	<!--
@@ -427,6 +498,7 @@
 				onclose={onCancel}
 			>
 				<div class="card">
+					{@render consentFacts()}
 					<p class="body">{m.body}</p>
 					{@render actions()}
 				</div>
@@ -435,8 +507,23 @@
 	{/if}
 {:else if showWindowChrome}
 	<main>
-		{#if stage.kind === 'consent' && request}
+		{#if stage.kind === 'consent' && request && needsWallet}
 			<h1>{cardTitle}</h1>
+			<p class="body">{m.noWallet}</p>
+			<div class="stack">
+				<Button variant="primary" shape="rounded" onclick={() => openOnboarding(true)}>
+					{m.createWallet}
+				</Button>
+				<Button variant="secondary" shape="rounded" onclick={() => openOnboarding(false)}>
+					{m.haveWallet}
+				</Button>
+				<Button variant="secondary" shape="rounded" disabled={busy} onclick={onCancel}>
+					{m.cancel}
+				</Button>
+			</div>
+		{:else if stage.kind === 'consent' && request}
+			<h1>{cardTitle}</h1>
+			{@render consentFacts()}
 			<p class="body">{m.body}</p>
 			{@render actions()}
 		{:else if stage.kind === 'refused'}
@@ -497,5 +584,11 @@
 	}
 	.actions > :global(*) {
 		flex: 1;
+	}
+	.stack {
+		margin-top: auto;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
 	}
 </style>

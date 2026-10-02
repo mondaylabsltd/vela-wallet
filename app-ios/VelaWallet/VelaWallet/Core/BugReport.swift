@@ -187,7 +187,7 @@ enum BugReport {
 
     /// One HTTP exchange. A seam so tests stub the network: nothing a test
     /// runs may ever file a real issue.
-    typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
+    typealias Transport = @MainActor (URLRequest) async throws -> (Data, URLResponse)
 
     static let liveTransport: Transport = { request in
         let config = URLSessionConfiguration.ephemeral

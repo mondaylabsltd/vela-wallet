@@ -488,14 +488,27 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1798 (093, 2026-10-02): + `history.dappRowTitle` — every dApp interaction is
 //   an Activity row titled "{{intent}} on {{place}}" (在 {{place}} {{intent}});
 //   every other word it needs is reused. Same branches: 1797 + 1 = 1798.
-// 1800 (096 C, 2026-10-02): + `componentsUi.gas.feeCoinSpent` — the fee coin a
+// 1803 (094, 2026-10-02): + the extension's own notices, branch `connect.ext`
+//   with `{installedNote, accessNote, accessAllow}` — a fresh install asks for
+//   the tabs open before it to be reloaded, and limited site access is said in
+//   plain words with its one-click grant — and `onboarding.common.siteAccessBody`,
+//   the passkey Chrome refused for that reason (was Chrome's raw SecurityError).
+//   1798 + 4 leaves + 1 branch = 1803 (1713 leaf + 90 branch).
+// 1824 (095, 2026-10-02): + `about.{linkPrivacy,linkTerms,linkSupport}` —
+//   Settings → About links the privacy policy, terms and support page on every
+//   shell (App Review 5.1.1(i): the policy reachable outside onboarding; the
+//   onboarding's `ack2PrivacyPolicy`/`ack2Terms` are inflected for their
+//   sentence, e.g. ru accusative, so not reused) — and the 17 leaves of the new
+//   `componentsUi.appMenu` branch: the macOS menu bar (About, Edit, View,
+//   Window), which was English-only. 1803 + 3 + 17 leaves + 1 branch = 1824.
+// 1826 (096 C, 2026-10-02): + `componentsUi.gas.feeCoinSpent` — the fee coin a
 //   person chose is one the transaction itself may spend, so too little may be
 //   left for the fee — and `send.recipientTokenContract`, said before the
 //   slide when the recipient is a token's own contract. The ja + en residency
-//   budget moves to 141,800 (owner, 2026-10-02). Same branches: 1798 + 2 = 1800.
-if (PATHS.length !== 1800) fail(`expected 1800 paths (1711 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1711) fail(`expected 1711 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
+//   budget moves to 141,800 (owner, 2026-10-02). Same branches: 1824 + 2 = 1826.
+if (PATHS.length !== 1826) fail(`expected 1826 paths (1735 leaf + 91 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1735) fail(`expected 1735 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 91) fail(`expected 91 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -607,9 +607,38 @@ describe('after the approval the sheet is a status', () => {
 			stage: 'failed',
 			title: m.receipt.failed,
 			captions: [SUMMARY, m.status.failedHint],
-			closable: true
+			closable: true,
+			// Spec 096 F8: a labelled close — the page hears the failure then.
+			actions: { close: m.receipt.done }
 		});
 		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('a failure that sent nothing offers Try again beside the close (spec 096 F8)', () => {
+		const retryable = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'Could not estimate gas' },
+				failure_retryable: true
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(retryable?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
+		expect(retryable?.captions).toEqual([SUMMARY, m.status.failedHint]);
+		// A refusal says so and offers no retry: the same op is refused again.
+		const refused = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'AA23' },
+				failure_refused: true,
+				failure_retryable: false
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(refused?.actions).toEqual({ close: m.receipt.done });
+		expect(refused?.captions).toEqual([SUMMARY, m.receipt.refused]);
 	});
 
 	it('an error before any approval is not a status (the form says it)', () => {
@@ -904,6 +933,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		surface: 'approval_editor',
 		confirm_allowed: true,
 		unlimited_consented: true,
+		unlimited_warning: true,
 		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
 		editor: {
 			mode: 'requested',
@@ -937,6 +967,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		const capped: GuardView = {
 			...unbounded,
 			unlimited_consented: false,
+			unlimited_warning: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'balance',
@@ -963,6 +994,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 			...unbounded,
 			confirm_allowed: false,
 			unlimited_consented: false,
+			unlimited_warning: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'custom',
@@ -987,6 +1019,41 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('disabled');
+	});
+});
+
+describe('an off-chain permit says it cannot be capped, and warns when unlimited (spec 094 S8)', () => {
+	const permit = (unlimited: boolean): GuardView => ({
+		...INITIAL_GUARD_VIEW,
+		surface: 'permit_sign',
+		confirm_allowed: true,
+		unlimited_warning: unlimited,
+		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+		editor: null
+	});
+
+	it('an unlimited Permit2 gets the danger sentence and the can’t-cap line — no editor', () => {
+		const model = buildSigningModel(inputs({ guard: permit(true) }))!;
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnPermitCantCap
+		});
+		expect(model.blocks.some((b) => b.kind === 'allowance')).toBe(false);
+		expect(model.confirm.enabled).toBe(true);
+	});
+
+	it('a bounded permit only says it cannot be capped', () => {
+		const model = buildSigningModel(inputs({ guard: permit(false) }))!;
+		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
+			false
+		);
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnPermitCantCap
+		});
 	});
 });
 
@@ -1076,6 +1143,7 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 			...INITIAL_GUARD_VIEW,
 			surface: 'batch',
 			confirm_allowed: true,
+			unlimited_warning: true,
 			batch: {
 				legs: [
 					{
@@ -1722,6 +1790,8 @@ describe('a batch shows every call (089 S1)', () => {
 		...INITIAL_GUARD_VIEW,
 		surface: 'batch',
 		confirm_allowed: true,
+		// The core's flag follows the leg's choice (`any_uncapped`, spec 094 S8).
+		unlimited_warning: choice?.choice?.type === 'unlimited',
 		batch: {
 			legs: [0, 1, 2].map((index) => ({
 				to: index === 2 ? B : A,

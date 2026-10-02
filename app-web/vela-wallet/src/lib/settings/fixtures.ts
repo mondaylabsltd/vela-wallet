@@ -718,6 +718,30 @@ function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 				mono: true,
 				external: true,
 				href: 'https://safe.global'
+			},
+			// Spec 095 (App Review 5.1.1(i)): the policy, the terms and a way to
+			// reach us, reachable after onboarding too — the same three on every
+			// shell.
+			{
+				label: m.about.linkPrivacy,
+				value: 'getvela.app/privacy',
+				mono: true,
+				external: true,
+				href: 'https://getvela.app/privacy'
+			},
+			{
+				label: m.about.linkTerms,
+				value: 'getvela.app/terms',
+				mono: true,
+				external: true,
+				href: 'https://getvela.app/terms'
+			},
+			{
+				label: m.about.linkSupport,
+				value: 'getvela.app/support',
+				mono: true,
+				external: true,
+				href: 'https://getvela.app/support'
 			}
 		],
 		footer: m.about.footer

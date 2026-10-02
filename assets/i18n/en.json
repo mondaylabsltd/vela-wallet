@@ -737,7 +737,8 @@
    "syncFailedBody": "Wallet created, but the public key wasn't uploaded — other devices can't sign in yet.",
    "copyAddress": "Copy address",
    "copied": "Copied",
-   "close": "Close"
+   "close": "Close",
+   "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again."
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
@@ -993,6 +994,11 @@
    "clearAllTitle": "Clear history?",
    "clearAllBody": "This removes all recently-opened dApps.",
    "a11yDeleteHistory": "Remove from history"
+  },
+  "ext": {
+   "installedNote": "Reload tabs that were already open so their sites can find Vela.",
+   "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
+   "accessAllow": "Allow access"
   }
  },
  "signHandoff": {
@@ -1041,6 +1047,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Privacy Policy",
+  "linkTerms": "Terms of Service",
+  "linkSupport": "Support",
   "footer": "Built with care. Your keys, your coins.",
   "sectionLinks": "Links",
   "debugMode": "Debug mode",
@@ -1612,6 +1621,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo placeholder · not scannable"
+  },
+  "appMenu": {
+   "about": "About Vela Wallet",
+   "hide": "Hide Vela Wallet",
+   "hideOthers": "Hide Others",
+   "showAll": "Show All",
+   "quit": "Quit Vela Wallet",
+   "edit": "Edit",
+   "undo": "Undo",
+   "redo": "Redo",
+   "cut": "Cut",
+   "copy": "Copy",
+   "paste": "Paste",
+   "selectAll": "Select All",
+   "view": "View",
+   "fullScreen": "Toggle Full Screen",
+   "window": "Window",
+   "minimize": "Minimize",
+   "closeWindow": "Close Window"
   }
  },
  "settingsModals": {

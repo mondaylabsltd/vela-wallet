@@ -444,12 +444,20 @@ fn a_rewritten_batch_with_a_self_call_in_a_later_call_is_never_signed() {
             .any(|op| matches!(op, Op::SignAndSubmit { .. })),
         "a self-call in a later call is never signed"
     );
+    // Spec 096 F8: the refusal is on the sheet, and the page hears it when the
+    // person closes it — the window is not taken away over the words.
     assert!(
-        ops.iter().any(|op| matches!(
+        !ops.iter().any(|op| matches!(op, Op::SendResponse { .. })),
+        "held for the sheet: {ops:?}"
+    );
+    assert!(sut.view().blocked.is_some(), "the sheet says why");
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    assert!(
+        closed.iter().any(|op| matches!(
             op,
             Op::SendResponse { payload: SignResponsePayload::Err { kind, .. }, .. }
                 if *kind == SignErrorKind::SelfCallBlocked
         )),
-        "refused by the self-call chokepoint, and answered so: {ops:?}"
+        "refused by the self-call chokepoint, and answered so: {closed:?}"
     );
 }

@@ -475,5 +475,6 @@
 	request({ method: 'eth_chainId' }).catch(() => {});
 	request({ method: 'eth_accounts' }).catch(() => {});
 
-	console.log('[Vela] EIP-1193/6963 provider installed', RDNS, SESSION_UUID);
+	// Nothing is logged: this runs in every page a person opens, and a line in
+	// each site's console says nothing to that site or to them (spec 094).
 })();

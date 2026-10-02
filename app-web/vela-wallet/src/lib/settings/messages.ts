@@ -251,6 +251,9 @@ export interface SettingsMessages {
 		linkWebsite: string;
 		linkGitHub: string;
 		linkSafeWallet: string;
+		linkPrivacy: string;
+		linkTerms: string;
+		linkSupport: string;
 		sectionLinks: string;
 		footer: string;
 	};
@@ -658,6 +661,9 @@ export const SETTINGS_KEYS = [
 	'about.linkWebsite',
 	'about.linkGitHub',
 	'about.linkSafeWallet',
+	'about.linkPrivacy',
+	'about.linkTerms',
+	'about.linkSupport',
 	'about.sectionLinks',
 	'about.footer',
 	'settingsModals.account.modalTitle',

@@ -287,16 +287,23 @@ object ExploreLive {
      */
     fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity, secure: Boolean): ConnectionModel {
         val host = consent.origin.substringAfter("://").substringBefore('/')
+        // Spec 096 F11: the account and the network a Connect shares are the
+        // CORE's (`DbrConsentView.address`, `.chain_id`) — the same facts every
+        // other shell's consent names. The active account's name goes with it
+        // only when it IS that account; the chain's logo follows the asking
+        // site's chain, never the tab in front.
+        val shared = consent.address?.takeIf { it.isNotBlank() } ?: identity.accountAddress
+        val isActive = shared.equals(identity.accountAddress, ignoreCase = true)
         return fallback.copy(
             title = strings.t("connect.browser.title", mapOf("host" to host)),
             site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host), iconUrls = iconsOf(consent.origin)),
             statusLine = "",
             secure = secure,
-            networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
+            networkLogoUrl = consent.chain_id.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
             primaryAction = true,
-            accountName = identity.accountName.ifBlank { fallback.accountName },
-            accountAddress = shortAddress(identity.accountAddress),
-            accountSeed = identity.accountAddress.ifBlank { fallback.accountSeed },
+            accountName = (if (isActive) identity.accountName else shortAddress(shared)).ifBlank { fallback.accountName },
+            accountAddress = shortAddress(shared),
+            accountSeed = shared.ifBlank { fallback.accountSeed },
             networkName = identity.chainName.ifBlank { fallback.networkName },
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
             // One sentence above the buttons and no footnote (spec 082 RE6):

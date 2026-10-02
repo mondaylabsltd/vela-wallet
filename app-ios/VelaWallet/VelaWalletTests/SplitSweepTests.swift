@@ -184,7 +184,7 @@ struct BatchExecutorTests {
     }
 
     private func executor(
-        rate: @escaping (String) async -> Double?, documents: DocumentPorts?
+        rate: @escaping @MainActor (String) async -> Double?, documents: DocumentPorts?
     ) -> BatchExecutor {
         BatchExecutor(fiatRate: rate, documents: { documents })
     }

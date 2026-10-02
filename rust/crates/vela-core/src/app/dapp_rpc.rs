@@ -129,6 +129,12 @@ pub enum Route {
     WatchAsset,
     /// Needs a signature: the signing sheet.
     Sign,
+    /// `wallet_getCapabilities` (EIP-5792) — what the wallet can do on each of
+    /// its chains, for the granted account ([`capabilities`]).
+    Capabilities,
+    /// `wallet_getCallsStatus` (EIP-5792) — a batch this wallet sent, read
+    /// from the bundler's receipt of its operation ([`calls_status`]).
+    CallsStatus,
     /// A node (or bundler) read on the site's chain.
     Read {
         bundler: bool,
@@ -165,6 +171,8 @@ pub fn classify(method: &str) -> Route {
         "wallet_switchEthereumChain" => Route::SwitchChain,
         "wallet_addEthereumChain" => Route::AddChain,
         "wallet_watchAsset" => Route::WatchAsset,
+        "wallet_getCapabilities" => Route::Capabilities,
+        "wallet_getCallsStatus" => Route::CallsStatus,
         _ if BUNDLER_METHODS.contains(&method) => Route::Read { bundler: true },
         _ if READ_ONLY_RPC_METHODS.contains(&method) || EXTRA_READ_METHODS.contains(&method) => {
             Route::Read { bundler: false }
@@ -221,6 +229,165 @@ pub fn requested_address(method: &str, params: &Value) -> Option<String> {
 /// `1` → `"0x1"`.
 pub fn hex_chain_id(chain_id: u32) -> String {
     format!("0x{chain_id:x}")
+}
+
+// ---------------------------------------------------------------------------
+// EIP-5792 — what a batch can be asked after it was sent (spec 094 S6)
+// ---------------------------------------------------------------------------
+
+/// `wallet_getCallsStatus` for an id this wallet never handed out (EIP-5792
+/// "Unknown bundle id").
+pub const UNKNOWN_BUNDLE_ID: i64 = 5730;
+/// The EIP-5792 answer shape [`calls_status`] speaks.
+pub const CALLS_STATUS_VERSION: &str = "2.0.0";
+
+/// The batch id a `wallet_getCallsStatus` asks about — `[id]`, a 32-byte hex
+/// operation hash (the id `wallet_sendCalls` answered with), lower-cased.
+pub fn calls_status_id(params: &Value) -> Option<String> {
+    let id = params.as_array()?.first()?.as_str()?;
+    let well_formed =
+        id.len() == 66 && id.starts_with("0x") && id[2..].bytes().all(|b| b.is_ascii_hexdigit());
+    well_formed.then(|| id.to_ascii_lowercase())
+}
+
+/// The EIP-5792 status of batch `id`, sent on `chain_id`, from the bundler's
+/// `eth_getUserOperationReceipt` result — the operation IS the batch: one
+/// atomic user operation (a MultiSend), so every call landed or none did —
+/// and, while it has no receipt, the relay's own status of it
+/// ([`USER_OP_STATUS_METHOD`], `relay_status`: that call's `result`).
+///
+/// - a receipt (`receipt.transactionHash`): `success: false` → `500`,
+///   reverted on chain (completely: it is atomic); else → `200`, with the one
+///   receipt. Its `logs` are the OPERATION's (the receipt's top-level `logs`,
+///   ERC-4337) — the bundle transaction's carry every operation in the
+///   bundle — and its `status` is the operation's;
+/// - no receipt, and the relay refused the op before any block (the
+///   tracker's terminal `Rejected`, [`refused_before_any_block`]) → `400`:
+///   not included on chain, and the wallet will not retry (spec 096 F3 — a
+///   refused batch used to read `100` for as long as the page asked);
+/// - otherwise → `100`, pending — also what a bundler or relay that could not
+///   be asked reads as: the wallet does not know otherwise, and a page polls
+///   on. A `rejected` that names a bundle transaction is not a refusal: that
+///   transaction's receipt decides, as the tracker's does.
+pub fn calls_status(
+    id: &str,
+    chain_id: u32,
+    user_op_receipt: Option<&Value>,
+    relay_status: Option<&Value>,
+) -> Value {
+    let mut status = json!({
+        "version": CALLS_STATUS_VERSION,
+        "id": id,
+        "chainId": hex_chain_id(chain_id),
+        "status": 100,
+        "atomic": true,
+    });
+    let found = user_op_receipt.filter(|value| value.is_object());
+    let receipt = found
+        .and_then(|value| value.get("receipt"))
+        .filter(|receipt| {
+            receipt
+                .get("transactionHash")
+                .and_then(Value::as_str)
+                .is_some()
+        });
+    let (Some(found), Some(receipt)) = (found, receipt) else {
+        let refused = relay_status
+            .and_then(|answer| super::tx_tracker::parse_user_op_status(&answer.to_string()))
+            .is_some_and(|answer| refused_before_any_block(&answer));
+        if refused {
+            status["status"] = json!(CALLS_STATUS_OFFCHAIN_FAILURE);
+        }
+        return status;
+    };
+    let succeeded = found.get("success").and_then(Value::as_bool) != Some(false);
+    let logs = found
+        .get("logs")
+        .filter(|logs| logs.is_array())
+        .or_else(|| receipt.get("logs").filter(|logs| logs.is_array()))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    status["status"] = json!(if succeeded { 200 } else { 500 });
+    status["receipts"] = json!([{
+        "logs": logs,
+        "status": if succeeded { "0x1" } else { "0x0" },
+        "blockHash": receipt.get("blockHash").cloned().unwrap_or(Value::Null),
+        "blockNumber": receipt.get("blockNumber").cloned().unwrap_or(Value::Null),
+        "gasUsed": receipt.get("gasUsed").cloned().unwrap_or(Value::Null),
+        "transactionHash": receipt.get("transactionHash").cloned().unwrap_or(Value::Null),
+    }]);
+    status
+}
+
+/// EIP-5792 `400`: the batch was not included on chain, and the wallet will
+/// not retry it.
+pub const CALLS_STATUS_OFFCHAIN_FAILURE: u16 = 400;
+
+/// Whether `user_op_receipt` (an `eth_getUserOperationReceipt` result) names
+/// the transaction the operation landed in — [`calls_status`] needs no relay
+/// status then.
+pub fn calls_status_landed(user_op_receipt: Option<&Value>) -> bool {
+    user_op_receipt
+        .and_then(|value| value.get("receipt"))
+        .and_then(|receipt| receipt.get("transactionHash"))
+        .and_then(Value::as_str)
+        .is_some()
+}
+
+/// The relay's status method, asked when a batch has no receipt.
+pub use super::tx_tracker::USER_OP_STATUS_METHOD;
+
+/// The relay refused the operation before any block: `rejected`, naming no
+/// bundle transaction — the tracker's terminal `Rejected`
+/// (`tx_tracker`, its `TrackShellResult::Status` arm). A `rejected` that names one is the
+/// relay marking a mined bundle, which the chain decides.
+pub fn refused_before_any_block(answer: &super::tx_tracker::TrackStatusAnswer) -> bool {
+    answer.status == super::tx_tracker::TrackLifecycle::Rejected && answer.tx_hash.is_none()
+}
+
+/// `wallet_getCapabilities` (EIP-5792): `[address, chainIds?]` → for each of
+/// the wallet's `chains` (only those the page names, when it names some), what
+/// Vela can do there — one capability, `atomic: supported`: `wallet_sendCalls`
+/// goes out as ONE user operation. Nothing else is claimed (a
+/// `paymasterService` is refused at signing).
+///
+/// The address must be one the site was granted (EIP-5792: an error when the
+/// page is not connected to it) — `Err((4100, …))`; no address is `-32602`.
+pub fn capabilities(
+    params: &Value,
+    granted: &[String],
+    chains: &[u32],
+) -> Result<Value, (i64, &'static str)> {
+    let list = params.as_array();
+    let address = list
+        .and_then(|list| list.first())
+        .and_then(Value::as_str)
+        .filter(|a| {
+            a.len() == 42 && a.starts_with("0x") && a[2..].bytes().all(|b| b.is_ascii_hexdigit())
+        })
+        .ok_or((-32602, "Expected [address, chainIds?]"))?;
+    if !granted.iter().any(|g| g.eq_ignore_ascii_case(address)) {
+        return Err((4100, "The address is not connected to this site"));
+    }
+    let asked: Option<Vec<u32>> = list
+        .and_then(|list| list.get(1))
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| chain_param(&json!([{ "chainId": id }])))
+                .collect()
+        });
+    let mut answer = serde_json::Map::new();
+    for chain in chains {
+        if asked.as_ref().is_some_and(|asked| !asked.contains(chain)) {
+            continue;
+        }
+        answer.insert(
+            hex_chain_id(*chain),
+            json!({ "atomic": { "status": "supported" } }),
+        );
+    }
+    Ok(Value::Object(answer))
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,5 +1197,160 @@ mod tests {
         ] {
             assert!(js.contains(table), "{table} in {js}");
         }
+    }
+
+    /// Spec 094: the provider says nothing in the console of every page.
+    #[test]
+    fn the_provider_logs_nothing_into_a_page() {
+        assert!(!PROVIDER_JS.contains("console.log"));
+        assert!(!PROVIDER_JS.contains("console.info"));
+    }
+
+    // ---- EIP-5792 (spec 094 S6) ------------------------------------------
+
+    const ID: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const ALICE: &str = "0xA1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1";
+
+    #[test]
+    fn the_two_status_methods_are_routed_not_refused() {
+        assert_eq!(classify("wallet_getCapabilities"), Route::Capabilities);
+        assert_eq!(classify("wallet_getCallsStatus"), Route::CallsStatus);
+        assert_eq!(classify("wallet_showCallsStatus"), Route::Unsupported);
+    }
+
+    #[test]
+    fn a_calls_status_id_is_one_32_byte_hash() {
+        assert_eq!(
+            calls_status_id(&json!([ID.to_uppercase().replace("0X", "0x")])),
+            Some(ID.to_owned())
+        );
+        assert_eq!(calls_status_id(&json!([])), None);
+        assert_eq!(calls_status_id(&json!(["0x1234"])), None);
+        assert_eq!(calls_status_id(&json!([{ "id": ID }])), None);
+    }
+
+    #[test]
+    fn a_batch_with_no_receipt_yet_is_pending() {
+        for receipt in [None, Some(json!(null)), Some(json!({ "receipt": {} }))] {
+            let status = calls_status(ID, 100, receipt.as_ref(), None);
+            assert_eq!(status["status"], 100, "{receipt:?}");
+            assert_eq!(status["version"], "2.0.0");
+            assert_eq!(status["id"], ID);
+            assert_eq!(status["chainId"], "0x64");
+            assert_eq!(status["atomic"], true);
+            assert!(status.get("receipts").is_none());
+        }
+    }
+
+    /// Spec 096 F3: with no receipt, the relay's own word decides between
+    /// pending and EIP-5792's 400 — its refusal before any block (the
+    /// tracker's terminal `rejected`) is final; a `rejected` naming a bundle
+    /// tx, any other status, or no answer, is still pending.
+    #[test]
+    fn a_batch_the_relay_refused_is_400_and_nothing_else_is() {
+        let refused = json!({"status": "rejected", "last_executor_error": "AA23"});
+        let status = calls_status(ID, 56, None, Some(&refused));
+        assert_eq!(status["status"], CALLS_STATUS_OFFCHAIN_FAILURE);
+        assert_eq!(status["chainId"], "0x38");
+        assert!(status.get("receipts").is_none());
+        for relay in [
+            Some(
+                json!({"status": "rejected", "transactionHash": format!("0x{}", "ee".repeat(32))}),
+            ),
+            Some(json!({"status": "submitted"})),
+            Some(json!({"status": "not_found"})),
+            Some(json!({"status": "who-knows"})),
+            Some(Value::Null),
+            None,
+        ] {
+            assert_eq!(
+                calls_status(ID, 56, None, relay.as_ref())["status"],
+                100,
+                "{relay:?}"
+            );
+        }
+        // A receipt outranks the relay: it landed.
+        let receipt = json!({"success": true, "receipt": {"transactionHash": "0x1"}});
+        assert_eq!(
+            calls_status(ID, 56, Some(&receipt), Some(&refused))["status"],
+            200
+        );
+        assert!(calls_status_landed(Some(&receipt)));
+        assert!(!calls_status_landed(Some(&json!({"receipt": {}}))));
+        assert!(!calls_status_landed(None));
+    }
+
+    #[test]
+    fn a_landed_batch_carries_its_operation_s_logs_and_status() {
+        let op_log = json!({ "address": "0x01", "topics": [], "data": "0x" });
+        let other_op_log = json!({ "address": "0x02", "topics": [], "data": "0x" });
+        let receipt = json!({
+            "success": true,
+            "logs": [op_log],
+            "receipt": {
+                "transactionHash": "0xbb",
+                "blockHash": "0xcc",
+                "blockNumber": "0x10",
+                "gasUsed": "0x5208",
+                "status": "0x1",
+                "logs": [op_log, other_op_log]
+            }
+        });
+        let status = calls_status(ID, 100, Some(&receipt), None);
+        assert_eq!(status["status"], 200);
+        let one = &status["receipts"][0];
+        assert_eq!(one["transactionHash"], "0xbb");
+        assert_eq!(one["blockNumber"], "0x10");
+        assert_eq!(one["status"], "0x1");
+        // The operation's own logs — never the other operations in its bundle.
+        assert_eq!(one["logs"], json!([op_log]));
+    }
+
+    #[test]
+    fn a_reverted_batch_is_500_even_when_its_bundle_succeeded() {
+        let receipt = json!({
+            "success": false,
+            "receipt": { "transactionHash": "0xbb", "status": "0x1", "logs": [] }
+        });
+        let status = calls_status(ID, 8453, Some(&receipt), None);
+        assert_eq!(status["status"], 500);
+        assert_eq!(status["receipts"][0]["status"], "0x0");
+        assert_eq!(status["chainId"], "0x2105");
+    }
+
+    #[test]
+    fn capabilities_are_atomic_batches_on_every_chain_for_the_connected_account() {
+        let granted = vec![ALICE.to_lowercase()];
+        let all = capabilities(&json!([ALICE]), &granted, &[1, 100]);
+        assert_eq!(
+            all,
+            Ok(json!({
+                "0x1": { "atomic": { "status": "supported" } },
+                "0x64": { "atomic": { "status": "supported" } }
+            }))
+        );
+        // Only the chains the page names, when it names some.
+        let some = capabilities(&json!([ALICE, ["0x64", "0x2105"]]), &granted, &[1, 100]);
+        assert_eq!(
+            some,
+            Ok(json!({ "0x64": { "atomic": { "status": "supported" } } }))
+        );
+    }
+
+    #[test]
+    fn capabilities_are_told_only_to_a_site_connected_to_that_address() {
+        let other = format!("0x{}", "b2".repeat(20));
+        assert_eq!(
+            capabilities(&json!([other]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            Err(4100)
+        );
+        assert_eq!(
+            capabilities(&json!([ALICE]), &[], &[1]).map_err(|e| e.0),
+            Err(4100)
+        );
+        assert_eq!(
+            capabilities(&json!([]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            Err(-32602)
+        );
     }
 }

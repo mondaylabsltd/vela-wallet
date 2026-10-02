@@ -229,6 +229,17 @@ export async function register(
  */
 export const SELECTOR_UNRESPONSIVE = 'vela:selector-unresponsive';
 
+/**
+ * The ceremony Chrome refused in the packaged extension because the person
+ * limited Vela's site access (spec 094 S2). Under `chrome-extension://` the
+ * relying party is always `getvela.app`, which an extension page may claim
+ * only while it holds that host permission — withheld, Chrome answers a
+ * `SecurityError` before any authenticator is asked. A detail, like
+ * {@link SELECTOR_UNRESPONSIVE}, that the prompt copy turns into plain words
+ * pointing at the one-click grant (`ExtensionNotices`), never Chrome's text.
+ */
+export const SITE_ACCESS_WITHHELD = 'vela:site-access-withheld';
+
 /** How long the page may keep focus with a get pending before the sheet is declared dead. */
 const SELECTOR_WATCHDOG_MS = 10_000;
 const SELECTOR_POLL_MS = 250;
@@ -534,6 +545,9 @@ function classify(error: unknown): PasskeyError {
 	}
 	if (e?.name === 'NotSupportedError') {
 		return new PasskeyError('not_supported', e.message || 'Authenticator not supported');
+	}
+	if (e?.name === 'SecurityError' && isPackagedApp()) {
+		return new PasskeyError('other', SITE_ACCESS_WITHHELD);
 	}
 	if (e?.name === 'InvalidStateError') {
 		// With excludeCredentials set this means the chosen authenticator

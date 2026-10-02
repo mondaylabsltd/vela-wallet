@@ -1361,6 +1361,7 @@ struct RootView: View {
                         onSigningDismissed: { closeSigningSheet() },
                         onSigningExplorer: { openSigningExplorer() },
                         onRefreshFee: { signing?.refreshFee() },
+                        onSigningRetry: { signing?.retry() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
@@ -3404,7 +3405,8 @@ struct RootView: View {
                     onSpeed: { id in signing?.speed(id) },
                     onClose: { closeSigningSheet() },
                     onExplorer: { openSigningExplorer() },
-                    onRefreshFee: { signing?.refreshFee() }
+                    onRefreshFee: { signing?.refreshFee() },
+                    onRetry: { signing?.retry() }
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])

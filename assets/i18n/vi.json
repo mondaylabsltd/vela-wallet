@@ -730,7 +730,8 @@
    "syncFailedBody": "Đã tạo ví, nhưng khóa công khai chưa được tải lên — các thiết bị khác tạm thời chưa đăng nhập được.",
    "copyAddress": "Sao chép địa chỉ",
    "copied": "Đã sao chép",
-   "close": "Đóng"
+   "close": "Đóng",
+   "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại."
   },
   "create": {
    "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",
@@ -986,6 +987,11 @@
    "clearAllTitle": "Xóa lịch sử?",
    "clearAllBody": "Thao tác này xóa tất cả dApp đã mở gần đây.",
    "a11yDeleteHistory": "Xóa khỏi lịch sử"
+  },
+  "ext": {
+   "installedNote": "Hãy tải lại các thẻ đã mở trước đó để các trang tìm thấy Vela.",
+   "accessNote": "Quyền truy cập trang web bị giới hạn: các trang không thấy Vela và không dùng được passkey.",
+   "accessAllow": "Cho phép truy cập"
   }
  },
  "signHandoff": {
@@ -1034,6 +1040,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Chính sách quyền riêng tư",
+  "linkTerms": "Điều khoản dịch vụ",
+  "linkSupport": "Hỗ trợ",
   "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
   "sectionLinks": "Liên kết",
   "debugMode": "Chế độ gỡ lỗi",
@@ -1602,6 +1611,25 @@
   },
   "qrPlaceholder": {
    "caption": "Hình giữ chỗ demo · không quét được"
+  },
+  "appMenu": {
+   "about": "Giới thiệu về Vela Wallet",
+   "hide": "Ẩn Vela Wallet",
+   "hideOthers": "Ẩn mục khác",
+   "showAll": "Hiển thị tất cả",
+   "quit": "Thoát Vela Wallet",
+   "edit": "Sửa",
+   "undo": "Hoàn tác",
+   "redo": "Làm lại",
+   "cut": "Cắt",
+   "copy": "Sao chép",
+   "paste": "Dán",
+   "selectAll": "Chọn tất cả",
+   "view": "Xem",
+   "fullScreen": "Bật/tắt toàn màn hình",
+   "window": "Cửa sổ",
+   "minimize": "Thu nhỏ",
+   "closeWindow": "Đóng cửa sổ"
   }
  },
  "settingsModals": {

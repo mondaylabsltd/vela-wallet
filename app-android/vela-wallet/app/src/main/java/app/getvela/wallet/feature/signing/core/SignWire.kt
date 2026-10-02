@@ -434,6 +434,12 @@ data class SignView(
     val tracker_withdraw: SignTrackerWithdraw? = null,
     /** Spec 082 RJ3: [error] is the relay refusing the op — `refused` under `statusFailed`, never "try again". */
     val failure_refused: Boolean = false,
+    /**
+     * Spec 096 F8: the failure sent nothing, was no refusal, and its answer is
+     * still held — the receipt offers Try again ([SignEvent.RetryTapped]) beside
+     * Done, which answers the page.
+     */
+    val failure_retryable: Boolean = false,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
     val blocked: SignBlockedView? = null,
@@ -580,6 +586,11 @@ sealed class SignEvent {
     @Serializable
     @SerialName("swipe_dismissed")
     data object SwipeDismissed : SignEvent()
+
+    /** Spec 096 F8: Try again on a failure that sent nothing. */
+    @Serializable
+    @SerialName("retry_tapped")
+    data object RetryTapped : SignEvent()
 
     @Serializable
     @SerialName("funding_complete_tapped")

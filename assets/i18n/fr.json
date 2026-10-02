@@ -733,7 +733,8 @@
    "syncFailedBody": "Portefeuille créé, mais la clé publique n'a pas été envoyée — les autres appareils ne peuvent pas encore se connecter.",
    "copyAddress": "Copier l'adresse",
    "copied": "Copié",
-   "close": "Fermer"
+   "close": "Fermer",
+   "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez."
   },
   "create": {
    "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
@@ -989,6 +990,11 @@
    "clearAllTitle": "Effacer l'historique ?",
    "clearAllBody": "Cela supprime toutes les dApps récemment ouvertes.",
    "a11yDeleteHistory": "Retirer de l'historique"
+  },
+  "ext": {
+   "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
+   "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
+   "accessAllow": "Autoriser l'accès"
   }
  },
  "signHandoff": {
@@ -1037,6 +1043,9 @@
   "linkWebsite": "Site web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Politique de confidentialité",
+  "linkTerms": "Conditions d'utilisation",
+  "linkSupport": "Assistance",
   "footer": "Conçu avec soin. Vos clés, vos cryptos.",
   "sectionLinks": "Liens",
   "debugMode": "Mode débogage",
@@ -1605,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "Aperçu de démonstration · non scannable"
+  },
+  "appMenu": {
+   "about": "À propos de Vela Wallet",
+   "hide": "Masquer Vela Wallet",
+   "hideOthers": "Masquer les autres",
+   "showAll": "Tout afficher",
+   "quit": "Quitter Vela Wallet",
+   "edit": "Édition",
+   "undo": "Annuler",
+   "redo": "Rétablir",
+   "cut": "Couper",
+   "copy": "Copier",
+   "paste": "Coller",
+   "selectAll": "Tout sélectionner",
+   "view": "Présentation",
+   "fullScreen": "Activer/désactiver le plein écran",
+   "window": "Fenêtre",
+   "minimize": "Placer dans le Dock",
+   "closeWindow": "Fermer la fenêtre"
   }
  },
  "settingsModals": {

@@ -12526,6 +12526,30 @@ fileprivate struct FfiConverterOptionTypeTrustedSignerRefusal: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeUserOpCall: FfiConverterRustBuffer {
+    typealias SwiftType = [UserOpCall]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeUserOpCall.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeUserOpCall.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
     typealias SwiftType = [UInt32]
 
@@ -13461,6 +13485,22 @@ public func dappReceiptWaitMs(elapsedMs: Double) -> Double  {
 })
 }
 /**
+ * The calls a dApp transaction request sends — `params[0].calls` of a
+ * `wallet_sendCalls`, else `params[0]` — every one or none, value in
+ * DECIMAL wei. `None` when any call is unreadable, has no recipient, or
+ * there are none. One rule for every shell (spec 096 F1): each used to read
+ * `value` its own way, and one request could be signed as different amounts.
+ */
+public func dappRequestCalls(method: String, paramsJson: String) -> [UserOpCall]?  {
+    return try!  FfiConverterOptionSequenceTypeUserOpCall.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_request_calls(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(paramsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * A dApp record's stored request as Technical details shows it (spec 093):
  * typed data pretty-printed, a message as its text (or its hex), call data
  * pretty-printed. `content` is the detail's `content` word (`"call_data"`,
@@ -13698,6 +13738,17 @@ public func hashTypedData(typedDataJson: String)throws  -> Data  {
 })
 }
 /**
+ * The Apple localization codes for the shipped locales, in their order
+ * (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+ */
+public func i18nAppleLocalizations() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_apple_localizations(uniffiCallStatus
+    )
+})
+}
+/**
  * Interpolate a template in isolation, without a key lookup.
  */
 public func i18nInterpolate(template: String, opts: TOptions)throws  -> String  {
@@ -13738,6 +13789,20 @@ public func i18nPluralSuffixesLegacy() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_i18n_plural_suffixes_legacy(uniffiCallStatus
+    )
+})
+}
+/**
+ * What "follow the system" resolves to: the first of the platform's
+ * preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+ * locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+ * copy of).
+ */
+public func i18nSystemLanguage(preferred: [String]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_system_language(
+        FfiConverterSequenceString.lower(preferred),uniffiCallStatus
     )
 })
 }
@@ -15629,6 +15694,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_dapp_receipt_wait_ms() != 43354) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_request_calls() != 992) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_request_display() != 13467) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15689,6 +15757,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_apple_localizations() != 29020) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_interpolate() != 21333) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15702,6 +15773,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_plural_suffixes_legacy() != 20218) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_system_language() != 43465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_text_direction() != 33468) {

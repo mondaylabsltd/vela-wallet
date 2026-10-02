@@ -59,6 +59,12 @@ import {
 	SURFACE_KEY,
 	SURFACE_PORT,
 	BUNDLER_METHODS,
+	UNKNOWN_BUNDLE_ID,
+	USER_OP_STATUS_METHOD,
+	callsStatusId,
+	callsStatusResult,
+	capabilitiesResult,
+	catalogChainIds,
 	chainEndpoints,
 	chainKnown,
 	chainNameOf,
@@ -84,10 +90,13 @@ import {
 	claimVerdict,
 	newRecord,
 	nextForWindow,
+	nextQueued,
+	queueAfter,
 	recoveryPlan,
 	settlement,
 	surfaceAfterOpen,
 	surfaceAnswer,
+	windowHolder,
 	withClaim
 } from './lib/request-life.js';
 import { createSwLog } from './lib/swlog.js';
@@ -99,7 +108,7 @@ import {
 	realTxHash,
 	receiptLookupHash
 } from './lib/op-receipt.js';
-import { openDoor } from './lib/locales.js';
+import { installDoor, openDoor } from './lib/locales.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -239,6 +248,32 @@ chrome.action?.onClicked?.addListener(() => {
 	openWallet().catch(() => console.error('[vela] could not open the wallet'));
 });
 
+/**
+ * A fresh install opens the wallet in a tab of its own (spec 094 S3): with no
+ * wallet yet, that is its welcome — create one, or sign in with a passkey —
+ * instead of an icon a person has to find in Chrome's puzzle menu first.
+ *
+ * Chrome runs the declared content scripts only in pages loaded AFTER the
+ * install, so a site already open has no provider until it is reloaded.
+ * Putting one into those pages needs the `scripting` permission, which this
+ * extension does not ask for; the welcome says to reload them instead, and
+ * only when there are any (`installDoor`). An update opens nothing.
+ */
+chrome.runtime.onInstalled?.addListener((details) => {
+	if (details?.reason !== 'install') return;
+	void openWelcome().catch(() => console.error('[vela] could not open the welcome'));
+});
+
+async function openWelcome() {
+	let staleTabs = 0;
+	try {
+		staleTabs = (await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] })).length;
+	} catch {
+		/* cannot tell: say nothing about other tabs */
+	}
+	await chrome.tabs.create({ url: chrome.runtime.getURL(installDoor(staleTabs)) });
+}
+
 // ---------------------------------------------------------------------------
 // Storage, read defensively
 // ---------------------------------------------------------------------------
@@ -372,9 +407,7 @@ async function settle(rid, cause) {
 	postTo(owner, { type: 'withdrawn', rid, cause });
 	void swlog.log('req.settled', { cause, tab: record.tabId });
 	void deliver(record, { error: settlement(cause) });
-	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
-		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
-	}
+	void releaseWindow(record, cause);
 	if (owner.kind === 'panel') pushOwed(owner);
 	return true;
 }
@@ -403,9 +436,7 @@ async function answerMaybeSent(rid, cause, payload, opHash) {
 		tab: record.tabId
 	});
 	void rememberOp(opHash, { chainId: record.chainId });
-	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
-		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
-	}
+	void releaseWindow(record, cause);
 	if (owner.kind === 'panel') pushOwed(owner);
 	return delivered;
 }
@@ -442,9 +473,7 @@ async function answer(rid, given, opHash, caller) {
 	});
 	if (maybeSent) void rememberOp(maybeSent, { chainId: record.chainId });
 	else if (!payload.error) void rememberOp(payload.result, opHash);
-	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
-		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
-	}
+	void releaseWindow(record, 'answered');
 	const owner = ownerOf(record);
 	if (owner.kind === 'panel') pushOwed(owner);
 	return delivered;
@@ -511,8 +540,26 @@ async function openWindows() {
 /**
  * The fallback surface: a dedicated window, not the action popup — opened at
  * the doorway, which picks the person's language (issue 317).
+ *
+ * ONE window per site (spec 094 S7): while a request of the same origin holds
+ * its window, this one is queued behind it, and the window passes to it when
+ * that one is answered (`releaseWindow`). Decided synchronously — the check and
+ * the `windowOpening` mark come before the first `await` — so a burst of
+ * requests cannot each find no window and each open one.
  */
 async function openRequestWindow(record) {
+	const live = records.get(record.rid);
+	if (!live) return;
+	live.surface = 'window';
+	if (windowHolder([...records.values()], live.origin, live.rid)) {
+		live.surfaceWindowId = undefined;
+		live.queued = true;
+		await persist(live);
+		void swlog.log('req.queued', { tab: live.tabId });
+		return;
+	}
+	live.queued = false;
+	live.windowOpening = true;
 	try {
 		const created = await chrome.windows.create({
 			url: chrome.runtime.getURL(openDoor(record.rid)),
@@ -521,18 +568,91 @@ async function openRequestWindow(record) {
 			height: 760,
 			focused: true
 		});
-		const live = records.get(record.rid);
-		if (!live) {
+		const opened = records.get(live.rid);
+		if (!opened) {
 			// Answered or settled while the window was opening.
 			chrome.windows.remove(created.id).catch(() => {});
 			return;
 		}
-		live.surface = 'window';
-		live.surfaceWindowId = created.id;
-		await persist(live);
-		void swlog.log('req.surface', { surface: 'window', tab: live.tabId });
+		opened.surface = 'window';
+		opened.surfaceWindowId = created.id;
+		delete opened.windowOpening;
+		await persist(opened);
+		void swlog.log('req.surface', { surface: 'window', tab: opened.tabId });
 	} catch {
-		await settle(record.rid, 'surface_closed');
+		await settle(live.rid, 'surface_closed');
+	}
+}
+
+/**
+ * A request that held its site's window left the ledger (spec 094 S7). The
+ * window passes to the oldest request queued behind it — the connects the
+ * person's decision already answered are answered on the way, with no window —
+ * or it closes. A window the person closed takes its site's queue with it
+ * (`queueAfter`).
+ */
+async function releaseWindow(record, cause) {
+	if (record.surface !== 'window' || record.queued === true) return;
+	const windowId = record.surfaceWindowId;
+	const step = queueAfter([...records.values()], record, cause);
+	for (const rid of step.settle) void settle(rid, 'surface_closed');
+	let next = step.next;
+	while (next && (await answeredWithoutWindow(next))) {
+		next = nextQueued([...records.values()], record.origin);
+	}
+	if (!next) {
+		if (windowId !== undefined) chrome.windows.remove(windowId).catch(() => {});
+		return;
+	}
+	next.queued = false;
+	if (windowId === undefined) {
+		await openRequestWindow(next);
+		return;
+	}
+	next.surfaceWindowId = windowId;
+	await persist(next);
+	try {
+		const [tab] = await chrome.tabs.query({ windowId });
+		if (tab?.id === undefined) throw new Error('no tab');
+		await chrome.tabs.update(tab.id, { url: chrome.runtime.getURL(openDoor(next.rid)) });
+		void swlog.log('req.surface', { surface: 'window', tab: next.tabId, reused: 1 });
+	} catch {
+		// The window went in the meantime: the next request opens its own.
+		const live = records.get(next.rid);
+		if (!live) return;
+		live.surfaceWindowId = undefined;
+		await openRequestWindow(live);
+	}
+}
+
+/**
+ * A queued connect whose site the person has just granted: answered as an
+ * instant connect would be (`instantConnectAnswer`, from storage — the grant
+ * written a moment ago), with no window. `true` when it was answered.
+ */
+async function answeredWithoutWindow(record) {
+	if (classifyMethod(record.method) !== 'connect') return false;
+	const all = await readLocal([PERM_PREFIX + record.origin, EXT_CACHE_KEY]);
+	const result = instantConnectAnswer(
+		record.method,
+		grantedAccounts(all[PERM_PREFIX + record.origin] ?? null, all[EXT_CACHE_KEY] ?? null)
+	);
+	if (!result || !records.has(record.rid)) return false;
+	await answer(record.rid, { result });
+	return true;
+}
+
+/** After a restart: a site with requests queued and no window gets one (S7). */
+async function promoteQueued() {
+	const origins = new Set(
+		[...records.values()].filter((r) => r?.queued === true).map((r) => r.origin)
+	);
+	for (const origin of origins) {
+		if (windowHolder([...records.values()], origin)) continue;
+		const next = nextQueued([...records.values()], origin);
+		if (!next) continue;
+		next.queued = false;
+		await openRequestWindow(next);
 	}
 }
 
@@ -656,6 +776,7 @@ async function resume() {
 		})
 	);
 	void swlog.log('sw.start', { records: found, recovered: kept });
+	await promoteQueued();
 }
 
 /** Resolves once the ledger is in memory; every request path waits for it. */
@@ -990,8 +1111,8 @@ function saveHealth(next) {
  * asked to learn) and goes back as is. When nothing answered, the page gets
  * the chain by name and no engine text (G33).
  */
-async function readChain(method, params, catalog, chainId) {
-	const endpoints = chainEndpoints(catalog, chainId, BUNDLER_METHODS.has(method));
+async function readChain(method, params, catalog, chainId, bundler = BUNDLER_METHODS.has(method)) {
+	const endpoints = chainEndpoints(catalog, chainId, bundler);
 	if (endpoints.length === 0) {
 		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Vela has no endpoint for chain ${chainId}`) };
 	}
@@ -1042,7 +1163,10 @@ async function readChain(method, params, catalog, chainId) {
 	};
 }
 
-/** Remember an operation hash the page was answered with (RF3). */
+/**
+ * Remember an operation hash the page was answered with (RF3) — the receipt
+ * reads it translates, and the batch ids `wallet_getCallsStatus` knows (094).
+ */
 async function rememberOp(result, opHash) {
 	const entry = opRecord(result, opHash, Date.now());
 	if (!entry) return;
@@ -1083,6 +1207,53 @@ async function forwardRead(method, params, origin) {
 		if (entry) return translatedReceipt(method, entry.chainId, asked, catalog);
 	}
 	return readChain(method, params, catalog, chainOf(origin, all));
+}
+
+// ---------------------------------------------------------------------------
+// EIP-5792 — a batch after it was sent (spec 094 S6)
+// ---------------------------------------------------------------------------
+
+/**
+ * `wallet_getCapabilities`: atomic batches on every chain the wallet has, for
+ * the account the site may see (`capabilitiesResult`, the core's
+ * `dapp_rpc::capabilities`, twinned).
+ */
+async function capabilities(params, origin) {
+	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY]);
+	const catalog = all[CHAINS_KEY];
+	if (!catalog) return { error: NOT_OPENED() };
+	const granted = grantedAccounts(all[PERM_PREFIX + origin] ?? null, all[EXT_CACHE_KEY] ?? null);
+	return capabilitiesResult(params, granted, catalogChainIds(catalog));
+}
+
+/**
+ * `wallet_getCallsStatus`: a batch this wallet answered a page with — its id
+ * is the operation hash, kept with its chain for 24 h (RF3) — read from the
+ * bundler's receipt of that operation (`callsStatusResult`, the core's
+ * `dapp_rpc::calls_status`, twinned). A bundler that could not be asked is no
+ * news: still pending, and the page polls on. Before 094 this answered 4200
+ * though `wallet_sendCalls` went through, and a dApp waiting on the batch
+ * failed after it had been sent (089 F04).
+ */
+async function callsStatus(params) {
+	const id = callsStatusId(params);
+	if (!id) return { error: rpcError(ERR.INVALID_PARAMS, 'Expected [id]') };
+	const stored = await readLocal([opKey(id), CHAINS_KEY]);
+	const entry = liveOpEntry(stored[opKey(id)], Date.now());
+	if (!entry) return { error: rpcError(UNKNOWN_BUNDLE_ID, 'Unknown bundle id') };
+	const catalog = stored[CHAINS_KEY];
+	if (!catalog) return { error: NOT_OPENED() };
+	const found = await readChain('eth_getUserOperationReceipt', [id], catalog, entry.chainId);
+	const receipt = found.error ? null : found.result;
+	const landed = callsStatusResult(id, entry.chainId, receipt);
+	if (landed.status !== 100) return { result: landed };
+	// No receipt: did the relay refuse it before any block? Then it never
+	// lands, and the page is told so (EIP-5792 400, spec 096 F3) — not
+	// "pending" for as long as it asks.
+	const relay = await readChain(USER_OP_STATUS_METHOD, [id], catalog, entry.chainId, true);
+	return {
+		result: callsStatusResult(id, entry.chainId, receipt, relay.error ? null : relay.result)
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -1198,6 +1369,12 @@ function route(request, sender, reply) {
 			return;
 		case 'read':
 			void forwardRead(request.method, request.params, origin).then(reply);
+			return;
+		case 'capabilities':
+			void capabilities(request.params, origin).then(reply);
+			return;
+		case 'callsStatus':
+			void callsStatus(request.params).then(reply);
 			return;
 		case 'connect': {
 			// Already granted to the account the wallet is in: answered here,

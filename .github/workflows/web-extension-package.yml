@@ -1,5 +1,10 @@
 # The Chrome extension build of the web wallet (app-web/vela-wallet, spec 027):
-# a zip Chrome loads unpacked or the Web Store takes as an upload.
+# two zips from one build (spec 094), both without developer pages (owner
+# ruling 2026-10-02) — the package Chrome loads unpacked (artifact
+# `chrome-extension`, attached to a release; it keeps the manifest `key`, so a
+# tester's id stays the same), and the Chrome Web Store upload (artifact
+# `chrome-web-store`: no `key` — the store assigns the id and refuses a first
+# upload that carries one).
 #
 # Same shape as the desktop release triad (desktop-*-packages.yml): a tag cuts
 # a release and attaches the package, a manual run builds without releasing,
@@ -24,6 +29,7 @@ on:
   pull_request:
     paths:
       - 'app-web/vela-wallet/extension/**'
+      - 'app-web/vela-wallet/src/lib/extension/**'
       - 'app-web/vela-wallet/vite.config.ts'
       - '.github/workflows/web-extension-package.yml'
 
@@ -51,7 +57,8 @@ jobs:
           const csp = m.content_security_policy?.extension_pages ?? '';
           if (!csp.includes("'wasm-unsafe-eval'")) fail("extension_pages CSP lost 'wasm-unsafe-eval' — WebAssembly.compile fails under MV3 without it (README constraint 1)");
           if (!(m.host_permissions ?? []).includes('https://getvela.app/*')) fail("host_permissions lost https://getvela.app/* — the passkey ceremony would run under a different relying party and the extension would be a different, empty wallet (README constraint 3)");
-          if (!m.key) fail('the fixed `key` is missing — the extension ID would change on every load');
+          if (!m.key) fail('the fixed `key` is missing — the development package\'s id would change on every load (the store package drops it at build time)');
+          if (Number(m.minimum_chrome_version) < 122) fail('minimum_chrome_version is below 122 — an extension page may use the getvela.app passkey only from Chrome 122 (spec 094)');
           const js = (m.content_scripts ?? []).flatMap((s) => s.js ?? []);
           for (const f of ['inpage.js', 'content.js']) if (!js.includes(f)) fail(`content_scripts no longer inject ${f}`);
           if (!/^\d+\.\d+\.\d+$/.test(m.version)) fail(`version "${m.version}" is not x.y.z`);
@@ -78,36 +85,44 @@ jobs:
           cache: pnpm
           cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # `build:extension` runs `vite build` itself (VELA_TARGET=extension) but
-      # not the two pre-steps `pnpm build` would run: the gitignored static/
-      # copy of the committed wasm, and the token drift check.
-      - name: Sync the committed wasm and check the tokens
-        run: |
-          pnpm run sync:wasm
-          node scripts/gen-tokens.mjs --check
-      - name: Build
-        run: pnpm run build:extension
+      # `extension/build.mjs` runs the two pre-steps `pnpm build` runs — the
+      # token drift check and the gitignored static/ copy of the committed
+      # wasm — itself (spec 094 B2), then `vite build`, then derives the store
+      # package and zips both.
+      - name: Build both packages
+        run: pnpm run package:extension
+      # The silent install failures, the release packages' manifests (`key`
+      # kept / dropped, no developer pages) and the wasm the code names —
+      # asserted on the packages just built.
+      - name: The packages keep their measured constraints
+        run: npx vitest run --project server src/lib/extension/package.test.ts
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The extension says which build it is
         run: |
           version=$(node -p "require('./extension/manifest.json').version")
-          grep -rqF "${GITHUB_SHA:0:7}" extension/dist || {
-            echo "::error::extension/dist does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
-          if grep -rqF '6ab8f' extension/dist; then
-            echo "::error::extension/dist still carries the design mock's commit 6ab8f"; exit 1; fi
+          for dist in extension/dist-release extension/dist-store; do
+            grep -rqF "${GITHUB_SHA:0:7}" "$dist" || {
+              echo "::error::$dist does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
+            if grep -rqF '6ab8f' "$dist"; then
+              echo "::error::$dist still carries the design mock's commit 6ab8f"; exit 1; fi
+          done
           echo "extension $version @ ${GITHUB_SHA:0:7}"
-      - name: Package
+      - name: Package names
         id: package
         run: |
           version=$(node -p "require('./extension/manifest.json').version")
           name="vela-wallet-extension-${version}"
-          # Zip the CONTENTS of dist/ (manifest.json at the zip root), which
-          # is what "Load unpacked" and the Web Store both expect.
-          (cd extension/dist && zip -qr "../../${name}.zip" .)
-          ls -l "${name}.zip"
+          ls -l "${name}.zip" "${name}-chrome-web-store.zip"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: chrome-extension
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}.zip
+          if-no-files-found: error
+      # Not attached to a release (release.yml downloads `chrome-extension`
+      # only): this one is uploaded to the Chrome Web Store dashboard by hand.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-web-store
+          path: app-web/vela-wallet/${{ steps.package.outputs.name }}-chrome-web-store.zip
           if-no-files-found: error

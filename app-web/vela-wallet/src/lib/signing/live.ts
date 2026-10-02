@@ -203,14 +203,23 @@ function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceC
 }
 
 /**
- * The request will go out granting an unbounded allowance, as the site asked:
- * the single approval kept on its Requested chip, or any batch leg left so.
- * Allowed since 2026-09-26 — never unsaid; each leg's own card is drawn by
- * `legBlocks`, and this is the sentence under them.
+ * The guard's sentences under an approval (spec 094 S8): the danger line when
+ * the request grants an unbounded allowance as it stands — the core's
+ * `unlimited_warning`, which covers the single approval kept on its Requested
+ * chip, any batch leg left so, and an off-chain permit for an unbounded
+ * amount (allowed since 2026-09-26, never unsaid) — and, for every off-chain
+ * permit, that its amount cannot be capped here: the dApp redeems its own
+ * struct, so the phones' line is the honest one (before this the web drew an
+ * unlimited Permit2 in red and said nothing at all, 089 F22).
  */
-function keepsUnlimited(guard: GuardView): boolean {
-	if (guard.surface === 'batch') return guard.batch?.any_uncapped ?? false;
-	return guard.editor?.choice?.type === 'unlimited';
+function guardWarnings(guard: GuardView, m: SigningMessages): Block[] {
+	const blocks: Block[] = [];
+	if (guard.unlimited_warning)
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	if (guard.surface === 'permit_sign') {
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnPermitCantCap });
+	}
+	return blocks;
 }
 
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
@@ -258,7 +267,7 @@ function allowanceBlock(
 ): Block {
 	const symbol = meta.loading ? '…' : meta.symbol;
 	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
-	// kept, reads as the danger it is (and `keepsUnlimited` adds the sentence).
+	// kept, reads as the danger it is (and `guardWarnings` adds the sentence).
 	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
 	const total = extra.increaseTotal ?? null;
 	return {
@@ -418,9 +427,7 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	}
 	// The guard reads every call's raw calldata: a cap card per unbounded call.
 	blocks.push(...legBlocks(guard, m));
-	if (keepsUnlimited(guard)) {
-		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
-	}
+	blocks.push(...guardWarnings(guard, m));
 	const results = batch.calls.flatMap((call): ClearSignResult[] =>
 		call.result ? [call.result] : []
 	);
@@ -497,9 +504,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
 		blocks.push(...legBlocks(guard, m));
-		if (keepsUnlimited(guard)) {
-			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
-		}
+		blocks.push(...guardWarnings(guard, m));
 
 		// Whatever the core flagged, said once, in its own words.
 		if (result.to_own_token) {
@@ -574,9 +579,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
 		blocks.push(...legBlocks(guard, m));
-		if (keepsUnlimited(guard)) {
-			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
-		}
+		blocks.push(...guardWarnings(guard, m));
 		return blocks;
 	}
 
@@ -1012,7 +1015,14 @@ export function signingStatus(
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
 			// again": the same op is refused the same way.
 			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
-			closable: true
+			closable: true,
+			// Spec 096 F8: the page waits for this close to hear the failure;
+			// "Try again" only when the core says nothing was sent and it was
+			// no refusal (`failure_retryable`).
+			actions: {
+				close: m.receipt.done,
+				...(sign.failure_retryable ? { retry: m.status.retry } : {})
+			}
 		};
 	}
 	const phase = sign.phase;

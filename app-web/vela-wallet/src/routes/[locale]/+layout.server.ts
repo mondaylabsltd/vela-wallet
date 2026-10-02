@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SUPPORTED_LOCALES, textDirectionOf, type Locale } from '$lib/i18n/locales';
 import {
+	resolveExtensionMessages,
 	resolveFlowMessages,
 	resolveIntroMessages,
 	resolveWelcomeMessages
@@ -27,6 +28,8 @@ export const load: LayoutServerLoad = ({ params }) => {
 		/** Onboarding flow copy (spec 014): raw templates, filled client-side. */
 		flow: resolveFlowMessages(locale),
 		/** First-run intro copy (spec 020), same raw-template contract. */
-		intro: resolveIntroMessages(locale)
+		intro: resolveIntroMessages(locale),
+		/** The packaged extension's notices (spec 094); unused on the site. */
+		extension: resolveExtensionMessages(locale)
 	};
 };

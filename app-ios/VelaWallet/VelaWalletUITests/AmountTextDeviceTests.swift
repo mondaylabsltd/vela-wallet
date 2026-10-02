@@ -64,7 +64,11 @@ final class AmountTextDeviceTests: XCTestCase {
         if picker.exists {
             // The picker's own row: the home's asset list has an xDAI line
             // too, and a tap on it behind the picker opens nothing.
-            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "xDAI,")).firstMatch
+            let row = app.buttons.matching(NSPredicate(
+                // The combined label's separator follows the system language:
+                // "," in English, "，" once the app declares zh-Hans (spec 095).
+                format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "xDAI,", "xDAI，"
+            )).firstMatch
             tap(row, "the picker's xDAI row", timeout: 30)
         }
         tap(field, "the amount field", timeout: 30)

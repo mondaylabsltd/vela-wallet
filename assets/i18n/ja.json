@@ -730,7 +730,8 @@
    "syncFailedBody": "ウォレットは作成されましたが、公開鍵がアップロードされていないため、他の端末ではまだサインインできません。",
    "copyAddress": "アドレスをコピー",
    "copied": "コピーしました",
-   "close": "閉じる"
+   "close": "閉じる",
+   "siteAccessBody": "サイトへのアクセスが制限されています。上部の「アクセスを許可」を選んで、もう一度お試しください。"
   },
   "create": {
    "accountNameHint": "この名前は、端末をまたいだサインインのために公開鍵とともにオンチェーンに保存されます。",
@@ -986,6 +987,11 @@
    "clearAllTitle": "履歴を消去しますか？",
    "clearAllBody": "最近開いた dApp をすべて削除します。",
    "a11yDeleteHistory": "履歴から削除"
+  },
+  "ext": {
+   "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
+   "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
+   "accessAllow": "アクセスを許可"
   }
  },
  "signHandoff": {
@@ -1034,6 +1040,9 @@
   "linkWebsite": "ウェブサイト",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "プライバシーポリシー",
+  "linkTerms": "利用規約",
+  "linkSupport": "サポート",
   "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
   "sectionLinks": "リンク",
   "debugMode": "デバッグモード",
@@ -1602,6 +1611,25 @@
   },
   "qrPlaceholder": {
    "caption": "デモ用プレースホルダー · スキャン不可"
+  },
+  "appMenu": {
+   "about": "Vela Walletについて",
+   "hide": "Vela Walletを非表示",
+   "hideOthers": "ほかを非表示",
+   "showAll": "すべてを表示",
+   "quit": "Vela Walletを終了",
+   "edit": "編集",
+   "undo": "取り消す",
+   "redo": "やり直す",
+   "cut": "カット",
+   "copy": "コピー",
+   "paste": "ペースト",
+   "selectAll": "すべてを選択",
+   "view": "表示",
+   "fullScreen": "フルスクリーンを切り替え",
+   "window": "ウインドウ",
+   "minimize": "しまう",
+   "closeWindow": "ウインドウを閉じる"
   }
  },
  "settingsModals": {

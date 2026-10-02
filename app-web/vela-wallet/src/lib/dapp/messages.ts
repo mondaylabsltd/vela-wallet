@@ -18,4 +18,19 @@ export interface RequestMessages {
 	connect: string;
 	cancel: string;
 	preparing: string;
+	/**
+	 * The request window with nobody signed in (spec 094 S5): the panel goes to
+	 * the welcome, the window cannot (it is the request), so it says this and
+	 * opens the welcome in a tab.
+	 */
+	noWallet: string;
+	createWallet: string;
+	haveWallet: string;
+	/**
+	 * Spec 096 F11: the consent names what a Connect shares — the account and
+	 * the network — under the labels the in-app browsers' consent uses
+	 * (`explore.account`, `explore.network`).
+	 */
+	accountLabel: string;
+	networkLabel: string;
 }

@@ -351,6 +351,12 @@ class DappSignMachineTest {
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
         withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
         c.approve()
+        // Spec 096 F8: the failure is on the sheet, its answer held — nothing
+        // was sent, so it may be tried again — until the person closes it.
+        val failed = withTimeout(30_000) { c.sign.first { it.error != null } }
+        assertTrue("nothing sent, no refusal: Try again", failed.failure_retryable)
+        assertTrue("held while it shows", answers.none { it.first == "tab-1/r1" })
+        c.swipeDismissed()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
         assertEquals(-32603, error.getInt("code"))
@@ -362,6 +368,35 @@ class DappSignMachineTest {
         assertTrue("no record for an op nobody has", store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
         assertEquals("every hand-off taken back", handoffs.map { it.first }.distinct(), withdraws.map { it.first })
         assertTrue("handed over only as may-have-been-sent, before the POST", handed.all { it.maybeSent && !it.admitted })
+    }
+
+    /**
+     * Spec 096 F8: a failure that sent nothing is tried again from the sheet —
+     * the request goes back to review, still unanswered, and the second slide
+     * is answered with the transaction like any other.
+     */
+    @Test
+    fun `try again after a failure that sent nothing submits afresh and answers once`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") { app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false, maybeDelivered = false) }
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { c.sign.first { it.error != null && it.failure_retryable } }
+        // The relay is back; the person tries again.
+        scriptRelay()
+        c.retry()
+        withTimeout(20_000) { c.sign.first { it.error == null && it.confirm_gate_open } }
+        assertTrue("still unanswered", answers.none { it.first == "tab-1/r1" })
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        val answered = answers.filter { it.first == "tab-1/r1" }
+        assertEquals("exactly one answer", 1, answered.size)
+        assertEquals("0xtx", answered.single().second.getString("result"))
+        assertEquals("signed twice: once per slide", 2, signs)
     }
 
     /**
@@ -490,6 +525,8 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
         store.refuseWrites = true
         c.approve()
+        withTimeout(30_000) { c.sign.first { it.error != null } }
+        c.swipeDismissed()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertEquals("zero POSTs", 0, events.count { it == "relay.send" })
         val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
@@ -511,14 +548,18 @@ class DappSignMachineTest {
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
         withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
         c.approve()
+        val sheet = withTimeout(30_000) { c.sign.first { it.error != null } }
+        assertTrue("the sheet knows it was refused", sheet.failure_refused)
+        assertTrue("a refusal is not tried again", !sheet.failure_retryable)
+        // Spec 096 F8: answered when the person closes the sheet.
+        assertTrue("held while it shows", answers.none { it.first == "tab-1/r1" })
+        c.swipeDismissed()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val answered = answers.filter { it.first == "tab-1/r1" }
         assertEquals("exactly one answer", 1, answered.size)
         val error = answered.single().second.getJSONObject("error")
         assertEquals(-32603, error.getInt("code"))
         assertTrue("the core's words: $error", error.getString("message").contains(uniffi.vela_core_uniffi.userOpRefusedDappDetail()))
-        val sheet = withTimeout(10_000) { c.sign.first { it.error != null } }
-        assertTrue("the sheet knows it was refused", sheet.failure_refused)
         assertEquals("posted once", 1, events.count { it == "relay.send" })
     }
 

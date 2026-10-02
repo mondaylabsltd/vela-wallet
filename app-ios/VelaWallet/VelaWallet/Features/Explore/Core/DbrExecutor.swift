@@ -43,10 +43,10 @@ final class DbrExecutor {
         var deliver: (_ tab: String, _ messageJson: String) -> Void = { _, _ in }
         /// One call through the wallet's own pool: `["result": …]`,
         /// `["error": ["code", "message"]]`, or `nil` when no endpoint answered.
-        var poolCall: (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
+        var poolCall: @MainActor (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
         = { _, _, _, _ in nil }
         /// The transaction a user operation landed in, if it has.
-        var resolveUserOp: (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
+        var resolveUserOp: @MainActor (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
         /// Open the signing sheet. Answered later, exactly once, through
         /// `signing_answered`.
         var forwardToSigning: (DbrForward) -> Void = { _ in }

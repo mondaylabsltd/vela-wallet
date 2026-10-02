@@ -224,6 +224,8 @@ fn every_route() {
     assert_eq!(classify("wallet_switchEthereumChain"), Route::SwitchChain);
     assert_eq!(classify("wallet_addEthereumChain"), Route::AddChain);
     assert_eq!(classify("wallet_watchAsset"), Route::WatchAsset);
+    assert_eq!(classify("wallet_getCapabilities"), Route::Capabilities);
+    assert_eq!(classify("wallet_getCallsStatus"), Route::CallsStatus);
     for method in [
         "eth_sendTransaction",
         "wallet_sendCalls",
@@ -2211,6 +2213,259 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
         json!([format!("0x{}", "ef".repeat(32))]),
     );
     assert!(plain.iter().any(|op| matches!(op, Op::Read { .. })));
+}
+
+/// Spec 094 S6 (089 F04): `wallet_sendCalls` went through but a dApp's
+/// `waitForCallsStatus` failed — `wallet_getCallsStatus` answered 4200.
+/// Spec 096 F3: the relay refused the batch's operation before any block —
+/// the tracker's terminal `rejected` — so the page hears EIP-5792's 400 (not
+/// included, the wallet will not retry), never 100 for as long as it asks. A
+/// `rejected` naming a bundle tx is the chain's to decide: still 100.
+#[test]
+fn a_batch_the_relay_refused_reads_400() {
+    let op_hash = format!("0x{}", "cd".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_sendCalls",
+        json!([{"calls":[{"to":A2}]}]),
+    );
+    sut.dispatch(Event::SigningAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        payload: SignResponsePayload::Ok {
+            result: Some(op_hash.clone()),
+        },
+        user_op_hash: Some(op_hash.clone()),
+    });
+    for (id, relay, status) in [
+        ("2", json!({"status": "rejected"}), 400),
+        (
+            "3",
+            json!({"status": "rejected", "transactionHash": format!("0x{}", "ee".repeat(32))}),
+            100,
+        ),
+    ] {
+        ask(
+            &mut sut,
+            "t1",
+            "d1",
+            DAPP,
+            id,
+            "wallet_getCallsStatus",
+            json!([op_hash]),
+        );
+        sut.resolve_matching(
+            |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "eth_getUserOperationReceipt"),
+            Res::ReadAnswered {
+                body_json: Some(json!({"result": null}).to_string()),
+            },
+        );
+        let ops = sut.resolve_matching(
+            |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "pimlico_getUserOperationStatus"),
+            Res::ReadAnswered {
+                body_json: Some(json!({ "result": relay }).to_string()),
+            },
+        );
+        let answer = only_answer(&ops);
+        assert_eq!(answer["result"]["status"], status, "{relay}");
+        assert!(answer["result"].get("receipts").is_none());
+    }
+}
+
+#[test]
+fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
+    let op_hash = format!("0x{}", "ab".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_sendCalls",
+        json!([{"calls":[{"to":A2}]}]),
+    );
+    sut.dispatch(Event::SigningAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        payload: SignResponsePayload::Ok {
+            result: Some(op_hash.clone()),
+        },
+        user_op_hash: Some(op_hash.clone()),
+    });
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_getCallsStatus",
+        json!([op_hash]),
+    );
+    assert!(ops.contains(&Op::Read {
+        tab: "t1".to_owned(),
+        id: "2".to_owned(),
+        chain_id: 100,
+        method: "eth_getUserOperationReceipt".to_owned(),
+        params_json: json!([op_hash]).to_string(),
+        bundler: true,
+    }));
+    // Not landed: the relay is asked whether it refused it (spec 096 F3);
+    // it holds it — pending.
+    let relay = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "2"),
+        Res::ReadAnswered {
+            body_json: Some(json!({"result": null}).to_string()),
+        },
+    );
+    assert_eq!(
+        relay,
+        vec![Op::Read {
+            tab: "t1".to_owned(),
+            id: "2".to_owned(),
+            chain_id: 100,
+            method: "pimlico_getUserOperationStatus".to_owned(),
+            params_json: json!([op_hash]).to_string(),
+            bundler: true,
+        }],
+        "no answer yet, one relay read"
+    );
+    let pending = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, method, .. } if id == "2" && method == "pimlico_getUserOperationStatus"),
+        Res::ReadAnswered {
+            body_json: Some(json!({"result": {"status": "submitted"}}).to_string()),
+        },
+    );
+    let answer = only_answer(&pending);
+    assert_eq!(answer["result"]["status"], 100);
+    assert_eq!(answer["result"]["id"], json!(op_hash));
+    assert_eq!(answer["result"]["chainId"], "0x64");
+
+    // Landed: confirmed, with its receipt.
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "3",
+        "wallet_getCallsStatus",
+        json!([op_hash]),
+    );
+    let landed = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "3"),
+        Res::ReadAnswered {
+            body_json: Some(
+                json!({"result": {
+                    "success": true,
+                    "logs": [],
+                    "receipt": {"transactionHash": format!("0x{}", "cd".repeat(32)), "status": "0x1"}
+                }})
+                .to_string(),
+            ),
+        },
+    );
+    assert_eq!(only_answer(&landed)["result"]["status"], 200);
+
+    // A bundler that answered nobody: still pending, never an error.
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "4",
+        "wallet_getCallsStatus",
+        json!([op_hash]),
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "4"),
+        Res::ReadAnswered { body_json: None },
+    );
+    let silent = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, method, .. } if id == "4" && method == "pimlico_getUserOperationStatus"),
+        Res::ReadAnswered { body_json: None },
+    );
+    assert_eq!(only_answer(&silent)["result"]["status"], 100);
+}
+
+#[test]
+fn a_batch_this_wallet_never_sent_is_an_unknown_bundle() {
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_getCallsStatus",
+        json!([format!("0x{}", "ee".repeat(32))]),
+    );
+    assert_eq!(error_code(&only_answer(&ops)), dapp_rpc::UNKNOWN_BUNDLE_ID);
+    assert!(!ops.iter().any(|op| matches!(op, Op::Read { .. })));
+    let malformed = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_getCallsStatus",
+        json!(["0x12"]),
+    );
+    assert_eq!(error_code(&only_answer(&malformed)), -32602);
+}
+
+#[test]
+fn capabilities_are_told_to_the_connected_account_only() {
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_getCapabilities",
+        json!([A1]),
+    );
+    assert_eq!(
+        only_answer(&ops)["result"],
+        json!({
+            "0x1": {"atomic": {"status": "supported"}},
+            "0x64": {"atomic": {"status": "supported"}},
+            "0x2105": {"atomic": {"status": "supported"}}
+        })
+    );
+    let other = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_getCapabilities",
+        json!([A2]),
+    );
+    assert_eq!(error_code(&only_answer(&other)), 4100);
+
+    let mut stranger = fresh();
+    hello(&mut stranger, "t1", "d1", OTHER);
+    let ops = ask(
+        &mut stranger,
+        "t1",
+        "d1",
+        OTHER,
+        "1",
+        "wallet_getCapabilities",
+        json!([A1]),
+    );
+    assert_eq!(error_code(&only_answer(&ops)), 4100);
 }
 
 #[test]

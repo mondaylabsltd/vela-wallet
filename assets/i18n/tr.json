@@ -730,7 +730,8 @@
    "syncFailedBody": "Cüzdan oluşturuldu ancak açık anahtar yüklenmedi — diğer cihazlar henüz giriş yapamaz.",
    "copyAddress": "Adresi kopyala",
    "copied": "Kopyalandı",
-   "close": "Kapat"
+   "close": "Kapat",
+   "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin."
   },
   "create": {
    "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
@@ -986,6 +987,11 @@
    "clearAllTitle": "Geçmiş temizlensin mi?",
    "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
    "a11yDeleteHistory": "Geçmişten kaldır"
+  },
+  "ext": {
+   "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
+   "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
+   "accessAllow": "Erişime izin ver"
   }
  },
  "signHandoff": {
@@ -1034,6 +1040,9 @@
   "linkWebsite": "Web Sitesi",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Gizlilik Politikası",
+  "linkTerms": "Hizmet Şartları",
+  "linkSupport": "Destek",
   "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
   "sectionLinks": "Bağlantılar",
   "debugMode": "Hata ayıklama modu",
@@ -1602,6 +1611,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo yer tutucu · taranamaz"
+  },
+  "appMenu": {
+   "about": "Vela Wallet Hakkında",
+   "hide": "Vela Wallet'ı Gizle",
+   "hideOthers": "Diğerlerini Gizle",
+   "showAll": "Tümünü Göster",
+   "quit": "Vela Wallet'tan Çık",
+   "edit": "Düzen",
+   "undo": "Geri Al",
+   "redo": "Yinele",
+   "cut": "Kes",
+   "copy": "Kopyala",
+   "paste": "Yapıştır",
+   "selectAll": "Tümünü Seç",
+   "view": "Görüntü",
+   "fullScreen": "Tam Ekranı Aç/Kapat",
+   "window": "Pencere",
+   "minimize": "Küçült",
+   "closeWindow": "Pencereyi Kapat"
   }
  },
  "settingsModals": {

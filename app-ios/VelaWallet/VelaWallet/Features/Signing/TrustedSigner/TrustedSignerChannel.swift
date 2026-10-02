@@ -135,7 +135,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
     /// Asked only when the person is back with no answer, or the tab said its
     /// first load failed; given the address alone (`probeUrl`), never the
     /// request. The app injects `headProbe`; tests inject a verdict.
-    var reachable: (URL) async -> Bool = { _ in true }
+    var reachable: @MainActor (URL) async -> Bool = { _ in true }
     /// The current visit's page could not open: the person came back with no
     /// answer (or the tab's first load failed) and the page's address does
     /// not answer. The waiting card says so and offers a retry; the request

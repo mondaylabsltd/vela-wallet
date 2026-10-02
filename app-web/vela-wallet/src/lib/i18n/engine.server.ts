@@ -22,6 +22,7 @@ import { INTRO_KEYS } from '$lib/intro/slides';
 import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
+import type { ExtensionMessages } from '$lib/extension/messages';
 import type { SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
@@ -517,6 +518,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			linkWebsite: k('about.linkWebsite'),
 			linkGitHub: k('about.linkGitHub'),
 			linkSafeWallet: k('about.linkSafeWallet'),
+			linkPrivacy: k('about.linkPrivacy'),
+			linkTerms: k('about.linkTerms'),
+			linkSupport: k('about.linkSupport'),
 			sectionLinks: k('about.sectionLinks'),
 			footer: k('about.footer')
 		},
@@ -712,7 +716,24 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		body: k('connect.browser.body'),
 		connect: k('connect.browser.connect'),
 		cancel: k('connect.browser.cancel'),
-		preparing: k('connect.browser.preparing')
+		preparing: k('connect.browser.preparing'),
+		accountLabel: k('explore.account'),
+		networkLabel: k('explore.network'),
+		noWallet: k('connect.list.noWallet'),
+		createWallet: k('onboarding.welcome.createWallet'),
+		haveWallet: k('onboarding.welcome.alreadyHaveWallet')
+	};
+}
+
+/** The packaged extension's notices (spec 094), on every `[locale]` page. */
+export function resolveExtensionMessages(locale: Locale): ExtensionMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, key);
+	return {
+		installedNote: k('connect.ext.installedNote'),
+		accessNote: k('connect.ext.accessNote'),
+		accessAllow: k('connect.ext.accessAllow'),
+		dismiss: k('common.gotIt')
 	};
 }
 
@@ -997,7 +1018,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
-			failedHint: k('send.txErrorGeneric')
+			failedHint: k('send.txErrorGeneric'),
+			retry: k('send.txRetryBtn')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

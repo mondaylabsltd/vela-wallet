@@ -58,6 +58,9 @@ pub mod safe;
 pub mod sign_message;
 pub mod storage_catalog;
 pub mod trusted_signer;
+/// One reading of a transaction request's calls — the `value` rule every
+/// shell's card, quote and submit share (spec 096 F1).
+pub mod tx_request;
 pub mod typed_data_request;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,

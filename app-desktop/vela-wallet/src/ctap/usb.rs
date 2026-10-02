@@ -169,6 +169,18 @@ pub fn hid_reachable() -> bool {
     hid_thread::run(|| HidApi::new().is_ok()).unwrap_or(false)
 }
 
+/// How many HID devices the system lists — FIDO or not: a developer build's
+/// sandbox probe (spec 095) asks whether enumeration works at all, and a
+/// keyboard or trackpad answers that without a security key plugged in.
+pub fn hid_device_count() -> Result<usize, String> {
+    hid_thread::run(|| {
+        HidApi::new()
+            .map(|api| api.device_list().count())
+            .map_err(|error| error.to_string())
+    })
+    .unwrap_or_else(|| Err("the HID thread could not answer".to_owned()))
+}
+
 /// The one thread hidapi is ever initialised or enumerated on.
 ///
 /// hidapi's macOS backend keeps ONE process-global `IOHIDManager` and

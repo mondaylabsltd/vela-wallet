@@ -35,6 +35,10 @@ worker-configuration.d.ts
 # twice is a 3.4 MB binary committed twice. `npm run check` gates staleness.
 static/vela_core_bg.*.wasm
 
-# spec 027: the packaged extension is build output
+# spec 027: the packaged extension is build output; spec 094: the store
+# package beside it, and the zips `build.mjs --zip` writes
 extension/dist
+extension/dist-release
+extension/dist-store
+/vela-wallet-extension-*.zip
 .pw-out*

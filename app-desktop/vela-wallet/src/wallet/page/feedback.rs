@@ -533,7 +533,7 @@ impl WalletPage {
     /// off the frame — and Send pressed; the send waits for the tiles as a
     /// real one does. `away`: the person leaves for the Wallet as it goes.
     fn feedback_autosend(&mut self, away: bool, cx: &mut Context<Self>) {
-        let files: Vec<PathBuf> = std::env::var_os("VELA_SCREENSHOT_FILES")
+        let files: Vec<PathBuf> = crate::dev_env::var_os!("VELA_SCREENSHOT_FILES")
             .map(|list| std::env::split_paths(&list).collect())
             .unwrap_or_default();
         self.feedback_add_paths(files, cx);
@@ -553,7 +553,7 @@ impl WalletPage {
         if self.feedback.busy() {
             return;
         }
-        if let Some(list) = std::env::var_os("VELA_SCREENSHOT_FILES") {
+        if let Some(list) = crate::dev_env::var_os!("VELA_SCREENSHOT_FILES") {
             let paths = std::env::split_paths(&list).collect();
             self.feedback_add_paths(paths, cx);
             return;
@@ -756,7 +756,7 @@ impl WalletPage {
         self.section = Section::Settings;
         self.settings_page = SettingsPage::Feedback;
         self.settings_dialog = None;
-        let files: Vec<PathBuf> = std::env::var_os("VELA_SCREENSHOT_FILES")
+        let files: Vec<PathBuf> = crate::dev_env::var_os!("VELA_SCREENSHOT_FILES")
             .map(|list| std::env::split_paths(&list).collect())
             .unwrap_or_default();
         let ready: Vec<ReadyShot> = files

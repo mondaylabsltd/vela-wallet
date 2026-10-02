@@ -42,6 +42,24 @@ struct SettingsTruthTests {
         #expect(versions == 1, "\(versions) versions on one row: \(text)")
     }
 
+    /// Spec 095 (App Review 5.1.1(i)): About links the privacy policy, the
+    /// terms and the support page — the URLs onboarding opens — in every
+    /// language, none showing its key.
+    @Test func theAboutPageLinksThePolicyTermsAndSupport() {
+        for tag in ["en", "de", "ja", "ru", "zh", "zh-HK"] {
+            let about = SettingsFixtures.build(.st1, loc: Loc(overrideTag: tag)).about
+            let links = about.links.compactMap(\.link)
+            #expect(Array(links.suffix(3)) == [
+                "https://getvela.app/privacy",
+                "https://getvela.app/terms",
+                "https://getvela.app/support",
+            ], "\(tag)")
+            for row in about.links {
+                #expect(!row.label.isEmpty && !row.label.hasPrefix("about."), "\(tag): \(row.label)")
+            }
+        }
+    }
+
     /// The About page's own line is the build's version and commit.
     @Test func theAboutPageNamesTheBuild() {
         let page = live().about

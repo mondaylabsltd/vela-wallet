@@ -730,7 +730,8 @@
    "syncFailedBody": "Dompet dibuat, tetapi kunci publik belum terunggah — perangkat lain belum bisa masuk.",
    "copyAddress": "Salin alamat",
    "copied": "Disalin",
-   "close": "Tutup"
+   "close": "Tutup",
+   "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi."
   },
   "create": {
    "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",
@@ -986,6 +987,11 @@
    "clearAllTitle": "Hapus riwayat?",
    "clearAllBody": "Ini menghapus semua dApp yang baru dibuka.",
    "a11yDeleteHistory": "Hapus dari riwayat"
+  },
+  "ext": {
+   "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
+   "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
+   "accessAllow": "Izinkan akses"
   }
  },
  "signHandoff": {
@@ -1034,6 +1040,9 @@
   "linkWebsite": "Situs Web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Kebijakan Privasi",
+  "linkTerms": "Ketentuan Layanan",
+  "linkSupport": "Dukungan",
   "footer": "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
   "sectionLinks": "Tautan",
   "debugMode": "Mode debug",
@@ -1602,6 +1611,25 @@
   },
   "qrPlaceholder": {
    "caption": "Placeholder demo · tidak dapat dipindai"
+  },
+  "appMenu": {
+   "about": "Tentang Vela Wallet",
+   "hide": "Sembunyikan Vela Wallet",
+   "hideOthers": "Sembunyikan Lainnya",
+   "showAll": "Tampilkan Semua",
+   "quit": "Keluar dari Vela Wallet",
+   "edit": "Edit",
+   "undo": "Urungkan",
+   "redo": "Ulangi",
+   "cut": "Potong",
+   "copy": "Salin",
+   "paste": "Tempel",
+   "selectAll": "Pilih Semua",
+   "view": "Tampilan",
+   "fullScreen": "Alihkan Layar Penuh",
+   "window": "Jendela",
+   "minimize": "Minimalkan",
+   "closeWindow": "Tutup Jendela"
   }
  },
  "settingsModals": {

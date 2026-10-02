@@ -424,6 +424,25 @@
     },
     "qrPlaceholder": {
       "caption": "Aperçu de démonstration · non scannable"
+    },
+    "appMenu": {
+      "about": "À propos de Vela Wallet",
+      "hide": "Masquer Vela Wallet",
+      "hideOthers": "Masquer les autres",
+      "showAll": "Tout afficher",
+      "quit": "Quitter Vela Wallet",
+      "edit": "Édition",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "cut": "Couper",
+      "copy": "Copier",
+      "paste": "Coller",
+      "selectAll": "Tout sélectionner",
+      "view": "Présentation",
+      "fullScreen": "Activer/désactiver le plein écran",
+      "window": "Fenêtre",
+      "minimize": "Placer dans le Dock",
+      "closeWindow": "Fermer la fenêtre"
     }
   }
 }

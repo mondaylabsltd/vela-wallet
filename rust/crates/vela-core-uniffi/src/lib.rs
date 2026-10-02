@@ -321,6 +321,25 @@ pub fn typed_data_document(method: String, params_json: String) -> Option<String
     vela_core::typed_data_request::document_json_of(&method, &params_json)
 }
 
+/// The calls a dApp transaction request sends — `params[0].calls` of a
+/// `wallet_sendCalls`, else `params[0]` — every one or none, value in
+/// DECIMAL wei. `None` when any call is unreadable, has no recipient, or
+/// there are none. One rule for every shell (spec 096 F1): each used to read
+/// `value` its own way, and one request could be signed as different amounts.
+#[uniffi::export]
+pub fn dapp_request_calls(method: String, params_json: String) -> Option<Vec<UserOpCall>> {
+    vela_core::tx_request::calls_of(&method, &params_json).map(|calls| {
+        calls
+            .into_iter()
+            .map(|call| UserOpCall {
+                to: call.to,
+                value: call.value,
+                data: call.data,
+            })
+            .collect()
+    })
+}
+
 #[uniffi::export]
 pub fn hash_typed_data(typed_data_json: String) -> Result<Vec<u8>, CoreError> {
     Ok(vela_core::eip712::hash_typed_data(&typed_data_json)?)
@@ -1004,6 +1023,25 @@ pub fn i18n_plural_suffix(locale: String, count: f64) -> String {
 #[uniffi::export]
 pub fn i18n_plural_suffixes(locale: String) -> Vec<String> {
     vela_core::i18n::plural_suffixes(&locale)
+}
+
+/// What "follow the system" resolves to: the first of the platform's
+/// preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+/// locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+/// copy of).
+#[uniffi::export]
+pub fn i18n_system_language(preferred: Vec<String>) -> String {
+    vela_core::i18n::system_language(&preferred).to_owned()
+}
+
+/// The Apple localization codes for the shipped locales, in their order
+/// (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+#[uniffi::export]
+pub fn i18n_apple_localizations() -> Vec<String> {
+    vela_core::i18n::apple_localizations()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 #[uniffi::export]

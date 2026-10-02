@@ -536,8 +536,9 @@ pub enum FeeGasOutcome {
 // ---------------------------------------------------------------------------
 
 /// What this machine asks the platform to do. The shell owns transports,
-/// RPC pooling, the 8s quote cache and the 15s estimate timeout — it answers
-/// each sentence exactly once (a timeout answers with the failure variant).
+/// RPC pooling and the 8s quote cache — it answers each sentence exactly once
+/// (a timeout answers with the failure variant). The bound on a whole run is
+/// the core's: [`FeeOperation::StartDeadline`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -585,6 +586,12 @@ pub enum FeeOperation {
     },
     /// Quote staleness timer.
     StartTtl { ms: u32 },
+    /// The bound on this whole run ([`QUOTE_DEADLINE_MS`], spec 094 S9):
+    /// answer [`FeeShellResult::DeadlineElapsed`] after `ms`. A run still
+    /// gathering or estimating then FAILS, retryably, instead of drawing
+    /// "Estimating…" for as long as the network hangs; a run that already
+    /// priced ignores it.
+    StartDeadline { ms: u32 },
 }
 
 /// What the shell observed.
@@ -620,6 +627,8 @@ pub enum FeeShellResult {
         gas: Vec<Option<String>>,
     },
     TtlElapsed,
+    /// [`FeeOperation::StartDeadline`]'s time ran out.
+    DeadlineElapsed,
 }
 
 impl Operation for FeeOperation {
@@ -756,6 +765,16 @@ pub enum FeeFailure {
     /// (and becomes [`FeeFailure::EstimateFailed`]).
     WouldFail,
 }
+
+/// The bound on one whole quote (spec 094 S9, 089 F06). Offline, a run's
+/// reads each time out on their own, one after another, and the row read
+/// "Estimating…" for 15 s and far beyond — 4 min 35 s measured on iOS — with
+/// no words and nothing scheduled to ask again. A run that has not priced in
+/// this long fails as [`FeeFailure::QuoteUnavailable`] (or
+/// [`FeeFailure::ChainRead`] when the chain's own price never came): the row
+/// says why, and the re-quote schedule ([`requote_delay_ms`]) asks again. 15 s
+/// is the send flow's own estimate bound.
+pub const QUOTE_DEADLINE_MS: u32 = 15_000;
 
 /// Bound on each automatic re-quote (spec 082 RJ12): a re-ask that has not
 /// answered in this time is a failure again, and the schedule goes on. With
@@ -2006,6 +2025,9 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
         chain_id: ctx.chain_id,
         account: ctx.account.clone(),
     });
+    operations.push(FeeOperation::StartDeadline {
+        ms: QUOTE_DEADLINE_MS,
+    });
     requests(model, operations)
 }
 
@@ -2074,6 +2096,24 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
         (Phase::Quoted, FeeShellResult::TtlElapsed) => {
             model.stale = true;
             render()
+        }
+        // The run did not price in time (spec 094 S9): it ends here, and
+        // whatever it was still waiting for is dropped when it comes.
+        (Phase::Gathering | Phase::Estimating(_), FeeShellResult::DeadlineElapsed) => {
+            let chain_price_missing =
+                model.phase == Phase::Gathering && model.pending.gas.is_none();
+            model.attempt += 1;
+            model.pending = Pending::default();
+            fail(
+                model,
+                if chain_price_missing {
+                    FeeFailure::ChainRead {
+                        rate_limited: false,
+                    }
+                } else {
+                    FeeFailure::QuoteUnavailable
+                },
+            )
         }
         // A result for a phase that no longer expects it. Never an error,
         // never a state change.

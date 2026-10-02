@@ -179,6 +179,11 @@ data class GuardView(
     /** Shown and kept as asked — copied into `SignApproveOpts.unlimited_approved`,
      *  the submit guard's only waiver. */
     val unlimited_consented: Boolean = false,
+    /** The request grants an unbounded allowance as it stands, said in the
+     *  danger tone — the ONE place every shell reads it from (spec 094 S8): the
+     *  approval kept as asked, a batch leg left so, or an unbounded off-chain
+     *  permit. */
+    val unlimited_warning: Boolean = false,
     val increase_total: GuardIncreaseTotalView? = null,
     val decimals_unverified: Boolean = false,
     val expired: Boolean = false,

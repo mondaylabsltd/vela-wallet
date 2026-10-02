@@ -343,6 +343,84 @@ test.describe('signing for a dApp', () => {
 		expect(answer.code).toBe(4100);
 		await context.close();
 	});
+
+	/**
+	 * Spec 094 S12: typed data (EIP-712 v4), the shape Permit2 and most dApp
+	 * logins use, signed end to end. A document no descriptor describes is a
+	 * blind signature, and the sheet says so; the slide and the fixture key
+	 * still sign it, and the page gets a signature.
+	 */
+	test('eth_signTypedData_v4: the sheet shows it, and approving returns a signature', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		await connect(context, page);
+
+		const typed = {
+			primaryType: 'Mail',
+			domain: { name: 'Vela e2e', version: '1' },
+			types: {
+				EIP712Domain: [
+					{ name: 'name', type: 'string' },
+					{ name: 'version', type: 'string' }
+				],
+				Mail: [
+					{ name: 'from', type: 'address' },
+					{ name: 'contents', type: 'string' }
+				]
+			},
+			message: { from: FIXTURE_ONE, contents: 'Hello from the typed-data e2e' }
+		};
+		const asked = page.evaluate(
+			([address, doc]) => window.__ask('eth_signTypedData_v4', [address, doc]),
+			[FIXTURE_ONE, JSON.stringify(typed)] as const
+		) as Promise<AskResult>;
+		const win = await requestWindow(context);
+		await expect(win.getByRole('dialog', { name: 'Signature request' })).toBeVisible({
+			timeout: 30_000
+		});
+		await expect(win.getByText('Blind signature')).toBeVisible();
+		await expect(win.getByText(`localhost:${PORT}`).first()).toBeVisible();
+		await slideToConfirm(win);
+		const answer = await asked;
+		expect(answer.ok).toBe(true);
+		expect(String(answer.result)).toMatch(/^0x[0-9a-fA-F]{100,}$/);
+		await context.close();
+	});
+
+	/**
+	 * Spec 094 S5: a dApp asking with no wallet in the extension. The window
+	 * used to show a Connect that asked the core to grant nobody — it threw,
+	 * and the button did nothing. It says what is missing now, opens the
+	 * welcome in a tab, and the moment a wallet exists (here: the parallel
+	 * space, in another tab) the card turns into the consent, whose Connect
+	 * works.
+	 */
+	test('connecting with no wallet: says so, opens the welcome, then connects once there is one', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+
+		const asked = page.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
+		const win = await requestWindow(context);
+		await expect(win.getByText('Create a wallet first')).toBeVisible({ timeout: 30_000 });
+		await expect(win.getByRole('button', { name: 'Connect' })).toHaveCount(0);
+
+		const opened = context.waitForEvent('page');
+		await win.getByRole('button', { name: 'Create Wallet' }).click();
+		const tab = await opened;
+		await tab.waitForURL(/\/en\/create\.html$/, { timeout: 30_000 });
+
+		// A wallet appears in another document of the extension…
+		await seedWallet(context, id);
+		// …and the window, still holding the request, asks for consent.
+		await win.getByRole('button', { name: 'Connect' }).click({ timeout: 30_000 });
+		expect((await asked).result).toEqual([FIXTURE_ONE]);
+		await context.close();
+	});
 });
 
 declare global {

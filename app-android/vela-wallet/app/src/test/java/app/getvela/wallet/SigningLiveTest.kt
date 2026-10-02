@@ -175,6 +175,36 @@ class SigningLiveTest {
         assertEquals("1000", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":"0x3e8"}]""")?.single()?.value)
     }
 
+    /**
+     * Spec 096 F1: the core's value table, through this shell's reading —
+     * PancakeSwap's `0xaa87bee538000` is 0.003 BNB; decimal text, bare hex,
+     * a sign (this shell took "-1" as minus one) and an overflow are refused.
+     */
+    @Test
+    fun `a call value is the core's reading`() {
+        val table = listOf(
+            "\"0xaa87bee538000\"" to "3000000000000000",
+            "\"0xAA87BEE538000\"" to "3000000000000000",
+            "\"0x\"" to "0",
+            "\"\"" to "0",
+            "\"0\"" to "0",
+            "0" to "0",
+            "\"0x${"f".repeat(64)}\"" to "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "\"0x1${"0".repeat(64)}\"" to null,
+            "\"1000\"" to null,
+            "\"aa87bee538000\"" to null,
+            "\"-1\"" to null,
+            "\"0X1f\"" to null,
+        )
+        for ((value, wei) in table) {
+            val calls = SignExecutor.callsOf(
+                "eth_sendTransaction",
+                """[{"to":"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4","value":$value,"data":"0x3593564c"}]""",
+            )
+            assertEquals(value, wei, calls?.single()?.value)
+        }
+    }
+
     @Test
     fun `the slide waits for the guard and the fee, and a contract call with bytes stays blind`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
@@ -290,7 +320,7 @@ class SigningLiveTest {
             choice = app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited,
             requested_finite = false, requested_unlimited = true, has_balance_cap = false,
         )
-        val kept = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = true, unlimited_consented = true)
+        val kept = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = true, unlimited_consented = true, unlimited_warning = true)
         val blocks = SigningLive.guardBlocks(kept, strings)
         val allowance = blocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals(strings.t("componentsUi.signingApprove.unlimitedValue"), allowance.value)
@@ -303,7 +333,7 @@ class SigningLiveTest {
         assertNull("the site's own bytes", opts.params_override_json)
         assertFalse(SigningController.approveOpts(FeeView(), ClearSigningView(), GuardView()).unlimited_approved)
 
-        val custom = kept.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), unlimited_consented = false)
+        val custom = kept.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), unlimited_consented = false, unlimited_warning = false)
         val cappedBlocks = SigningLive.guardBlocks(custom, strings)
         val bounded = cappedBlocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals("1 USDC", bounded.value)
@@ -375,6 +405,28 @@ class SigningLiveTest {
         assertEquals(listOf<Int?>(1), cards.map { it.leg })
         assertEquals(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance, SigningLive.chipMode("balance"))
         assertNull(SigningLive.chipMode("grant"))
+    }
+
+    /** Spec 094 S8: an unbounded off-chain permit is warned about from the core's flag, and gets no editor. */
+    @Test
+    fun `an unlimited permit is said like an unlimited approval and still cannot be capped`() {
+        val permit = GuardView(
+            surface = app.getvela.wallet.feature.signing.core.GuardSurface.PermitSign,
+            detected = app.getvela.wallet.feature.signing.core.GuardDetectedApproval(
+                kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Permit2Single, spender = "0x1111",
+                is_unbounded = true, editable = false,
+                locus = app.getvela.wallet.feature.signing.core.GuardLocus.TypedPath("details.amount"),
+            ),
+            unlimited_warning = true,
+        )
+        val blocks = SigningLive.guardBlocks(permit, strings)
+        val warnings = blocks.filterIsInstance<SigningBlock.Warning>().map { it.text }
+        assertTrue(warnings.contains(strings.t("componentsUi.signing.unlimitedWarning")))
+        assertTrue(warnings.contains(strings.t("componentsUi.signingApprove.permitCantCap")))
+        assertTrue(blocks.none { it is SigningBlock.Allowance })
+        val bounded = SigningLive.guardBlocks(permit.copy(unlimited_warning = false), strings)
+            .filterIsInstance<SigningBlock.Warning>().map { it.text }
+        assertEquals(listOf(strings.t("componentsUi.signingApprove.permitCantCap")), bounded)
     }
 
     private fun transferLeg() = app.getvela.wallet.feature.signing.core.GuardLegView(to = "0xdd")
@@ -721,6 +773,7 @@ class SigningLiveTest {
         val guard = GuardView(
             surface = app.getvela.wallet.feature.signing.core.GuardSurface.Batch,
             batch = app.getvela.wallet.feature.signing.core.GuardBatchView(any_uncapped = true),
+            unlimited_warning = true,
         )
         val model = batchModel("""[{"to":"$other","data":"0xdeadbeef"},{"to":"$founder","data":"0x095ea7b3"}]""", clear, guard)
         assertEquals(SigningTone.Danger, (model.blocks.first() as SigningBlock.Intent).tone)

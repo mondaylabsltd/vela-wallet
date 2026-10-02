@@ -31,7 +31,53 @@ use vela_core::app::fee_policy::{
     TEMPO_PER_SUBCALL_GAS_EST, TEMPO_SPLIT_SAFETY_BPS, TEMPO_SPLIT_SAFETY_GAS,
 };
 
-type Sut = DomainDriver<FeePolicy>;
+/// The machine, driven as the shell drives it — except that every run's
+/// deadline timer (`StartDeadline`, spec 094) is a shell timer these tests
+/// never let fire: dropped as it is asked for, so each test answers the reads
+/// it is about in order. The deadline's own tests use [`Timed`].
+struct Sut(DomainDriver<FeePolicy>);
+
+fn is_deadline(op: &Op) -> bool {
+    matches!(op, Op::StartDeadline { .. })
+}
+
+impl Sut {
+    fn new() -> Self {
+        Self(DomainDriver::new())
+    }
+    fn quiet(&mut self, ops: Vec<Op>) -> Vec<Op> {
+        self.0.drop_matching(is_deadline);
+        ops.into_iter().filter(|op| !is_deadline(op)).collect()
+    }
+    fn dispatch(&mut self, event: Event) -> Vec<Op> {
+        let ops = self.0.dispatch(event);
+        self.quiet(ops)
+    }
+    fn resolve(&mut self, result: Res) -> Vec<Op> {
+        let ops = self.0.resolve(result);
+        self.quiet(ops)
+    }
+    fn resolve_matching(&mut self, predicate: impl Fn(&Op) -> bool, result: Res) -> Vec<Op> {
+        let ops = self.0.resolve_matching(predicate, result);
+        self.quiet(ops)
+    }
+}
+
+impl std::ops::Deref for Sut {
+    type Target = DomainDriver<FeePolicy>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Sut {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// The machine with its deadline timers left in, for the tests of the bound.
+type Timed = DomainDriver<FeePolicy>;
 
 const CHAIN: u32 = 1;
 const TEMPO_CHAIN: u32 = 4_217;
@@ -4602,7 +4648,8 @@ fn what_a_swap_brings_in_pays_its_fee_only_at_half() {
     assert!(enough.confirm_fee_ready, "{enough:?}");
 }
 
-// ===========================================================================
+// ====================================================================}
+
 // Spec 096 F2 — the machine never pays in a coin the operation may spend
 //
 // The real-dApp pass on BNB Chain: PancakeSwap USDC → BNB, all 2.3417 USDC.
@@ -4906,4 +4953,99 @@ fn a_plain_send_still_pays_its_fee_in_the_coin_it_sends_when_that_is_all_there_i
     );
     assert!(!view.confirm_fee_ready);
     assert!(view.options.iter().all(|option| !option.spent_by_operation));
+=======
+// ---------------------------------------------------------------------------
+// The bound on a whole run (spec 094 S9, 089 F06)
+// ---------------------------------------------------------------------------
+
+/// Offline, the run's reads each time out on their own, one after another, and
+/// the row read "Estimating…" far past 15 s with no words. Every run is
+/// bounded now, by a timer the core asks for with its reads.
+#[test]
+fn every_run_asks_for_its_deadline_with_its_reads() {
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(request(CHAIN, vec![]));
+    assert_eq!(
+        ops.last(),
+        Some(&Op::StartDeadline {
+            ms: vela_core::app::fee_policy::QUOTE_DEADLINE_MS
+        })
+    );
+    assert_eq!(vela_core::app::fee_policy::QUOTE_DEADLINE_MS, 15_000);
+}
+
+#[test]
+fn a_run_with_no_chain_price_by_the_deadline_is_a_chain_read_failure() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    assert!(sut.view().busy);
+    let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert!(
+        ops.is_empty(),
+        "nothing more is asked by the deadline itself"
+    );
+    let view = sut.view();
+    assert!(!view.busy, "no longer Estimating…");
+    assert_eq!(
+        view.failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        })
+    );
+    assert!(!view.confirm_fee_ready);
+    // The reads that come back late belong to a run that is over.
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let late = sut.resolve(quotes_ok());
+    assert!(late.is_empty(), "a late answer starts nothing");
+    assert!(sut.view().failed.is_some());
+    // …and the failure is one the schedule asks again for.
+    assert!(vela_core::app::fee_policy::requote_delay_ms(
+        FeeFailure::ChainRead {
+            rate_limited: false
+        },
+        1
+    )
+    .is_some());
+}
+
+#[test]
+fn a_run_stuck_on_the_relay_is_a_quote_failure_and_a_retry_starts_over() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    // Estimating: the relay's simulation never answers.
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert_eq!(sut.view().failed, Some(FeeFailure::QuoteUnavailable));
+    // The schedule's re-ask is a fresh run, with a deadline of its own.
+    let ops = sut.dispatch(Event::Requote);
+    assert!(ops.iter().any(is_deadline));
+    assert!(sut.view().busy);
+}
+
+#[test]
+fn a_priced_quote_ignores_its_deadline_and_a_refresh_keeps_the_one_on_screen() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve_matching(|op| matches!(op, Op::EstimateUserOpGas { .. }), estimated());
+    assert!(sut.view().fee.is_some());
+    // The first run's deadline fires after it priced: nothing happens.
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert!(sut.view().failed.is_none());
+    assert!(sut.view().confirm_fee_ready);
+    // A refresh that hangs keeps the quote it had (`fail` on a refresh).
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.dispatch(Event::Requote);
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    let view = sut.view();
+    assert!(!view.busy);
+    assert!(
+        view.fee.is_some(),
+        "the quote on screen survives a hung refresh"
+    );
 }

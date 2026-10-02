@@ -84,6 +84,7 @@ function makeEnv() {
 			getURL: (path = '') => `chrome-extension://ext/${path}`,
 			onMessage: on('message'),
 			onConnect: on('connect'),
+			onInstalled: on('installed'),
 			getContexts: async () =>
 				globalPanel.up ? [{ windowId: -1 }] : [...panelWindows].map((windowId) => ({ windowId }))
 		},
@@ -117,10 +118,15 @@ function makeEnv() {
 						return undefined;
 				}
 			},
-			query: async () =>
-				[...pages.values()].map((page) => ({ id: page.tabId, url: `${page.origin}/` })),
-			create: async () => ({}),
-			update: async () => ({}),
+			// A request window (a popup) holds one tab, `1000 + windowId`.
+			query: async (q?: { windowId?: number }) =>
+				q?.windowId !== undefined
+					? windows.has(q.windowId)
+						? [{ id: 1000 + q.windowId, windowId: q.windowId }]
+						: []
+					: [...pages.values()].map((page) => ({ id: page.tabId, url: `${page.origin}/` })),
+			create: vi.fn(async () => ({})),
+			update: vi.fn(async () => ({})),
 			onRemoved: on('tabRemoved'),
 			onReplaced: on('tabReplaced')
 		},
@@ -1133,6 +1139,183 @@ describe('a connect from a site that is already granted (089)', () => {
 	});
 });
 
+/**
+ * Spec 094 S3: a fresh install opens the wallet's welcome in a tab, saying to
+ * reload the pages that were open before (Chrome put no provider in them).
+ */
+describe('a fresh install (094)', () => {
+	it('opens the welcome at the doorway, marked when web pages were already open', async () => {
+		const env = makeEnv();
+		env.openPage(7, 'doc-a');
+		await startWorker(env);
+		env.emit('installed', { reason: 'install' });
+		await settleAll();
+		expect(env.chrome.tabs.create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html?installed=1'
+		});
+	});
+
+	it('says nothing about other tabs when none were open', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		env.emit('installed', { reason: 'install' });
+		await settleAll();
+		expect(env.chrome.tabs.create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html'
+		});
+	});
+
+	it('opens nothing on an update or a Chrome update', async () => {
+		const env = makeEnv();
+		env.openPage(7, 'doc-a');
+		await startWorker(env);
+		env.emit('installed', { reason: 'update', previousVersion: '0.9.5' });
+		env.emit('installed', { reason: 'chrome_update' });
+		await settleAll();
+		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * Spec 094 S7 (089 F03): a page that fired twelve requests with no click got
+ * twelve focused popups. One window per site now: the rest queue behind it, and
+ * the window passes from one to the next.
+ */
+describe('one request window per site (094)', () => {
+	const ALICE = `0x${'a1'.repeat(20)}`;
+
+	/** The request window's surface, as a request page says hello. */
+	function windowSurface(env: Env, rid: string) {
+		const port = env.portPair('vela.surface', {
+			url: `chrome-extension://ext/en/request.html?rid=${encodeURIComponent(rid)}`
+		});
+		port.post({ type: 'hello', kind: 'window', rid });
+		return port;
+	}
+
+	async function burst(env: Env, page: FakePage, count: number, method = 'eth_requestAccounts') {
+		for (let i = 1; i <= count; i += 1) await env.ask(page, `q:${i}`, method);
+		await settleAll();
+	}
+
+	it('opens ONE window for a burst from one site, and queues the rest', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await burst(env, page, 12);
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		const [{ url }] = env.chrome.windows.create.mock.calls[0] as unknown as [{ url: string }];
+		// The OLDEST request opens it.
+		expect(url).toBe('chrome-extension://ext/open.html?rid=7%3Aq%3A1');
+		const queued = Object.values(env.session.data).filter(
+			(r) => (r as { queued?: boolean }).queued === true
+		);
+		expect(queued).toHaveLength(11);
+	});
+
+	it('another site still gets a window of its own', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		await burst(env, env.openPage(7, 'doc-a', 'https://a.example'), 2);
+		await burst(env, env.openPage(9, 'doc-b', 'https://b.example'), 2);
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(2);
+	});
+
+	it('passes the window to the next request when one is answered', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await burst(env, page, 2, 'personal_sign');
+		const first = windowSurface(env, '7:q:1');
+		first.post({ type: 'answer', rid: '7:q:1', result: '0xsig' });
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'q:1', result: '0xsig', error: undefined }]);
+		// The same window, navigated to the next request — not closed, not a new one.
+		expect(env.chrome.windows.remove).not.toHaveBeenCalled();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(1101, {
+			url: 'chrome-extension://ext/open.html?rid=7%3Aq%3A2'
+		});
+		expect(env.session.data['vela.req.7:q:2']).toMatchObject({
+			surface: 'window',
+			surfaceWindowId: 101,
+			queued: false
+		});
+
+		const second = windowSurface(env, '7:q:2');
+		second.post({ type: 'answer', rid: '7:q:2', result: '0xsig2' });
+		await settleAll();
+		expect(page.answers).toHaveLength(2);
+		// Nothing left behind it: now the window closes.
+		expect(env.chrome.windows.remove).toHaveBeenCalledWith(101);
+	});
+
+	it('answers the queued connects once the person granted the site, with no window', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		env.local.data['vela.ext.cache'] = { address: ALICE, accounts: [{ address: ALICE }] };
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await burst(env, page, 5);
+		const first = windowSurface(env, '7:q:1');
+		// What the window does on Connect: the grant, then the answer.
+		env.local.data['vela.perm.https://a.example'] = {
+			origin: 'https://a.example',
+			address: ALICE,
+			chainId: 100,
+			grantedAt: 1
+		};
+		first.post({ type: 'answer', rid: '7:q:1', result: [ALICE] });
+		await settleAll();
+		expect(page.answers.map((a) => a.id)).toEqual(['q:1', 'q:2', 'q:3', 'q:4', 'q:5']);
+		expect(page.answers.every((a) => JSON.stringify(a.result) === JSON.stringify([ALICE]))).toBe(
+			true
+		);
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		expect(env.chrome.windows.remove).toHaveBeenCalledWith(101);
+		expect(reqKeys(env.session)).toEqual([]);
+	});
+
+	it('a window the person closed takes its site’s queue with it — 4900 each', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await burst(env, page, 3);
+		env.windows.delete(101);
+		env.emit('windowRemoved', 101);
+		await settleAll();
+		expect(page.answers.map((a) => [a.id, a.error?.code])).toEqual([
+			['q:1', 4900],
+			['q:2', 4900],
+			['q:3', 4900]
+		]);
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		expect(reqKeys(env.session)).toEqual([]);
+	});
+
+	it('a restarted worker keeps the queue, and gives it a window', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await burst(env, page, 2);
+		// The holder's window went while the worker was stopped.
+		delete env.session.data['vela.req.7:q:1'];
+		env.windows.delete(101);
+		await startWorker(env);
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(2);
+		expect(env.session.data['vela.req.7:q:2']).toMatchObject({
+			queued: false,
+			surfaceWindowId: 102
+		});
+	});
+});
+
 describe('the page’s own deadline (RB11)', () => {
 	it('an `abandon` settles the record as expired and withdraws the sheet', async () => {
 		const env = makeEnv();
@@ -1297,6 +1480,125 @@ describe('chain reads (RF2, G20, G33)', () => {
 		});
 		await settleAll();
 		expect(String(env.session.data['vela.sw.log'])).toMatch(/read\.exhausted chain=100 tried=2/);
+	});
+});
+
+/**
+ * Spec 094 S6 (089 F04): `wallet_sendCalls` went through, and the two EIP-5792
+ * methods a dApp asks next answered 4200 — viem's `waitForCallsStatus` failed
+ * after a batch that had been sent.
+ */
+describe('a batch, asked after (EIP-5792, 094)', () => {
+	const ID = `0x${'ab'.repeat(32)}`;
+	const TX = `0x${'cd'.repeat(32)}`;
+	const ALICE = `0x${'a1'.repeat(20)}`;
+	const catalog = {
+		version: 1,
+		chains: {
+			'1': { chainId: 1, name: 'Ethereum', rpc: ['https://eth.example/'], bundler: '' },
+			'100': {
+				chainId: 100,
+				name: 'Gnosis',
+				rpc: ['https://node.example/'],
+				bundler: 'https://relay.example/100'
+			}
+		}
+	};
+	const rpc = (env: Env, page: FakePage, method: string, params: unknown[]) =>
+		env.sendFromPage(page, { type: 'rpc', id: `r:${method}`, method, params });
+
+	it('reads the status of a batch it answered with, from its operation’s receipt', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		let landed = false;
+		let relay: unknown = { status: 'submitted' };
+		const asked: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string, init: { body: string }) => {
+				const body = JSON.parse(init.body);
+				asked.push(`${new URL(url).host} ${body.method}`);
+				const result =
+					body.method === 'pimlico_getUserOperationStatus'
+						? relay
+						: landed
+							? { success: true, logs: [], receipt: { transactionHash: TX, status: '0x1' } }
+							: null;
+				return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), { status: 200 });
+			})
+		);
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'b:1', 'wallet_sendCalls');
+		await settleAll();
+		panel.post({ type: 'answer', rid: '7:b:1', result: ID, opHash: { chainId: 100 } });
+		await settleAll();
+
+		// No receipt, the relay still holds it: pending.
+		const pending = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(pending.result).toMatchObject({ id: ID, chainId: '0x64', status: 100, atomic: true });
+		// Spec 096 F3: the relay refused it before any block — the tracker's
+		// terminal `rejected` — so the page hears 400, not 100 forever.
+		relay = { status: 'rejected', last_executor_error: 'AA23 reverted' };
+		const refused = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(refused.result).toMatchObject({ id: ID, chainId: '0x64', status: 400, atomic: true });
+		expect(refused.result).not.toHaveProperty('receipts');
+		landed = true;
+		const confirmed = await rpc(env, page, 'wallet_getCallsStatus', [
+			ID.toUpperCase().replace('0X', '0x')
+		]);
+		expect(confirmed.result).toMatchObject({
+			status: 200,
+			receipts: [{ transactionHash: TX, status: '0x1' }]
+		});
+		expect(asked).toEqual([
+			'relay.example eth_getUserOperationReceipt',
+			'relay.example pimlico_getUserOperationStatus',
+			'relay.example eth_getUserOperationReceipt',
+			'relay.example pimlico_getUserOperationStatus',
+			'relay.example eth_getUserOperationReceipt'
+		]);
+	});
+
+	it('an id it never handed out is an unknown bundle (5730), asking nobody', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		const fetchSpy = vi.fn();
+		vi.stubGlobal('fetch', fetchSpy);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const reply = await rpc(env, page, 'wallet_getCallsStatus', [`0x${'ee'.repeat(32)}`]);
+		expect(reply.error).toMatchObject({ code: 5730 });
+		expect((await rpc(env, page, 'wallet_getCallsStatus', ['0x12'])).error).toMatchObject({
+			code: -32602
+		});
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it('tells a connected site its capabilities on every chain the wallet has, and nobody else', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		env.local.data['vela.ext.cache'] = { address: ALICE, accounts: [{ address: ALICE }] };
+		env.local.data['vela.perm.https://a.example'] = {
+			origin: 'https://a.example',
+			address: ALICE,
+			chainId: 100,
+			grantedAt: 1
+		};
+		await startWorker(env);
+		const granted = env.openPage(7, 'doc-a', 'https://a.example');
+		const stranger = env.openPage(9, 'doc-b', 'https://b.example');
+		expect((await rpc(env, granted, 'wallet_getCapabilities', [ALICE])).result).toEqual({
+			'0x1': { atomic: { status: 'supported' } },
+			'0x64': { atomic: { status: 'supported' } }
+		});
+		expect((await rpc(env, granted, 'wallet_getCapabilities', [ALICE, ['0x64']])).result).toEqual({
+			'0x64': { atomic: { status: 'supported' } }
+		});
+		expect((await rpc(env, stranger, 'wallet_getCapabilities', [ALICE])).error).toMatchObject({
+			code: 4100
+		});
 	});
 });
 

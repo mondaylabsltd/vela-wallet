@@ -14,9 +14,12 @@ import {
 	callerOwns,
 	claimVerdict,
 	deadlineOf,
+	holdsWindow,
 	maybeSentHash,
 	newRecord,
 	nextForWindow,
+	nextQueued,
+	queueAfter,
 	recoveryPlan,
 	settlement,
 	surfaceAfterOpen,
@@ -39,6 +42,8 @@ type Rec = ReturnType<typeof newRecord> & {
 	phase?: string;
 	opHash?: string;
 	chainId?: number;
+	queued?: boolean;
+	windowOpening?: boolean;
 };
 
 function record(over: Partial<Rec> = {}): Rec {
@@ -102,6 +107,51 @@ describe('one queue per window (RB7)', () => {
 		const other = record({ rid: '1:x', surfaceWindowId: 4 });
 		const windowed = record({ rid: '1:y', surface: 'window', surfaceWindowId: 99 });
 		expect(nextForWindow([other, windowed], 3)).toBeNull();
+	});
+});
+
+describe('one request window per site (spec 094 S7)', () => {
+	const win = (over: Partial<Rec> = {}) =>
+		record({ surface: 'window', surfaceWindowId: undefined, ...over });
+
+	it('a window is held by the request that has it, or is opening it — not by one on its way', () => {
+		expect(holdsWindow(win({ surfaceWindowId: 101 }))).toBe(true);
+		expect(holdsWindow(win({ windowOpening: true }))).toBe(true);
+		expect(holdsWindow(win())).toBe(false);
+		expect(holdsWindow(win({ surfaceWindowId: 101, queued: true }))).toBe(false);
+		expect(holdsWindow(record())).toBe(false);
+	});
+
+	it('the oldest queued request of the site is next, and only that site’s', () => {
+		const a = win({ rid: '7:a', at: NOW - 3_000, queued: true });
+		const b = win({ rid: '7:b', at: NOW - 2_000, queued: true });
+		const other = win({ rid: '9:c', at: NOW - 9_000, queued: true, origin: 'https://b.example' });
+		expect(nextQueued([b, other, a], 'https://a.example')?.rid).toBe('7:a');
+		expect(nextQueued([b, a], 'https://b.example')).toBeNull();
+	});
+
+	it('an answer passes the window on; a closed window takes the queue with it', () => {
+		const holder = win({ rid: '7:h', surfaceWindowId: 101 });
+		const q1 = win({ rid: '7:1', at: NOW - 900, queued: true });
+		const q2 = win({ rid: '7:2', at: NOW - 800, queued: true });
+		const elsewhere = win({ rid: '9:x', queued: true, origin: 'https://b.example' });
+		expect(queueAfter([q2, q1, elsewhere], holder, 'answered')).toEqual({ settle: [], next: q1 });
+		expect(queueAfter([q2, q1, elsewhere], holder, 'page_left').next).toBe(q1);
+		expect(queueAfter([q2, q1, elsewhere], holder, 'surface_closed')).toEqual({
+			settle: ['7:2', '7:1'],
+			next: null
+		});
+		// A queued request leaving moves nothing.
+		expect(queueAfter([q2, holder], q1, 'expired')).toEqual({ settle: [], next: null });
+	});
+
+	it('a restarted worker keeps a queued request for its page to confirm', () => {
+		const plan = recoveryPlan([win({ queued: true })], {
+			now: NOW,
+			panelWindows: new Set(),
+			openWindows: new Set([3])
+		});
+		expect(plan).toEqual([{ rid: '7:page:1', action: 'probe' }]);
 	});
 });
 

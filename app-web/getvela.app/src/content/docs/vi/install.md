@@ -1,7 +1,7 @@
 ---
 title: Cài đặt Vela
 description: "Mọi cách để chạy Vela — web, tiện ích trình duyệt, máy tính và điện thoại — mỗi cách tốn bao nhiêu, làm được gì, và thiết bị của bạn cần gì."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -31,7 +31,7 @@ trên thiết bị khác, bạn chỉ cần đăng nhập lại bằng một tro
 
 ## Tiện ích trình duyệt
 
-Dành cho trình duyệt nhân Chromium: Chrome, Edge và Brave (Chrome 116 trở lên). Tiện
+Dành cho trình duyệt nhân Chromium: Chrome, Edge và Brave (Chrome 122 trở lên). Tiện
 ích đặt chiếc ví lên thanh công cụ và cho phép dApp kết nối thẳng với nó. Cho đến khi
 có mặt trên Chrome Web Store:
 
