@@ -1725,7 +1725,10 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s).or(refused).or(reason),
+        warning: insufficient_gas_warning(fee, s)
+            .or(refused)
+            .or_else(|| spent_fee_coin_warning(fee, s))
+            .or(reason),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -1794,6 +1797,25 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
     selected.insufficient.then(|| {
         SharedString::from(crate::signing::fill(
             &s.warn_insufficient_gas,
+            &[("sym", &selected.symbol)],
+        ))
+    })
+}
+
+/// Spec 096 F2: the coin paying is one the transaction itself may spend —
+/// the PancakeSwap USDC swap, its fee in USDC — and nothing has measured how
+/// much of it is left (the core's `spent_by_operation`). The machine never
+/// picks such a coin; the person may, and this says what it risks while it
+/// is the coin in force. A warning, not a gate.
+#[must_use]
+pub fn spent_fee_coin_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.busy {
+        return None;
+    }
+    let selected = fee.options.iter().find(|option| option.selected)?;
+    selected.spent_by_operation.then(|| {
+        SharedString::from(crate::signing::fill(
+            &s.warn_fee_coin_spent,
             &[("sym", &selected.symbol)],
         ))
     })
@@ -3346,6 +3368,7 @@ mod fee_tests {
             amount: Some("1250000".to_owned()),
             insufficient,
             selected,
+            spent_by_operation: false,
         }
     }
 
@@ -3768,5 +3791,31 @@ mod fee_tests {
         let mut unquoted = broke;
         unquoted.fee = None;
         assert!(insufficient_gas_warning(&unquoted, &s).is_none());
+    }
+
+    /// Spec 096 F2: the person chose a coin the transaction itself spends
+    /// (the PancakeSwap USDC swap, fee in USDC). The core flags it and the
+    /// sheet says so — while that coin pays, and not while it re-measures.
+    #[test]
+    fn a_fee_coin_the_transaction_spends_is_warned() {
+        let s = strings();
+        let usdc = Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d");
+        let spent = |selected: bool| FeeOptionView {
+            spent_by_operation: true,
+            ..option("USDC", usdc, false, selected)
+        };
+        let paying = quoted(vec![option("BNB", None, false, false), spent(true)], true);
+        let text = spent_fee_coin_warning(&paying, &s)
+            .unwrap_or_else(|| unreachable!("the coin the swap spends pays, unsaid"));
+        assert!(text.contains("USDC"), "{text}");
+        assert!(!text.contains("{{"), "{text}");
+
+        // Listed, not paying: nothing to say.
+        let in_bnb = quoted(vec![option("BNB", None, false, true), spent(false)], true);
+        assert!(spent_fee_coin_warning(&in_bnb, &s).is_none());
+        // Re-measuring: the verdict is about to be asked again.
+        let mut busy = paying;
+        busy.busy = true;
+        assert!(spent_fee_coin_warning(&busy, &s).is_none());
     }
 }

@@ -925,6 +925,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
 		feeRefresh: k('send.feeRefresh'),
 		feeStale: k('send.feeStale'),
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.

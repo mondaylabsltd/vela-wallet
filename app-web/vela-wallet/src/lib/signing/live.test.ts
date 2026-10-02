@@ -167,7 +167,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -207,7 +208,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				},
 				{
 					symbol: 'USDC',
@@ -219,7 +221,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '1',
 					amount: '6300000',
 					insufficient: false,
-					selected: false
+					selected: false,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -245,7 +248,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -266,7 +270,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '3000',
 			amount: '2100000000000000',
 			insufficient: true,
-			selected: true
+			selected: true,
+			spent_by_operation: false
 		};
 		const usdt = {
 			...eth,
@@ -278,7 +283,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '1',
 			amount: '6300000',
 			insufficient: false,
-			selected: false
+			selected: false,
+			spent_by_operation: false
 		};
 		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
 		const model = buildSigningModel(inputs({ fee: short }));
@@ -336,7 +342,8 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		usd_price: '3000',
 		amount: '2100000000000000',
 		insufficient: false,
-		selected: true
+		selected: true,
+		spent_by_operation: false
 	};
 	const failedWith = (failed: FeeView['failed']): FeeView => ({
 		...QUOTED_FEE,
@@ -1230,6 +1237,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		amount: '2100000000000000',
 		insufficient: false,
 		selected: true,
+		spent_by_operation: false,
 		...over
 	});
 	const two: FeeView = {
@@ -1250,7 +1258,8 @@ describe('the fee coin can be switched, as it can when sending', () => {
 				balance: '100000000000000',
 				amount: '1270000000000000000',
 				insufficient: true,
-				selected: false
+				selected: false,
+				spent_by_operation: false
 			})
 		]
 	};
@@ -1278,6 +1287,39 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+
+	// Spec 096 F2: the person chose a coin the transaction itself spends (the
+	// PancakeSwap USDC swap, fee in USDC). The core flags it; the sheet says
+	// so under the fee — and only while that coin is the one paying.
+	it('warns when the coin paying is one the transaction spends', () => {
+		const spentUsdc: FeeView = {
+			...two,
+			options: [
+				option({ selected: false }),
+				option({
+					symbol: 'USDC',
+					contract: '0x' + 'a0'.repeat(20),
+					decimals: 6,
+					balance: '42000000',
+					amount: '1270000',
+					selected: true,
+					spent_by_operation: true
+				})
+			]
+		};
+		const fee = feeOf({ fee: spentUsdc });
+		expect(fee).toMatchObject({
+			warning: m.feeCoinSpent.replace('{{sym}}', 'USDC')
+		});
+		const open = feeOf({ fee: spentUsdc, feeOpen: true });
+		expect(open).toMatchObject({ warning: m.feeCoinSpent.replace('{{sym}}', 'USDC') });
+		// The same coin listed but not paying: nothing to say.
+		const inEth: FeeView = {
+			...spentUsdc,
+			options: [option({}), { ...spentUsdc.options[1], selected: false }]
+		};
+		expect(feeOf({ fee: inEth })).not.toHaveProperty('warning', expect.anything());
 	});
 });
 

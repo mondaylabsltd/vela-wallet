@@ -539,6 +539,8 @@ data class RecipientFieldModel(
     val scanLabel: String? = null,
     /** Sweep's "every token goes to the same address". */
     val note: String? = null,
+    /** The note is a warning (spec 096 F12: a token's own contract). */
+    val noteWarning: Boolean = false,
     /** Spec 043: the live address as typed; `null` = a drawn, read-only field. */
     val raw: String? = null,
 )

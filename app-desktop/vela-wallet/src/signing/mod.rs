@@ -263,6 +263,9 @@ pub struct SigningStrings {
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
+    /// Spec 096 F2: the coin paying is one the transaction itself may spend
+    /// ({{sym}}) — the core's `spent_by_operation`.
+    pub warn_fee_coin_spent: SharedString,
     pub tech_function: SharedString,
     pub tech_raw_data: SharedString,
     pub tech_sim_result: SharedString,
@@ -506,6 +509,7 @@ impl SigningStrings {
             refused: s("refused"),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
+            warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
             tech_sim_result: s("simResultLabel"),

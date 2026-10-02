@@ -724,11 +724,16 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
 	// other coins are one tap away — a dark slide with no reason is issue 204.
+	// Otherwise, spec 096 F2: the coin in force is one the transaction itself
+	// may spend, so what is left for the fee may be too little — the core's
+	// `spent_by_operation`, said while that coin is the one paying.
 	const selected = fee.options.find((option) => option.selected);
 	const warning =
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
-			: undefined;
+			: !fee.busy && selected?.spent_by_operation === true
+				? fill(m.feeCoinSpent, { sym: selected.symbol })
+				: undefined;
 	return {
 		kind: 'onchain',
 		label: m.feeLabel,

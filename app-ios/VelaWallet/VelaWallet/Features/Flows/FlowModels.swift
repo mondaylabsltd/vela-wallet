@@ -586,6 +586,8 @@ struct RecipientFieldModel {
     var scanLabel: String?
     /// Sweep's "every token goes to the same address".
     var note: String?
+    /// The note is a warning (spec 096 F12: a token's own contract).
+    var noteWarn = false
 }
 
 enum RecipientAction: String, Identifiable {

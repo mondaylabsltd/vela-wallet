@@ -1066,6 +1066,11 @@ object SigningLive {
             tappable = fee.failed != null || choosable,
             warning = when {
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
+                // Spec 096 F2: the person chose a coin the transaction itself
+                // spends (the PancakeSwap USDC swap, fee in USDC); the core
+                // flags it, said under the fee while that coin pays.
+                !fee.busy && fee.failed == null && selected?.spent_by_operation == true ->
+                    ctx.strings.t("componentsUi.gas.feeCoinSpent", mapOf("sym" to selected.symbol))
                 // Spec 079: why there is no fee, and that it will be asked
                 // again — in the core's words (spec 082 RJ13): the relay's
                 // failure, or the chain's node (rate-limited, or out of reach,

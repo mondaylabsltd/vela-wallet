@@ -565,6 +565,8 @@ data class SendView(
     val treasury_bootstrap: SendTreasuryStatus? = null,
     val recipient_identity: SendRecipientIdentity? = null,
     val recipient_risk: SendRecipientRisk? = null,
+    /** Spec 096 F12: the recipient is a token's own contract (the core's verdict). */
+    val recipient_is_token_contract: Boolean = false,
     val sim_json: String? = null,
 )
 

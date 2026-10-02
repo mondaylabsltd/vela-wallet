@@ -609,9 +609,11 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		identiconSvg: send.recipient ? identicon(send.recipient) : '',
 		pickLabel: m['send.recipientPickAria'],
 		scanLabel: m['send.scanAria'],
-		// The trust line the core resolved: a name when it knows one, and the
+		// The trust line the core resolved: that the address is a token's own
+		// contract (spec 096 F12), else a name when it knows one, and the
 		// first-interaction note when it does not.
-		note: recipientNote(send, m)
+		note: recipientLine(send, m),
+		noteWarn: send.recipient_is_token_contract
 	};
 
 	// SD2d — the sweep: several tokens, one recipient, one operation. The
@@ -639,7 +641,9 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 			recipients: undefined,
 			recipientActions: undefined,
 			summary: undefined,
-			recipient: { ...recipientBlock, note: m['send.multiSendSameRecipient'] },
+			recipient: send.recipient_is_token_contract
+				? recipientBlock
+				: { ...recipientBlock, note: m['send.multiSendSameRecipient'] },
 			fee: feeRow(inputs, model.fee),
 			speed: feeSpeed(inputs),
 			cta: m['send.continueBtn']
@@ -996,6 +1000,16 @@ function recipientNote(send: SendView, m: WalletFlowMessages): string | undefine
 	return undefined;
 }
 
+/**
+ * The line under the recipient, before anything else it could say (spec 096
+ * F12): the core found the recipient is a token's own contract, where what
+ * is sent is usually lost. Otherwise who it is, or that it is new.
+ */
+function recipientLine(send: SendView, m: WalletFlowMessages): string | undefined {
+	if (send.recipient_is_token_contract) return m['send.recipientTokenContract'];
+	return recipientNote(send, m);
+}
+
 /** SD3 — the confirm screen: what is about to be signed. */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
@@ -1006,8 +1020,9 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	// The core's own verdict, resolved on this page only (`confirm_probes`) —
 	// the form's note never sees it. One recipient only: a split's rows have
 	// no per-row verdict.
-	const recipientTag =
-		!send.split_mode && send.recipient_risk?.first_time === true
+	const recipientTag = send.recipient_is_token_contract
+		? m['send.recipientTokenContract']
+		: !send.split_mode && send.recipient_risk?.first_time === true
 			? m['componentsUi.signing.firstTimeTag']
 			: undefined;
 

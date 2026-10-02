@@ -702,6 +702,8 @@ export interface SendFormModel {
 		scanLabel?: string;
 		/** sweep's "every token goes to the same address". */
 		note?: string;
+		/** The note is a warning (spec 096 F12: a token's own contract). */
+		noteWarn?: boolean;
 	};
 	/** single: the "+ add recipient" that turns this into a split. */
 	addRecipient?: string;

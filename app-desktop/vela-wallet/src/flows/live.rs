@@ -2465,9 +2465,14 @@ pub fn send_token_ids(view: &SendView) -> Vec<String> {
     view.tokens.iter().map(SendToken::id).collect()
 }
 
-/// The recipient's trust line: a name the core resolved, else the
-/// first-interaction tell (the one that matters for a poisoned look-alike).
+/// The recipient's trust line: that it is a token's own contract (spec 096
+/// F12, the core's verdict — said before anything else), else a name the
+/// core resolved, else the first-interaction tell (the one that matters for
+/// a poisoned look-alike).
 fn recipient_note(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    if send.recipient_is_token_contract {
+        return Some(s.recipient_token_contract.clone());
+    }
     if let Some(identity) = &send.recipient_identity
         && let Some(name) = &identity.name
     {
@@ -2910,13 +2915,14 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             SharedString::from(send.recipient.clone()),
         )
     });
-    let recipient_note = if sweeping {
+    let recipient_note = if sweeping && !send.recipient_is_token_contract {
         Some(s.multi_send_same_recipient.clone())
     } else if split {
         None
     } else {
         recipient_note(send, s)
     };
+    let recipient_note_warn = !split && send.recipient_is_token_contract;
     // SD2d (078 F-05): the picked coins, each at the amount it will move —
     // the same reading the confirm lists (`sweep_breakdown`).
     let sweep = sweeping.then(|| {
@@ -2987,6 +2993,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
         token: header,
         sweep,
         recipient_note,
+        recipient_note_warn,
         amount: (!split && !sweeping).then(|| {
             (
                 SharedString::from(if send.amount.is_empty() {
@@ -3285,13 +3292,19 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         } else {
             Vec::new()
         },
-        // The core's own verdict, resolved on this page only (single recipient).
-        recipient_tag: (!send.split_mode
-            && send
-                .recipient_risk
-                .as_ref()
-                .is_some_and(|risk| risk.first_time == Some(true)))
-        .then(|| s.first_time_tag.clone()),
+        // The core's own verdicts: a token's own contract (spec 096 F12)
+        // first, else the first time, resolved on this page only (single
+        // recipient).
+        recipient_tag: if send.recipient_is_token_contract {
+            Some(s.recipient_token_contract.clone())
+        } else {
+            (!send.split_mode
+                && send
+                    .recipient_risk
+                    .as_ref()
+                    .is_some_and(|risk| risk.first_time == Some(true)))
+            .then(|| s.first_time_tag.clone())
+        },
         notice,
         cta: s.confirm_send.clone(),
         // Signing and submitting are waits; `can_confirm` is the core's gate
@@ -4187,6 +4200,7 @@ mod tests {
             amount: Some("91000000000000".to_owned()),
             insufficient: false,
             selected: true,
+            spent_by_operation: false,
         }];
         assert_eq!(
             fee_line(
@@ -4255,6 +4269,10 @@ mod tests {
         assert_eq!(tag(&send), Some(s.first_time_tag.clone()));
         send.split_mode = true;
         assert_eq!(tag(&send), None, "a split has no one recipient");
+        // Spec 096 F12: a token's own contract is said first.
+        send.split_mode = false;
+        send.recipient_is_token_contract = true;
+        assert_eq!(tag(&send), Some(s.recipient_token_contract.clone()));
     }
 
     /// A receipt in each of the two states the core can hold one in.

@@ -269,6 +269,12 @@ data class FeeOptionView(
     val amount: String? = null,
     val insufficient: Boolean = false,
     val selected: Boolean = false,
+    /**
+     * Spec 096 F2: the operation itself may spend this coin by an amount no
+     * call states, and nothing measured what is left (the core's verdict).
+     * The sheet warns while it is the coin paying.
+     */
+    val spent_by_operation: Boolean = false,
 )
 
 @Serializable

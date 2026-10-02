@@ -2018,6 +2018,7 @@ mod tests {
             amount: Some("10000000000000000".to_owned()),
             insufficient,
             selected: symbol == "xDAI",
+            spent_by_operation: false,
         };
         let fee = FeeView {
             options: vec![option("xDAI", false), option("USDC", true)],

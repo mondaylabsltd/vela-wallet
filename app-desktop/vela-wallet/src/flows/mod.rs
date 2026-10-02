@@ -478,6 +478,8 @@ pub struct FlowStrings {
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
     pub first_time_tag: SharedString,
+    /// Spec 096 F12: the recipient is a token's own contract.
+    pub recipient_token_contract: SharedString,
     pub fee_pending: SharedString,
 
     // Send · the fee you can refresh, at a speed you can choose (spec 068, on
@@ -809,6 +811,7 @@ impl FlowStrings {
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
+            recipient_token_contract: s("send.recipientTokenContract"),
             fee_pending: SharedString::from("…"),
 
             fee_refresh: s("send.feeRefresh"),

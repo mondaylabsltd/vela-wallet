@@ -1275,6 +1275,12 @@ enum SigningLive {
         if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+        } else if let fee, !fee.busy, fee.failed == nil,
+                  let selected = fee.options.first(where: { $0.selected }), selected.spentByOperation == true {
+            // Spec 096 F2: the person chose a coin the transaction itself
+            // spends (the PancakeSwap USDC swap, fee in USDC). The core
+            // flags it; said under the fee while that coin is the one paying.
+            warning = context.loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": selected.symbol])
         } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
                   let key = feeFailureReasonKey(failure: failed) {
             // Spec 079: why there is no fee, and that it will be asked again

@@ -1079,6 +1079,58 @@ struct SigningLiveTests {
         }
     }
 
+    /// Spec 096 F2: the person chose a coin the transaction itself spends —
+    /// the PancakeSwap USDC swap, its fee in USDC. The core flags it
+    /// (`spent_by_operation`); the sheet says so under the fee while that
+    /// coin pays, and says nothing while another coin does.
+    @Test func aFeeCoinTheTransactionSpendsIsWarned() {
+        let usdcAddress = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        var usdc = option("USDC", contract: usdcAddress, decimals: 18,
+                          balance: "2341700000000000000", amount: "280000000000000000",
+                          insufficient: false, selected: true)
+        usdc.spentByOperation = true
+        let bnb = option("BNB", contract: nil, decimals: 18, balance: "0",
+                         amount: "460000000000000", insufficient: true, selected: false)
+        let estimate = FeeEstimateWire(
+            chainId: 56, totalWei: "0", maxFeePerGas: "0", totalGas: "450000",
+            deployed: true, quoted: true,
+            feeAsset: .erc20(token: usdcAddress, decimals: 18, amount: "280000000000000000", symbol: "USDC"),
+            feeRecipient: "0xrelay"
+        )
+        let paying = FeeViewWire(
+            busy: false, failed: nil, fee: estimate, stale: false, feeToken: usdcAddress,
+            options: [bnb, usdc], confirmFeeReady: true
+        )
+        guard case .onchain(_, _, _, let warning, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: paying, context: context()
+        ) else {
+            Issue.record("a transaction's fee row is on-chain")
+            return
+        }
+        #expect(warning == loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": "USDC"]))
+        #expect(warning?.contains("{{") == false)
+
+        // Listed but not paying: nothing to say.
+        let listed = FeeOptionWire(
+            symbol: usdc.symbol, contract: usdc.contract, decimals: usdc.decimals,
+            balance: usdc.balance, recipient: usdc.recipient, usdBalance: usdc.usdBalance,
+            usdPrice: usdc.usdPrice, amount: usdc.amount, insufficient: false, selected: false,
+            spentByOperation: true
+        )
+        let other = option("USDT", contract: "0x55d398326f99059ff775485246999027b3197955",
+                           decimals: 18, balance: "5000000000000000000",
+                           amount: "280000000000000000", insufficient: false, selected: true)
+        let inUsdt = FeeViewWire(
+            busy: false, failed: nil, fee: estimate, stale: false, feeToken: other.contract,
+            options: [bnb, listed, other], confirmFeeReady: true
+        )
+        if case .onchain(_, _, _, let none, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: inUsdt, context: context()
+        ) {
+            #expect(none == nil)
+        }
+    }
+
     /// An unlimited approval opens on its own "as requested" chip — kept as
     /// the site asked (2026-09-26) — reads as the danger it is, says so, and
     /// its consent rides into the approve opts.

@@ -160,6 +160,12 @@ export interface SigningMessages {
 	feeTokenTitle: string;
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
+	/**
+	 * Spec 096 F2: the coin in force is one the transaction itself may spend
+	 * (the core's `spent_by_operation`), so too little may be left for the fee
+	 * ({{sym}}).
+	 */
+	feeCoinSpent: string;
 	/** Spec 079: the send form's refresh control (`send.feeRefresh`). */
 	feeRefresh: string;
 	/** Spec 079: the send form's stale note (`send.feeStale`). */

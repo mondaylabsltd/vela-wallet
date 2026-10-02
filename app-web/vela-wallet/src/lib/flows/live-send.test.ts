@@ -113,6 +113,7 @@ const EMPTY_SEND: SendView = {
 	treasury_bootstrap: null,
 	recipient_identity: null,
 	recipient_risk: null,
+	recipient_is_token_contract: false,
 	sim_json: null
 };
 
@@ -304,6 +305,23 @@ describe('the form', () => {
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
+	});
+
+	// Spec 096 F12: the core found the recipient is a token's own contract.
+	// Said first, in the warning tone — over a name, over "first time", and
+	// over the sweep's "every token goes to the same address".
+	it('warns when the recipient is a token contract, before anything else', () => {
+		const token = liveSendForm(
+			formModel(),
+			inputs({
+				recipient_is_token_contract: true,
+				recipient_risk: { is_contract: true, first_time: true }
+			})
+		);
+		expect(token.recipient?.note).toBe(m['send.recipientTokenContract']);
+		expect(token.recipient?.noteWarn).toBe(true);
+		const plain = liveSendForm(formModel(), inputs({}));
+		expect(plain.recipient?.noteWarn).toBe(false);
 	});
 
 	it('the fee row waits rather than inventing a number, then reads the quote', () => {
@@ -683,6 +701,25 @@ describe('the confirm screen', () => {
 			})
 		);
 		expect(split.recipientTag).toBeUndefined();
+	});
+
+	// Spec 096 F12: the WBNB-to-the-WBNB-contract send said only "First time
+	// sending here". The token-contract sentence goes first.
+	it('says the recipient is a token contract before the slide', () => {
+		const single = {
+			selected_token: ETH,
+			recipient: '0x' + 'ab'.repeat(20),
+			confirm_amount: '0.5'
+		};
+		const token = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				...single,
+				recipient_is_token_contract: true,
+				recipient_risk: { is_contract: true, first_time: true }
+			})
+		);
+		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
 	});
 });
 
@@ -1230,7 +1267,8 @@ describe('the fee row names the coin that is paying', () => {
 							usd_price: '1',
 							amount: '944000',
 							insufficient: false,
-							selected: true
+							selected: true,
+							spent_by_operation: false
 						}
 					]
 				}
@@ -1274,7 +1312,8 @@ describe('the fee row says what the fee costs', () => {
 							usd_price: '600',
 							amount: '91000000000000',
 							insufficient: false,
-							selected: true
+							selected: true,
+							spent_by_operation: false
 						}
 					]
 				}
@@ -1371,7 +1410,8 @@ describe('the fee-coin sheet', () => {
 							usd_price: '3000',
 							amount: '2100000000000000',
 							insufficient: false,
-							selected: true
+							selected: true,
+							spent_by_operation: false
 						},
 						{
 							symbol: 'USDC',
@@ -1383,7 +1423,8 @@ describe('the fee-coin sheet', () => {
 							usd_price: '1',
 							amount: null,
 							insufficient: true,
-							selected: false
+							selected: false,
+							spent_by_operation: false
 						}
 					]
 				}
@@ -1424,7 +1465,8 @@ describe('the fee-coin sheet', () => {
 							usd_price: null,
 							amount: '83333333333334',
 							insufficient: false,
-							selected: true
+							selected: true,
+							spent_by_operation: false
 						}
 					]
 				}

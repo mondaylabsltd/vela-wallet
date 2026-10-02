@@ -532,6 +532,35 @@ class SigningLiveTest {
         assertFalse(open.options[1].disabled)
     }
 
+    /**
+     * Spec 096 F2: the person chose a coin the transaction itself spends (the
+     * PancakeSwap USDC swap, fee in USDC). The core flags it; the sheet says
+     * so under the fee while that coin pays, and nothing while another does.
+     */
+    @Test
+    fun `a fee coin the transaction spends is warned while it pays`() {
+        val usdc = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        val spent = FeeOptionView(
+            symbol = "USDC", contract = usdc, decimals = 18, balance = "2341700000000000000",
+            recipient = "0x3e59", usd_balance = "2.34", amount = "280000000000000000",
+            selected = true, spent_by_operation = true,
+        )
+        val bnb = eth.copy(symbol = "BNB", selected = false)
+        val paying = FeeView(
+            fee = estimate(FeeAssetView.Erc20(token = usdc, decimals = 18, amount = "280000000000000000", symbol = "USDC"), "0"),
+            options = listOf(bnb, spent),
+            confirm_fee_ready = true,
+        )
+        val model = SigningLive.feeModel(ClearSigningView(), paying, ctx) as FeeModel.OnChain
+        assertEquals(strings.t("componentsUi.gas.feeCoinSpent", mapOf("sym" to "USDC")), model.warning)
+        assertFalse(model.warning!!.contains("{{"))
+
+        val inUsdt = paying.copy(options = listOf(bnb, spent.copy(selected = false), usdt.copy(selected = true)))
+        assertNull((SigningLive.feeModel(ClearSigningView(), inUsdt, ctx) as FeeModel.OnChain).warning)
+        val measuring = paying.copy(busy = true)
+        assertNull((SigningLive.feeModel(ClearSigningView(), measuring, ctx) as FeeModel.OnChain).warning)
+    }
+
     /** A coin that pays is not a warning, and one coin alone has no list to open. */
     @Test
     fun `a fee the account can pay carries no warning`() {
