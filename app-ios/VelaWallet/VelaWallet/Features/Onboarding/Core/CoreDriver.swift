@@ -52,7 +52,7 @@ extension SessionCore: CoreBridge {}
 @MainActor
 final class CoreDriver {
     private let bridge: CoreBridge
-    private let perform: ([String: Any]) async -> String
+    private let perform: @MainActor ([String: Any]) async -> String
     private let onView: ([String: Any]) -> Void
     private let onFault: (Error) -> Void
     /// The machine's own failure variant for an effect the core refused to
@@ -85,7 +85,7 @@ final class CoreDriver {
     init(
         bridge: CoreBridge,
         /// Perform one operation and return the result JSON. Must not throw.
-        perform: @escaping ([String: Any]) async -> String,
+        perform: @escaping @MainActor ([String: Any]) async -> String,
         /// Called on every committed view, in the order the core produced them.
         onView: @escaping ([String: Any]) -> Void,
         /// A shell fault: a malformed event, an escaped error. Never a user error.

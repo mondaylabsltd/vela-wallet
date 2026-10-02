@@ -195,13 +195,13 @@ final class UserOpSpine {
     /// Safe has no code there, so its figure is 21k plus calldata whatever the
     /// call does. Measured from the Safe's address instead, a codeless account
     /// estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
-    private let measureCall: (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
+    private let measureCall: @MainActor (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
 
     init(
         relay: RelayClient,
         accounts: AccountPort,
         signer: @escaping () -> UserOpSigner,
-        measureCall: @escaping (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
+        measureCall: @escaping @MainActor (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
     ) {
         self.relay = relay
         self.accounts = accounts

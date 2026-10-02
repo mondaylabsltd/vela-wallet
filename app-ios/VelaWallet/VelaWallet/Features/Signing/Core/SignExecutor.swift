@@ -100,7 +100,7 @@ final class SignExecutor {
         /// for THAT write, not for any write (a delete included).
         var recordWritten: (_ recordId: String) -> Void = { _ in }
         /// The session's active-account switch.
-        var switchAccount: (_ index: Int) async -> Bool = { _ in false }
+        var switchAccount: @MainActor (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         /// Who asked, as the Trusted Signer's page is told it (spec 071): the

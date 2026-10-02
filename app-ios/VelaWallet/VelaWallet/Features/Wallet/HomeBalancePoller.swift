@@ -26,7 +26,7 @@ final class HomeBalancePoller {
     static let interval: Duration = .seconds(600)
 
     private let interval: Duration
-    private let sleep: (Duration) async throws -> Void
+    private let sleep: @MainActor (Duration) async throws -> Void
     private let tick: () -> Void
 
     private var onScreen = false
@@ -40,7 +40,7 @@ final class HomeBalancePoller {
     /// minutes; it must throw when its task is cancelled, as `Task.sleep` does.
     init(
         interval: Duration = HomeBalancePoller.interval,
-        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         tick: @escaping () -> Void
     ) {
         self.interval = interval

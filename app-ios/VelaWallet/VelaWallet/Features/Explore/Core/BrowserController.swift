@@ -115,10 +115,10 @@ final class BrowserController {
     struct Ports {
         /// One call through the wallet's own pool — `["result": …]`,
         /// `["error": …]`, or `nil` when no endpoint answered.
-        var poolCall: (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
+        var poolCall: @MainActor (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
         = { _, _, _, _ in nil }
         /// The transaction a user operation landed in (the relay's receipt).
-        var resolveUserOp: (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
+        var resolveUserOp: @MainActor (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
         /// Open the signing sheet for a request. `nil` = there is no sheet to
         /// open, and the request is refused rather than left waiting.
         var onForwardToSigning: ((DbrForward) -> Void)?

@@ -43,16 +43,16 @@ final class RegistryNameLookup {
     /// `eth_call` on one chain: the RAW `result` hex — a bare `0x` included,
     /// which is a chain saying "no such contract here" — or `nil` when nobody
     /// answered. The distinction is the core's caching rule.
-    private let ethCall: (_ chainId: Int, _ to: String, _ data: String) async -> String?
-    private let indexGet: (_ path: String) async -> IndexAnswer
+    private let ethCall: @MainActor (_ chainId: Int, _ to: String, _ data: String) async -> String?
+    private let indexGet: @MainActor (_ path: String) async -> IndexAnswer
     /// `registryNameStep` from the core; a seam so tests can script it.
     private let step: (_ address: String, _ answersJson: String) -> String
     private let now: () -> Double
 
     init(
         store: VelaStore,
-        ethCall: @escaping (Int, String, String) async -> String?,
-        indexGet: @escaping (String) async -> IndexAnswer,
+        ethCall: @escaping @MainActor (Int, String, String) async -> String?,
+        indexGet: @escaping @MainActor (String) async -> IndexAnswer,
         step: @escaping (String, String) -> String = { registryNameStep(address: $0, answersJson: $1) },
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
     ) {

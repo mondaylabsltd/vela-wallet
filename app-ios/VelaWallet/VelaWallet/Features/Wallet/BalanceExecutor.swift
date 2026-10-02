@@ -59,7 +59,7 @@ final class BalanceExecutor {
     /// the core's read plan (spec 082 RE9). `nil` (the registry could not be
     /// reached, or none is wired) reads the native coin and the person's own
     /// tokens only: silence, never an invented list.
-    var chainFacts: (Int) async -> ChainTokens.Facts? = { _ in nil }
+    var chainFacts: @MainActor (Int) async -> ChainTokens.Facts? = { _ in nil }
 
     private let store: VelaStore
     private let pool: RpcPool

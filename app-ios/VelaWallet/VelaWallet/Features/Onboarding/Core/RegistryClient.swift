@@ -123,7 +123,7 @@ actor RegistryClient {
 
     /// How a request reaches the index and comes back: one exchange, or the
     /// error that says it never arrived.
-    typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    typealias Transport = @concurrent @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
     /// The app's: `URLSession.velaShared`, under the request's own timeout.
     static let urlSession: Transport = { request in try await URLSession.velaShared.data(for: request) }

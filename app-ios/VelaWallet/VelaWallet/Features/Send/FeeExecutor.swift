@@ -37,7 +37,7 @@ final class FeeExecutor {
     /// `eth_estimateGas({from, to, value, data})` for one call on one chain —
     /// the gas hex, or `nil` when nobody answered. The same read the spine's
     /// `measureCall` makes at submit.
-    typealias MeasureCall = (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
+    typealias MeasureCall = @MainActor (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
 
     /// The pool's `eth_estimateGas`, as both the spine and this executor read it.
     static func measuring(with pool: RpcPool) -> MeasureCall {
