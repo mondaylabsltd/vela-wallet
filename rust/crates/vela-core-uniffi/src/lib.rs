@@ -534,6 +534,34 @@ pub fn sign_route(device_keys_json: String, method: String) -> Option<String> {
     vela_core::wallet_keys::sign_route_json(&device_keys_json, &method)
 }
 
+/// A key-method row's words (087 F01, F02): the title's corpus key and the
+/// line under it — `line_key` a corpus key to translate, or `line_name` a
+/// product name ("Face ID") drawn as it is; exactly one of the two is set.
+/// See `vela_core::app::method_words`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct KeyMethodWords {
+    pub title_key: String,
+    pub line_key: Option<String>,
+    pub line_name: Option<String>,
+}
+
+/// The words of one key-method row in the create or sign-in chooser, decided
+/// once in the core for every shell. All three are wire names: `method`
+/// (`"platform"`, `"hybrid"`, `"security_key"`, `"trusted_signer"`),
+/// `chooser` (`"create"`, `"sign_in"`) and `unlock` — what unlocks a passkey
+/// on this device as far as the shell can tell (`"face_id"`, `"touch_id"`,
+/// `"windows_hello"`, `"other"`). `None` for a name the core does not know.
+#[uniffi::export]
+#[must_use]
+pub fn key_method_words(method: String, chooser: String, unlock: String) -> Option<KeyMethodWords> {
+    let words = vela_core::app::method_words::method_words(&method, &chooser, &unlock)?;
+    Some(KeyMethodWords {
+        title_key: words.title_key.to_owned(),
+        line_key: words.line_key().map(str::to_owned),
+        line_name: words.line_name().map(str::to_owned),
+    })
+}
+
 /// Where an account's signatures go (founder, 2026-09-26): the key it was
 /// created or signed in with, over the route that reached it — `None` for a
 /// record written before that existed, which signs as it always did.
@@ -2187,6 +2215,21 @@ pub fn browser_site_label(title: String, host: String) -> BrowserSiteLabel {
         name: label.name,
         host_line: label.host_line,
     }
+}
+
+/// The title a page is pinned under as a favourite (spec 086, issue #329):
+/// `last_good`'s title when it is the same site as `url` — the bar's address,
+/// the failed one under a failure panel — else `None`, and the favourite takes
+/// its host. `last_good` is the last visit `browser_load_visit` made: an
+/// engine's error page never is one.
+#[uniffi::export]
+pub fn browser_pinned_title(url: String, last_good: Option<BrowserVisit>) -> Option<String> {
+    let visit = last_good.map(|visit| vela_core::app::browser_load::Visit {
+        url: visit.url,
+        title: visit.title,
+        favicon: visit.favicon,
+    });
+    vela_core::app::browser_load::pinned_title(&url, visit.as_ref())
 }
 
 // -- network health and logo misses (spec 082 RE3, RE10, contract §11) --------

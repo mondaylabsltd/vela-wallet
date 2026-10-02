@@ -174,7 +174,7 @@
       "methodHybridBody": "コードを読み取り、近くの端末で作成",
       "methodHybridTitle": "スマホまたはタブレット",
       "methodHybridUnavailable": "近日対応",
-      "methodPlatformBody": "Touch ID または Windows Hello",
+      "methodPlatformBody": "指紋・顔・画面ロック",
       "methodPlatformTitle": "この端末",
       "methodSecurityKeyBody": "挿してタッチ",
       "methodSecurityKeyTitle": "USB セキュリティキー",

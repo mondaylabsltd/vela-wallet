@@ -250,6 +250,9 @@ pub struct FlowStrings {
     /// word about the same state.
     pub status_pending: SharedString,
     pub status_failed: SharedString,
+    /// A pending record nothing will settle (087 F04) — "Unknown", never
+    /// "Failed": it may have been sent.
+    pub status_unknown: SharedString,
     pub detail_from: SharedString,
     pub detail_to: SharedString,
     /// "App" — the site a dApp's transaction came from (083 H2), the word the
@@ -533,6 +536,9 @@ pub struct FlowStrings {
     pub batch_no_price: SharedString,
     pub batch_import_failed_title: SharedString,
     pub batch_import_failed_body: SharedString,
+    /// 087: a picked file in a legacy code page — how to save it, in the
+    /// contacts import's own words.
+    pub batch_import_failed_encoding: SharedString,
 }
 
 impl FlowStrings {
@@ -613,6 +619,7 @@ impl FlowStrings {
             status_confirmed: s("componentsTx.receipt.statusConfirmed"),
             status_pending: s("componentsTx.detail.statusPending"),
             status_failed: s("componentsTx.detail.statusFailed"),
+            status_unknown: s("componentsUi.signing.intentUnknown"),
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),
@@ -816,6 +823,7 @@ impl FlowStrings {
             batch_no_price: s("send.batchNoPrice"),
             batch_import_failed_title: s("send.batchImportFailedTitle"),
             batch_import_failed_body: s("send.batchImportFailedBody"),
+            batch_import_failed_encoding: s("contacts.importFailEncoding"),
         }
     }
 }

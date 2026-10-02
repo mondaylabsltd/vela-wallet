@@ -16,10 +16,12 @@
  */
 import { loadCore } from '$lib/core/client';
 import { checksumAddress } from '$lib/core/kernels';
+import type { Account } from '$lib/core/generated/Account';
 import { listGrants } from './connections';
 import { getGrant, revokeGrant, setGrant } from './grants';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
+import { publishExtSnapshot, type SnapshotFacts } from './core/ext-cache';
 
 export interface FollowFacts {
 	/** The account the wallet switched TO. */
@@ -75,44 +77,87 @@ export async function followActiveAccount(facts: FollowFacts): Promise<FollowOut
 /** What the follow reads of the session — `SessionView`, narrowed. */
 export interface FollowedSession {
 	loading: boolean;
+	has_wallet: boolean;
 	address: string;
-	accounts: readonly { account: { address: string } }[];
+	active_index: number;
+	accounts: readonly { account: Account }[];
 }
 
 /**
- * The account a connected site should be on, followed from EVERY screen (spec
- * 082 RJ20, G58).
+ * The worker's picture of the session, and every grant, kept on the account
+ * the person is signed in to — from EVERY screen (spec 082 RJ20, G58) and on
+ * every session the document settles on, its first included (spec 086, issue
+ * 315).
  *
- * The FIRST address the session settles on is a boot, not a switch: only a
- * change from one known address to another asks the core to re-pin the
- * grants (`followActiveAccount`), and the worker announces each re-pinned
- * grant to the site's tabs as `accountsChanged`.
+ * Two writes, in this order, each the core's:
  *
- * Before 082 round 2 this lived in the wallet page — an effect over a
- * component-local `followedAddress`. A switch made in Settings (切换账户) never
- * reached a site, because the wallet page was not mounted; and coming back to
- * the wallet remounted it with `null`, so the change read as a boot and was
- * dropped for good. The root layout now calls `note()` on every session view,
- * and the address it last saw lives here, in the module, for the document's
- * whole life.
+ *   1. the snapshot (`ext_cache`) — who is signed in, which is what the
+ *      service worker answers `eth_accounts` from. It used to be published by
+ *      the wallet page alone, so a switch made in Settings left the worker
+ *      answering for the account the person had left;
+ *   2. the grants (`followActiveAccount`) — each re-pinned to the signed-in
+ *      account, or dropped when its own account left the device; the worker
+ *      announces each change to the site's tabs. Second, so a page that hears
+ *      `accountsChanged([new])` and asks `eth_accounts` reads the new account.
+ *
+ * The FIRST session a document settles on is followed too. It used to be "a
+ * boot, not a switch" — but a person who signs out and signs in to another
+ * wallet, in a fresh document, never switches in the follower's sight, and
+ * every site stayed on the previous account (issue 315). The in-app browsers
+ * have always done this (`dapp_browser`: "the active account changed —
+ * initial load included"). Re-asking about a session already followed is a
+ * no-op: the same session is noted once.
+ *
+ * Signed out, the snapshot goes and the grants stay: signing back in lines
+ * them back up (`session.rs`), and the worker tells each site it is no longer
+ * answered.
  */
 export class SessionFollower {
 	#followed: string | null = null;
+	/** One follow at a time, in the order the sessions were seen. */
+	#queue: Promise<unknown> = Promise.resolve();
+	readonly #publish: (facts: SnapshotFacts) => Promise<unknown>;
+
+	constructor(publish: (facts: SnapshotFacts) => Promise<unknown> = publishExtSnapshot) {
+		this.#publish = publish;
+	}
 
 	/**
-	 * Called with each session view. Returns the re-pin it started, or `null`
-	 * when the view is not a switch (still loading, the boot, the same account).
+	 * Called with each session view. Returns the follow it started, or `null`
+	 * when there is nothing to follow (still loading, or the session already
+	 * followed).
 	 */
-	note(view: FollowedSession, nowMs?: number): Promise<FollowOutcome> | null {
-		if (view.loading || !view.address) return null;
-		const previous = this.#followed;
-		this.#followed = view.address;
-		if (previous === null || previous.toLowerCase() === view.address.toLowerCase()) return null;
-		return followActiveAccount({
-			activeAddress: view.address,
-			addresses: view.accounts.map((row) => row.account.address),
-			nowMs
+	note(
+		view: FollowedSession,
+		options: { locale?: string; nowMs?: number } = {}
+	): Promise<FollowOutcome> | null {
+		if (view.loading) return null;
+		// Read now: the view is live state, and the follow runs later.
+		const address = view.address;
+		const accounts = view.accounts.map((row) => row.account);
+		const addresses = accounts.map((account) => account.address);
+		const key = JSON.stringify([
+			view.has_wallet,
+			address.toLowerCase(),
+			addresses.map((a) => a.toLowerCase())
+		]);
+		if (key === this.#followed) return null;
+		this.#followed = key;
+		const facts: SnapshotFacts = {
+			isLoading: false,
+			hasWallet: view.has_wallet,
+			accounts,
+			active: accounts[view.active_index] ?? null,
+			theme: 'dark',
+			locale: options.locale ?? 'en'
+		};
+		const run = this.#queue.then(async (): Promise<FollowOutcome> => {
+			await this.#publish(facts);
+			if (!address) return { repinned: [], removed: [] };
+			return followActiveAccount({ activeAddress: address, addresses, nowMs: options.nowMs });
 		});
+		this.#queue = run.catch(() => {});
+		return run;
 	}
 }
 

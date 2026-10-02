@@ -88,6 +88,8 @@ struct ContactImportFailureWire: Decodable, Equatable {
         case noAddressColumn = "no_address_column"
         case empty
         case unknownGroup = "unknown_group"
+        /// Not UTF-8, nor UTF-16 by its BOM — a legacy code page (issue 333).
+        case unsupportedEncoding = "unsupported_encoding"
         /// A variant this build has not heard of. It still means "the file was
         /// refused", which is the half the screen acts on.
         case unrecognised

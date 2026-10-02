@@ -227,9 +227,10 @@ class BrowserEngine(
 
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 // A same-document change (pushState) is the document's own; an
-                // error page's history entry is not a document.
+                // error page's history entry is not a document — nor is its
+                // title ("网页无法打开") the tab's name (issue #329).
                 update(url) { if (navFailed) it else it.copy(shown = url) }
-                listener.shown(tabId, url, view.title.orEmpty())
+                if (!navFailed) listener.shown(tabId, url, view.title.orEmpty())
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -730,6 +731,14 @@ class BrowserController(
      */
     private val crashed = HashSet<String>()
 
+    /**
+     * Each tab's last document that loaded WITHOUT failing — the core's visit
+     * (`browserLoadVisit`), read from the document itself. What the star
+     * names a favourite after (`browserPinnedTitle`, issue #329): never the
+     * engine's error page, never the page before's title.
+     */
+    private val lastVisits = HashMap<String, uniffi.vela_core_uniffi.BrowserVisit>()
+
     /** Set when something outside 探索 (a deep link, a dev seam) opened a page: the tab should show. */
     val openRequested = MutableStateFlow(false)
 
@@ -759,6 +768,7 @@ class BrowserController(
         }
         if (_snapshots.value.keys.any { it !in alive }) _snapshots.value = _snapshots.value.filterKeys { it in alive }
         crashed.retainAll(alive)
+        lastVisits.keys.retainAll(alive)
         val selected = view.tabs.firstOrNull { it.id == view.selected_tab } ?: view.tabs.firstOrNull()
         val engine = selected?.url?.takeIf { selected.id !in crashed }?.let { url ->
             engines.getOrPut(selected.id) { newEngine(selected.id).also { it.load(url) } }
@@ -802,6 +812,7 @@ class BrowserController(
                         mainFrameFailed = false,
                         httpStatus = httpStatus?.toUShort(),
                     ) ?: return@evaluateJavascript
+                    lastVisits[tab] = visit
                     scope.launch {
                         historyLoaded.await()
                         bhistHost.dispatch(BhistEvent.VisitRecorded(url = visit.url, title = visit.title, favicon = visit.favicon, now_ms = now()), BhistEvent.serializer())
@@ -982,15 +993,25 @@ class BrowserController(
         }
     }
 
-    /** The star: pins the page in front, or unpins it when it already is a favourite. */
+    /**
+     * The star: pins the page in front, or unpins it when it already is a favourite.
+     *
+     * It acts on what the bar names (the core's `browserAddressBar`: under a
+     * failure panel, the address that failed), and the name is the core's rule
+     * (`browserPinnedTitle`): that site's last good title, else its host. The
+     * engine's own title was the WebView's error page's ("网页无法打开") when
+     * the page had failed, or the page before's (issue #329).
+     */
     fun toggleFavorite() {
-        val state = _current.value?.state?.value ?: return
-        if (state.url.isBlank()) return
-        val origin = state.origin
+        val engine = _current.value ?: return
+        val url = engine.state.value.addressBar().url
+        if (url.isBlank()) return
+        val origin = dappOriginOf(url)
         if (origin != null && exploreHost.view.value.favorites.any { it.origin == origin }) {
             removeFavorite(origin)
         } else {
-            exploreHost.dispatch(ExploreEvent.FavoriteAdded(url = state.url, title = state.title.ifBlank { null }, now_ms = now()), ExploreEvent.serializer())
+            val title = uniffi.vela_core_uniffi.browserPinnedTitle(url, lastVisits[engine.id])
+            exploreHost.dispatch(ExploreEvent.FavoriteAdded(url = url, title = title, now_ms = now()), ExploreEvent.serializer())
         }
     }
 
