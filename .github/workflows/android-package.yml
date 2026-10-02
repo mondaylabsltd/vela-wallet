@@ -14,8 +14,14 @@
 #     packaging path nobody walks is where 0.9.0 found three defects at once.
 #
 # Unsigned on purpose (founder, 2026-09-11: 不用考虑签名). The upload keystore
-# is the founder's to hold; signing the AAB is a local step
-# (`jarsigner` / Play App Signing — see docs/project-takeover/05).
+# is the founder's to hold. Since spec 088 the Gradle build SIGNS a release
+# itself when the four VELA_UPLOAD_* values are set (env, or the gitignored
+# app-android/vela-wallet/keystore.properties) and REFUSES to build one when
+# they are not — so this job, which has no key, asks for an unsigned package
+# out loud with -PvelaUnsignedRelease. To upload, either build locally with the
+# key (docs/NATIVE-LAUNCH-CHECKLIST.md §A1) or sign this artifact by hand with
+# `jarsigner`. Its versionCode is the commit count (spec 088 FR-012), which is
+# why the checkout below fetches the whole history.
 #
 # Unlike the `android` job in ci.yml this job does NOT pass
 # -PvelaSkipRustBuild: a release package needs libvela_core_uniffi.so for all
@@ -67,6 +73,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # versionCode = `git rev-list --count HEAD` (spec 088); a shallow clone counts 1.
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -95,7 +104,7 @@ jobs:
             --language kotlin --out-dir bindings/kotlin --no-format
       - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)
         working-directory: app-android/vela-wallet
-        run: ./gradlew :app:assembleRelease :app:bundleRelease --console=plain
+        run: ./gradlew :app:assembleRelease :app:bundleRelease -PvelaUnsignedRelease --console=plain
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The app says which commit it is
         working-directory: app-android/vela-wallet

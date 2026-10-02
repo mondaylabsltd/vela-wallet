@@ -74,6 +74,9 @@ pub struct WalletStrings {
     /// "处理中 · …", "失败 · …".
     pub status_pending: SharedString,
     pub status_failed: SharedString,
+    /// "未知 · …" — a pending record nothing will settle (087 F04): the
+    /// corpus's bare "Unknown", never "failed" (it may have been sent).
+    pub status_unknown: SharedString,
     /// A dApp transaction's title (083 H2): its decoded intent in the
     /// reader's words — the signing sheet's own (`componentsUi.signing.<leaf>`)
     /// — else "Contract interaction", as the sheet called it.
@@ -178,6 +181,7 @@ impl WalletStrings {
             label_dapp: s("history.txLabelDappTx"),
             status_pending: s("componentsTx.detail.statusPending"),
             status_failed: s("componentsTx.detail.statusFailed"),
+            status_unknown: s("componentsUi.signing.intentUnknown"),
             terms: vela_core::app::clear_signing::ClearTerm::all()
                 .map(|term| (term, s(&format!("componentsUi.signing.{}", term.leaf()))))
                 .collect(),

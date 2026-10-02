@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +8,67 @@ plugins {
 
 // Repo root (this module lives at <repo>/app-android/vela-wallet/app).
 val velaRepoRoot: File = rootDir.parentFile.parentFile
+
+// ---------------------------------------------------------------------------
+// Spec 088 FR-001: the Play upload key. Never in the repo. Each value comes from
+// an environment variable, else from `app-android/vela-wallet/keystore.properties`
+// (gitignored; keys `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; a
+// relative `storeFile` is relative to that file, `~/` is the home directory):
+//
+//   VELA_UPLOAD_STORE_FILE  VELA_UPLOAD_STORE_PASSWORD  VELA_UPLOAD_KEY_ALIAS  VELA_UPLOAD_KEY_PASSWORD
+//
+// A release build without all four FAILS, saying which are missing — it is never
+// signed with the debug key and never comes out unsigned by accident. The one
+// way to an unsigned release is to ask for it: `-PvelaUnsignedRelease` (CI's
+// packaging check, whose artifact the founder signs by hand). Debug builds and
+// unit tests read none of this.
+// ---------------------------------------------------------------------------
+val velaKeystoreProperties = Properties().apply {
+    val file = rootDir.resolve("keystore.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+
+fun velaUploadValue(env: String, property: String): String? =
+    providers.environmentVariable(env).orNull?.takeIf { it.isNotBlank() }
+        ?: velaKeystoreProperties.getProperty(property)?.trim()?.takeIf { it.isNotEmpty() }
+
+val velaUploadKey: Map<String, String?> = linkedMapOf(
+    "VELA_UPLOAD_STORE_FILE (storeFile)" to velaUploadValue("VELA_UPLOAD_STORE_FILE", "storeFile"),
+    "VELA_UPLOAD_STORE_PASSWORD (storePassword)" to velaUploadValue("VELA_UPLOAD_STORE_PASSWORD", "storePassword"),
+    "VELA_UPLOAD_KEY_ALIAS (keyAlias)" to velaUploadValue("VELA_UPLOAD_KEY_ALIAS", "keyAlias"),
+    "VELA_UPLOAD_KEY_PASSWORD (keyPassword)" to velaUploadValue("VELA_UPLOAD_KEY_PASSWORD", "keyPassword"),
+)
+val velaUploadStoreFile: File? = velaUploadKey.values.first()?.let { path ->
+    when {
+        path.startsWith("~/") -> File(System.getProperty("user.home"), path.removePrefix("~/"))
+        File(path).isAbsolute -> File(path)
+        else -> rootDir.resolve(path)
+    }
+}
+val velaUploadKeyProblems: List<String> = buildList {
+    velaUploadKey.filterValues { it == null }.keys.forEach { add("missing $it") }
+    if (velaUploadStoreFile != null && !velaUploadStoreFile.isFile) add("no keystore at $velaUploadStoreFile")
+}
+val velaUnsignedRelease: Boolean = providers.gradleProperty("velaUnsignedRelease").isPresent
+
+// Spec 088 FR-012: every upload needs a higher versionCode than any before it.
+// `-PvelaVersionCode=N`, else `VELA_VERSION_CODE`, else the number of commits
+// behind HEAD — which only grows along `main`, so a later commit is a later
+// build without anybody keeping a counter. (A shallow clone counts 1: the
+// packaging workflow checks out full history for that reason.)
+val velaVersionCode: Int = run {
+    val asked = (providers.gradleProperty("velaVersionCode").orNull ?: providers.environmentVariable("VELA_VERSION_CODE").orNull)
+        ?.trim()?.takeIf { it.isNotEmpty() }
+    if (asked != null) {
+        asked.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
+            ?: throw GradleException("velaVersionCode / VELA_VERSION_CODE must be a whole number from 1 to 2100000000, not '$asked'")
+    } else {
+        providers.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.map { it.trim() }.orNull?.toIntOrNull()?.takeIf { it > 0 } ?: 1
+    }
+}
 
 android {
     namespace = "app.getvela.wallet"
@@ -24,7 +87,8 @@ android {
         // Keep rust/scripts/build-android.sh --platform in sync.
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
+        // Spec 088 FR-012 — see velaVersionCode above. The name is set by hand per release.
+        versionCode = velaVersionCode
         versionName = "0.9.5"
 
         // Spec 047: the About page and the bug report name the build. A provider,
@@ -55,11 +119,25 @@ android {
         }
     }
 
+    signingConfigs {
+        // Only when all four values are there; the check below says what is not.
+        if (velaUploadKeyProblems.isEmpty()) {
+            create("release") {
+                storeFile = velaUploadStoreFile
+                storePassword = velaUploadKey.values.elementAt(1)
+                keyAlias = velaUploadKey.values.elementAt(2)
+                keyPassword = velaUploadKey.values.elementAt(3)
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
             }
+            // The upload key, or nothing at all — never the debug key.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
@@ -159,6 +237,30 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
     outputs.dir(projectDir.resolve("src/main/jniLibs"))
         .withPropertyName("velaJniLibs")
     outputs.cacheIf { true }
+}
+
+// Spec 088 FR-001: a release build stops here, in words, when the upload key is
+// not configured — before anything is compiled, so nobody uploads a bundle that
+// was quietly left unsigned.
+val velaCheckUploadKey = tasks.register("velaCheckUploadKey") {
+    description = "Fails a release build whose Play upload key is not configured (spec 088)."
+    val problems = velaUploadKeyProblems
+    val unsignedAsked = velaUnsignedRelease
+    doLast {
+        if (problems.isNotEmpty() && !unsignedAsked) {
+            throw GradleException(
+                "The release build has no upload key, so it would not be accepted by Google Play.\n" +
+                    problems.joinToString("\n") { "  - $it" } + "\n" +
+                    "Set the four VELA_UPLOAD_* environment variables, or write them to " +
+                    "app-android/vela-wallet/keystore.properties (gitignored) as storeFile, storePassword, " +
+                    "keyAlias and keyPassword. See docs/NATIVE-LAUNCH-CHECKLIST.md §A1. " +
+                    "To build an UNSIGNED release on purpose (CI's packaging check), pass -PvelaUnsignedRelease.",
+            )
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(velaCheckUploadKey)
 }
 
 val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {

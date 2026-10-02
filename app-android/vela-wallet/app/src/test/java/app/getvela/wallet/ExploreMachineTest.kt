@@ -64,6 +64,34 @@ class ExploreMachineTest {
         ).also { it.dispatch(BhistEvent.Start, BhistEvent.serializer()) }
     }
 
+    /**
+     * Issue #329: app.uniswap.org, starred while it had failed to load, was
+     * pinned as "网页无法打开" — the WebView's error page's title. The star now
+     * names a favourite by the core's rule (`browserPinnedTitle` over the last
+     * visit `browserLoadVisit` made): the site's last good title, else its host.
+     */
+    @Test
+    fun `a page that failed to load is pinned by its host, never the error page's title`() = runBlocking {
+        val h = explore()
+        withTimeout(10_000) { h.view.first { it.ready } }
+        val failedUrl = "https://app.uniswap.org/"
+        // The error page is no visit — failed, and read at its chrome-error:// address.
+        val errorPage = uniffi.vela_core_uniffi.browserLoadVisit("chrome-error://chromewebdata/", "网页无法打开", null, false, null)
+        assertNull(errorPage)
+        assertNull(uniffi.vela_core_uniffi.browserLoadVisit(failedUrl, "网页无法打开", null, true, null))
+        // The page before was another site: its title is not this one's either.
+        val before = uniffi.vela_core_uniffi.browserLoadVisit("https://bscscan.com/", "BscScan", null, false, null)
+        assertNull(uniffi.vela_core_uniffi.browserPinnedTitle(failedUrl, before))
+        val title = uniffi.vela_core_uniffi.browserPinnedTitle(failedUrl, errorPage)
+        h.dispatch(ExploreEvent.FavoriteAdded(failedUrl, title, 1.0e12), ExploreEvent.serializer())
+        val pinned = withTimeout(10_000) { h.view.first { it.favorites.isNotEmpty() } }
+        assertEquals("app.uniswap.org", pinned.favorites.single().name)
+
+        // Once the site has loaded, its own title names it — even under a later failure.
+        val good = uniffi.vela_core_uniffi.browserLoadVisit("https://app.uniswap.org/swap", "Uniswap Interface", null, false, null)
+        assertEquals("Uniswap Interface", uniffi.vela_core_uniffi.browserPinnedTitle(failedUrl, good))
+    }
+
     @Test
     fun `favourites, a group and tabs survive a second host over the same store`() = runBlocking {
         val h = explore()

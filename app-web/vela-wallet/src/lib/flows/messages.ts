@@ -75,6 +75,9 @@ export const WALLET_FLOW_KEYS = [
 	// the tracker resolves it, and a refusal is failed (issue 211).
 	'componentsTx.detail.statusPending',
 	'componentsTx.detail.statusFailed',
+	// 087 F04: a pending record nothing will settle reads "Unknown" — never
+	// "Failed" (it may have been sent), never "Pending" for ever.
+	'componentsUi.signing.intentUnknown',
 	'componentsTx.detail.from',
 	'componentsTx.detail.to',
 	'componentsTx.detail.labelChain',

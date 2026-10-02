@@ -237,6 +237,8 @@ final class SendStore {
 
     func advance() { dispatch(["type": "continue"]) }
     func back() { dispatch(["type": "back"]) }
+    /// Issue #326: the form's token card — back to the picker, the payee kept.
+    func changeToken() { dispatch(["type": "change_token"]) }
     func editAmount() { dispatch(["type": "edit_amount"]) }
     func chooseFeeToken(_ token: String?) {
         dispatch(["type": "choose_fee_token", "token": token.map { $0 as Any } ?? NSNull()])

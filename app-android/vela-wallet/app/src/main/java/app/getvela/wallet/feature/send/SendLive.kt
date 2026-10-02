@@ -140,12 +140,17 @@ object SendLive {
     }
 
     /** The picker's rows after both narrowings, as indices into `view.tokens`, in the core's order (the web's `visibleSendTokens`). */
-    fun visibleTokens(view: SendView, chainFilter: Int?, classFilter: String): List<Int> =
-        view.tokens.indices.filter { i ->
+    fun visibleTokens(view: SendView, chainFilter: Int?, classFilter: String): List<Int> {
+        // Issue #312: a code that named a network decides which network is on
+        // screen — the core lists only its holdings, and a home filter left on
+        // another network must not hide them all.
+        val chain = view.request_chain_id ?: chainFilter
+        return view.tokens.indices.filter { i ->
             val token = view.tokens[i]
-            (chainFilter == null || token.chain_id.toInt() == chainFilter) &&
+            (chain == null || token.chain_id.toInt() == chain) &&
                 (classFilter == "all" || sendTokenClass(token) == classFilter)
         }
+    }
 
     internal fun pick(
         fallback: SendPickModel,
@@ -156,21 +161,41 @@ object SendLive {
         classFilter: String = "all",
     ): SendPickModel {
         val s = ctx.strings
+        // Issue #312: the network a scanned code named is the one on screen.
+        val chainFilter = view.request_chain_id ?: chainFilter
         val visible = visibleTokens(view, chainFilter, classFilter)
         val rows = visible.map { i -> assetRow(view.tokens[i], ctx) }
         VelaLog.event("send.pick", "narrowed", "class" to classFilter, "chain" to chainFilter, "visible" to visible.size, "of" to view.tokens.size, "networks" to view.tokens.map { it.network }.distinct().take(4))
         // Spec 048: the chips and the pill say what narrowed the list.
         val filters = fallback.filters.map { it.copy(selected = it.id == classFilter) }
-        val pill = fallback.header.pill?.let { p -> p.copy(label = chainFilter?.let { ctx.chainNames[it] } ?: p.label) }
+        // Issue #312: no network pill while a scanned code names the network —
+        // the notice says which one, and a pill that opened the network sheet
+        // there could choose nothing the list would follow.
+        val pill = if (view.request_chain_id != null) {
+            null
+        } else {
+            fallback.header.pill?.let { p -> p.copy(label = chainFilter?.let { ctx.chainNames[it] } ?: p.label) }
+        }
         // Issue 209 (the web's `liveSendPick`): an empty list says WHY. The
         // core's own token list tells "holds nothing" from "a filter or the
         // search hid everything".
         val empty = s.t(if (view.tokens.isEmpty()) I18nKeys.Flows.NO_TOKENS_WITH_BALANCE else I18nKeys.Flows.NO_MATCHING_TOKENS)
+        val recipient = pickRecipient(view, s)
+        // Issue #312: the network a scanned code named, in the receive card's
+        // own words ("BNB Chain payments only") — above an empty list it is
+        // also why the list is empty.
+        val requestNotice = view.request_chain_id?.let { chainId ->
+            SendNoticeModel(
+                mark = WalletLive.mark(chainId, nativeSymbol(chainId, ctx), null),
+                text = s.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
+            )
+        }
         if (!sweepPicking) {
             return fallback.copy(
                 header = fallback.header.copy(pill = pill),
+                recipient = recipient,
                 filters = filters,
-                notice = null,
+                notice = requestNotice,
                 selection = null,
                 rows = rows,
                 cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
@@ -184,9 +209,10 @@ object SendLive {
         val chainName = chain?.let { ctx.chainNames[it] ?: "chain-$it" } ?: ""
         return fallback.copy(
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE), pill = pill),
+            recipient = recipient,
             filters = filters,
             empty = empty,
-            notice = chain?.let {
+            notice = requestNotice ?: chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
@@ -203,6 +229,24 @@ object SendLive {
             } else {
                 SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false)
             },
+        )
+    }
+
+    /**
+     * Issue #332: the picker's "To" line — the recipient the core already
+     * holds, worded as the confirm page words it, so the person sees whom they
+     * are paying while they choose what. Nobody held, no line; artwork only for
+     * a real address (the founder's anti-poisoning rule).
+     */
+    internal fun pickRecipient(view: SendView, s: VelaStrings): FactRowModel? {
+        val address = view.recipient.trim()
+        if (address.isEmpty()) return null
+        val name = view.recipient_identity?.name
+        return FactRowModel(
+            label = s.t(I18nKeys.Flows.TO_LABEL),
+            value = name?.let { "$it · ${shortAddress(address)}" } ?: shortAddress(address),
+            lead = if (ADDRESS.matches(address)) FactLead.Identicon(address) else null,
+            mono = name == null,
         )
     }
 
@@ -426,6 +470,8 @@ object SendLive {
                     // list's) — so two screens never show two numbers for one.
                     detail = "$chain · ${s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(it.balance)))}",
                     max = s.t(I18nKeys.Flows.MAX),
+                    // Issue #326: the card is the way to another asset, where the core says so.
+                    change = if (view.can_change_token) s.t(I18nKeys.Flows.SELECT_TOKEN_TITLE) else null,
                 )
             },
             // Spec 045 US1: the door into a split, and — once through it —

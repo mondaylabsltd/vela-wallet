@@ -719,10 +719,12 @@ pub struct WalletPage {
     /// One cap field per batch leg — two legs in Custom at once must not share
     /// a focus handle, or typing in one lands in both.
     leg_cap_focus: std::collections::HashMap<u32, FocusHandle>,
-    /// What the open page last called itself, from the bridge's own report.
-    /// The star pins with THIS rather than the host, because the host is what
-    /// a tile falls back to and a page's title is what a person recognises.
-    browser_title: Option<String>,
+    /// The last document that settled as a visit (the core's
+    /// `visit_to_record`): its address and what it called itself. The star
+    /// names a pin after it by the core's rule (`pinned_title`) — only when it
+    /// is the pinned site, so a page still loading, or one that failed, is
+    /// never pinned under the page before's title (issue #329).
+    browser_visit: Option<vela_core::app::browser_load::Visit>,
     /// Spec 079 US3 / 082 RD3–RD7: the page's load — the core's `LoadWatch`,
     /// fed by the wallet's requests, WebKit's own state and the probe.
     load: crate::wallet::browser_host::LoadDriver,
@@ -1034,6 +1036,8 @@ struct SendBindings {
     /// traversal that wrote the sentence, so the button and the words cannot
     /// disagree about what they are offering.
     way_out: Option<flows_live::NoticeWayOut>,
+    /// The core's `can_change_token`: the token card opens the picker (#326).
+    can_change_token: bool,
 }
 
 impl Identity {
@@ -1309,7 +1313,7 @@ impl WalletPage {
             explore_groups: false,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
-            browser_title: None,
+            browser_visit: None,
             load: crate::wallet::browser_host::LoadDriver::default(),
             shown_tab: None,
             tab_strip: explore_components::TabStripScroll::default(),
@@ -6089,6 +6093,7 @@ impl WalletPage {
             sweeping: self.send_sweeping,
             token_chain_ids: view.tokens.iter().map(|token| token.chain_id).collect(),
             multi_chain_id: view.multi_chain_id,
+            can_change_token: view.can_change_token,
         })
     }
 
@@ -6690,6 +6695,7 @@ impl WalletPage {
             amount_field: None,
             recipient_field: None,
             tap_max: None,
+            change_token: None,
             toggle_denom: None,
             pick_contact_rows: Vec::new(),
             fee_rows: Vec::new(),
@@ -7103,6 +7109,11 @@ impl WalletPage {
                         }),
                     });
                     actions.tap_max = Some(to_host(SendEvent::TapMax));
+                    // The token card goes back to the picker with the payee
+                    // kept (issue #326) — only where the core offers it.
+                    if send.can_change_token {
+                        actions.change_token = Some(to_host(SendEvent::ChangeToken));
+                    }
                     // ⇄: the core owns the swap — whether it is possible, and
                     // what becomes of the figure; the page only says it was
                     // pressed (the web's `toggle_fiat_input`, #197).
@@ -13724,19 +13735,17 @@ impl WalletPage {
         }
         #[cfg(not(target_os = "linux"))]
         if let Some(url) = crate::webview::current_url() {
-            // The page's own title when it has reported one; the host
-            // otherwise. The core keeps whichever arrives until somebody
-            // renames the tile.
-            let title = self
-                .browser_title
-                .clone()
-                .or_else(crate::webview::host)
-                .unwrap_or_default();
+            // The core's rule (issue #329): the site's last good title — the
+            // last visit's, when it is this site — else none, and the core
+            // names the tile by its host. Never the page before's title over
+            // a load still under way, nor over an engine's error page.
+            let title =
+                vela_core::app::browser_load::pinned_title(&url, self.browser_visit.as_ref());
             resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
                 resident.dispatch(
                     vela_core::app::explore_sites::Event::FavoriteAdded {
                         url,
-                        title: (!title.is_empty()).then_some(title),
+                        title,
                         now_ms: crate::executor::now_ms(),
                     },
                     cx,
@@ -13921,7 +13930,7 @@ impl WalletPage {
                         if target == MetaTarget::Nobody {
                             return;
                         }
-                        page.browser_title.clone_from(&visit.title);
+                        page.browser_visit = Some(visit.clone());
                         let opened = target == MetaTarget::NewTab;
                         explore.update(cx, |resident, cx| {
                             let event = match target {
@@ -18857,6 +18866,24 @@ mod tests {
         // The words are a corpus key the desktop already resolves.
         let loc = Loc::from_env();
         assert_ne!(loc.t(CLOSE_HELD_WORDS).as_ref(), CLOSE_HELD_WORDS);
+    }
+
+    /// Issue #329: a pinned page is named by the core's rule over the last
+    /// visit — the site's last good title, else its host — never by the page
+    /// before's title over a load still under way or an engine's error page.
+    #[test]
+    fn a_pin_is_named_by_the_core_rule() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let start = source
+            .find(&["fn ", "pin_current_page("].concat())
+            .unwrap_or_else(|| unreachable!("pin_current_page is gone"));
+        let rest = &source[start..];
+        let body = &rest[..rest.find("\n    }\n").unwrap_or(rest.len())];
+        assert!(body.contains(&["pinned_title(&url, self.", "browser_visit.as_ref())"].concat()));
+        // The visit it reads is the core's, kept from the page's own report.
+        assert!(source.contains(&["page.browser_visit = ", "Some(visit.clone());"].concat()));
+        assert!(!source.contains(&["browser_", "title"].concat()));
     }
 
     /// Spec 082 G41: every way into the address bar takes the keyboard back

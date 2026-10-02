@@ -19,7 +19,10 @@
  *    requester with 4001 — but since spec 079 only the header's ✕ closes it
  *    (no scrim, drag or Escape: a stray touch lost the owner a request).
  */
+import type { ClearBatchCall } from '$lib/core/generated/ClearBatchCall';
+import type { ClearBatchView } from '$lib/core/generated/ClearBatchView';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
+import type { ClearSignResult } from '$lib/core/generated/ClearSignResult';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -305,10 +308,9 @@ function allowanceBlock(
  * core's, and this reads it rather than re-deriving it.
  */
 /**
- * The calldata's length in bytes — what the two "unable to decode" lines name.
- * A batch counts its FIRST leg, the one its decode describes (the desktop's
- * and the phones' `first_call`); `params[0]` of a bundle has no `data`, and a
- * bundle read as "(0 bytes)".
+ * The calldata's length in bytes — what the "unable to decode" line names for
+ * a lone call. A batch of ONE call is drawn as that call, so it counts that
+ * call; a longer batch names each call's own bytes (`ClearBatchCall`).
  */
 export function calldataBytes(paramsJson: string): number {
 	try {
@@ -337,6 +339,102 @@ function selfCallBlockedText(
 	return fill(m.selfCallBlockedBody, { function: blocked.function });
 }
 
+/**
+ * 089 S1: one call of a batch, as its own card — the same words its call
+ * would get alone. A decoded call is its intent and its fields, then the coin
+ * it moves and whom it calls; a plain send is "Send", the exact amount and
+ * the recipient; a call nobody could read says so in its title, with whom it
+ * calls and what coin it moves. Never omitted: the core hands a row for every
+ * call.
+ */
+function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages): Block {
+	const step = (action: string) => fill(m.batchStep, { index: String(call.index), action });
+	const tone = toneOf(call.risk);
+	// What the call moves of the chain's own coin, and whom it calls: inside a
+	// batch nothing else on the sheet says it for this call.
+	const coin: KeyValueRow[] =
+		call.amount !== null && call.value_wei !== '0'
+			? [{ label: m.labelAmount, value: `${MINUS}${call.amount} ${symbol}` }]
+			: [];
+	const target: KeyValueRow[] =
+		call.to !== null ? [{ label: m.labelInteracting, value: call.to, mono: true }] : [];
+	if (call.surface === 'clear_sign' && call.result) {
+		return {
+			kind: 'card',
+			title: step(call.result.intent),
+			tone,
+			rows: [
+				...call.result.fields.filter((field) => !field.detail).map(fieldRow),
+				...coin,
+				...target
+			]
+		};
+	}
+	if (call.surface === 'plain_send' && call.plain_send) {
+		const plain = call.plain_send;
+		return {
+			kind: 'card',
+			title: step(m.intentSend),
+			tone,
+			rows: [
+				{ label: m.labelAmount, value: `${plain.no_value ? '' : MINUS}${plain.amount} ${symbol}` },
+				{ label: m.labelRecipient, value: plain.to, mono: true }
+			]
+		};
+	}
+	return {
+		kind: 'card',
+		title: step(fill(m.warnBlindDecode, { bytes: String(call.data_bytes) })),
+		tone,
+		rows: [...target, ...coin]
+	};
+}
+
+/**
+ * 089 S1: a batch as the sheet draws it — "Batch", how many transactions are
+ * signed together, then EVERY call as its own card (the drawn CS26), the coin
+ * the whole batch moves, the guard's per-call cap cards, and every flag any
+ * call raised, said once. The headline is never call 1's: a batch of
+ * `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1 xDAI" and signed both.
+ */
+function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] {
+	const { sign, guard, m } = inputs;
+	const symbol = sign.request ? nativeSymbol(sign.request.chain_id) : '';
+	const blocks: Block[] = [
+		{ kind: 'intent', text: m.intentBatch, tone: toneOf(batch.risk) },
+		{
+			kind: 'sentence',
+			text: fill(m.summaryBatch, { count: String(batch.calls.length) }),
+			tone: 'accent'
+		},
+		...batch.calls.map((call) => batchCallCard(call, symbol, m))
+	];
+	if (batch.total_amount !== null && batch.total_value_wei !== '0') {
+		blocks.push({
+			kind: 'rows',
+			rows: [{ label: m.labelTotal, value: `${MINUS}${batch.total_amount} ${symbol}` }]
+		});
+	}
+	// The guard reads every call's raw calldata: a cap card per unbounded call.
+	blocks.push(...legBlocks(guard, m));
+	if (keepsUnlimited(guard)) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	}
+	const results = batch.calls.flatMap((call): ClearSignResult[] =>
+		call.result ? [call.result] : []
+	);
+	if (results.some((r) => r.to_own_token)) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
+	}
+	if (results.some((r) => r.provenance === 'fetched')) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
+	}
+	if (results.some((r) => r.partial || r.best_effort)) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
+	}
+	return blocks;
+}
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
@@ -358,6 +456,10 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	if (clear.surface === 'loading' || clear.resolving) {
 		blocks.push({ kind: 'sentence', text: m.choosePrompt, tone: 'neutral' });
 		return blocks;
+	}
+
+	if (clear.surface === 'batch' && clear.batch) {
+		return batchBlocks(inputs, clear.batch);
 	}
 
 	const result = clear.result;
@@ -735,16 +837,25 @@ function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMes
 export function localizedTerms(clear: ClearSigningView, m: SigningMessages): ClearSigningView {
 	const word = (term: string | null | undefined, text: string) =>
 		(term ? m.terms[term] : undefined) || text;
+	const localize = (result: ClearSignResult): ClearSignResult => ({
+		...result,
+		intent: word(result.intent_term, result.intent),
+		fields: result.fields.map((field) => ({
+			...field,
+			label: word(field.label_term, field.label),
+			value: word(field.value_term, field.value)
+		}))
+	});
 	const result = clear.result;
 	return {
 		...clear,
-		result: result && {
-			...result,
-			intent: word(result.intent_term, result.intent),
-			fields: result.fields.map((field) => ({
-				...field,
-				label: word(field.label_term, field.label),
-				value: word(field.value_term, field.value)
+		result: result && localize(result),
+		// Every call of a batch, in the same words a lone call gets.
+		batch: clear.batch && {
+			...clear.batch,
+			calls: clear.batch.calls.map((call) => ({
+				...call,
+				result: call.result && localize(call.result)
 			}))
 		},
 		confirm:
@@ -766,29 +877,54 @@ export function localizedTerms(clear: ClearSigningView, m: SigningMessages): Cle
  * same rule in every shell.
  */
 export function cappedApproval(clear: ClearSigningView, guard: GuardView): ClearSigningView {
+	const cap = (result: ClearSignResult, text: string | null): ClearSignResult => {
+		if (text === null) return result;
+		const fields = result.fields.map((field) =>
+			field.warning && field.format === 'tokenAmount'
+				? { ...field, value: text, warning: false }
+				: field
+		);
+		const risk =
+			result.risk === 'danger' && !fields.some((f) => f.warning) ? 'caution' : result.risk;
+		return { ...result, fields, risk };
+	};
+	// A batch: each call's "Unlimited" is replaced by ITS OWN leg's cap — the
+	// guard's legs are the calls, in order.
+	if (clear.batch && guard.surface === 'batch') {
+		const calls = clear.batch.calls.map((call, index) => {
+			if (!call.result) return call;
+			const result = cap(call.result, capText(guard, index));
+			// Capped, the call is what its decode now says — unless it burns.
+			const risk =
+				call.risk === 'danger' && result.risk !== 'danger' && !result.to_own_token
+					? result.risk
+					: call.risk;
+			return { ...call, result, risk };
+		});
+		const order = ['safe', 'normal', 'caution', 'danger'] as const;
+		const risk = calls.reduce<ClearBatchView['risk']>(
+			(worst, call) => (order.indexOf(call.risk) > order.indexOf(worst) ? call.risk : worst),
+			'safe'
+		);
+		return { ...clear, batch: { ...clear.batch, calls, risk } };
+	}
 	const result = clear.result;
-	const cap = capText(guard);
-	if (result === null || cap === null) return clear;
-	const fields = result.fields.map((field) =>
-		field.warning && field.format === 'tokenAmount'
-			? { ...field, value: cap, warning: false }
-			: field
-	);
-	const risk = result.risk === 'danger' && !fields.some((f) => f.warning) ? 'caution' : result.risk;
-	return { ...clear, result: { ...result, fields, risk } };
+	const text = capText(guard, 0);
+	if (result === null || text === null) return clear;
+	return { ...clear, result: cap(result, text) };
 }
 
 /**
  * The guard's finite choice on an unlimited request, as the cap row prints it
- * — the single approval's, or a batch's FIRST leg's: a bundle decodes from its
- * first leg, so that is the line the decode's "Unlimited" sits on.
+ * — the single approval's, or batch leg `leg`'s: each call of a batch carries
+ * its own decode, so each "Unlimited" is replaced by its own leg's cap.
  */
-function capText(guard: GuardView): string | null {
+function capText(guard: GuardView, leg: number): string | null {
 	const single = guard.surface === 'approval_editor';
-	const leg = guard.surface === 'batch' ? (guard.batch?.legs[0] ?? null) : null;
-	const detected = single ? guard.detected : (leg?.approval ?? null);
-	const editor = single ? guard.editor : (leg?.editor ?? null);
-	const meta = single ? guard.meta : (leg?.meta ?? null);
+	const batchLeg = guard.surface === 'batch' ? (guard.batch?.legs[leg] ?? null) : null;
+	const detected = single ? guard.detected : (batchLeg?.approval ?? null);
+	const editor = single ? guard.editor : (batchLeg?.editor ?? null);
+	const meta = single ? guard.meta : (batchLeg?.meta ?? null);
 	if (
 		!detected?.is_unbounded ||
 		editor === null ||
