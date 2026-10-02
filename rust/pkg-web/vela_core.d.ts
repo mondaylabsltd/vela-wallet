@@ -721,6 +721,26 @@ export function dappProviderScript(host: string): string;
 export function dappReceiptWaitMs(elapsed_ms: number): number;
 
 /**
+ * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+ * from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
+ * or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+ */
+export function dappRpcCallsStatus(id: string, chain_id: number, receipt_json?: string | null): string;
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
+ * asks about, lower-cased — `undefined` when it is not one 32-byte hash.
+ */
+export function dappRpcCallsStatusId(params_json: string): string | undefined;
+
+/**
+ * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+ * request's params, the site's granted addresses and the wallet's chains (all
+ * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ */
+export function dappRpcCapabilities(params_json: string, granted_json: string, chains_json: string): string;
+
+/**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  */
 export function dappRpcClassify(method: string): string;
@@ -758,6 +778,13 @@ export function extractAttestationPublicKey(attestation_object: Uint8Array): P25
  * [`fee_requote_delay_ms`].
  */
 export function feeFailureReasonKey(failure: string): string | undefined;
+
+/**
+ * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+ * (spec 094 S9). The web shell bounds the deployment read it makes before a
+ * quote by the same figure.
+ */
+export function feeQuoteDeadlineMs(): number;
 
 /**
  * The wait in ms before automatic fee re-quote `attempt` (1-based) after
@@ -1379,6 +1406,9 @@ export interface InitOutput {
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
     readonly dappProviderScript: (a: number, b: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
+    readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
+    readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
@@ -1404,9 +1434,9 @@ export interface InitOutput {
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
     readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
+    readonly feeQuoteDeadlineMs: () => number;
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
     readonly feeRequoteTimeoutMs: () => number;
-    readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1560,6 +1590,7 @@ export interface InitOutput {
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly feeSignalsCacheTtlMs: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

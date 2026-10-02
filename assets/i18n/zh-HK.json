@@ -720,7 +720,8 @@
    "syncFailedBody": "錢包已建立，但公鑰未有上傳，其他裝置暫時無法登入。",
    "copyAddress": "複製地址",
    "copied": "已複製",
-   "close": "關閉"
+   "close": "關閉",
+   "siteAccessBody": "Vela 嘅網站存取權受咗限制，所以 Chrome 擋咗個通行密鑰。撳頁面頂嘅「允許存取」，然後再試一次。"
   },
   "create": {
    "accountNameHint": "此名稱會連同你的公鑰一起儲存於鏈上，以便跨裝置登入。",
@@ -976,6 +977,11 @@
    "clearAllTitle": "清除記錄？",
    "clearAllBody": "這會移除所有最近開啟過的 dApp。",
    "a11yDeleteHistory": "從記錄中移除"
+  },
+  "ext": {
+   "installedNote": "Vela 已經裝好。之前開咗嘅分頁要重新載入，啲網站先搵到佢。",
+   "accessNote": "Vela 嘅網站存取權受咗限制，網站搵唔到你個錢包，呢度都用唔到你嘅通行密鑰。",
+   "accessAllow": "允許存取"
   }
  },
  "signHandoff": {

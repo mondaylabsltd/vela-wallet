@@ -108,6 +108,11 @@
       "clearAllTitle": "¿Borrar el historial?",
       "clearAllBody": "Esto elimina todas las dApps abiertas recientemente.",
       "a11yDeleteHistory": "Quitar del historial"
+    },
+    "ext": {
+      "installedNote": "Vela ya está instalada. Recarga las pestañas que ya tenías abiertas para que sus sitios puedan encontrarla.",
+      "accessNote": "El acceso de Vela a los sitios está limitado: los sitios no encuentran tu billetera y aquí no puedes usar tu passkey.",
+      "accessAllow": "Permitir acceso"
     }
   },
   "signHandoff": {

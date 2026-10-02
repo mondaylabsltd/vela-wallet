@@ -108,6 +108,11 @@
       "clearAllTitle": "履歴を消去しますか？",
       "clearAllBody": "最近開いた dApp をすべて削除します。",
       "a11yDeleteHistory": "履歴から削除"
+    },
+    "ext": {
+      "installedNote": "Vela をインストールしました。すでに開いていたタブを再読み込みすると、そのサイトから Vela が見つかるようになります。",
+      "accessNote": "Vela のサイトへのアクセスが制限されているため、サイトからウォレットが見つからず、ここではパスキーも使えません。",
+      "accessAllow": "アクセスを許可"
     }
   },
   "signHandoff": {

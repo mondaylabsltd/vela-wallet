@@ -626,6 +626,16 @@ pub struct GuardView {
     /// only thing that lets an unbounded amount past the submit guard, so a
     /// request this machine never saw still cannot carry one.
     pub unlimited_consented: bool,
+    /// The request grants an unbounded allowance as it stands, and the
+    /// person is told so in the danger tone — the ONE place every shell reads
+    /// that sentence from (spec 094 S8): the single approval kept on its
+    /// Requested chip, any batch leg left so, or an off-chain permit for an
+    /// unbounded amount (EIP-2612, Permit2 `PermitSingle`/`PermitBatch`, a DAI
+    /// `allowed: true`). A permit has no cap editor — the dApp redeems its OWN
+    /// struct, so a capped signature would only revert its transaction
+    /// ([`GuardBlockReason::OffChainPermit`]) — which is why, before this, an
+    /// unlimited Permit2 drew a red hero and no warning at all (089 F22).
+    pub unlimited_warning: bool,
     pub increase_total: Option<GuardIncreaseTotalView>,
     /// Unverified decimals must be explicitly flagged
     /// (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).
@@ -728,6 +738,7 @@ impl App for ApprovalGuard {
                     .legs
                     .iter()
                     .any(|leg| matches!(leg.choice, Some(GuardChoice::Unlimited)));
+            let unlimited_warning = batch_view.any_uncapped;
             return GuardView {
                 surface: GuardSurface::Batch,
                 detected: None,
@@ -741,6 +752,7 @@ impl App for ApprovalGuard {
                 confirm_allowed,
                 rewritten_params_json,
                 unlimited_consented,
+                unlimited_warning,
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -758,6 +770,7 @@ impl App for ApprovalGuard {
                 confirm_allowed: true,
                 rewritten_params_json: None,
                 unlimited_consented: false,
+                unlimited_warning: false,
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -777,6 +790,11 @@ impl App for ApprovalGuard {
         let confirm_allowed = !(detected.editable && choice.is_none());
 
         let unlimited_consented = matches!(choice, Some(GuardChoice::Unlimited));
+        // Kept unbounded on the editor, or a permit nobody can cap.
+        let unlimited_warning = unlimited_consented
+            || (surface == GuardSurface::PermitSign
+                && detected.is_unbounded
+                && !detected.is_reducing);
         let rewritten_params_json = match (&choice, &model.params) {
             // Kept as asked: the site's own bytes go out, nothing to re-encode.
             (Some(GuardChoice::Unlimited), _) => None,
@@ -809,6 +827,7 @@ impl App for ApprovalGuard {
             confirm_allowed,
             rewritten_params_json,
             unlimited_consented,
+            unlimited_warning,
             decimals_unverified,
             meta,
             batch: None,

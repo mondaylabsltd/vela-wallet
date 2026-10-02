@@ -108,6 +108,11 @@
       "clearAllTitle": "清空记录？",
       "clearAllBody": "这会移除所有最近打开的 dApp。",
       "a11yDeleteHistory": "从记录中移除"
+    },
+    "ext": {
+      "installedNote": "Vela 已安装。请刷新之前已打开的标签页，这些网站才能找到它。",
+      "accessNote": "Vela 的网站访问权限受到限制，网站找不到你的钱包，这里也用不了你的通行密钥。",
+      "accessAllow": "允许访问"
     }
   },
   "signHandoff": {

@@ -470,9 +470,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   file that is not UTF-8 (a GBK CSV from Excel on Chinese Windows) is refused
 //   with how to save it, where every shell used to import its names as U+FFFD.
 //   Same branches: 1785 + 1 = 1786.
-if (PATHS.length !== 1786) fail(`expected 1786 paths (1697 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1697) fail(`expected 1697 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
+// 1791 (094, 2026-10-02): + the extension's own notices, branch `connect.ext`
+//   with `{installedNote, accessNote, accessAllow}` — a fresh install asks for
+//   the tabs open before it to be reloaded, and limited site access is said in
+//   plain words with its one-click grant — and `onboarding.common.siteAccessBody`,
+//   the passkey Chrome refused for that reason (was Chrome's raw SecurityError).
+//   1786 + 4 leaves + 1 branch = 1791 (1701 leaf + 90 branch).
+if (PATHS.length !== 1791) fail(`expected 1791 paths (1701 leaf + 90 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1701) fail(`expected 1701 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 90) fail(`expected 90 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

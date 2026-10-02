@@ -125,7 +125,8 @@
       "syncFailedBody": "钱包已创建，但公钥未上传，其他设备暂时无法登录。",
       "copyAddress": "复制地址",
       "copied": "已复制",
-      "close": "关闭"
+      "close": "关闭",
+      "siteAccessBody": "Vela 的网站访问权限受到限制，Chrome 拦截了通行密钥。请点按页面顶部的“允许访问”，然后重试。"
     },
     "create": {
       "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",

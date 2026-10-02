@@ -108,6 +108,11 @@
       "clearAllTitle": "Effacer l'historique ?",
       "clearAllBody": "Cela supprime toutes les dApps récemment ouvertes.",
       "a11yDeleteHistory": "Retirer de l'historique"
+    },
+    "ext": {
+      "installedNote": "Vela est installée. Rechargez les onglets déjà ouverts pour que leurs sites puissent la trouver.",
+      "accessNote": "L'accès de Vela aux sites est limité : les sites ne trouvent pas votre portefeuille et votre passkey ne peut pas être utilisée ici.",
+      "accessAllow": "Autoriser l'accès"
     }
   },
   "signHandoff": {

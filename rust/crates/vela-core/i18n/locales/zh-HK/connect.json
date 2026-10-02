@@ -108,6 +108,11 @@
       "clearAllTitle": "清除記錄？",
       "clearAllBody": "這會移除所有最近開啟過的 dApp。",
       "a11yDeleteHistory": "從記錄中移除"
+    },
+    "ext": {
+      "installedNote": "Vela 已經裝好。之前開咗嘅分頁要重新載入，啲網站先搵到佢。",
+      "accessNote": "Vela 嘅網站存取權受咗限制，網站搵唔到你個錢包，呢度都用唔到你嘅通行密鑰。",
+      "accessAllow": "允許存取"
     }
   },
   "signHandoff": {

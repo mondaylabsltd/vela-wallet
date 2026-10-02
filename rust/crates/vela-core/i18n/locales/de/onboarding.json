@@ -125,7 +125,8 @@
 			"syncFailedBody": "Wallet erstellt, aber der öffentliche Schlüssel wurde nicht hochgeladen — andere Geräte können sich noch nicht anmelden.",
 			"copyAddress": "Adresse kopieren",
 			"copied": "Kopiert",
-			"close": "Schließen"
+			"close": "Schließen",
+			"siteAccessBody": "Chrome hat den Passkey blockiert, weil der Websitezugriff von Vela eingeschränkt ist. Wählen Sie oben auf der Seite „Zugriff erlauben“ und versuchen Sie es erneut."
 		},
 		"create": {
 			"accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",

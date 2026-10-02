@@ -108,6 +108,11 @@
       "clearAllTitle": "Cancellare la cronologia?",
       "clearAllBody": "Questo rimuove tutte le dApp aperte di recente.",
       "a11yDeleteHistory": "Rimuovi dalla cronologia"
+    },
+    "ext": {
+      "installedNote": "Vela è installata. Ricarica le schede già aperte perché i loro siti possano trovarla.",
+      "accessNote": "L'accesso di Vela ai siti è limitato: i siti non trovano il tuo wallet e qui non puoi usare la tua passkey.",
+      "accessAllow": "Consenti accesso"
     }
   },
   "signHandoff": {

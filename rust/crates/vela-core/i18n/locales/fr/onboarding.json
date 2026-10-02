@@ -125,7 +125,8 @@
       "syncFailedBody": "Portefeuille créé, mais la clé publique n'a pas été envoyée — les autres appareils ne peuvent pas encore se connecter.",
       "copyAddress": "Copier l'adresse",
       "copied": "Copié",
-      "close": "Fermer"
+      "close": "Fermer",
+      "siteAccessBody": "Chrome a bloqué la passkey car l'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut de la page, puis réessayez."
     },
     "create": {
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",

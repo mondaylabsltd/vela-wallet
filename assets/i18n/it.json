@@ -723,7 +723,8 @@
    "syncFailedBody": "Wallet creato, ma la chiave pubblica non è stata caricata — gli altri dispositivi non possono ancora accedere.",
    "copyAddress": "Copia indirizzo",
    "copied": "Copiato",
-   "close": "Chiudi"
+   "close": "Chiudi",
+   "siteAccessBody": "Chrome ha bloccato la passkey perché l'accesso di Vela ai siti è limitato. Scegli Consenti accesso in cima alla pagina, poi riprova."
   },
   "create": {
    "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",
@@ -979,6 +980,11 @@
    "clearAllTitle": "Cancellare la cronologia?",
    "clearAllBody": "Questo rimuove tutte le dApp aperte di recente.",
    "a11yDeleteHistory": "Rimuovi dalla cronologia"
+  },
+  "ext": {
+   "installedNote": "Vela è installata. Ricarica le schede già aperte perché i loro siti possano trovarla.",
+   "accessNote": "L'accesso di Vela ai siti è limitato: i siti non trovano il tuo wallet e qui non puoi usare la tua passkey.",
+   "accessAllow": "Consenti accesso"
   }
  },
  "signHandoff": {

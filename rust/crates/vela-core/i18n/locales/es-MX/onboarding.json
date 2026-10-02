@@ -125,7 +125,8 @@
       "syncFailedBody": "Se creó la billetera, pero la llave pública no se subió — otros dispositivos aún no pueden iniciar sesión.",
       "copyAddress": "Copiar dirección",
       "copied": "Copiado",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "siteAccessBody": "Chrome bloqueó la passkey porque el acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba en la página y vuelve a intentarlo."
     },
     "create": {
       "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
