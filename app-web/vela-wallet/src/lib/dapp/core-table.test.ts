@@ -48,6 +48,10 @@ function bucketOf(method: string): string {
 			return 'addChain';
 		case 'watch_asset':
 			return 'watchAsset';
+		case 'capabilities':
+			return 'capabilities';
+		case 'calls_status':
+			return 'callsStatus';
 		case 'sign':
 			return 'sign';
 		case 'read':
@@ -82,6 +86,8 @@ const EVERY_METHOD = [
 	'personal_ecRecover',
 	'debug_traceCall',
 	'wallet_getCallsStatus',
+	'wallet_getCapabilities',
+	'wallet_showCallsStatus',
 	''
 ];
 
