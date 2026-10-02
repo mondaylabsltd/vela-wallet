@@ -13063,6 +13063,20 @@ public func dappBrowserInput(text: String) -> String?  {
 })
 }
 /**
+ * A page another app or site asked the wallet's browser to open
+ * (`velawallet://open?url=…`, spec 088): the host the person is asked about
+ * before it loads, or `None` when the link is not opened at all (only an
+ * `https` page with a plain host qualifies).
+ */
+public func dappExternalPageHost(url: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_external_page_host(
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
  * Is this provider method one that asks for a signature? The routing
  * table's first question (spec 044), answered by the core so the shell's
  * allowlist and the machine's own notion of "a signing method" cannot drift.
@@ -15163,6 +15177,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_browser_input() != 24918) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_external_page_host() != 27454) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {

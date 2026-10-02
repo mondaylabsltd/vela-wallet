@@ -2180,6 +2180,16 @@ fun VelaNavHost(
     // an answer nobody can give.
     // Spec 047 D10: the last run's crash, or a core fault, raised once.
     CrashSheet(strings = LocalVelaStrings.current, version = BuildConfig.VERSION_NAME)
+    // Spec 088 FR-004: a page another app asked to open waits for the person —
+    // hosted out here for the same reason: a link can arrive on any screen.
+    val externalPage by application.container.browser.externalPage.collectAsStateWithLifecycle()
+    externalPage?.let { page ->
+        app.getvela.wallet.feature.browser.ExternalPageSheet(
+            page = page,
+            strings = LocalVelaStrings.current,
+            onAnswer = application.container.browser::answerExternal,
+        )
+    }
     onboarding.pending?.let { prompt ->
         FlowSheet(
             kind = prompt.kind,

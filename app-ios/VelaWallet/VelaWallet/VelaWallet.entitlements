@@ -36,6 +36,14 @@
 	  associated-domain above, this path consults NO domain association: it is
 	  the escape hatch a lapsed or down assetlinks server cannot padlock
 	  (FR-009c). Needs a YubiKey with firmware 5.8+ (FIDO over CCID).
+
+	  Spec 088 (2026-10-01): this key never reaches a SIGNED binary. Xcode drops
+	  it when signing for iOS — it is absent from the archive's .xcent and from
+	  the App Store export's entitlements, and no provisioning profile for this
+	  App ID grants it — so it does not break archiving or export, and every
+	  signed build (Debug on a device, TestFlight, App Store) runs without it.
+	  Whatever the USB security-key route does on a device today is what it
+	  does in TestFlight. Kept, because it costs nothing and documents intent.
 	-->
 	<key>com.apple.security.smartcard</key>
 	<true/>
