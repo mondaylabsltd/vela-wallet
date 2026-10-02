@@ -34,6 +34,7 @@
 //
 
 import Foundation
+import os
 import VelaCore
 
 enum TokenReads {
@@ -41,7 +42,12 @@ enum TokenReads {
     /// One chain's answer. `failed` and `rateLimited` are carried separately
     /// because the core renders them differently: a failed chain is offered a
     /// fix, a throttled one is not (invariant ④).
-    struct ChainResult {
+    ///
+    /// Nonisolated and `Sendable` (spec 092): a chain's answer crosses from the
+    /// read to the round off the main actor. `@unchecked` for `tokens`, whose
+    /// values are the decoded JSON scalars of one read — never shared, never
+    /// mutated after it is built.
+    nonisolated struct ChainResult: @unchecked Sendable {
         let chainId: Int
         let tokens: [[String: Any]]
         let failed: Bool
@@ -55,26 +61,72 @@ enum TokenReads {
     /// never settled. Past the deadline the chain is failed for this round
     /// (it joins the unreachable list like any other) and its late answer, if
     /// one ever comes, is dropped; the other chains' answers land regardless.
-    static func bounded(
+    nonisolated static func bounded(
         chainId: Int,
         deadlineMs: UInt32 = balanceChainReadDeadlineMs(),
-        _ read: @escaping () async -> ChainResult
+        _ read: @escaping @Sendable () async -> ChainResult
     ) async -> ChainResult {
-        final class Once { var done = false }
-        let once = Once()
+        // The deadline must not wait on the main actor (spec 092, CI #386):
+        // the target is main-actor by default, and at launch — or on a loaded
+        // runner — the main actor can be busy for many seconds. So the race is
+        // run by two detached tasks, and the one-shot answer is guarded by a
+        // lock rather than by actor isolation. No task group: a group would
+        // wait for a read that never ends.
+        let race = Race()
         return await withCheckedContinuation { continuation in
-            func finish(_ result: ChainResult) {
-                guard !once.done else { return }
-                once.done = true
-                continuation.resume(returning: result)
+            race.start(
+                work: Task.detached {
+                    let result = await read()
+                    race.finish(result, continuation)
+                },
+                timer: Task.detached {
+                    try? await Task.sleep(nanoseconds: UInt64(deadlineMs) * 1_000_000)
+                    guard !Task.isCancelled else { return }
+                    race.finish(
+                        ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false),
+                        continuation
+                    )
+                }
+            )
+        }
+    }
+
+    /// One answer for `bounded`, whichever side gets there first: the read's
+    /// own (the timer is cancelled) or the deadline's (the read is cancelled,
+    /// and its late answer, if one ever comes, is dropped).
+    private nonisolated final class Race: Sendable {
+        private struct State {
+            var done = false
+            var work: Task<Void, Never>?
+            var timer: Task<Void, Never>?
+        }
+        private let state = OSAllocatedUnfairLock(initialState: State())
+
+        func start(work: Task<Void, Never>, timer: Task<Void, Never>) {
+            let finished = state.withLock { state -> Bool in
+                state.work = work
+                state.timer = timer
+                return state.done
             }
-            let work = Task { finish(await read()) }
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(deadlineMs) * 1_000_000)
-                guard !once.done else { return }
+            // A side that won before the handles were stored: stop the other.
+            if finished {
                 work.cancel()
-                finish(ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false))
+                timer.cancel()
             }
+        }
+
+        func finish(_ result: ChainResult, _ continuation: CheckedContinuation<ChainResult, Never>) {
+            let tasks = state.withLock { state -> (Task<Void, Never>?, Task<Void, Never>?)? in
+                guard !state.done else { return nil }
+                state.done = true
+                return (state.work, state.timer)
+            }
+            guard let (work, timer) = tasks else { return }
+            continuation.resume(returning: result)
+            // Whichever lost: the read stops being waited on, the timer stops
+            // sleeping. Cancelling the side that is finishing is a no-op.
+            work?.cancel()
+            timer?.cancel()
         }
     }
 
