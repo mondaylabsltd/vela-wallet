@@ -3,6 +3,7 @@ import type { FeedBatch } from "./FeedBatch";
 import type { FeedCounterpartyRole } from "./FeedCounterpartyRole";
 import type { FeedDapp } from "./FeedDapp";
 import type { FeedDirection } from "./FeedDirection";
+import type { FeedLine } from "./FeedLine";
 import type { FeedTxKind } from "./FeedTxKind";
 import type { FeedTxStatus } from "./FeedTxStatus";
 
@@ -77,8 +78,15 @@ site: string | null,
  */
 counterparty_role: FeedCounterpartyRole, 
 /**
- * A dApp transaction's site, intent and what it moved (083 H2); `None`
- * on every other row. Its `site` and `contract_call` are the row's own
- * [`FeedItem::site`] and [`FeedItem::counterparty_role`], read once.
+ * A dApp interaction's site, headline, place and what it moved or
+ * granted (083 H2, spec 093); `None` on every other row. Its `site` and
+ * `contract_call` are the row's own [`FeedItem::site`] and
+ * [`FeedItem::counterparty_role`], read once.
  */
-dapp?: FeedDapp | null, };
+dapp?: FeedDapp | null, 
+/**
+ * The row's second line, in order (spec 093): the shell words each part
+ * and joins them with " · ". Decided here for every row, so no shell
+ * keeps its own "status · site/contract/chain" rule.
+ */
+subtitle: Array<FeedLine>, };
