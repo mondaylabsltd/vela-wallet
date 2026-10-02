@@ -21,8 +21,8 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
-import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import uniffi.vela_core_uniffi.cableQrMatrix
 
 /**
@@ -33,8 +33,11 @@ import uniffi.vela_core_uniffi.cableQrMatrix
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CableQrSheet(payload: String) {
+fun CableQrSheet(payload: String, chooser: KeyChooser) {
     val strings = LocalVelaStrings.current
+    // The hybrid row's own words, as the chooser that opened this card drew
+    // them (087 F02): a sign-in's line is the scan — it creates nothing.
+    val (title, line) = methodCopy(KeyMethod.Hybrid, chooser, strings)
     val colors = VelaTheme.colors
     val matrix = remember(payload) { cableQrMatrix(payload) }
 
@@ -51,19 +54,15 @@ fun CableQrSheet(payload: String) {
                 .padding(bottom = VelaSpacing.xl3),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
-            // Reusing the hybrid-method copy ("Phone or tablet" / "Scan a code
-            // …on a nearby device") rather than minting two new corpus keys
-            // across 15 locales for a first cut; a dedicated SCAN_TITLE/BODY is
-            // a follow-up through the i18n gate.
             Text(
-                text = strings.t(I18nKeys.Create.METHOD_HYBRID_TITLE),
+                text = title,
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.bold,
                 fontSize = VelaTextSize.xl2,
             )
             Text(
-                text = strings.t(I18nKeys.Create.METHOD_HYBRID_BODY),
+                text = line,
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,

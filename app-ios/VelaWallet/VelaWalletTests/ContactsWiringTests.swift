@@ -217,10 +217,9 @@ struct ContactsWiringTests {
           {"address":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","name":"Treasury"}
         ],"groups":[]}
         """
-        let imported = try core.dispatch(eventJson: CoreJSON.string([
-            "type": "import_file", "content": backup, "filename": "vela-contacts.json",
-            "into_group": NSNull(), "now_ms": 1_700_000_000_000,
-        ]))
+        let imported = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: Data(backup.utf8), filename: "vela-contacts.json", intoGroup: nil, nowMs: 1_700_000_000_000
+        ))
         let view = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: imported))
         #expect(view.contacts.count == 2)
         #expect(view.lastImport?.added == 2)
@@ -242,10 +241,9 @@ struct ContactsWiringTests {
     /// different and wrong sentence.
     @Test func aRubbishFileIsRefusedWholesale() throws {
         let core = try loaded()
-        let refused = try core.dispatch(eventJson: CoreJSON.string([
-            "type": "import_file", "content": "{ not json at all", "filename": "notes.json",
-            "into_group": NSNull(), "now_ms": 1_700_000_000_000,
-        ]))
+        let refused = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: Data("{ not json at all".utf8), filename: "notes.json", intoGroup: nil, nowMs: 1_700_000_000_000
+        ))
         let view = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: refused))
         #expect(view.importFailure != nil)
         #expect(view.lastImport == nil)
@@ -253,6 +251,57 @@ struct ContactsWiringTests {
 
         let notice = try #require(ContactsLive.importNotice(view, loc: loc))
         #expect(notice.title == loc.t("contacts.importFailTitle"))
+        #expect(notice.message == loc.t("contacts.importFailBody"))
+    }
+
+    /// Issue 333: a CSV that Excel saved on Chinese Windows is GBK. The shell
+    /// used to decode it with `String(decoding:as: UTF8.self)` and imported
+    /// `jxjjx����`; now the BYTES go to the core, which refuses the file and
+    /// says how to save it — before any write.
+    @Test func aLegacyEncodedFileIsRefusedWithHowToSaveIt() throws {
+        let core = try loaded()
+        var gbk = Data("address,name\r\n\(alice),jxjjx".utf8)
+        gbk.append(contentsOf: [0xB2, 0xE2, 0xCA, 0xD4]) // 测试
+        let refused = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: gbk, filename: "excel.csv", intoGroup: nil, nowMs: 1_700_000_000_000
+        ))
+        let view = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: refused))
+        #expect(view.importFailure?.reason == .unsupportedEncoding)
+        #expect(view.contacts.isEmpty)
+
+        let notice = try #require(ContactsLive.importNotice(view, loc: loc))
+        #expect(notice.title == loc.t("contacts.importFailTitle"))
+        #expect(notice.message == loc.t("contacts.importFailEncoding"))
+        #expect(notice.message.contains("UTF-8"))
+    }
+
+    /// The same names saved as UTF-16 (by its BOM) or UTF-8 land exactly —
+    /// CJK, Cyrillic, an emoji — byte for byte.
+    @Test func unicodeFilesImportEveryNameExactly() throws {
+        let core = try loaded()
+        let names = ["jxjjx测试", "Иван Петров", "Zoë 🦊"]
+        let addresses = [alice, "0x88cCA0EeDbF2C4426110bbFc998F048689266894", "0x3333333333333333333333333333333333333333"]
+        let csv = "address,name\r\n" + zip(addresses, names).map { "\($0),\($1)\r\n" }.joined()
+        var utf16 = Data([0xFF, 0xFE])
+        utf16.append(csv.data(using: .utf16LittleEndian) ?? Data())
+        let imported = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: utf16, filename: "unicode.csv", intoGroup: nil, nowMs: 1_700_000_000_000
+        ))
+        let view = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: imported))
+        #expect(view.importFailure == nil)
+        #expect(view.lastImport?.added == 3)
+        for (address, name) in zip(addresses, names) {
+            #expect(view.contacts.first { $0.address == address.lowercased() }?.name == name)
+        }
+
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "import_acknowledged"]))
+        var utf8 = Data([0xEF, 0xBB, 0xBF])
+        utf8.append(Data("address,name\n0x4444444444444444444444444444444444444444,张小明\n".utf8))
+        let more = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: utf8, filename: "utf8.csv", intoGroup: nil, nowMs: 1_700_000_000_001
+        ))
+        let after = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: more))
+        #expect(after.contacts.first { $0.address == "0x4444444444444444444444444444444444444444" }?.name == "张小明")
     }
 
     /// Export writes a file into the view, and `export_taken` removes it.

@@ -76,7 +76,9 @@ export const en = {
 				chainSetup: 'Chain setup',
 				selfHosting: 'Self-hosting guide',
 				privacy: 'Privacy',
-				terms: 'Terms'
+				terms: 'Terms',
+				support: 'Support',
+				deleteData: 'Delete your data'
 			}
 		},
 		language: {

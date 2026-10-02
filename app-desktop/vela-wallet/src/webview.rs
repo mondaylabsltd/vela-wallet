@@ -857,29 +857,6 @@ fn view_url(view: &wry::WebView) -> Option<String> {
     view.url().ok()
 }
 
-/// The host the toolbar shows.
-///
-/// From the WEBVIEW, so the lock and the name beside it describe the page that
-/// is actually loaded — a label fed from anywhere else is a claim about an
-/// origin, which is the one thing a browser chrome must never get wrong.
-/// `None` before the first page, and the caller keeps drawing what the mock
-/// draws rather than an empty bar.
-///
-/// The COMMITTED document's, since spec 079: the webview's own URL moves to
-/// the next site the moment a navigation starts, so on a slow network the bar
-/// named a site that had not loaded — and, on a failure, never would.
-#[must_use]
-pub fn host() -> Option<String> {
-    // Only a WEB document counts as committed here: WKWebView commits an
-    // empty `about:blank` when a fresh view's first load is refused.
-    let url = committed_url()
-        .filter(|url| vela_core::app::dapp_permissions::origin_of(url).is_some())
-        .or_else(|| BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view)))?;
-    let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
-    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
-    (!host.is_empty()).then(|| host.to_owned())
-}
-
 /// Hand one message from the core to the page in `tab`.
 ///
 /// There is one webview, so there is one tab; a message for any other is

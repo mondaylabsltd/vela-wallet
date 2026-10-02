@@ -12,6 +12,7 @@ use vela_core::app::browser_load::{
     AddressBar, Asked, BarLock, EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished,
     LoadPlatform as P, LoadWatch, Probed, RetryAction, SiteLabel, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
+use vela_core::app::browser_load::{pinned_title, Visit};
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
     classify(platform, code, domain, false).map(|failure| failure.class)
@@ -1090,6 +1091,99 @@ fn a_site_named_by_its_host_is_said_once() {
         label("app.uniswap.org", None)
     );
     assert_eq!(site_label("Uniswap", ""), label("Uniswap", None));
+}
+
+// ---------------------------------------------------------------------------
+// Spec 086 (issue #329): the title a page is pinned under
+// ---------------------------------------------------------------------------
+
+/// What a shell reads from the document when a load finishes, made a visit
+/// by the core's own rule — the only door a title has into `pinned_title`.
+fn visit_of(url: &str, title: &str, failed: bool) -> Option<Visit> {
+    visit_to_record(LoadFinished {
+        url: url.to_owned(),
+        title: title.to_owned(),
+        icon: None,
+        main_frame_failed: failed,
+        http_status: None,
+    })
+}
+
+/// Issue #329: app.uniswap.org failed to load and was pinned as "网页无法打开",
+/// the WebView's own error page. That page is never a visit — failed, or read
+/// at its `chrome-error://` address — so it never names a favourite.
+#[test]
+fn an_engine_error_page_never_names_a_favourite() {
+    let pinned = "https://app.uniswap.org/";
+    let error_page = visit_of("chrome-error://chromewebdata/", "网页无法打开", false);
+    assert_eq!(
+        error_page, None,
+        "an engine document is no visit, failed flag or not"
+    );
+    assert_eq!(pinned_title(pinned, error_page.as_ref()), None);
+    let failed = visit_of(pinned, "网页无法打开", true);
+    assert_eq!(pinned_title(pinned, failed.as_ref()), None);
+    // …and the favourite is then its host (`explore_sites`: no title → host).
+}
+
+/// The site's last good title survives a later failure of the same site.
+#[test]
+fn a_site_keeps_its_last_good_title_under_a_failure() {
+    let good = visit_of("https://app.uniswap.org/swap", "Uniswap Interface", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", good.as_ref()),
+        Some("Uniswap Interface".to_owned()),
+        "same origin, another path: the same site"
+    );
+    assert_eq!(
+        pinned_title("https://APP.Uniswap.org/explore", good.as_ref()),
+        Some("Uniswap Interface".to_owned()),
+        "the host's case is not another site"
+    );
+}
+
+/// The page before is another site: its title never names this one — the
+/// failed address, or a load that has no title yet, is pinned by its host.
+#[test]
+fn another_site_s_title_never_names_a_favourite() {
+    let before = visit_of("https://bscscan.com/", "BscScan", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", before.as_ref()),
+        None
+    );
+    assert_eq!(
+        pinned_title("http://bscscan.com/", before.as_ref()),
+        None,
+        "another scheme"
+    );
+    assert_eq!(
+        pinned_title("https://bscscan.com:8443/", before.as_ref()),
+        None,
+        "another port"
+    );
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", None),
+        None,
+        "nothing loaded yet"
+    );
+}
+
+/// A visit with no title, a blank one, or an address that is no web page
+/// gives no title — never an empty name.
+#[test]
+fn no_title_is_no_title() {
+    let untitled = visit_of("https://app.uniswap.org/", "   ", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", untitled.as_ref()),
+        None
+    );
+    let good = visit_of("https://app.uniswap.org/", "  Uniswap Interface  ", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", good.as_ref()),
+        Some("Uniswap Interface".to_owned())
+    );
+    assert_eq!(pinned_title("about:blank", good.as_ref()), None);
+    assert_eq!(pinned_title("", good.as_ref()), None);
 }
 
 // ---------------------------------------------------------------------------
