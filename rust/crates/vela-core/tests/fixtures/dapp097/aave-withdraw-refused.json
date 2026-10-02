@@ -1,0 +1,14 @@
+{
+ "source": "097 real dApp pass (round 2), 2026-10-02 (extension request log r2-req-r2-160-fail-sheet.json): an Aave withdraw of USDC never supplied — the relay took the op (UserOp 0x4319f0f7…), then refused it; nothing was sent (N4)",
+ "method": "eth_sendTransaction",
+ "origin": "https://app.aave.com",
+ "chainId": 56,
+ "params": [
+  {
+   "data": "0x69328dec0000000000000000000000008ac76a51cc950d9822d68b83fe1ad97b32cd580d0000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+   "from": "0x88cca0eedbf2c4426110bbfc998f048689266894",
+   "to": "0x6807dc923806fE8Fd134338EABCA509979a7e0cB",
+   "value": "0x0"
+  }
+ ]
+}

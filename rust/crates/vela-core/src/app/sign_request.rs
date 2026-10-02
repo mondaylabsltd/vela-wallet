@@ -88,6 +88,12 @@
 //! - **The answer follows the tracker (RJ4)**: [`Event::OpTracked`] answers the
 //!   waiting page the moment the tracker knows the outcome.
 //!
+//! Spec 097 N4: a refusal (or "nothing was sent") the tracker reaches after
+//! "Submitted" is held on the sheet, like a failure before the submit (096
+//! F8): shown in its own words with Done and no "Try again" (the rid is
+//! settled, ⑧), and answered once — when the person closes it, when a new
+//! request takes the sheet, or at once when nobody is looking.
+//!
 //! Ported quirks and fail-closed divergences are doc-commented inline.
 
 use crux_core::capability::Operation;
@@ -845,6 +851,8 @@ pub enum Event {
     /// Dropped with one (included, reverted) answers -32603
     /// [`reverted_detail`] (083, owner ruling 2026-10-01); Rejected answers
     /// -32603 refused; NotSent answers -32603 not sent; anything else waits.
+    /// A refusal or "not sent" for the request on the sheet is held there
+    /// until the close (spec 097 N4, the rule of 096 F8).
     OpTracked {
         user_op_hash: String,
         status: TrackStatus,
@@ -1446,6 +1454,13 @@ impl Model {
                 ))
     }
 
+    /// `id` went to the relay in this session (⑧).
+    fn settled_submitted(&self, id: &str) -> bool {
+        self.settled
+            .iter()
+            .any(|(rid, outcome)| rid == id && *outcome == SignSettledOutcome::Submitted)
+    }
+
     fn settle(&mut self, id: &str, outcome: SignSettledOutcome) {
         if let Some(slot) = self.settled.iter_mut().find(|(rid, _)| rid == id) {
             slot.1 = outcome;
@@ -1458,9 +1473,15 @@ impl Model {
     }
 
     /// [`SignView::failure_retryable`]: a held failure that sent nothing and
-    /// was no refusal — by the relay (RJ3) or by a rule of this machine.
+    /// was no refusal — by the relay (RJ3) or by a rule of this machine — of
+    /// a request whose operation never reached the relay. One that did is
+    /// settled `Submitted` (⑧: a settled rid never signs twice), so a
+    /// verdict the tracker reached after the submit (spec 097 N4) is shown
+    /// and answered, never signed again from the sheet.
     fn failure_retryable(&self) -> bool {
-        self.pending.as_ref().is_some_and(|p| p.held.is_some())
+        self.pending
+            .as_ref()
+            .is_some_and(|p| p.held.is_some() && !self.settled_submitted(&p.id))
             && !self.sign_error_refused
             && self
                 .sign_error
@@ -1626,7 +1647,9 @@ pub struct SignView {
     /// The failure on the sheet sent nothing, was not a refusal, and its
     /// answer is still held (spec 096 F8): the sheet offers "Try again"
     /// (`send.txRetryBtn` → [`Event::RetryTapped`]) beside its close, which
-    /// answers the page the failure.
+    /// answers the page the failure. Never for a request whose operation
+    /// reached the relay — a verdict after the submit (spec 097 N4) has only
+    /// the close.
     #[serde(default)]
     pub failure_retryable: bool,
     pub notice: Option<SignNotice>,
@@ -2313,7 +2336,12 @@ fn on_chain_switch(
         .is_some_and(|p| p.per_request_chain.is_none() && !p.responded)
         && !model.committed();
     if cancel {
-        if let Some(p) = &model.pending {
+        // A failure still on screen is owed its own answer (spec 096 F8, 097
+        // N4) — the request failed, the person never cancelled it — so the
+        // switch sends that one, never a 4001 in its place.
+        if let Some(held) = model.answer_held() {
+            ops.push(held);
+        } else if let Some(p) = &model.pending {
             ops.push(respond_op(
                 &p.transport_id,
                 &p.id,
@@ -3125,9 +3153,11 @@ fn on_op_submitted(
 }
 
 /// The tracker's word on the in-flight op (spec 082 RJ3, RJ4). Answers the
-/// waiting page at once when it is final — and only then: a relay's
-/// `submitted` tx hash can still be replaced by a fee bump, and `included`
-/// becomes Confirmed within one poll through the tracker's `TxReceipt`.
+/// waiting page when it is final — at once, or, for a refusal or "not sent"
+/// the sheet shows, when the person closes it (spec 097 N4) — and only
+/// then: a relay's `submitted` tx hash can still be replaced by a fee bump,
+/// and `included` becomes Confirmed within one poll through the tracker's
+/// `TxReceipt`.
 /// The inflight clears and the attempt moves on, so the shell's own late
 /// `Submit` result (the window's end) is dropped — never a second answer,
 /// never an answer to a newer request.
@@ -3203,25 +3233,31 @@ fn on_op_tracked(
                 model.clear_sheet();
             }
         }
-        Some(refused) => {
-            // Nothing was sent: the sheet says it failed — as a refusal,
-            // with no Retry, when the relay refused it — and no longer
-            // "submitting".
-            if shows_it {
-                if let Some(p) = model.pending.as_mut() {
-                    p.responded = true;
-                }
-                if let SignResponsePayload::Err { kind, message, .. } = &payload {
-                    model.sign_error = Some(SignErrorNotice {
-                        kind: *kind,
-                        detail: message.clone(),
-                    });
-                }
-                model.sign_error_refused = refused;
-                model.pending_op_hash = None;
-                model.pending_op_maybe_sent = false;
+        // Nothing was sent: the sheet says it failed — as a refusal, with no
+        // Retry, when the relay refused it — and no longer "submitting". The
+        // answer is held while it shows, as for a failure before the submit
+        // (spec 096 F8), and the close sends it (spec 097 N4): answered here,
+        // the extension worker closed the request window over the words ~12 s
+        // after "Submitted", and the person never read why. The rid is
+        // settled `Submitted`, so the sheet offers no "Try again" (⑧).
+        Some(refused) if shows_it => {
+            if let SignResponsePayload::Err { kind, message, .. } = &payload {
+                model.sign_error = Some(SignErrorNotice {
+                    kind: *kind,
+                    detail: message.clone(),
+                });
             }
+            model.sign_error_refused = refused;
+            model.pending_op_hash = None;
+            model.pending_op_maybe_sent = false;
+            if let Some(p) = model.pending.as_mut() {
+                p.held = Some(payload);
+            }
+            return render();
         }
+        // Nobody is looking (closed while it ran, or superseded): the page
+        // is answered at once.
+        Some(_) => {}
     }
     ops_and_render(model, vec![respond_op(&fl.transport_id, &fl.id, payload)])
 }
