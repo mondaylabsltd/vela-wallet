@@ -48,6 +48,36 @@ enum TokenReads {
         let rateLimited: Bool
     }
 
+    /// One chain's read, given up on at the core's per-chain deadline
+    /// (`balanceChainReadDeadlineMs`, spec 092). A connection held open — a
+    /// real mode behind a blocking network — answers nothing, and before this
+    /// the round waited on it for as long as the pool kept sweeping, so Home
+    /// never settled. Past the deadline the chain is failed for this round
+    /// (it joins the unreachable list like any other) and its late answer, if
+    /// one ever comes, is dropped; the other chains' answers land regardless.
+    static func bounded(
+        chainId: Int,
+        deadlineMs: UInt32 = balanceChainReadDeadlineMs(),
+        _ read: @escaping () async -> ChainResult
+    ) async -> ChainResult {
+        final class Once { var done = false }
+        let once = Once()
+        return await withCheckedContinuation { continuation in
+            func finish(_ result: ChainResult) {
+                guard !once.done else { return }
+                once.done = true
+                continuation.resume(returning: result)
+            }
+            let work = Task { finish(await read()) }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(deadlineMs) * 1_000_000)
+                guard !once.done else { return }
+                work.cancel()
+                finish(ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false))
+            }
+        }
+    }
+
     /// Which balances one chain's read covers — the core's plan
     /// (`balanceReadPlan`, spec 082 RE9, G24): the native coin unless the
     /// chain has none, the registry's stablecoins (worth their peg, decimals
