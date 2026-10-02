@@ -7,7 +7,6 @@ import app.getvela.wallet.feature.contacts.core.ContactGroupView
 import app.getvela.wallet.feature.contacts.core.ContactImportFailure
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.wallet.WalletLive
-import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 
 /**
@@ -160,27 +159,24 @@ object ContactsLive {
         view: ContactsView,
         feed: FeedView = FeedView(),
         strings: VelaStrings? = null,
-        /** What each network is called — a row's second line may name one (spec 093). */
+        /** What each network is called — a row's second line names one (spec 093). */
         chainNames: Map<Int, String> = emptyMap(),
+        now: Long = System.currentTimeMillis(),
     ): ContactDetailModel {
         val model = toContactModel(contact)
-        // Only the rows whose counterparty IS this person. Matched on the
-        // address rather than the name: a name is a label somebody typed and
-        // two contacts can share one, while the address is the identity the
-        // payment actually went to.
+        // Spec 093: what passed between the account and this person is the
+        // core's (`contact_rows`, every network, matched by address) — drawn
+        // with Activity's own row builder, so a dApp's payment to them reads
+        // as its verb, never "Sent". Only a set that IS this person's: rows
+        // the core still holds for the page that was open before are not
+        // drawn on this one (the identity travels with the model).
         val withThisPerson = if (strings == null) {
             emptyList()
         } else {
-            WalletLive.activity(
-                FeedView(
-                    rows = feed.rows.filter { row ->
-                        row !is FeedRow.Item ||
-                            row.item.counterparty.equals(contact.address, ignoreCase = true)
-                    },
-                ),
-                strings,
-                chainNames = chainNames,
-            ).flatMap { it.rows }
+            feed.contact_rows
+                .takeIf { rows -> rows.all { it.counterparty.equals(contact.address, ignoreCase = true) } }
+                ?.let { rows -> WalletLive.rows(rows, strings, chainNames, now) }
+                .orEmpty()
         }
         return fallback.copy(
             contact = model,

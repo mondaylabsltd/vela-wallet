@@ -275,6 +275,14 @@ sealed class FeedLine {
     @Serializable
     @SerialName("network")
     data class Network(val chain_id: Int) : FeedLine()
+
+    /**
+     * The day, by its local-midnight key (epoch **milliseconds**) — worded as
+     * the date headers word it. Only on a contact's rows, which have no headers.
+     */
+    @Serializable
+    @SerialName("day")
+    data class Day(val day_start_ms: Double) : FeedLine()
 }
 
 /** An allowance as Activity states it (spec 093). */
@@ -573,6 +581,11 @@ sealed class FeedEvent {
     @SerialName("chain_filter_changed")
     data class ChainFilterChanged(val chain_id: Int? = null) : FeedEvent()
 
+    /** Spec 093: a contact's page opened (its address) or closed (`null`) — the view's [FeedView.contact_rows]. */
+    @Serializable
+    @SerialName("contact_filter_changed")
+    data class ContactFilterChanged(val address: String? = null) : FeedEvent()
+
     @Serializable
     @SerialName("delete_requested")
     data class DeleteRequested(val id: String) : FeedEvent()
@@ -593,4 +606,14 @@ data class FeedView(
     val history_empty_key: String = "history.emptyTitle",
     /** The home Activity's empty line, chosen the same way. */
     val home_empty_key: String = "home.emptyNoActivity",
+    /**
+     * Spec 093: what passed between the account and the open contact
+     * ([FeedEvent.ContactFilterChanged]) — every row with that counterparty,
+     * on every network, newest first, worded as Activity words it; second
+     * line: status (unsettled), network, day. Fail-soft per row.
+     */
+    @Serializable(with = FeedItemList::class)
+    val contact_rows: List<FeedItem> = emptyList(),
 )
+
+object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

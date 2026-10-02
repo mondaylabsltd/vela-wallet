@@ -265,6 +265,92 @@ class DappActivityTest {
     }
 
     /**
+     * Technical details read the stored request the core's way
+     * (`dapp_request_display`): a message's hex as its text, call data as
+     * its params, and nothing kept — or a word this build does not know —
+     * as "content not recorded".
+     */
+    @Test
+    fun `the stored request is shown as the core displays it`() {
+        assertEquals("hello", FlowLive.requestDisplay("message", "[\"0x68656c6c6f\",\"$ME\"]"))
+        val call = FlowLive.requestDisplay("call_data", SWAP_PARAMS)!!
+        assertTrue("the params, pretty-printed: $call", call.lines().size > 1 && call.contains("0x3593564c"))
+        assertNull(FlowLive.requestDisplay("call_data", ""))
+        assertNull(FlowLive.requestDisplay("call_data", null))
+        assertNull(FlowLive.requestDisplay("haiku", SWAP_PARAMS))
+    }
+
+    /**
+     * Spec 093: a contact's page draws the core's `contact_rows` — the feed
+     * filters by address, on every network — with Activity's row builder: a
+     * dApp's transfer to the contact reads as its verb, never "Sent", and the
+     * second line is the network and the day (no headers on that page).
+     */
+    @Test
+    fun `a contact's page draws the core's rows, a dApp transfer by its verb and each with its day`() = runBlocking {
+        val alice = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
+        val bob = "0x1111111111111111111111111111111111111111"
+        val transfer = "0xa9059cbb" + "0".repeat(24) + alice.removePrefix("0x").lowercase() + "0".repeat(58) + "0f4240"
+        val params = "[{\"to\":\"$USDC\",\"value\":\"0x0\",\"data\":\"$transfer\"}]"
+        val paid = swapRecord().copy(
+            record_id = "dapp-paid", params_json = params, stored_request = params, intent = "Transfer", balance_changes = null,
+            result = "0x" + "d1".repeat(32), user_op_hash = "",
+            summary = DappSummary(action = DappAction.Call, calls = 1, contract = USDC),
+        )
+        val now = System.currentTimeMillis()
+        fun send(id: String, to: String, hash: String) = JSONObject()
+            .put("id", id).put("type", "send").put("from", ME).put("to", to).put("value", "5").put("symbol", "USDC")
+            .put("decimals", 6).put("chainId", 1).put("timestamp", now / 1000).put("status", "confirmed").put("txHash", "0x" + hash.repeat(32))
+        val (view, _) = realFeed(
+            listOf(paid),
+            extra = listOf(send("send-alice", alice, "e1"), send("send-bob", bob, "e2")),
+            events = listOf(FeedEvent.ContactFilterChanged(alice)),
+        ) { view -> view.contact_rows.size == 2 }
+
+        assertTrue("only Alice's", view.contact_rows.all { it.counterparty.equals(alice, ignoreCase = true) })
+        val contact = app.getvela.wallet.feature.contacts.core.Contact(address = alice, name = "Alice")
+        val fallback = app.getvela.wallet.feature.contacts.ContactsFixtures.contactDetailNoActivity(en)
+        val rows = app.getvela.wallet.feature.contacts.ContactsLive.detail(
+            fallback, contact, app.getvela.wallet.feature.contacts.core.ContactsView(contacts = listOf(contact)),
+            feed = view, strings = en, chainNames = chains, now = now,
+        ).activity.rows.associateBy { it.id }
+        assertEquals(setOf("dapp-paid", "send-alice"), rows.keys)
+        val verb = en.t("componentsUi.signing.intentTransfer")
+        assertEquals(en.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to verb, "place" to "app.uniswap.org")), rows.getValue("dapp-paid").title)
+        assertNotEquals(en.t(I18nKeys.Wallet.LABEL_SENT), rows.getValue("dapp-paid").title)
+        val today = en.t(I18nKeys.Wallet.DAY_TODAY)
+        assertEquals("the network and the day", "Ethereum · $today", rows.getValue("dapp-paid").subtitle)
+        assertEquals("Ethereum · $today", rows.getValue("send-alice").subtitle)
+        assertEquals(en.t(I18nKeys.Wallet.LABEL_SENT), rows.getValue("send-alice").title)
+
+        // Rows the core still holds for another contact are not drawn on this page.
+        val bobs = app.getvela.wallet.feature.contacts.core.Contact(address = bob, name = "Bob")
+        assertTrue(
+            app.getvela.wallet.feature.contacts.ContactsLive.detail(
+                fallback, bobs, app.getvela.wallet.feature.contacts.core.ContactsView(contacts = listOf(bobs)),
+                feed = view, strings = en, chainNames = chains, now = now,
+            ).activity.rows.isEmpty(),
+        )
+    }
+
+    /** The day line is worded as the date headers word it: today, yesterday, else the date. */
+    @Test
+    fun `a row's day line says today, yesterday or the date`() {
+        val now = System.currentTimeMillis()
+        val midnight = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val yesterday = java.util.Calendar.getInstance().apply { timeInMillis = midnight; add(java.util.Calendar.DAY_OF_YEAR, -1) }.timeInMillis
+        val old = java.util.Calendar.getInstance().apply { timeInMillis = midnight; add(java.util.Calendar.DAY_OF_YEAR, -9) }.timeInMillis
+        fun line(day: Long) = WalletLive.subtitle(listOf(FeedLine.Day(day.toDouble())), zh, chains, now)
+        assertEquals(zh.t(I18nKeys.Wallet.DAY_TODAY), line(midnight))
+        assertEquals(zh.t(I18nKeys.Wallet.DAY_YESTERDAY), line(yesterday))
+        assertEquals(app.getvela.wallet.core.format.Formats.current.date(old), line(old))
+    }
+
+    /**
      * Who got the money (core ebe50807b): a dApp's token transfer names its
      * recipient — "To", by the row's name for them, copyable — and no
      * contract; a plain send of the coin names its recipient too.
@@ -374,10 +460,16 @@ class DappActivityTest {
         assertEquals(en.t(I18nKeys.Flows.CONTENT_TYPED_DATA), content.label)
         assertEquals(permitId, content.recordId)
         assertEquals(en.t(I18nKeys.Flows.CONTENT_MISSING), content.missing)
+        assertEquals("the core's word for what the request holds", "typed_data", content.content)
         assertEquals("PermitSingle", (technical.lines[2] as TxTechnicalLine.Fact).fact.value)
         assertEquals(3, technical.lines.size)
-        // What opening the section reads: the request as the core kept it.
+        // What opening the section reads: the request as the core kept it,
+        // shown as the core displays typed data — the document, pretty-printed.
         assertEquals(requestOf(permitParams()), requestOf(feed.storedRequest(content.recordId)!!))
+        val shown = FlowLive.requestDisplay(content.content, feed.storedRequest(content.recordId))!!
+        assertTrue("pretty-printed: $shown", shown.lines().size > 10)
+        assertTrue(shown.contains("PermitSingle") && shown.contains(ROUTER))
+        assertEquals(requestOf(JSONArray(permitParams()).getString(1)), Wire.json.parseToJsonElement(shown))
 
         val swap = FlowLive.txDetail(fallback, view, "dapp-swap", en, chains, mapOf(1 to "https://etherscan.io"))!!
         assertEquals(en.t(I18nKeys.Flows.STATUS_CONFIRMED), swap.status?.text)
@@ -492,11 +584,15 @@ class DappActivityTest {
     private suspend fun realFeed(
         records: List<SignRecord>,
         ownAccounts: List<FeedExecutor.FeedOwnAccount> = emptyList(),
+        /** Rows of other kinds, as their writers store them. */
+        extra: List<JSONObject> = emptyList(),
+        /** Told to the feed once it has read the store. */
+        events: List<FeedEvent> = emptyList(),
         ready: (FeedView) -> Boolean,
     ): Pair<FeedView, FeedExecutor> {
         val store = FakeStore()
         val feed = FeedExecutor(store = store, ownAccounts = { ownAccounts })
-        assertTrue(feed.writeRecords(records.map { SignExecutor.recordRow(it, "ETH") }))
+        assertTrue(feed.writeRecords(records.map { SignExecutor.recordRow(it, "ETH") } + extra))
         val host = CoreHost(
             bridge = ActivityFeedCore().asBridge(),
             scope = scope,
@@ -508,6 +604,7 @@ class DappActivityTest {
         )
         host.dispatch(FeedEvent.AccountSwitched(ME), FeedEvent.serializer())
         host.dispatch(FeedEvent.ReconcileCompleted(1), FeedEvent.serializer())
+        events.forEach { host.dispatch(it, FeedEvent.serializer()) }
         val view = withTimeout(20_000) { host.view.first(ready) }
         return view to feed
     }

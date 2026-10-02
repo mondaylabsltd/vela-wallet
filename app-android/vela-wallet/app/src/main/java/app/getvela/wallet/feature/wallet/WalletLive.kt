@@ -130,9 +130,9 @@ object WalletLive {
         val groups = mutableListOf<ActivityGroupModel>()
         for (row in feed.rows) {
             when (row) {
-                is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row, strings, now), emptyList())
+                is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row.day_start_ms, strings, now), emptyList())
                 is FeedRow.Item -> {
-                    val model = activityRow(row.item, strings, chainNames)
+                    val model = activityRow(row.item, strings, chainNames, now)
                     val last = groups.lastOrNull()
                     if (last == null) {
                         // An item before any header cannot happen — but if the
@@ -150,13 +150,26 @@ object WalletLive {
     }
 
     /**
+     * Spec 093: rows with no headers — a contact's page draws the core's
+     * `contact_rows` with the very builder Activity uses, so a dApp's payment
+     * to that person reads as its verb there too. Their second line carries
+     * the day instead.
+     */
+    fun rows(
+        items: List<FeedItem>,
+        strings: VelaStrings,
+        chainNames: Map<Int, String> = emptyMap(),
+        now: Long = System.currentTimeMillis(),
+    ): List<ActivityRowModel> = items.map { activityRow(it, strings, chainNames, now) }
+
+    /**
      * "Today", "Yesterday", or the date.
      *
      * The comparison is between LOCAL midnights: the core stamped
      * `day_start_ms` with this device's own midnight, so comparing it against
      * today's gives whole days apart without any timezone arithmetic here.
      */
-    private fun dayLabel(header: FeedRow.Header, strings: VelaStrings, now: Long): String {
+    private fun dayLabel(dayStartMs: Double, strings: VelaStrings, now: Long): String {
         val today = Calendar.getInstance().apply {
             timeInMillis = now
             set(Calendar.HOUR_OF_DAY, 0)
@@ -164,15 +177,15 @@ object WalletLive {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        val days = ((today - header.day_start_ms.toLong()) / DAY_MS)
+        val days = ((today - dayStartMs.toLong()) / DAY_MS)
         return when (days) {
             0L -> strings.t(I18nKeys.Wallet.DAY_TODAY)
             1L -> strings.t(I18nKeys.Wallet.DAY_YESTERDAY)
-            else -> Formats.current.date(header.day_start_ms.toLong())
+            else -> Formats.current.date(dayStartMs.toLong())
         }
     }
 
-    private fun activityRow(item: FeedItem, strings: VelaStrings, chainNames: Map<Int, String>): ActivityRowModel {
+    private fun activityRow(item: FeedItem, strings: VelaStrings, chainNames: Map<Int, String>, now: Long): ActivityRowModel {
         val received = item.direction == FeedDirection.In
         val batch = item.batch
         // What the row is and where its record stands are the core's (spec
@@ -197,7 +210,7 @@ object WalletLive {
                 received -> strings.t(I18nKeys.Wallet.LABEL_RECEIVED)
                 else -> strings.t(I18nKeys.Wallet.LABEL_SENT)
             },
-            subtitle = subtitle(item.subtitle, strings, chainNames),
+            subtitle = subtitle(item.subtitle, strings, chainNames, now),
             amount = when {
                 allowance != null -> allowanceFigure(allowance, strings)
                 // 083 F1: the simulation's figure, not one the wallet can vouch for.
@@ -233,9 +246,9 @@ object WalletLive {
      * Spec 093: the row's second line, part by part as the core ordered them,
      * joined " · ". Status in the detail sheet's words (087 F04 "Unknown" too);
      * a person by name, else a short address; a site verbatim; a network by
-     * its name on this device.
+     * its name on this device; a day as the date headers say it.
      */
-    fun subtitle(lines: List<FeedLine>, strings: VelaStrings, chainNames: Map<Int, String>): String =
+    fun subtitle(lines: List<FeedLine>, strings: VelaStrings, chainNames: Map<Int, String>, now: Long = System.currentTimeMillis()): String =
         lines.mapNotNull { line ->
             when (line) {
                 is FeedLine.Status -> when (line.status) {
@@ -248,6 +261,7 @@ object WalletLive {
                 is FeedLine.From -> strings.t(I18nKeys.Wallet.FROM_NAME, mapOf("name" to (line.name ?: shortenAddress(line.address))))
                 is FeedLine.Site -> line.site
                 is FeedLine.Network -> chainNames[line.chain_id] ?: line.chain_id.toString()
+                is FeedLine.Day -> dayLabel(line.day_start_ms, strings, now)
             }?.takeIf { it.isNotBlank() }
         }.joinToString(" · ")
 

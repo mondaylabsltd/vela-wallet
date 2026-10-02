@@ -261,9 +261,11 @@ sealed interface TxTechnicalLine {
 
     /**
      * The request the record kept — read from the store by [recordId] only
-     * when the section is opened; [missing] when it kept none.
+     * when the section is opened, shown as the core displays a request of
+     * this [content] (`call_data`, `typed_data`, `message`: the core's word);
+     * [missing] when it kept none.
      */
-    data class Content(val label: String, val recordId: String, val missing: String) : TxTechnicalLine
+    data class Content(val label: String, val recordId: String, val missing: String, val content: String) : TxTechnicalLine
 }
 
 /* ------------------------------------------------------------------ assets */

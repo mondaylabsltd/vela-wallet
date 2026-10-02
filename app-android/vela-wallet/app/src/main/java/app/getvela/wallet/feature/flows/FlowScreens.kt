@@ -534,14 +534,16 @@ private fun TxTechnicalSection(
     }
 }
 
-/** The request a record kept, read by its id when first drawn — the open section's only store read. */
+/** The request a record kept, read by its id when first drawn — the open section's only store read — and shown as the core displays it. */
 @Composable
 private fun StoredRequest(line: TxTechnicalLine.Content, onLoadRequest: (suspend (String) -> String?)?) {
     val colors = VelaTheme.colors
     var text by remember(line.recordId) { mutableStateOf<String?>(null) }
     var read by remember(line.recordId) { mutableStateOf(false) }
     LaunchedEffect(line.recordId) {
-        text = onLoadRequest?.let { load -> runCatching { load(line.recordId) }.getOrNull() }?.takeIf { it.isNotBlank() }
+        val stored = onLoadRequest?.let { load -> runCatching { load(line.recordId) }.getOrNull() }
+        // The core says how a request reads (spec 093); none → "not recorded".
+        text = runCatching { FlowLive.requestDisplay(line.content, stored) }.getOrNull()
         read = true
     }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg)) {

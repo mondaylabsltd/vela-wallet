@@ -1,6 +1,8 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.format.Formats
+import kotlinx.serialization.json.jsonPrimitive
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.send.core.MtokView
@@ -427,9 +429,23 @@ object FlowLive {
             ),
             recordId = item.id,
             missing = strings.t(I18nKeys.Flows.CONTENT_MISSING),
+            // The core's own word for it, as the wire spells it.
+            content = Wire.json.encodeToJsonElement(FeedDappContent.serializer(), fact.content).jsonPrimitive.content,
         )
         else -> technicalFact(fact, strings)?.let(TxTechnicalLine::Fact)
     }
+
+    /**
+     * Spec 093: a stored request as Technical details shows it — the core's
+     * one rule (`dapp_request_display`): typed data as its pretty-printed
+     * document, a message as its text (or its hex), call data as its
+     * params. `null` (the record kept nothing, or a word this build does not
+     * know) is `connect.detail.contentMissing`.
+     */
+    fun requestDisplay(content: String, storedRequest: String?): String? =
+        storedRequest?.takeIf { it.isNotBlank() }
+            ?.let { uniffi.vela_core_uniffi.dappRequestDisplay(content, it) }
+            ?.takeIf { it.isNotBlank() }
 
     private fun technicalFact(fact: FeedFact, strings: VelaStrings): FactRowModel? = when (fact) {
         is FeedFact.Operation -> FactRowModel(

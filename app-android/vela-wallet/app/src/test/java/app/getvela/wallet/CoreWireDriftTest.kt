@@ -452,6 +452,14 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<app.getvela.wallet.feature.wallet.core.FeedDappOperation>("FeedDappOperation")
         assertStringUnion<app.getvela.wallet.feature.wallet.core.FeedDappContent>("FeedDappContent")
         assertStringUnion<app.getvela.wallet.feature.wallet.core.DappAction>("DappAction")
+        // A contact's rows (spec 093): the view's list, the event that fills
+        // it, and the day part of their second line — each declared here and
+        // checked against the mirror by the gates above.
+        assertTrue("contact_rows" in serializer<FeedView>().descriptor.elementNames)
+        assertTrue("contact_filter_changed" in variantNames(FeedEvent.serializer()))
+        assertTrue("day" in variantNames(app.getvela.wallet.feature.wallet.core.FeedLine.serializer()))
+        assertFieldsExist<FeedView>("FeedView")
+        assertVariantsExist<FeedEvent>("FeedEvent")
     }
 
     /**
