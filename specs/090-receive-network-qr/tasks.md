@@ -60,6 +60,22 @@
   - `FlowLive.receiveQr` / `shareCard(code)`, threaded through FlowHost and VelaNavHost.
   - Tests: JUnit with the real core.
 
+## Phase 3b: Vela reads its own code from a picture (US3, lead's device finding)
+
+- [x] T014 Core: `qr_scan::still_qr_sizes` and `STILL_QR_LADDER` (1024 / 640 / 400, never enlarge),
+  exported over UniFFI as `still_qr_sizes` → `[QrScanSize]`. 4 unit tests. Regenerate wasm, Swift
+  bindings, xcframework and Kotlin bindings.
+- [x] T015 Fixtures: the lead's Android crop, network on (`@137`) and bare, re-encoded losslessly (17 KB
+  and 22 KB). Copied into each shell's test fixtures.
+- [x] T016 Measure every shell's decoder against the fixtures and the full screenshots. Results are in
+  `results.md`. Only Android's ZXing fails.
+- [x] T017 Android:
+  - `QrDecoder.decodeStill` climbs the core ladder with a pure-Kotlin area-average downscale;
+  - `decode(bitmap)` uses it;
+  - tests: fixture vs core value, raw ZXing asserted to fail, ladder from the core, downscale.
+- [x] T018 Desktop, iOS and web: a fixture test each that decodes to the core's value. None needs a ladder
+  change; each test's doc comment says why.
+
 ## Phase 4: Polish
 
 - [x] T011 Run every suite: core, web, desktop, Android, iOS, and the CI scripts.

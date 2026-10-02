@@ -55,6 +55,18 @@ same network. Switch off: the code is the bare address again and the hint goes a
 4. **Given** the switch on, **When** the person taps Save image, **Then** the saved card encodes
    exactly the code on screen.
 
+### User Story 3 — Vela reads its own code from a picture (Priority: P1)
+
+Lead's device check, 2026-10-02 (a pre-existing bug). Someone saves the share card or screenshots a
+receive code and sends it in a chat. The payer picks that picture from the album in Vela's scanner. The
+scanner must read it.
+
+**Acceptance Scenarios**:
+
+1. **Given** a screenshot of a Vela receive code from a 1080×2400 Android phone (modules about 24 px
+   across), **When** it is picked in Vela's scanner, **Then** it decodes to the code's value: the bare
+   address, or `ethereum:<address>@<chain>`.
+
 ### Edge Cases
 
 - Request mode (amount builder) already encodes a URI with its network: no switch, no hint there.
@@ -77,6 +89,14 @@ same network. Switch off: the code is the bare address again and the hint goes a
   share image.
 - **FR-006**: The URI MUST round-trip through Vela's own scanner (each shell's `parseEIP681`) and the
   send machine to the same address and `request_chain_id`.
+- **FR-008**: Still-image decoding (a picked or dropped picture) MUST read Vela's own receive code from a
+  phone screenshot. The retry ladder is a core rule (`vela_core::qr_scan::still_qr_sizes`, exported over
+  UniFFI):
+  - try the image as it is;
+  - then scale it so its longest side is 1024, then 640, then 400, using only sizes smaller than the image;
+  - stop at the first hit.
+
+  A shell climbs the ladder only when its decoder needs it. Camera frames are unchanged.
 - **FR-007**: The two strings live only in the corpus (`receive.includeNetwork`,
   `receive.includeNetworkHint`), in all 15 locales; the hint is calm (subtle text colour, not a warning
   colour).

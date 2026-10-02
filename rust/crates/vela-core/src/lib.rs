@@ -45,6 +45,9 @@ pub mod passkey;
 mod passkey_catalog;
 pub mod prefs;
 pub mod primitives;
+/// Still-image QR decoding: the size ladder every shell retries a picked or
+/// dropped image at (spec 090).
+pub mod qr_scan;
 pub mod registry_backup;
 pub mod registry_chain;
 pub mod registry_lookup;

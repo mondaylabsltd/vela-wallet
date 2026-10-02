@@ -1,6 +1,6 @@
 # 090 results: receive code with opt-in network (ERC-681)
 
-Status 2026-10-02: implemented on `090-receive-network-qr`, in seven commits (six code, one docs) on top of `origin/main` `ec033f231`. Nothing is pushed.
+Status 2026-10-02: implemented on `090-receive-network-qr`, in eight commits on top of `origin/main` `ec033f231`. Nothing is pushed.
 
 ## What changed
 
@@ -32,18 +32,35 @@ The web e2e also decodes the rendered code off the screen at both widths.
 
 | Suite | Result |
 |---|---|
-| core `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,315 passed / 0 failed (61 binaries; `app_payment_request` 27, of which 8 are new) |
+| core `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,319 passed / 0 failed (`app_payment_request` 27, of which 8 are new; `qr_scan` 4) |
 | core clippy `-D warnings`, `cargo fmt --check` | clean |
 | core `build-web --check`, `gen-onboarding-types --check`, `gen-core-types --check` | current |
-| web `npx vitest run` | 171 files, 2,396 passed, 5 skipped |
+| web `npx vitest run` | 171 files, 2,398 passed, 5 skipped |
 | web `pnpm check` | 0 errors, 0 warnings |
 | web e2e `receive-code.e2e.ts` (chromium) | 4/4. Two tests are new; the two existing ones had a stale selector on `main` and are fixed here |
-| desktop `cargo test` / clippy / fmt | 882 passed, 49 ignored / no new warnings / clean |
-| Android `:app:testDebugUnitTest` | 913 passed, 0 failed (`ReceiveNetworkSwitchTest` 3 new) |
+| desktop `cargo test` / clippy / fmt | 883 passed, 49 ignored / no new warnings / clean |
+| Android `:app:testDebugUnitTest` | 916 passed, 0 failed (`ReceiveNetworkSwitchTest` 3 new; `QrDecoderTest` 3 new) |
 | iOS focused (6 suites) | 67 passed |
 | iOS UI `ReceiveNetworkSwitchUITests` (parallel space) | passed |
-| iOS full `VelaWalletTests` (cloned iPhone 16 Pro sim) | 1,104 tests in 142 suites passed (Swift Testing; XCTest part 0) |
+| iOS full `VelaWalletTests` (cloned iPhone 16 Pro sim) | 1,105 tests in 143 suites passed |
 | `check-native-reachability`, `check-event-payloads`, `check-dead-controls` | pass (0 mismatches, 532 sites) |
+
+## Vela reads its own code from a picture (lead's device finding, 2026-10-02)
+
+On a Xiaomi, picking a screenshot of a Vela receive code from the album gave 「在所选图片中未找到二维码。」. Each module is about 24 px across in a 1080×2400 screenshot.
+
+Fixtures: the lead's Android crop (945×948) of a 1080×2400 screenshot, network on (`@137`) and bare. Both are re-encoded losslessly: 17 KB and 22 KB, against 97 KB for the original. Shrinking them makes them decode, so they cannot be downscaled and still reproduce the bug.
+
+| Shell | Decoder | As is (crops and full 1080×2400 / 750×1624 screenshots) | Change |
+|---|---|---|---|
+| Android | ZXing 3.5.3, HybridBinarizer | **Fails** on all the Android images. The iPhone screenshots read. | **Ladder added**: `QrDecoder.decodeStill` climbs the core's `stillQrSizes` with a pure-Kotlin area-average downscale. Bare crop reads at 400; network-on crop at 640. |
+| Web + extension | `decodeImage`: zbar at 1200/1000/800/600/400 wide, then jsQR | Raw jsQR fails, but `decodeImage` reads crops and full screenshots: its existing photo ladder shrinks before zbar. | None. Fixture test added; it asserts raw jsQR fails and `decodeImage` reads the core's value. |
+| Desktop | rqrr | Reads all of them as they are; rqrr's threshold window scales with the image. | None. Fixture test through `decode_first`. |
+| iOS | CoreImage `CIDetector` | Reads all of them as they are. | None. Fixture test through `QrDecoder.decode(image:)`. |
+
+- **Core:** `vela_core::qr_scan::still_qr_sizes` (`STILL_QR_LADDER` = 1024 / 640 / 400) is exported over UniFFI as `still_qr_sizes` → `[QrScanSize]`.
+- **Not exported over wasm:** the web would not use it, because its measured zbar ladder already covers this case. An unused export would be dead code.
+- **Camera frames:** unchanged everywhere. No test showed the failure there.
 
 ## i18n bytes
 
