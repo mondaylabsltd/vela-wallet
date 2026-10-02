@@ -456,7 +456,7 @@ mod tests {
 #[cfg(test)]
 mod menu_tests {
     use super::super::ExploreStrings;
-    use super::super::fixtures::site_menu;
+    use super::super::fixtures::{SITE_MENU_DISCONNECT, site_menu};
 
     /// The site menu's ORDER is a contract with the page.
     ///
@@ -470,7 +470,7 @@ mod menu_tests {
     #[test]
     fn the_site_menu_keeps_the_order_the_page_arms() {
         let s = ExploreStrings::resolve(&crate::loc::Loc::from_env());
-        let labels: Vec<String> = site_menu(&s)
+        let labels: Vec<String> = site_menu(&s, true)
             .items
             .iter()
             .map(|item| item.label.to_string())
@@ -488,5 +488,16 @@ mod menu_tests {
             ],
             "the site menu was reordered; page.rs arms every item by position"
         );
+        // Spec 097 E: a site with no grant has no Disconnect — the page drops
+        // the action at the same index, so the rows below keep theirs.
+        assert_eq!(labels[SITE_MENU_DISCONNECT], s.disconnect.to_string());
+        let unconnected: Vec<String> = site_menu(&s, false)
+            .items
+            .iter()
+            .map(|item| item.label.to_string())
+            .collect();
+        let mut expected = labels.clone();
+        expected.remove(SITE_MENU_DISCONNECT);
+        assert_eq!(unconnected, expected);
     }
 }

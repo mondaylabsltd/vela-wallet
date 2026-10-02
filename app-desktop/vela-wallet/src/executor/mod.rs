@@ -668,8 +668,15 @@ pub fn day_start_ms(timestamp_ms: f64) -> f64 {
 pub fn local_civil(epoch_ms: f64) -> Civil {
     #[allow(clippy::cast_possible_truncation, reason = "an epoch in milliseconds")]
     let ms = epoch_ms as i64;
-    let offset_minutes = i32::try_from(local_utc_offset_seconds() / 60).unwrap_or(0);
-    Civil::from_unix_millis(ms, offset_minutes)
+    Civil::from_unix_millis(ms, local_utc_offset_minutes())
+}
+
+/// The device's UTC offset in minutes, right now — what the core is told
+/// wherever it writes a local time and cannot know the zone (spec 097 E: the
+/// signing sheet's deadlines and expiries, which read UTC with no zone).
+#[must_use]
+pub fn local_utc_offset_minutes() -> i32 {
+    i32::try_from(local_utc_offset_seconds() / 60).unwrap_or(0)
 }
 
 /// The same wall clock, as epoch milliseconds — what the wallet-state machines
