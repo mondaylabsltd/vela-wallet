@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.wallet.core.ReceiveAsset
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -258,6 +259,20 @@ class FlowLiveTest {
         assertTrue(live.rows[0].addressDisplay.endsWith("D141"))
     }
 
+    /**
+     * 087 F13: a receive row's QR button SHOWS that network's code. TalkBack
+     * read it as "扫描二维码" — the scanner's title — on every row.
+     */
+    @Test
+    fun `a receive row's QR button says it shows the code`() {
+        val view = NetView(loaded = true, networks = listOf(row(1, "Ethereum", "ETH"), row(100, "Gnosis", "XDAI")))
+
+        val live = FlowLive.receiveNetworks(listFixture(), view, mine, WalletLive::badge)
+
+        assertTrue(live.rows.all { it.qrLabel == strings.t("componentsUi.funding.showQr") })
+        assertTrue(live.rows.none { it.qrLabel == strings.t(I18nKeys.Flows.SCAN_TITLE) })
+    }
+
     @Test
     fun `the subtitle counts the networks this device has`() {
         val view = NetView(loaded = true, networks = listOf(row(1, "Ethereum", "ETH")))
@@ -457,14 +472,67 @@ class FlowLiveTest {
 
         assertEquals(strings.t(I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to "XDAI")), detail.title)
         assertEquals(strings.t(I18nKeys.Flows.STATUS_PENDING), detail.status.text)
+        // 087 F05: no chain hash yet means no hash row — never the record's id.
         assertEquals(
-            listOf(I18nKeys.Flows.DETAIL_TO, I18nKeys.Flows.DETAIL_CHAIN, I18nKeys.Flows.DETAIL_DATE, I18nKeys.Flows.DETAIL_HASH).map { strings.t(it) },
+            listOf(I18nKeys.Flows.DETAIL_TO, I18nKeys.Flows.DETAIL_CHAIN, I18nKeys.Flows.DETAIL_DATE).map { strings.t(it) },
             detail.facts.map { it.label },
         )
         assertEquals("Gnosis", detail.facts[1].value)
         assertTrue("the counterparty is the item's, shortened", detail.facts[0].value.startsWith("0x9F3c"))
-        assertTrue("no chain hash yet: the row's own id", detail.facts[3].value.startsWith("sent"))
         assertTrue(detail.facts[2].value.startsWith(strings.t(I18nKeys.Flows.DAY_TODAY)))
+        assertFalse(detail.facts.any { it.copyValue == "sent" || it.value.startsWith("sent") })
+    }
+
+    /**
+     * 087 F05: a tester tapped a dApp record with no hash and its 哈希 row read
+     * — and copied — `dapp-17905…796-tx`, the record's own id. A hash row is
+     * drawn only for a transaction hash, and copies exactly that.
+     */
+    @Test
+    fun `the hash row is a transaction hash or nothing, never the record id`() {
+        val hash = "0x" + "ab".repeat(32)
+        val feed = feedOf(
+            feedItem("dapp-1790500000796-tx", received = false, value = null, chainId = 100, kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx),
+            feedItem("landed", received = false, value = "1", chainId = 100, txHash = hash, status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed),
+        )
+        val hashless = FlowLive.txDetail(txFixture(), feed, id = "dapp-1790500000796-tx", strings = strings)!!
+        assertFalse(hashless.facts.any { it.label == strings.t(I18nKeys.Flows.DETAIL_HASH) })
+        assertFalse(hashless.facts.any { it.copyValue?.contains("dapp-") == true || it.value.contains("dapp-") })
+
+        val landed = FlowLive.txDetail(txFixture(), feed, id = "landed", strings = strings)!!
+        val row = landed.facts.single { it.label == strings.t(I18nKeys.Flows.DETAIL_HASH) }
+        assertEquals(hash, row.copyValue)
+        assertEquals("0xabababab…ababab", row.value)
+    }
+
+    /**
+     * 087 F04: a pending record nothing will settle arrives from the core as
+     * `Unknown` — its row and its detail say "Unknown", never "Pending" for
+     * ever and never "Failed", and its 删除记录 stays (quiet: it may have
+     * been sent).
+     */
+    @Test
+    fun `a record nothing will settle reads unknown on its row and its detail`() {
+        val unknown = feedItem(
+            "dapp-1790500000796-tx",
+            received = false,
+            value = null,
+            chainId = 100,
+            kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx,
+            status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Unknown,
+            site = "app.uniswap.org",
+        )
+        val row = FlowLive.history(historyFixture(), feedOf(unknown), strings, chainNames = mapOf(100 to "Gnosis"))
+            .groups.flatMap { it.rows }.single()
+        assertEquals(strings.t("componentsUi.signing.intentUnknown") + " · app.uniswap.org", row.subtitle)
+
+        val detail = FlowLive.txDetail(txFixture(), feedOf(unknown), id = unknown.id, strings = strings)!!
+        assertEquals(strings.t("componentsUi.signing.intentUnknown"), detail.status.text)
+        assertEquals(app.getvela.wallet.feature.flows.StatusTone.Info, detail.status.tone)
+        assertNotEquals(strings.t(I18nKeys.Flows.STATUS_PENDING), detail.status.text)
+        assertNotEquals(strings.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), detail.status.text)
+        assertEquals(strings.t(I18nKeys.Flows.DELETE_RECORD), detail.deleteLabel)
+        assertEquals(true, detail.deleteQuiet)
     }
 
     /** An unpriced payment shows no fiat line, not a confident zero. */

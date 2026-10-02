@@ -36,7 +36,6 @@ import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.SecurityKeyCeremony
 import app.getvela.wallet.feature.onboarding.gallery.GalleryScreen
-import app.getvela.wallet.navigation.VelaDestinations
 import app.getvela.wallet.navigation.VelaNavHost
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -187,7 +186,7 @@ class MainActivity : ComponentActivity() {
      *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.gallery true
      */
     private fun galleryRequested(): Boolean =
-        intent?.getBooleanExtra("vela.gallery", false) == true
+        LaunchExtras.honoured("vela.gallery", intent?.getBooleanExtra("vela.gallery", false)) == true
 
     /**
      * Launch-time start-route override (spec 015, research D4): keeps the
@@ -204,15 +203,13 @@ class MainActivity : ComponentActivity() {
      *   adb shell am start -n app.getvela.wallet/.MainActivity \
      *     --es vela.startDestination settings-gallery --es vela.settingsState ST7
      */
-    private fun settingsState(): String? = intent?.getStringExtra("vela.settingsState")
+    private fun settingsState(): String? = LaunchExtras.honoured("vela.settingsState", intent?.getStringExtra("vela.settingsState"))
 
     /** Forces the gallery's theme, so a sweep can cover light and dark. */
-    private fun settingsDark(): Boolean? =
-        if (intent?.hasExtra("vela.settingsDark") == true) {
-            intent?.getBooleanExtra("vela.settingsDark", false)
-        } else {
-            null
-        }
+    private fun settingsDark(): Boolean? = LaunchExtras.honoured(
+        "vela.settingsDark",
+        if (intent?.hasExtra("vela.settingsDark") == true) intent?.getBooleanExtra("vela.settingsDark", false) else null,
+    )
 
     /**
      * Debug walks on a phone that is somebody's real wallet: this launch's
@@ -236,10 +233,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Spec 088 FR-003: debug builds only — a release build always starts at Welcome. */
     private fun startDestination(): String =
-        intent?.getStringExtra("vela.startDestination")
-            ?.takeIf { it in VelaDestinations.ALL }
-            ?: VelaDestinations.WELCOME
+        LaunchExtras.startDestination(intent?.getStringExtra("vela.startDestination"))
 
     /**
      * Opens a gallery straight onto one state (spec 021). Same family as the
@@ -249,7 +245,7 @@ class MainActivity : ComponentActivity() {
      *   adb shell am start -n app.getvela.wallet/.MainActivity \
      *     --es vela.startDestination flows-gallery --es vela.flowState SD2B
      */
-    private fun startFlowState(): String? = intent?.getStringExtra("vela.flowState")
+    private fun startFlowState(): String? = LaunchExtras.honoured("vela.flowState", intent?.getStringExtra("vela.flowState"))
 
     /**
      * The notification's door (spec 043 phase 4): a send's verdict landed while
@@ -265,12 +261,14 @@ class MainActivity : ComponentActivity() {
      *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.parallelSpace true
      *   … --ez vela.parallelSpace false   # leave without signing the device out
      */
-    private fun parallelSpaceRequested(): Boolean? =
-        if (intent?.hasExtra("vela.parallelSpace") == true) {
-            intent?.getBooleanExtra("vela.parallelSpace", false)
-        } else {
-            null
-        }
+    private fun parallelSpaceRequested(): Boolean? = LaunchExtras.honoured(
+        "vela.parallelSpace",
+        if (intent?.hasExtra("vela.parallelSpace") == true) intent?.getBooleanExtra("vela.parallelSpace", false) else null,
+    )
+
+    /** The device pass's page door: loads with no question asked, so debug builds only (spec 088). */
+    private fun debugOpenUrl(intent: android.content.Intent?): String? =
+        LaunchExtras.honoured("vela.openUrl", intent?.getStringExtra("vela.openUrl"))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -315,7 +313,7 @@ class MainActivity : ComponentActivity() {
             container.applyLanguage(prefs.language)
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
-        intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
         // Spec 078 round 3: a stand-in report endpoint for the device pass, so
         // checking 发送 never files a real issue — debug builds only (and the
@@ -440,17 +438,21 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val container = (application as VelaWalletApplication).container
-        intent.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
         // Spec 070: the page in front's renderer dies on purpose — debug builds only.
         if (BuildConfig.DEBUG && intent.getBooleanExtra("vela.crashRenderer", false)) container.browser.debugCrashRenderer()
     }
 
-    /** Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route. */
+    /**
+     * Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route.
+     * Spec 088 FR-004: an `open` link only ASKS — the person sees the host first, and the core
+     * decides whether the link may be opened at all (https only).
+     */
     private fun routeDeepLink(intent: android.content.Intent?, container: AppContainer) {
         val data = intent?.data ?: return
         when (val link = PayLink.parse(data.toString())) {
-            is PayLink.Open -> container.browser.open(link.url, fromOutside = true)
+            is PayLink.Open -> container.browser.askToOpen(link.url)
             is PayLink.Pay -> container.pendingPayLink.value = data
             null -> Unit
         }

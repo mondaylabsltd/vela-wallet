@@ -43,10 +43,14 @@
 		<span class="title">{row.title}</span>
 		<span class="subtitle">{row.subtitle}</span>
 	</span>
-	<span class="amount" class:positive={row.positive} class:masked={row.masked}>
-		<span class="value">{row.amount}</span>
-		<span class="unit">{row.unit}</span>
-	</span>
+	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
+	     draws no amount cell — never an empty one. -->
+	{#if row.amount !== '' || row.unit !== ''}
+		<span class="amount" class:positive={row.positive} class:masked={row.masked}>
+			<span class="value">{row.amount}</span>
+			<span class="unit">{row.unit}</span>
+		</span>
+	{/if}
 {/snippet}
 
 {#if onclick !== undefined}

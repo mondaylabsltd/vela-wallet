@@ -174,7 +174,7 @@
       "methodHybridBody": "Scannez un code et créez-la sur un appareil à proximité",
       "methodHybridTitle": "Téléphone ou tablette",
       "methodHybridUnavailable": "Bientôt disponible",
-      "methodPlatformBody": "Touch ID ou Windows Hello",
+      "methodPlatformBody": "Empreinte, visage ou verrouillage d'écran",
       "methodPlatformTitle": "Cet appareil",
       "methodSecurityKeyBody": "Branchez-la et touchez-la",
       "methodSecurityKeyTitle": "Clé de sécurité USB",

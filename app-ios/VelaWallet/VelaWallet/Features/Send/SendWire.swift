@@ -270,6 +270,12 @@ struct SendViewWire: Decodable, Equatable {
     let tokens: [SendTokenWire]
     let selectedToken: SendTokenWire?
     let recipient: String
+    /// Issue #312: the network a scanned code named for the payer to choose
+    /// on. While set, `tokens` holds only that network's holdings.
+    let requestChainId: Int?
+    /// Issue #326: the form's token card opens the asset picker. Absent (a
+    /// core built before the field existed) reads as no.
+    let canChangeToken: Bool?
     /// As typed, in whatever unit `amountFiatCode` names.
     let amount: String
     /// `nil` = the token's own units. **The figure's own code**, not the

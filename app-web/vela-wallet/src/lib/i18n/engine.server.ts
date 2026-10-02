@@ -148,6 +148,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('home.emptySubtitle'),
 			pending: k('componentsTx.detail.statusPending'),
 			failed: k('componentsTx.detail.statusFailed'),
+			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
+			unknown: k('componentsUi.signing.intentUnknown'),
 			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
 		},
 		assets: {
@@ -269,6 +271,7 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		importDoneInvalid: k('contacts.importDoneInvalid'),
 		importFailTitle: k('contacts.importFailTitle'),
 		importFailBody: k('contacts.importFailBody'),
+		importFailEncoding: k('contacts.importFailEncoding'),
 		exportBody: k('contacts.exportBody'),
 		groupDeleteBody: k('contacts.groupDeleteBody'),
 		groupMembersLabel: k('contacts.groupMembersLabel'),
@@ -994,6 +997,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),
 		batchStep: k('componentsUi.signing.batchStep'),
+		labelTotal: k('send.splitTotalLabel'),
 		expiredValue: k('componentsUi.signing.expiredValue'),
 		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract')
 	};

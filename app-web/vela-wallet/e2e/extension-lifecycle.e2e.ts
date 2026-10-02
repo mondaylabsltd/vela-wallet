@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import { NOT_CONFIRMED_MESSAGE } from '../extension/lib/protocol.js';
 import {
 	extensionBuilt,
 	extensionId,
@@ -143,6 +144,21 @@ const historyOf = (wallet: Page, opHash: string) =>
 			}),
 		opHash
 	);
+
+/**
+ * What a page is told when a submit that may have been sent loses its surface
+ * (RJ2): -32603 "not confirmed yet", naming the operation — never 4900, which
+ * a dApp reads as "not sent" and pays again, and never the op hash as a
+ * result, which no node the site asks knows (083, owner ruling 2026-10-01).
+ * One answer: the page's own record of it is the same.
+ */
+function expectNotConfirmed(answer: AskResult, opHash: string): void {
+	expect(answer).toEqual({
+		ok: false,
+		code: -32603,
+		message: `${NOT_CONFIRMED_MESSAGE} (user operation ${opHash})`
+	});
+}
 
 /** What the page's provider answered, per method (the test dApp's own record). */
 const results = (page: Page) =>
@@ -560,7 +576,8 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 * G35 (P0, RJ2): the device pass closed the side panel after the slide and
 	 * the page was told 4900 "The browser closed…" while the op landed 13 s
 	 * later — a dApp that reads 4900 as "not sent" pays again. Once the submit
-	 * claim carries the operation hash, the page is told that hash instead.
+	 * claim carries the operation hash, the page is told it is not confirmed
+	 * yet, naming that hash (083: never the hash as if it were a transaction).
 	 *
 	 * The claim here is made on the worker's own `vela.surface` port, by a
 	 * stand-in for the panel in the wallet tab: the worker, the page, the
@@ -568,7 +585,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 * sent. The next case makes the same claim the product's way — a dust send
 	 * slid in the panel itself.
 	 */
-	test('G35 (RJ2): a claimed submit whose panel goes is answered with its op hash, never 4900', async () => {
+	test('G35 (RJ2): a claimed submit whose panel goes is answered "not confirmed yet" with its op hash, never 4900', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const wallet = await seedWallet(context, extensionId());
 		const page = await context.newPage();
@@ -641,7 +658,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		);
 		expect(outcome).toEqual({ sign: true, submit: true });
 
-		expect(await asked).toEqual({ ok: true, result: OP });
+		expectNotConfirmed(await asked, OP);
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
 		// Logged after the page took the answer: waited for, not read once.
 		await expect
@@ -661,8 +678,9 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 * G35 as the device pass met it (post2-E1): a send slid in the side panel,
 	 * the relay has the op, its reply is still out — and the person closes the
 	 * panel. The panel's own submit claim carries the op's hash (T228), made
-	 * after the write-ahead and before the POST, so the page is told that hash:
-	 * one answer, never 4900 (which a dApp reads as "not sent" and pays again).
+	 * after the write-ahead and before the POST, so the page is told it is not
+	 * confirmed yet, naming that hash: one answer, never 4900 (which a dApp
+	 * reads as "not sent" and pays again).
 	 *
 	 * Signed for real by the parallel space's fixture key; the relay and the
 	 * chain are the stand-ins above, so nothing leaves the machine.
@@ -676,8 +694,8 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	for (const how of ['close', 'reload'] as const) {
 		const title =
 			how === 'close'
-				? 'G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one ok(op hash)'
-				: 'G35 (RJ2): a dust send slid in the panel, the panel reloaded after its submit claim → one ok(op hash), and the new panel owes nothing';
+				? 'G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one "not confirmed yet" naming its op hash'
+				: 'G35 (RJ2): a dust send slid in the panel, the panel reloaded after its submit claim → one "not confirmed yet" naming its op hash, and the new panel owes nothing';
 		test(title, async () => {
 			await dustSendThenLosePanel(how);
 		});
@@ -751,7 +769,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 				wallet,
 				how === 'close' ? 'panel.close();' : 'panel.location.reload();'
 			).catch(() => {});
-			expect(await asked).toEqual({ ok: true, result: opHash });
+			expectNotConfirmed(await asked, opHash);
 			await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
 
 			// One answer: no settlement and no second answer, however it was
@@ -782,7 +800,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			expect(log.match(/maybe_sent=1/g)).toHaveLength(1);
 			expect(log).not.toMatch(/req\.settled/);
 			await page.waitForTimeout(1_000);
-			expect((await results(page)).eth_sendTransaction).toEqual({ ok: true, result: opHash });
+			expectNotConfirmed((await results(page)).eth_sendTransaction, opHash);
 			// Its receipt reads are translated from now on (RF3).
 			const remembered = await wallet.evaluate(
 				(hash) =>

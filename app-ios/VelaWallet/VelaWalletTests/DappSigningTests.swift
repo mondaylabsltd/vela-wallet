@@ -210,13 +210,23 @@ struct SigningAssemblyTests {
         #expect(tx?["to"] as? String == "0xabc")
         #expect(tx?["data"] as? String == "0xdeadbeef")
 
-        // A batch leads with its FIRST leg.
+        // 089 S1: a batch goes over WHOLE — the core reads every call.
+        let batchParams = #"[{"calls":[{"to":"0xfirst","data":"0x01"},{"to":"0xsecond"}]}]"#
         let batch = SigningController.clearKickoff(
-            method: "wallet_sendCalls",
-            paramsJson: #"[{"calls":[{"to":"0xfirst","data":"0x01"},{"to":"0xsecond"}]}]"#,
+            method: "wallet_sendCalls", paramsJson: batchParams, chainId: 100, origin: nil
+        )
+        #expect(batch?["type"] as? String == "resolve_batch")
+        #expect(batch?["params_json"] as? String == batchParams)
+        #expect(batch?["to"] == nil, "never call 1 alone")
+
+        // A transaction is its OWN call — a stray `calls` beside it is not read.
+        let stray = SigningController.clearKickoff(
+            method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0xsigned","data":"0x095ea7b3ff","calls":[{"to":"0xdecoy","value":"0x1"}]}]"#,
             chainId: 100, origin: nil
         )
-        #expect(batch?["to"] as? String == "0xfirst")
+        #expect(stray?["to"] as? String == "0xsigned")
+        #expect(stray?["data"] as? String == "0x095ea7b3ff")
 
         let typed = SigningController.clearKickoff(
             method: "eth_signTypedData_v4",
@@ -495,6 +505,201 @@ struct SigningLiveTests {
         #expect(dust.delta == formatSignedTokenAmount(deltaBaseUnits: "-1000", decimals: 18, preset: "comma_dot"))
         #expect(rows.last?.delta == "+2.5")
         #expect(SimDeltas.deltaText("0", decimals: 18) == nil)
+    }
+
+    /// Issue #314: the wallet's own key backup leads with its outcome. Its
+    /// intent is the headline (the sheet draws `dappOwn` that way) and a
+    /// simulation that moves nothing is folded into the technical details —
+    /// it was a bordered "Balance changes" card weighing as much as the
+    /// outcome. A dApp's sheet keeps the card, and a simulation with something
+    /// to say is never folded away, not even on the wallet's own.
+    @Test func theWalletsOwnBackupFoldsASimulationThatMovesNothing() throws {
+        let registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        let result = try CoreJSON.decode(ClearSignResultWire.self, from: [
+            "intent": "Back up public keys", "contract_name": "Vela passkey registry", "fields": [
+                ["label": "Registered as", "value": "Me", "format": "raw", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+                ["label": "Address", "value": "0x88cca0…266894", "format": "addressName", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false,
+                 "address": "0x88cca0eedbf2c4426110bbfc998f048689266894"],
+                ["label": "Public keys", "value": "1", "format": "raw", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+            ],
+            "risk": "safe", "contract_address": registry, "verified": true, "provenance": "built_in",
+            "sign_type": "transaction", "partial": false, "best_effort": false, "to_own_token": false,
+        ])
+        let backup = clear(surface: .clearSign, result: result)
+        let params = #"[{"to":"0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9","data":"0xcd438f9b","value":"0x0"}]"#
+        func sheet(transport: String, simulation: SigningController.Simulation, judgments: [[String: Any]] = []) throws -> SigningModel {
+            var ctx = context()
+            ctx.sim = try CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
+            ctx.simulation = simulation
+            return SigningLive.model(
+                fallback: SigningFixtures.build(.cs1, loc: loc),
+                request: SigningController.Incoming(
+                    id: "r", method: "eth_sendTransaction", paramsJson: params,
+                    origin: "https://getvela.app", transportId: transport, chainId: 1
+                ),
+                sign: .empty, clear: backup, guard: .empty, fee: nil, context: ctx
+            )
+        }
+        func hasBalances(_ model: SigningModel) -> Bool {
+            model.blocks.contains { if case .balances = $0 { return true } else { return false } }
+        }
+
+        let own = try sheet(transport: SigningLive.walletTransport, simulation: .answered)
+        #expect(own.dappOwn)
+        #expect(!hasBalances(own), "the no-change card is still on the sheet")
+        #expect(own.tech.simResult?.label == loc.t("componentsUi.signing.simResultLabel"))
+        #expect(own.tech.simResult?.value == loc.t("componentsUi.signing.balanceNoAssetsMove"))
+
+        let dapp = try sheet(transport: "tab-1", simulation: .answered)
+        #expect(hasBalances(dapp), "a dApp keeps its balance card")
+        #expect(dapp.tech.simResult == nil)
+
+        let reverts = try sheet(
+            transport: SigningLive.walletTransport,
+            simulation: .notice(risk: "danger", key: "componentsUi.signing.simWillFail", reason: nil)
+        )
+        #expect(reverts.blocks.contains { if case .warning(.danger, _) = $0 { return true } else { return false } },
+                "a revert is never folded away")
+        #expect(reverts.tech.simResult == nil)
+        let moves = try sheet(
+            transport: SigningLive.walletTransport, simulation: .answered,
+            judgments: [["type": "native", "delta": "-1000000000000000"]]
+        )
+        #expect(hasBalances(moves), "a balance that would move stays on the sheet")
+        #expect(moves.tech.simResult == nil)
+    }
+
+    /// The REAL core's reading of a batch, kicked off as the sheet kicks it off.
+    private func resolvedBatch(_ paramsJson: String) throws -> ClearSigningViewWire {
+        let event = try #require(SigningController.clearKickoff(
+            method: "wallet_sendCalls", paramsJson: paramsJson, chainId: 100, origin: nil
+        ))
+        let core = ClearSigningCore()
+        let result = try core.dispatch(eventJson: CoreJSON.string(event))
+        return try CoreJSON.decode(ClearSigningViewWire.self, from: CoreJSON.object(result)["view"] as? [String: Any] ?? [:])
+    }
+
+    private func cards(_ blocks: [SigningBlock]) -> [(title: String?, rows: [SigningRow], tone: SigningTone)] {
+        blocks.compactMap { block in
+            if case .card(let title, let rows, let tone) = block { return (title, rows, tone) }
+            return nil
+        }
+    }
+
+    /// 089 S1 — THE defect: `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1 xDAI
+    /// to A" and signed both. Every call is its own card, the total is said,
+    /// and the headline is the batch's, never call 1's "Send".
+    @Test func aTwoCallBatchDrawsBothCallsAndTheirTotal() throws {
+        let a = "0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141"
+        let b = "0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c"
+        let view = try resolvedBatch(
+            #"[{"chainId":"0x64","calls":[{"to":"\#(a)","value":"0x1"},{"to":"\#(b)","value":"0xde0b6b3a7640000"}]}]"#
+        )
+        #expect(view.surface == .batch)
+        #expect(view.result == nil && view.plainSend == nil, "no single reading stands for the batch")
+        let blocks = SigningLive.blocks(clear: view, to: a, valueHex: "0x1", dataBytes: 0, context: context())
+        #expect(intents(blocks) == [loc.t("componentsUi.signing.batchIntent")])
+        let drawn = cards(blocks)
+        #expect(drawn.count == 2)
+        let send = loc.t("componentsUi.signing.intentSend")
+        #expect(drawn[0].title == loc.t("componentsUi.signing.batchStep", vars: ["index": "1", "action": send]))
+        #expect(drawn[0].rows.first?.value == "\u{2212}0.000000000000000001 xDAI")
+        #expect(drawn[0].rows.last?.value.lowercased() == a)
+        #expect(drawn[1].title == loc.t("componentsUi.signing.batchStep", vars: ["index": "2", "action": send]))
+        #expect(drawn[1].rows.first?.value == "\u{2212}1 xDAI")
+        #expect(drawn[1].rows.last?.value.lowercased() == b)
+        let total = blocks.compactMap { block -> SigningRow? in
+            if case .rows(let rows) = block { return rows.first }
+            return nil
+        }.first
+        #expect(total?.label == loc.t("send.splitTotalLabel"))
+        #expect(total?.value == "\u{2212}1.000000000000000001 xDAI")
+        #expect(SigningLive.confirmLabel(clear: view, loc: loc) == loc.t("componentsUi.signing.confirmLabel"))
+    }
+
+    /// 089 S1: a call nobody could read is a card that says so, never dropped;
+    /// a batch whose SECOND call is an unlimited approve reads danger in that
+    /// card and the headline, and a cap on that call's leg is what ITS card
+    /// reads (the guard's legs are the calls, in order).
+    @Test func anUnreadableCallSaysSoAndASecondCallCapIsItsOwn() throws {
+        let view = try CoreJSON.decode(ClearSigningViewWire.self, from: [
+            "resolving": false, "resolved": true, "result": NSNull(), "message": NSNull(),
+            "surface": "batch", "confirm": ["type": "confirm"], "blind_typed": NSNull(),
+            "danger_haptic": false,
+            "batch": [
+                "calls": [
+                    ["index": 1, "surface": "blind_transaction", "result": NSNull(), "plain_send": NSNull(),
+                     "to": "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c", "data_bytes": 36,
+                     "value_wei": "0", "amount": "0", "risk": "caution"],
+                    ["index": 2, "surface": "clear_sign", "plain_send": NSNull(),
+                     "result": [
+                        "intent": "Approve", "intent_term": "intentApprove", "contract_name": NSNull(),
+                        "owner": NSNull(), "risk": "danger", "contract_address": "0xdd", "verified": false,
+                        "provenance": "standard", "sign_type": "transaction", "partial": false,
+                        "best_effort": false, "to_own_token": false,
+                        "fields": [[
+                            "label": "Amount", "value": "Unlimited", "format": "tokenAmount",
+                            "token_address": NSNull(), "warning": true, "unverified": false, "role": "send_amount",
+                            "detail": false, "expired": false, "address": NSNull(), "usd_value": NSNull(),
+                            "label_term": "labelAmount", "value_term": "valueUnlimited",
+                        ]],
+                     ] as [String: Any],
+                     "to": "0xdd", "data_bytes": 68, "value_wei": "0", "amount": "0", "risk": "danger"],
+                ] as [[String: Any]],
+                "total_value_wei": "0", "total_amount": "0", "risk": "danger",
+            ] as [String: Any],
+        ])
+        let blocks = SigningLive.blocks(clear: view, to: nil, valueHex: nil, dataBytes: 0, context: context())
+        let drawn = cards(blocks)
+        let undecoded = loc.t("componentsUi.signing.blindDecodeWarning", vars: ["bytes": "36"])
+        #expect(drawn[0].title == loc.t("componentsUi.signing.batchStep", vars: ["index": "1", "action": undecoded]))
+        #expect(drawn[0].rows.map(\.label) == [loc.t("componentsUi.signing.interactingLabel")])
+        #expect(drawn[1].tone == .danger)
+        // …and whom the call goes to: inside a batch nothing else says it.
+        #expect(drawn[1].rows.last?.label == loc.t("componentsUi.signing.interactingLabel"))
+        #expect(drawn[1].rows.last?.value == "0xdd")
+        if case .intent(_, let tone)? = blocks.first { #expect(tone == .danger) } else { Issue.record("no headline") }
+
+        let capped = try CoreJSON.decode(GuardViewWire.self, from: [
+            "surface": "batch", "detected": NSNull(),
+            "meta": ["symbol": "…", "decimals": 18, "verified": false, "loading": false],
+            "editor": NSNull(), "confirm_allowed": true, "rewritten_params_json": NSNull(),
+            "unlimited_consented": false, "increase_total": NSNull(), "decimals_unverified": false,
+            "expired": false,
+            "batch": [
+                "legs": [
+                    ["to": "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c", "approval": NSNull(),
+                     "meta": ["symbol": "…", "decimals": 18, "verified": false, "loading": false],
+                     "editor": NSNull(), "choice": NSNull(), "needs_editor": false, "needs_choice": false,
+                     "grants_broad": false],
+                    ["to": "0xdd",
+                     "approval": [
+                        "kind": "erc20_approve", "token_address": "0xdd", "spender": "0x1111",
+                        "amount_raw": "f", "amount_bits": 256, "is_unbounded": true, "is_boolean_grant": false,
+                        "is_reducing": false, "editable": true, "block_reason": NSNull(), "deadline": NSNull(),
+                        "locus": ["type": "calldata_word", "word_index": 1],
+                     ] as [String: Any],
+                     "meta": ["symbol": "USDC", "decimals": 6, "verified": true, "loading": false],
+                     "editor": [
+                        "mode": "custom", "custom_text": "250", "error": NSNull(),
+                        "choice": ["type": "amount", "amount_raw": "250000000"],
+                        "display_amount_raw": "250000000", "requested_finite": false,
+                        "requested_unlimited": true, "has_balance_cap": false, "revoke_offered": true,
+                        "balance_raw": NSNull(),
+                     ] as [String: Any],
+                     "choice": ["type": "amount", "amount_raw": "250000000"],
+                     "needs_editor": true, "needs_choice": false, "grants_broad": false],
+                ] as [[String: Any]],
+                "any_uncapped": false, "any_to_own_token": false, "all_settled": true,
+            ] as [String: Any],
+        ])
+        let shown = SigningLive.cappedApproval(view, guard: capped)
+        #expect(shown.batch?.calls[1].result?.fields.first?.value == "250 USDC")
+        #expect(shown.batch?.calls[1].risk == .caution, "an approve, capped, is a caution")
+        #expect(shown.batch?.risk == .caution)
     }
 
     private func context() -> SigningLive.Context {

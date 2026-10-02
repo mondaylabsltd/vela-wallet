@@ -40,6 +40,42 @@ struct WalletLiveTests {
 
     private var base: BalanceModel { WalletFixtures.buildMobileState(.h1, loc: loc).balance }
 
+    // MARK: - The assets section
+
+    /// 087 F03: an account that holds nothing showed 资产 over a blank area —
+    /// the drawn home's `.rows` mode survived the live view. Once the core has
+    /// looked, the section draws its empty state in the corpus's words; while
+    /// it has not (or cannot say), the skeleton; with holdings, the rows.
+    @Test func anEmptyWalletSaysSoUnderAssets() throws {
+        let drawn = WalletFixtures.buildMobileState(.h1, loc: loc)
+        #expect(drawn.assetsSection.mode == .rows, "the fixture this used to keep")
+
+        let empty = WalletLive.apply(view(total: 0), on: drawn, loc: loc)
+        #expect(empty.assetRows.isEmpty)
+        #expect(empty.assetsSection.mode == .empty)
+        let words = try #require(empty.assetsSection.empty)
+        #expect(words.title == loc.t("assets.emptyTitle"))
+        #expect(words.caption == loc.t("assets.emptySubtext"))
+        #expect(empty.assetsSection.title == drawn.assetsSection.title)
+
+        var loading = view(total: nil)
+        loading = BalanceViewWire(
+            address: loading.address, displayTotalUsd: nil, balanceUnknown: false,
+            balancePartial: false, notice: nil, hidden: false, refreshing: true,
+            lastRefreshedAtMs: nil, tokens: [], unpricedTokens: [], failedChainIds: [],
+            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: true,
+            cachedTotalUsd: nil,
+            switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
+        )
+        #expect(WalletLive.apply(loading, on: drawn, loc: loc).assetsSection.mode == .loading)
+
+        let held = WalletLive.apply(
+            view(total: 2, tokens: [token("XDAI", balance: "2", price: 1)]), on: drawn, loc: loc
+        )
+        #expect(held.assetsSection.mode == .rows)
+        #expect(held.assetRows.count == 1)
+    }
+
     // MARK: - The hero
 
     /// 082 X-DEADPROXY: with chains failing, the line under the figure says

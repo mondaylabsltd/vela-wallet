@@ -13,7 +13,9 @@ datastore = "1.1.7"
 work = "2.10.5"
 webkit = "1.14.0"
 splashscreen = "1.0.1"
-jna = "5.14.0"
+# Spec 088 FR-002: 5.17.0 is the first JNA whose libjnidispatch runs on 16 KB-page devices
+# (jna#1618 in 5.16.0, jna#1647 in 5.17.0) and ships 16 KB-aligned 64-bit libraries.
+jna = "5.17.0"
 kotlinxCoroutines = "1.10.2"
 orgJson = "20240303"
 lottie = "6.7.1"

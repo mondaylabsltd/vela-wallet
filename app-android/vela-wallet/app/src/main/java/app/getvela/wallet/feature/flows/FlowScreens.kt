@@ -180,6 +180,8 @@ fun ReceiveListBody(
 fun ReceiveQrBody(
     model: ReceiveQrModel,
     modifier: Modifier = Modifier,
+    /** The sheet's ✕, drawn at the end of the heading's line (issue #321). */
+    close: (@Composable () -> Unit)? = null,
     onSave: () -> Unit = {},
     onExplorer: () -> Unit = {},
 ) {
@@ -189,13 +191,20 @@ fun ReceiveQrBody(
     val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = model.title,
-            color = colors.fgBase,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.semibold,
-            fontSize = VelaTextSize.lg,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = model.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+                modifier = Modifier.weight(1f),
+            )
+            if (close != null) {
+                Spacer(modifier = Modifier.width(VelaSpacing.md))
+                close()
+            }
+        }
         model.contract?.let { contract ->
             Spacer(modifier = Modifier.height(VelaSpacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -807,6 +816,13 @@ fun SendPickBody(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
+        // Whom this is for, above what to send (issue #332): a scanned code or
+        // a contact lands here, and the person confirms the payee while choosing.
+        model.recipient?.let {
+            FactRow(fact = it)
+            HairlineDivider()
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        }
         FlowSearchField(
             placeholder = model.searchPlaceholder,
             value = query,
@@ -887,6 +903,8 @@ fun SendFormBody(
     onFee: () -> Unit = {},
     onDenom: () -> Unit = {},
     onMax: (Int) -> Unit = {},
+    /** Issue #326: the token card — back to the asset picker. */
+    onChangeToken: (() -> Unit)? = null,
     onAddRecipient: () -> Unit = {},
     onContinue: () -> Unit = {},
     onAmountChange: ((String) -> Unit)? = null,
@@ -904,7 +922,7 @@ fun SendFormBody(
     val haptic = rememberVelaHaptic()
     Column(modifier = modifier.fillMaxWidth()) {
         model.token?.let {
-            TokenHeaderCard(token = it, onMax = { onMax(0) })
+            TokenHeaderCard(token = it, onMax = { onMax(0) }, onChange = onChangeToken)
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.sweepSummary?.let {

@@ -70,6 +70,8 @@ const EMPTY_SEND: SendView = {
 	tokens: [],
 	selected_token: null,
 	recipient: '',
+	request_chain_id: null,
+	can_change_token: false,
 	amount: '',
 	amount_fiat_code: null,
 	denom_toggle_shown: false,
@@ -205,9 +207,58 @@ describe('the token picker', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [{ ...ETH, price_usd: null }] }));
 		expect(model.rows[0].fiat).toEqual({ kind: 'no-price', text: '—' });
 	});
+
+	// Issue 332: a scan from the home lands HERE with the address it read,
+	// and the picker used to show no sign of it.
+	it('says whom the money is for when the core already holds a recipient', () => {
+		const payee = '0x' + 'ab'.repeat(20);
+		const model = liveSendPick(pickModel(), inputs({ tokens: [USDT], recipient: payee }));
+		expect(model.recipient).toEqual({
+			label: m['send.toLabel'],
+			value: shortenAddress(payee),
+			lead: { kind: 'identicon', svg: identicon(payee), address: payee },
+			mono: true
+		});
+
+		// The name the core resolved, when it has one — as the confirm words it.
+		const named = liveSendPick(
+			pickModel(),
+			inputs({
+				tokens: [USDT],
+				recipient: payee,
+				recipient_identity: { name: 'alice.eth', source: 'ens' }
+			})
+		);
+		expect(named.recipient).toMatchObject({ value: 'alice.eth', mono: false });
+
+		// Kept in the sweep's picker too: it is the same person.
+		const sweep = liveSendPick(pickModel(), {
+			...inputs({ tokens: [USDT], recipient: payee }),
+			sweepPicking: true
+		});
+		expect(sweep.recipient?.value).toBe(shortenAddress(payee));
+	});
+
+	it('draws no recipient line when nobody is held, and no artwork for a non-address', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [USDT] })).recipient).toBeUndefined();
+		const odd = liveSendPick(pickModel(), inputs({ tokens: [USDT], recipient: 'hello' }));
+		expect(odd.recipient).toMatchObject({ value: 'hello', lead: undefined });
+	});
 });
 
 describe('the form', () => {
+	// Issue 326: the token card is the way to another asset, wherever the core
+	// says the asset is the payer's to change — and only there.
+	it('offers the token card as the way to another asset only where the core does', () => {
+		const open = liveSendForm(formModel(), inputs({ selected_token: ETH, can_change_token: true }));
+		expect(open.token?.change).toBe(m['send.selectTokenTitle']);
+		const fixed = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, can_change_token: false })
+		);
+		expect(fixed.token?.change).toBeUndefined();
+	});
+
 	it('carries the chosen token, the typed amount and its fiat value', () => {
 		const model = liveSendForm(
 			formModel(),
@@ -1426,6 +1477,28 @@ describe('the picker narrows to the sidebar chain and the class chips', () => {
 		expect(model.filters.find((f) => f.selected)?.id).toBe('gas');
 		// The page resolves the row the same way, so row 1 IS XDAI.
 		expect(visibleSendTokens({ ...EMPTY_SEND, ...send }, filters)[1]).toBe(XDAI);
+	});
+
+	// Issue 312: a code that named a network. The core has already narrowed
+	// `tokens` to it; the picker says which network, and a sidebar filter left
+	// on another one must not hide the payer's holdings there.
+	it('says which network a scanned code named, and no sidebar filter hides it', () => {
+		const named = { tokens: [XDAI], stage: 'select_token' as const, request_chain_id: 100 };
+		const model = liveSendPick(pickModel(), { ...inputs(named), chainFilter: 1 });
+		expect(model.rows.map((r) => r.ticker)).toEqual(['XDAI']);
+		// No pill: a network sheet could choose nothing the list would follow.
+		expect(model.header.pill).toBeUndefined();
+		expect(model.notice?.text).toBe(fill(m['receive.shareCardNetworkNote'], { network: 'Gnosis' }));
+		expect(visibleSendTokens({ ...EMPTY_SEND, ...named }, { chainFilter: 1 })).toEqual([XDAI]);
+
+		// Nothing held there: the notice is why the list is empty.
+		const nothing = liveSendPick(pickModel(), inputs({ ...named, tokens: [] }));
+		expect(nothing.rows).toHaveLength(0);
+		expect(nothing.empty).toBe(m['send.noTokensWithBalance']);
+		expect(nothing.notice?.text).toContain('Gnosis');
+
+		// No network named, no notice.
+		expect(liveSendPick(pickModel(), inputs(send)).notice).toBeUndefined();
 	});
 
 	it('keeps the sweep ticks aligned to the narrowed rows', () => {
