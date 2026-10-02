@@ -139,6 +139,8 @@ export interface SigningMessages {
 	warnApproveAll: string;
 	warnPermitCantCap: string;
 	warnBestEffort: string;
+	/** The core's `partial`: the reading is incomplete (spec 097 N1). */
+	warnPartial: string;
 	warnVerifiedAbi: string;
 	/**
 	 * Spec 081 FR-008: this description came from the descriptor service and
