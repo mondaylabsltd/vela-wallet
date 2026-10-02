@@ -996,6 +996,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),
 		batchStep: k('componentsUi.signing.batchStep'),
+		labelTotal: k('send.splitTotalLabel'),
 		expiredValue: k('componentsUi.signing.expiredValue'),
 		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract')
 	};

@@ -33,7 +33,9 @@
 				"chainSetup": "鏈設定",
 				"selfHosting": "自行架設指南",
 				"privacy": "私隱政策",
-				"terms": "服務條款"
+				"terms": "服務條款",
+				"support": "支援",
+				"deleteData": "刪除你的資料"
 			}
 		},
 		"language": {

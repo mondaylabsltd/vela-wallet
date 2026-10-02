@@ -33,7 +33,9 @@
 				"chainSetup": "Chain-Einrichtung",
 				"selfHosting": "Anleitung zum Selbsthosten",
 				"privacy": "Datenschutz",
-				"terms": "AGB"
+				"terms": "AGB",
+				"support": "Support",
+				"deleteData": "Deine Daten löschen"
 			}
 		},
 		"language": {
