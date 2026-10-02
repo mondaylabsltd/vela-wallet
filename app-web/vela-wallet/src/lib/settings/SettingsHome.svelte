@@ -388,15 +388,18 @@
 						{/if}
 					{/each}
 
-					<!-- Live, this ASKS THE CORE; the core's sheet is the one
+					<!-- Issue 322: Sign Out is a settings ROW — the glyph, the
+					     title and the chevron its neighbours carry — not centred
+					     grey text, which read as a caption rather than a control.
+					     Live, it ASKS THE CORE; the core's sheet is the one
 					     confirmation (ST3/ST3b stay the gallery's boards). -->
-					<button
-						type="button"
-						class="sign-out"
-						onclick={() => (onsignout ? onsignout() : (overlay = 'sign-out'))}
-					>
-						{model.signOut.label}
-					</button>
+					<div class="sign-out">
+						<SettingsRow
+							row={{ id: 'sign-out', title: model.signOut.label, icon: 'log-out' }}
+							divider={false}
+							onselect={() => (onsignout ? onsignout() : (overlay = 'sign-out'))}
+						/>
+					</div>
 
 					<div class="danger">
 						<DangerCard
@@ -672,16 +675,7 @@
 	}
 
 	.sign-out {
-		display: block;
-		width: 100%;
-		margin-block: var(--space-4xl) var(--space-3xl);
-		padding: var(--space-lg);
-		border: none;
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-lg) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
-		cursor: pointer;
+		margin-block: var(--space-3xl);
 	}
 
 	.danger {

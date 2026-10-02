@@ -8,6 +8,8 @@ import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.signing.core.ClearBatchCall
+import app.getvela.wallet.feature.signing.core.ClearBatchView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
 import app.getvela.wallet.feature.signing.core.ClearMessageView
@@ -156,20 +158,22 @@ object SigningLive {
      * its English intent and falls back to the term.
      */
     fun localizedTerms(clear: ClearSigningView, strings: VelaStrings): ClearSigningView {
-        val result = clear.result ?: return clear
         fun word(term: String?, text: String): String {
             if (term == null) return text
             val key = "componentsUi.signing.$term"
             val translated = strings.t(key)
             return if (translated.isBlank() || translated == key) text else translated
         }
+        fun localize(result: ClearSignResult) = result.copy(
+            intent = word(result.intent_term, result.intent),
+            fields = result.fields.map { field ->
+                field.copy(label = word(field.label_term, field.label), value = word(field.value_term, field.value))
+            },
+        )
         return clear.copy(
-            result = result.copy(
-                intent = word(result.intent_term, result.intent),
-                fields = result.fields.map { field ->
-                    field.copy(label = word(field.label_term, field.label), value = word(field.value_term, field.value))
-                },
-            ),
+            result = clear.result?.let(::localize),
+            // 089 S1: every call of a batch, in the words a lone call gets.
+            batch = clear.batch?.let { batch -> batch.copy(calls = batch.calls.map { it.copy(result = it.result?.let(::localize)) }) },
         )
     }
 
@@ -185,13 +189,29 @@ object SigningLive {
      * (`clear_signing::assess_risk`). The same rule in every shell.
      */
     fun cappedApproval(clear: ClearSigningView, guard: GuardView): ClearSigningView {
-        val result = clear.result ?: return clear
-        val cap = capText(guard) ?: return clear
-        val fields = result.fields.map { field ->
-            if (field.warning && field.format == "tokenAmount") field.copy(value = cap, warning = false) else field
+        fun capped(result: ClearSignResult, cap: String): ClearSignResult {
+            val fields = result.fields.map { field ->
+                if (field.warning && field.format == "tokenAmount") field.copy(value = cap, warning = false) else field
+            }
+            val risk = if (result.risk == ClearRisk.Danger && fields.none { it.warning }) ClearRisk.Caution else result.risk
+            return result.copy(fields = fields, risk = risk)
         }
-        val risk = if (result.risk == ClearRisk.Danger && fields.none { it.warning }) ClearRisk.Caution else result.risk
-        return clear.copy(result = result.copy(fields = fields, risk = risk))
+        // 089 S1: each call's "Unlimited" is replaced by ITS OWN leg's cap —
+        // the guard's legs are the calls, in order.
+        clear.batch?.let { batch ->
+            val calls = batch.calls.mapIndexed { index, call ->
+                val result = call.result ?: return@mapIndexed call
+                val cap = capText(guard, index) ?: return@mapIndexed call
+                val shown = capped(result, cap)
+                // Capped, the call is what its decode now says — unless it burns.
+                val risk = if (call.risk == ClearRisk.Danger && shown.risk != ClearRisk.Danger && !shown.to_own_token) shown.risk else call.risk
+                call.copy(result = shown, risk = risk)
+            }
+            return clear.copy(batch = batch.copy(calls = calls, risk = calls.maxOfOrNull { it.risk } ?: batch.risk))
+        }
+        val result = clear.result ?: return clear
+        val cap = capText(guard, 0) ?: return clear
+        return clear.copy(result = capped(result, cap))
     }
 
     /** A drawn chip's id, in the guard's vocabulary — the single card's and every leg's. */
@@ -205,11 +225,11 @@ object SigningLive {
 
     /**
      * The guard's finite choice on an unlimited request, as the cap row prints
-     * it — the single approval's, or a batch's FIRST leg's: a bundle decodes
-     * from its first leg, so that is the line the decode's "Unlimited" sits on.
+     * it — the single approval's, or batch leg [legIndex]'s: each call of a
+     * batch carries its own decode, so each "Unlimited" takes its own leg's cap.
      */
-    private fun capText(guard: GuardView): String? {
-        val leg = guard.batch?.legs?.firstOrNull()
+    private fun capText(guard: GuardView, legIndex: Int): String? {
+        val leg = guard.batch?.legs?.getOrNull(legIndex)
         val (detected, editor, meta) = when (guard.surface) {
             GuardSurface.ApprovalEditor -> Triple(guard.detected, guard.editor, guard.meta)
             GuardSurface.Batch -> Triple(leg?.approval, leg?.editor, leg?.meta ?: return null)
@@ -239,20 +259,29 @@ object SigningLive {
             guard,
         )
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
-        val facts = SigningController.firstCall(request.paramsJson)
+        val facts = SigningController.firstCall(request.paramsJson, request.method)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
+        // 089 S1: a batch's technical details are the whole batch, never call 1's calldata.
+        val wholeBatch = clear.surface == ClearSurface.Batch
         // Spec 081: a refused request gets the refusal and nothing else. The
         // decoded body, the simulation and the guard all describe a
         // transaction that will never be signed, and reading them invites the
         // question "so why can't I?" — which the sentence above already answers.
         val refused = sign.blocked != null
-        val blocks =
-            if (refused) statusBlocks(sign, s)
-            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
-                simBlocks(sim, ctx) + guardBlocks(guard, s)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         val own = request.transportId == WALLET_TRANSPORT
+        val sims = simBlocks(sim, ctx)
+        // Issue #314: on the wallet's own request a simulation that moves
+        // nothing only confirms what the wallet itself wrote — a technical
+        // fact, folded with the others, not a bordered card weighing as much as
+        // the outcome. Anything else it has to say (a revert, a node that could
+        // not check, a balance that would move) stays on the sheet.
+        val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        val blocks =
+            if (refused) statusBlocks(sign, s)
+            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
+                (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
         // Spec 082 RE7: the name and whether the host is said again are the
         // core's (`browserSiteLabel`); a request carries no page title, so a
         // site is named by its host, once.
@@ -277,9 +306,13 @@ object SigningLive {
                 signature = if (refused) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
-                simResult = null,
-                rawLabel = if (!refused && dataBytes > 0) s.s("techRawData") else null,
-                rawHex = if (refused) null else facts?.second?.takeIf { dataBytes > 0 },
+                simResult = quietSim?.takeIf { !refused }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
+                rawLabel = if (!refused && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
+                rawHex = when {
+                    refused -> null
+                    wholeBatch -> request.paramsJson
+                    else -> facts?.second?.takeIf { dataBytes > 0 }
+                },
             ),
             techOpen = false,
             // No fee and no confirm control under a refusal: a fee for a
@@ -790,6 +823,66 @@ object SigningLive {
             to?.let { add(SigningBlock.Party(s.s("interactingLabel"), s.s("unverifiedLabel"), it, PartyBadge(s.s("unverifiedLabel"), SigningTone.Caution))) }
         }
         ClearSurface.PlainSend -> clear.plain_send?.let { plainSendBlocks(it, ctx) }.orEmpty()
+        // 089 S1: every call of a batch, never call 1 alone.
+        ClearSurface.Batch -> clear.batch?.let { batchBlocks(it, ctx) }.orEmpty()
+    }
+
+    /**
+     * 089 S1: a batch as the sheet draws it — "Batch", how many transactions
+     * are signed together, then EVERY call as its own card (the drawn CS26),
+     * the coin the whole batch moves, and every flag any call raised, said
+     * once. The headline is never call 1's: `[1 wei → A, 1 xDAI → B]` read
+     * "Send 0.000…1 xDAI" and signed both. The guard's per-call cap cards and
+     * its unlimited sentence follow ([guardBlocks]).
+     */
+    fun batchBlocks(batch: ClearBatchView, ctx: Context): List<SigningBlock> = buildList {
+        val s = ctx.strings
+        add(SigningBlock.Intent(s.s("batchIntent"), toneOf(batch.risk)))
+        add(SigningBlock.Sentence(s.s("batchSubtitle", mapOf("count" to batch.calls.size.toString())), SigningTone.Accent))
+        batch.calls.forEach { add(batchCallCard(it, ctx)) }
+        val total = batch.total_amount
+        if (total != null && batch.total_value_wei != "0") {
+            add(SigningBlock.Rows(listOf(SigningRow(s.t(I18nKeys.Flows.SPLIT_TOTAL), "−$total ${ctx.nativeSymbol}"))))
+        }
+        val results = batch.calls.mapNotNull { it.result }
+        if (results.any { it.to_own_token }) add(SigningBlock.Warning(SigningTone.Danger, s.s("tokenToContractWarning")))
+        if (results.any { it.best_effort }) add(SigningBlock.Warning(SigningTone.Caution, s.s("bestEffortWarning")))
+        if (results.any { it.partial }) add(SigningBlock.Warning(SigningTone.Caution, s.s("partialWarning")))
+        if (results.any { it.provenance == ClearProvenance.Fetched }) add(SigningBlock.Warning(SigningTone.Caution, s.s("descriptorFetchedWarning")))
+        if (results.any { r -> r.fields.any { it.unverified } }) add(SigningBlock.Warning(SigningTone.Caution, s.s("unverifiedWarning")))
+        if (results.any { r -> r.fields.any { it.expired } }) add(SigningBlock.Warning(SigningTone.Caution, s.a("expired")))
+    }
+
+    /**
+     * 089 S1: one call of a batch, as its own card — the words its call would
+     * get alone. A decoded call is its intent and its fields, then the coin it
+     * moves and whom it calls; a plain send is "Send", the exact amount and the
+     * recipient; a call nobody could read says so in its title, with whom it
+     * calls and what coin it moves. Never omitted.
+     */
+    private fun batchCallCard(call: ClearBatchCall, ctx: Context): SigningBlock.Card {
+        val s = ctx.strings
+        fun step(action: String) = s.s("batchStep", mapOf("index" to call.index.toString(), "action" to action))
+        val tone = toneOf(call.risk)
+        val result = call.result
+        val plain = call.plain_send
+        // What the call moves of the chain's own coin, and whom it calls:
+        // inside a batch nothing else on the sheet says it for this call.
+        val coin = call.amount?.takeIf { call.value_wei != "0" }?.let { listOf(SigningRow(s.s("labelAmount"), "−$it ${ctx.nativeSymbol}")) }.orEmpty()
+        val target = call.to?.let { listOf(SigningRow(s.s("interactingLabel"), it, mono = true)) }.orEmpty()
+        return when {
+            call.surface == ClearSurface.ClearSign && result != null ->
+                SigningBlock.Card(step(result.intent), result.fields.filter { !it.detail }.map { rowOf(it, s) } + coin + target, tone)
+            call.surface == ClearSurface.PlainSend && plain != null -> SigningBlock.Card(
+                step(s.s("intentSend")),
+                listOf(
+                    SigningRow(s.s("labelAmount"), "${if (plain.no_value) "" else "−"}${plain.amount} ${ctx.nativeSymbol}"),
+                    SigningRow(s.s("recipientLabel"), plain.to, mono = true),
+                ),
+                tone,
+            )
+            else -> SigningBlock.Card(step(s.s("blindDecodeWarning", mapOf("bytes" to call.data_bytes.toString()))), target + coin, tone)
+        }
     }
 
     private fun toneOf(risk: ClearRisk): SigningTone = when (risk) {

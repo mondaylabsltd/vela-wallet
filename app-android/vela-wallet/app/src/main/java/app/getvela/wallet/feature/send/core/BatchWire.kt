@@ -74,6 +74,8 @@ data class BatchView(
     val file_name: String? = null,
     val busy: Boolean = false,
     val file_error: Boolean = false,
+    /** Why the picked file was not read, when [file_error] (087). */
+    val file_failure: BatchFileFailure? = null,
     val template_saved: Boolean = false,
     val priced: Boolean = false,
     val rate_status: BatchRateStatus = BatchRateStatus.Loading,
@@ -149,13 +151,34 @@ sealed class BatchOperation {
 
 @Serializable
 sealed class BatchFileContent {
+    /**
+     * A CSV/TSV/TXT file's BYTES, undecoded: the core decodes them (UTF-8, or
+     * UTF-16 by its BOM — never a guess), as it does a contacts file (issue
+     * 333). `decodeToString()` used to decode here, turning a GBK CSV's
+     * Chinese names into U+FFFD without a word. Build it with [of]: the wire
+     * is the core's `Vec<u8>`, 0–255, and a Kotlin `Byte` is signed.
+     */
     @Serializable
-    @SerialName("text")
-    data class Text(val text: String) : BatchFileContent()
+    @SerialName("bytes")
+    data class Bytes(val bytes: List<Int>) : BatchFileContent() {
+        companion object {
+            fun of(bytes: ByteArray) = Bytes(bytes.map { it.toInt() and 0xFF })
+        }
+    }
 
     @Serializable
     @SerialName("matrix")
     data class Matrix(val rows: List<List<String>>) : BatchFileContent()
+}
+
+/** Why a picked file was not read — the second line of the sheet's error. */
+@Serializable
+enum class BatchFileFailure {
+    /** The pick or the read failed: say which files the sheet reads. */
+    @SerialName("unreadable") Unreadable,
+
+    /** Not UTF-8, nor UTF-16 by its BOM — say how to save it (087). */
+    @SerialName("unsupported_encoding") UnsupportedEncoding,
 }
 
 @Serializable

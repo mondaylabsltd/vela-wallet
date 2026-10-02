@@ -1475,14 +1475,15 @@ fn export(
     sut.view().export.expect("the view carries the file")
 }
 
+/// The file's BYTES, as a shell reads them — text tests pass a `&str`.
 fn import_file(
     sut: &mut Sut,
-    content: &str,
+    content: impl AsRef<[u8]>,
     filename: Option<&str>,
     into_group: Option<&str>,
 ) -> Vec<Op> {
     sut.dispatch(Event::ImportFile {
-        content: content.to_owned(),
+        bytes: content.as_ref().to_vec(),
         filename: filename.map(str::to_owned),
         into_group: into_group.map(str::to_owned),
         now_ms: 5_000.0,
@@ -1653,6 +1654,251 @@ fn a_bad_file_is_refused_before_anything_is_written() {
     assert_eq!(sut.view().import_failure, None);
 }
 
+// -- Issue 333: a file's bytes become text in ONE place ----------------------
+
+/// Names in every script the book is used with, one row each — mixed with
+/// Latin, an emoji, CRLF line endings and an empty name.
+const NAMES: [&str; 10] = [
+    "jxjjx测试",
+    "张小明",
+    "田中太郎",
+    "김민수",
+    "Иван Петров",
+    "محمد",
+    "प्रिया",
+    "สมชาย",
+    "Zoë 🦊 Müller",
+    "陳大文",
+];
+
+fn address(i: usize) -> String {
+    format!("0x{:040x}", 0x1000 + i)
+}
+
+/// The CSV a person might keep: our header, CRLF, one row with no name.
+fn names_csv() -> String {
+    let mut csv = String::from("address,name\r\n");
+    for (i, name) in NAMES.iter().enumerate() {
+        csv.push_str(&format!("{},{name}\r\n", address(i)));
+    }
+    csv.push_str(&format!("{},\r\n", address(99)));
+    csv
+}
+
+fn utf16(text: &str, little_endian: bool) -> Vec<u8> {
+    let mut bytes = if little_endian {
+        vec![0xFF, 0xFE]
+    } else {
+        vec![0xFE, 0xFF]
+    };
+    for unit in text.encode_utf16() {
+        bytes.extend(if little_endian {
+            unit.to_le_bytes()
+        } else {
+            unit.to_be_bytes()
+        });
+    }
+    bytes
+}
+
+/// What the core reads, byte for byte: UTF-8 with or without its mark and
+/// UTF-16 either way round by its mark. Everything else is refused, never
+/// guessed — and never U+FFFD.
+#[test]
+fn a_file_becomes_text_only_as_what_it_is() {
+    let text = names_csv();
+    let mut bom = vec![0xEF, 0xBB, 0xBF];
+    bom.extend(text.as_bytes());
+    for (label, bytes) in [
+        ("utf-8", text.as_bytes().to_vec()),
+        ("utf-8 + bom", bom),
+        ("utf-16le + bom", utf16(&text, true)),
+        ("utf-16be + bom", utf16(&text, false)),
+    ] {
+        assert_eq!(
+            contacts_io::decode_text(&bytes).as_deref(),
+            Ok(text.as_str()),
+            "{label}"
+        );
+    }
+    assert_eq!(contacts_io::decode_text(b""), Ok(String::new()));
+    assert_eq!(
+        contacts_io::decode_text(&[0xEF, 0xBB, 0xBF]),
+        Ok(String::new())
+    );
+
+    let refused = Err(ContactImportFailure::UnsupportedEncoding);
+    let gbk = [b"jxjjx".as_slice(), &[0xB2, 0xE2, 0xCA, 0xD4]].concat(); // jxjjx测试
+    let shift_jis = [0x93, 0x63, 0x92, 0x86]; // 田中 — well-formed GBK too
+    let cp1252 = [0x4D, 0xFC, 0x6C, 0x6C, 0x65, 0x72]; // Müller
+    let utf16_unmarked: Vec<u8> = utf16("address", true).split_off(2);
+    let mut dangling = utf16("a", true);
+    dangling.push(0x00);
+    let lone_surrogate = [0xFF, 0xFE, 0x3D, 0xD8]; // a high surrogate, alone
+    let marked_garbage = [0xEF, 0xBB, 0xBF, 0xB2, 0xE2];
+    let utf32le = [0xFF, 0xFE, 0x00, 0x00, 0x61, 0x00, 0x00, 0x00];
+    for (label, bytes) in [
+        ("gbk", gbk.as_slice()),
+        ("shift_jis", shift_jis.as_slice()),
+        ("windows-1252", cp1252.as_slice()),
+        ("utf-16 without its mark", utf16_unmarked.as_slice()),
+        ("utf-16 with a dangling byte", dangling.as_slice()),
+        (
+            "utf-16 with an unpaired surrogate",
+            lone_surrogate.as_slice(),
+        ),
+        ("not utf-8 behind a utf-8 mark", marked_garbage.as_slice()),
+        ("utf-32", utf32le.as_slice()),
+    ] {
+        assert_eq!(contacts_io::decode_text(bytes), refused, "{label}");
+    }
+}
+
+/// The reported file: names a spreadsheet saved as GBK. Refused with its own
+/// reason before anything is written — the book never gains `jxjjx����`.
+#[test]
+fn a_legacy_encoded_file_is_refused_not_garbled() {
+    let mut sut = booted(
+        vec![manual(A, Some("Alice"), false, 1.0)],
+        vec![],
+        vec![],
+        vec![],
+    );
+    let mut gbk = format!("address,name\r\n{B},jxjjx").into_bytes();
+    gbk.extend([0xB2, 0xE2, 0xCA, 0xD4, b'\r', b'\n']); // 测试
+    gbk.extend(format!("{C},").into_bytes());
+    gbk.extend([0xD5, 0xC5, 0xD0, 0xA1, 0xC3, 0xF7, b'\r', b'\n']); // 张小明
+    let ops = import_file(&mut sut, &gbk, Some("contacts.csv"), None);
+    assert!(ops.is_empty(), "a refusal writes nothing: {ops:?}");
+    let view = sut.view();
+    assert_eq!(
+        view.import_failure,
+        Some(ContactImportFailure::UnsupportedEncoding)
+    );
+    assert_eq!(view.last_import, None);
+    assert_eq!(addresses(&view), vec![A.to_owned()]);
+}
+
+/// Every name in every readable encoding lands exactly as written — CSV and
+/// JSON alike — and the nameless row is a contact with no name.
+#[test]
+fn names_in_any_script_import_byte_exact_from_utf8_and_utf16() {
+    let csv = names_csv();
+    let json = format!(
+        "{{\"contacts\":[{}]}}",
+        NAMES
+            .iter()
+            .enumerate()
+            .map(|(i, name)| format!("{{\"address\":\"{}\",\"name\":\"{name}\"}}", address(i)))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    for (file, filename, rows) in [
+        (&csv, "book.csv", NAMES.len() + 1),
+        (&json, "book.json", NAMES.len()),
+    ] {
+        let mut bom = vec![0xEF, 0xBB, 0xBF];
+        bom.extend(file.as_bytes());
+        for (label, bytes) in [
+            ("utf-8", file.as_bytes().to_vec()),
+            ("utf-8 + bom", bom),
+            ("utf-16le", utf16(file, true)),
+            ("utf-16be", utf16(file, false)),
+        ] {
+            let mut sut = booted_empty();
+            let ops = import_file(&mut sut, &bytes, Some(filename), None);
+            assert!(!ops.is_empty(), "{filename} {label}");
+            let view = sut.view();
+            assert_eq!(view.import_failure, None, "{filename} {label}");
+            assert_eq!(
+                view.last_import.map(|report| report.added),
+                Some(u32::try_from(rows).unwrap_or(u32::MAX)),
+                "{filename} {label}"
+            );
+            for (i, name) in NAMES.iter().enumerate() {
+                assert_eq!(
+                    find(&view, &address(i)).name.as_deref(),
+                    Some(*name),
+                    "{filename} {label}"
+                );
+            }
+            if rows > NAMES.len() {
+                assert_eq!(find(&view, &address(99)).name, None, "{label}");
+            }
+        }
+    }
+}
+
+/// The CSV export carries a UTF-8 mark for spreadsheets, and the app reads
+/// its own file back unchanged — names in every script included.
+#[test]
+fn the_csv_export_is_marked_utf8_and_round_trips_every_script() {
+    let saved: Vec<Contact> = NAMES
+        .iter()
+        .enumerate()
+        .map(|(i, name)| manual(&address(i), Some(name), false, 1.0))
+        .collect();
+    let mut first = booted(saved, vec![], vec![], vec![]);
+    let file = export(&mut first, ContactExportScope::All, ContactFileFormat::Csv);
+    assert!(
+        file.content.as_bytes().starts_with(&[0xEF, 0xBB, 0xBF]),
+        "UTF-8 with its mark, as every shell writes the string"
+    );
+    let mut second = booted_empty();
+    import_file(
+        &mut second,
+        file.content.as_bytes(),
+        Some(&file.filename),
+        None,
+    );
+    let view = second.view();
+    assert_eq!(view.import_failure, None);
+    for (i, name) in NAMES.iter().enumerate() {
+        assert_eq!(find(&view, &address(i)).name.as_deref(), Some(*name));
+    }
+}
+
+/// A name the old lenient decode stored as `jxjjx����` is repaired by the
+/// same file read properly — existing-wins guards what a person wrote, and
+/// nobody writes U+FFFD. An intact saved name still wins.
+#[test]
+fn a_reimport_repairs_a_name_the_old_decode_damaged() {
+    let mut sut = booted(
+        vec![
+            manual(A, Some("jxjjx\u{fffd}\u{fffd}\u{fffd}\u{fffd}"), false, 1.0),
+            manual(B, Some("Local Bob"), false, 1.0),
+            manual(C, Some("\u{fffd}\u{fffd}"), false, 1.0),
+        ],
+        vec![],
+        vec![],
+        vec![],
+    );
+    let csv = format!("address,name\n{A},jxjjx测试\n{B},Bob from file\n{C},\n");
+    let ops = import_file(&mut sut, &csv, Some("book.csv"), None);
+    assert!(
+        matches!(ops.as_slice(), [Op::WriteContacts { .. }]),
+        "{ops:?}"
+    );
+    ack_writes(&mut sut, 1);
+    let view = sut.view();
+    assert_eq!(find(&view, A).name.as_deref(), Some("jxjjx测试"));
+    assert_eq!(find(&view, B).name.as_deref(), Some("Local Bob"));
+    assert_eq!(
+        find(&view, C).name.as_deref(),
+        Some("\u{fffd}\u{fffd}"),
+        "a file with no name for it repairs nothing"
+    );
+    assert_eq!(
+        view.last_import,
+        Some(ContactImportReport {
+            added: 0,
+            skipped: 3,
+            invalid: 0,
+            groups_created: 0
+        })
+    );
+}
+
 /// Exporting one group carries its members only, names only that group, and
 /// an unsaved member still travels as its address (invariant ③).
 #[test]
@@ -1680,7 +1926,7 @@ fn exporting_a_group_covers_its_members_only() {
     assert_eq!(file.mime, "text/csv");
     assert_eq!(file.contacts, 2);
     let lines: Vec<&str> = file.content.lines().collect();
-    assert_eq!(lines[0], "address,name,note,favorite,groups");
+    assert_eq!(lines[0], "\u{feff}address,name,note,favorite,groups");
     assert_eq!(lines[1], format!("{A},Alice,,,Payroll"));
     assert_eq!(lines[2], format!("{C},,,,Payroll"));
     assert_eq!(lines.len(), 3, "Bob is not in Payroll");

@@ -116,6 +116,25 @@ struct ActivityDetailTests {
         #expect(pending.deleteLabel == loc.t("history.deleteRecord"))
         #expect(pending.deleteQuiet)
     }
+
+    /// 087 F04: a pending record nothing will settle reaches the shell as
+    /// `unknown` — its row and its detail say "Unknown", never "Pending" for
+    /// ever and never "Failed"; it draws no hash and keeps its quiet delete.
+    @Test func aRecordNothingWillSettleReadsUnknown() throws {
+        let unknown = item(role: .contract, txHash: nil, status: .unknown)
+        let detail = FlowsLive.txDetail(unknown, record: nil, on: try drawn, loc: loc)
+        #expect(detail.status.text == loc.t("componentsUi.signing.intentUnknown"))
+        #expect(detail.status.tone == .info)
+        #expect(detail.status.text != loc.t("componentsTx.detail.statusPending"))
+        #expect(detail.status.text != loc.t("componentsTx.detail.statusFailed"))
+        #expect(!detail.facts.map(\.label).contains(loc.t("componentsTx.detail.labelHash")))
+        #expect(!detail.facts.contains { $0.copyValue?.hasPrefix("dapp-") == true })
+        #expect(detail.deleteLabel == loc.t("history.deleteRecord"))
+        #expect(detail.deleteQuiet)
+        #expect(WalletLive.statusPrefix(.unknown, loc: loc) == loc.t("componentsUi.signing.intentUnknown"))
+        let decoded = try CoreJSON.decoder.decode(FeedTxStatusWire.self, from: Data(#""unknown""#.utf8))
+        #expect(decoded == .unknown)
+    }
 }
 
 #if VELA_LIVE_TESTS

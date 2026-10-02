@@ -701,10 +701,17 @@ class SigningController(
             unlimited_approved = guard.unlimited_consented,
         )
 
-        /** The first call of a request: `(to, data, value)` (the desktop's `first_call`). */
-        fun firstCall(paramsJson: String): Triple<String?, String?, String?>? {
+        /**
+         * The first call of a request: `(to, data, value)` (the desktop's
+         * `first_call`). Given the [method], chosen BY it, the way the submit
+         * path chooses what it sends: an `eth_sendTransaction` is its own
+         * top-level call — never a stray `calls` key beside it, which once had
+         * a harmless leg described while a malicious call was signed (the
+         * desktop's 083 review).
+         */
+        fun firstCall(paramsJson: String, method: String? = null): Triple<String?, String?, String?>? {
             val first = runCatching { JSONArray(paramsJson).optJSONObject(0) }.getOrNull() ?: return null
-            val call = first.optJSONArray("calls")?.optJSONObject(0) ?: first
+            val call = if (method == "eth_sendTransaction") first else first.optJSONArray("calls")?.optJSONObject(0) ?: first
             // A JSON null is absent — `optString` would read it as the text
             // "null". A present non-string (a number) goes as its text, so the
             // core refuses it rather than reading a calm "0" (spec 082 RC6).
@@ -713,8 +720,15 @@ class SigningController(
         }
 
         fun clearKickoff(method: String, paramsJson: String, chainId: Int, origin: String?): ClearSigningEvent? = when {
-            method == "eth_sendTransaction" || method == "wallet_sendCalls" -> {
-                val call = firstCall(paramsJson)
+            // 089 S1: a batch goes over whole — the core reads EVERY call, so
+            // the sheet can never describe call 1 while signing them all.
+            method == "wallet_sendCalls" -> ClearSigningEvent.ResolveBatch(
+                params_json = paramsJson,
+                chain_id = chainId,
+                locale = ClearLocale.fromFormats(Formats.current),
+            )
+            method == "eth_sendTransaction" -> {
+                val call = firstCall(paramsJson, method)
                 ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
             }
             method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(method, paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))

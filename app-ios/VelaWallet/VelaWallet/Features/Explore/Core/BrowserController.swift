@@ -220,6 +220,41 @@ final class BrowserController {
         }
     }
 
+    // MARK: - A page from outside (spec 088 FR-004)
+
+    /// A page another app or website asked this wallet to open, and the host
+    /// the person is asked about.
+    struct ExternalPage: Identifiable, Equatable {
+        let url: String
+        let host: String
+        var id: String { url }
+    }
+
+    /// `velawallet://open?url=…` waits here for the person. Nothing loads —
+    /// and no page meets the provider — until they say yes to the host on the
+    /// sheet (`answerExternal`).
+    var externalPage: ExternalPage?
+
+    /// Ask before opening a page from outside. The core decides whether the
+    /// link may be opened at all (https, a plain host) and which host to show;
+    /// anything else is dropped in silence, like any link this app does not
+    /// handle.
+    func askToOpen(_ url: String) {
+        guard let host = dappExternalPageHost(url: url) else { return }
+        externalPage = ExternalPage(url: url, host: host)
+    }
+
+    /// The sheet's answer: open the page as asked, or forget it. `true` when
+    /// a page is now opening.
+    @discardableResult
+    func answerExternal(_ open: Bool) -> Bool {
+        guard let page = externalPage else { return false }
+        externalPage = nil
+        guard open else { return false }
+        self.open(page.url)
+        return true
+    }
+
     // MARK: - Tabs and navigation
 
     /// Open what somebody typed: a URL, a host, or a search.
@@ -374,7 +409,10 @@ final class BrowserController {
     /// not.
     ///
     /// Spec 082 RE1: the star acts on what the bar names — the page on
-    /// screen, never where a load in flight is going.
+    /// screen, never where a load in flight is going. Under a failure panel
+    /// that is the address that failed, and the engine's title is still the
+    /// page before's: the name is the core's rule (`browserPinnedTitle`) —
+    /// that site's last good title, else its host (issue #329).
     func toggleFavorite() {
         guard let engine = current else { return }
         let url = engine.bar.url
@@ -383,7 +421,7 @@ final class BrowserController {
         if explore.favorites.contains(where: { $0.origin == origin }) {
             removeFavorite(origin: origin)
         } else {
-            addFavorite(url: url, title: engine.title.isEmpty ? nil : engine.title)
+            addFavorite(url: url, title: browserPinnedTitle(url: url, lastGood: engine.lastVisit))
         }
     }
 

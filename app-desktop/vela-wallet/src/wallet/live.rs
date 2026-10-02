@@ -845,6 +845,57 @@ mod tests {
         assert_eq!(rows[0].subtitle.as_ref(), "127.0.0.1:8137");
     }
 
+    /// 087 F04/F05, through the real core: a dApp record from an older build
+    /// — no operation hash, no tx hash — three days on is "未知 · <site>",
+    /// never "处理中" for ever and never "失败"; its detail says the same,
+    /// draws no hash (the record id is not one) and keeps a quiet delete.
+    #[test]
+    fn a_record_nothing_will_settle_reads_unknown_and_shows_no_hash() {
+        use vela_core::app::activity_feed::FeedTxStatus;
+        let s = strings();
+        let mut legacy = dapp_record("dapp-1790500000796-tx", FeedTxStatus::Pending);
+        legacy.user_op_hash = String::new();
+        legacy.timestamp -= 3.0 * 86_400.0;
+        let view = feed_of(vec![legacy]);
+        let rows = activity_rows(&view, &s, &flow_strings(), false);
+        assert_eq!(
+            rows[0].subtitle.as_ref(),
+            format!("{} · 127.0.0.1:8137", s.status_unknown)
+        );
+        assert_ne!(s.status_unknown, s.status_pending);
+        assert_ne!(s.status_unknown, s.status_failed);
+
+        let flows = flow_strings();
+        let detail = crate::flows::live::tx_detail(
+            &view,
+            "dapp-1790500000796-tx",
+            &flows,
+            &s,
+            false,
+            "en-US",
+            super::Money::usd(),
+        )
+        .unwrap_or_else(|| unreachable!("the row exists"));
+        assert_eq!(detail.status.text, flows.status_unknown);
+        assert!(matches!(
+            crate::flows::panels::delete_style(&detail.status),
+            crate::flows::panels::DeleteStyle::Quiet
+        ));
+        assert!(
+            detail
+                .facts
+                .iter()
+                .all(|fact| fact.label != flows.detail_hash)
+        );
+        assert!(detail.facts.iter().all(|fact| {
+            fact.copy
+                .as_ref()
+                .is_none_or(|copy| !copy.contains("dapp-"))
+        }));
+        assert!(detail.explorer_url.is_none());
+        assert!(detail.delete_label.is_some());
+    }
+
     /// With no site the recipient names it, and with neither the chain.
     #[test]
     fn a_dapp_row_without_a_site_falls_back_to_recipient_then_chain() {
@@ -2420,6 +2471,7 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
         FeedTxStatus::Confirmed => None,
         FeedTxStatus::Pending => Some(&s.status_pending),
         FeedTxStatus::Failed => Some(&s.status_failed),
+        FeedTxStatus::Unknown => Some(&s.status_unknown),
     };
     let subtitle = match (status, with.is_empty()) {
         (None, _) => SharedString::from(with),

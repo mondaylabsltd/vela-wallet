@@ -175,27 +175,33 @@ object ExploreLive {
                 snapshot = snapshots[open.id].takeIf { open.url != null },
             )
         }
-        // The page's origin, or — when its renderer died and there is no engine —
-        // the core's word for what the tab shows.
-        val shownOrigin = engine?.origin ?: tab?.origin
         // Spec 082 RE1: what the bar names is the core's rule over the
         // engine's committed, pending and failed addresses — never the drawn
         // fixture's host, and never a lock for a page that is not there. A
         // tab whose renderer died names the document the core last saw.
         val bar = engine?.addressBar() ?: tab?.origin?.let { uniffi.vela_core_uniffi.browserAddressBar(it, null, null) }
+        // The star lights for what it pins: the address the bar names (issue
+        // #329 — under a failure panel, the one that failed), else the page's
+        // origin, or the core's word for a tab whose renderer died.
+        val shownOrigin = bar?.url?.takeIf { it.isNotBlank() }?.let { uniffi.vela_core_uniffi.dappOriginOf(it) } ?: engine?.origin ?: tab?.origin
         val bookmarked = shownOrigin != null && view.favorites.any { it.origin == shownOrigin }
         return fallback.copy(
             tabCountLabel = tabs.size.takeIf { it > 0 }?.toString(),
             // No CTA: there is no curated list behind "browse", and a button
             // that goes nowhere is worse than none (spec 070).
             empty = if (populated) null else ExploreEmptyCopy(strings.t("explore.startTitle"), strings.t("explore.startHint"), ""),
-            favorites = if (favorites.isEmpty() || view.favorites_hidden) {
+            // The Favorites heading stays on any page with something on it —
+            // no favourites yet, or Favorites hidden: its Edit is the way to
+            // Manage groups, and with every group hidden the page was left with
+            // the search field alone and no way back (issue #330). Hidden, it
+            // loses its tiles, not its heading — the desktop's rule (078 W-11).
+            favorites = if (!populated) {
                 null
             } else {
                 FavoritesSection(
                     title = strings.t("explore.favorites"),
                     action = strings.t("explore.edit"),
-                    tiles = favorites.map { TileModel.Site(it) } + TileModel.Add(strings.t("explore.add")),
+                    tiles = if (view.favorites_hidden) emptyList() else favorites.map { TileModel.Site(it) } + TileModel.Add(strings.t("explore.add")),
                 )
             },
             groups = groups,

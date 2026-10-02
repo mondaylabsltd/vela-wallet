@@ -76,6 +76,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -720,7 +721,6 @@ private fun SettingsHomeBody(
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
 ) {
-    val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
 
     // Under the account it belongs to (spec 062): which keys, then their backup.
@@ -765,23 +765,23 @@ private fun SettingsHomeBody(
         }
     }
 
-    Text(
-        text = model.signOutLabel,
-        color = colors.fgMuted,
-        fontFamily = VelaFontFamily,
-        fontSize = VelaTextSize.lg,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            // ASKS THE CORE. The session machine answers with its own sheet —
-            // the one carrying the pending-upload warning and a way back out —
-            // and that sheet IS the confirmation. Raising ST3 in front of it
-            // made leaving a wallet three taps and two sheets saying the same
-            // sentence (founder, 2026-09-16); ST3/ST3b stay the fixture boards
-            // they always were, reachable from a seeded overlay.
-            .clickable { onSignOut() }
-            .padding(top = VelaSpacing.xl4, bottom = VelaSpacing.xl3),
+    // Issue #322: Sign Out is a settings ROW — the glyph, the title and the
+    // chevron its neighbours carry — not centred grey text, which read as a
+    // caption under About rather than something to tap.
+    //
+    // It ASKS THE CORE. The session machine answers with its own sheet — the
+    // one carrying the pending-upload warning and a way back out — and that
+    // sheet IS the confirmation. Raising ST3 in front of it made leaving a
+    // wallet three taps and two sheets saying the same sentence (founder,
+    // 2026-09-16); ST3/ST3b stay the fixture boards they always were,
+    // reachable from a seeded overlay.
+    Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+    VelaSettingsRow(
+        row = SettingsRowModel(id = "sign-out", title = model.signOutLabel, icon = SettingsIcon.LogOut),
+        divider = false,
+        onClick = { onSignOut() },
     )
+    Spacer(modifier = Modifier.height(VelaSpacing.xl3))
     VelaDangerCard(model.eraseTitle, model.eraseSubtitle) {
         onOpenOverlay(SettingsOverlay.EraseDevice)
     }
@@ -2355,13 +2355,22 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
             fontSize = VelaTextSize.sm,
             modifier = Modifier.padding(top = VelaSpacing.xl, bottom = VelaSpacing.md),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        // 087 F07: the four names shared one row, so "Chainlist" — the last,
+        // with the least room left — broke mid-word onto a second line. A chip
+        // is one word on one line; when the row is full the next chip wraps
+        // whole onto the next line (a narrow phone, a large text size).
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        ) {
             model.providers.forEach { name ->
                 Text(
                     text = name,
                     color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier
                         .background(colors.bgRaised)
                         .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
