@@ -10,15 +10,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import app.getvela.wallet.BuildConfig
+import uniffi.vela_core_uniffi.prefsDebugMode
 import uniffi.vela_core_uniffi.prefsDebugModeValue
 import uniffi.vela_core_uniffi.prefsLocaleJson
 import uniffi.vela_core_uniffi.prefsMigrations
 import uniffi.vela_core_uniffi.prefsRead
 
 /**
- * Settings' debug mode (spec 091) as the core names it in `PrefsRecord`:
+ * Settings' debug mode (spec 091) as the core names it (`prefsDebugMode`):
  * `hidden` until About's version is tapped seven times, then `off` / `on`.
  * Hidden is off. What is STORED is the core's ([Preferences.setDebugMode]).
+ *
+ * Debug builds only (owner, 2026-10-02): in a release build the core reads it
+ * as hidden whatever is stored and no tap reveals it — this app hands the core
+ * `BuildConfig.DEBUG` and nothing else.
  */
 enum class DebugMode(val wire: String) {
     Hidden("hidden"), Off("off"), On("on");
@@ -62,6 +68,8 @@ class Preferences(
     private val locale: () -> Locale = { Locale.getDefault() },
     /** Called on every change with the formats to draw with; the default publishes `Formats.current`. */
     private val onFormats: (Formats) -> Unit = { Formats.current = it },
+    /** Spec 091: the build fact the core reads debug mode with — the `debug` variant. */
+    private val developerBuild: Boolean = BuildConfig.DEBUG,
 ) {
     private val _view = MutableStateFlow(PrefsView())
     val view: StateFlow<PrefsView> = _view
@@ -85,7 +93,7 @@ class Preferences(
                     dateFormat = DateFormatKey.of(read.dateFormat),
                     timeFormat = TimeFormatKey.of(read.timeFormat),
                     textScale = TextScaleLevel.of(read.textScale),
-                    debugMode = DebugMode.of(read.debugMode),
+                    debugMode = DebugMode.of(prefsDebugMode(entries, developerBuild)),
                     loaded = true,
                 ),
             )
@@ -121,7 +129,7 @@ class Preferences(
     }
 
     private fun readDebugMode(stored: String?): DebugMode =
-        DebugMode.of(prefsRead(buildMap { stored?.let { put(KEY_DEBUG_MODE, it) } }).debugMode)
+        DebugMode.of(prefsDebugMode(buildMap { stored?.let { put(KEY_DEBUG_MODE, it) } }, developerBuild))
 
     private fun update(next: PrefsView, persist: suspend (PrefsView) -> Unit) {
         publish(next)

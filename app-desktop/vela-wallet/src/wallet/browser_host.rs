@@ -1361,9 +1361,11 @@ mod tests {
         });
     }
 
-    /// Spec 091: Settings' debug mode reaches the core's gate. Off — hidden
-    /// or switched off — a LAN page is not heard; on, it is; switched off
-    /// again, what it had open is answered 4900 and it is not heard again.
+    /// Spec 091: Settings' debug mode reaches the core's gate — in a
+    /// developer build. Off (hidden or switched off) a LAN page is not heard;
+    /// on, it is; switched off again, what it had open is answered 4900 and it
+    /// is not heard again. In a release build the switch stored on is still
+    /// off: the core says so, and the page is never heard.
     #[test]
     fn debug_mode_from_the_preferences_reaches_the_gate() {
         const LAN: &str = "http://192.168.1.5:3000";
@@ -1376,32 +1378,38 @@ mod tests {
             assert!(ask(&mut driver, LAN, "d1", "1", "eth_chainId", json!([])).is_empty());
 
             crate::executor::preferences::set_debug_mode(true);
-            let on = debug_mode_news(Some(false)).unwrap_or_else(|| unreachable!("a change"));
-            assert!(on);
+            let developer = crate::executor::preferences::DEVELOPER_BUILD;
+            let news = debug_mode_news(Some(false));
+            assert_eq!(news, developer.then_some(true), "a release build stays off");
+            let on = news.unwrap_or(false);
             driver.dispatch(Event::DebugModeChanged { on });
             page(&mut driver, LAN, json!({"t":"hello","doc":"d2"}));
             let out = ask(&mut driver, LAN, "d2", "2", "eth_chainId", json!([]));
-            assert_eq!(answers(&out)[0]["result"], json!("0x1"));
-            seed_grant(LAN, A1, 1);
-            page(&mut driver, LAN, json!({"t":"hello","doc":"d3"}));
-            let out = ask(
-                &mut driver,
-                LAN,
-                "d3",
-                "3",
-                "eth_requestAccounts",
-                json!([]),
-            );
-            assert!(
-                answers(&out).is_empty(),
-                "a new LAN site is asked to connect"
-            );
+            if !developer {
+                assert!(out.is_empty(), "a release build never answers a LAN page");
+            } else {
+                assert_eq!(answers(&out)[0]["result"], json!("0x1"));
+                seed_grant(LAN, A1, 1);
+                page(&mut driver, LAN, json!({"t":"hello","doc":"d3"}));
+                let out = ask(
+                    &mut driver,
+                    LAN,
+                    "d3",
+                    "3",
+                    "eth_requestAccounts",
+                    json!([]),
+                );
+                assert!(
+                    answers(&out).is_empty(),
+                    "a new LAN site is asked to connect"
+                );
 
-            crate::executor::preferences::set_debug_mode(false);
-            let off = debug_mode_news(Some(true)).unwrap_or_else(|| unreachable!("a change"));
-            let out = driver.dispatch(Event::DebugModeChanged { on: off });
-            assert_eq!(answers(&out)[0]["error"]["code"], json!(4900));
-            assert!(ask(&mut driver, LAN, "d3", "4", "eth_chainId", json!([])).is_empty());
+                crate::executor::preferences::set_debug_mode(false);
+                let off = debug_mode_news(Some(true)).unwrap_or_else(|| unreachable!("a change"));
+                let out = driver.dispatch(Event::DebugModeChanged { on: off });
+                assert_eq!(answers(&out)[0]["error"]["code"], json!(4900));
+                assert!(ask(&mut driver, LAN, "d3", "4", "eth_chainId", json!([])).is_empty());
+            }
             // Leave the process as a default launch would find it.
             let _ = storage::apply_raw(&[(vela_core::prefs::keys::DEBUG_MODE.to_owned(), None)]);
             crate::executor::preferences::load();

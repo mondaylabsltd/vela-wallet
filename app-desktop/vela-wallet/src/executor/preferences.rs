@@ -53,11 +53,13 @@ pub fn migrate() -> Result<usize, storage::StorageError> {
 /// Read the store and put what it says in force. Also what an erase calls to
 /// return every preference to its default.
 pub fn load() {
-    let read = prefs::read(&storage::raw_entries().unwrap_or_default());
-    apply(read);
+    let entries = storage::raw_entries().unwrap_or_default();
+    apply(prefs::read(&entries), &entries);
 }
 
-fn apply(read: Prefs) {
+fn apply(read: Prefs, entries: &[(String, String)]) {
+    *debug_cell().lock().unwrap_or_else(PoisonError::into_inner) =
+        prefs::debug_mode(entries, DEVELOPER_BUILD);
     // The text size the person chose, into the ONE store that holds it
     // (`appearance_prefs`, main's). `theme::scaled` reads it there, so a
     // second copy here would be a preference that disagrees with itself.
@@ -123,15 +125,23 @@ pub fn set_text_scale(level: &str) {
     }
 }
 
-/// Settings' debug mode (spec 091): hidden until seven taps on About's
-/// version reveal it, then off or on. The rule and the stored spelling are the
-/// core's (`prefs::DebugMode`, `prefs::version_tapped`).
+/// Whether this is a developer build (spec 091) — the desktop's
+/// `dev-fixtures` feature, the same compile-time gate the parallel space
+/// stands behind (`parallel_space::active`). A release build is not one, and
+/// the core then reads debug mode as hidden whatever is stored.
+pub const DEVELOPER_BUILD: bool = cfg!(feature = "dev-fixtures");
+
+/// Settings' debug mode in force (spec 091): the core's reading for this
+/// build (`prefs::debug_mode`) — hidden until seven taps on About's version
+/// reveal it, then off or on; in a release build always hidden.
 #[must_use]
 pub fn debug_mode() -> prefs::DebugMode {
-    cell()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .debug_mode
+    *debug_cell().lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn debug_cell() -> &'static Mutex<prefs::DebugMode> {
+    static DEBUG: OnceLock<Mutex<prefs::DebugMode>> = OnceLock::new();
+    DEBUG.get_or_init(|| Mutex::new(prefs::DebugMode::Hidden))
 }
 
 /// The revealed switch, set on or off — and revealing it is setting it off.
@@ -152,7 +162,7 @@ fn write(key: &str, value: &str) {
     // The write may have failed; the choice still holds for this session.
     entries.retain(|(stored, _)| stored != key);
     entries.push((key.to_owned(), value.to_owned()));
-    apply(prefs::read(&entries));
+    apply(prefs::read(&entries), &entries);
 }
 
 #[cfg(test)]
@@ -267,28 +277,36 @@ mod tests {
         });
     }
 
-    /// Spec 091: the debug-mode switch is hidden until revealed, stored in
-    /// the core's spelling once it is, and read back as such.
+    /// Spec 091: the switch is stored in the core's spelling, and what it
+    /// means is the core's reading for THIS build — off, whatever is stored,
+    /// unless the build is a developer one (`dev-fixtures`).
     #[test]
     fn the_debug_mode_switch_is_stored_in_the_cores_spelling() {
         with_temp_state("prefs-debug-mode", || {
             load();
             assert_eq!(debug_mode(), prefs::DebugMode::Hidden, "nothing stored");
+            let in_this_build = |mode| {
+                if DEVELOPER_BUILD {
+                    mode
+                } else {
+                    prefs::DebugMode::Hidden
+                }
+            };
             set_debug_mode(false);
-            assert_eq!(debug_mode(), prefs::DebugMode::Off, "revealed, off");
             assert_eq!(
                 storage::read_value(keys::DEBUG_MODE).ok().flatten(),
                 Some(json!("off"))
             );
+            assert_eq!(debug_mode(), in_this_build(prefs::DebugMode::Off));
             set_debug_mode(true);
-            assert_eq!(debug_mode(), prefs::DebugMode::On);
             assert_eq!(
                 storage::read_value(keys::DEBUG_MODE).ok().flatten(),
                 Some(json!("on"))
             );
-            // A relaunch reads what was stored.
+            assert_eq!(debug_mode(), in_this_build(prefs::DebugMode::On));
+            // A relaunch reads what was stored, for this build.
             load();
-            assert!(debug_mode().is_on());
+            assert_eq!(debug_mode().is_on(), DEVELOPER_BUILD);
             // Leave the process as a default launch would find it.
             if storage::apply_raw(&[(keys::DEBUG_MODE.to_owned(), None)]).is_err() {
                 unreachable!("remove");

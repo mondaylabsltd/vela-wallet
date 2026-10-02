@@ -265,15 +265,19 @@ data class SettingsActions(
 /**
  * About's hidden entry (spec 091): the taps on the version so far, kept while
  * About is on screen. What a tap means is the core's rule
- * (`prefsVersionTapped`: seven, each within a second of the one before, and
- * nothing once the switch is revealed).
+ * (`prefsVersionTapped`: seven, each within a second of the one before,
+ * nothing once the switch is revealed — and nothing ever in a release build,
+ * whose build fact is all this hands over).
  */
-internal class VersionTapCounter(private val now: () -> Double = { System.currentTimeMillis().toDouble() }) {
+internal class VersionTapCounter(
+    private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    private val developerBuild: Boolean = app.getvela.wallet.BuildConfig.DEBUG,
+) {
     private var taps = VersionTaps(0u, 0.0)
 
     /** One tap, with the switch as it stands. `true` exactly when this tap revealed it. */
     fun tap(mode: DebugMode): Boolean {
-        val answer = prefsVersionTapped(taps, now(), mode.wire)
+        val answer = prefsVersionTapped(taps, now(), mode.wire, developerBuild)
         taps = answer.taps
         return answer.revealed
     }

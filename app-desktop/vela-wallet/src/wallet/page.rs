@@ -11432,10 +11432,11 @@ impl WalletPage {
                                     .child(s.about_tagline.clone()),
                             )
                             .child(
-                                // Spec 091: the hidden entry — seven quick taps
-                                // reveal debug mode. Nothing marks it as a
-                                // control; where there is no browser (Linux)
-                                // there is nothing to reveal.
+                                // Spec 091: the hidden entry — in a developer
+                                // build seven quick taps reveal debug mode (the
+                                // core's rule; a release build never reveals).
+                                // Nothing marks it as a control; where there is
+                                // no browser (Linux) there is nothing to reveal.
                                 div()
                                     .id("about-version")
                                     .font_family(theme::font_mono())
@@ -14357,13 +14358,15 @@ impl WalletPage {
     }
 
     /// Spec 091: one tap on About's version. The count and the rule are the
-    /// core's (`prefs::version_tapped`): seven quick taps reveal the
-    /// debug-mode switch — stored off — once, with a notice.
+    /// core's (`prefs::version_tapped`): in a developer build seven quick taps
+    /// reveal the debug-mode switch — stored off — once, with a notice; in a
+    /// release build nothing ever does.
     fn version_tapped(&mut self, cx: &mut Context<Self>) {
         let (taps, revealed) = vela_core::prefs::version_tapped(
             self.version_taps,
             crate::executor::now_ms(),
             crate::executor::preferences::debug_mode(),
+            crate::executor::preferences::DEVELOPER_BUILD,
         );
         self.version_taps = taps;
         if !revealed {

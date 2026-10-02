@@ -79,6 +79,30 @@ struct DebugModeTests {
         #expect(booted(store).debugMode == .off, "still revealed, so it can be turned on again")
     }
 
+    /// A Release build has no debug mode (owner, 2026-10-02): whatever a
+    /// Debug build left in the store reads hidden — off — and no number of
+    /// taps reveals the switch. The build fact is the only thing this app
+    /// hands the core.
+    @Test func aReleaseBuildHasNoDebugModeWhateverIsStored() {
+        for raw in ["on", "off"] {
+            let (_, store) = fresh()
+            store.writeString(VelaStore.Key.debugMode, raw)
+            let prefs = Preferences(store: store, developerBuild: false)
+            prefs.boot()
+            #expect(prefs.debugMode == .hidden, "\(raw)")
+            #expect(!prefs.debugMode.isOn && !prefs.debugMode.revealed)
+        }
+        var counter = VersionTapCounter()
+        counter.developerBuild = false
+        for index in 0..<30 {
+            let revealed = counter.tap(nowMs: 1_000 + Double(index) * 200, mode: .hidden)
+            #expect(!revealed)
+        }
+        #expect(counter.taps.count == 0, "nothing is even counted")
+        // This test bundle is a Debug build: the fact the app hands the core.
+        #expect(DebugMode.developerBuild)
+    }
+
     /// Erasing the device hides the switch again, and debug mode is off.
     @Test func anEraseHidesTheSwitchAgain() async {
         let (_, store) = fresh()

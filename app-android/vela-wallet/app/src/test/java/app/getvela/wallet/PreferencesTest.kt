@@ -129,6 +129,33 @@ class PreferencesTest {
     }
 
     /**
+     * Spec 091, owner 2026-10-02: a release build has no debug mode. Whatever
+     * a debug build left in the store reads hidden — off — and no number of
+     * taps reveals the switch. `BuildConfig.DEBUG` is all this app hands the
+     * core; this suite runs in the debug variant, so the fact is stated here.
+     */
+    @Test
+    fun `a release build has no debug mode whatever is stored, and taps reveal nothing`() = runBlocking<Unit> {
+        for (stored in listOf("on", "off")) {
+            val store = FakeStore(mapOf(Preferences.KEY_DEBUG_MODE to stored))
+            val prefs = Preferences(store, kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined), { Locale.US }, {}, developerBuild = false)
+            prefs.load()
+            val view = withTimeout(5_000) { prefs.view.first { it.loaded } }
+            assertEquals(stored, DebugMode.Hidden, view.debugMode)
+            prefs.reloadDebugMode()
+            assertEquals(stored, DebugMode.Hidden, prefs.view.value.debugMode)
+        }
+        var clock = 0.0
+        val counter = VersionTapCounter({ clock }, developerBuild = false)
+        repeat(30) {
+            clock += 200.0
+            assertFalse(counter.tap(DebugMode.Hidden))
+        }
+        // The unit-test variant is the debug one: the fact the app hands over.
+        assertEquals(true, BuildConfig.DEBUG)
+    }
+
+    /**
      * Spec 091: About's version, wired as the screen wires it — each tap asks
      * the core ([VersionTapCounter]), a revealing tap stores the switch
      * (`SettingsRoute` → `onDebugModeRevealed` → [Preferences.revealDebugMode]).
@@ -139,7 +166,7 @@ class PreferencesTest {
         val store = FakeStore()
         val prefs = loaded(store)
         var clock = 1_000_000.0
-        val counter = VersionTapCounter { clock }
+        val counter = VersionTapCounter({ clock })
         var reveals = 0
         fun tap(gapMs: Double = 300.0) {
             clock += gapMs
