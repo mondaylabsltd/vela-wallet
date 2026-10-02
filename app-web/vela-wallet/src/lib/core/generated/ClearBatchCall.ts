@@ -30,6 +30,12 @@ surface: ClearSurface, result: ClearSignResult | null, plain_send: ClearPlainSen
  */
 to: string | null, 
 /**
+ * The target's name, when the wallet itself knows the contract on this
+ * chain (096 F5): the "Interacting with" row reads "PancakeSwap Permit2",
+ * not forty hex digits. Never a name a descriptor or the dApp supplied.
+ */
+to_name: string | null, 
+/**
  * The calldata's length in bytes — what "unable to decode" names.
  */
 data_bytes: number, 
