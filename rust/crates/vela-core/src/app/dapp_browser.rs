@@ -61,6 +61,11 @@
 //! - Messages from a subframe are ignored: the script installs nothing there,
 //!   so only a direct call to the host bridge can produce one, and there is no
 //!   way to answer a subframe that is not also a way to speak as the top page.
+//! - Messages from a page that is not a secure context ([`is_secure_context`]:
+//!   https, or http on loopback) are ignored too (spec 088 FR-004). The script
+//!   offers no provider there (`window.isSecureContext`), so only a direct call
+//!   to the host bridge can produce one — Android's listener cannot be limited
+//!   to "any https origin", so the bridge object itself is in every page.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -74,8 +79,8 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::dapp_permissions::{
-    dapp_spelling, is_insecure_public_origin, origin_of, resolve_granted, should_drop_grant,
-    DpermGrant,
+    dapp_spelling, is_insecure_public_origin, is_secure_context, origin_of, resolve_granted,
+    should_drop_grant, DpermGrant,
 };
 use super::dapp_rpc::{
     self, chain_param, classify, error_body_json, error_json, event_json, hex_chain_id,
@@ -993,6 +998,12 @@ fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     let Some(frame_origin) = origin_of(&message.frame_origin) else {
         return;
     };
+    // Spec 088 FR-004: the wallet is offered only to secure contexts. The
+    // script stays silent elsewhere, so this is a page calling the bridge by
+    // hand — no hello is adopted and no request is read, let alone answered.
+    if !is_secure_context(&frame_origin) {
+        return;
+    }
     match parse_page_message(&message.message_json) {
         PageMessage::Ignored => {}
         PageMessage::Hello { doc, href } => {

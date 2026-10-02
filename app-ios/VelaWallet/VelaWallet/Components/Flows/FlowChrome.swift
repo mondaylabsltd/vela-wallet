@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The phone page frame for every non-sheet screen (component 1).
 ///
@@ -40,7 +41,13 @@ struct FlowScaffold<Content: View, Footer: View>: View {
                 }
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.bottom, Tokens.Space.s24)
+                .background(KeyboardDismissOnTap())
             }
+            // A drag of the page puts the keyboard away (087 F28: on an
+            // iPhone 11 nothing did). At once, not only once the finger
+            // reaches the keys: the form is short, and a drag that has to
+            // travel into the keypad reads as one that does nothing.
+            .scrollDismissesKeyboard(.immediately)
             footer()
         }
         .background(theme.bgBase.ignoresSafeArea())
@@ -103,6 +110,68 @@ extension FlowScaffold where Footer == EmptyView {
             header: header, onBack: onBack, onAction: onAction, onPill: onPill,
             content: content, footer: { EmptyView() }
         )
+    }
+}
+
+/// A tap on a flow page, anywhere but a text field, puts the keyboard away
+/// (087 F28). On an iPhone 11 the amount's decimal pad could not be dismissed
+/// at all, and it sat over 继续.
+///
+/// UIKit rather than an `onTapGesture`: a SwiftUI tap on the page would also
+/// fire for a tap INSIDE the field being typed into (moving the caret would
+/// shut the keypad), and one behind the content never sees a tap on a label.
+/// This recogniser rides on the page's scroll view, lets every touch through
+/// to what it landed on, and ignores the ones that land in a text input.
+struct KeyboardDismissOnTap: UIViewRepresentable {
+    func makeUIView(context: Context) -> Installer { Installer() }
+    func updateUIView(_ uiView: Installer, context: Context) {}
+
+    final class Installer: UIView, UIGestureRecognizerDelegate {
+        private weak var host: UIView?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            // It only carries the recogniser; a touch is never its own.
+            isUserInteractionEnabled = false
+        }
+
+        required init?(coder: NSCoder) { nil }
+        private lazy var tap: UITapGestureRecognizer = {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            return tap
+        }()
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            host?.removeGestureRecognizer(tap)
+            host = nil
+            guard window != nil else { return }
+            var view = superview
+            while let candidate = view, !(candidate is UIScrollView) { view = candidate.superview }
+            guard let scroll = view else { return }
+            scroll.addGestureRecognizer(tap)
+            host = scroll
+        }
+
+        @objc private func tapped() {
+            window?.endEditing(true)
+        }
+
+        func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view = touch.view
+            while let candidate = view {
+                if candidate is UITextField || candidate is UITextView { return false }
+                view = candidate.superview
+            }
+            return true
+        }
+
+        func gestureRecognizer(
+            _ recognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool { true }
     }
 }
 

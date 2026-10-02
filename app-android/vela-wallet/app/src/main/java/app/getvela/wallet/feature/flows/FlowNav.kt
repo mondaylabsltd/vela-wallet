@@ -123,6 +123,22 @@ class FlowNavState internal constructor() {
         selected = null
     }
 
+    /**
+     * A sheet the person closed (×, a drag, a tap on the scrim, Back) takes its
+     * own level with it — only when that level is the top, so a sheet the send
+     * machine derives (never pushed) cannot pop the screen under it, and a late
+     * second report pops nothing. Left on the stack, the closed sheet stayed on
+     * top: the next row tapped pushed the same step, which [push] ignores, so
+     * nothing opened (issue #328); and the first ‹ only took the invisible
+     * sheet away. The same fix iOS shipped as 082 X-HISTORY.
+     */
+    fun sheetClosed(state: FlowState) {
+        if (top != state) return
+        VelaLog.event("flows", "sheet closed", "top" to state.name)
+        stack = stack.dropLast(1)
+        selected = null
+    }
+
     fun close() {
         VelaLog.event("flows", "close", "top" to top?.name)
         stack = emptyList()
