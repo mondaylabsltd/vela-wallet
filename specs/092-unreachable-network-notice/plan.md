@@ -26,9 +26,9 @@ The core now owns the list, and the shells only draw it:
 | Web (wide) + extension panel | Dialog over Home | same | same |
 | Desktop | dialog over Home (`unreachable_dialog`), under the settings dialog layer | `SettingsDialog::FixRpc` opens over the list | closing the editor shows the list again |
 | iOS | the existing rescue `.sheet` over Home, content `.unreachable` (SR6) | content swaps to SR2 (`rescueStep`); no second sheet | ✕ / Save → back to the list |
-| Android | the existing route: Settings pushed over Wallet + sheet; overlay `Unreachable` (SR6) | overlay swaps to RpcFix for that chain | Done / ✕ → back to the list |
+| Android | one sheet over the Wallet route (the settings sheet host, `SettingsSheet`, made internal); overlay `Unreachable` (SR6); no tab switch | the same sheet swaps to RpcFix for that chain (`WalletRescue.fix`) | Done / ✕ → back to the list over Home |
 
-Android keeps its rescue sheets on the Settings route (spec 048) rather than moving them onto the Wallet screen. It is still one tap from Home, and moving all its rescue sheets would be a larger refactor than F08 calls for.
+Android used to push Settings for every status-line rescue (spec 048), and F08 named that as part of the defect. On the lead's ruling (2026-10-02), the rescues (SR6, a row's SR2, and SR3 when nothing is down) are now one sheet over the wallet. Its content swaps and never stacks, the same pattern as the account switcher. `pendingSettingsOverlay` and the Settings route's rescue wiring are removed. Settings → Networks is unchanged.
 
 ## Constitution Check
 

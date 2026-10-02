@@ -388,6 +388,21 @@ object WalletFixtures {
                 ),
             )
 
+            // The line the live builder writes for SR6's three networks (spec 092).
+            WalletScreenState.H9 -> base.copy(
+                balance = balance(
+                    strings,
+                    BalanceStateKind.Normal,
+                    integer = "$1,383",
+                    decimals = "28",
+                    status = WalletLive.unreachableLine(
+                        app.getvela.wallet.feature.settings.SettingsFixtures.UNREACHABLE_VIEW,
+                        strings,
+                        emptyMap(),
+                    )?.let { BalanceStatusModel(kind = BalanceStatusKind.Warning, text = it) },
+                ),
+            )
+
             WalletScreenState.H7, WalletScreenState.H7X -> base.copy(
                 balance = balance(strings, BalanceStateKind.Normal, integer = "$1,234,567", decimals = "89"),
                 activityGroups = groupByDay(strings, EXTREME_ACTIVITY),

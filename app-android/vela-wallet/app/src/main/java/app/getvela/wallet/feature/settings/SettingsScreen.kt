@@ -245,8 +245,6 @@ data class SettingsActions(
     val onRelayerRetry: () -> Unit = {},
     /** SR3's 立即重试 on a chain that did not answer, by chain id. */
     val onBalanceRetry: (String) -> Unit = {},
-    /** SR6's per-network fix (spec 092), by chain id: the host aims SR2 at it. */
-    val onUnreachableFix: (Int) -> Unit = {},
     val onAccountSelect: (Int) -> Unit = {},
     val onAccountPrimary: () -> Unit = {},
     val onAccountSecondary: () -> Unit = {},
@@ -277,8 +275,6 @@ fun SettingsRoute(
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
     LaunchedEffect(overlay) { actions.onOverlayShown(overlay) }
-    // SR2 opened from SR6's row (spec 092): closing it steps back to the list.
-    var fixFromList by remember(model.state) { mutableStateOf(false) }
     // The storage row waiting on an answer, and the warning its group carries
     // (spec 058): 清除 asks before it removes.
     var pendingStorage by remember { mutableStateOf<Pair<StorageItemModel, String>?>(null) }
@@ -333,10 +329,7 @@ fun SettingsRoute(
         onBack = { page = SettingsPage.Home },
         onToggleAdvanced = { advancedOpen = !advancedOpen },
         onOpenOverlay = { overlay = it },
-        onDismissOverlay = {
-            overlay = if (overlay == SettingsOverlay.RpcFix && fixFromList) SettingsOverlay.Unreachable else SettingsOverlay.None
-            fixFromList = false
-        },
+        onDismissOverlay = { overlay = SettingsOverlay.None },
         onSheetSelect = { sheet, id ->
             actions.onSheetSelect(sheet, id)
             // The sheet closes on the pick, before the core has answered. The
@@ -402,11 +395,6 @@ fun SettingsRoute(
         onOpenLink = actions.onOpenLink,
         onRelayerRetry = actions.onRelayerRetry,
         onBalanceRetry = actions.onBalanceRetry,
-        onUnreachableFix = { chainId ->
-            actions.onUnreachableFix(chainId)
-            fixFromList = true
-            overlay = SettingsOverlay.RpcFix
-        },
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
@@ -416,10 +404,7 @@ fun SettingsRoute(
             // Done (the probe said ok) is the one that closes it.
             val close = model.rpcFix.restored
             actions.onRpcFixPrimary()
-            if (close) {
-                overlay = if (fixFromList) SettingsOverlay.Unreachable else SettingsOverlay.None
-                fixFromList = false
-            }
+            if (close) overlay = SettingsOverlay.None
         },
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
@@ -531,7 +516,6 @@ fun SettingsScreen(
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
-    onUnreachableFix: (Int) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -665,7 +649,6 @@ fun SettingsScreen(
                 onOpenLink = onOpenLink,
                 onRelayerRetry = onRelayerRetry,
                 onBalanceRetry = onBalanceRetry,
-                onUnreachableFix = onUnreachableFix,
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
@@ -1331,11 +1314,16 @@ private fun IndexDownScreen(model: IndexDownModel, modifier: Modifier = Modifier
     }
 }
 
-/** Every overlay the phone draws as a bottom sheet. */
+/**
+ * Every overlay the phone draws as a bottom sheet — ONE host whose content
+ * swaps, never a sheet stacked on a sheet. Internal since spec 092: the home
+ * hosts its status-line rescues (SR6's list, a row's SR2, SR3) over the
+ * wallet with the same bodies, instead of sending the person to Settings.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun SettingsSheet(
+internal fun SettingsSheet(
     model: SettingsScreenModel,
     overlay: SettingsOverlay,
     onDismiss: () -> Unit,
