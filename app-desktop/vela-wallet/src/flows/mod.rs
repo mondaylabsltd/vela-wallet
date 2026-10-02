@@ -258,12 +258,14 @@ pub struct FlowStrings {
     /// "App" — the site a dApp's transaction came from (083 H2), the word the
     /// web's connection detail uses.
     pub detail_app: SharedString,
-    /// "Contract" — what a dApp's call went to (083 F3): a router is not a
-    /// recipient. The token detail's label for a contract address, in every
-    /// language a noun: the signing sheet's "Interacting with" is progressive
-    /// in several ("Interactuando con", "Đang tương tác với"), which on a
-    /// finished record says the call is still under way (083 F3 review).
-    pub detail_contract: SharedString,
+    /// A dApp record's detail facts (spec 093), each labelled by the key the
+    /// core's `FeedFact` names: the contract it called, the spender a grant
+    /// lets spend, the grant's cap and when it ends.
+    pub detail_interacting: SharedString,
+    pub detail_spender: SharedString,
+    pub detail_spending_cap: SharedString,
+    pub detail_expires: SharedString,
+    pub detail_no_expiry: SharedString,
     /// "Balance changes" over a dApp transaction's lines (083 F1), and
     /// "Unverified token" for a line with no figure — the signing sheet's
     /// words, so the detail reads as what was approved.
@@ -273,6 +275,23 @@ pub struct FlowStrings {
     pub detail_date: SharedString,
     pub detail_hash: SharedString,
     pub detail_section_title: SharedString,
+    /// "Off-chain signature — nothing was sent on-chain": a dApp signature's
+    /// detail, where a transaction's status chip would be (spec 093).
+    pub detail_off_chain: SharedString,
+    /// The collapsed "Technical details" (spec 093) and its lines' words.
+    pub detail_technical: SharedString,
+    pub detail_operation: SharedString,
+    pub op_contract_interaction: SharedString,
+    /// Template carrying `{{count}}`.
+    pub op_batch: String,
+    pub op_signature: SharedString,
+    pub op_typed_data: SharedString,
+    pub content_call_data: SharedString,
+    pub content_typed_data: SharedString,
+    pub content_message: SharedString,
+    pub content_missing: SharedString,
+    pub detail_type: SharedString,
+    pub detail_user_op_hash: SharedString,
 
     // Assets.
     pub assets_title: SharedString,
@@ -623,13 +642,30 @@ impl FlowStrings {
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),
-            detail_contract: s("tokenDetail.labelContract"),
+            detail_interacting: s("componentsUi.signing.interactingLabel"),
+            detail_spender: s("componentsUi.signing.labelSpender"),
+            detail_spending_cap: s("componentsUi.signingApprove.spendingCap"),
+            detail_expires: s("componentsUi.signingApprove.expiresLabel"),
+            detail_no_expiry: s("componentsUi.signingApprove.noExpiry"),
             detail_changes: s("componentsUi.signing.balanceChangesTitle"),
             detail_unverified_token: s("componentsUi.signing.balanceUnverifiedToken"),
             detail_chain: s("componentsTx.detail.labelChain"),
             detail_date: s("componentsTx.detail.labelDate"),
             detail_hash: s("componentsTx.detail.labelHash"),
             detail_section_title: s("componentsTx.detail.sectionTitle"),
+            detail_off_chain: s("connect.detail.offChainNote"),
+            detail_technical: s("componentsUi.signing.advancedToggle"),
+            detail_operation: s("componentsTx.detail.labelOperation"),
+            op_contract_interaction: s("componentsTx.detail.opContractInteraction"),
+            op_batch: raw("componentsUi.signing.batchSubtitle"),
+            op_signature: s("componentsTx.detail.opSignature"),
+            op_typed_data: s("componentsTx.detail.opTypedDataSignature"),
+            content_call_data: s("connect.detail.contentCallData"),
+            content_typed_data: s("connect.detail.contentTypedData"),
+            content_message: s("connect.detail.contentMessage"),
+            content_missing: s("connect.detail.contentMissing"),
+            detail_type: s("componentsUi.signing.typeLabel"),
+            detail_user_op_hash: s("componentsTx.receipt.userOpHash"),
 
             assets_title: s("assets.sectionTitle"),
             assets_add: s("assets.addToken"),

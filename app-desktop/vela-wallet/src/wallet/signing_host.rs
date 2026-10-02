@@ -1713,7 +1713,10 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         }),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
-        intent: recorded_intent(clear),
+        // The verb the record keeps, which Activity titles the row with — the
+        // core's (spec 093): no best-effort guess, "Send" for a plain send, a
+        // batch's one shared verb. Copied, never decided here.
+        intent: clear.record_intent.clone(),
         // The guard showed an unbounded amount and it was kept as the site
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
@@ -1721,6 +1724,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // The simulation is the column's, not these views': `approve` adds
         // it (`approved_changes`).
         balance_changes: None,
+        // The approval surface's token as it resolved (spec 093), so the
+        // record can say "100 USDC": the core reads it only once it resolved.
+        token_meta: Some(guard.meta.clone()),
     }
 }
 
@@ -1735,23 +1741,6 @@ fn approved_changes(
     unavailable: bool,
 ) -> Option<Vec<vela_core::app::token_trust::TrustSimJudgment>> {
     (!unavailable && !sim.is_empty()).then(|| sim.to_vec())
-}
-
-/// The intent the record keeps, which Activity shows as the row's title in
-/// the wallet's own voice (083 H2).
-///
-/// Only a reading the sheet did not mark best-effort: a function name
-/// recovered from the public selector database is whatever the contract's
-/// deployer called it, and the sheet showed it under a caution. A plain title
-/// in Activity would drop that caution, so such a call records no intent and
-/// reads "Contract interaction" (083 H2 review). A plain native send has no
-/// reading at all; the core records "Send" for it.
-fn recorded_intent(clear: &ClearSigningView) -> Option<String> {
-    clear
-        .result
-        .as_ref()
-        .filter(|result| result.verified || !result.best_effort)
-        .map(|result| result.intent.clone())
 }
 
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
@@ -2435,26 +2424,24 @@ mod tests {
         );
     }
 
-    /// The record keeps the intent Activity will print as a title, so only a
-    /// reading that is not best-effort: a selector-database name is the
-    /// deployer's word, shown on the sheet under a caution, and Activity has
-    /// no caution to show it under (083 H2 review).
+    /// Spec 093: the record keeps the verb the CORE chose for it
+    /// (`ClearSigningView::record_intent`) — a best-effort reading the sheet
+    /// drew under a caution included, the shell decides nothing — and the
+    /// approval surface's token as the guard resolved it.
     #[test]
-    fn only_a_trusted_reading_names_the_recorded_intent() {
+    fn the_approve_copies_the_cores_record_intent_and_the_guards_token() {
         use vela_core::app::clear_signing::{
             ClearProvenance, ClearRisk, ClearSignResult, ClearSignType,
         };
 
         let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
-        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
         let mut clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
-        assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent,
-            None,
-            "nothing read: the core decides (\"Send\" for a plain send)"
-        );
+        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
 
-        let reading = |verified: bool, best_effort: bool| ClearSignResult {
+        // A reading whose intent the core would not record: the shell does
+        // not fall back to it.
+        clear.result = Some(ClearSignResult {
             intent: "Claim".to_owned(),
             intent_term: None,
             contract_name: None,
@@ -2462,28 +2449,31 @@ mod tests {
             fields: Vec::new(),
             risk: ClearRisk::Caution,
             contract_address: None,
-            verified,
+            verified: false,
             provenance: ClearProvenance::Standard,
             sign_type: ClearSignType::Transaction,
             partial: false,
-            best_effort,
+            best_effort: true,
             to_own_token: false,
+        });
+        clear.record_intent = None;
+        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
+        clear.record_intent = Some("Swap".to_owned());
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            Some("Swap"),
+            "the core's word, not the reading's"
+        );
+
+        guard.meta = vela_core::app::approval_guard::GuardTokenMetaView {
+            symbol: "USDC".to_owned(),
+            decimals: 6,
+            verified: true,
+            loading: false,
         };
-        clear.result = Some(reading(false, true));
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent,
-            None,
-            "a guessed function name is not recorded"
-        );
-        clear.result = Some(reading(false, false));
-        assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent.as_deref(),
-            Some("Claim")
-        );
-        clear.result = Some(reading(true, true));
-        assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent.as_deref(),
-            Some("Claim")
+            approve_opts(&fee, &clear, &guard).token_meta,
+            Some(guard.meta.clone())
         );
     }
 
@@ -2763,6 +2753,7 @@ mod approve_tests {
             intent: None,
             unlimited_approved: false,
             balance_changes: None,
+            token_meta: None,
         };
 
         let signed = opts

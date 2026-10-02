@@ -908,13 +908,11 @@ pub(crate) fn persist_record(record: &SignRecord) {
         reason = "seconds, as the store keeps them"
     )]
     let timestamp = (record.now_ms / 1000.0) as i64;
-    // What was signed, kept for the replay view — clipped, because a payload
-    // is untrusted and unbounded and this file is the one that decides how
-    // much of it lives on the disk forever.
-    let (signed_request, truncated) = clip(&record.params_json);
     let mut row = json!({
         "id": record.record_id,
         "userOpHash": record.user_op_hash,
+        // A transaction's hash (or a batch's id, which the tracker follows);
+        // empty for a signature, which the core keeps off the disk (spec 093).
         "txHash": record.result,
         "from": record.from,
         "to": to,
@@ -932,8 +930,12 @@ pub(crate) fn persist_record(record: &SignRecord) {
         // The origin itself, beside the name: Activity names the site from
         // this one only (083 H2 review).
         "dappUrl": record.dapp_url,
-        "signedRequest": signed_request,
-        "requestTruncated": truncated,
+        // What was signed, kept for the detail's technical section — as the
+        // core cut it (spec 093: 8 KB, string values clipped, JSON kept), the
+        // one cut every client stores. A page chooses how long a request is;
+        // the core decides how much of it lives on the disk.
+        "signedRequest": record.stored_request,
+        "requestTruncated": record.request_truncated,
         // Spec 082 T181: a may-have-been-sent op and the head read before its
         // first POST travel with the record, so a relaunch hands the tracker
         // the same op it was following (`tracker::pending_records`).
@@ -943,6 +945,16 @@ pub(crate) fn persist_record(record: &SignRecord) {
     if let Some(intent) = &record.intent {
         row["intent"] = json!(intent);
     }
+    // What the request was, as Activity states it (spec 093) — the core's
+    // summary, read once from the WHOLE request at approve time, kept
+    // verbatim and handed back to the feed untouched.
+    if let Some(summary) = record
+        .summary
+        .as_ref()
+        .and_then(|summary| serde_json::to_value(summary).ok())
+    {
+        row["dappSummary"] = summary;
+    }
     // What the sheet's simulation showed when the person approved (083 F1),
     // which Activity reads the row's figure from. The core keeps these for a
     // transaction only, and only from the approve.
@@ -951,8 +963,8 @@ pub(crate) fn persist_record(record: &SignRecord) {
     }
     // Whether it called a contract (083 F3), decided here from the WHOLE
     // final request by the reading the submit path uses (`calls_of`) — not
-    // later from `signedRequest`, which is clipped at 8 KB (a page controls
-    // its length, so it would control the label) and which Activity cannot
+    // later from `signedRequest`, which is clipped (a page controls its
+    // length, so it would control the label) and which Activity cannot
     // read by method (a page-written `calls` beside a single transaction
     // would decide it).
     if let Some(calldata) = (record.kind == SignRecordKind::DappTx)
@@ -1113,24 +1125,6 @@ fn native_symbol(chain_id: u32) -> String {
         .map_or_else(String::new, |chain| chain.native_symbol.to_owned())
 }
 
-/// The stored payload, and whether it was cut.
-///
-/// A page chooses this string's length; the wallet chooses how much of it it
-/// keeps. 8 KB is well past any real request and far short of a store a site
-/// could grow on purpose.
-fn clip(params_json: &str) -> (String, bool) {
-    const CAP: usize = 8 * 1024;
-    if params_json.len() <= CAP {
-        return (params_json.to_owned(), false);
-    }
-    // On a char boundary: a truncated multibyte tail is not JSON and not text.
-    let mut end = CAP;
-    while end > 0 && !params_json.is_char_boundary(end) {
-        end -= 1;
-    }
-    (params_json[..end].to_owned(), true)
-}
-
 /// A wei figure off the wire — decimal, as the core writes it, or `0x` hex
 /// (the web's `BigInt(value)` takes both). `None` when it is neither.
 fn parse_wei(value: &str) -> Option<u128> {
@@ -1168,7 +1162,33 @@ mod tests {
             maybe_sent: false,
             submit_block: None,
             balance_changes: None,
+            summary: None,
+            stored_request: String::new(),
+            request_truncated: false,
         }
+    }
+
+    /// A record as the signing core hands it over (spec 093): its summary and
+    /// its stored request are the core's own, read from its `method`,
+    /// `params_json` and `dapp_url` — so every test here writes what a real
+    /// approve writes. It shadows the executor's `persist_record` for this
+    /// module only; a field a test set itself is kept.
+    fn persist_record(record: &SignRecord) {
+        let mut record = record.clone();
+        if record.summary.is_none() {
+            let params = serde_json::from_str(&record.params_json).unwrap_or(Value::Null);
+            record.summary = Some(vela_core::app::dapp_activity::summarize(
+                &record.method,
+                &params,
+                &record.dapp_url,
+                None,
+            ));
+        }
+        if record.stored_request.is_empty() {
+            (record.stored_request, record.request_truncated) =
+                vela_core::app::dapp_activity::stored_request(&record.params_json);
+        }
+        super::persist_record(&record);
     }
 
     fn context(site: Option<&str>) -> SignContext {
@@ -2333,6 +2353,18 @@ mod tests {
         lookups
     }
 
+    /// A dApp detail's "Balance changes" fact, its lines as drawn.
+    fn changes_of(
+        detail: &crate::flows::fixtures::TxDetail,
+        flow: &crate::flows::FlowStrings,
+    ) -> Option<String> {
+        detail
+            .facts
+            .iter()
+            .find(|fact| fact.label == flow.detail_changes)
+            .map(|fact| fact.value.to_string())
+    }
+
     #[test]
     fn a_dapp_transaction_is_in_activity_with_its_site_until_it_lands() {
         use crate::core_host::CoreHost;
@@ -2365,16 +2397,29 @@ mod tests {
             assert_eq!(rows.len(), 1, "the dApp's transaction is in Activity");
             let row = &rows[0];
             assert_eq!(row.kind, crate::wallet::fixtures::ActivityKind::Dapp);
+            // A plain send reads as one, at the site as the address bar names
+            // it (spec 082 RG1: host[:port]) — never the name the dApp gave.
+            let send = s
+                .terms
+                .get(&ClearTerm::IntentSend)
+                .cloned()
+                .unwrap_or_default();
             assert_eq!(
-                Some(&row.title),
-                s.terms.get(&ClearTerm::IntentSend),
-                "a plain send reads as one"
+                row.title.to_string(),
+                crate::wallet::fill(
+                    &crate::wallet::fill(&s.dapp_row_title, "place", "127.0.0.1:5173"),
+                    "intent",
+                    &send
+                )
             );
-            // The site as the address bar names it (spec 082 RG1: host[:port]).
-            assert!(
-                row.subtitle.ends_with("127.0.0.1:5173"),
-                "the site: {}",
-                row.subtitle
+            // Pending until it lands, on its network; the site is in the title.
+            assert_eq!(
+                row.subtitle.to_string(),
+                format!(
+                    "{} · {}",
+                    s.status_pending,
+                    crate::flows::live::chain_name(100)
+                )
             );
             // 0x2386f26fc10000 wei is 0.01 of the coin, going out.
             assert!(
@@ -2441,18 +2486,28 @@ mod tests {
             let s = crate::wallet::WalletStrings::resolve(&loc);
             let flow = crate::flows::FlowStrings::resolve(&loc);
             let view = host.view();
+            // A call nobody read, at the site that asked (spec 093).
+            let title = crate::wallet::fill(
+                &crate::wallet::fill(&s.dapp_row_title, "place", "app.uniswap.org"),
+                "intent",
+                &s.intent_contract_call,
+            );
             for hidden in [false, true] {
                 let rows = crate::wallet::live::activity_rows(&view, &s, &flow, hidden);
                 assert_eq!(rows.len(), 1);
-                assert_eq!(rows[0].title, s.intent_contract_call);
+                assert_eq!(rows[0].title.as_ref(), title);
                 // A row the tracker has not closed leads with its status
-                // (spec 082 RG2); the site is what labels it.
-                assert!(
-                    rows[0].subtitle.ends_with("app.uniswap.org"),
-                    "{}",
-                    rows[0].subtitle
+                // (spec 082 RG2), then its network; the site is in the title.
+                assert_eq!(
+                    rows[0].subtitle.to_string(),
+                    format!(
+                        "{} · {}",
+                        s.status_pending,
+                        crate::flows::live::chain_name(100)
+                    )
                 );
                 assert!(!rows[0].subtitle.contains("日本語"));
+                assert!(!rows[0].title.contains("日本語"));
                 assert_eq!((rows[0].amount.as_ref(), rows[0].unit.as_ref()), ("", ""));
             }
         });
@@ -2622,32 +2677,33 @@ mod tests {
                     )
                 })
                 .collect();
+            let base = crate::flows::live::chain_name(8453);
             assert_eq!(
                 drawn,
                 vec![
                     (
-                        "合约交互",
-                        "app.uniswap.org",
+                        "在 app.uniswap.org 合约交互",
+                        base.as_str(),
                         "\u{2212}0.0001",
                         "ETH",
                         Some("≈ +0.269487 USDC")
                     ),
                     (
-                        "合约交互",
-                        "app.uniswap.org",
+                        "在 app.uniswap.org 合约交互",
+                        base.as_str(),
                         "≈ \u{2212}0.271741",
                         "USDC",
                         Some("≈ +0.000101 ETH")
                     ),
                     (
-                        "合约交互",
-                        "app.uniswap.org",
+                        "在 app.uniswap.org 合约交互",
+                        base.as_str(),
                         "≈ \u{2212}0.1",
                         "USDC",
                         Some("≈ +0.000037 ETH")
                     ),
                 ],
-                "newest first; the title stays what the wallet knows"
+                "newest first; the title stays what the wallet knows, at the site"
             );
             // Privacy masks both figures and keeps their units.
             let masked = crate::wallet::live::activity_rows(&view, &s, &flow, true);
@@ -2668,7 +2724,7 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("the row exists: {id}"));
-            assert_eq!(detail.title.as_ref(), "合约交互");
+            assert_eq!(detail.title.as_ref(), "在 app.uniswap.org 合约交互");
             assert_eq!(detail.amount.as_ref(), "≈ \u{2212}0.1 USDC");
             assert!(detail.fiat.contains("0.10"), "{}", detail.fiat);
             let facts: Vec<(&str, &str)> = detail
@@ -2677,26 +2733,44 @@ mod tests {
                 .map(|fact| (fact.label.as_ref(), fact.value.as_ref()))
                 .collect();
             assert_eq!(facts[0], ("应用", "app.uniswap.org"));
-            assert_eq!(facts[1], ("合约", "0xd614…9c40"));
-            assert_eq!(facts[2].0, "网络");
-            assert_eq!(facts[4], ("哈希", "0x9f2c…6e7f"));
+            assert_eq!(facts[1].0, "网络");
+            assert_eq!(facts[2], ("交互合约", "0xd614…9c40"));
             assert_eq!(
-                detail.facts[4].copy.as_ref().map(AsRef::as_ref),
+                facts[3],
+                ("余额变化", "≈ \u{2212}0.1 USDC\n≈ +0.000037 ETH")
+            );
+            assert_eq!(facts[4].0, "日期");
+            // The hash is a technical detail (spec 093), shortened to fit,
+            // whole on its copy button.
+            let mut opened = detail.clone();
+            crate::flows::live::open_technical(
+                &mut opened,
+                &view,
+                &swaps[0].record_id,
+                None,
+                &flow,
+                &s,
+                "zh-CN",
+            );
+            let hash = opened
+                .technical
+                .and_then(|technical| technical.lines)
+                .unwrap_or_default()
+                .into_iter()
+                .find_map(|line| match line {
+                    crate::flows::fixtures::TechnicalLine::Fact(fact)
+                        if fact.label == flow.detail_hash =>
+                    {
+                        Some(fact)
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| unreachable!("a landed swap has its hash"));
+            assert_eq!(hash.value.as_ref(), "0x9f2c…6e7f");
+            assert_eq!(
+                hash.copy.as_ref().map(AsRef::as_ref),
                 Some(HASH),
                 "the copy button holds the whole hash"
-            );
-            assert_eq!(
-                detail.breakdown_title.as_ref().map(AsRef::as_ref),
-                Some("余额变化")
-            );
-            let lines: Vec<(&str, &str)> = detail
-                .breakdown
-                .iter()
-                .map(|line| (line.label.as_ref(), line.value.as_ref()))
-                .collect();
-            assert_eq!(
-                lines,
-                vec![("USDC", "≈ \u{2212}0.1"), ("ETH", "≈ +0.000037")]
             );
 
             // What the wallet sent reads bare, in the row and in its lines.
@@ -2711,14 +2785,9 @@ mod tests {
             )
             .unwrap_or_else(|| unreachable!("the row exists"));
             assert_eq!(detail.amount.as_ref(), "\u{2212}0.0001 ETH");
-            let lines: Vec<(&str, &str)> = detail
-                .breakdown
-                .iter()
-                .map(|line| (line.label.as_ref(), line.value.as_ref()))
-                .collect();
             assert_eq!(
-                lines,
-                vec![("ETH", "\u{2212}0.0001"), ("USDC", "≈ +0.269487")]
+                changes_of(&detail, &flow).as_deref(),
+                Some("\u{2212}0.0001 ETH\n≈ +0.269487 USDC")
             );
         });
     }
@@ -2760,7 +2829,7 @@ mod tests {
                     rows[0].amount.as_ref(),
                     rows[0].unit.as_ref()
                 ),
-                ("合约交互", "", "")
+                ("在 app.uniswap.org 合约交互", "", "")
             );
             assert_eq!(rows[0].received, None, "nothing \"≈ back\" on a revert");
 
@@ -2774,19 +2843,17 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("the row exists"));
-            assert_eq!(detail.status.text, flow.status_failed);
+            assert_eq!(
+                detail.status.as_ref().map(|chip| &chip.text),
+                Some(&flow.status_failed)
+            );
             assert_eq!(detail.amount.as_ref(), "");
-            assert_ne!(
-                detail.breakdown_title.as_ref(),
-                Some(&flow.detail_changes),
+            assert_eq!(
+                changes_of(&detail, &flow),
+                None,
                 "no balance changes that never were"
             );
-            assert!(
-                detail
-                    .breakdown
-                    .iter()
-                    .all(|line| line.label.as_ref() != "USDC" && line.label.as_ref() != "ETH")
-            );
+            assert!(detail.breakdown.is_empty());
         });
     }
 
@@ -2843,12 +2910,10 @@ mod tests {
             .unwrap_or_else(|| unreachable!("the row exists"));
             assert_eq!(detail.amount.as_ref(), "");
             assert_eq!(detail.fiat.as_ref(), "", "no dollars for a site's claim");
-            let lines: Vec<(&str, &str)> = detail
-                .breakdown
-                .iter()
-                .map(|line| (line.label.as_ref(), line.value.as_ref()))
-                .collect();
-            assert_eq!(lines, vec![("USDC", "≈ \u{2212}100,000.00")]);
+            assert_eq!(
+                changes_of(&detail, &flow).as_deref(),
+                Some("≈ \u{2212}100,000.00 USDC")
+            );
         });
     }
 
@@ -2981,14 +3046,15 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("the row exists"));
-            let lines: Vec<(&str, &str)> = detail
-                .breakdown
-                .iter()
-                .map(|line| (line.label.as_ref(), line.value.as_ref()))
-                .collect();
-            assert_eq!(lines, vec![("USDC", "≈ \u{2212}0.1"), ("未验证代币", "+")]);
+            assert_eq!(
+                changes_of(&detail, &flow).as_deref(),
+                Some("≈ \u{2212}0.1 USDC\n+ 未验证代币")
+            );
             // Still pending, and the hash row waits for a hash.
-            assert_eq!(detail.status.text, flow.status_pending);
+            assert_eq!(
+                detail.status.as_ref().map(|chip| &chip.text),
+                Some(&flow.status_pending)
+            );
             assert!(
                 detail
                     .facts
@@ -3004,6 +3070,7 @@ mod tests {
         storage::tests::with_temp_state("sign-record-msg", || {
             let mut record = record(SignRecordKind::SignMessage, r#"["0xdeadbeef","0xabc"]"#);
             record.record_id = "dapp-1757000000000-msg".to_owned();
+            record.method = "personal_sign".to_owned();
             persist_record(&record);
             let rows = match storage::read_value(TX_KEY).ok().flatten() {
                 Some(Value::Array(rows)) => rows,
@@ -3017,26 +3084,73 @@ mod tests {
             assert_eq!(row.get("value").and_then(Value::as_str), Some("0"));
             assert_eq!(row.get("symbol").and_then(Value::as_str), Some(""));
             assert_eq!(row.get("to").and_then(Value::as_str), Some(""));
+            // The core keeps the signature itself off the disk (spec 093).
+            assert_eq!(row.get("txHash").and_then(Value::as_str), Some(""));
+            assert_eq!(
+                row.get("dappSummary")
+                    .and_then(|summary| summary.get("action"))
+                    .and_then(Value::as_str),
+                Some("message")
+            );
         });
     }
 
-    /// The stored payload is clipped on a character boundary.
-    ///
-    /// A page chooses the length of what it asks to sign; this file chooses
-    /// how much of it lives on the disk forever.
+    /// Spec 093: the record keeps the request as the CORE cut it
+    /// (`SignRecord::stored_request`, `request_truncated`) — the shell's own
+    /// 8 KB cut is gone — and the core's summary verbatim as `dappSummary`,
+    /// which the feed's reader hands back untouched. The summary was read
+    /// from the whole request, so a permit past the cut still says what it
+    /// granted.
     #[test]
-    fn an_enormous_payload_is_clipped_and_says_so() {
-        let long = format!("[\"{}\"]", "字".repeat(9000));
-        let (kept, truncated) = clip(&long);
-        assert!(truncated, "a 27 KB payload was stored whole");
-        assert!(kept.len() <= 8 * 1024);
-        assert!(
-            std::str::from_utf8(kept.as_bytes()).is_ok(),
-            "the clip cut a multibyte character in half"
-        );
-        let (kept, truncated) = clip("[]");
-        assert!(!truncated);
-        assert_eq!(kept, "[]");
+    fn the_record_keeps_the_cores_cut_and_summary() {
+        use vela_core::app::dapp_activity::{DappAction, stored_request, summarize};
+
+        storage::tests::with_temp_state("sign-record-kept", || {
+            let mut record = record(SignRecordKind::SignTypedData, "[]");
+            record.method = "eth_signTypedData_v4".to_owned();
+            let typed = json!({
+                "types": {
+                    "EIP712Domain": [{"name": "name", "type": "string"}],
+                    "Note": [{"name": "text", "type": "string"}]
+                },
+                "primaryType": "Note",
+                "domain": {"name": "Example"},
+                "message": {"text": "字".repeat(9000)}
+            });
+            record.params_json = json!(["0xme", typed.to_string()]).to_string();
+            let (kept, truncated) = stored_request(&record.params_json);
+            assert!(truncated, "a 27 KB request is past the cut");
+            record.stored_request = kept.clone();
+            record.request_truncated = truncated;
+            record.summary = Some(summarize(
+                &record.method,
+                &serde_json::from_str(&record.params_json).unwrap_or(Value::Null),
+                &record.dapp_url,
+                None,
+            ));
+            super::persist_record(&record);
+
+            let rows = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(
+                rows[0].get("signedRequest").and_then(Value::as_str),
+                Some(kept.as_str()),
+                "the core's cut, byte for byte"
+            );
+            assert_eq!(rows[0].get("requestTruncated"), Some(&json!(true)));
+            assert_eq!(
+                rows[0].get("dappSummary"),
+                serde_json::to_value(&record.summary).ok().as_ref()
+            );
+            let read = crate::executor::activity_feed::read_records();
+            assert_eq!(read[0].summary, record.summary);
+            assert_eq!(
+                read[0].summary.as_ref().map(|summary| summary.action),
+                Some(DappAction::TypedData)
+            );
+        });
     }
 
     /// A plain dApp transaction.

@@ -915,6 +915,11 @@ pub struct WalletPage {
     /// then closes rather than showing a stale detail over a row that no
     /// longer exists.
     tx_detail: Option<String>,
+    /// DA2L, live: the dApp record whose "Technical details" are open
+    /// (spec 093), with the request read from the store when they were
+    /// opened — `None` (or another record's id) is collapsed. Read on the
+    /// tap, never before: the stored request is what the section is for.
+    tx_technical: Option<(String, Option<String>)>,
     /// DR2L, live: WHICH network's QR the receive flow stepped into.
     ///
     /// The mock never needed this — every fixture row opened the same picture.
@@ -1271,6 +1276,7 @@ impl WalletPage {
             chain_filter: None,
             feed_privacy: None,
             tx_detail: None,
+            tx_technical: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
             add_token_native: false,
@@ -3777,6 +3783,7 @@ impl WalletPage {
                         let id = home_tx_ids.get(i).cloned();
                         cx.listener(move |this, _, _, cx| {
                             this.tx_detail = id.clone();
+                            this.tx_technical = None;
                             this.enter_flow(FlowEntry::TxDetail, cx);
                             cx.notify();
                         })
@@ -6480,7 +6487,7 @@ impl WalletPage {
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
-                        flows_live::tx_detail(
+                        let mut detail = flows_live::tx_detail(
                             &feed,
                             id,
                             &self.flow_strings,
@@ -6488,7 +6495,22 @@ impl WalletPage {
                             hidden,
                             &self.locale,
                             &currency,
-                        )
+                        )?;
+                        // Open only for the record it was opened on (spec 093).
+                        if let Some((_, request)) =
+                            self.tx_technical.as_ref().filter(|(open, _)| open == id)
+                        {
+                            flows_live::open_technical(
+                                &mut detail,
+                                &feed,
+                                id,
+                                request.as_deref(),
+                                &self.flow_strings,
+                                &self.strings,
+                                &self.locale,
+                            );
+                        }
+                        Some(detail)
                     })
                     .map_or_else(
                         // The record is gone. The mock is not a substitute for
@@ -6692,6 +6714,7 @@ impl WalletPage {
             open_add_token: bind(FlowStep::AddToken, cx),
             open_receive: None,
             delete_tx: None,
+            toggle_technical: None,
             open_scan: bind(FlowStep::Scan, cx),
             add_recipient: bind(FlowStep::AddRecipient, cx),
             open_batch_import: bind(FlowStep::BatchImport, cx),
@@ -6757,6 +6780,7 @@ impl WalletPage {
                 .map(|id| -> panels::Click {
                     Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.tx_detail = Some(id.clone());
+                        this.tx_technical = None;
                         this.push_step(FlowStep::TxDetail);
                         cx.notify();
                     }))
@@ -6771,6 +6795,25 @@ impl WalletPage {
             actions.open_receive = Some(Box::new(cx.listener(
                 |this, _: &gpui::ClickEvent, _, cx| {
                     this.enter_flow(FlowEntry::Receive, cx);
+                    cx.notify();
+                },
+            )));
+        }
+
+        // DA2L, live: a dApp record's "Technical details" (spec 093). Opening
+        // them is what reads the stored request, by the record's id — once,
+        // on the tap; folding them forgets it.
+        if live && matches!(panel, FlowPanel::Da2 | FlowPanel::Da3) {
+            actions.toggle_technical = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(id) = this.tx_detail.clone() else {
+                        return;
+                    };
+                    this.tx_technical = flows_live::technical_toggled(
+                        this.tx_technical.take(),
+                        id,
+                        crate::executor::activity_feed::stored_request,
+                    );
                     cx.notify();
                 },
             )));
@@ -7659,6 +7702,7 @@ impl WalletPage {
                         let Some(id) = id.clone() else { return };
                         this.asset_detail = None;
                         this.tx_detail = Some(id);
+                        this.tx_technical = None;
                         this.enter_flow(FlowEntry::TxDetail, cx);
                         cx.notify();
                     })),

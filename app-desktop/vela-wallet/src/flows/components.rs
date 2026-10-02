@@ -366,8 +366,15 @@ pub fn fact_row(
         value
             .min_w(px(0.))
             .when(fact.mono, |value| value.truncate())
+            // A value of several lines (a dApp record's balance changes,
+            // spec 093) keeps every line against the right edge.
+            .text_right()
             .font_weight(gpui::FontWeight::MEDIUM)
-            .text_color(theme.fg_base)
+            .text_color(if fact.danger {
+                theme.error_base
+            } else {
+                theme.fg_base
+            })
             .child(text),
     );
 

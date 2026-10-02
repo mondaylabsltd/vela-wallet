@@ -479,6 +479,7 @@ mod tests {
                     site: None,
                     counterparty_role: Default::default(),
                     dapp: None,
+                    subtitle: Vec::new(),
                 },
             }],
             ..host.view()
@@ -559,6 +560,7 @@ mod tests {
                 site: None,
                 counterparty_role: Default::default(),
                 dapp: None,
+                subtitle: Vec::new(),
             },
         };
         let feed = FeedView {
