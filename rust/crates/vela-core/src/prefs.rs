@@ -81,7 +81,6 @@ pub struct Prefs {
     pub number_format: &'static str,
     pub date_format: &'static str,
     pub time_format: &'static str,
-    pub debug_mode: DebugMode,
 }
 
 fn one_of(raw: Option<&str>, allowed: &[&'static str], fallback: &'static str) -> &'static str {
@@ -182,7 +181,6 @@ pub fn read(entries: &[(String, String)]) -> Prefs {
             &TIME_FORMATS,
             "auto",
         ),
-        debug_mode: DebugMode::read(get(keys::DEBUG_MODE)),
     }
 }
 
@@ -190,15 +188,22 @@ pub fn read(entries: &[(String, String)]) -> Prefs {
 // Debug mode — the hidden developer switch (spec 091)
 // ---------------------------------------------------------------------------
 
-/// Settings' debug mode (spec 091; owner ruling 2026-10-02). With it on, the
+/// Settings' debug mode (spec 091; owner rulings 2026-10-02). With it on, the
 /// in-app browsers offer the wallet to http pages on this device's own
 /// network too (`app::dapp_permissions::offers_wallet`, the one rule).
 ///
-/// Nobody meets it by accident: the switch is [`Hidden`](Self::Hidden) until
-/// the version in About is tapped [`VERSION_TAPS`] times
-/// ([`version_tapped`]), and then stays in About, so it can be turned off
-/// again. Stored under [`keys::DEBUG_MODE`] as `off` or `on`; absent — or
-/// any other value — reads as hidden, and hidden is off. Erasing the device
+/// **Developer builds only** — the builds that carry the parallel space
+/// (Android `debug`, iOS `Debug`, the desktop's `dev-fixtures`). A store
+/// build has no such mode: [`debug_mode`] reads it as hidden whatever is
+/// stored, and [`version_tapped`] reveals nothing, so a release build offers
+/// the wallet exactly as spec 088 does. The shell says which build it is and
+/// nothing more.
+///
+/// In a developer build nobody meets it by accident either: the switch is
+/// [`Hidden`](Self::Hidden) until the version in About is tapped
+/// [`VERSION_TAPS`] times, and then stays in About, so it can be turned off
+/// again. Stored under [`keys::DEBUG_MODE`] as `off` or `on`; absent — or any
+/// other value — reads as hidden, and hidden is off. Erasing the device
 /// removes the key, which hides the switch again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DebugMode {
@@ -273,6 +278,23 @@ impl DebugMode {
     }
 }
 
+/// Settings' debug mode in force on this build (spec 091): what is stored
+/// under [`keys::DEBUG_MODE`] in a `developer_build`; hidden — and so off — in
+/// any other, whatever is stored. The only reading of the key there is: a
+/// store build never acts on a value a developer build left behind.
+#[must_use]
+pub fn debug_mode(entries: &[(String, String)], developer_build: bool) -> DebugMode {
+    if !developer_build {
+        return DebugMode::Hidden;
+    }
+    DebugMode::read(
+        entries
+            .iter()
+            .find(|(key, _)| key == keys::DEBUG_MODE)
+            .map(|(_, value)| value.as_str()),
+    )
+}
+
 /// Taps on About's version that reveal the switch — Android's developer
 /// options count the same.
 pub const VERSION_TAPS: u32 = 7;
@@ -293,10 +315,16 @@ pub struct VersionTaps {
 ///
 /// Taps count only in a run, each within [`VERSION_TAP_GAP_MS`] of the one
 /// before; a slower tap, or a clock that went backwards, starts again at one.
-/// Once the switch is revealed nothing counts.
+/// Once the switch is revealed nothing counts — and outside a
+/// `developer_build` nothing ever does.
 #[must_use]
-pub fn version_tapped(taps: VersionTaps, now_ms: f64, mode: DebugMode) -> (VersionTaps, bool) {
-    if mode.revealed() {
+pub fn version_tapped(
+    taps: VersionTaps,
+    now_ms: f64,
+    mode: DebugMode,
+    developer_build: bool,
+) -> (VersionTaps, bool) {
+    if !developer_build || mode.revealed() {
         return (VersionTaps::default(), false);
     }
     let since = now_ms - taps.last_ms;
@@ -521,18 +549,13 @@ mod tests {
 
     #[test]
     fn debug_mode_reads_hidden_until_revealed() {
-        assert_eq!(read(&[]).debug_mode, DebugMode::Hidden);
-        assert_eq!(
-            read(&entries(&[("vela.debugMode", "off")])).debug_mode,
-            DebugMode::Off
-        );
-        assert_eq!(
-            read(&entries(&[("vela.debugMode", " on ")])).debug_mode,
-            DebugMode::On
-        );
+        let dev = |raw: &str| debug_mode(&entries(&[("vela.debugMode", raw)]), true);
+        assert_eq!(debug_mode(&[], true), DebugMode::Hidden);
+        assert_eq!(dev("off"), DebugMode::Off);
+        assert_eq!(dev(" on "), DebugMode::On);
         // Anything this build does not write is hidden — and hidden is off.
         for raw in ["", "ON", "true", "1", "verbose"] {
-            let mode = read(&entries(&[("vela.debugMode", raw)])).debug_mode;
+            let mode = dev(raw);
             assert_eq!(mode, DebugMode::Hidden, "{raw:?}");
             assert!(!mode.is_on() && !mode.revealed());
         }
@@ -551,44 +574,82 @@ mod tests {
         assert!(migrations(&entries(&[("vela.debugMode", "on")])).is_empty());
     }
 
+    /// Owner, 2026-10-02: store builds forbid it entirely. Whatever a
+    /// developer build left in the store, a store build reads hidden — off.
+    #[test]
+    fn a_store_build_has_no_debug_mode_whatever_is_stored() {
+        for raw in ["on", "off", " on ", "anything"] {
+            let mode = debug_mode(&entries(&[("vela.debugMode", raw)]), false);
+            assert_eq!(mode, DebugMode::Hidden, "{raw:?}");
+            assert!(!mode.is_on() && !mode.revealed());
+        }
+        assert_eq!(debug_mode(&[], false), DebugMode::Hidden);
+        // The other preferences read the same in either build: debug mode
+        // is not part of the shared record.
+        let stored = entries(&[("vela.debugMode", "on"), ("vela.theme", "dark")]);
+        assert_eq!(read(&stored), read(&entries(&[("vela.theme", "dark")])));
+    }
+
     /// Seven taps in a run reveal the switch, once.
     #[test]
     fn seven_quick_taps_reveal_the_switch() {
         let mut taps = VersionTaps::default();
         for i in 0..VERSION_TAPS - 1 {
-            let (next, revealed) =
-                version_tapped(taps, 1_000.0 + f64::from(i) * 300.0, DebugMode::Hidden);
+            let (next, revealed) = version_tapped(
+                taps,
+                1_000.0 + f64::from(i) * 300.0,
+                DebugMode::Hidden,
+                true,
+            );
             assert!(!revealed, "tap {}", i + 1);
             assert_eq!(next.count, i + 1);
             taps = next;
         }
-        let (after, revealed) = version_tapped(taps, 1_000.0 + 6.0 * 300.0, DebugMode::Hidden);
+        let (after, revealed) =
+            version_tapped(taps, 1_000.0 + 6.0 * 300.0, DebugMode::Hidden, true);
         assert!(revealed, "the seventh tap reveals");
         assert_eq!(after, VersionTaps::default(), "and the count starts over");
+    }
+
+    /// In a store build no number of taps reveals anything.
+    #[test]
+    fn a_store_build_never_reveals_the_switch() {
+        let mut taps = VersionTaps::default();
+        for i in 0..30 {
+            let (next, revealed) =
+                version_tapped(taps, f64::from(i) * 100.0, DebugMode::Hidden, false);
+            assert!(!revealed, "tap {}", i + 1);
+            assert_eq!(next, VersionTaps::default(), "nothing is even counted");
+            taps = next;
+        }
     }
 
     #[test]
     fn a_slow_tap_starts_the_count_again() {
         let mut taps = VersionTaps::default();
         for i in 0..6 {
-            taps = version_tapped(taps, f64::from(i) * 500.0, DebugMode::Hidden).0;
+            taps = version_tapped(taps, f64::from(i) * 500.0, DebugMode::Hidden, true).0;
         }
         assert_eq!(taps.count, 6);
         // Exactly the gap still counts …
         let (edge, revealed) =
-            version_tapped(taps, 2_500.0 + VERSION_TAP_GAP_MS, DebugMode::Hidden);
+            version_tapped(taps, 2_500.0 + VERSION_TAP_GAP_MS, DebugMode::Hidden, true);
         assert!(
             revealed,
             "a tap exactly {VERSION_TAP_GAP_MS} ms later is still in the run"
         );
         assert_eq!(edge, VersionTaps::default());
         // … one past it does not.
-        let (late, revealed) =
-            version_tapped(taps, 2_500.0 + VERSION_TAP_GAP_MS + 1.0, DebugMode::Hidden);
+        let (late, revealed) = version_tapped(
+            taps,
+            2_500.0 + VERSION_TAP_GAP_MS + 1.0,
+            DebugMode::Hidden,
+            true,
+        );
         assert!(!revealed);
         assert_eq!(late.count, 1, "a late tap is the first of a new run");
         // A clock that went backwards is no run either.
-        let (back, revealed) = version_tapped(taps, 100.0, DebugMode::Hidden);
+        let (back, revealed) = version_tapped(taps, 100.0, DebugMode::Hidden, true);
         assert!(!revealed);
         assert_eq!(back.count, 1);
     }
@@ -598,7 +659,7 @@ mod tests {
         for mode in [DebugMode::Off, DebugMode::On] {
             let mut taps = VersionTaps::default();
             for i in 0..20 {
-                let (next, revealed) = version_tapped(taps, f64::from(i) * 100.0, mode);
+                let (next, revealed) = version_tapped(taps, f64::from(i) * 100.0, mode, true);
                 assert!(!revealed, "{mode:?} tap {i}");
                 assert_eq!(next, VersionTaps::default());
                 taps = next;

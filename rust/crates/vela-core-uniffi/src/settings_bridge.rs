@@ -23,9 +23,6 @@ pub struct PrefsRecord {
     pub number_format: String,
     pub date_format: String,
     pub time_format: String,
-    /// Settings' debug mode (spec 091): `hidden` (the switch is not shown —
-    /// and debug mode is off), `off` or `on`.
-    pub debug_mode: String,
 }
 
 /// One store write: `value: None` removes the key.
@@ -53,7 +50,6 @@ pub fn prefs_read(entries: HashMap<String, String>) -> PrefsRecord {
         number_format: read.number_format.to_owned(),
         date_format: read.date_format.to_owned(),
         time_format: read.time_format.to_owned(),
-        debug_mode: read.debug_mode.name().to_owned(),
     }
 }
 
@@ -77,6 +73,18 @@ pub fn prefs_text_scale_levels() -> Vec<TextScaleLevel> {
             factor: *factor,
         })
         .collect()
+}
+
+/// Settings' debug mode in force on this build (spec 091): `hidden` (no
+/// switch — and debug mode is off), `off` or `on`. `developer_build` is the
+/// shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
+/// desktop's `dev-fixtures` — and outside one the answer is always `hidden`,
+/// whatever is stored (owner, 2026-10-02: store builds forbid it).
+#[uniffi::export]
+pub fn prefs_debug_mode(entries: HashMap<String, String>, developer_build: bool) -> String {
+    prefs::debug_mode(&entries_of(entries), developer_build)
+        .name()
+        .to_owned()
 }
 
 /// What to store under `vela.debugMode` for the revealed switch set `on`
@@ -107,12 +115,14 @@ pub struct VersionTapAnswer {
 
 /// One tap on the version in About at `now_ms`, with the switch as it stands
 /// (`hidden` | `off` | `on`). The core's rule: seven taps, each within a
-/// second of the one before (spec 091).
+/// second of the one before — and never outside a `developer_build`
+/// (spec 091).
 #[uniffi::export]
 pub fn prefs_version_tapped(
     taps: VersionTaps,
     now_ms: f64,
     debug_mode: String,
+    developer_build: bool,
 ) -> VersionTapAnswer {
     let (next, revealed) = prefs::version_tapped(
         prefs::VersionTaps {
@@ -121,6 +131,7 @@ pub fn prefs_version_tapped(
         },
         now_ms,
         prefs::DebugMode::from_name(&debug_mode),
+        developer_build,
     );
     VersionTapAnswer {
         taps: VersionTaps {

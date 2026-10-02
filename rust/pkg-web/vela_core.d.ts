@@ -960,7 +960,7 @@ export function prefsMigrations(entries_json: string): string;
 
 /**
  * `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
- * numberFormat, dateFormat, timeFormat, debugMode}`.
+ * numberFormat, dateFormat, timeFormat}`.
  */
 export function prefsRead(entries_json: string): string;
 

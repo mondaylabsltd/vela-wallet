@@ -880,10 +880,11 @@ pub fn is_secure_context(origin: &str) -> bool {
 /// script they inject ([`super::dapp_rpc::provider_script`]) both follow.
 ///
 /// - Always: a secure context ([`is_secure_context`]).
-/// - With debug mode on (Settings → About, revealed by tapping the version
-///   [`crate::prefs::VERSION_TAPS`] times): also plain `http` on this
-///   device's own network — RFC 1918 and link-local IPv4, IPv6 unique-local
-///   and link-local, `.local` — matched exactly by
+/// - With debug mode on (Settings → About in a developer build only,
+///   revealed by tapping the version [`crate::prefs::VERSION_TAPS`] times;
+///   a store build's mode is always off, `crate::prefs::debug_mode`): also
+///   plain `http` on this device's own network — RFC 1918 and link-local
+///   IPv4, IPv6 unique-local and link-local, `.local` — matched exactly by
 ///   [`is_loopback_or_private_host`], never by a name that only starts with
 ///   those digits (`10.0.0.1.evil.com`).
 /// - Never: public `http`, debug mode or not; any other scheme; an origin

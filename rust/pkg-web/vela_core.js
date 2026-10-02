@@ -4135,7 +4135,7 @@ export function prefsMigrations(entries_json) {
 
 /**
  * `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
- * numberFormat, dateFormat, timeFormat, debugMode}`.
+ * numberFormat, dateFormat, timeFormat}`.
  * @param {string} entries_json
  * @returns {string}
  */
