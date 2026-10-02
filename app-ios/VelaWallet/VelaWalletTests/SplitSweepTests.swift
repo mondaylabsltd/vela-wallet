@@ -220,7 +220,17 @@ struct BatchExecutorTests {
             await executor(rate: { _ in 1 }, documents: documents).perform(["type": "pick_file"])
         )
         #expect(text["type"] as? String == "file_picked")
-        #expect((text["content"] as? [String: Any])?["type"] as? String == "text")
+        let picked = text["content"] as? [String: Any]
+        #expect(picked?["type"] as? String == "bytes")
+        #expect(picked?["bytes"] as? [Int] == Array("a,b\n1,2".utf8).map { Int($0) })
+
+        // 087: never decoded here — a GBK name's bytes reach the core as they
+        // are, for the core to refuse rather than garble.
+        documents.picked = PickedDocument(name: "gbk.csv", bytes: Data([0xD5, 0xC5, 0xC8, 0xFD]))
+        let legacy = try! CoreJSON.object(
+            await executor(rate: { _ in 1 }, documents: documents).perform(["type": "pick_file"])
+        )
+        #expect((legacy["content"] as? [String: Any])?["bytes"] as? [Int] == [0xD5, 0xC5, 0xC8, 0xFD])
 
         let workbook = try! Data(contentsOf: URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()

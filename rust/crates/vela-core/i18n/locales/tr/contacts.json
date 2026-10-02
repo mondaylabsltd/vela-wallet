@@ -55,6 +55,7 @@
     "importDoneInvalid": "Geçersiz adresli {{invalid}} satır atlandı.",
     "importFailTitle": "İçe aktarma başarısız",
     "importFailBody": "Bir JSON veya CSV kişi dosyası kullanın.",
+    "importFailEncoding": "Dosyayı UTF-8 olarak kaydedin (Excel: CSV UTF-8) ve yeniden deneyin.",
     "manage": "Yönet",
     "sectionContacts": "Kişiler",
     "countPeople": "{{count}}",

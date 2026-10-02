@@ -565,6 +565,9 @@ class SendController(
 
     fun back() = dispatch(SendEvent.Back)
 
+    /** Issue #326: the form's token card, where the core offers it (`can_change_token`). */
+    fun changeToken() = dispatch(SendEvent.ChangeToken)
+
     fun editAmount() = dispatch(SendEvent.EditAmount)
 
     fun chooseFeeToken(token: String?) = dispatch(SendEvent.ChooseFeeToken(token))

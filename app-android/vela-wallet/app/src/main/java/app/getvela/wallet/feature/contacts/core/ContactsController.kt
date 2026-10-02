@@ -131,16 +131,18 @@ class ContactsController(
     }
 
     /**
-     * The book travels in through the picker: the file's text goes to the
-     * core, which parses JSON or CSV (existing wins) and answers with a
-     * report or a refusal in the view; the shell shows it, then acknowledges.
+     * The book travels in through the picker: the file's BYTES go to the
+     * core, which decodes them (issue 333 — `decodeToString()` here turned a
+     * GBK CSV's Chinese names into U+FFFD), parses JSON or CSV (existing
+     * wins) and answers with a report or a refusal in the view; the shell
+     * shows it, then acknowledges.
      */
     fun importBook(intoGroup: String? = null) {
         scope.launch {
             val picked = runCatching { documents()?.pick(IMPORT_MIMES) }
                 .onFailure { VelaLog.failure("contacts.import", "picker failed", it) }
                 .getOrNull() ?: return@launch
-            dispatch(ContactEvent.ImportFile(content = picked.bytes.decodeToString(), filename = picked.name, into_group = intoGroup, now_ms = now()))
+            dispatch(ContactEvent.ImportFile.of(picked.bytes, filename = picked.name, intoGroup = intoGroup, nowMs = now()))
         }
     }
 

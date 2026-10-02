@@ -41,10 +41,10 @@
 	--weight-medium: 500;
 	--weight-semibold: 600;
 	--weight-bold: 700;
-	--font-sans: 'Plus Jakarta Sans';
-	--font-display: 'Plus Jakarta Sans';
-	--font-numeric: 'Plus Jakarta Sans';
-	--font-mono: 'IBM Plex Mono';
+	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+	--font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+	--font-numeric: 'Plus Jakarta Sans', system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 	--letterSpacing-sectionLabel: 0.6px;
 	--opacity-disabled: 0.45;
 	--opacity-dim: 0.4;

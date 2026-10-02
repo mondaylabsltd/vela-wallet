@@ -12,7 +12,7 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::batch_import::{
-    interpret_rows, parse_recipient_table_text, BatchFileContent, BatchImport,
+    interpret_rows, parse_recipient_table_text, BatchFileContent, BatchFileFailure, BatchImport,
     BatchOperation as Op, BatchParseError, BatchParseReason, BatchParseResult, BatchParsedRow,
     BatchRateStatus, BatchShellResult as Res, BatchToken, BatchUnit, Event, BATCH_MAX_RECIPIENTS,
     TEMPLATE_CSV,
@@ -1301,9 +1301,7 @@ fn stale_file_pick_from_a_previous_open_is_dropped() {
 
     sut.resolve(Res::FilePicked {
         name: "payroll.csv".to_owned(),
-        content: BatchFileContent::Text {
-            text: format!("{},5000", a()),
-        },
+        content: text_file(&format!("{},5000", a())),
     });
     let view = sut.view();
     assert_eq!(view.raw_text, "");
@@ -1345,9 +1343,7 @@ fn picked_text_file_flows_through_the_paste_parser() {
 
     sut.resolve(Res::FilePicked {
         name: "payroll.csv".to_owned(),
-        content: BatchFileContent::Text {
-            text: format!("Alice,{},5000", a()),
-        },
+        content: text_file(&format!("Alice,{},5000", a())),
     });
     let view = sut.view();
     assert!(!view.busy);
@@ -1400,9 +1396,87 @@ fn unreadable_file_sets_the_error_flag() {
     let view = sut.view();
     assert!(!view.busy);
     assert!(view.file_error, "the shell shows the alert copy");
+    assert_eq!(view.file_failure, Some(BatchFileFailure::Unreadable));
     // The next pick starts clean.
     sut.dispatch(Event::PickFileRequested);
     assert!(!sut.view().file_error);
+    assert_eq!(sut.view().file_failure, None);
+}
+
+/// A text file as a shell hands it over: its bytes, undecoded.
+fn text_file(text: &str) -> BatchFileContent {
+    BatchFileContent::Bytes {
+        bytes: text.as_bytes().to_vec(),
+    }
+}
+
+/// 087 (issue 333's twin): the payroll file is decoded once, in the core, as
+/// the contacts import decodes it. A UTF-8 file — with Excel's "CSV UTF-8"
+/// byte-order mark or without — and a BOM-marked UTF-16 one read exactly; the
+/// names arrive whole.
+#[test]
+fn a_picked_file_is_decoded_once_in_the_core() {
+    let csv = format!("name,address,amount\n张三,{},5000\n", a());
+    let mut utf16 = vec![0xFF, 0xFE];
+    utf16.extend(csv.encode_utf16().flat_map(u16::to_le_bytes));
+    let mut bom = vec![0xEF, 0xBB, 0xBF];
+    bom.extend(csv.as_bytes());
+    for (label, bytes) in [
+        ("utf-8", csv.as_bytes().to_vec()),
+        ("utf-8 + BOM", bom),
+        ("utf-16le + BOM", utf16),
+    ] {
+        let mut sut = rated(usdt("100000"), 7.2);
+        sut.dispatch(Event::PickFileRequested);
+        sut.resolve(Res::FilePicked {
+            name: "payroll.csv".to_owned(),
+            content: BatchFileContent::Bytes { bytes },
+        });
+        let view = sut.view();
+        assert!(!view.file_error, "{label}");
+        assert_eq!(view.preview.len(), 1, "{label}");
+        assert_eq!(view.preview[0].name.as_deref(), Some("张三"), "{label}");
+        assert!(
+            !view.raw_text.starts_with('\u{feff}'),
+            "{label}: the mark is not text"
+        );
+    }
+}
+
+/// 087: a CSV Excel saved in GBK on Chinese Windows used to arrive with every
+/// name as U+FFFD — the addresses, being ASCII, came through, so nothing
+/// looked refused. It is refused as an encoding the core will not guess, the
+/// sheet says how to save it, and no row from it (or from the file before
+/// it) is offered for payment.
+#[test]
+fn a_file_in_a_legacy_code_page_is_refused_not_garbled() {
+    let mut sut = rated(usdt("100000"), 7.2);
+    paste(&mut sut, format!("Bob,{},10", b()));
+    assert_eq!(sut.view().preview.len(), 1);
+
+    // "张三" in GBK, then an ASCII address and amount.
+    let mut gbk = b"name,address,amount\n".to_vec();
+    gbk.extend([0xD5, 0xC5, 0xC8, 0xFD]);
+    gbk.extend(format!(",{},5000\n", a()).as_bytes());
+    sut.dispatch(Event::PickFileRequested);
+    sut.resolve(Res::FilePicked {
+        name: "payroll-gbk.csv".to_owned(),
+        content: BatchFileContent::Bytes { bytes: gbk },
+    });
+    let view = sut.view();
+    assert!(!view.busy);
+    assert!(view.file_error);
+    assert_eq!(
+        view.file_failure,
+        Some(BatchFileFailure::UnsupportedEncoding)
+    );
+    assert_eq!(view.file_name.as_deref(), Some("payroll-gbk.csv"));
+    assert!(
+        view.preview.is_empty(),
+        "no row is offered from a refused file"
+    );
+    assert!(!view.can_apply);
+    assert!(!view.raw_text.contains('\u{fffd}'));
 }
 
 #[test]

@@ -33,7 +33,9 @@
 				"chainSetup": "Configurazione chain",
 				"selfHosting": "Guida al self-hosting",
 				"privacy": "Privacy",
-				"terms": "Termini"
+				"terms": "Termini",
+				"support": "Assistenza",
+				"deleteData": "Elimina i tuoi dati"
 			}
 		},
 		"language": {

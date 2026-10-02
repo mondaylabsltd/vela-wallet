@@ -996,14 +996,21 @@ final class SigningController {
         return ["amount": amount, "recipient": recipient, "tier": estimate.tier]
     }
 
-    /// The first call of a request: `to`, `data`, `value`.
-    static func firstCall(paramsJson: String) -> (to: String?, data: String?, value: String?)? {
+    /// The first call of a request: `to`, `data`, `value`. Given the
+    /// `method`, chosen BY it, the way the submit path chooses what it sends:
+    /// an `eth_sendTransaction` is its own top-level call — never a stray
+    /// `calls` key beside it, which once had a harmless leg described while a
+    /// malicious call was signed (the desktop's 083 review).
+    static func firstCall(
+        paramsJson: String, method: String? = nil
+    ) -> (to: String?, data: String?, value: String?)? {
         guard let data = paramsJson.data(using: .utf8),
               let params = try? JSONSerialization.jsonObject(with: data) as? [Any],
               let first = params.first as? [String: Any]
         else { return nil }
-        // A batch's first leg is what the sheet leads with.
-        let call = ((first["calls"] as? [[String: Any]])?.first) ?? first
+        let call = method == "eth_sendTransaction"
+            ? first
+            : ((first["calls"] as? [[String: Any]])?.first) ?? first
         func field(_ name: String) -> String? {
             (call[name] as? String).flatMap { $0.isEmpty ? nil : $0 }
         }
@@ -1025,8 +1032,18 @@ final class SigningController {
     static func clearKickoff(
         method: String, paramsJson: String, chainId: Int, origin: String?
     ) -> [String: Any]? {
-        if method == "eth_sendTransaction" || method == "wallet_sendCalls" {
-            let call = firstCall(paramsJson: paramsJson)
+        // 089 S1: a batch goes over whole — the core reads EVERY call, so the
+        // sheet can never describe call 1 while signing them all.
+        if method == "wallet_sendCalls" {
+            return [
+                "type": "resolve_batch",
+                "params_json": paramsJson,
+                "chain_id": chainId,
+                "locale": defaultLocale,
+            ]
+        }
+        if method == "eth_sendTransaction" {
+            let call = firstCall(paramsJson: paramsJson, method: method)
             return [
                 "type": "resolve_transaction",
                 "to": call?.to as Any? ?? NSNull(),

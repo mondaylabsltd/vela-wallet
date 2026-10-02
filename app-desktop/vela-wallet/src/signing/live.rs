@@ -16,9 +16,9 @@ use vela_core::app::approval_guard::{
     GuardAmountError, GuardChoice, GuardEditorMode, GuardSurface, GuardView,
 };
 use vela_core::app::clear_signing::{
-    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
-    ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
-    UNKNOWN_AMOUNT,
+    ClearBatchCall, ClearBatchView, ClearBlindTyped, ClearDangerClass, ClearMessageView,
+    ClearProvenance, ClearRisk, ClearSignField, ClearSignResult, ClearSigningView,
+    ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignPhase, SignView};
@@ -121,39 +121,91 @@ pub fn localized_terms(clear: &ClearSigningView, s: &SigningStrings) -> ClearSig
             *text = word.to_string();
         }
     };
-    let mut shown = clear.clone();
-    if let Some(result) = shown.result.as_mut() {
+    let localize = |result: &mut ClearSignResult| {
         word(result.intent_term, &mut result.intent);
         for field in &mut result.fields {
             word(field.label_term, &mut field.label);
             word(field.value_term, &mut field.value);
         }
+    };
+    let mut shown = clear.clone();
+    if let Some(result) = shown.result.as_mut() {
+        localize(result);
+    }
+    // Every call of a batch, in the same words a lone call gets (089 S1).
+    if let Some(batch) = shown.batch.as_mut() {
+        for result in batch
+            .calls
+            .iter_mut()
+            .filter_map(|call| call.result.as_mut())
+        {
+            localize(result);
+        }
     }
     shown
+}
+
+/// One decode with the cap written over its "Unlimited".
+fn cap_result(result: &mut ClearSignResult, cap: &str) {
+    for field in &mut result.fields {
+        if field.warning && field.format == "tokenAmount" {
+            field.value = cap.to_owned();
+            field.warning = false;
+        }
+    }
+    if result.risk == ClearRisk::Danger && !result.fields.iter().any(|f| f.warning) {
+        result.risk = ClearRisk::Caution;
+    }
 }
 
 fn capped(mut shown: ClearSigningView, guard: &GuardView) -> ClearSigningView {
-    let Some(cap) = cap_text(guard) else {
+    // A batch (089 S1): each call's "Unlimited" is replaced by ITS OWN leg's
+    // cap — the guard's legs are the calls, in order.
+    if let Some(batch) = shown.batch.as_mut() {
+        for (index, call) in batch.calls.iter_mut().enumerate() {
+            let (Some(result), Some(cap)) = (call.result.as_mut(), cap_text(guard, index)) else {
+                continue;
+            };
+            cap_result(result, &cap);
+            // Capped, the call is what its decode now says — unless it burns.
+            if call.risk == ClearRisk::Danger
+                && result.risk != ClearRisk::Danger
+                && !result.to_own_token
+            {
+                call.risk = result.risk;
+            }
+        }
+        batch.risk = batch
+            .calls
+            .iter()
+            .map(|call| call.risk)
+            .max_by_key(|risk| risk_rank(*risk))
+            .unwrap_or(batch.risk);
+        return shown;
+    }
+    let Some(cap) = cap_text(guard, 0) else {
         return shown;
     };
     if let Some(result) = shown.result.as_mut() {
-        for field in &mut result.fields {
-            if field.warning && field.format == "tokenAmount" {
-                field.value = cap.clone();
-                field.warning = false;
-            }
-        }
-        if result.risk == ClearRisk::Danger && !result.fields.iter().any(|f| f.warning) {
-            result.risk = ClearRisk::Caution;
-        }
+        cap_result(result, &cap);
     }
     shown
 }
 
+/// The order risks rise in, for "the worst call sets the headline's tone".
+fn risk_rank(risk: ClearRisk) -> u8 {
+    match risk {
+        ClearRisk::Safe => 0,
+        ClearRisk::Normal => 1,
+        ClearRisk::Caution => 2,
+        ClearRisk::Danger => 3,
+    }
+}
+
 /// The guard's finite choice on an unlimited request, as the cap row prints it
-/// — the single approval's, or a batch's FIRST leg's: a bundle decodes from
-/// its first leg, so that is the line the decode's "Unlimited" sits on.
-fn cap_text(guard: &GuardView) -> Option<String> {
+/// — the single approval's, or batch leg `leg`'s: each call of a batch carries
+/// its own decode, so each "Unlimited" is replaced by its own leg's cap.
+fn cap_text(guard: &GuardView, leg: usize) -> Option<String> {
     let (detected, editor, meta) = match guard.surface {
         GuardSurface::ApprovalEditor => (
             guard.detected.as_ref()?,
@@ -161,7 +213,7 @@ fn cap_text(guard: &GuardView) -> Option<String> {
             &guard.meta,
         ),
         GuardSurface::Batch => {
-            let leg = guard.batch.as_ref()?.legs.first()?;
+            let leg = guard.batch.as_ref()?.legs.get(leg)?;
             (leg.approval.as_ref()?, leg.editor.as_ref()?, &leg.meta)
         }
         _ => return None,
@@ -240,6 +292,198 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|plain| plain_send_blocks(plain, facts, s))
             .unwrap_or_default(),
+        // 089 S1: every call of a batch, never call 1 alone.
+        ClearSurface::Batch => clear
+            .batch
+            .as_ref()
+            .map(|batch| batch_blocks(batch, facts, s))
+            .unwrap_or_default(),
+    }
+}
+
+/// 089 S1: a batch as the sheet draws it — "Batch", how many transactions are
+/// signed together, then EVERY call as its own card (the drawn CS26), the coin
+/// the whole batch moves, and every flag any call raised, said once. The
+/// headline is never call 1's: `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1
+/// xDAI" and signed both. The guard's per-call cap cards and its unlimited
+/// sentence follow, from the page, as they do for a lone approval.
+fn batch_blocks(batch: &ClearBatchView, facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
+    let symbol = facts.native_symbol.as_str();
+    let mut out = vec![
+        Block::Intent {
+            text: s.intent_batch.clone(),
+            tone: tone_of(batch.risk),
+        },
+        Block::Sentence {
+            text: crate::signing::fill(
+                &s.summary_batch,
+                &[("count", &batch.calls.len().to_string())],
+            )
+            .into(),
+            tone: Tone::Accent,
+        },
+    ];
+    out.extend(
+        batch
+            .calls
+            .iter()
+            .map(|call| batch_call_card(call, symbol, s)),
+    );
+    if let Some(total) = batch
+        .total_amount
+        .as_deref()
+        .filter(|_| batch.total_value_wei.as_deref() != Some("0"))
+    {
+        out.push(Block::Rows(vec![(
+            s.label_total.clone(),
+            SharedString::from(format!("−{total} {symbol}")),
+            Tone::Neutral,
+            false,
+        )]));
+    }
+    let results: Vec<&ClearSignResult> = batch
+        .calls
+        .iter()
+        .filter_map(|call| call.result.as_ref())
+        .collect();
+    if results.iter().any(|result| result.to_own_token) {
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.warn_token_to_contract.clone(),
+        });
+    }
+    if results.iter().any(|result| result.best_effort) {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_best_effort.clone(),
+        });
+    }
+    if results.iter().any(|result| result.partial) {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_partial.clone(),
+        });
+    }
+    if results
+        .iter()
+        .any(|result| result.provenance == ClearProvenance::Fetched)
+    {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_descriptor_fetched.clone(),
+        });
+    }
+    if results
+        .iter()
+        .any(|result| result.fields.iter().any(|field| field.unverified))
+    {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_unverified_amount.clone(),
+        });
+    }
+    if results
+        .iter()
+        .any(|result| result.fields.iter().any(|field| field.expired))
+    {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_expired.clone(),
+        });
+    }
+    out
+}
+
+/// 089 S1: one call of a batch, as its own card — the words its call would get
+/// alone. A decoded call is its intent and its fields, then the coin it moves
+/// and whom it calls; a plain send is "Send", the exact amount and the
+/// recipient; a call nobody could read says so in its title, with whom it
+/// calls and what coin it moves. Never omitted: the core hands a row for every
+/// call.
+fn batch_call_card(call: &ClearBatchCall, symbol: &str, s: &SigningStrings) -> Block {
+    let index = call.index.to_string();
+    let step = |action: &str| {
+        Some(SharedString::from(crate::signing::fill(
+            &s.batch_step,
+            &[("index", &index), ("action", action)],
+        )))
+    };
+    let tone = tone_of(call.risk);
+    // What the call moves of the chain's own coin, and whom it calls: inside a
+    // batch nothing else on the sheet says it for this call.
+    let coin: Vec<crate::signing::fixtures::Row> = call
+        .amount
+        .as_deref()
+        .filter(|_| call.value_wei.as_deref() != Some("0"))
+        .map(|amount| {
+            (
+                s.label_amount.clone(),
+                SharedString::from(format!("−{amount} {symbol}")),
+                Tone::Neutral,
+                false,
+            )
+        })
+        .into_iter()
+        .collect();
+    let target: Vec<crate::signing::fixtures::Row> = call
+        .to
+        .as_ref()
+        .map(|to| {
+            (
+                s.label_interacting.clone(),
+                SharedString::from(to.clone()),
+                Tone::Neutral,
+                true,
+            )
+        })
+        .into_iter()
+        .collect();
+    if let (ClearSurface::ClearSign, Some(result)) = (call.surface, call.result.as_ref()) {
+        let mut rows: Vec<crate::signing::fixtures::Row> = result
+            .fields
+            .iter()
+            .filter(|field| !field.detail)
+            .map(|field| row_of(field, s))
+            .collect();
+        rows.extend(coin);
+        rows.extend(target);
+        return Block::Card {
+            title: step(&result.intent),
+            rows,
+            tone,
+        };
+    }
+    if let (ClearSurface::PlainSend, Some(plain)) = (call.surface, call.plain_send.as_ref()) {
+        let sign = if plain.no_value { "" } else { "−" };
+        return Block::Card {
+            title: step(&s.intent_send),
+            rows: vec![
+                (
+                    s.label_amount.clone(),
+                    SharedString::from(format!("{sign}{} {symbol}", plain.amount)),
+                    Tone::Neutral,
+                    false,
+                ),
+                (
+                    s.label_recipient.clone(),
+                    SharedString::from(plain.to.clone()),
+                    Tone::Neutral,
+                    true,
+                ),
+            ],
+            tone,
+        };
+    }
+    let mut rows = target;
+    rows.extend(coin);
+    let undecoded = crate::signing::fill(
+        &s.warn_blind_decode,
+        &[("bytes", &call.data_bytes.to_string())],
+    );
+    Block::Card {
+        title: step(&undecoded),
+        rows,
+        tone,
     }
 }
 
@@ -1792,6 +2036,180 @@ mod tests {
         crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view()
     }
 
+    /// 089 S1: the defect's own batch — 1 wei to A, 1 xDAI to B.
+    const TWO_SENDS: &str = r#"[{"chainId":"0x64","calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x1"},{"to":"0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c","value":"0xde0b6b3a7640000"}]}]"#;
+
+    /// What the REAL core reads a batch as — plain sends ask the shell nothing.
+    fn real_batch(params: &str) -> ClearSigningView {
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let _ = host.dispatch(vela_core::app::clear_signing::Event::ResolveBatch {
+            params_json: params.to_owned(),
+            chain_id: 100,
+            locale: vela_core::app::clear_signing::ClearLocale::default(),
+        });
+        host.view()
+    }
+
+    fn cards(
+        blocks: &[Block],
+    ) -> Vec<(
+        Option<SharedString>,
+        Vec<crate::signing::fixtures::Row>,
+        Tone,
+    )> {
+        blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Card { title, rows, tone } => Some((title.clone(), rows.clone(), *tone)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 089 S1: `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1 xDAI to A" and
+    /// signed both. Every call is its own card, the total is said, and the
+    /// headline is the batch's — never call 1's "Send".
+    #[test]
+    fn a_batch_draws_every_call_and_its_total() {
+        let s = strings();
+        let facts = RequestFacts {
+            native_symbol: "xDAI".to_owned(),
+            ..RequestFacts::default()
+        };
+        let clear = real_batch(TWO_SENDS);
+        assert_eq!(clear.surface, ClearSurface::Batch);
+        let drawn = blocks(&clear, &facts, &s);
+        assert!(matches!(
+            &drawn[0],
+            Block::Intent { text, tone: Tone::Neutral } if *text == s.intent_batch
+        ));
+        assert!(matches!(
+            &drawn[1],
+            Block::Sentence { text, .. }
+                if *text == crate::signing::fill(&s.summary_batch, &[("count", "2")])
+        ));
+        let cards = cards(&drawn);
+        assert_eq!(cards.len(), 2, "one card per call");
+        let step = |index: &str| {
+            Some(SharedString::from(crate::signing::fill(
+                &s.batch_step,
+                &[("index", index), ("action", &s.intent_send)],
+            )))
+        };
+        assert_eq!(cards[0].0, step("1"));
+        assert_eq!(
+            cards[0].1[0].1,
+            SharedString::from("−0.000000000000000001 xDAI")
+        );
+        assert_eq!(
+            cards[0].1[1].1.to_lowercase(),
+            "0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141"
+        );
+        assert_eq!(cards[1].0, step("2"));
+        assert_eq!(cards[1].1[0].1, SharedString::from("−1 xDAI"));
+        assert_eq!(
+            cards[1].1[1].1.to_lowercase(),
+            "0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c"
+        );
+        assert!(drawn.iter().any(|block| matches!(
+            block,
+            Block::Rows(rows) if rows.len() == 1
+                && rows[0].0 == s.label_total
+                && rows[0].1 == "−1.000000000000000001 xDAI"
+        )));
+        let label = confirm_label(&clear, &s);
+        assert!(label.ends_with(s.confirm_plain.as_ref()), "{label}");
+        assert!(
+            !label.contains(s.confirm_send.as_ref()),
+            "no one call's verb: {label}"
+        );
+    }
+
+    /// 089 S1: a call nobody can read is a card that says so — with whom it
+    /// calls and what it moves — and never a dropped one; a batch of ONE call
+    /// is that call, drawn as it always was.
+    #[test]
+    fn an_unreadable_call_is_a_card_and_a_one_call_batch_is_the_call() {
+        let s = strings();
+        let facts = RequestFacts {
+            native_symbol: "xDAI".to_owned(),
+            ..RequestFacts::default()
+        };
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        // A create (no `to`, calldata) concludes at once as a deployment; a
+        // second plain send with an unreadable value is the blind card.
+        let _ = host.dispatch(vela_core::app::clear_signing::Event::ResolveBatch {
+            params_json: r#"[{"calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x1"},{"to":"0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c","value":1000}]}]"#.to_owned(),
+            chain_id: 100,
+            locale: vela_core::app::clear_signing::ClearLocale::default(),
+        });
+        let clear = host.view();
+        let drawn = cards(&blocks(&clear, &facts, &s));
+        assert_eq!(drawn.len(), 2);
+        let undecoded = crate::signing::fill(&s.warn_blind_decode, &[("bytes", "0")]);
+        assert_eq!(
+            drawn[1].0,
+            Some(SharedString::from(crate::signing::fill(
+                &s.batch_step,
+                &[("index", "2"), ("action", &undecoded)],
+            )))
+        );
+        assert_eq!(drawn[1].2, Tone::Caution);
+        assert_eq!(drawn[1].1[0].0, s.label_interacting);
+        assert!(
+            !blocks(&clear, &facts, &s)
+                .iter()
+                .any(|block| matches!(block, Block::Rows(rows) if rows[0].0 == s.label_total)),
+            "a sum missing a term is not stated"
+        );
+
+        let one = real_batch(
+            r#"[{"calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x38d7ea4c68000"}]}]"#,
+        );
+        assert_eq!(
+            one.surface,
+            ClearSurface::PlainSend,
+            "one call is that call"
+        );
+        assert!(cards(&blocks(&one, &facts, &s)).is_empty());
+    }
+
+    /// 089 S1: a decoded call's card still says what coin the call moves and
+    /// whom it calls — a 4-byte reading with no fields drew an empty card,
+    /// and the 0.01 it moved appeared only in the total.
+    #[test]
+    fn a_decoded_call_card_names_its_coin_and_its_target() {
+        let s = strings();
+        let facts = RequestFacts {
+            native_symbol: "ETH".to_owned(),
+            ..RequestFacts::default()
+        };
+        let mut clear = real_batch(TWO_SENDS);
+        let batch = clear
+            .batch
+            .as_mut()
+            .unwrap_or_else(|| unreachable!("a batch"));
+        let call = &mut batch.calls[1];
+        call.surface = ClearSurface::ClearSign;
+        call.plain_send = None;
+        call.result = Some(result(Vec::new()));
+        call.to = Some("0xcccccccccccccccccccccccccccccccccccccccc".to_owned());
+        let drawn = cards(&blocks(&clear, &facts, &s));
+        let rows = &drawn[1].1;
+        assert_eq!(
+            rows.len(),
+            2,
+            "{:?}",
+            rows.iter().map(|r| r.0.clone()).collect::<Vec<_>>()
+        );
+        assert_eq!(rows[0].0, s.label_amount);
+        assert_eq!(rows[0].1, SharedString::from("−1 ETH"));
+        assert_eq!(rows[1].0, s.label_interacting);
+        assert!(rows[1].3, "an address reads as monospace");
+    }
+
     fn message(danger: ClearDangerClass) -> ClearMessageView {
         ClearMessageView {
             payload: "0xdead".to_owned(),
@@ -1858,6 +2276,7 @@ mod tests {
                 },
             ),
             (ClearSurface::BlindTransaction, pristine()),
+            (ClearSurface::Batch, real_batch(TWO_SENDS)),
             (
                 ClearSurface::PlainSend,
                 ClearSigningView {

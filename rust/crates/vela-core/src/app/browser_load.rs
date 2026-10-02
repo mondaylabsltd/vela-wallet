@@ -30,6 +30,9 @@
 //! - [`address_bar`] and [`site_label`] — what the bar names and with which
 //!   lock (spec 082, RE1: never a pending host over a shown page), and a name
 //!   that is its host said once (RE7).
+//! - [`pinned_title`] — the title a page is pinned under: its site's last
+//!   good title, never an engine error page's ("网页无法打开") nor the page
+//!   before's (spec 086, issue #329).
 
 use serde::{Deserialize, Serialize};
 
@@ -224,18 +227,23 @@ fn failure(class: LoadFailureClass) -> LoadFailure {
     }
 }
 
-/// The corpus key of each class's sentence. Offline, timeout and refused
-/// share one: to a person all three are "the network — retrying", and the
-/// class still drives the retry schedule. The generic line is the one the
-/// panel always had (`connect.browser.loadFailed`).
+/// The corpus key of each class's sentence. Offline and timeout share one:
+/// to a person both are "the network — retrying", and the class still drives
+/// the retry schedule. The generic line is the one the panel always had
+/// (`connect.browser.loadFailed`).
+///
+/// A refused connection is not the network (087 F15): the network carried the
+/// request to the host, and nothing there took it — a dev server that is not
+/// running at `127.0.0.1:8137` read "网络不稳定，页面没能打开". It says only
+/// what is known, the generic "couldn't load this page" (the panel's own
+/// title, so no second line), and keeps the network's retry schedule: a
+/// server coming up is answered on the next attempt.
 pub fn reason_key(class: LoadFailureClass) -> &'static str {
     match class {
-        LoadFailureClass::Offline | LoadFailureClass::Timeout | LoadFailureClass::Refused => {
-            "explore.loadOffline"
-        }
+        LoadFailureClass::Offline | LoadFailureClass::Timeout => "explore.loadOffline",
         LoadFailureClass::NotFound => "explore.loadNotFound",
         LoadFailureClass::Certificate => "explore.loadCertificate",
-        LoadFailureClass::Other => "connect.browser.loadFailed",
+        LoadFailureClass::Refused | LoadFailureClass::Other => "connect.browser.loadFailed",
         LoadFailureClass::Proxy => "explore.loadProxy",
     }
 }
@@ -1115,4 +1123,28 @@ pub fn site_label(title: &str, host: &str) -> SiteLabel {
         name: title.to_owned(),
         host_line: (!host.is_empty()).then(|| host.to_owned()),
     }
+}
+
+/// The title a page is pinned under when it is made a favourite (spec 086
+/// FR-010, issue #329: Android pinned app.uniswap.org as "网页无法打开", the
+/// title of the WebView's own error page).
+///
+/// `url` is the address pinned — the bar's ([`AddressBar::url`]), which under
+/// a failure panel is the address that failed. `last_good` is the last
+/// document that loaded WITHOUT failing, as [`visit_to_record`] made it a
+/// visit: an engine's error page never is one, failed or not, because its
+/// document is not a web page.
+///
+/// That visit's title when it is the same site (origin) as `url` — the site's
+/// last good title. Otherwise `None`: a site that never loaded, a load with
+/// no title yet, a title left from the page before. The favourite is then
+/// named by its host (`explore_sites`' own fallback).
+#[must_use]
+pub fn pinned_title(url: &str, last_good: Option<&Visit>) -> Option<String> {
+    let visit = last_good?;
+    if origin_of(url.trim())? != origin_of(visit.url.trim())? {
+        return None;
+    }
+    let title = visit.title.as_deref()?.trim();
+    (!title.is_empty()).then(|| title.to_owned())
 }

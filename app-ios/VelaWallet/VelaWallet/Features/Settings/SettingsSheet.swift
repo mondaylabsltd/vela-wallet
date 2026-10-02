@@ -1278,11 +1278,16 @@ private struct RpcFixSheetBody: View {
                 .foregroundStyle(theme.fgSubtle)
                 .padding(.top, Tokens.Space.s16)
                 .padding(.bottom, Tokens.Space.s8)
-            HStack(spacing: Tokens.Space.s8) {
+            // 087 F07: one word per chip, whole — a full row wraps the next
+            // chip onto a new line instead of breaking "Chainlist" in two
+            // (seen on Android; an HStack squeezes the same way here).
+            PillFlow(spacing: Tokens.Space.s8) {
                 ForEach(model.providers, id: \.self) { name in
                     Text(name)
                         .typeRole(Typography.flowCaption)
                         .foregroundStyle(theme.fgBase)
+                        .lineLimit(1)
+                        .fixedSize()
                         .padding(.horizontal, Tokens.Space.s12)
                         .padding(.vertical, Tokens.Space.s8)
                         .background(theme.bgRaised,

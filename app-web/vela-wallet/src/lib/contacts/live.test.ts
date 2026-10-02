@@ -378,6 +378,10 @@ describe('importReport', () => {
 		expect(invalid?.body).toContain('3');
 		const refused = importReport({ ...VIEW, import_failure: { type: 'no_address_column' } }, m);
 		expect(refused).toEqual({ title: m.importFailTitle, body: m.importFailBody });
+		// Issue 333: a file in a legacy encoding is told how to save it.
+		const encoding = importReport({ ...VIEW, import_failure: { type: 'unsupported_encoding' } }, m);
+		expect(encoding).toEqual({ title: m.importFailTitle, body: m.importFailEncoding });
+		expect(m.importFailEncoding).toContain('UTF-8');
 	});
 });
 

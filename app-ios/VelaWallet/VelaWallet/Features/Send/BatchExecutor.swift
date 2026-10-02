@@ -70,7 +70,12 @@ final class BatchExecutor {
                 }
                 content = ["type": "matrix", "rows": rows]
             } else {
-                content = ["type": "text", "text": String(decoding: picked.bytes, as: UTF8.self)]
+                // The BYTES, undecoded — the core decodes them once (UTF-8, or
+                // UTF-16 by its BOM, never a guess), as it does a contacts
+                // file (issue 333). `String(decoding:as:)` used to decode
+                // here and turned a GBK CSV's Chinese names into U+FFFD
+                // without a word (087).
+                content = ["type": "bytes", "bytes": picked.bytes.map { Int($0) }]
             }
             return CoreJSON.string([
                 "type": "file_picked", "name": picked.name, "content": content,
