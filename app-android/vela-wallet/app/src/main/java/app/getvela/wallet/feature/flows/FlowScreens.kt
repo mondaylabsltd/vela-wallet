@@ -1928,6 +1928,8 @@ fun SendReceiptBody(
     modifier: Modifier = Modifier,
     onExplorer: () -> Unit = {},
     onCta: () -> Unit = {},
+    /** Spec 096 F8: the failed dApp receipt's Try again ([SendReceiptModel.retry]). */
+    onRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     var copied by remember { mutableStateOf(false) }
@@ -1998,12 +2000,21 @@ fun SendReceiptBody(
         )
             Spacer(modifier = Modifier.height(VelaSpacing.md))
         }
-        FlowCta(
-            label = model.cta,
-            onClick = onCta,
-            accent = model.ctaAccent,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        val retry = model.retry
+        if (retry != null && onRetry != null) {
+            // Spec 096 F8: Done answers the page; Try again goes back to review.
+            Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), modifier = Modifier.fillMaxWidth()) {
+                FlowCta(label = model.cta, onClick = onCta, accent = false, modifier = Modifier.weight(1f))
+                FlowCta(label = retry, onClick = onRetry, accent = true, modifier = Modifier.weight(1f))
+            }
+        } else {
+            FlowCta(
+                label = model.cta,
+                onClick = onCta,
+                accent = model.ctaAccent,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

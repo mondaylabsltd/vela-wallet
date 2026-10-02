@@ -175,6 +175,36 @@ class SigningLiveTest {
         assertEquals("1000", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":"0x3e8"}]""")?.single()?.value)
     }
 
+    /**
+     * Spec 096 F1: the core's value table, through this shell's reading —
+     * PancakeSwap's `0xaa87bee538000` is 0.003 BNB; decimal text, bare hex,
+     * a sign (this shell took "-1" as minus one) and an overflow are refused.
+     */
+    @Test
+    fun `a call value is the core's reading`() {
+        val table = listOf(
+            "\"0xaa87bee538000\"" to "3000000000000000",
+            "\"0xAA87BEE538000\"" to "3000000000000000",
+            "\"0x\"" to "0",
+            "\"\"" to "0",
+            "\"0\"" to "0",
+            "0" to "0",
+            "\"0x${"f".repeat(64)}\"" to "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "\"0x1${"0".repeat(64)}\"" to null,
+            "\"1000\"" to null,
+            "\"aa87bee538000\"" to null,
+            "\"-1\"" to null,
+            "\"0X1f\"" to null,
+        )
+        for ((value, wei) in table) {
+            val calls = SignExecutor.callsOf(
+                "eth_sendTransaction",
+                """[{"to":"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4","value":$value,"data":"0x3593564c"}]""",
+            )
+            assertEquals(value, wei, calls?.single()?.value)
+        }
+    }
+
     @Test
     fun `the slide waits for the guard and the fee, and a contract call with bytes stays blind`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""

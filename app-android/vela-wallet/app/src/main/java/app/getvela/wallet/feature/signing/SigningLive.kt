@@ -489,7 +489,10 @@ object SigningLive {
                     // sent" — never "try again": it would be refused again.
                     captions = listOfNotNull(summary, failureWords(sign, s)),
                     cta = s.t(I18nKeys.Flows.DONE),
-                    ctaAccent = true,
+                    // Spec 096 F8: the core holds the page's answer until this
+                    // closes; a failure that sent nothing may be tried again.
+                    ctaAccent = !sign.failure_retryable,
+                    retry = if (sign.failure_retryable) s.t(I18nKeys.Flows.TX_RETRY) else null,
                 )
             // Spec 082 RA10: the relay's reply was lost. "Submitting…", it may
             // have been sent, Vela keeps checking — the op hash, and a close

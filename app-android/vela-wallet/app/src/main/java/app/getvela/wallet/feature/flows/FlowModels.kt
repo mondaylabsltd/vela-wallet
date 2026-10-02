@@ -758,6 +758,8 @@ data class SendReceiptModel(
     val ctaAccent: Boolean,
     /** Submitted only, and only where the chain has a typical time: the screen's clock runs off this. */
     val eta: ReceiptEtaModel? = null,
+    /** Spec 096 F8: "Try again" beside the button — a dApp request that failed before anything was sent. */
+    val retry: String? = null,
 )
 
 /**
