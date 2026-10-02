@@ -130,6 +130,12 @@ impl Machine for FeePolicy {
                 Duration::from_millis(u64::from(*ms)),
                 FeeShellResult::TtlElapsed,
             ),
+            // The core's bound on a whole run (spec 094 S9): a quote that has
+            // not priced by then fails, retryably, instead of "Estimating…".
+            FeeOperation::StartDeadline { ms } => Answer::After(
+                Duration::from_millis(u64::from(*ms)),
+                FeeShellResult::DeadlineElapsed,
+            ),
         }
     }
 }

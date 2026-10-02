@@ -32,6 +32,7 @@ final class FeeExecutor {
         "estimate_user_op_gas",
         "measure_inner_calls",
         "start_ttl",
+        "start_deadline",
     ]
 
     /// `eth_estimateGas({from, to, value, data})` for one call on one chain —
@@ -122,6 +123,13 @@ final class FeeExecutor {
             let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
             try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
             return CoreJSON.string(["type": "ttl_elapsed"])
+
+        case "start_deadline":
+            // The core's bound on a whole quote (spec 094 S9): a run that has
+            // not priced by then fails, retryably, instead of "Estimating…".
+            let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
+            try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            return CoreJSON.string(["type": "deadline_elapsed"])
 
         default:
             // Answered, loudly. An unanswered operation leaves the machine
@@ -266,6 +274,8 @@ final class FeeExecutor {
             ])
         case "start_ttl":
             return CoreJSON.string(["type": "ttl_elapsed"])
+        case "start_deadline":
+            return CoreJSON.string(["type": "deadline_elapsed"])
         default:
             return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": "context_unavailable"]])
         }

@@ -1092,6 +1092,7 @@ struct SigningLiveTests {
             ),
             meta: GuardTokenMetaViewWire(symbol: "USDC", decimals: 6, verified: true, loading: false),
             editor: editor, confirmAllowed: true, rewrittenParamsJson: nil, unlimitedConsented: true,
+            unlimitedWarning: true,
             increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
         )
         let blocks = SigningLive.guardBlocks(guardView, loc: loc)
@@ -1176,6 +1177,32 @@ struct SigningLiveTests {
     /// An off-chain permit says plainly that the wallet cannot cap it, and
     /// why. Rewriting one would desync the signature and revert the dApp's own
     /// transaction.
+    /// Spec 094 S8: an UNLIMITED off-chain permit (Permit2's, Uniswap's) is
+    /// also said in the danger tone, from the core's flag — and still gets no
+    /// cap editor, which would only revert the dApp's transaction.
+    @Test func anUnlimitedPermitIsWarnedAboutLikeAnUnlimitedApproval() {
+        let guardView = GuardViewWire(
+            surface: .permitSign,
+            detected: GuardDetectedApprovalWire(
+                kind: .permit2Single, tokenAddress: "0xtoken", spender: "0xspender",
+                amountRaw: nil, amountBits: 160, isUnbounded: true, isBooleanGrant: false,
+                isReducing: false, editable: false, blockReason: .offChainPermit,
+                deadline: nil, locus: .typedPath("details.amount")
+            ),
+            meta: GuardViewWire.empty.meta, editor: nil, confirmAllowed: true,
+            rewrittenParamsJson: nil, unlimitedConsented: false, unlimitedWarning: true,
+            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
+        )
+        let blocks = SigningLive.guardBlocks(guardView, loc: loc)
+        let warnings = blocks.compactMap { block -> String? in
+            if case .warning(.danger, let text) = block { return text }
+            return nil
+        }
+        #expect(warnings.contains(loc.t("componentsUi.signing.unlimitedWarning")))
+        #expect(warnings.contains(loc.t("componentsUi.signingApprove.permitCantCap")))
+        #expect(!blocks.contains { if case .allowance = $0 { return true } else { return false } })
+    }
+
     @Test func anOffChainPermitSaysItCannotBeCapped() {
         let guardView = GuardViewWire(
             surface: .permitSign,
