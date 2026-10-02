@@ -92,10 +92,16 @@ struct DappActivityTests {
     // MARK: - Helpers
 
     /// The real feed core, fed stored rows through `TxRecords.toWire`.
-    private func feed(_ rows: [[String: Any]]) throws -> FeedViewWire {
+    private func feed(_ rows: [[String: Any]], contact: String? = nil) throws -> FeedViewWire {
         let core = ActivityFeedCore()
         var run = BridgeRun()
         try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "account_switched", "address": F.me])))
+        if let contact {
+            // What `ActivityStore.contactFilter` sends when a contact's page opens.
+            try run.take(core.dispatch(eventJson: CoreJSON.string([
+                "type": "contact_filter_changed", "address": contact,
+            ])))
+        }
         let wire = rows.compactMap(TxRecords.toWire)
         try run.drain(core) { operation in
             switch operation["type"] as? String {
@@ -367,6 +373,113 @@ struct DappActivityTests {
         #expect(content.missing == zh.t("connect.detail.contentMissing"))
     }
 
+    /// Technical details shows the stored request as the CORE words it
+    /// (`dappRequestDisplay`), read only when opened: a sign-in's message as
+    /// its text, call data as pretty params; nothing kept → `nil`, which the
+    /// detail says as `connect.detail.contentMissing`.
+    @Test func theRequestIsShownAsTheCoreWordsIt() throws {
+        let view = try feed(F.stored(nowMs: now))
+        func content(_ id: String, stored: String?) throws -> TxContentModel {
+            let detail = FlowsLive.txDetail(
+                try item(id, in: view), record: nil, on: try drawnDetail, loc: en,
+                readRequest: { _ in stored }
+            )
+            return try #require(detail.technical?.lines.compactMap { line -> TxContentModel? in
+                if case .content(let content) = line { return content } else { return nil }
+            }.first)
+        }
+        let signIn = try content("dapp-siwe-msg", stored: #"["0x6170702e756e69737761702e6f7267","\#(F.me)"]"#)
+        #expect(signIn.label == en.t("connect.detail.contentMessage"))
+        #expect(signIn.read() == "app.uniswap.org", "a message reads as its text")
+        let call = try content("dapp-swap-tx", stored: F.swapRequest)
+        #expect(call.label == en.t("connect.detail.contentCallData"))
+        let shown = try #require(call.read())
+        #expect(shown.contains("\n"), "pretty-printed")
+        #expect(shown.contains("\"0x3593564c\""))
+        #expect(try content("dapp-swap-tx", stored: "").read() == nil)
+        #expect(try content("dapp-swap-tx", stored: nil).read() == nil)
+    }
+
+    /// A contact's page is the feed's own rows for them (`contact_rows`),
+    /// drawn by Activity's row builder: both ways, on every network, a dApp's
+    /// token transfer to them as its verb — never "已发送" — and a second line
+    /// of the network and the day, worded as the date headers word it.
+    @Test func aContactsPageIsTheFeedsOwnRows() throws {
+        let them = "0x031d7d57c99caf891e1c250554691fd12d84772b"
+        let other = "0x00000000000000000000000000000000000b0b0b"
+        let seconds = now / 1000
+        func transfer(_ id: String, type: String, from: String, to: String, value: String) -> [String: Any] {
+            [
+                "id": id, "type": type, "from": from, "to": to, "value": value, "symbol": "USDC",
+                "decimals": 6, "chainId": 100, "timestamp": seconds, "status": "confirmed",
+                "txHash": "0x" + String(repeating: id == "paid" ? "11" : "22", count: 32),
+            ]
+        }
+        let word = "0xa9059cbb" + String(repeating: "0", count: 24) + String(them.dropFirst(2))
+            + String(repeating: "0", count: 56) + "05f5e100"
+        let request = #"[{"to":"\#(F.usdc)","value":"0x0","data":"\#(word)"}]"#
+        let dapp = SignExecutor.recordRow([
+            "record_id": "dapp-pay-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
+            "params_json": request, "stored_request": request, "request_truncated": false,
+            "result": F.txHash, "from": F.me, "chain_id": 1, "now_ms": now, "status": "confirmed",
+            "user_op_hash": F.opHash, "dapp_origin": "https://pay.example", "dapp_url": "https://pay.example",
+            "intent": "Send", "summary": ["action": "call", "calls": 1, "contract": F.usdc],
+        ], nativeSymbol: "ETH")
+        let rows = [
+            transfer("paid", type: "send", from: F.me, to: them, value: "1.5"),
+            transfer("got", type: "receive", from: them, to: F.me, value: "5"),
+            transfer("elsewhere", type: "send", from: F.me, to: other, value: "9"),
+            dapp,
+        ]
+        let view = try feed(rows, contact: them)
+        #expect(Set(view.contactRows.map(\.id)) == ["paid", "got", "dapp-pay-tx"], "somebody else's transfer is not theirs")
+
+        let contact = ContactWire(
+            address: them, name: "Them", resolvedName: nil, resolvedSource: nil, kind: .eoa,
+            favorite: false, note: nil, txCount: 0, lastUsedMs: 0, firstSeenMs: 0, source: .manual
+        )
+        let page = ContactsLive.detail(
+            contact,
+            view: ContactsViewWire(
+                loaded: true, contacts: [contact], sections: [], groups: [],
+                lastImport: nil, importFailure: nil, export: nil, recipient: nil
+            ),
+            rows: view.contactRows, loc: zh
+        )
+        #expect(page.activity.count == 3)
+        let today = zh.t("componentsUi.dayGroup.today")
+        let paid = try #require(page.activity.first { $0.itemId == "dapp-pay-tx" })
+        #expect(paid.kind == .dapp)
+        #expect(paid.title == zh.t("history.dappRowTitle", vars: [
+            "intent": zh.t("componentsUi.signing.intentSend"), "place": "pay.example",
+        ]))
+        #expect(paid.title != zh.t("history.labelSent"), "a dApp's transfer is not a send")
+        #expect(paid.subtitle == "\(WalletLive.chainName(1)) · \(today)")
+        let sent = try #require(page.activity.first { $0.itemId == "paid" })
+        #expect(sent.title == zh.t("history.labelSent"))
+        #expect(sent.subtitle == "\(WalletLive.chainName(100)) · \(today)", "never \"至 Them\" on Them's page")
+        let got = try #require(page.activity.first { $0.itemId == "got" })
+        #expect(got.positive && got.amount == "+5")
+
+        // The page closed: no rows.
+        #expect(try feed(rows).contactRows.isEmpty)
+    }
+
+    /// The day line is worded as the date headers word it.
+    @Test func theDayLineIsTheHeadersWord() {
+        let midnight = TxRecords.dayStartMs(Date().timeIntervalSince1970)
+        #expect(WalletLive.subtitleText([.day(dayStartMs: midnight)], loc: zh) == zh.t("componentsUi.dayGroup.today"))
+        let yesterday = TxRecords.dayStartMs(Date().timeIntervalSince1970 - 86_400)
+        #expect(WalletLive.subtitleText([.day(dayStartMs: yesterday)], loc: zh) == zh.t("componentsUi.dayGroup.yesterday"))
+        let old = TxRecords.dayStartMs(1_700_000_000)
+        #expect(WalletLive.subtitleText([.network(chainId: 1), .day(dayStartMs: old)], loc: en)
+                == "\(WalletLive.chainName(1)) · \(Formats.date(Date(timeIntervalSince1970: old / 1000)))")
+        #expect(WalletLive.dayLabel(dayStartMs: old, timestamp: 1_700_000_000, loc: en)
+                == Formats.date(Date(timeIntervalSince1970: old / 1000)), "the header says the same date")
+        let decoded = try? CoreJSON.decoder.decode(FeedLineWire.self, from: Data(#"{"type":"day","day_start_ms":1.5}"#.utf8))
+        #expect(decoded == .day(dayStartMs: 1.5))
+    }
+
     /// A summary this build cannot read (an action from a newer build) never
     /// stops the feed: the core reads that record by its kind, and the rest
     /// of the feed is as it was.
@@ -613,7 +726,11 @@ struct DappActivityTests {
             case .content(let content):
                 labels.append(content.label)
                 #expect(content.missing == en.t("connect.detail.contentMissing"))
-                #expect(content.read() == F.permitRequest)
+                // The core's display of the stored request: the typed
+                // document, pretty-printed — not the params' raw JSON.
+                let shown = try #require(content.read())
+                #expect(shown.contains("\n  \"primaryType\": \"PermitSingle\""), "\(shown)")
+                #expect(shown != F.permitRequest)
             }
         }
         #expect(reads == ["dapp-permit-sig"], "read by record id, when opened")

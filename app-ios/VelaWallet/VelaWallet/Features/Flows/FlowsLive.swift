@@ -25,6 +25,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum FlowsLive {
 
@@ -433,9 +434,16 @@ enum FlowsLive {
             case .message: label = loc.t("connect.detail.contentMessage")
             case .unknown: return nil
             }
+            // Read when the section opens, and shown as the core words it
+            // (`dappRequestDisplay`): typed data pretty-printed, a message as
+            // its text or hex, call data pretty-printed. Nothing kept → nil.
             return .content(TxContentModel(
                 label: label, missing: loc.t("connect.detail.contentMissing"),
-                read: { readRequest(id) }
+                read: {
+                    readRequest(id).flatMap {
+                        dappRequestDisplay(content: content.rawValue, storedRequest: $0)
+                    }
+                }
             ))
         case .primaryType(let name):
             return .fact(FactRowModel(label: loc.t("componentsUi.signing.typeLabel"), value: name, mono: true))

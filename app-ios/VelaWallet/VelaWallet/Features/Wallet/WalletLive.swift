@@ -552,7 +552,8 @@ extension WalletLive {
 
     /// A row's second line, from the core's parts (spec 093): status in the
     /// words this shell already says it with, "至 / 来自" somebody (named, or
-    /// their short address), a site verbatim, a network by its name.
+    /// their short address), a site verbatim, a network by its name, a day as
+    /// the date headers say it.
     static func subtitleText(_ lines: [FeedLineWire], loc: Loc) -> String {
         lines.compactMap { line -> String? in
             switch line {
@@ -563,6 +564,9 @@ extension WalletLive {
                 loc.t("history.fromName", vars: ["name": name ?? AddressText.short(address)])
             case .site(let site): site
             case .network(let chainId): chainName(chainId)
+            // A contact's row has no headers over it: its day is worded as
+            // a header is (its midnight names the date).
+            case .day(let dayStartMs): dayLabel(dayStartMs: dayStartMs, timestamp: dayStartMs / 1000, loc: loc)
             case .unknown: nil
             }
         }

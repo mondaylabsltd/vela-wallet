@@ -227,10 +227,13 @@ enum FeedLineWire: Decodable, Equatable {
     case site(String)
     /// The network, by its chain id; the shell names it.
     case network(chainId: Int)
+    /// The day, by its local-midnight key — worded as a date header is
+    /// (今天 / 昨天 / a date). Only on a contact's rows, which have no headers.
+    case day(dayStartMs: Double)
     case unknown
 
     private enum CodingKeys: String, CodingKey {
-        case type, status, address, name, site, chainId
+        case type, status, address, name, site, chainId, dayStartMs
     }
 
     init(from decoder: Decoder) throws {
@@ -245,6 +248,7 @@ enum FeedLineWire: Decodable, Equatable {
                          name: try c.decodeIfPresent(String.self, forKey: .name))
         case "site": self = .site(try c.decode(String.self, forKey: .site))
         case "network": self = .network(chainId: try c.decode(Int.self, forKey: .chainId))
+        case "day": self = .day(dayStartMs: try c.decode(Double.self, forKey: .dayStartMs))
         default: self = .unknown
         }
     }
@@ -502,4 +506,30 @@ struct FeedViewWire: Decodable, Equatable {
     var historyEmptyKey: String = "history.emptyTitle"
     /// The corpus key of the home Activity's empty line, chosen the same way.
     var homeEmptyKey: String = "home.emptyNoActivity"
+    /// What passed between the account and the contact whose page is open
+    /// (`contact_filter_changed`, spec 093): the same items Activity draws,
+    /// on every network, newest first, their second line the status, the
+    /// network and the day. Empty when no contact is open.
+    var contactRows: [FeedItemWire] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case rows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows
+    }
+}
+
+extension FeedViewWire {
+    /// Written out so a view from a core without `contact_rows` (or the
+    /// empty-line keys) still reads, with none.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            rows: try c.decode([FeedRowWire].self, forKey: .rows),
+            transactions: try c.decode([FeedTxRecordWire].self, forKey: .transactions),
+            newItemId: try c.decodeIfPresent(String.self, forKey: .newItemId),
+            toast: try c.decodeIfPresent(FeedToastWire.self, forKey: .toast),
+            historyEmptyKey: try c.decodeIfPresent(String.self, forKey: .historyEmptyKey) ?? "history.emptyTitle",
+            homeEmptyKey: try c.decodeIfPresent(String.self, forKey: .homeEmptyKey) ?? "home.emptyNoActivity",
+            contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? []
+        )
+    }
 }

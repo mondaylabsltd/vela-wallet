@@ -30,6 +30,9 @@ final class DappActivityScreenshotTests: XCTestCase {
     private static let permit2 = "0x000000000022d473030f116ddee9f6b43ac78ba3"
     private static let usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
     private static let site = "https://app.uniswap.org"
+    /// A contact in the book, paid once by a plain send and once by a dApp's
+    /// token transfer — the contact page reads the second as its verb.
+    private static let alice = "0x031d7d57c99caf891e1c250554691fd12d84772b"
 
     /// The three records, as `SignExecutor.recordRow` writes them.
     private static func history(now: Int) -> [[String: Any]] {
@@ -38,6 +41,9 @@ final class DappActivityScreenshotTests: XCTestCase {
             data: try! JSONSerialization.data(withJSONObject: [me, typedData]), encoding: .utf8
         )!
         let signInRequest = #"["0x6170702e756e69737761702e6f72672077616e747320796f7520746f207369676e20696e","\#(me)"]"#
+        let transferWord = "0xa9059cbb" + String(repeating: "0", count: 24) + String(alice.dropFirst(2))
+            + String(repeating: "0", count: 56) + "017d7840"
+        let payRequest = #"[{"to":"\#(usdc)","value":"0x0","data":"\#(transferWord)"}]"#
         return [
             [
                 "id": "dapp-swap-tx", "userOpHash": "0x" + String(repeating: "ab", count: 32),
@@ -70,8 +76,33 @@ final class DappActivityScreenshotTests: XCTestCase {
                 "signedRequest": signInRequest, "requestTruncated": false,
                 "dappSummary": ["action": "sign_in", "signin_domain": "app.uniswap.org"],
             ],
+            [
+                "id": "dapp-pay-alice", "userOpHash": "0x" + String(repeating: "cd", count: 32),
+                "txHash": "0x" + String(repeating: "5e", count: 32), "from": me, "to": usdc,
+                "value": "0x0", "symbol": "ETH", "decimals": 18, "chainId": 1, "timestamp": now - 300,
+                "status": "confirmed", "type": "dapp_tx",
+                "dappOrigin": "https://pay.example", "dappUrl": "https://pay.example",
+                "signedRequest": payRequest, "requestTruncated": false, "intent": "Send",
+                "dappSummary": ["action": "call", "calls": 1, "contract": usdc],
+                "balanceChanges": [
+                    ["type": "erc20_trusted", "token": usdc, "delta": "-25000000",
+                     "symbol": "USDC", "decimals": 6, "in_trusted_set": true],
+                ],
+            ],
+            [
+                "id": "send-alice", "userOpHash": "0x" + String(repeating: "ef", count: 32),
+                "txHash": "0x" + String(repeating: "6f", count: 32), "from": me, "to": alice,
+                "value": "1.5", "symbol": "USDC", "decimals": 6, "chainId": 1, "timestamp": now - 600,
+                "status": "confirmed", "type": "send",
+            ],
         ]
     }
+
+    /// The address book: Alice.
+    private static let book: [[String: Any]] = [[
+        "address": alice, "name": "Alice", "kind": "eoa", "favorite": false,
+        "txCount": 0, "lastUsed": 0, "firstSeen": 0, "source": "manual",
+    ]]
 
     /// The shelf's JSON text as an argument-domain value: an old-style plist
     /// quoted string, so it reaches `UserDefaults.string(forKey:)` as text.
@@ -89,14 +120,16 @@ final class DappActivityScreenshotTests: XCTestCase {
         let permitTitle: String
         let technical: String
         let all: String
+        let contacts: String
+        let recent: String
     }
 
     func testTheThreeRowsAndThePermitsTechnicalDetails() throws {
         let languages = [
             Words(lang: "zh", swapTitle: "在 Uniswap 兑换", permitTitle: "在 Uniswap 授权签名",
-                  technical: "技术细节", all: "全部"),
+                  technical: "技术细节", all: "全部", contacts: "通讯录", recent: "最近往来"),
             Words(lang: "en", swapTitle: "Swap on Uniswap", permitTitle: "Spending permit on Uniswap",
-                  technical: "Technical details", all: "All"),
+                  technical: "Technical details", all: "All", contacts: "Contacts", recent: "Recent activity"),
         ]
         for words in languages {
             let app = launch(words.lang)
@@ -137,6 +170,17 @@ final class DappActivityScreenshotTests: XCTestCase {
             Thread.sleep(forTimeInterval: 1)
             attach(again.screenshot(), named: "\(words.lang)-swap-detail")
             again.terminate()
+
+            // Alice's page: the feed's own rows for her — the dApp's transfer
+            // as its verb beside the plain send.
+            let book = launch(words.lang)
+            tap(book.buttons[words.contacts].firstMatch, "the contacts tab", timeout: 40)
+            tap(book.staticTexts["Alice"].firstMatch, "Alice's row")
+            XCTAssertTrue(book.staticTexts[words.recent].waitForExistence(timeout: 10),
+                          "Alice's page never opened")
+            Thread.sleep(forTimeInterval: 1.5)
+            attach(book.screenshot(), named: "\(words.lang)-contact-page")
+            book.terminate()
         }
     }
 
@@ -148,6 +192,7 @@ final class DappActivityScreenshotTests: XCTestCase {
             "-vela.transactionHistory",
             Self.argument(Self.history(now: Int(Date().timeIntervalSince1970))),
         ]
+        app.launchArguments += ["-vela.contacts", Self.argument(Self.book)]
         app.launchEnvironment["VELA_ACCOUNT"] = Self.me
         app.launchEnvironment["VELA_LANG"] = lang
         app.launchEnvironment["VELA_THEME"] = "light"
