@@ -153,6 +153,66 @@ class SendControllerTest {
     }
 
     /**
+     * Issue #332, the phone's own order: Home → Scan opens Send on the picker
+     * with the scanner over it, and the code arrives afterwards. The address
+     * it read is the recipient on the picker, the form opens on it once a
+     * token is chosen, and going back to choose another keeps it.
+     */
+    @Test
+    fun `a code scanned from the home is the recipient on the picker and survives back`() {
+        val send = controller()
+        send.open(account = me, display = usd)
+        send.awaitView("the picker lists the holdings") { it.stage == SendStage.SelectToken && it.tokens.size == 3 }
+        send.openScanner()
+        send.scanned("  $PAYEE ")
+
+        val picking = send.awaitView("the picker, with the scanned recipient") {
+            it.stage == SendStage.SelectToken && !it.show_scanner && it.recipient == PAYEE
+        }
+        assertNull(picking.selected_token)
+
+        val pol = picking.tokens.first { it.symbol == "POL" }
+        send.selectToken(app.getvela.wallet.feature.send.SendLive.tokenId(pol))
+        send.awaitView("the form, for them") { it.stage == SendStage.EnterDetails && it.recipient == PAYEE }
+
+        send.back()
+        send.awaitView("back on the picker, still for them") {
+            it.stage == SendStage.SelectToken && it.selected_token == null && it.recipient == PAYEE
+        }
+    }
+
+    /**
+     * Issue #312, the phone's order: a code that names a network
+     * (`ethereum:<payee>@137`) offers only what the payer holds THERE — one
+     * holding opens the form on it, never the balance's top coin on another
+     * chain — and the token card (issue #326) goes back to that network's
+     * picker with the payee kept.
+     */
+    @Test
+    fun `a code naming a network offers only that network and the token card keeps it`() {
+        val send = controller()
+        send.open(account = me, display = usd)
+        send.awaitView("the picker lists the holdings") { it.stage == SendStage.SelectToken && it.tokens.size == 3 }
+        send.openScanner()
+        send.scanned("ethereum:$PAYEE@137")
+
+        val form = send.awaitView("the form, on the one Polygon holding") {
+            it.stage == SendStage.EnterDetails && it.selected_token?.chain_id == 137
+        }
+        assertEquals("POL", form.selected_token?.symbol)
+        assertEquals(PAYEE, form.recipient)
+        assertEquals(137, form.request_chain_id)
+        assertEquals(listOf(137), form.tokens.map { it.chain_id })
+        assertEquals(true, form.can_change_token)
+
+        send.changeToken()
+        val picker = send.awaitView("that network's picker, for them") { it.stage == SendStage.SelectToken }
+        assertEquals(listOf(137), picker.tokens.map { it.chain_id })
+        assertEquals(PAYEE, picker.recipient)
+        assertNull(picker.selected_token)
+    }
+
+    /**
      * Spec 082 (T128): what a tracker entry means for the send on screen is
      * the core's one mapping (`sendReceiptOutcomeOf`) — this app's own `when`
      * over four statuses is gone. A lost reply the relay has not shown it
@@ -174,5 +234,6 @@ class SendControllerTest {
 
     private companion object {
         const val ME = "0x576a2cc9e6adc0c95989fa6aa104290aa940c73f"
+        const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     }
 }

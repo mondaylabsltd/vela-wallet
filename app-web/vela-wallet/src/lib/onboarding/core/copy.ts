@@ -93,8 +93,23 @@ export function submitLabelToI18n(label: SubmitLabel): string {
 	}
 }
 
-/** A key row's title and caption in the add-method picker. */
-export function methodCopy(method: KeyMethod): { title: string; body: string } {
+/** Which chooser a key-method row is drawn in — the core's `KeyChooser`. */
+export type KeyChooser = 'create' | 'sign_in';
+
+/**
+ * A key row's title and caption keys in the create picker or the sign-in sheet
+ * — the core's words (`vela_core::app::method_words`, 087 F01/F02) for a
+ * browser, which cannot tell what unlocks the device it runs on (`other`): so
+ * "this device" is the family line, never "Touch ID or Windows Hello" on a
+ * phone, and the sign-in sheet's phone row scans rather than creates.
+ *
+ * A mirror, not a second rule: `copy.test.ts` checks it against the core for
+ * every method and chooser.
+ */
+export function methodCopy(
+	method: KeyMethod,
+	chooser: KeyChooser
+): { title: string; body: string } {
 	switch (method) {
 		case 'platform':
 			return {
@@ -104,7 +119,7 @@ export function methodCopy(method: KeyMethod): { title: string; body: string } {
 		case 'hybrid':
 			return {
 				title: 'onboarding.create.methodHybridTitle',
-				body: 'onboarding.create.methodHybridBody'
+				body: chooser === 'sign_in' ? 'explore.scan' : 'onboarding.create.methodHybridBody'
 			};
 		case 'security_key':
 			return {

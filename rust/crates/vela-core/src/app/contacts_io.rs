@@ -67,6 +67,10 @@ pub enum ContactImportFailure {
     Empty,
     /// "Import into this group" named a group that no longer exists.
     UnknownGroup,
+    /// The bytes are not text this core reads faithfully — not UTF-8, and not
+    /// UTF-16 marked by its byte-order mark (issue 333). Typically a CSV a
+    /// spreadsheet saved in a legacy code page; saving it as UTF-8 fixes it.
+    UnsupportedEncoding,
 }
 
 // ---------------------------------------------------------------------------
@@ -118,9 +122,15 @@ fn exported_contact(contact: &Contact) -> Value {
 
 /// The CSV backup: `address,name,note,favorite,groups`, groups `;`-joined per
 /// row. `\n` line endings, quoted only where a cell needs it.
+///
+/// It starts with a UTF-8 byte-order mark (issue 333). Excel opens a CSV
+/// without one in the machine's legacy code page, so on Chinese Windows every
+/// name in a backup showed as mojibake — and a Save from there wrote it back
+/// in that code page. With the mark, Excel reads UTF-8 and saves "CSV UTF-8".
+/// [`decode_text`] drops it again, so the app's own round trip is unchanged.
 #[must_use]
 pub fn to_csv(contacts: &[Contact], groups: &[ContactGroup]) -> String {
-    let mut lines = vec!["address,name,note,favorite,groups".to_owned()];
+    let mut lines = vec!["\u{feff}address,name,note,favorite,groups".to_owned()];
     for contact in contacts {
         let memberships: Vec<&str> = groups
             .iter()
@@ -217,6 +227,58 @@ fn iso_date_prefix(iso: &str) -> Option<&str> {
     let digits_at = |range: std::ops::Range<usize>| bytes[range].iter().all(u8::is_ascii_digit);
     (digits_at(0..4) && bytes[4] == b'-' && digits_at(5..7) && bytes[7] == b'-' && digits_at(8..10))
         .then_some(head)
+}
+
+// ---------------------------------------------------------------------------
+// Decode
+// ---------------------------------------------------------------------------
+
+/// A picked file's TEXT, from its bytes — the one place a contact file becomes
+/// characters, for every shell (issue 333).
+///
+/// The shells used to decode for themselves, and three did it leniently: the
+/// web's `File.text()`, Android's `decodeToString()` and iOS's
+/// `String(decoding:as: UTF8.self)` all turn bytes that are not UTF-8 into
+/// U+FFFD without a word. A CSV that Excel saved on Chinese Windows is GBK, so
+/// every Chinese name in it imported as `jxjjx����` while the addresses, being
+/// ASCII, came through — nothing looked refused. The desktop read strictly and
+/// refused the same file as "not a JSON or CSV file".
+///
+/// Read exactly:
+/// - UTF-8, with or without its byte-order mark (the mark is dropped);
+/// - UTF-16, little- or big-endian, when its byte-order mark says which
+///   (what Notepad and PowerShell call "Unicode").
+///
+/// Anything else is refused as [`ContactImportFailure::UnsupportedEncoding`],
+/// never guessed. A legacy code page does not say which one it is, and in
+/// this app's languages a guess is not safe: Shift_JIS (ja), EUC-KR (ko) and
+/// Big5 (zh-TW, zh-HK) bytes are well-formed GBK too, so "GBK when it
+/// decodes" would import 田中太郎 as 揷拞懢榊 and 김민수 as 辫刮荐 with no error
+/// to notice — names that existing-wins then protects from the real ones.
+/// Saving the file as UTF-8 is one step, and the refusal says how.
+///
+/// A NUL is refused the same way: no name holds one, and it is what UTF-16
+/// without its mark, or a binary file, looks like as UTF-8.
+pub fn decode_text(bytes: &[u8]) -> Result<String, ContactImportFailure> {
+    let text = match bytes {
+        [0xEF, 0xBB, 0xBF, rest @ ..] => std::str::from_utf8(rest).ok().map(str::to_owned),
+        [0xFF, 0xFE, rest @ ..] => utf16(rest, u16::from_le_bytes),
+        [0xFE, 0xFF, rest @ ..] => utf16(rest, u16::from_be_bytes),
+        _ => std::str::from_utf8(bytes).ok().map(str::to_owned),
+    };
+    text.filter(|text| !text.contains('\0'))
+        .ok_or(ContactImportFailure::UnsupportedEncoding)
+}
+
+/// Strict UTF-16: a dangling byte or an unpaired surrogate refuses the file.
+fn utf16(bytes: &[u8], unit: fn([u8; 2]) -> u16) -> Option<String> {
+    if bytes.len() % 2 != 0 {
+        return None;
+    }
+    let units = bytes.chunks_exact(2).map(|pair| unit([pair[0], pair[1]]));
+    char::decode_utf16(units)
+        .collect::<Result<String, _>>()
+        .ok()
 }
 
 // ---------------------------------------------------------------------------

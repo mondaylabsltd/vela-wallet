@@ -103,6 +103,16 @@ pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
 
+/// How old a pending record with no operation hash may be and still be drawn
+/// pending (087 F04): three times the longest any client keeps a submit open
+/// ([`super::sign_request::PAGE_WAIT_CAP_MS`], the desktop page's ten
+/// minutes; the phones answer within
+/// [`super::sign_request::DAPP_TX_ANSWER_WINDOW_MS`]). Every submit path
+/// writes its record WITH the operation's hash, so a record without one is a
+/// write from an older build, or a submit that never produced a hash — and
+/// the tracker follows hashes only, so nothing will ever settle it.
+pub const UNFOLLOWED_AFTER_MS: f64 = 3.0 * super::sign_request::PAGE_WAIT_CAP_MS;
+
 /// The most decimals a dApp row's stored figure is scaled by (083 H2
 /// review). Every client stores 18; a `u128` has 39 digits, so anything past
 /// this could only print a string of zeros — and an unbounded one sizes an
@@ -139,7 +149,8 @@ pub enum FeedTxKind {
     Connect,
 }
 
-/// Storage lifecycle vocabulary (`status: 'pending' | 'confirmed' | 'failed'`).
+/// Storage lifecycle vocabulary (`status: 'pending' | 'confirmed' | 'failed'`),
+/// plus the one word only a row says: [`FeedTxStatus::Unknown`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -147,6 +158,14 @@ pub enum FeedTxStatus {
     Pending,
     Confirmed,
     Failed,
+    /// A pending record that nothing will ever settle (087 F04): it has no
+    /// operation hash for the tracker to follow and is past
+    /// [`UNFOLLOWED_AFTER_MS`], or it is past the tracker's own
+    /// [`super::tx_tracker::ABANDON_AGE_MS`]. It may have been sent, so it is
+    /// never `Failed`; it is not being worked on, so it is no longer
+    /// `Pending`. Never stored — the record stays `pending` on disk — and
+    /// never on a [`FeedTxRecord`]: only a [`FeedItem`] says it.
+    Unknown,
 }
 
 /// One stored transaction, as the shell maps `LocalTransaction` in — only the
@@ -333,7 +352,8 @@ pub struct FeedItem {
     pub kind: FeedTxKind,
     /// The record's lifecycle; a folded batch carries its first line's. The
     /// tracker is the only thing that moves a record off `Pending`, so a row
-    /// says "confirmed" or "failed" only when the stored record does.
+    /// says "confirmed" or "failed" only when the stored record does — and
+    /// `Unknown` when it is pending and nothing will ever settle it (087 F04).
     #[serde(default = "status_unknown")]
     pub status: FeedTxStatus,
     /// `DappTx` only: the site that asked, read from the origin the request
@@ -850,7 +870,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             // Fold, then tombstone-filter — the reload path is the ONLY
             // setter, and it is the tombstones' single enforcement point
             // (invariant ⑤).
-            let mut items = build_items(&records, &model.address);
+            let mut items = build_items(&records, &model.address, now_ms);
             items.retain(|item| !model.tombstones.contains(&item.id));
             model.items = items;
 
@@ -982,7 +1002,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
 
 /// Fold raw records into feed items: same-id dedupe first, then batch
 /// folding by shared `userOpHash`, newest-first (invariant ①).
-fn build_items(records: &[FeedTxRecord], address: &str) -> Vec<FeedItem> {
+fn build_items(records: &[FeedTxRecord], address: &str, now_ms: f64) -> Vec<FeedItem> {
     if address.is_empty() {
         return Vec::new();
     }
@@ -1038,9 +1058,15 @@ fn build_items(records: &[FeedTxRecord], address: &str) -> Vec<FeedItem> {
             FeedTxKind::DappTx if t.from.to_lowercase() == lc => Some(dapp_item(t)),
             _ => None,
         };
-        let Some(item) = item else {
+        let Some(mut item) = item else {
             continue;
         };
+        // A folded batch reads its first line, which is `t` here too: the
+        // group was gathered in this same order.
+        item.status = row_status(t, now_ms);
+        if let Some(batch) = item.batch.as_mut() {
+            batch.status = item.status;
+        }
         seen.insert(&t.id);
         items.push(item);
     }
@@ -1048,6 +1074,32 @@ fn build_items(records: &[FeedTxRecord], address: &str) -> Vec<FeedItem> {
     // `sort((a, b) => b.timestamp - a.timestamp)` — stable in both runtimes.
     items.sort_by(|a, b| b.timestamp.total_cmp(&a.timestamp));
     items
+}
+
+/// Where a stored record stands as a row (087 F04): its stored status, except
+/// that a `Pending` record nothing will ever settle reads
+/// [`FeedTxStatus::Unknown`] — one with no operation hash past
+/// [`UNFOLLOWED_AFTER_MS`], or any past the tracker's
+/// [`super::tx_tracker::ABANDON_AGE_MS`]. Time only ever ends "pending"
+/// here; it never decides that money landed or failed.
+fn row_status(t: &FeedTxRecord, now_ms: f64) -> FeedTxStatus {
+    if t.status != FeedTxStatus::Pending {
+        return t.status;
+    }
+    // Epoch seconds as stored; a millisecond figure is tolerated, as the web
+    // detail tolerates it — read as seconds it would never age at all.
+    let at_ms = if t.timestamp < 1e12 {
+        t.timestamp * 1000.0
+    } else {
+        t.timestamp
+    };
+    let age_ms = now_ms - at_ms;
+    let unfollowed = t.user_op_hash.trim().is_empty() && age_ms >= UNFOLLOWED_AFTER_MS;
+    if unfollowed || age_ms >= super::tx_tracker::ABANDON_AGE_MS {
+        FeedTxStatus::Unknown
+    } else {
+        FeedTxStatus::Pending
+    }
 }
 
 /// `receiveRecordToActivity` — structured (no pre-formatting).
