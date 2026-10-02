@@ -667,7 +667,7 @@ struct SigningLiveTests {
             "surface": "batch", "detected": NSNull(),
             "meta": ["symbol": "…", "decimals": 18, "verified": false, "loading": false],
             "editor": NSNull(), "confirm_allowed": true, "rewritten_params_json": NSNull(),
-            "unlimited_consented": false, "increase_total": NSNull(), "decimals_unverified": false,
+            "unlimited_consented": false, "unlimited_warning": false, "increase_total": NSNull(), "decimals_unverified": false,
             "expired": false,
             "batch": [
                 "legs": [
