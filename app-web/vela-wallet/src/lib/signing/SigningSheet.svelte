@@ -3,6 +3,7 @@
 	import SigningBody from './ui/SigningBody.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import type { SigningModel } from './model';
 
 	/**
@@ -45,6 +46,8 @@
 		 * before the approval, a plain close after), not 400 ms later.
 		 */
 		onclosestart?: () => void;
+		/** Spec 096 F8: "Try again" on a failure that sent nothing. */
+		onretry?: () => void;
 	}
 
 	let {
@@ -59,8 +62,15 @@
 		onspeed,
 		onspeedpick,
 		onfeerefresh,
-		onclosestart
+		onclosestart,
+		onretry
 	}: Props = $props();
+
+	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
+	function closeNow(): void {
+		onclosestart?.();
+		sheet?.close();
+	}
 
 	let sheet = $state<{ close: () => void }>();
 </script>
@@ -80,12 +90,7 @@
 		network={model.network}
 		closeLabel={model.closeLabel}
 		closeDisabled={!dismissible}
-		onclose={onclose && !model.dismissOnly
-			? () => {
-					onclosestart?.();
-					sheet?.close();
-				}
-			: undefined}
+		onclose={onclose && !model.dismissOnly ? closeNow : undefined}
 	/>
 	{#if model.status}
 		<div class="status" data-testid="signing-status" aria-live="polite">
@@ -95,6 +100,20 @@
 				captions={model.status.captions}
 			/>
 		</div>
+		{#if model.status.actions}
+			<!-- Spec 096 F8: a failure says how to leave it — Close answers the
+			     page, Try again (only when nothing was sent) goes back to review. -->
+			<div class="actions" data-testid="signing-status-actions">
+				<Button variant="secondary" shape="rounded" onclick={closeNow}>
+					{model.status.actions.close}
+				</Button>
+				{#if model.status.actions.retry && onretry}
+					<Button variant="primary" shape="rounded" onclick={() => onretry?.()}>
+						{model.status.actions.retry}
+					</Button>
+				{/if}
+			</div>
+		{/if}
 	{:else}
 		<SigningBody
 			{model}
@@ -117,5 +136,13 @@
 		display: flex;
 		justify-content: center;
 		padding-block: var(--space-3xl);
+	}
+	.actions {
+		display: flex;
+		gap: var(--space-lg);
+		padding-bottom: var(--space-xl);
+	}
+	.actions > :global(*) {
+		flex: 1;
 	}
 </style>

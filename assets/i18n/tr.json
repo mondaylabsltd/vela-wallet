@@ -411,7 +411,8 @@
   "txBackgroundHint": "Bu sayfayı kapatsanız da işlem devam eder",
   "txCloseBackground": "Kapat · çalışmaya devam",
   "txSubmittedTitle": "Ağa gönderildi",
-  "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi"
+  "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
+  "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz."
  },
  "receive": {
   "title": "Al",
@@ -1039,6 +1040,9 @@
   "linkWebsite": "Web Sitesi",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Gizlilik Politikası",
+  "linkTerms": "Hizmet Şartları",
+  "linkSupport": "Destek",
   "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
   "sectionLinks": "Bağlantılar",
   "debugMode": "Hata ayıklama modu",
@@ -1347,6 +1351,7 @@
    "labelNewContract": "Yeni sözleşme",
    "labelNft": "NFT",
    "labelOnBehalfOf": "Adına",
+   "labelOrder": "Emir",
    "labelOperator": "Operatör",
    "labelPrice": "Fiyat",
    "labelQuantities": "Miktarlar",
@@ -1360,6 +1365,8 @@
    "labelYouReceive": "Aldığınız",
    "labelYouReceiveMin": "En az alacağınız",
    "valueUnlimited": "Sınırsız",
+   "valueAll": "Tümü",
+   "warnOrderTerms": "Bu emrin tutarları burada gösterilmiyor — önce sitede kontrol edin.",
    "simResultLabel": "Simülasyon sonucu",
    "simResultNoChange": "Varlık değişikliği yok",
    "simResultNoOther": "başka değişiklik yok",
@@ -1509,7 +1516,8 @@
    "feeToken": "Ücret token'ı",
    "paidWith": "{{symbol}} ile ödendi",
    "rowBalance": "Bakiye",
-   "rowSpend": "Tahmini maliyet"
+   "rowSpend": "Tahmini maliyet",
+   "feeCoinSpent": "Bu işlem {{sym}} bakiyenizi de kullanıyor. Ücret için yeterli kalmazsa işlem başarısız olur."
   },
   "dock": {
    "receive": "Al",
@@ -1606,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo yer tutucu · taranamaz"
+  },
+  "appMenu": {
+   "about": "Vela Wallet Hakkında",
+   "hide": "Vela Wallet'ı Gizle",
+   "hideOthers": "Diğerlerini Gizle",
+   "showAll": "Tümünü Göster",
+   "quit": "Vela Wallet'tan Çık",
+   "edit": "Düzen",
+   "undo": "Geri Al",
+   "redo": "Yinele",
+   "cut": "Kes",
+   "copy": "Kopyala",
+   "paste": "Yapıştır",
+   "selectAll": "Tümünü Seç",
+   "view": "Görüntü",
+   "fullScreen": "Tam Ekranı Aç/Kapat",
+   "window": "Pencere",
+   "minimize": "Küçült",
+   "closeWindow": "Pencereyi Kapat"
   }
  },
  "settingsModals": {

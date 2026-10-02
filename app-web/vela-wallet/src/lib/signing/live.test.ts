@@ -129,7 +129,8 @@ const DECODED: ClearSigningView = {
 		sign_type: 'transaction',
 		partial: false,
 		best_effort: false,
-		to_own_token: false
+		to_own_token: false,
+		terms_off_chain: false
 	}
 };
 
@@ -167,7 +168,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -207,7 +209,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				},
 				{
 					symbol: 'USDC',
@@ -219,7 +222,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '1',
 					amount: '6300000',
 					insufficient: false,
-					selected: false
+					selected: false,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -245,7 +249,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -266,7 +271,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '3000',
 			amount: '2100000000000000',
 			insufficient: true,
-			selected: true
+			selected: true,
+			spent_by_operation: false
 		};
 		const usdt = {
 			...eth,
@@ -278,7 +284,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '1',
 			amount: '6300000',
 			insufficient: false,
-			selected: false
+			selected: false,
+			spent_by_operation: false
 		};
 		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
 		const model = buildSigningModel(inputs({ fee: short }));
@@ -336,7 +343,8 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		usd_price: '3000',
 		amount: '2100000000000000',
 		insufficient: false,
-		selected: true
+		selected: true,
+		spent_by_operation: false
 	};
 	const failedWith = (failed: FeeView['failed']): FeeView => ({
 		...QUOTED_FEE,
@@ -600,9 +608,38 @@ describe('after the approval the sheet is a status', () => {
 			stage: 'failed',
 			title: m.receipt.failed,
 			captions: [SUMMARY, m.status.failedHint],
-			closable: true
+			closable: true,
+			// Spec 096 F8: a labelled close — the page hears the failure then.
+			actions: { close: m.receipt.done }
 		});
 		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('a failure that sent nothing offers Try again beside the close (spec 096 F8)', () => {
+		const retryable = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'Could not estimate gas' },
+				failure_retryable: true
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(retryable?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
+		expect(retryable?.captions).toEqual([SUMMARY, m.status.failedHint]);
+		// A refusal says so and offers no retry: the same op is refused again.
+		const refused = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'AA23' },
+				failure_refused: true,
+				failure_retryable: false
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(refused?.actions).toEqual({ close: m.receipt.done });
+		expect(refused?.captions).toEqual([SUMMARY, m.receipt.refused]);
 	});
 
 	it('an error before any approval is not a status (the form says it)', () => {
@@ -1269,6 +1306,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		amount: '2100000000000000',
 		insufficient: false,
 		selected: true,
+		spent_by_operation: false,
 		...over
 	});
 	const two: FeeView = {
@@ -1289,7 +1327,8 @@ describe('the fee coin can be switched, as it can when sending', () => {
 				balance: '100000000000000',
 				amount: '1270000000000000000',
 				insufficient: true,
-				selected: false
+				selected: false,
+				spent_by_operation: false
 			})
 		]
 	};
@@ -1317,6 +1356,39 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+
+	// Spec 096 F2: the person chose a coin the transaction itself spends (the
+	// PancakeSwap USDC swap, fee in USDC). The core flags it; the sheet says
+	// so under the fee — and only while that coin is the one paying.
+	it('warns when the coin paying is one the transaction spends', () => {
+		const spentUsdc: FeeView = {
+			...two,
+			options: [
+				option({ selected: false }),
+				option({
+					symbol: 'USDC',
+					contract: '0x' + 'a0'.repeat(20),
+					decimals: 6,
+					balance: '42000000',
+					amount: '1270000',
+					selected: true,
+					spent_by_operation: true
+				})
+			]
+		};
+		const fee = feeOf({ fee: spentUsdc });
+		expect(fee).toMatchObject({
+			warning: m.feeCoinSpent.replace('{{sym}}', 'USDC')
+		});
+		const open = feeOf({ fee: spentUsdc, feeOpen: true });
+		expect(open).toMatchObject({ warning: m.feeCoinSpent.replace('{{sym}}', 'USDC') });
+		// The same coin listed but not paying: nothing to say.
+		const inEth: FeeView = {
+			...spentUsdc,
+			options: [option({}), { ...spentUsdc.options[1], selected: false }]
+		};
+		expect(feeOf({ fee: inEth })).not.toHaveProperty('warning', expect.anything());
 	});
 });
 
@@ -1676,6 +1748,7 @@ describe('a batch shows every call (089 S1)', () => {
 					result: null,
 					plain_send: { to: A, value_wei: '1', amount: '0.000000000000000001', no_value: false },
 					to: A,
+					to_name: null,
 					data_bytes: 0,
 					value_wei: '1',
 					amount: '0.000000000000000001',
@@ -1693,6 +1766,7 @@ describe('a batch shows every call (089 S1)', () => {
 					},
 					plain_send: null,
 					to: '0x' + 'cc'.repeat(20),
+					to_name: null,
 					data_bytes: 68,
 					value_wei: '0',
 					amount: '0',
@@ -1704,6 +1778,7 @@ describe('a batch shows every call (089 S1)', () => {
 					result: null,
 					plain_send: null,
 					to: B,
+					to_name: null,
 					data_bytes: 36,
 					value_wei: '10000000000000000',
 					amount: '0.01',
@@ -1886,5 +1961,135 @@ describe('what the approve carries (spec 093)', () => {
 		// The guard's placeholder token is handed over as it is; whether an
 		// unresolved token counts is the core's to say.
 		expect(opts.token_meta).toEqual(INITIAL_GUARD_VIEW.meta);
+	});
+});
+
+/**
+ * Spec 096 (part B): what the core now says about a request, drawn — the
+ * coin a lone call sends, the order whose terms are off chain, a known
+ * contract's name, and a sheet that is still reading.
+ */
+describe('the readable part says what the call does (096)', () => {
+	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
+
+	it('still reading: "Loading…", never the cap prompt, and the slide stays shut (F7)', () => {
+		const loading: ClearSigningView = { ...INITIAL_CLEAR_VIEW, resolving: true, surface: 'loading' };
+		const model = buildSigningModel(inputs({ clear: loading }))!;
+		expect(model.blocks).toEqual([{ kind: 'sentence', text: m.loading, tone: 'neutral' }]);
+		expect(model.blocks.some((b) => JSON.stringify(b).includes(m.chipCustom))).toBe(false);
+		// Every other machine says yes: the gate, the guard, the fee.
+		expect(OPEN_SIGN.confirm_gate_open && INITIAL_GUARD_VIEW.confirm_allowed).toBe(true);
+		expect(model.confirm.enabled).toBe(false);
+		// Read, the same sheet arms.
+		expect(buildSigningModel(inputs())!.confirm.enabled).toBe(true);
+	});
+
+	it('a decoded call that sends coin says how much, as a batch call does (F4)', () => {
+		const supply: ClearSigningView = {
+			...DECODED,
+			result: {
+				...DECODED.result!,
+				intent: 'Supply',
+				fields: [
+					field({ label: 'On behalf of', value: '0x88cca0...266894', role: 'generic', address: '0x88' })
+				]
+			},
+			native_value: { value_wei: '3000000000000000', amount: '0.003' }
+		};
+		const model = buildSigningModel(inputs({ sign: BNB, clear: supply }))!;
+		expect(model.blocks[1]).toEqual({
+			kind: 'amount',
+			line: { sign: '\u2212', value: '0.003', symbol: 'BNB', tone: 'neutral' }
+		});
+		// Beside a decoded amount of its own, the coin is a row.
+		const both = buildSigningModel(
+			inputs({ sign: BNB, clear: { ...DECODED, native_value: supply.native_value } })
+		)!;
+		expect(both.blocks).toContainEqual({
+			kind: 'rows',
+			rows: [{ label: m.labelAmount, value: '\u22120.003 BNB' }]
+		});
+	});
+
+	it('a call nobody could read still says the coin it sends (F4)', () => {
+		const blind: ClearSigningView = {
+			...INITIAL_CLEAR_VIEW,
+			resolved: true,
+			surface: 'blind_transaction',
+			native_value: { value_wei: '3000000000000000', amount: '0.003' }
+		};
+		const model = buildSigningModel(inputs({ sign: BNB, clear: blind }))!;
+		expect(model.blocks.slice(0, 2)).toEqual([
+			{ kind: 'intent', text: m.intentBlind, tone: 'danger' },
+			{ kind: 'amount', line: { sign: '\u2212', value: '0.003', symbol: 'BNB', tone: 'neutral' } }
+		]);
+	});
+
+	it("an order whose terms are off chain says so, alone and in a batch (F5)", () => {
+		const order: ClearSigningView = {
+			...DECODED,
+			result: { ...DECODED.result!, intent: 'Swap', terms_off_chain: true }
+		};
+		const warning = { kind: 'warning', tone: 'caution', text: m.warnOrderTerms };
+		expect(m.warnOrderTerms).toBeTruthy();
+		expect(buildSigningModel(inputs({ clear: order }))!.blocks).toContainEqual(warning);
+		const batch: ClearSigningView = {
+			...INITIAL_CLEAR_VIEW,
+			resolved: true,
+			surface: 'batch',
+			batch: {
+				calls: [
+					{
+						index: 1,
+						surface: 'clear_sign',
+						result: order.result,
+						plain_send: null,
+						to: '0x9008D19f58AAbD9eD0D60971565AA8510560ab41',
+						to_name: 'CoW Protocol',
+						data_bytes: 164,
+						value_wei: '0',
+						amount: '0',
+						risk: 'caution'
+					},
+					{
+						index: 2,
+						surface: 'blind_transaction',
+						result: null,
+						plain_send: null,
+						to: '0x7777777777777777777777777777777777777777',
+						to_name: null,
+						data_bytes: 4,
+						value_wei: '0',
+						amount: '0',
+						risk: 'caution'
+					}
+				],
+				total_value_wei: '0',
+				total_amount: '0',
+				risk: 'caution'
+			}
+		};
+		const model = buildSigningModel(inputs({ clear: batch }))!;
+		expect(model.blocks).toContainEqual(warning);
+		const cards = model.blocks.filter((b) => b.kind === 'card');
+		// A known contract by its name; any other by its full address.
+		expect(JSON.stringify(cards[0])).toContain(
+			JSON.stringify({ label: m.labelInteracting, value: 'CoW Protocol' })
+		);
+		expect(JSON.stringify(cards[1])).toContain(
+			JSON.stringify({
+				label: m.labelInteracting,
+				value: '0x7777777777777777777777777777777777777777',
+				mono: true
+			})
+		);
+	});
+
+	it('the new words resolve in every locale the corpus ships', () => {
+		const zh = resolveSigningMessages('zh');
+		expect(zh.loading).toBe('加载中...');
+		expect(zh.terms.valueAll).toBe('全部');
+		expect(zh.terms.labelOrder).toBe('订单');
+		expect(zh.warnOrderTerms).toContain('订单');
 	});
 });

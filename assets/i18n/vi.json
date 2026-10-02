@@ -411,7 +411,8 @@
   "txBackgroundHint": "Đóng trang này thì giao dịch vẫn chạy tiếp",
   "txCloseBackground": "Đóng · vẫn chạy tiếp",
   "txSubmittedTitle": "Đã gửi lên mạng",
-  "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}",
+  "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại."
  },
  "receive": {
   "title": "Nhận",
@@ -1039,6 +1040,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Chính sách quyền riêng tư",
+  "linkTerms": "Điều khoản dịch vụ",
+  "linkSupport": "Hỗ trợ",
   "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
   "sectionLinks": "Liên kết",
   "debugMode": "Chế độ gỡ lỗi",
@@ -1347,6 +1351,7 @@
    "labelNewContract": "Hợp đồng mới",
    "labelNft": "NFT",
    "labelOnBehalfOf": "Thay mặt cho",
+   "labelOrder": "Lệnh",
    "labelOperator": "Bên vận hành",
    "labelPrice": "Giá",
    "labelQuantities": "Số lượng",
@@ -1360,6 +1365,8 @@
    "labelYouReceive": "Bạn nhận",
    "labelYouReceiveMin": "Bạn nhận (tối thiểu)",
    "valueUnlimited": "Không giới hạn",
+   "valueAll": "Tất cả",
+   "warnOrderTerms": "Số tiền của lệnh này không hiển thị ở đây — hãy kiểm tra trên trang web trước.",
    "simResultLabel": "Kết quả mô phỏng",
    "simResultNoChange": "Không có thay đổi tài sản",
    "simResultNoOther": "không có thay đổi nào khác",
@@ -1509,7 +1516,8 @@
    "feeToken": "Token trả phí",
    "paidWith": "Trả bằng {{symbol}}",
    "rowBalance": "Số dư",
-   "rowSpend": "Chi phí ước tính"
+   "rowSpend": "Chi phí ước tính",
+   "feeCoinSpent": "Giao dịch này cũng dùng {{sym}} của bạn. Nếu phần còn lại không đủ trả phí, giao dịch sẽ thất bại."
   },
   "dock": {
    "receive": "Nhận",
@@ -1606,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "Hình giữ chỗ demo · không quét được"
+  },
+  "appMenu": {
+   "about": "Giới thiệu về Vela Wallet",
+   "hide": "Ẩn Vela Wallet",
+   "hideOthers": "Ẩn mục khác",
+   "showAll": "Hiển thị tất cả",
+   "quit": "Thoát Vela Wallet",
+   "edit": "Sửa",
+   "undo": "Hoàn tác",
+   "redo": "Làm lại",
+   "cut": "Cắt",
+   "copy": "Sao chép",
+   "paste": "Dán",
+   "selectAll": "Chọn tất cả",
+   "view": "Xem",
+   "fullScreen": "Bật/tắt toàn màn hình",
+   "window": "Cửa sổ",
+   "minimize": "Thu nhỏ",
+   "closeWindow": "Đóng cửa sổ"
   }
  },
  "settingsModals": {

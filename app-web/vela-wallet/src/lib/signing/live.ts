@@ -11,9 +11,10 @@
  *
  * 1. **The confirm gate is an AND.** `SignView.confirm_gate_open` says the
  *    request may be signed; `GuardView.confirm_allowed` says the cap has been
- *    chosen. The slider arms only when both are true (and the fee, when the
- *    request has one, is ready). Its own doc in the drawn component says the
- *    shell must AND them — this is that place.
+ *    chosen; `ClearSigningView.resolving` says the request is still being
+ *    read (spec 096 F7). The slider arms only when all agree (and the fee,
+ *    when the request has one, is ready). Its own doc in the drawn component
+ *    says the shell must AND them — this is that place.
  * 2. **The ✕ is the refusal.** The 022 interaction contract draws no reject
  *    button: closing the sheet IS the refusal, and the route answers the
  *    requester with 4001 — but since spec 079 only the header's ✕ closes it
@@ -144,7 +145,9 @@ function fieldRow(field: ClearSignField): KeyValueRow {
 		label: field.label,
 		value: field.value,
 		valueTone: field.warning ? 'danger' : field.unverified ? 'caution' : undefined,
-		mono: field.address !== null || field.token_address !== null
+		// An address reads as monospace; a contract the core names
+		// ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
+		mono: (field.address !== null && field.value.startsWith('0x')) || field.token_address !== null
 	};
 }
 
@@ -366,8 +369,14 @@ function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages)
 		call.amount !== null && call.value_wei !== '0'
 			? [{ label: m.labelAmount, value: `${MINUS}${call.amount} ${symbol}` }]
 			: [];
+	// A contract the wallet knows on this chain is named (096 F5); any other
+	// is its full address.
 	const target: KeyValueRow[] =
-		call.to !== null ? [{ label: m.labelInteracting, value: call.to, mono: true }] : [];
+		call.to === null
+			? []
+			: call.to_name
+				? [{ label: m.labelInteracting, value: call.to_name }]
+				: [{ label: m.labelInteracting, value: call.to, mono: true }];
 	if (call.surface === 'clear_sign' && call.result) {
 		return {
 			kind: 'card',
@@ -437,6 +446,9 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	if (results.some((r) => r.provenance === 'fetched')) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 	}
+	if (results.some((r) => r.terms_off_chain)) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnOrderTerms });
+	}
 	if (results.some((r) => r.partial || r.best_effort)) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
 	}
@@ -461,8 +473,11 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
+	// Spec 096 F7: still reading — a neutral "Loading…", and the slide stays
+	// shut (`buildSigningModel`). This said the cap editor's "Set a finite
+	// amount to continue." over an Aave supply for seconds.
 	if (clear.surface === 'loading' || clear.resolving) {
-		blocks.push({ kind: 'sentence', text: m.choosePrompt, tone: 'neutral' });
+		blocks.push({ kind: 'sentence', text: m.loading, tone: 'neutral' });
 		return blocks;
 	}
 
@@ -488,6 +503,10 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		} else if (receive) {
 			blocks.push({ kind: 'amount', line: amountLine(receive, false, currency) });
 		}
+		// Spec 096 F4: the coin the call sends, when its reading does not say
+		// it — the hero when nothing else is, else the batch call's own row.
+		const coin = nativeValueBlock(inputs, !send && !receive);
+		if (coin) blocks.push(coin);
 
 		for (const field of result.fields) {
 			if (field.role !== 'recipient' && field.role !== 'spender') continue;
@@ -523,6 +542,9 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		 */
 		if (result.provenance === 'fetched') {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
+		}
+		if (result.terms_off_chain) {
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnOrderTerms });
 		}
 		if (result.partial) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
@@ -571,6 +593,9 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
+		// Nobody could read the call — what coin it sends is still known.
+		const coin = nativeValueBlock(inputs, true);
+		if (coin) blocks.push(coin);
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
 		// The approval guard reads the raw calldata, not the descriptor — an
 		// approve nobody described (Permit2's own `approve`, say) still gets
@@ -604,6 +629,28 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	}
 
 	return blocks;
+}
+
+/**
+ * Spec 096 F4: the chain's own coin a lone call sends (`native_value`), in
+ * the words a batch call's row uses — "Amount −0.003 BNB" — or as the hero
+ * amount when the reading has none. The coin symbol is the fee row's (RC5).
+ */
+function nativeValueBlock(inputs: SigningLiveInputs, hero: boolean): Block | null {
+	const { sign, clear, m } = inputs;
+	const native = clear.native_value;
+	if (!native || !sign.request) return null;
+	const symbol = nativeSymbol(sign.request.chain_id);
+	if (hero) {
+		return {
+			kind: 'amount',
+			line: { sign: MINUS, value: native.amount, symbol, tone: 'neutral' }
+		};
+	}
+	return {
+		kind: 'rows',
+		rows: [{ label: m.labelAmount, value: `${MINUS}${native.amount} ${symbol}` }]
+	};
 }
 
 /**
@@ -727,11 +774,16 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
 	// other coins are one tap away — a dark slide with no reason is issue 204.
+	// Otherwise, spec 096 F2: the coin in force is one the transaction itself
+	// may spend, so what is left for the fee may be too little — the core's
+	// `spent_by_operation`, said while that coin is the one paying.
 	const selected = fee.options.find((option) => option.selected);
 	const warning =
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
-			: undefined;
+			: !fee.busy && selected?.spent_by_operation === true
+				? fill(m.feeCoinSpent, { sym: selected.symbol })
+				: undefined;
 	return {
 		kind: 'onchain',
 		label: m.feeLabel,
@@ -1010,7 +1062,14 @@ export function signingStatus(
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
 			// again": the same op is refused the same way.
 			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
-			closable: true
+			closable: true,
+			// Spec 096 F8: the page waits for this close to hear the failure;
+			// "Try again" only when the core says nothing was sent and it was
+			// no refusal (`failure_retryable`).
+			actions: {
+				close: m.receipt.done,
+				...(sign.failure_retryable ? { retry: m.status.retry } : {})
+			}
 		};
 	}
 	const phase = sign.phase;
@@ -1115,7 +1174,15 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// still be waiting for a cap; the fee may still be in flight.
 	const feeReady =
 		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
-	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
+	// Spec 096 F7: and the core has finished reading the request — a slide
+	// that armed under "Loading…" signed what nobody had been shown yet.
+	const enabled =
+		sign.confirm_gate_open &&
+		guard.confirm_allowed &&
+		feeReady &&
+		!clear.resolving &&
+		clear.surface !== 'loading' &&
+		!sign.is_signing;
 
 	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);

@@ -17,6 +17,34 @@
     <key>CFBundleShortVersionString</key><string>@VERSION@</string>
     <key>CFBundleVersion</key>           <string>@VERSION@</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <!-- The 15 languages the corpus ships, as Apple codes
+         (vela_core::i18n::apple_localizations; spec 095). macOS then speaks the
+         person's language in its own UI — open/save panels, the About panel,
+         the menu items AppKit adds — and the App Store lists the languages.
+         The wallet's strings do not depend on this: they come from the
+         corpus, in the language picked in Settings or followed from the
+         system. A test holds this list to the core's. -->
+    <key>CFBundleDevelopmentRegion</key> <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>zh-HK</string>
+        <string>ja</string>
+        <string>ko</string>
+        <string>vi</string>
+        <string>id</string>
+        <string>tr</string>
+        <string>es-MX</string>
+        <string>pt-BR</string>
+        <string>fr</string>
+        <string>de</string>
+        <string>ru</string>
+        <string>it</string>
+    </array>
+    <!-- The standard About panel's last line (app menu → About, spec 095). -->
+    <key>NSHumanReadableCopyright</key>  <string>© MONDAY LABS LTD</string>
     <!-- gpui renders through Metal and expects a real backing-scale factor;
          without this the window is rendered at 1x and upscaled. -->
     <!-- Spec 076: the Trusted Signer's answer comes back as a navigation to
@@ -40,6 +68,17 @@
             </array>
         </dict>
     </array>
+    <!-- The in-app browser loads the web as the iOS app does (its Info.plist
+         carries the same two keys): plain-http pages load — without the
+         wallet, which a page only reaches from a secure context — and so do
+         addresses on the local network. App Transport Security still covers
+         everything else the process might fetch through Apple's stack; the
+         wallet's own traffic is rustls over HTTPS and never reaches ATS. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoadsInWebContent</key> <true/>
+        <key>NSAllowsLocalNetworking</key>            <true/>
+    </dict>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>LSMinimumSystemVersion</key>    <string>11.0</string>
     <key>LSApplicationCategoryType</key> <string>public.app-category.finance</string>

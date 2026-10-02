@@ -794,6 +794,10 @@ pub enum Event {
     RejectTapped,
     /// Close after an error / after submission — response already handled.
     DismissTapped,
+    /// "Try again" on a failure that sent nothing (spec 096 F8,
+    /// [`SignView::failure_retryable`]): the request goes back to review,
+    /// still unanswered.
+    RetryTapped,
     /// The modal was swipe-dismissed — the core dispatches by phase
     /// (`SigningRequestModal.tsx:34-42`): funding view → funding cancel;
     /// error / submitted / submitting → dismiss; else → reject.
@@ -1269,6 +1273,13 @@ struct Pending {
     /// An error response was already sent for this id — a later approve must
     /// never produce a second response for the same id (invariant ① family).
     responded: bool,
+    /// The failure answer this request is owed, held while its sheet shows
+    /// the failure (spec 096 F8) — sent when the person closes the sheet, or
+    /// dropped when they retry. The extension worker closes the request
+    /// window the moment a request is answered, so an answer sent with the
+    /// failure took the failure off the screen before anyone read it (the
+    /// same reason a refused request waits, spec 081).
+    held: Option<SignResponsePayload>,
 }
 
 /// Where the single-flight approve pipeline is.
@@ -1446,6 +1457,26 @@ impl Model {
         self.settled.push((id.to_owned(), outcome));
     }
 
+    /// [`SignView::failure_retryable`]: a held failure that sent nothing and
+    /// was no refusal — by the relay (RJ3) or by a rule of this machine.
+    fn failure_retryable(&self) -> bool {
+        self.pending.as_ref().is_some_and(|p| p.held.is_some())
+            && !self.sign_error_refused
+            && self
+                .sign_error
+                .as_ref()
+                .is_some_and(|e| e.kind == SignErrorKind::SubmitFailed)
+    }
+
+    /// The held failure answer, sent now (spec 096 F8): the request counts
+    /// as answered from here on.
+    fn answer_held(&mut self) -> Option<SignOperation> {
+        let pending = self.pending.as_mut()?;
+        let payload = pending.held.take()?;
+        pending.responded = true;
+        Some(respond_op(&pending.transport_id, &pending.id, payload))
+    }
+
     fn clear_sheet(&mut self) {
         self.pending = None;
         self.blocked = None;
@@ -1592,6 +1623,12 @@ pub struct SignView {
     /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
     #[serde(default)]
     pub failure_refused: bool,
+    /// The failure on the sheet sent nothing, was not a refusal, and its
+    /// answer is still held (spec 096 F8): the sheet offers "Try again"
+    /// (`send.txRetryBtn` → [`Event::RetryTapped`]) beside its close, which
+    /// answers the page the failure.
+    #[serde(default)]
+    pub failure_retryable: bool,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
     /// Present when the request was refused because it would have changed who
@@ -1667,6 +1704,7 @@ impl App for SignRequest {
             }
             Event::RejectTapped => reject(model),
             Event::DismissTapped => dismiss(model),
+            Event::RetryTapped => retry(model),
             Event::SwipeDismissed => match swipe_action(model) {
                 SignSwipeAction::Reject => reject(model),
                 SignSwipeAction::Dismiss => dismiss(model),
@@ -1820,7 +1858,7 @@ impl App for SignRequest {
                 && model.inflight.is_none()
                 && model.funding.is_none()
                 && model.reconciled
-                && !model.pending.as_ref().is_some_and(|p| p.responded),
+                && !model.pending.as_ref().is_some_and(|p| p.responded || p.held.is_some()),
             request,
             is_signing,
             is_submitting,
@@ -1838,6 +1876,7 @@ impl App for SignRequest {
             tracker_handoff: model.tracker_handoff.clone(),
             tracker_withdraw: model.tracker_withdraw.clone(),
             failure_refused: model.sign_error.is_some() && model.sign_error_refused,
+            failure_retryable: model.failure_retryable(),
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
             blocked: model.blocked.clone(),
@@ -2022,6 +2061,27 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         }
     }
 
+    // The same for a transaction's value (spec 096 F1): read ONCE by the
+    // card's rule, refused -32602 before any sheet when it breaks it, and
+    // carried on in its canonical text — so the card, the fee quote, both
+    // guards and every shell's submit hold one number, never one each.
+    match crate::tx_request::canonical_params_json(&arrival.method, &arrival.params_json) {
+        Err(error) => {
+            let op = respond_op(
+                &arrival.transport_id,
+                &arrival.id,
+                err_payload(
+                    CODE_INVALID_PARAMS,
+                    SignErrorKind::InvalidParams,
+                    Some(error.message()),
+                ),
+            );
+            return ops_and_render(model, vec![op]);
+        }
+        Ok(Some(canonical)) => arrival.params_json = canonical,
+        Ok(None) => {}
+    }
+
     // §12.1.6: the requested account must BE the granted one — 4100, never a
     // silent signer swap (`web-request.tsx:190-193`).
     if let (Some(req_addr), Some(granted)) = (&arrival.requested_address, &arrival.granted_address)
@@ -2102,6 +2162,14 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
     // surface opens only on the `AccountSwitched` ack (explicit sequencing —
     // the `setTimeout(0)` of `web-request.tsx:207` made a rule).
     let mut commands: Vec<Command<SignEffect, Event>> = Vec::new();
+    // A failure still on screen for the request this one replaces is answered
+    // now (spec 096 F8) — its page must not wait on a sheet that is gone —
+    // and its words go with it.
+    if let Some(op) = model.answer_held() {
+        model.sign_error = None;
+        model.sign_error_refused = false;
+        commands.push(request_op(model, op, false));
+    }
     model.reconciled = true;
     if let Some(granted) = &arrival.granted_address {
         let idx = sign_account_index(&model.accounts, model.active_index, Some(granted));
@@ -2158,6 +2226,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             per_request_chain: arrival.per_request_chain,
             dapp: arrival.dapp,
             responded: false,
+            held: None,
         });
         commands.push(render());
         return Command::all(commands);
@@ -2177,6 +2246,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         per_request_chain: arrival.per_request_chain,
         dapp: arrival.dapp,
         responded: false,
+        held: None,
     });
     commands.push(render());
     Command::all(commands)
@@ -2321,8 +2391,10 @@ fn approve_with(
     let Some(pending) = model.pending.clone() else {
         return Command::done();
     };
-    // A response already went out for this id — never a second one (①).
-    if pending.responded {
+    // A response already went out for this id — never a second one (①) —
+    // or one is held for a failure still on screen (spec 096 F8: "Try again"
+    // clears it first).
+    if pending.responded || pending.held.is_some() {
         return Command::done();
     }
     if model.funding.is_some() {
@@ -2455,6 +2527,7 @@ fn approve_with(
     let summary = super::dapp_activity::summarize(
         &pending.method,
         &parsed,
+        chain_id,
         &pending.origin,
         opts.token_meta.as_ref(),
     );
@@ -2647,17 +2720,20 @@ fn fail_inflight(
             close: SignRecordClose::Failed,
         });
     }
-    ops.push(respond_op(
-        &fl.transport_id,
-        &fl.id,
-        err_payload(code, kind, detail.clone()),
-    ));
-    if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
-        if let Some(p) = model.pending.as_mut() {
-            p.responded = true;
+    let payload = err_payload(code, kind, detail.clone());
+    match model.pending.as_mut().filter(|p| p.id == fl.id) {
+        // Its sheet is up: the failure is shown, and the answer waits for the
+        // person to close it — or is dropped when they try again (spec 096
+        // F8). Answering now let the extension worker close the window over
+        // the failure before a word of it was read.
+        Some(p) => {
+            p.held = Some(payload);
+            model.sign_error = Some(SignErrorNotice { kind, detail });
+            model.sign_error_refused = false;
         }
-        model.sign_error = Some(SignErrorNotice { kind, detail });
-        model.sign_error_refused = false;
+        // Nobody is looking (dismissed while it ran, or superseded): the
+        // page is answered at once.
+        None => ops.push(respond_op(&fl.transport_id, &fl.id, payload)),
     }
     ops_and_render(model, ops)
 }
@@ -2677,8 +2753,10 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
         return Command::done();
     }
     // A response already went out (error shown) — closing is a dismiss, never
-    // a second response for the same id.
-    if pending.responded {
+    // a second response for the same id. A HELD failure is closed the same
+    // way, and the dismissal sends it (spec 096 F8) — never a 4001 for a
+    // request the person approved.
+    if pending.responded || pending.held.is_some() {
         return dismiss(model);
     }
     // Spec 081: the wallet refused this one, not the person — the dApp is told
@@ -2712,8 +2790,27 @@ fn dismiss(model: &mut Model) -> Command<SignEffect, Event> {
     // No response, no pipeline abort: a dismissed-but-committed op proceeds
     // and its real result is still delivered (`dismissRequest`) — or, when its
     // passkey comes back cancelled instead, its refusal (083, `on_submit`).
+    // The one answer a dismissal sends is a failure held for the sheet
+    // (spec 096 F8): the page hears it now that it has been read.
+    let held = model.answer_held();
     model.clear_sheet();
     model.notice = None;
+    ops_and_render(model, held.into_iter().collect())
+}
+
+/// "Try again" (spec 096 F8): a failure that sent nothing goes back to
+/// review — the held answer is dropped, the request is unanswered again and
+/// the slide is live once more. A refusal, or a failure with no held answer,
+/// has nothing to retry.
+fn retry(model: &mut Model) -> Command<SignEffect, Event> {
+    if !model.failure_retryable() {
+        return Command::done();
+    }
+    if let Some(pending) = model.pending.as_mut() {
+        pending.held = None;
+    }
+    model.sign_error = None;
+    model.sign_error_refused = false;
     render()
 }
 

@@ -2,10 +2,12 @@
 //  LocaleMappingTests.swift
 //  VelaWalletTests
 //
-//  D6 fixtures — semantics of src/i18n/shared.ts#detectSystemLanguage.
+//  D6 fixtures — now the core's `system_language` (spec 095), through the shell.
 //
 
+import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -29,5 +31,29 @@ struct LocaleMappingTests {
     func mapsPreferredLanguage(fixture: (String, String)) {
         #expect(Loc.mapPreferredLanguage(fixture.0) == fixture.1,
                 "\(fixture.0) should map to \(fixture.1)")
+    }
+
+    /// Spec 095: "follow the system" walks the person's whole list through
+    /// the core's rule — a first language Vela does not speak gives way to
+    /// the second.
+    @Test func theWholePreferredListIsWalked() {
+        #expect(Loc.systemLanguage(["ar-SA", "ja-JP"]) == "ja")
+        #expect(Loc.systemLanguage(["zh-Hant-HK", "en-US"]) == "zh-HK")
+        #expect(Loc.systemLanguage(["th", "hi"]) == "en")
+        #expect(Loc.systemLanguage([]) == "en")
+    }
+
+    /// Spec 095: the app declares exactly the corpus's locales, as the core
+    /// names them for Apple (`CFBundleLocalizations`) — and each one, chosen
+    /// as the app's language in iOS Settings, resolves back to that corpus
+    /// language, so the per-app Language row can never pick English by
+    /// accident.
+    @Test func theBundleDeclaresTheCorpusLocales() {
+        let declared = Bundle.main.object(forInfoDictionaryKey: "CFBundleLocalizations") as? [String]
+        #expect(declared == i18nAppleLocalizations())
+        #expect(Bundle.main.object(forInfoDictionaryKey: "CFBundleDevelopmentRegion") as? String == "en")
+        for (apple, corpus) in zip(i18nAppleLocalizations(), SettingsFixtures.localeEndonyms.map(\.id)) {
+            #expect(Loc.mapPreferredLanguage(apple) == corpus, "\(apple) should resolve to \(corpus)")
+        }
     }
 }

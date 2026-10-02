@@ -1,0 +1,15 @@
+{
+ "source": "096 real dApp pass, 2026-10-02 (extension request log req-105-aave-bnb.json)",
+ "method": "eth_sendTransaction",
+ "origin": "https://app.aave.com",
+ "chainId": 56,
+ "params": [
+  {
+   "data": "0x474cf53d0000000000000000000000006807dc923806fe8fd134338eabca509979a7e0cb00000000000000000000000088cca0eedbf2c4426110bbfc998f0486892668940000000000000000000000000000000000000000000000000000000000000000",
+   "from": "0x88cca0eedbf2c4426110bbfc998f048689266894",
+   "gas": "0x493e0",
+   "to": "0x0c2c95b24529664fe55d4437d7a31175cfe6c4f7",
+   "value": "0xaa87bee538000"
+  }
+ ]
+}

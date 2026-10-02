@@ -47,7 +47,7 @@ final class Loc {
         // instead. Found the moment `apply` landed — the storage page came up
         // in English under `VELA_LANG=zh`.
         self.pinned = overrideTag != nil
-        let candidate = overrideTag ?? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
+        let candidate = overrideTag ?? Self.systemLanguage(preferredLanguages)
         adopt(candidate)
     }
 
@@ -72,7 +72,7 @@ final class Loc {
     func apply(_ stored: String) {
         guard !pinned else { return }
         let wanted = stored == "auto" || stored.isEmpty
-            ? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
+            ? Self.systemLanguage(preferredLanguages)
             : (Self.supported.contains(stored) ? stored : Self.mapPreferredLanguage(stored))
         guard wanted != resolvedLanguage else { return }
         adopt(wanted)
@@ -122,34 +122,21 @@ final class Loc {
         return (try? engine.t(key: key, opts: opts)) ?? key
     }
 
-    // MARK: - Language detection (D6 — shared.ts semantics)
+    // MARK: - Language detection (the core's rule, spec 095)
 
-    /// Maps a BCP-47 preferred-language tag onto the supported set, with the
-    /// exact base-language semantics of `shared.ts#detectSystemLanguage`:
-    /// zh script/region handling, es→es-MX, pt→pt-BR, legacy in→id, exact
-    /// match, base match, otherwise en.
+    /// What "follow the system" means: the first of the person's preferred
+    /// languages a shipped locale serves, else English — the core's
+    /// `system_language`, shared with the desktop and Android. It walks the
+    /// whole list: somebody whose first language Vela does not speak gets
+    /// their second, where this used to read only the first.
+    static func systemLanguage(_ preferred: [String]) -> String {
+        i18nSystemLanguage(preferred: preferred)
+    }
+
+    /// One tag through the same rule (zh script/region, es→es-MX, pt→pt-BR,
+    /// legacy in→id, language-region, language, otherwise en).
     static func mapPreferredLanguage(_ tag: String) -> String {
-        let language = Locale.Language(identifier: tag)
-        var code = language.languageCode?.identifier.lowercased() ?? "en"
-        let script = language.script?.identifier
-        let region = language.region?.identifier.uppercased()
-
-        if code == "in" { code = "id" } // legacy Indonesian tag
-
-        if code == "zh" {
-            let traditional = script == "Hant"
-                || (script == nil && ["TW", "HK", "MO"].contains(region ?? ""))
-            if !traditional { return "zh" }
-            return (region == "HK" || region == "MO") ? "zh-HK" : "zh-TW"
-        }
-        if code == "es" { return "es-MX" } // only Spanish variant shipped
-        if code == "pt" { return "pt-BR" } // only Portuguese variant shipped
-
-        if let region, supported.contains("\(code)-\(region)") {
-            return "\(code)-\(region)"
-        }
-        if supported.contains(code) { return code }
-        return "en"
+        systemLanguage([tag])
     }
 
     // MARK: - Bundled catalogs

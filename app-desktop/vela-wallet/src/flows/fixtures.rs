@@ -613,6 +613,8 @@ pub struct SendForm {
     /// first-interaction note, or the sweep's "same address" (078 F-08). The
     /// field's label stays "Recipient".
     pub recipient_note: Option<SharedString>,
+    /// The note is a warning (spec 096 F12: a token's own contract).
+    pub recipient_note_warn: bool,
     pub amount: Option<(SharedString, SharedString)>,
     pub recipient: Option<(SharedString, (SharedString, SharedString), SharedString)>,
     pub add_recipient: Option<SharedString>,
@@ -1351,6 +1353,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         return SendForm {
             sweep: None,
             recipient_note: None,
+            recipient_note_warn: false,
             token,
             amount: None,
             recipient: None,
@@ -1413,6 +1416,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
     SendForm {
         sweep: None,
         recipient_note: None,
+        recipient_note_warn: false,
         token,
         amount: Some(("120".into(), "≈ $120.00".into())),
         recipient: Some((

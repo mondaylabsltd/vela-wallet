@@ -26,4 +26,11 @@ export interface RequestMessages {
 	noWallet: string;
 	createWallet: string;
 	haveWallet: string;
+	/**
+	 * Spec 096 F11: the consent names what a Connect shares — the account and
+	 * the network — under the labels the in-app browsers' consent uses
+	 * (`explore.account`, `explore.network`).
+	 */
+	accountLabel: string;
+	networkLabel: string;
 }

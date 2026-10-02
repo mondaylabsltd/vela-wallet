@@ -52,7 +52,8 @@ struct SigningReceiptTests {
     private func sign(
         signing: Bool = false, submitting: Bool = false, op: String? = nil,
         error: SignErrorKind? = nil, kind: SignMethodKind? = nil,
-        phase: SignPhaseWire = .idle, maybeSent: Bool = false, refused: Bool = false
+        phase: SignPhaseWire = .idle, maybeSent: Bool = false, refused: Bool = false,
+        retryable: Bool = false
     ) -> SignViewWire {
         SignViewWire(
             surface: .sheet,
@@ -67,7 +68,8 @@ struct SigningReceiptTests {
             error: error.map { SignErrorNoticeWire(kind: $0, detail: nil) },
             funding: nil, confirmGateOpen: true, reconcilePending: false, swipeAction: .reject,
             trackerHandoff: nil, notice: nil, globalChainId: 100, blocked: nil,
-            phase: phase, pendingOpMaybeSent: maybeSent, failureRefused: refused
+            phase: phase, pendingOpMaybeSent: maybeSent, failureRefused: refused,
+            failureRetryable: retryable
         )
     }
 
@@ -201,6 +203,24 @@ struct SigningReceiptTests {
         // A true "not sent" (the relay was never reached) keeps its words.
         let notSent = SigningLive.receipt(sign: sign(error: .submitFailed), blocks: blocks, context: context())
         #expect(notSent?.captions.contains(loc.t("send.txErrorGeneric")) == true)
+        #expect(notSent?.retry == nil, "the core said nothing about retrying")
+        let refused = SigningLive.receipt(
+            sign: sign(error: .submitFailed, refused: true), blocks: blocks, context: context()
+        )
+        #expect(refused?.retry == nil, "a refusal is not tried again")
+    }
+
+    /// Spec 096 F8: a failure that sent nothing — the core holds the page's
+    /// answer and says it may be tried again: Try again beside Done, the
+    /// accent on Try again.
+    @Test func aFailureThatSentNothingOffersTryAgain() {
+        let retryable = SigningLive.receipt(
+            sign: sign(error: .submitFailed, retryable: true), blocks: blocks, context: context()
+        )
+        #expect(retryable?.stage == .failed)
+        #expect(retryable?.retry == loc.t("send.txRetryBtn"))
+        #expect(retryable?.cta == loc.t("componentsTx.receipt.done"))
+        #expect(retryable?.ctaAccent == false)
     }
 
     /// RI3's reader test for the round-2 sentence: it resolves in zh and en,

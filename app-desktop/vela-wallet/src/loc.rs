@@ -146,23 +146,93 @@ impl Loc {
 pub(crate) const LANGUAGES: [&str; 15] = vela_core::i18n::SUPPORTED;
 
 /// The tag the strings resolve from: the `VELA_LANG` pin, else the language
-/// the person chose in Settings (spec 072: `vela.language`), else the
-/// machine's own ([`system_tag`]).
+/// the person chose in Settings (spec 072: `vela.language`), else what the
+/// system asks for ([`system_language`]).
 pub(crate) fn requested_tag() -> String {
     pick_tag(
-        env_tag(&["VELA_LANG"]),
+        pinned_tag(),
         crate::executor::preferences::pinned_language(),
-        system_tag,
+        system_language,
     )
 }
 
+/// The environment's locale variables, in POSIX precedence.
+const ENV_LOCALE: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
+
 /// The machine's locale: `VELA_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` →
-/// `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` → `zh-CN`). What "follow the
-/// system" follows, and what the format presets' "Automatic" means (spec 038
+/// `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` → `zh-CN`). What the format
+/// presets' "Automatic" and the display currency's region read (spec 038
 /// #E3) — the web's `auto` formats read the platform too, never the app's
-/// chosen language.
+/// chosen language. The STRINGS' "follow the system" is
+/// [`system_language`], which on macOS asks the system itself.
 pub(crate) fn system_tag() -> String {
-    env_tag(&["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]).unwrap_or_else(|| "en".to_owned())
+    pinned_tag()
+        .or_else(|| env_tag(&ENV_LOCALE))
+        .unwrap_or_else(|| "en".to_owned())
+}
+
+/// The shipped language "follow the system" means (spec 095).
+///
+/// macOS: the person's preferred languages (System Settings → Language &
+/// Region), through the core's one rule — the same `system_language` iOS and
+/// Android use. A Finder or Dock launch carries no `LANG`, so reading the
+/// environment there gave English to everybody who had not picked a language
+/// in Settings. Windows and Linux: the environment chain, resolved by the
+/// engine, exactly as before.
+pub(crate) fn system_language() -> String {
+    language_from(pinned_tag(), preferred_languages(), || env_tag(&ENV_LOCALE))
+}
+
+/// [`system_language`] with the platform's answers handed in: the developer
+/// pin, the system's preferred languages (`None` where the platform keeps
+/// none — Windows, Linux), and the environment chain.
+fn language_from(
+    pin: Option<String>,
+    preferred: Option<Vec<String>>,
+    env: impl FnOnce() -> Option<String>,
+) -> String {
+    if let Some(pin) = pin {
+        return vela_core::i18n::resolve_language(&pin).language;
+    }
+    if let Some(preferred) = preferred.filter(|list| !list.is_empty()) {
+        return vela_core::i18n::system_language(&preferred).to_owned();
+    }
+    vela_core::i18n::resolve_language(&env().unwrap_or_else(|| "en".to_owned())).language
+}
+
+/// `CFLocaleCopyPreferredLanguages`: the person's languages, most preferred
+/// first, as BCP-47 (`zh-Hans-CN`). Allowed in the App Sandbox.
+#[cfg(target_os = "macos")]
+fn preferred_languages() -> Option<Vec<String>> {
+    use core_foundation::array::CFArray;
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::string::CFString;
+
+    // SAFETY: a Copy-rule function: the array is owned here and released by
+    // `wrap_under_create_rule`'s drop; null is checked first.
+    let raw = unsafe { core_foundation_sys::locale::CFLocaleCopyPreferredLanguages() };
+    if raw.is_null() {
+        return None;
+    }
+    let array: CFArray<CFType> = unsafe { CFArray::wrap_under_create_rule(raw) };
+    let languages: Vec<String> = array
+        .iter()
+        .filter_map(|item| item.downcast::<CFString>().map(|text| text.to_string()))
+        .collect();
+    (!languages.is_empty()).then_some(languages)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn preferred_languages() -> Option<Vec<String>> {
+    None
+}
+
+/// `VELA_LANG` — a developer build's language pin (spec 095: release builds
+/// do not read it).
+fn pinned_tag() -> Option<String> {
+    crate::dev_env::var!("VELA_LANG")
+        .filter(|v| !v.is_empty())
+        .map(|raw| normalize_posix_tag(&raw))
 }
 
 fn env_tag(keys: &[&str]) -> Option<String> {
@@ -191,6 +261,97 @@ fn normalize_posix_tag(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 095: on macOS "follow the system" is the person's preferred
+    /// languages through the core's rule — whatever the environment says.
+    #[test]
+    fn the_systems_preferred_languages_pick_the_language() {
+        let preferred = |tags: &[&str]| Some(tags.iter().map(|t| (*t).to_owned()).collect());
+        let no_env = || None;
+        for (tags, want) in [
+            (&["zh-Hans-CN"][..], "zh"),
+            (&["zh-Hant-HK"], "zh-HK"),
+            (&["pt-BR"], "pt-BR"),
+            (&["fr-CA"], "fr"),
+            (&["ar-SA"], "en"),
+            (&["ar-SA", "ja-JP"], "ja"),
+        ] {
+            assert_eq!(
+                language_from(None, preferred(tags), no_env),
+                want,
+                "{tags:?}"
+            );
+        }
+        assert_eq!(
+            language_from(None, preferred(&["zh-Hans-CN"]), || Some(
+                "en-US".to_owned()
+            )),
+            "zh",
+            "the system's list, not LANG, on macOS"
+        );
+        assert_eq!(
+            language_from(Some("ja".to_owned()), preferred(&["zh-Hans-CN"]), no_env),
+            "ja",
+            "a developer's pin first"
+        );
+    }
+
+    /// Spec 095: where the platform keeps no preferred list (Windows, Linux)
+    /// or it is empty, the environment chain resolves as it always has.
+    #[test]
+    fn without_a_preferred_list_the_environment_decides_as_before() {
+        for (env, want) in [
+            (Some("zh-TW"), "zh-TW"),
+            (Some("zh-CN"), "zh"),
+            (Some("pt-PT"), "pt-BR"),
+            (Some("de-DE"), "de"),
+            (Some("C"), "en"),
+            (None, "en"),
+        ] {
+            let from_env = || env.map(str::to_owned);
+            assert_eq!(language_from(None, None, from_env), want, "{env:?}");
+            assert_eq!(
+                language_from(None, Some(Vec::new()), from_env),
+                want,
+                "{env:?}"
+            );
+            // What the strings resolved to before spec 095: the raw tag handed
+            // to the engine.
+            let before = Loc::for_tag(env.unwrap_or("en")).language().to_owned();
+            assert_eq!(before, want, "{env:?}");
+        }
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(preferred_languages(), None);
+    }
+
+    /// The live macOS read answers something the core can resolve.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_reports_preferred_languages() {
+        let preferred = preferred_languages().expect("macOS keeps a preferred-language list");
+        assert!(!preferred.is_empty());
+        let _ = vela_core::i18n::system_language(&preferred);
+    }
+
+    /// Spec 095: the Mac bundle declares exactly the corpus's locales, as the
+    /// core names them for Apple — no more (a language the app cannot speak),
+    /// no fewer (one the store would not list).
+    #[test]
+    fn the_bundle_declares_the_corpus_locales() {
+        let plist = include_str!("../packaging/macos/Info.plist.in");
+        let key = plist
+            .find("<key>CFBundleLocalizations</key>")
+            .unwrap_or_else(|| unreachable!("Info.plist.in declares no localizations"));
+        let array = &plist[key..];
+        let array = &array[..array.find("</array>").unwrap_or(array.len())];
+        let declared: Vec<&str> = array
+            .split("<string>")
+            .skip(1)
+            .filter_map(|rest| rest.split("</string>").next())
+            .collect();
+        assert_eq!(declared, vela_core::i18n::apple_localizations());
+        assert!(plist.contains("<key>CFBundleDevelopmentRegion</key> <string>en</string>"));
+    }
 
     /// Every key the welcome screen renders, including the 13 added by spec 007.
     const WELCOME_KEYS: [&str; 16] = [

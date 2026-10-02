@@ -157,6 +157,7 @@
     "txBackgroundHint": "Đóng trang này thì giao dịch vẫn chạy tiếp",
     "txCloseBackground": "Đóng · vẫn chạy tiếp",
     "txSubmittedTitle": "Đã gửi lên mạng",
-    "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}"
+    "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}",
+    "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại."
   }
 }

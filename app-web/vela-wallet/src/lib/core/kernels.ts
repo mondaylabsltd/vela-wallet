@@ -14,6 +14,7 @@ import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { Account } from '$lib/core/generated/Account';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
+import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
 import type { ReadSlot } from '$lib/core/generated/ReadSlot';
@@ -395,6 +396,20 @@ export function matchSelector(calldata: string, signatures: string[]): string | 
  */
 export function typedDataDocument(method: string, paramsJson: string): string | null {
 	return wasm.typedDataDocument(method, paramsJson) ?? null;
+}
+
+/**
+ * The calls a dApp transaction request sends — the core's ONE reading
+ * (`tx_request::calls_of`, spec 096 F1): `params[0].calls` of a
+ * `wallet_sendCalls`, else `params[0]`, every one or none, `value` in DECIMAL
+ * wei (the `FeeCall` convention). `null` when a call is unreadable, names no
+ * recipient, or there are none. Each reader of `value` used to be its own —
+ * the fee quote read `"1000"` as decimal, the submit as hex, and the gas
+ * floor threw on PancakeSwap's `0xaa87bee538000` once its prefix was gone.
+ */
+export function dappRequestCalls(method: string, paramsJson: string): FeeCall[] | null {
+	const json = wasm.dappRequestCalls(method, paramsJson);
+	return json === undefined ? null : (JSON.parse(json) as FeeCall[]);
 }
 
 export function hashTypedData(typedData: TypedData): Uint8Array {

@@ -135,6 +135,8 @@ data class ClearBatchCall(
     val result: ClearSignResult? = null,
     val plain_send: ClearPlainSend? = null,
     val to: String? = null,
+    /** Spec 096 F5: the target's name, when the wallet itself knows the contract on this chain. */
+    val to_name: String? = null,
     val data_bytes: Int = 0,
     val value_wei: String? = null,
     val amount: String? = null,
@@ -289,7 +291,13 @@ data class ClearSignResult(
     val partial: Boolean = false,
     val best_effort: Boolean = false,
     val to_own_token: Boolean = false,
+    /** Spec 096 F5: the call signs an order whose amounts live off chain (a CoW pre-signature). */
+    val terms_off_chain: Boolean = false,
 )
+
+/** Spec 096 F4: the chain's own coin a lone call sends, exact. */
+@Serializable
+data class ClearNativeValue(val value_wei: String, val amount: String)
 
 @Serializable
 data class ClearBlindField(val key: String, val value: String)
@@ -345,6 +353,11 @@ data class ClearSigningView(
      * Copied to `SignApproveOpts.intent`; `null` = nothing may be recorded.
      */
     val record_intent: String? = null,
+    /**
+     * Spec 096 F4: the coin a lone contract call sends, when its reading does
+     * not say it — on `ClearSign` and `BlindTransaction` only.
+     */
+    val native_value: ClearNativeValue? = null,
 )
 
 @Serializable

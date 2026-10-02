@@ -157,6 +157,7 @@
     "txBackgroundHint": "閂咗呢頁，筆交易都會喺背景繼續行",
     "txCloseBackground": "閂咗 · 背景繼續",
     "txSubmittedTitle": "交易已經交咗上網絡",
-    "txConfirmedTitle": "發咗 {{amount}} {{symbol}}"
+    "txConfirmedTitle": "發咗 {{amount}} {{symbol}}",
+    "recipientTokenContract": "呢個係代幣合約地址，轉咗去呢度嘅資產通常攞唔返。"
   }
 }

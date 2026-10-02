@@ -586,6 +586,8 @@ struct RecipientFieldModel {
     var scanLabel: String?
     /// Sweep's "every token goes to the same address".
     var note: String?
+    /// The note is a warning (spec 096 F12: a token's own contract).
+    var noteWarn = false
 }
 
 enum RecipientAction: String, Identifiable {
@@ -848,6 +850,9 @@ struct SendReceiptModel {
     /// The single bottom button: "Close · keep running" or "Done".
     let cta: String
     let ctaAccent: Bool
+    /// Spec 096 F8: a dApp request that failed before anything was sent —
+    /// "Try again" beside the button, which takes the request back to review.
+    var retry: String?
     /// While the passkey ceremony is up the button is 取消 and it must NOT
     /// leave the screen: it is the core's own checkpoint (`cancel_signing`),
     /// and navigating away from it would abandon a prompt nobody can answer.

@@ -61,6 +61,10 @@ pub struct SigningReceipt {
     pub explorer_tx: Option<String>,
     pub cta: SharedString,
     pub cta_accent: bool,
+    /// Spec 096 F8: "Try again" beside the close — a failure that sent
+    /// nothing and was no refusal (`SignView::failure_retryable`); the core
+    /// takes the request back to review.
+    pub retry: Option<SharedString>,
 }
 
 /// The chain's clock, for the ring and the "~9s remaining" line.
@@ -300,13 +304,17 @@ pub fn approved(
         } else {
             s.error_off_chain.clone()
         });
-        return Some(receipt(
+        // Spec 096 F8: the page waits for this close to hear the failure;
+        // when nothing was sent and it was no refusal, it may be tried again.
+        let mut out = receipt(
             ReceiptStage::Failed,
             s.receipt_failed.clone(),
             captions,
             s.receipt_done.clone(),
-            true,
-        ));
+            !sign.failure_retryable,
+        );
+        out.retry = sign.failure_retryable.then(|| s.retry.clone());
+        return Some(out);
     }
     // The operation left: from here on it is the core's ending, as the
     // tracker knows it. Before the tracker has taken it, the view's own flag
@@ -587,6 +595,7 @@ fn receipt(
         explorer_tx: None,
         cta,
         cta_accent,
+        retry: None,
     }
 }
 
@@ -969,6 +978,30 @@ mod tests {
         assert_eq!(refused.stage, ReceiptStage::Failed);
         assert_eq!(refused.title, s.receipt_failed);
         assert_eq!(refused.captions, vec![summary(), s.refused.clone()]);
+        assert_eq!(refused.retry, None, "a refusal is not tried again");
+        assert!(refused.cta_accent, "Done is the one way out");
+        assert_eq!(failed.retry, None, "the core said nothing about retrying");
+
+        // Spec 096 F8: nothing was sent and it was no refusal — Try again
+        // beside Done, the accent moving to it.
+        let retryable = approved(
+            &view(|v| {
+                v.error = Some(SignErrorNotice {
+                    kind: SignErrorKind::SubmitFailed,
+                    detail: Some("Could not estimate gas".to_owned()),
+                });
+                v.failure_retryable = true;
+            }),
+            true,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(retryable.retry, Some(s.retry.clone()));
+        assert_eq!(retryable.cta, s.receipt_done);
+        assert!(!retryable.cta_accent);
         for kind in [
             SignErrorKind::UserRejected,
             SignErrorKind::UnsupportedChain,

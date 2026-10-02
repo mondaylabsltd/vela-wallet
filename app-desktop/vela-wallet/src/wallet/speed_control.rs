@@ -860,7 +860,10 @@ mod tests {
     /// The deltas `sim::simulate` answers, handed over as `signing_host`
     /// hands them, told to the session in force right after its question
     /// (`ask_session`), put the fee leg the relay is asked to simulate in
-    /// ETH; without them the machine picks USDC, the coin the swap drains.
+    /// ETH — paid from what the swap brings in; without them, with no ETH
+    /// held and a router call that names no fee coin, the machine picks USDC,
+    /// the coin the swap drains. (Spec 096: a call that NAMES the USDC never
+    /// has it picked; with ETH held, ETH pays first either way.)
     #[test]
     fn the_simulations_deltas_put_a_max_swaps_fee_leg_in_the_chains_coin() {
         use vela_core::app::fee_policy::{
@@ -947,10 +950,7 @@ mod tests {
                         }),
                     },
                     FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
-                        quotes: Some(vec![
-                            row(true, "480000000000000", "0.90"),
-                            row(false, "271741", "0.27"),
-                        ]),
+                        quotes: Some(vec![row(true, "0", "0"), row(false, "271741", "0.27")]),
                     },
                     FeeOperation::EstimateUserOpGas { calls, .. } => {
                         asked = calls.last().cloned();

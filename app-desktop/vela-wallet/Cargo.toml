@@ -271,6 +271,10 @@ nokhwa = { version = "0.10", default-features = false, features = [
     "input-avfoundation",
 ] }
 objc2 = "0.5"
+# The decision handler WebKit hands the in-app browser's navigation gate
+# (spec 095, `webview.rs` `mac_leaves`): an Objective-C block. The version
+# objc2 0.5 already pulls, so nothing new is fetched.
+block2 = "0.5"
 # The system proxy, as WebKit resolves it (spec 082 RD2, `executor/
 # proxy_macos.rs`): CFNetwork's per-URL lookup and its PAC runner, called
 # through a small `extern "C"` block over these two. Both already in the lock
@@ -428,3 +432,13 @@ opt-level = 3
 
 [profile.dev.package.crc32fast]
 opt-level = 3
+
+# Spec 095: gpui_macos without the private API the Mac App Store refuses
+# (`CGSSetWindowBackgroundBlurRadius`, `_windowResize…Cursor`,
+# `_opaqueRectForWindowMoveWhenInTitlebar`). The vendored crate is upstream at
+# the pinned commit minus exactly those; its Cargo.toml says why, what changed
+# and how to refresh it. `scripts/check-macos-private-api.sh` proves the
+# release binary clean. Remove this block with the vendored copy once upstream
+# no longer links private API.
+[patch."https://github.com/zed-industries/zed"]
+gpui_macos = { path = "../vendor/gpui_macos" }

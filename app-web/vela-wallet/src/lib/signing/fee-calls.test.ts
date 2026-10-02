@@ -9,41 +9,56 @@
  * The cases below are the shapes dApps actually send, `"0x"` included —
  * `BigInt("0x")` throws, and that throw is what took the fee away.
  */
-import { describe, expect, it } from 'vitest';
-import { feeCallsOf, weiOf } from './fee-calls';
+import { readFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
+import { feeCallsOf } from './fee-calls';
+
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 const tx = (call: Record<string, unknown>) => JSON.stringify([call]);
 const ROUTER = '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD';
 
-describe('a JSON-RPC quantity as wei', () => {
-	it('reads the encodings dApps send for ZERO, "0x" included', () => {
-		// The one that threw. `BigInt('0x')` is a SyntaxError, and several dApp
-		// libraries write a zero value exactly like this.
-		expect(weiOf('0x')).toBe('0');
-		expect(weiOf(undefined)).toBe('0');
-		expect(weiOf('')).toBe('0');
-		expect(weiOf('0x0')).toBe('0');
-		expect(weiOf(0)).toBe('0');
-	});
+/**
+ * Spec 096 F1: the core's value table (`tx_request` `VALUE_TABLE`), as the fee
+ * quote reads it — the same reading the submit sends. `null` = refused.
+ */
+const VALUE_TABLE: [unknown, string | null][] = [
+	['0xaa87bee538000', '3000000000000000'],
+	['0xAA87BEE538000', '3000000000000000'],
+	['0x0', '0'],
+	['0x', '0'],
+	['', '0'],
+	[null, '0'],
+	[undefined, '0'],
+	['0', '0'],
+	[0, '0'],
+	[
+		'0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+		'115792089237316195423570985008687907853269984665640564039457584007913129639935'
+	],
+	['0x10000000000000000000000000000000000000000000000000000000000000000', null],
+	['1000', null],
+	['aa87bee538000', null],
+	[1000, null],
+	[1.5, null],
+	['0X1f', null],
+	['  0x2a  ', null],
+	['-0x1', null],
+	['0xzz', null],
+	[{}, null]
+];
 
-	it('reads an amount however it was written', () => {
-		expect(weiOf('0x38d7ea4c68000')).toBe('1000000000000000');
-		expect(weiOf('1000000000000000')).toBe('1000000000000000');
-		expect(weiOf(1000)).toBe('1000');
-		expect(weiOf(10n ** 21n)).toBe('1000000000000000000000');
-		expect(weiOf('  0x2a  ')).toBe('42');
-	});
-
-	it('says NULL for what is not a number, rather than calling it zero', () => {
-		// A fee is computed from this. Reading nonsense as 0 would put a wrong
-		// number beside a real transaction, which is worse than no number.
-		expect(weiOf('later')).toBeNull();
-		expect(weiOf('0xzz')).toBeNull();
-		expect(weiOf(-1)).toBeNull();
-		expect(weiOf(-1n)).toBeNull();
-		expect(weiOf(1.5)).toBeNull();
-		expect(weiOf({})).toBeNull();
-	});
+describe("a call value, read by the core's one rule", () => {
+	for (const [value, wei] of VALUE_TABLE) {
+		it(`${JSON.stringify(value)} → ${wei ?? 'refused'}`, () => {
+			const calls = feeCallsOf('transaction', tx({ to: ROUTER, value, data: '0x' }));
+			expect(calls?.[0]?.value ?? null).toBe(wei);
+		});
+	}
 });
 
 describe('the calls a signing request can be priced by', () => {

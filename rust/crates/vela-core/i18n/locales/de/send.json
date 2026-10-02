@@ -157,6 +157,7 @@
     "txBackgroundHint": "Diese Seite zu schließen hält die Transaktion nicht an",
     "txCloseBackground": "Schließen · weiterlaufen lassen",
     "txSubmittedTitle": "An das Netzwerk gesendet",
-    "txConfirmedTitle": "{{amount}} {{symbol}} gesendet"
+    "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
+    "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen."
   }
 }

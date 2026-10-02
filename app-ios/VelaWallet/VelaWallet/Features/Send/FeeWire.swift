@@ -177,6 +177,11 @@ struct FeeOptionWire: Decodable, Equatable {
     /// The core's verdict, not a comparison this shell makes.
     let insufficient: Bool
     let selected: Bool
+    /// Spec 096 F2: the operation itself may spend this coin by an amount no
+    /// call states, and nothing measured what is left — the core's
+    /// `spent_by_operation`. The sheet warns while it is the coin paying.
+    /// Optional on the wire so a hand-written row without it reads `false`.
+    var spentByOperation: Bool?
 }
 
 struct FeeViewWire: Decodable, Equatable {

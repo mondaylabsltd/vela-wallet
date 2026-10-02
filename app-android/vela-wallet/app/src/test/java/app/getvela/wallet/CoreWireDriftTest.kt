@@ -1008,6 +1008,10 @@ class CoreWireDriftTest {
                "tracker_withdraw":{"user_op_hash":"0xop","record_ids":["0xop"]}}""",
         )
         assertTrue(view.failure_refused)
+        assertTrue("absent reads false", !view.failure_retryable)
+        // Spec 096 F8: the core's flag and its event, in the core's spelling.
+        assertTrue(roundTrip<SignView>("""{"surface":"sheet","failure_retryable":true}""").failure_retryable)
+        assertEquals(SignEvent.RetryTapped, roundTrip<SignEvent>("""{"type":"retry_tapped"}"""))
         assertTrue(view.tracker_handoff!!.admitted)
         assertEquals(SignTrackerWithdraw("0xop", listOf("0xop")), view.tracker_withdraw)
 
@@ -1198,6 +1202,9 @@ class CoreWireDriftTest {
         assertFieldsExist<ClearSiweFields>("ClearSiweFields")
         assertFieldsExist<ClearLocale>("ClearLocale")
         assertFieldsExist<ClearPlainSend>("ClearPlainSend")
+        assertFieldsExist<ClearNativeValue>("ClearNativeValue")
+        assertFieldsExist<ClearBatchCall>("ClearBatchCall")
+        assertFieldsExist<ClearBatchView>("ClearBatchView")
         assertVariantsExhaustive<ClearOperation>("ClearOperation")
         assertVariantsExhaustive<ClearShellResult>("ClearShellResult")
         assertVariantsExhaustive<ClearConfirm>("ClearConfirm")

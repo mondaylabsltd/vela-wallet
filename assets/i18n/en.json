@@ -418,7 +418,8 @@
   "txBackgroundHint": "Closing this page keeps the transaction running",
   "txCloseBackground": "Close · keep running",
   "txSubmittedTitle": "Submitted to the network",
-  "txConfirmedTitle": "Sent {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
+  "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered."
  },
  "receive": {
   "title": "Receive",
@@ -1046,6 +1047,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Privacy Policy",
+  "linkTerms": "Terms of Service",
+  "linkSupport": "Support",
   "footer": "Built with care. Your keys, your coins.",
   "sectionLinks": "Links",
   "debugMode": "Debug mode",
@@ -1399,6 +1403,7 @@
    "labelNewContract": "New contract",
    "labelNft": "NFT",
    "labelOnBehalfOf": "On behalf of",
+   "labelOrder": "Order",
    "labelOperator": "Operator",
    "labelPrice": "Price",
    "labelQuantities": "Quantities",
@@ -1412,6 +1417,8 @@
    "labelYouReceive": "You receive",
    "labelYouReceiveMin": "You receive (min)",
    "valueUnlimited": "Unlimited",
+   "valueAll": "All",
+   "warnOrderTerms": "This order's amounts aren't shown — check them on the site.",
    "batchSubtitle": "{{count}} transactions, signed together",
    "batchCall": "Contract call",
    "balanceSelfTransfer": "To your own address · balance won't change",
@@ -1522,7 +1529,8 @@
    "feeToken": "Fee token",
    "paidWith": "Paid with {{symbol}}",
    "rowBalance": "Balance",
-   "rowSpend": "Est. cost"
+   "rowSpend": "Est. cost",
+   "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail."
   },
   "dock": {
    "receive": "Receive",
@@ -1616,6 +1624,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo placeholder · not scannable"
+  },
+  "appMenu": {
+   "about": "About Vela Wallet",
+   "hide": "Hide Vela Wallet",
+   "hideOthers": "Hide Others",
+   "showAll": "Show All",
+   "quit": "Quit Vela Wallet",
+   "edit": "Edit",
+   "undo": "Undo",
+   "redo": "Redo",
+   "cut": "Cut",
+   "copy": "Copy",
+   "paste": "Paste",
+   "selectAll": "Select All",
+   "view": "View",
+   "fullScreen": "Toggle Full Screen",
+   "window": "Window",
+   "minimize": "Minimize",
+   "closeWindow": "Close Window"
   }
  },
  "settingsModals": {

@@ -245,7 +245,7 @@ impl OnboardingPage {
             identicons: RefCell::default(),
             passkey_icons: RefCell::default(),
             directory: RefCell::default(),
-            intro: if std::env::var("VELA_INTRO").as_deref() == Ok("1")
+            intro: if crate::dev_env::flag!("VELA_INTRO")
                 || storage::read_epoch_ms(theme::INTRO_SEEN_KEY).is_none()
             {
                 Some(intro::IntroState::default())

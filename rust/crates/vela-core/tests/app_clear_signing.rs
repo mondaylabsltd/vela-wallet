@@ -914,7 +914,15 @@ fn unlimited_approve_reads_danger() {
     let amount = &result.fields[0];
     assert!(amount.warning);
     assert_eq!(amount.value, "Unlimited");
-    let spender = &result.fields[1];
+    // "Unlimited" names no coin: the token is on the very next row (096 F6).
+    let token = &result.fields[1];
+    assert_eq!(
+        (token.label.as_str(), token.value.as_str()),
+        ("Token", "USDC")
+    );
+    assert_eq!(token.token_address.as_deref(), Some(USDC));
+    assert_eq!(token.label_term, Some(ClearTerm::LabelToken));
+    let spender = &result.fields[2];
     assert_eq!(spender.role, ClearFieldRole::Spender);
 
     // The words a shell translates (the founder read "Approve / Amount /
@@ -1824,12 +1832,13 @@ fn best_effort_decode_never_blind_signs_silently() {
     assert_eq!(result.risk, ClearRisk::Caution, "decoded but unverified");
     assert!(result.contract_name.is_none());
 
+    // The parameter's own name, in words (096 F4).
     let to = &result.fields[0];
-    assert_eq!(to.label, "to");
+    assert_eq!(to.label, "To");
     assert!(to.detail, "best-effort params live in the detail panel");
     assert_eq!(to.address.as_deref(), Some(VITALIK));
     let amount = &result.fields[1];
-    assert_eq!(amount.label, "amount");
+    assert_eq!(amount.label, "Amount");
     assert_eq!(amount.value, "1,000,000");
 }
 

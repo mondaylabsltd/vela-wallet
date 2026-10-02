@@ -411,7 +411,8 @@
   "txBackgroundHint": "이 페이지를 닫아도 거래는 계속 진행됩니다",
   "txCloseBackground": "닫기 · 계속 진행",
   "txSubmittedTitle": "네트워크에 제출됨",
-  "txConfirmedTitle": "{{amount}} {{symbol}} 전송 완료"
+  "txConfirmedTitle": "{{amount}} {{symbol}} 전송 완료",
+  "recipientTokenContract": "토큰 컨트랙트 주소입니다. 이 주소로 보낸 자산은 대개 되찾을 수 없습니다."
  },
  "receive": {
   "title": "받기",
@@ -1039,6 +1040,9 @@
   "linkWebsite": "웹사이트",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "개인정보 처리방침",
+  "linkTerms": "서비스 약관",
+  "linkSupport": "고객 지원",
   "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
   "sectionLinks": "링크",
   "debugMode": "디버그 모드",
@@ -1347,6 +1351,7 @@
    "labelNewContract": "새 컨트랙트",
    "labelNft": "NFT",
    "labelOnBehalfOf": "대리 대상",
+   "labelOrder": "주문",
    "labelOperator": "운영자",
    "labelPrice": "가격",
    "labelQuantities": "수량",
@@ -1360,6 +1365,8 @@
    "labelYouReceive": "받는 금액",
    "labelYouReceiveMin": "최소 받는 금액",
    "valueUnlimited": "무제한",
+   "valueAll": "전액",
+   "warnOrderTerms": "이 주문의 금액은 여기에 표시되지 않습니다 — 먼저 사이트에서 확인하세요.",
    "simResultLabel": "시뮬레이션 결과",
    "simResultNoChange": "자산 변동 없음",
    "simResultNoOther": "다른 변동 없음",
@@ -1509,7 +1516,8 @@
    "feeToken": "수수료 토큰",
    "paidWith": "{{symbol}}(으)로 결제",
    "rowBalance": "잔액",
-   "rowSpend": "예상 비용"
+   "rowSpend": "예상 비용",
+   "feeCoinSpent": "이 거래는 {{sym}}도 사용합니다. 수수료를 낼 만큼 남지 않으면 거래가 실패합니다."
   },
   "dock": {
    "receive": "받기",
@@ -1606,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "데모 자리 표시자 · 스캔 불가"
+  },
+  "appMenu": {
+   "about": "Vela Wallet에 관하여",
+   "hide": "Vela Wallet 가리기",
+   "hideOthers": "기타 가리기",
+   "showAll": "모두 보기",
+   "quit": "Vela Wallet 종료",
+   "edit": "편집",
+   "undo": "실행 취소",
+   "redo": "실행 복귀",
+   "cut": "오려두기",
+   "copy": "복사하기",
+   "paste": "붙여넣기",
+   "selectAll": "전체 선택",
+   "view": "보기",
+   "fullScreen": "전체 화면 전환",
+   "window": "윈도우",
+   "minimize": "최소화",
+   "closeWindow": "윈도우 닫기"
   }
  },
  "settingsModals": {

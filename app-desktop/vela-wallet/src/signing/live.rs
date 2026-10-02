@@ -17,8 +17,8 @@ use vela_core::app::approval_guard::{
 };
 use vela_core::app::clear_signing::{
     ClearBatchCall, ClearBatchView, ClearBlindTyped, ClearDangerClass, ClearMessageView,
-    ClearProvenance, ClearRisk, ClearSignField, ClearSignResult, ClearSigningView,
-    ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
+    ClearNativeValue, ClearProvenance, ClearRisk, ClearSignField, ClearSignResult,
+    ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignPhase, SignView};
@@ -63,7 +63,10 @@ pub fn confirm_enabled(
 ) -> bool {
     let fee_ready =
         off_chain(clear) || (fee.confirm_fee_ready && !fee_of_another_tier(fee, speed_tier));
-    sign.confirm_gate_open && guard.confirm_allowed && fee_ready
+    // Spec 096 F7: and the request has been read — a slide that armed under
+    // "Loading…" signed what nobody had been shown yet.
+    let read = !clear.resolving && clear.surface != ClearSurface::Loading;
+    sign.confirm_gate_open && guard.confirm_allowed && fee_ready && read
 }
 
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
@@ -272,7 +275,7 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
         ClearSurface::ClearSign => clear
             .result
             .as_ref()
-            .map(|result| result_blocks(result, s))
+            .map(|result| result_blocks(result, clear.native_value.as_ref(), facts, s))
             .unwrap_or_default(),
         ClearSurface::EthSign | ClearSurface::MessageSign => clear
             .message
@@ -284,7 +287,7 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
-        ClearSurface::BlindTransaction => blind_tx_blocks(facts, s),
+        ClearSurface::BlindTransaction => blind_tx_blocks(clear.native_value.as_ref(), facts, s),
         // Spec 082 G14 (RC1): empty calldata is a send whatever the
         // recipient; the core decided it and scaled the amount.
         ClearSurface::PlainSend => clear
@@ -373,6 +376,12 @@ fn batch_blocks(batch: &ClearBatchView, facts: &RequestFacts, s: &SigningStrings
             text: s.warn_descriptor_fetched.clone(),
         });
     }
+    if results.iter().any(|result| result.terms_off_chain) {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_order_terms.clone(),
+        });
+    }
     if results
         .iter()
         .any(|result| result.fields.iter().any(|field| field.unverified))
@@ -425,16 +434,24 @@ fn batch_call_card(call: &ClearBatchCall, symbol: &str, s: &SigningStrings) -> B
         })
         .into_iter()
         .collect();
+    // A contract the wallet knows on this chain is named (096 F5); any other
+    // is its full address.
     let target: Vec<crate::signing::fixtures::Row> = call
         .to
         .as_ref()
-        .map(|to| {
-            (
+        .map(|to| match &call.to_name {
+            Some(name) => (
+                s.label_interacting.clone(),
+                SharedString::from(name.clone()),
+                Tone::Neutral,
+                false,
+            ),
+            None => (
                 s.label_interacting.clone(),
                 SharedString::from(to.clone()),
                 Tone::Neutral,
                 true,
-            )
+            ),
         })
         .into_iter()
         .collect();
@@ -1455,7 +1472,11 @@ fn blind_typed_blocks(typed: &ClearBlindTyped, s: &SigningStrings) -> Vec<Block>
 /// go to. The amount is deliberately absent: scaling a value is what the core
 /// does for every other rung, and a number this file composed on its own would
 /// be a second authority on "how much" (recorded as a gap in phase 26).
-fn blind_tx_blocks(facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
+fn blind_tx_blocks(
+    native: Option<&ClearNativeValue>,
+    facts: &RequestFacts,
+    s: &SigningStrings,
+) -> Vec<Block> {
     let mut out = vec![
         Block::Intent {
             text: s.intent_contract_call.clone(),
@@ -1469,6 +1490,10 @@ fn blind_tx_blocks(facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
             )),
         },
     ];
+    // Spec 096 F4: nobody could read the call; the coin it sends is known.
+    if let Some(native) = native {
+        out.push(Block::Rows(vec![coin_row(native, facts, s)]));
+    }
     if let Some(to) = facts.to.as_ref() {
         out.push(Block::Party {
             label: s.label_interacting.clone(),
@@ -1504,24 +1529,51 @@ pub fn tech_destination_label(data: &str, leg: Option<usize>, s: &SigningStrings
 ///
 /// Intent first — what this DOES — then what is wrong with it, then the
 /// detail. A warning under the fields is a warning after the decision.
-fn result_blocks(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
+fn result_blocks(
+    result: &ClearSignResult,
+    native: Option<&ClearNativeValue>,
+    facts: &RequestFacts,
+    s: &SigningStrings,
+) -> Vec<Block> {
     let mut out = vec![Block::Intent {
         text: SharedString::from(result.intent.clone()),
         tone: tone_of(result.risk),
     }];
     out.extend(warnings(result, s));
-    let rows: Vec<crate::signing::fixtures::Row> = result
-        .fields
-        .iter()
-        // `detail` fields are the Advanced section's, not the summary's.
-        // Promoting them here would bury the decision in parameters.
-        .filter(|field| !field.detail)
-        .map(|field| row_of(field, s))
+    // Spec 096 F4: the coin the call sends leads the rows, in a batch call's
+    // own words, when the reading does not say it itself.
+    let rows: Vec<crate::signing::fixtures::Row> = native
+        .map(|native| coin_row(native, facts, s))
+        .into_iter()
+        .chain(
+            result
+                .fields
+                .iter()
+                // `detail` fields are the Advanced section's, not the summary's.
+                // Promoting them here would bury the decision in parameters.
+                .filter(|field| !field.detail)
+                .map(|field| row_of(field, s)),
+        )
         .collect();
     if !rows.is_empty() {
         out.push(Block::Rows(rows));
     }
     out
+}
+
+/// "Amount −0.003 BNB" — the core's `native_value`, as a batch call's coin
+/// row reads, in the coin symbol the fee row uses (RC5).
+fn coin_row(
+    native: &ClearNativeValue,
+    facts: &RequestFacts,
+    s: &SigningStrings,
+) -> crate::signing::fixtures::Row {
+    (
+        s.label_amount.clone(),
+        SharedString::from(format!("−{} {}", native.amount, facts.native_symbol)),
+        Tone::Neutral,
+        false,
+    )
 }
 
 /// What is wrong with this request, from the core's flags alone.
@@ -1567,6 +1619,14 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
             text: s.warn_descriptor_fetched.clone(),
         });
     }
+    if result.terms_off_chain {
+        // Spec 096 F5: a CoW pre-signature signs an order whose amounts are
+        // hashed into its id — not on this sheet, and said so.
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_order_terms.clone(),
+        });
+    }
     if result.fields.iter().any(|field| field.unverified) {
         // An amount rendered with decimals nobody verified is an amount at a
         // magnitude nobody verified.
@@ -1608,8 +1668,10 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
         value,
         tone,
         // Addresses and raw values read as monospace; a decoded amount does
-        // not. The core says which is which by carrying an address.
-        field.address.is_some(),
+        // not. The core says which is which by carrying an address — and a
+        // contract it names ("PancakeSwap Permit2", 096 F5) is a name, set
+        // in the text face.
+        field.address.is_some() && field.value.starts_with("0x"),
     )
 }
 
@@ -1728,7 +1790,10 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s).or(refused).or(reason),
+        warning: insufficient_gas_warning(fee, s)
+            .or(refused)
+            .or_else(|| spent_fee_coin_warning(fee, s))
+            .or(reason),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -1797,6 +1862,25 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
     selected.insufficient.then(|| {
         SharedString::from(crate::signing::fill(
             &s.warn_insufficient_gas,
+            &[("sym", &selected.symbol)],
+        ))
+    })
+}
+
+/// Spec 096 F2: the coin paying is one the transaction itself may spend —
+/// the PancakeSwap USDC swap, its fee in USDC — and nothing has measured how
+/// much of it is left (the core's `spent_by_operation`). The machine never
+/// picks such a coin; the person may, and this says what it risks while it
+/// is the coin in force. A warning, not a gate.
+#[must_use]
+pub fn spent_fee_coin_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.busy {
+        return None;
+    }
+    let selected = fee.options.iter().find(|option| option.selected)?;
+    selected.spent_by_operation.then(|| {
+        SharedString::from(crate::signing::fill(
+            &s.warn_fee_coin_spent,
             &[("sym", &selected.symbol)],
         ))
     })
@@ -2013,6 +2097,7 @@ mod tests {
             best_effort: false,
             to_own_token: false,
             intent_term: None,
+            terms_off_chain: false,
         }
     }
 
@@ -2211,6 +2296,117 @@ mod tests {
         assert_eq!(rows[0].1, SharedString::from("−1 ETH"));
         assert_eq!(rows[1].0, s.label_interacting);
         assert!(rows[1].3, "an address reads as monospace");
+    }
+
+    /// Spec 096 F4: a lone call that sends coin says how much — first among
+    /// its rows, in a batch call's own words — and so does a call nobody
+    /// could read.
+    #[test]
+    fn a_call_that_sends_coin_says_how_much() {
+        let s = strings();
+        let facts = RequestFacts {
+            to: Some("0x0c2c95b24529664fe55d4437d7a31175cfe6c4f7".to_owned()),
+            data_bytes: 100,
+            native_symbol: "BNB".to_owned(),
+        };
+        let native = vela_core::app::clear_signing::ClearNativeValue {
+            value_wei: "3000000000000000".to_owned(),
+            amount: "0.003".to_owned(),
+        };
+        let mut decoded = view(result(vec![field("On behalf of", "0x88cca0...266894")]));
+        decoded.native_value = Some(native.clone());
+        let drawn = blocks(&decoded, &facts, &s);
+        let rows = drawn
+            .iter()
+            .find_map(|block| match block {
+                Block::Rows(rows) => Some(rows.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| unreachable!("rows"));
+        assert_eq!(rows[0].0, s.label_amount);
+        assert_eq!(rows[0].1, SharedString::from("−0.003 BNB"));
+        assert_eq!(rows[1].0, SharedString::from("On behalf of"));
+
+        let mut blind = pristine();
+        blind.resolved = true;
+        blind.surface = ClearSurface::BlindTransaction;
+        blind.native_value = Some(native);
+        let drawn = blocks(&blind, &facts, &s);
+        assert!(
+            drawn.iter().any(|block| matches!(block, Block::Rows(rows)
+                if rows[0].1 == "−0.003 BNB")),
+            "the blind card says the coin too"
+        );
+    }
+
+    /// Spec 096 F5: an order whose terms are off chain says so — alone and in
+    /// a batch — and a contract the wallet knows is named in its card.
+    #[test]
+    fn an_order_says_its_terms_are_not_shown_and_a_known_target_is_named() {
+        let s = strings();
+        assert!(!s.warn_order_terms.is_empty() && !s.warn_order_terms.contains("warnOrderTerms"));
+        let facts = RequestFacts {
+            native_symbol: "BNB".to_owned(),
+            ..RequestFacts::default()
+        };
+        let mut order = result(vec![field("Order", "0x09e95d9c...6abfb9fe")]);
+        order.terms_off_chain = true;
+        let said = |drawn: &[Block]| {
+            drawn.iter().any(
+                |block| matches!(block, Block::Warning { text, .. } if *text == s.warn_order_terms),
+            )
+        };
+        assert!(said(&blocks(&view(order.clone()), &facts, &s)));
+
+        let mut clear = real_batch(TWO_SENDS);
+        let batch = clear
+            .batch
+            .as_mut()
+            .unwrap_or_else(|| unreachable!("a batch"));
+        let call = &mut batch.calls[1];
+        call.surface = ClearSurface::ClearSign;
+        call.plain_send = None;
+        call.result = Some(order);
+        call.to = Some("0x9008D19f58AAbD9eD0D60971565AA8510560ab41".to_owned());
+        call.to_name = Some("CoW Protocol".to_owned());
+        let drawn = blocks(&clear, &facts, &s);
+        assert!(said(&drawn));
+        let target = cards(&drawn)[1]
+            .1
+            .iter()
+            .find(|row| row.0 == s.label_interacting)
+            .cloned()
+            .unwrap_or_else(|| unreachable!("a target row"));
+        assert_eq!(target.1, SharedString::from("CoW Protocol"));
+        assert!(!target.3, "a name is not monospace");
+    }
+
+    /// Spec 096 F7: every machine says yes, and the request is still being
+    /// read — the slide stays shut until it is.
+    #[test]
+    fn the_slide_waits_for_the_reading() {
+        let mut sign =
+            crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
+        let mut guard =
+            crate::core_host::CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new()
+                .view();
+        let mut fee =
+            crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        sign.confirm_gate_open = true;
+        guard.confirm_allowed = true;
+        fee.confirm_fee_ready = true;
+        let mut clear = pristine();
+        clear.resolving = true;
+        clear.surface = ClearSurface::Loading;
+        assert!(!confirm_enabled(&sign, &guard, &clear, &fee, None));
+        // And the sheet says "Loading", never the cap editor's prompt.
+        let drawn = blocks(&clear, &RequestFacts::default(), &strings());
+        assert!(
+            matches!(drawn.as_slice(), [Block::Sentence { text, .. }] if *text == strings().loading)
+        );
+        clear.resolving = false;
+        clear.surface = ClearSurface::ClearSign;
+        assert!(confirm_enabled(&sign, &guard, &clear, &fee, None));
     }
 
     fn message(danger: ClearDangerClass) -> ClearMessageView {
@@ -3378,6 +3574,7 @@ mod fee_tests {
             amount: Some("1250000".to_owned()),
             insufficient,
             selected,
+            spent_by_operation: false,
         }
     }
 
@@ -3800,5 +3997,31 @@ mod fee_tests {
         let mut unquoted = broke;
         unquoted.fee = None;
         assert!(insufficient_gas_warning(&unquoted, &s).is_none());
+    }
+
+    /// Spec 096 F2: the person chose a coin the transaction itself spends
+    /// (the PancakeSwap USDC swap, fee in USDC). The core flags it and the
+    /// sheet says so — while that coin pays, and not while it re-measures.
+    #[test]
+    fn a_fee_coin_the_transaction_spends_is_warned() {
+        let s = strings();
+        let usdc = Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d");
+        let spent = |selected: bool| FeeOptionView {
+            spent_by_operation: true,
+            ..option("USDC", usdc, false, selected)
+        };
+        let paying = quoted(vec![option("BNB", None, false, false), spent(true)], true);
+        let text = spent_fee_coin_warning(&paying, &s)
+            .unwrap_or_else(|| unreachable!("the coin the swap spends pays, unsaid"));
+        assert!(text.contains("USDC"), "{text}");
+        assert!(!text.contains("{{"), "{text}");
+
+        // Listed, not paying: nothing to say.
+        let in_bnb = quoted(vec![option("BNB", None, false, true), spent(false)], true);
+        assert!(spent_fee_coin_warning(&in_bnb, &s).is_none());
+        // Re-measuring: the verdict is about to be asked again.
+        let mut busy = paying;
+        busy.busy = true;
+        assert!(spent_fee_coin_warning(&busy, &s).is_none());
     }
 }

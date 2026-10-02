@@ -414,7 +414,8 @@
   "txBackgroundHint": "Fermer cette page n’interrompt pas la transaction",
   "txCloseBackground": "Fermer · continuer en arrière-plan",
   "txSubmittedTitle": "Envoyée au réseau",
-  "txConfirmedTitle": "{{amount}} {{symbol}} envoyés"
+  "txConfirmedTitle": "{{amount}} {{symbol}} envoyés",
+  "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu."
  },
  "receive": {
   "title": "Recevoir",
@@ -1042,6 +1043,9 @@
   "linkWebsite": "Site web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Politique de confidentialité",
+  "linkTerms": "Conditions d'utilisation",
+  "linkSupport": "Assistance",
   "footer": "Conçu avec soin. Vos clés, vos cryptos.",
   "sectionLinks": "Liens",
   "debugMode": "Mode débogage",
@@ -1350,6 +1354,7 @@
    "labelNewContract": "Nouveau contrat",
    "labelNft": "NFT",
    "labelOnBehalfOf": "Pour le compte de",
+   "labelOrder": "Ordre",
    "labelOperator": "Opérateur",
    "labelPrice": "Prix",
    "labelQuantities": "Quantités",
@@ -1363,6 +1368,8 @@
    "labelYouReceive": "Vous recevez",
    "labelYouReceiveMin": "Vous recevez (min.)",
    "valueUnlimited": "Illimité",
+   "valueAll": "Tout",
+   "warnOrderTerms": "Les montants de cet ordre ne sont pas affichés ici — vérifiez-les d'abord sur le site.",
    "simResultLabel": "Résultat de la simulation",
    "simResultNoChange": "Aucun changement d’actif",
    "simResultNoOther": "aucun autre changement",
@@ -1512,7 +1519,8 @@
    "feeToken": "Token de frais",
    "paidWith": "Payé en {{symbol}}",
    "rowBalance": "Solde",
-   "rowSpend": "Coût estim."
+   "rowSpend": "Coût estim.",
+   "feeCoinSpent": "Cette transaction utilise aussi vos {{sym}}. S'il n'en reste pas assez pour les frais, elle échouera."
   },
   "dock": {
    "receive": "Recevoir",
@@ -1609,6 +1617,25 @@
   },
   "qrPlaceholder": {
    "caption": "Aperçu de démonstration · non scannable"
+  },
+  "appMenu": {
+   "about": "À propos de Vela Wallet",
+   "hide": "Masquer Vela Wallet",
+   "hideOthers": "Masquer les autres",
+   "showAll": "Tout afficher",
+   "quit": "Quitter Vela Wallet",
+   "edit": "Édition",
+   "undo": "Annuler",
+   "redo": "Rétablir",
+   "cut": "Couper",
+   "copy": "Copier",
+   "paste": "Coller",
+   "selectAll": "Tout sélectionner",
+   "view": "Présentation",
+   "fullScreen": "Activer/désactiver le plein écran",
+   "window": "Fenêtre",
+   "minimize": "Placer dans le Dock",
+   "closeWindow": "Fermer la fenêtre"
   }
  },
  "settingsModals": {

@@ -123,6 +123,7 @@ const BASE: SendView = {
 	treasury_bootstrap: null,
 	recipient_identity: null,
 	recipient_risk: null,
+	recipient_is_token_contract: false,
 	sim_json: null
 };
 

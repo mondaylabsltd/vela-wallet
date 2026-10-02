@@ -224,6 +224,13 @@ pub struct DpermPopupView {
     /// [`granted_to_signed_in`]'s answer for this origin — exposed so the
     /// window never re-derives which account a site may see itself.
     pub granted: Vec<String>,
+    /// With [`DpermPopupOutcome::Consent`]: the account a Connect would share
+    /// — the one signed in, which `PopupApproved` pins the grant to — for the
+    /// consent card to name before anyone presses it (spec 096 F11), as every
+    /// in-app browser's consent names `DbrConsentView::address`. `None`
+    /// otherwise, or when nobody is signed in.
+    #[serde(default)]
+    pub consent_address: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +516,18 @@ fn popup_request(
     } else {
         popup_outcome(method, &granted, facts.pinned(method).as_deref())
     };
-    model.popup = Some(DpermPopupView { outcome, granted });
+    let consent_address = matches!(outcome, DpermPopupOutcome::Consent)
+        .then(|| {
+            signed_in
+                .filter(|address| !address.is_empty())
+                .map(dapp_spelling)
+        })
+        .flatten();
+    model.popup = Some(DpermPopupView {
+        outcome,
+        granted,
+        consent_address,
+    });
     render()
 }
 

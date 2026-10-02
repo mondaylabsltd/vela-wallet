@@ -823,6 +823,7 @@ fun VelaNavHost(
                                 onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
                                 onTrustedSignerReopen = trustedSigner::reopen,
                                 onTrustedSignerCancel = trustedSigner::cancel,
+                                onRetry = { controller.retry() },
                             )
                         }
                     }

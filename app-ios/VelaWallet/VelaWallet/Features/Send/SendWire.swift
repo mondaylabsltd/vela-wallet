@@ -361,4 +361,8 @@ struct SendViewWire: Decodable, Equatable {
     let treasuryBootstrap: SendTreasuryStatusWire?
     let recipientIdentity: SendRecipientIdentityWire?
     let recipientRisk: SendRecipientRiskWire?
+    /// Spec 096 F12: the recipient is a token's own contract on this network
+    /// (the core's `recipient_is_token_contract`) — said before the slide.
+    /// Optional on the wire so a hand-written view without it reads `false`.
+    var recipientIsTokenContract: Bool?
 }

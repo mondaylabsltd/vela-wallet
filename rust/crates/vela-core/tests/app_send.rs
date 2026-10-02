@@ -6187,3 +6187,68 @@ fn a_cancelled_run_s_late_op_signed_never_rides_the_retry() {
     let records = signed_and_cleared(&mut sut);
     assert_eq!(records[0].user_op_hash, LOCAL_HASH);
 }
+
+// ===========================================================================
+// Spec 096 F12 — sending to a token's own contract is said before the slide
+//
+// The real-dApp pass sent WBNB to the WBNB contract and the confirm page said
+// only "First time sending here". A token contract has no way to give back
+// what lands on it.
+// ===========================================================================
+
+/// A token held on the network the money moves on: its contract, typed as the
+/// recipient, is said — in any letter case — and an ordinary address is not.
+#[test]
+fn a_held_tokens_contract_as_the_recipient_is_said() {
+    let mut sut = boot(vec![eth("2"), usdc("9000"), dai("5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, DAI);
+    assert!(sut.view().recipient_is_token_contract);
+    let shouted = format!("0x{}", DAI[2..].to_uppercase());
+    set_recipient(&mut sut, &shouted);
+    assert!(sut.view().recipient_is_token_contract, "case aside");
+    set_recipient(&mut sut, RECIPIENT);
+    assert!(!sut.view().recipient_is_token_contract);
+}
+
+/// The token being sent, to its own contract — the WBNB → WBNB case.
+#[test]
+fn the_token_being_sent_to_its_own_contract_is_said() {
+    let mut sut = boot(vec![eth("2"), usdc("9000")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, USDC);
+    assert!(sut.view().recipient_is_token_contract);
+}
+
+/// A token's contract on ANOTHER network is an address like any other on
+/// this one; and a split's rows are not asked.
+#[test]
+fn only_the_networks_own_tokens_count_and_not_in_a_split() {
+    const POLYGON_ONLY: &str = "0x4444444444444444444444444444444444444444";
+    let polygon_token = SendToken {
+        symbol: "PT".to_owned(),
+        token_address: Some(POLYGON_ONLY.to_owned()),
+        ..polygon_usdc("10")
+    };
+    let mut sut = boot(vec![eth("2"), polygon_pol("10"), polygon_token]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, POLYGON_ONLY);
+    assert!(!sut.view().recipient_is_token_contract);
+
+    let mut sut = boot(vec![eth("2"), usdc("9000")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, USDC);
+    sut.dispatch(Event::EnterSplitMode);
+    let view = sut.view();
+    assert!(view.split_mode);
+    assert!(!view.recipient_is_token_contract);
+}
+
+#[test]
+fn the_token_contract_verdict_is_on_the_wire() {
+    let mut sut = boot(vec![eth("2"), usdc("9000")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, USDC);
+    let json = serde_json::to_value(sut.view()).expect("serializes");
+    assert_eq!(json["recipient_is_token_contract"], true);
+}

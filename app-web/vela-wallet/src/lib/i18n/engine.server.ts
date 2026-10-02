@@ -518,6 +518,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			linkWebsite: k('about.linkWebsite'),
 			linkGitHub: k('about.linkGitHub'),
 			linkSafeWallet: k('about.linkSafeWallet'),
+			linkPrivacy: k('about.linkPrivacy'),
+			linkTerms: k('about.linkTerms'),
+			linkSupport: k('about.linkSupport'),
 			sectionLinks: k('about.sectionLinks'),
 			footer: k('about.footer')
 		},
@@ -714,6 +717,8 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		connect: k('connect.browser.connect'),
 		cancel: k('connect.browser.cancel'),
 		preparing: k('connect.browser.preparing'),
+		accountLabel: k('explore.account'),
+		networkLabel: k('explore.network'),
 		noWallet: k('connect.list.noWallet'),
 		createWallet: k('onboarding.welcome.createWallet'),
 		haveWallet: k('onboarding.welcome.alreadyHaveWallet')
@@ -891,7 +896,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		selfCallBlockedLegBody: k('componentsUi.signing.selfCallBlockedLegBody'),
 		selfCallBlockedSafeTx: k('componentsUi.signing.selfCallBlockedSafeTx'),
 		invalidAmount: k('componentsUi.signingApprove.invalidAmount'),
-		choosePrompt: k('componentsUi.signingApprove.choosePrompt'),
+		loading: k('componentsUi.signing.loading'),
 		summarySend: k('componentsUi.signing.summarySend'),
 		summarySendFrom: k('componentsUi.signing.summarySendFrom'),
 		summarySwap: k('componentsUi.signing.summarySwap'),
@@ -928,6 +933,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnBestEffort: k('componentsUi.signing.bestEffortWarning'),
 		warnVerifiedAbi: k('componentsUi.signing.verifiedAbiWarning'),
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
+		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
 		warnSimUnavailable: k('componentsUi.signing.simUnavailableWarning'),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
@@ -941,6 +947,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
 		feeRefresh: k('send.feeRefresh'),
 		feeStale: k('send.feeStale'),
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
@@ -1012,7 +1019,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
-			failedHint: k('send.txErrorGeneric')
+			failedHint: k('send.txErrorGeneric'),
+			retry: k('send.txRetryBtn')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

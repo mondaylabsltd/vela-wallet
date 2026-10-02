@@ -9,4 +9,12 @@ export type DpermPopupView = { outcome: DpermPopupOutcome,
  * [`granted_to_signed_in`]'s answer for this origin — exposed so the
  * window never re-derives which account a site may see itself.
  */
-granted: Array<string>, };
+granted: Array<string>, 
+/**
+ * With [`DpermPopupOutcome::Consent`]: the account a Connect would share
+ * — the one signed in, which `PopupApproved` pins the grant to — for the
+ * consent card to name before anyone presses it (spec 096 F11), as every
+ * in-app browser's consent names `DbrConsentView::address`. `None`
+ * otherwise, or when nobody is signed in.
+ */
+consent_address: string | null, };

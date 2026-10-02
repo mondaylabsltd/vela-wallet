@@ -1749,7 +1749,7 @@ fn describe(
             .filter(|to| super::contacts::is_address(to))
             .map(str::to_lowercase)
     });
-    let place = place_of(&summary, contract.as_deref(), site);
+    let place = place_of(t.chain_id, &summary, contract.as_deref(), site);
     let cap = allowance_of(&summary);
 
     let mut facts = Vec::new();
@@ -1763,14 +1763,14 @@ fn describe(
     });
     let contract_fact = |address: &str| FeedFact::Contract {
         address: address.to_owned(),
-        name: contract_name_of(address).map(str::to_owned),
+        name: contract_name_of(t.chain_id, address).map(str::to_owned),
     };
     match action {
         DappAction::Approve | DappAction::Permit => {
             if let Some(spender) = &summary.spender {
                 facts.push(FeedFact::Spender {
                     address: spender.clone(),
-                    name: contract_name_of(spender).map(str::to_owned),
+                    name: contract_name_of(t.chain_id, spender).map(str::to_owned),
                 });
             }
             if let Some(cap) = &cap {
@@ -1911,9 +1911,17 @@ fn headline(summary: &DappSummary, recorded: Option<&str>) -> (Option<ClearTerm>
 /// Where it happened (spec 093): the protocol the wallet knows the contract
 /// (or an allowance's spender) by, else the site that asked. A signature
 /// with no contract of its own happened on the site.
-fn place_of(summary: &DappSummary, contract: Option<&str>, site: Option<&str>) -> Option<String> {
-    let spender = summary.spender.as_deref().and_then(protocol_of);
-    let called = contract.and_then(protocol_of);
+fn place_of(
+    chain_id: u32,
+    summary: &DappSummary,
+    contract: Option<&str>,
+    site: Option<&str>,
+) -> Option<String> {
+    let spender = summary
+        .spender
+        .as_deref()
+        .and_then(|spender| protocol_of(chain_id, spender));
+    let called = contract.and_then(|contract| protocol_of(chain_id, contract));
     let known = match summary.action {
         DappAction::Approve | DappAction::Permit => spender,
         DappAction::Batch => called.or(spender),

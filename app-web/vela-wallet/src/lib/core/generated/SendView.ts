@@ -178,4 +178,14 @@ fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendA
  * The confirm slide gate: fee settled ∧ nothing re-quoting ∧ no
  * same-asset breach ∧ idle.
  */
-can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, recipient_identity: SendRecipientIdentity | null, recipient_risk: SendRecipientRisk | null, sim_json: string | null, };
+can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, recipient_identity: SendRecipientIdentity | null, recipient_risk: SendRecipientRisk | null, 
+/**
+ * The recipient is a token's own contract on the network the money moves
+ * on (spec 096 F12): the token being sent, or any token in the person's
+ * list there — the registry's stablecoins and wrapped coin they hold, and
+ * tokens they added. A token contract almost never has a way to give
+ * back what is sent to it, so the form and the confirm page say so
+ * plainly before the slide; it does not block. Not asked of a split's
+ * rows.
+ */
+recipient_is_token_contract: boolean, sim_json: string | null, };

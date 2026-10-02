@@ -48,4 +48,12 @@ best_effort: boolean,
  * view is built, never at construction. Every builder therefore writes
  * `false` here and cannot get it wrong by forgetting.
  */
-to_own_token: boolean, };
+to_own_token: boolean, 
+/**
+ * The call commits to terms this sheet cannot show (096 F5): a CoW
+ * `setPreSignature` signs an order whose amounts and price live off
+ * chain, hashed into the order id. Every shell says so in a caution
+ * sentence (`componentsUi.signing.warnOrderTerms`), and nothing on the
+ * sheet fetches them.
+ */
+terms_off_chain: boolean, };

@@ -414,7 +414,8 @@
   "txBackgroundHint": "Si cierras esta página la transacción sigue su curso",
   "txCloseBackground": "Cerrar · seguir en segundo plano",
   "txSubmittedTitle": "Enviada a la red",
-  "txConfirmedTitle": "Enviaste {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Enviaste {{amount}} {{symbol}}",
+  "recipientTokenContract": "Esta es la dirección de un contrato de token. Lo que envíes aquí normalmente no se puede recuperar."
  },
  "receive": {
   "title": "Recibir",
@@ -1042,6 +1043,9 @@
   "linkWebsite": "Sitio web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Política de privacidad",
+  "linkTerms": "Términos del servicio",
+  "linkSupport": "Soporte",
   "footer": "Hecho con cariño. Tus llaves, tus monedas.",
   "sectionLinks": "Enlaces",
   "debugMode": "Modo de depuración",
@@ -1350,6 +1354,7 @@
    "labelNewContract": "Contrato nuevo",
    "labelNft": "NFT",
    "labelOnBehalfOf": "En nombre de",
+   "labelOrder": "Orden",
    "labelOperator": "Operador",
    "labelPrice": "Precio",
    "labelQuantities": "Cantidades",
@@ -1363,6 +1368,8 @@
    "labelYouReceive": "Recibes",
    "labelYouReceiveMin": "Recibes (mín.)",
    "valueUnlimited": "Ilimitado",
+   "valueAll": "Todo",
+   "warnOrderTerms": "Los montos de esta orden no se muestran aquí — revísalos primero en el sitio.",
    "simResultLabel": "Resultado de la simulación",
    "simResultNoChange": "Sin cambios de activos",
    "simResultNoOther": "sin otros cambios",
@@ -1512,7 +1519,8 @@
    "feeToken": "Token de comisión",
    "paidWith": "Pagado con {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Costo est."
+   "rowSpend": "Costo est.",
+   "feeCoinSpent": "Esta transacción también usa tu {{sym}}. Si no queda suficiente para la comisión, fallará."
   },
   "dock": {
    "receive": "Recibir",
@@ -1609,6 +1617,25 @@
   },
   "qrPlaceholder": {
    "caption": "Marcador de demostración · no escaneable"
+  },
+  "appMenu": {
+   "about": "Acerca de Vela Wallet",
+   "hide": "Ocultar Vela Wallet",
+   "hideOthers": "Ocultar otros",
+   "showAll": "Mostrar todo",
+   "quit": "Salir de Vela Wallet",
+   "edit": "Edición",
+   "undo": "Deshacer",
+   "redo": "Rehacer",
+   "cut": "Cortar",
+   "copy": "Copiar",
+   "paste": "Pegar",
+   "selectAll": "Seleccionar todo",
+   "view": "Visualización",
+   "fullScreen": "Activar o desactivar pantalla completa",
+   "window": "Ventana",
+   "minimize": "Minimizar",
+   "closeWindow": "Cerrar ventana"
   }
  },
  "settingsModals": {

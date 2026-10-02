@@ -3,6 +3,7 @@ import type { ClearBatchView } from "./ClearBatchView";
 import type { ClearBlindTyped } from "./ClearBlindTyped";
 import type { ClearConfirm } from "./ClearConfirm";
 import type { ClearMessageView } from "./ClearMessageView";
+import type { ClearNativeValue } from "./ClearNativeValue";
 import type { ClearPlainSend } from "./ClearPlainSend";
 import type { ClearSignResult } from "./ClearSignResult";
 import type { ClearSurface } from "./ClearSurface";
@@ -59,4 +60,16 @@ batch: ClearBatchView | null,
  * set aside ([`batch_headline`]). `None` for everything else — the record
  * then reads by what the request is.
  */
-record_intent: string | null, };
+record_intent: string | null, 
+/**
+ * What a lone contract call moves of the chain's own coin, when it moves
+ * any and its reading does not already say so (096 F4: "Deposit eth"
+ * sent 0.003 BNB and the sheet's readable part never said it; a generic
+ * "Value 0" beside it was the referral code). `Some` only on
+ * [`ClearSurface::ClearSign`] and [`ClearSurface::BlindTransaction`] for
+ * a transaction — a plain send is its own card, and every call of a
+ * batch carries its own ([`ClearBatchCall::amount`]). `None` when the
+ * value is zero, or not hex-readable (RC4), or a descriptor row already
+ * states it (`@.value`).
+ */
+native_value: ClearNativeValue | null, };

@@ -164,6 +164,7 @@
       "labelNewContract": "Kontrak baru",
       "labelNft": "NFT",
       "labelOnBehalfOf": "Atas nama",
+      "labelOrder": "Order",
       "labelOperator": "Operator",
       "labelPrice": "Harga",
       "labelQuantities": "Kuantitas",
@@ -177,6 +178,8 @@
       "labelYouReceive": "Anda terima",
       "labelYouReceiveMin": "Anda terima (min)",
       "valueUnlimited": "Tanpa batas",
+      "valueAll": "Semua",
+      "warnOrderTerms": "Jumlah order ini tidak ditampilkan di sini — periksa dulu di situs.",
       "simResultLabel": "Hasil simulasi",
       "simResultNoChange": "Tidak ada perubahan aset",
       "simResultNoOther": "tidak ada perubahan lain",
@@ -326,7 +329,8 @@
       "feeToken": "Token biaya",
       "paidWith": "Dibayar dengan {{symbol}}",
       "rowBalance": "Saldo",
-      "rowSpend": "Perkiraan biaya"
+      "rowSpend": "Perkiraan biaya",
+      "feeCoinSpent": "Transaksi ini juga memakai {{sym}} Anda. Jika sisanya tidak cukup untuk biaya, transaksi akan gagal."
     },
     "dock": {
       "receive": "Terima",
@@ -423,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "Placeholder demo · tidak dapat dipindai"
+    },
+    "appMenu": {
+      "about": "Tentang Vela Wallet",
+      "hide": "Sembunyikan Vela Wallet",
+      "hideOthers": "Sembunyikan Lainnya",
+      "showAll": "Tampilkan Semua",
+      "quit": "Keluar dari Vela Wallet",
+      "edit": "Edit",
+      "undo": "Urungkan",
+      "redo": "Ulangi",
+      "cut": "Potong",
+      "copy": "Salin",
+      "paste": "Tempel",
+      "selectAll": "Pilih Semua",
+      "view": "Tampilan",
+      "fullScreen": "Alihkan Layar Penuh",
+      "window": "Jendela",
+      "minimize": "Minimalkan",
+      "closeWindow": "Tutup Jendela"
     }
   }
 }

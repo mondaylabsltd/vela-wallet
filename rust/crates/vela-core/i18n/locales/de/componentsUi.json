@@ -164,6 +164,7 @@
       "labelNewContract": "Neuer Vertrag",
       "labelNft": "NFT",
       "labelOnBehalfOf": "Im Namen von",
+      "labelOrder": "Auftrag",
       "labelOperator": "Operator",
       "labelPrice": "Preis",
       "labelQuantities": "Mengen",
@@ -177,6 +178,8 @@
       "labelYouReceive": "Sie erhalten",
       "labelYouReceiveMin": "Sie erhalten (min.)",
       "valueUnlimited": "Unbegrenzt",
+      "valueAll": "Alles",
+      "warnOrderTerms": "Die Beträge dieses Auftrags werden hier nicht angezeigt — vorher auf der Website prüfen.",
       "simResultLabel": "Simulationsergebnis",
       "simResultNoChange": "Keine Vermögensänderungen",
       "simResultNoOther": "keine weiteren Änderungen",
@@ -326,7 +329,8 @@
       "feeToken": "Gebühren-Token",
       "paidWith": "Mit {{symbol}} bezahlt",
       "rowBalance": "Guthaben",
-      "rowSpend": "Gesch. Kosten"
+      "rowSpend": "Gesch. Kosten",
+      "feeCoinSpent": "Diese Transaktion verwendet auch Ihr {{sym}}. Bleibt zu wenig für die Gebühr übrig, schlägt sie fehl."
     },
     "dock": {
       "receive": "Empfangen",
@@ -423,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "Demo-Platzhalter · nicht scannbar"
+    },
+    "appMenu": {
+      "about": "Über Vela Wallet",
+      "hide": "Vela Wallet ausblenden",
+      "hideOthers": "Andere ausblenden",
+      "showAll": "Alle einblenden",
+      "quit": "Vela Wallet beenden",
+      "edit": "Bearbeiten",
+      "undo": "Widerrufen",
+      "redo": "Wiederholen",
+      "cut": "Ausschneiden",
+      "copy": "Kopieren",
+      "paste": "Einsetzen",
+      "selectAll": "Alles auswählen",
+      "view": "Darstellung",
+      "fullScreen": "Vollbildmodus ein/aus",
+      "window": "Fenster",
+      "minimize": "Im Dock ablegen",
+      "closeWindow": "Fenster schließen"
     }
   }
 }

@@ -73,6 +73,41 @@ describe('a batch’s status', () => {
 	it('names the chain the batch went to', () => {
 		expect(callsStatusResult(ID, 8453, null)).toMatchObject({ chainId: '0x2105', status: 100 });
 	});
+
+	// Spec 096 F3: with no receipt, the relay's own word — its refusal before
+	// any block is 400 (never lands, the wallet will not retry it); a
+	// `rejected` naming a bundle tx waits for that tx, like the tracker.
+	const relays: [string, unknown, unknown, number][] = [
+		['refused', null, { status: 'rejected', last_executor_error: 'AA23' }, 400],
+		['refused, as a whole body', null, { result: { status: 'rejected' } }, 400],
+		[
+			'refused but named a bundle',
+			null,
+			{ status: 'rejected', transactionHash: TX.transactionHash },
+			100
+		],
+		['refused, an empty tx', null, { status: 'rejected', transactionHash: '' }, 400],
+		['still held', null, { status: 'submitted' }, 100],
+		['not found', null, { status: 'not_found' }, 100],
+		['an unknown status', null, { status: 'gone' }, 100],
+		['no answer', null, null, 100],
+		['a list', null, [{ status: 'rejected' }], 100],
+		['landed after all', { success: true, receipt: { ...TX } }, { status: 'rejected' }, 200]
+	];
+	for (const [name, receipt, relay, expected] of relays) {
+		it(`agrees with the relay: ${name}`, () => {
+			const core = JSON.parse(
+				dappRpcCallsStatus(
+					ID,
+					56,
+					receipt === null ? undefined : JSON.stringify(receipt),
+					relay === null ? undefined : JSON.stringify(relay)
+				)
+			);
+			expect(core.status).toBe(expected);
+			expect(callsStatusResult(ID, 56, receipt, relay)).toEqual(core);
+		});
+	}
 });
 
 describe('the capabilities', () => {

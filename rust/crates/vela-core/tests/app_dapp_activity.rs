@@ -134,7 +134,7 @@ fn resolved(symbol: &str, decimals: u32) -> GuardTokenMetaView {
 #[test]
 fn an_unlimited_permit2_permit_is_read_whole() {
     let params = typed_params(&permit_single(MAX_U160, (1 << 48) - 1));
-    let summary = summarize("eth_signTypedData_v4", &params, UNISWAP, None);
+    let summary = summarize("eth_signTypedData_v4", &params, 1, UNISWAP, None);
     assert_eq!(
         summary,
         DappSummary {
@@ -159,6 +159,7 @@ fn a_limited_erc2612_permit_keeps_its_amount_and_the_sheets_token() {
     let summary = summarize(
         "eth_signTypedData_v4",
         &params,
+        1,
         UNISWAP,
         Some(&resolved("TKN", 6)),
     );
@@ -176,7 +177,13 @@ fn a_limited_erc2612_permit_keeps_its_amount_and_the_sheets_token() {
         loading: true,
         ..resolved("…", 18)
     };
-    let summary = summarize("eth_signTypedData_v4", &params, UNISWAP, Some(&unresolved));
+    let summary = summarize(
+        "eth_signTypedData_v4",
+        &params,
+        1,
+        UNISWAP,
+        Some(&unresolved),
+    );
     assert_eq!(
         (summary.symbol, summary.decimals),
         (None, None),
@@ -196,7 +203,13 @@ fn typed_data_that_grants_nothing_is_structured_data() {
         "domain": {"chainId": 1},
         "message": {"contents": "hello"}
     });
-    let summary = summarize("eth_signTypedData_v4", &typed_params(&mail), UNISWAP, None);
+    let summary = summarize(
+        "eth_signTypedData_v4",
+        &typed_params(&mail),
+        1,
+        UNISWAP,
+        None,
+    );
     assert_eq!(summary.action, DappAction::TypedData);
     assert_eq!(summary.primary_type.as_deref(), Some("Mail"));
     assert_eq!(summary.spender, None);
@@ -208,23 +221,24 @@ fn typed_data_that_grants_nothing_is_structured_data() {
 #[test]
 fn a_sign_in_must_match_the_site() {
     let params = json!([hex_text(&siwe("app.uniswap.org")), ACCT]);
-    let matched = summarize("personal_sign", &params, UNISWAP, None);
+    let matched = summarize("personal_sign", &params, 1, UNISWAP, None);
     assert_eq!(matched.action, DappAction::SignIn);
     assert_eq!(matched.signin_domain.as_deref(), Some("app.uniswap.org"));
 
-    let mismatched = summarize("personal_sign", &params, "https://evil.example", None);
+    let mismatched = summarize("personal_sign", &params, 1, "https://evil.example", None);
     assert_eq!(mismatched.action, DappAction::Message);
     assert_eq!(mismatched.signin_domain, None);
 
     let plain = summarize(
         "personal_sign",
         &json!([hex_text("hello"), ACCT]),
+        1,
         UNISWAP,
         None,
     );
     assert_eq!(plain.action, DappAction::Message);
     assert_eq!(
-        summarize("eth_sign", &json!([ACCT, "0x12"]), UNISWAP, None).action,
+        summarize("eth_sign", &json!([ACCT, "0x12"]), 1, UNISWAP, None).action,
         DappAction::BlindSign
     );
 }
@@ -237,6 +251,7 @@ fn on_chain_approvals_grant_revoke_or_are_calls() {
     let unlimited = summarize(
         "eth_sendTransaction",
         &tx(approve_data(ROUTER, &"f".repeat(64))),
+        1,
         UNISWAP,
         None,
     );
@@ -250,6 +265,7 @@ fn on_chain_approvals_grant_revoke_or_are_calls() {
     let revoke = summarize(
         "eth_sendTransaction",
         &tx(approve_data(ROUTER, "0")),
+        1,
         UNISWAP,
         None,
     );
@@ -257,7 +273,7 @@ fn on_chain_approvals_grant_revoke_or_are_calls() {
     assert!(revoke.revoke);
 
     let decrease = format!("0xa457c2d7{}{}", word(ROUTER), word("10"));
-    let call = summarize("eth_sendTransaction", &tx(decrease), UNISWAP, None);
+    let call = summarize("eth_sendTransaction", &tx(decrease), 1, UNISWAP, None);
     assert_eq!(call.action, DappAction::Call);
     assert_eq!(call.calls, 1);
 }
@@ -274,7 +290,7 @@ fn a_batch_names_its_calls_its_place_and_its_grant() {
             { "to": ROUTER, "data": "0x3593564c", "value": "0x0" },
         ]
     }]);
-    let summary = summarize("wallet_sendCalls", &params, UNISWAP, None);
+    let summary = summarize("wallet_sendCalls", &params, 1, UNISWAP, None);
     assert_eq!(summary.action, DappAction::Batch);
     assert_eq!(summary.calls, 2);
     assert_eq!(summary.contract.as_deref(), Some(ROUTER));
@@ -282,7 +298,7 @@ fn a_batch_names_its_calls_its_place_and_its_grant() {
     assert!(summary.unlimited);
 
     let one = json!([{ "calls": [{ "to": ROUTER, "data": "0x3593564c" }] }]);
-    let summary = summarize("wallet_sendCalls", &one, UNISWAP, None);
+    let summary = summarize("wallet_sendCalls", &one, 1, UNISWAP, None);
     assert_eq!((summary.action, summary.calls), (DappAction::Call, 1));
 }
 

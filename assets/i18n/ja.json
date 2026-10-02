@@ -411,7 +411,8 @@
   "txBackgroundHint": "このページを閉じても取引はバックグラウンドで続きます",
   "txCloseBackground": "閉じる · バックグラウンドで続行",
   "txSubmittedTitle": "ネットワークに送信しました",
-  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました"
+  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
+  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
  },
  "receive": {
   "title": "受け取る",
@@ -1039,6 +1040,9 @@
   "linkWebsite": "ウェブサイト",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "プライバシーポリシー",
+  "linkTerms": "利用規約",
+  "linkSupport": "サポート",
   "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
   "sectionLinks": "リンク",
   "debugMode": "デバッグモード",
@@ -1347,6 +1351,7 @@
    "labelNewContract": "新しいコントラクト",
    "labelNft": "NFT",
    "labelOnBehalfOf": "代理先",
+   "labelOrder": "注文",
    "labelOperator": "オペレーター",
    "labelPrice": "価格",
    "labelQuantities": "数量",
@@ -1360,6 +1365,8 @@
    "labelYouReceive": "受取額",
    "labelYouReceiveMin": "最小受取額",
    "valueUnlimited": "無制限",
+   "valueAll": "全額",
+   "warnOrderTerms": "この注文の金額は表示されません — サイトでご確認ください。",
    "simResultLabel": "シミュレーション結果",
    "simResultNoChange": "資産の変動なし",
    "simResultNoOther": "他に変動なし",
@@ -1509,7 +1516,8 @@
    "feeToken": "手数料トークン",
    "paidWith": "{{symbol}} で支払い",
    "rowBalance": "残高",
-   "rowSpend": "推定コスト"
+   "rowSpend": "推定コスト",
+   "feeCoinSpent": "この取引では {{sym}} も使われます。手数料の分が残らないと、取引は失敗します。"
   },
   "dock": {
    "receive": "受け取る",
@@ -1606,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "デモ用プレースホルダー · スキャン不可"
+  },
+  "appMenu": {
+   "about": "Vela Walletについて",
+   "hide": "Vela Walletを非表示",
+   "hideOthers": "ほかを非表示",
+   "showAll": "すべてを表示",
+   "quit": "Vela Walletを終了",
+   "edit": "編集",
+   "undo": "取り消す",
+   "redo": "やり直す",
+   "cut": "カット",
+   "copy": "コピー",
+   "paste": "ペースト",
+   "selectAll": "すべてを選択",
+   "view": "表示",
+   "fullScreen": "フルスクリーンを切り替え",
+   "window": "ウインドウ",
+   "minimize": "しまう",
+   "closeWindow": "ウインドウを閉じる"
   }
  },
  "settingsModals": {

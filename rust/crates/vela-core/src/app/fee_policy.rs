@@ -1787,6 +1787,19 @@ pub struct FeeOptionView {
     pub amount: Option<String>,
     pub insufficient: bool,
     pub selected: bool,
+    /// The operation itself may spend this coin by an amount none of its
+    /// calls states — it approves it, hands it to Permit2 or a router, or is
+    /// made to the coin's own contract — and no simulation has said how much
+    /// is left (spec 096 F2). The machine never picks such a coin; a person
+    /// may, and the sheet tells them, under the fee, while it is the coin in
+    /// force: the fee is paid last, from what the operation leaves, and if
+    /// that is too little the relay refuses the whole transaction.
+    ///
+    /// Never set on the chain's own coin, nor for a plain transfer, whose
+    /// amount the fee is already weighed on top of. `#[serde(default)]`: a
+    /// reader that predates it reads `false`.
+    #[serde(default)]
+    pub spent_by_operation: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2472,14 +2485,35 @@ fn static_total_gas(ctx: &RequestCtx, inner_floor: Option<u128>) -> u128 {
 /// the native value of every call, and every ERC-20 `transfer`'s amount by
 /// contract. A coin that pays the fee has to cover the fee ON TOP of this —
 /// a Max of USDC cannot also pay its own fee in USDC.
+///
+/// Those two are the only amounts a call STATES. Every other call (spec 096
+/// F2) can move a token by an amount written nowhere in it: an `approve` or a
+/// Permit2 `approve` lets the next leg pull the token, and a router pulls it
+/// through `transferFrom` — the PancakeSwap USDC → BNB batch approves all of
+/// the wallet's USDC to Permit2 and the router takes it, while not one
+/// `transfer` appears. So those calls are kept whole ([`Self::open`]), and a
+/// coin one of them names is a coin the operation may spend
+/// ([`Self::spends_unstated`]).
 #[derive(Debug, Default)]
 struct Outflows {
     native: u128,
     tokens: Vec<(String, u128)>,
+    /// Every call that is more than a plain transfer, as `(target, calldata)`
+    /// — both lower-case hex without `0x`.
+    open: Vec<(String, String)>,
 }
 
 /// `transfer(address,uint256)`.
 const ERC20_TRANSFER_SELECTOR: &str = "a9059cbb";
+
+/// Lower-case hex without `0x`.
+fn bare_hex(hex: &str) -> String {
+    let hex = hex.trim();
+    hex.strip_prefix("0x")
+        .or_else(|| hex.strip_prefix("0X"))
+        .unwrap_or(hex)
+        .to_ascii_lowercase()
+}
 
 impl Outflows {
     fn of_calls(calls: &[FeeCall]) -> Self {
@@ -2488,6 +2522,10 @@ impl Outflows {
             out.native = out
                 .native
                 .saturating_add(parse_units(&call.value).unwrap_or(0));
+            if is_contract_call(call) {
+                out.open.push((bare_hex(&call.to), bare_hex(&call.data)));
+                continue;
+            }
             let data = call.data.trim_start_matches("0x").to_ascii_lowercase();
             if data.len() == 8 + 64 + 64 && data.starts_with(ERC20_TRANSFER_SELECTOR) {
                 let amount = U256::from_str_radix(&data[8 + 64..], 16)
@@ -2519,6 +2557,38 @@ impl Outflows {
                     .find(|(token, _)| token.eq_ignore_ascii_case(contract))
             })
             .map_or(0, |(_, amount)| *amount)
+    }
+
+    /// The calls hold one that is more than a plain transfer.
+    fn has_open_calls(&self) -> bool {
+        !self.open.is_empty()
+    }
+
+    /// The operation may spend this row's coin by an amount no call states:
+    /// a call other than a plain transfer is made TO the token (an
+    /// `approve`, a `permit`, a `transferFrom`), or names it anywhere in its
+    /// calldata — a Permit2 `approve(token, …)`, a router's path, a lending
+    /// pool's `supply(asset, …)` — at a whole byte, as an argument word or as
+    /// the packed 20 bytes of a swap path.
+    ///
+    /// Never the chain's own coin: a call can move it only by the `value` it
+    /// states, which [`Self::of`] counts.
+    fn spends_unstated(&self, row: &ParsedQuote) -> bool {
+        if row.is_native {
+            return false;
+        }
+        let Some(token) = row.fee_token.as_deref().map(bare_hex) else {
+            return false;
+        };
+        if token.len() != 40 {
+            return false;
+        }
+        self.open.iter().any(|(to, data)| {
+            *to == token
+                || data
+                    .match_indices(token.as_str())
+                    .any(|(at, _)| at % 2 == 0)
+        })
     }
 }
 
@@ -2584,6 +2654,11 @@ fn after_change(balance: u128, change: i128) -> u128 {
 /// calls. The fee leg runs LAST in the batch, so what the operation takes
 /// out is gone before the fee is paid and what it brings in is there — at
 /// the share [`after_change`] trusts it for.
+///
+/// Until a simulation has answered, a coin the operation may spend by an
+/// amount no call states ([`Outflows::spends_unstated`]) has nothing that can
+/// be counted on to be left (spec 096 F2): the machine never pays in it, and
+/// a person who picks it is told ([`FeeOptionView::spent_by_operation`]).
 struct Spend<'a> {
     decoded: Outflows,
     measured: Option<&'a Measured>,
@@ -2603,10 +2678,25 @@ impl<'a> Spend<'a> {
         self.decoded.of(row) > 0
     }
 
+    /// The operation may spend this coin by an amount no call states, and no
+    /// simulation has said how much of it is left.
+    fn unstated(&self, row: &ParsedQuote) -> bool {
+        self.measured.is_none() && self.decoded.spends_unstated(row)
+    }
+
+    /// Nothing measured the operation and it holds more than plain transfers:
+    /// any token it does not name may still be pulled through an allowance
+    /// given earlier (a vault's `deposit(amount)` names no token), and only
+    /// the chain's own coin moves by nothing but the `value` the calls state.
+    fn prefers_native(&self) -> bool {
+        self.measured.is_none() && self.decoded.has_open_calls()
+    }
+
     /// The most this coin's fee leg can move once the operation has run.
     fn usable(&self, row: &ParsedQuote) -> u128 {
         match self.measured {
             Some(changes) => after_change(row.balance, measured_change(changes, row)),
+            None if self.decoded.spends_unstated(row) => 0,
             None => row.balance.saturating_sub(self.decoded.of(row)),
         }
     }
@@ -2615,9 +2705,13 @@ impl<'a> Spend<'a> {
     fn covers(&self, row: &ParsedQuote, fee: u128) -> bool {
         match self.measured {
             Some(_) => fee <= self.usable(row),
-            // Verbatim: an operation nobody measured weighs coins exactly as
-            // it did before the simulation was read.
-            None => fee.saturating_add(self.decoded.of(row)) <= row.balance,
+            // An operation nobody measured weighs a coin by what its calls
+            // state — and a coin it may spend by an amount they do not state
+            // covers nothing.
+            None => {
+                !self.decoded.spends_unstated(row)
+                    && fee.saturating_add(self.decoded.of(row)) <= row.balance
+            }
         }
     }
 }
@@ -2651,8 +2745,10 @@ fn is_listed(coins: &[Option<String>], row: &ParsedQuote) -> bool {
 /// requested coin then stands and its refusal is the one that shows.
 ///
 /// Only a coin that provably covers the fee plus what the transaction itself
-/// moves of it is a candidate ([`Spend::covers`]), and never one the relay
-/// already refused this operation with (`excluded`). Among those, in order:
+/// moves of it is a candidate ([`Spend::covers`]) — never, before a
+/// simulation, one the transaction may spend by an amount it does not state
+/// (spec 096 F2) — and never one the relay already refused this operation
+/// with (`excluded`). Among those, in order:
 ///
 /// 1. one the transaction is NOT sending — the fee never comes out of the
 ///    amount while something else can pay it, so a Max stays whole;
@@ -2661,6 +2757,11 @@ fn is_listed(coins: &[Option<String>], row: &ParsedQuote) -> bool {
 /// 3. the larger balance in USD — the coin least likely to run short on the
 ///    next send too.
 ///
+/// An operation with a contract call that nothing has simulated puts the
+/// chain's coin first instead ([`Spend::prefers_native`]): it is the one
+/// coin no contract can take more of than the calls state. Then a coin the
+/// operation does not send, then the larger USD balance.
+///
 /// Ties keep the relay's own row order, so the answer is deterministic.
 fn auto_pick(
     rows: &[ParsedQuote],
@@ -2668,12 +2769,14 @@ fn auto_pick(
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
+    let native_first = spend.prefers_native();
     let rank = |row: &ParsedQuote| {
-        (
-            !spend.sends(row),
-            !row.is_native,
-            row.usd_balance.trim().parse::<f64>().unwrap_or(0.0),
-        )
+        let usd = row.usd_balance.trim().parse::<f64>().unwrap_or(0.0);
+        if native_first {
+            (row.is_native, !spend.sends(row), usd)
+        } else {
+            (!spend.sends(row), !row.is_native, usd)
+        }
     };
     let mut best: Option<&ParsedQuote> = None;
     for row in rows
@@ -3726,6 +3829,10 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
     // from.
     let would_fail =
         model.estimate.is_none() && model.phase == Phase::Failed(FeeFailure::WouldFail);
+    let spend = model
+        .ctx
+        .as_ref()
+        .map(|ctx| Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref())));
     picker_rows(model)
         .map(|row| {
             let amount = fee_amount_for_option(model, row);
@@ -3751,6 +3858,7 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
                 amount: amount.map(|a| a.to_string()),
                 insufficient,
                 selected,
+                spent_by_operation: spend.as_ref().is_some_and(|spend| spend.unstated(row)),
             }
         })
         .collect()

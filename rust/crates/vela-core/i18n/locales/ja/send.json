@@ -157,6 +157,7 @@
     "txBackgroundHint": "このページを閉じても取引はバックグラウンドで続きます",
     "txCloseBackground": "閉じる · バックグラウンドで続行",
     "txSubmittedTitle": "ネットワークに送信しました",
-    "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました"
+    "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
+    "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
   }
 }

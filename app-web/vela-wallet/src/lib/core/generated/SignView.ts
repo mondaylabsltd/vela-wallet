@@ -47,7 +47,14 @@ tracker_withdraw: SignTrackerWithdraw | null,
  * `error` is the relay refusing the op (spec 082 RJ3): the sheet says
  * `componentsUi.signing.refused` under `statusFailed`, never "try again".
  */
-failure_refused: boolean, notice: SignNotice | null, global_chain_id: number, 
+failure_refused: boolean, 
+/**
+ * The failure on the sheet sent nothing, was not a refusal, and its
+ * answer is still held (spec 096 F8): the sheet offers "Try again"
+ * (`send.txRetryBtn` → [`Event::RetryTapped`]) beside its close, which
+ * answers the page the failure.
+ */
+failure_retryable: boolean, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

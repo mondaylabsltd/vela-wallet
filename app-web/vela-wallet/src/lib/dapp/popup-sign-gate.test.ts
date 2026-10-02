@@ -114,3 +114,31 @@ describe('a public plain-http origin (089)', () => {
 		).toMatchObject({ kind: 'signing' });
 	});
 });
+
+describe('the connect consent names what it shares (spec 096 F11)', () => {
+	it('carries the account a Connect would grant — the core’s, in the dApp’s spelling', async () => {
+		const stage = await ask('https://pancakeswap.finance', 'eth_requestAccounts', []);
+		expect(stage).toEqual({
+			kind: 'consent',
+			origin: 'https://pancakeswap.finance',
+			method: 'eth_requestAccounts',
+			address: expect.stringMatching(new RegExp(`^${ALICE}$`, 'i'))
+		});
+	});
+
+	it('names nobody when nobody is signed in', async () => {
+		const stage = await evaluate(
+			{
+				rid: '7:2',
+				id: '2',
+				method: 'eth_requestAccounts',
+				params: [],
+				origin: 'https://pancakeswap.finance',
+				tabId: 7,
+				at: 0
+			},
+			{ activeAddress: '', addresses: [] }
+		);
+		expect(stage).toMatchObject({ kind: 'consent', address: null });
+	});
+});

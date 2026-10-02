@@ -38,6 +38,7 @@ export * from './ClearDateFormat';
 export * from './ClearFieldRole';
 export * from './ClearLocale';
 export * from './ClearMessageView';
+export * from './ClearNativeValue';
 export * from './ClearNumberFormat';
 export * from './ClearOperation';
 export * from './ClearPlainSend';

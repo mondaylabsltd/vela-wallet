@@ -16,7 +16,10 @@ import app.getvela.wallet.feature.signing.FeeModel
 import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
+import app.getvela.wallet.feature.signing.SigningRow
 import app.getvela.wallet.feature.signing.SigningScreenState
+import app.getvela.wallet.feature.signing.core.ClearBatchCall
+import app.getvela.wallet.feature.signing.core.ClearBatchView
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.SignExecutor
 import app.getvela.wallet.feature.signing.core.SignResponsePayload
@@ -77,7 +80,7 @@ class SigningLiveTest {
         clearOf("eth_sendTransaction", org.json.JSONArray().put(call).toString())
 
     /** The REAL core, kicked off by [SigningController.clearKickoff] for [method] and [params]. */
-    private fun clearOf(method: String, params: String): ClearSigningView = runBlocking {
+    private fun clearOf(method: String, params: String, chainId: Int = 100): ClearSigningView = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val host = CoreHost(
@@ -93,7 +96,7 @@ class SigningLiveTest {
                 },
                 escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
             )
-            host.dispatch(SigningController.clearKickoff(method, params, 100, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
+            host.dispatch(SigningController.clearKickoff(method, params, chainId, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
             withTimeout(10_000) { host.view.first { it.resolved && !it.resolving } }
         } finally {
             scope.cancel()
@@ -173,6 +176,113 @@ class SigningLiveTest {
         assertNull(SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":1000}]"""))
         assertEquals("0", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":null}]""")?.single()?.value)
         assertEquals("1000", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":"0x3e8"}]""")?.single()?.value)
+    }
+
+    // Spec 096 (part B): what you see is what you sign.
+    private val bnb = ctx.copy(chainName = "BNB Chain", nativeSymbol = "BNB", chainId = 56)
+
+    private fun rowsOf(blocks: List<SigningBlock>): List<SigningRow> =
+        blocks.filterIsInstance<SigningBlock.Rows>().flatMap { it.rows }
+
+    /**
+     * F4 on the real core: Aave's `depositETH` of 0.003 BNB (the 096 pass's
+     * own request) reads "Supply · 0.003 BNB" — not "Value 0" — and a call
+     * nobody could read still says the coin it sends.
+     */
+    @Test
+    fun `the coin a call sends is in the readable part (096 F4)`() {
+        val deposit = """[{"to":"0x0c2c95b24529664fe55d4437d7a31175cfe6c4f7","data":"0x474cf53d0000000000000000000000006807dc923806fe8fd134338eabca509979a7e0cb00000000000000000000000088cca0eedbf2c4426110bbfc998f0486892668940000000000000000000000000000000000000000000000000000000000000000","value":"0xaa87bee538000"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val read = clearOf("eth_sendTransaction", deposit, chainId = 56)
+        assertEquals(ClearSurface.ClearSign, read.surface)
+        assertNull("the reading's own row says it — once", read.native_value)
+        val model = SigningLive.model(drawn, request(deposit), sign, read, GuardView(), FeeView(confirm_fee_ready = true), bnb)
+        val rows = rowsOf(model.blocks).map { "${it.label} ${it.value}" }
+        assertEquals("${strings.t("componentsUi.signing.intentSupply")} 0.003 BNB", rows.first())
+        assertTrue(rows.toString(), rows.none { "Value" in it || "Number" in it })
+
+        val blindParams = """[{"to":"0x7777777777777777777777777777777777777777","data":"0xdeadbeef","value":"0xaa87bee538000"}]"""
+        val blind = clearOf("eth_sendTransaction", blindParams, chainId = 56)
+        assertEquals(ClearSurface.BlindTransaction, blind.surface)
+        assertEquals("0.003", blind.native_value?.amount)
+        val coin = rowsOf(SigningLive.model(drawn, request(blindParams), sign, blind, GuardView(), FeeView(confirm_fee_ready = true), bnb).blocks)
+        assertEquals(strings.t("componentsUi.signing.labelAmount"), coin.first().label)
+        assertEquals("−0.003 BNB", coin.first().value)
+    }
+
+    /** F5: an order whose terms are off chain says so; a known contract is named in its batch card. */
+    @Test
+    fun `an order says its terms are not shown and a known target is named (096 F5)`() {
+        val order = ClearSignResult(
+            intent = "Swap", risk = ClearRisk.Caution, provenance = ClearProvenance.BuiltIn, terms_off_chain = true,
+            fields = listOf(ClearSignField(label = "Order", value = "0x09e95d9c...6abfb9fe", format = "raw")),
+        )
+        val warning = strings.t("componentsUi.signing.warnOrderTerms")
+        assertFalse("the corpus has the sentence", warning.contains("warnOrderTerms"))
+        val params = """[{"to":"0x9008D19f58AAbD9eD0D60971565AA8510560ab41","data":"0xec6cb13f"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val lone = SigningLive.model(drawn, request(params), sign, ClearSigningView(resolved = true, surface = ClearSurface.ClearSign, result = order), GuardView(), FeeView(confirm_fee_ready = true), bnb)
+        assertTrue(lone.blocks.any { it is SigningBlock.Warning && it.text == warning })
+
+        val batch = ClearSigningView(
+            resolved = true, surface = ClearSurface.Batch,
+            batch = ClearBatchView(calls = listOf(
+                ClearBatchCall(index = 1, surface = ClearSurface.ClearSign, result = order, to = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", to_name = "CoW Protocol", value_wei = "0", amount = "0", risk = ClearRisk.Caution),
+                ClearBatchCall(index = 2, surface = ClearSurface.BlindTransaction, to = "0x7777777777777777777777777777777777777777", data_bytes = 4, value_wei = "0", amount = "0"),
+            )),
+        )
+        val drawnBatch = SigningLive.model(drawn, request(params), sign, batch, GuardView(), FeeView(confirm_fee_ready = true), bnb).blocks
+        assertTrue(drawnBatch.any { it is SigningBlock.Warning && it.text == warning })
+        val cards = drawnBatch.filterIsInstance<SigningBlock.Card>()
+        val interacting = strings.t("componentsUi.signing.interactingLabel")
+        val named = cards[0].rows.single { it.label == interacting }
+        assertEquals("CoW Protocol", named.value)
+        assertFalse("a name is not monospace", named.mono)
+        assertTrue(cards[1].rows.single { it.label == interacting }.mono)
+    }
+
+    /** F7: every machine says yes and the request is still being read — the slide stays shut, under "Loading…". */
+    @Test
+    fun `the slide waits for the reading (096 F7)`() {
+        val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val reading = ClearSigningView(resolving = true, surface = ClearSurface.Loading)
+        val model = SigningLive.model(drawn, request(params), sign, reading, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        assertFalse(model.confirmEnabled)
+        val sentence = model.blocks.filterIsInstance<SigningBlock.Sentence>().single()
+        assertEquals(strings.t("componentsUi.signing.loading"), sentence.text)
+        val read = SigningLive.model(drawn, request(params), sign, ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction), GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        assertTrue(read.confirmEnabled)
+    }
+
+    /**
+     * Spec 096 F1: the core's value table, through this shell's reading —
+     * PancakeSwap's `0xaa87bee538000` is 0.003 BNB; decimal text, bare hex,
+     * a sign (this shell took "-1" as minus one) and an overflow are refused.
+     */
+    @Test
+    fun `a call value is the core's reading`() {
+        val table = listOf(
+            "\"0xaa87bee538000\"" to "3000000000000000",
+            "\"0xAA87BEE538000\"" to "3000000000000000",
+            "\"0x\"" to "0",
+            "\"\"" to "0",
+            "\"0\"" to "0",
+            "0" to "0",
+            "\"0x${"f".repeat(64)}\"" to "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "\"0x1${"0".repeat(64)}\"" to null,
+            "\"1000\"" to null,
+            "\"aa87bee538000\"" to null,
+            "\"-1\"" to null,
+            "\"0X1f\"" to null,
+        )
+        for ((value, wei) in table) {
+            val calls = SignExecutor.callsOf(
+                "eth_sendTransaction",
+                """[{"to":"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4","value":$value,"data":"0x3593564c"}]""",
+            )
+            assertEquals(value, wei, calls?.single()?.value)
+        }
     }
 
     @Test
@@ -552,6 +662,35 @@ class SigningLiveTest {
         assertEquals(listOf("native", usdt.contract), open.options.map { it.id })
         assertTrue("ETH cannot pay: shown, not pickable", open.options[0].disabled)
         assertFalse(open.options[1].disabled)
+    }
+
+    /**
+     * Spec 096 F2: the person chose a coin the transaction itself spends (the
+     * PancakeSwap USDC swap, fee in USDC). The core flags it; the sheet says
+     * so under the fee while that coin pays, and nothing while another does.
+     */
+    @Test
+    fun `a fee coin the transaction spends is warned while it pays`() {
+        val usdc = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        val spent = FeeOptionView(
+            symbol = "USDC", contract = usdc, decimals = 18, balance = "2341700000000000000",
+            recipient = "0x3e59", usd_balance = "2.34", amount = "280000000000000000",
+            selected = true, spent_by_operation = true,
+        )
+        val bnb = eth.copy(symbol = "BNB", selected = false)
+        val paying = FeeView(
+            fee = estimate(FeeAssetView.Erc20(token = usdc, decimals = 18, amount = "280000000000000000", symbol = "USDC"), "0"),
+            options = listOf(bnb, spent),
+            confirm_fee_ready = true,
+        )
+        val model = SigningLive.feeModel(ClearSigningView(), paying, ctx) as FeeModel.OnChain
+        assertEquals(strings.t("componentsUi.gas.feeCoinSpent", mapOf("sym" to "USDC")), model.warning)
+        assertFalse(model.warning!!.contains("{{"))
+
+        val inUsdt = paying.copy(options = listOf(bnb, spent.copy(selected = false), usdt.copy(selected = true)))
+        assertNull((SigningLive.feeModel(ClearSigningView(), inUsdt, ctx) as FeeModel.OnChain).warning)
+        val measuring = paying.copy(busy = true)
+        assertNull((SigningLive.feeModel(ClearSigningView(), measuring, ctx) as FeeModel.OnChain).warning)
     }
 
     /** A coin that pays is not a warning, and one coin alone has no list to open. */

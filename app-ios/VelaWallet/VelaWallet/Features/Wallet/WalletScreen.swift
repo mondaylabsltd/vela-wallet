@@ -54,10 +54,12 @@ struct WalletScreen: View {
     /// and a spinner over one would be a promise nothing keeps.
     ///
     /// Boxed in a class on purpose. An `(() async -> Void)?` stored directly in
-    /// a `View` crashes SwiftUI's layout machinery on this toolchain — the
-    /// AttributeGraph walks the view's fields to build a comparison layout and
-    /// segfaults reading the metadata of an optional async function type. A
-    /// class reference is one pointer, so there are no fields to walk.
+    /// a `View` crashed SwiftUI's layout machinery on iOS 17 — the
+    /// AttributeGraph walks the view's fields to build a comparison layout,
+    /// and the metadata of that `nonisolated(nonsending)` function type calls
+    /// an iOS 18 runtime entry point (087 F33; `RefreshAction.run` is `@MainActor`
+    /// for the same reason). A class reference is one pointer, so there are
+    /// no fields to walk.
     var onRefresh: RefreshAction?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
@@ -285,9 +287,9 @@ private extension View {
 /// itself.
 @MainActor
 final class RefreshAction {
-    let run: () async -> Void
+    let run: @MainActor () async -> Void
 
-    init(_ run: @escaping () async -> Void) {
+    init(_ run: @escaping @MainActor () async -> Void) {
         self.run = run
     }
 }

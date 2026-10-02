@@ -417,7 +417,8 @@
   "txBackgroundHint": "Если закрыть страницу, транзакция продолжится",
   "txCloseBackground": "Закрыть · продолжить в фоне",
   "txSubmittedTitle": "Отправлено в сеть",
-  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}",
+  "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть."
  },
  "receive": {
   "title": "Получить",
@@ -1045,6 +1046,9 @@
   "linkWebsite": "Сайт",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Политика конфиденциальности",
+  "linkTerms": "Условия использования",
+  "linkSupport": "Поддержка",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
   "sectionLinks": "Ссылки",
   "debugMode": "Режим отладки",
@@ -1353,6 +1357,7 @@
    "labelNewContract": "Новый контракт",
    "labelNft": "NFT",
    "labelOnBehalfOf": "От имени",
+   "labelOrder": "Заявка",
    "labelOperator": "Оператор",
    "labelPrice": "Цена",
    "labelQuantities": "Количества",
@@ -1366,6 +1371,8 @@
    "labelYouReceive": "Вы получаете",
    "labelYouReceiveMin": "Вы получаете (мин.)",
    "valueUnlimited": "Без лимита",
+   "valueAll": "Всё",
+   "warnOrderTerms": "Суммы этой заявки здесь не показаны — сначала проверьте их на сайте.",
    "simResultLabel": "Результат симуляции",
    "simResultNoChange": "Нет изменений активов",
    "simResultNoOther": "нет других изменений",
@@ -1515,7 +1522,8 @@
    "feeToken": "Токен комиссии",
    "paidWith": "Оплачено в {{symbol}}",
    "rowBalance": "Баланс",
-   "rowSpend": "Прибл. стоимость"
+   "rowSpend": "Прибл. стоимость",
+   "feeCoinSpent": "Эта транзакция тоже расходует ваши {{sym}}. Если на комиссию останется мало, она не пройдёт."
   },
   "dock": {
    "receive": "Получить",
@@ -1612,6 +1620,25 @@
   },
   "qrPlaceholder": {
    "caption": "Демонстрационный шаблон · не сканируется"
+  },
+  "appMenu": {
+   "about": "О программе Vela Wallet",
+   "hide": "Скрыть Vela Wallet",
+   "hideOthers": "Скрыть остальные",
+   "showAll": "Показать все",
+   "quit": "Завершить Vela Wallet",
+   "edit": "Правка",
+   "undo": "Отменить",
+   "redo": "Повторить",
+   "cut": "Вырезать",
+   "copy": "Скопировать",
+   "paste": "Вставить",
+   "selectAll": "Выбрать все",
+   "view": "Вид",
+   "fullScreen": "Полноэкранный режим",
+   "window": "Окно",
+   "minimize": "Свернуть",
+   "closeWindow": "Закрыть окно"
   }
  },
  "settingsModals": {

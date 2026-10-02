@@ -494,9 +494,25 @@ for (let i = 1; i < PATHS.length; i++) {
 //   plain words with its one-click grant — and `onboarding.common.siteAccessBody`,
 //   the passkey Chrome refused for that reason (was Chrome's raw SecurityError).
 //   1798 + 4 leaves + 1 branch = 1803 (1713 leaf + 90 branch).
-if (PATHS.length !== 1803) fail(`expected 1803 paths (1713 leaf + 90 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1713) fail(`expected 1713 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 90) fail(`expected 90 branch paths, got ${branchSet.size}`);
+// 1824 (095, 2026-10-02): + `about.{linkPrivacy,linkTerms,linkSupport}` —
+//   Settings → About links the privacy policy, terms and support page on every
+//   shell (App Review 5.1.1(i): the policy reachable outside onboarding; the
+//   onboarding's `ack2PrivacyPolicy`/`ack2Terms` are inflected for their
+//   sentence, e.g. ru accusative, so not reused) — and the 17 leaves of the new
+//   `componentsUi.appMenu` branch: the macOS menu bar (About, Edit, View,
+//   Window), which was English-only. 1803 + 3 + 17 leaves + 1 branch = 1824.
+// 1826 (096 C, 2026-10-02): + `componentsUi.gas.feeCoinSpent` — the fee coin a
+//   person chose is one the transaction itself may spend, so too little may be
+//   left for the fee — and `send.recipientTokenContract`, said before the
+//   slide when the recipient is a token's own contract. The ja + en residency
+//   budget moves to 141,800 (owner, 2026-10-02). Same branches: 1824 + 2 = 1826.
+// 1829 (096 B, 2026-10-02): + `componentsUi.signing.{labelOrder,valueAll,
+//   warnOrderTerms}` — a CoW order named by its id, `type(uint256).max` read as
+//   "All", and the plain caution that a pre-signed order's amounts are not on
+//   the sheet. Same branches: 1826 + 3 = 1829.
+if (PATHS.length !== 1829) fail(`expected 1829 paths (1738 leaf + 91 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1738) fail(`expected 1738 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 91) fail(`expected 91 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -164,6 +164,7 @@
       "labelNewContract": "新合約",
       "labelNft": "NFT",
       "labelOnBehalfOf": "代表帳戶",
+      "labelOrder": "訂單",
       "labelOperator": "操作者",
       "labelPrice": "價格",
       "labelQuantities": "數量",
@@ -177,6 +178,8 @@
       "labelYouReceive": "你收到",
       "labelYouReceiveMin": "你最少收到",
       "valueUnlimited": "無上限",
+      "valueAll": "全部",
+      "warnOrderTerms": "呢張訂單嘅金額唔會喺度顯示 — 請先喺網站上核對。",
       "simResultLabel": "模擬結果",
       "simResultNoChange": "沒有資產變動",
       "simResultNoOther": "沒有其他變動",
@@ -287,7 +290,8 @@
       "feeToken": "費用代幣",
       "paidWith": "以 {{symbol}} 支付",
       "rowBalance": "餘額",
-      "rowSpend": "預估費用"
+      "rowSpend": "預估費用",
+      "feeCoinSpent": "呢筆交易都會用到你嘅 {{sym}}，剩低嘅唔夠俾網絡費用，交易就會失敗。"
     },
     "dock": {
       "receive": "收款",
@@ -423,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "示範佔位圖案 · 無法掃描"
+    },
+    "appMenu": {
+      "about": "關於 Vela Wallet",
+      "hide": "隱藏 Vela Wallet",
+      "hideOthers": "隱藏其他",
+      "showAll": "全部顯示",
+      "quit": "結束 Vela Wallet",
+      "edit": "編輯",
+      "undo": "還原",
+      "redo": "重做",
+      "cut": "剪下",
+      "copy": "複製",
+      "paste": "貼上",
+      "selectAll": "全選",
+      "view": "顯示",
+      "fullScreen": "切換全螢幕",
+      "window": "視窗",
+      "minimize": "縮到最細",
+      "closeWindow": "關閉視窗"
     }
   }
 }

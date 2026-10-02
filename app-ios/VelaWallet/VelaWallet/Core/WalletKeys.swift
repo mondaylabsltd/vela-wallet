@@ -75,13 +75,13 @@ final class WalletKeys {
     /// A handful of rounds; this only stops a contract bug from spinning.
     private static let maxRounds = 24
 
-    private let ethCall: (_ chainId: Int, _ to: String, _ data: String) async -> String?
+    private let ethCall: @MainActor (_ chainId: Int, _ to: String, _ data: String) async -> String?
     private let step: (
         _ address: String, _ deviceKeysJson: String, _ answersJson: String, _ signInCredential: String
     ) -> String
 
     init(
-        ethCall: @escaping (Int, String, String) async -> String?,
+        ethCall: @escaping @MainActor (Int, String, String) async -> String?,
         step: @escaping (String, String, String, String) -> String = {
             walletKeysStep(address: $0, deviceKeysJson: $1, answersJson: $2, signInCredential: $3)
         }

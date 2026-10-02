@@ -42,6 +42,20 @@ final class FeedbackSender {
         var prepared: ScreenshotPrep.Prepared?
     }
 
+    /// One picked item's bytes. Each runs in its own child task of `add`, off
+    /// the main actor.
+    ///
+    /// `@concurrent` is load-bearing (087 F33). Unannotated, this target's
+    /// `NonisolatedNonsendingByDefault` makes it a `nonisolated(nonsending)`
+    /// function type, and an array of those needs that type's runtime
+    /// metadata, which Swift 6.2 builds with
+    /// `swift_getExtendedFunctionTypeMetadata` — an iOS 18 runtime entry point
+    /// it links weakly and calls with no fallback. On iOS 17 that is a call to
+    /// NULL: attaching a screenshot crashed the app.
+    /// `check-ios17-function-metadata.mjs` keeps every such type out of the
+    /// built binary.
+    typealias Loader = @concurrent () async -> Data?
+
     /// Why the last pick was not taken whole — shown in the public-warning
     /// line's place until the next change.
     enum Notice: Equatable {
@@ -79,7 +93,7 @@ final class FeedbackSender {
     /// `PhotosPickerItem`, or plain data in a test). Past the limit the first
     /// `room` are taken and the rest refused with `.limit`; one that is not a
     /// decodable image is refused with `.unsupported`.
-    func add(_ loaders: [() async -> Data?]) async {
+    func add(_ loaders: [Loader]) async {
         // The form is inert while the report is on its way (v3 B9).
         guard !sending else { return }
         notice = nil
@@ -113,7 +127,7 @@ final class FeedbackSender {
 
     /// Start attaching picked items and return at once — the sheet's entry.
     /// The work is tracked, so a Send pressed meanwhile waits for it.
-    func attach(_ loaders: [() async -> Data?]) {
+    func attach(_ loaders: [Loader]) {
         let key = UUID()
         inFlight[key] = Task { [weak self] in
             await self?.add(loaders)

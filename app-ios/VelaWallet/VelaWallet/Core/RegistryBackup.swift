@@ -49,12 +49,12 @@ final class RegistryBackup {
 
     /// The RAW `result` hex — a bare `0x` included, which is a chain saying
     /// "no registry here" — or `nil` when nobody answered.
-    private let ethCall: (_ chainId: Int, _ to: String, _ data: String) async -> String?
+    private let ethCall: @MainActor (_ chainId: Int, _ to: String, _ data: String) async -> String?
     /// `registryBackupStep` from the core; a seam so tests can script it.
     private let step: (_ address: String, _ key: String, _ answersJson: String, _ target: UInt32?) -> String
 
     init(
-        ethCall: @escaping (Int, String, String) async -> String?,
+        ethCall: @escaping @MainActor (Int, String, String) async -> String?,
         step: @escaping (String, String, String, UInt32?) -> String = {
             registryBackupStep(address: $0, foundingPublicKeyHex: $1, answersJson: $2, targetChain: $3)
         }

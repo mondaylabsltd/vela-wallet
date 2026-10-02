@@ -303,6 +303,15 @@ class SigningReceiptTest {
         // Not refused: the plain failure a retry can fix keeps its words.
         val plain = SigningLive.receipt(sheet.copy(failure_refused = false), blocks, ctx)!!
         assertTrue(plain.captions.contains(retry))
+        assertEquals("a refusal has no Try again", null, live.retry)
+        assertTrue(live.ctaAccent)
+
+        // Spec 096 F8: nothing was sent and it was no refusal — the core holds
+        // the page's answer and says so; Try again beside Done, the accent on it.
+        val retryable = SigningLive.receipt(sheet.copy(failure_refused = false, failure_retryable = true), blocks, ctx)!!
+        assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), retryable.retry)
+        assertEquals(strings.t(I18nKeys.Flows.DONE), retryable.cta)
+        assertTrue(!retryable.ctaAccent)
 
         val ending = SigningLive.aftercareReceipt(app.getvela.wallet.feature.signing.core.SignEndingState.Refused, "Send", ctx)
         assertEquals(ReceiptStage.Failed, ending.stage)

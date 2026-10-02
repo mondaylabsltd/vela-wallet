@@ -644,6 +644,8 @@ class SigningController(
     fun refreshFee() = speedControl.refresh()
     fun reject() = dispatchSign(SignEvent.RejectTapped)
     fun dismiss() = dispatchSign(SignEvent.DismissTapped)
+    /** Spec 096 F8: Try again — the core takes the request back to review, still unanswered. */
+    fun retry() = dispatchSign(SignEvent.RetryTapped)
     fun swipeDismissed() {
         val now = sign.value
         if (now.is_signing || now.is_submitting || now.pending_op_hash != null) closedAfterApproval = true

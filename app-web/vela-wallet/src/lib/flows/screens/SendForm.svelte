@@ -154,6 +154,7 @@
 			pickLabel={model.recipient.pickLabel}
 			scanLabel={model.recipient.scanLabel}
 			note={model.recipient.note}
+			noteWarn={model.recipient.noteWarn}
 			onpick={onpickRecipient}
 			{onscan}
 			oninput={onrecipient}
