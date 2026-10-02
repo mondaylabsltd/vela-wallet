@@ -35,7 +35,8 @@ use serde_json::{Value, json};
 
 use vela_core::app::token_trust::TrustReceiptLog;
 use vela_core::app::tx_tracker::{
-    Event, TrackOperation, TrackPendingRecord, TrackRecordStatus, TrackShellResult, TxTracker,
+    Event, TrackOperation, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus,
+    TrackShellResult, TxTracker,
 };
 
 use crate::diag::{short, vlog};
@@ -140,19 +141,21 @@ pub(crate) fn resumable(user_op_hash: &str) -> bool {
 
 /// Patch the named records in place — same ids, never a second record — in
 /// ONE write (`updateTransactions`).
-fn patch_records(ids: &[String], status: TrackRecordStatus, tx_hash: Option<&str>) {
+fn patch_records(ids: &[String], patch: &TrackRecordPatch) {
     // Under the store's lock (spec 082 RJ1 review): a dApp's record is
     // written on a worker meanwhile, and a stale copy written back here
     // would take it away.
-    let _ = storage::update_list(TX_KEY, |rows| patch_rows(rows, ids, status, tx_hash));
+    let _ = storage::update_list(TX_KEY, |rows| patch_rows(rows, ids, patch));
 }
 
-fn patch_rows(
-    rows: &mut [Value],
-    ids: &[String],
-    status: TrackRecordStatus,
-    tx_hash: Option<&str>,
-) -> bool {
+fn patch_rows(rows: &mut [Value], ids: &[String], patch: &TrackRecordPatch) -> bool {
+    let (status, tx_hash) = (patch.status, patch.tx_hash.as_deref());
+    // Spec 097: how it ended — what its receipt proved it moved, or why it
+    // failed — kept beside the status, verbatim, for the feed.
+    let settlement = patch
+        .settlement
+        .as_ref()
+        .and_then(|settlement| serde_json::to_value(settlement).ok());
     let mut touched = false;
     for row in rows.iter_mut() {
         let Some(id) = row.get("id").and_then(Value::as_str) else {
@@ -174,6 +177,9 @@ fn patch_rows(
             );
             if let Some(tx_hash) = tx_hash {
                 object.insert("txHash".to_owned(), Value::String(tx_hash.to_owned()));
+            }
+            if let Some(settlement) = &settlement {
+                object.insert("settlement".to_owned(), settlement.clone());
             }
             touched = true;
         }
@@ -322,7 +328,7 @@ impl Machine for TxTracker {
             }),
 
             TrackOperation::UpdateTxRecords { ids, patch } => {
-                patch_records(ids, patch.status, patch.tx_hash.as_deref());
+                patch_records(ids, patch);
                 // Records changed UNDER the feed, which is reading the same
                 // store and has no way to know. Counted here and handed over on
                 // the next tick (this function has no `cx` to reach another
@@ -1028,19 +1034,48 @@ mod tests {
                 row("c", "pending", "0xccc", "", None),
             ];
             let _ = storage::write_value(TX_KEY, Value::Array(rows));
+            // Spec 097: the patch's settlement rides with the status.
+            let moved = vela_core::app::tx_tracker::TrackSettlement {
+                moved: Some(vec![vela_core::app::tx_tracker::TrackMove {
+                    token: Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d".to_owned()),
+                    delta: "300000000000000000".to_owned(),
+                }]),
+                failure: None,
+            };
             patch_records(
                 &["a".to_owned(), "b".to_owned()],
-                TrackRecordStatus::Confirmed,
-                Some("0xtx"),
+                &TrackRecordPatch {
+                    status: TrackRecordStatus::Confirmed,
+                    tx_hash: Some("0xtx".to_owned()),
+                    settlement: Some(moved.clone()),
+                },
             );
-            patch_records(&["c".to_owned()], TrackRecordStatus::Failed, None);
+            patch_records(
+                &["c".to_owned()],
+                &TrackRecordPatch {
+                    status: TrackRecordStatus::Failed,
+                    tx_hash: None,
+                    settlement: Some(vela_core::app::tx_tracker::TrackSettlement {
+                        moved: None,
+                        failure: Some(vela_core::app::tx_tracker::TrackFailure::Refused),
+                    }),
+                },
+            );
             let rows = read_rows();
             assert_eq!(rows.len(), 3);
             assert_eq!(rows[0]["status"], "confirmed");
             assert_eq!(rows[0]["txHash"], "0xtx");
             assert_eq!(rows[1]["txHash"], "0xtx");
+            assert_eq!(
+                serde_json::from_value::<vela_core::app::tx_tracker::TrackSettlement>(
+                    rows[1]["settlement"].clone()
+                )
+                .ok(),
+                Some(moved)
+            );
             assert_eq!(rows[2]["status"], "failed");
             assert_eq!(rows[2]["txHash"], "");
+            assert_eq!(rows[2]["settlement"], json!({ "failure": "refused" }));
             assert_eq!(pending_records(&rows).len(), 0);
             assert_eq!(stored_sender("0xAAA").as_deref(), Some("0xfrom"));
         });

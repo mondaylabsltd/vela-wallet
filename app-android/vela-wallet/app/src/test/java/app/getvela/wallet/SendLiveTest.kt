@@ -40,6 +40,12 @@ import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.SendSplitRowIssue
 import app.getvela.wallet.feature.send.core.SplitRows
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
+import app.getvela.wallet.feature.send.core.SendNameSource
+import app.getvela.wallet.feature.send.core.SendPayee
+import app.getvela.wallet.feature.send.core.SendReceiptCoin
+import app.getvela.wallet.feature.send.core.SendReceiptKind
+import app.getvela.wallet.feature.send.core.SendReceiptTransfer
+import app.getvela.wallet.feature.flows.FactLead
 import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendFormMode
@@ -294,6 +300,95 @@ class SendLiveTest {
     }
 
     /**
+     * Spec 097 F (S3): a two-coin sweep's success screen said "Send ETH |
+     * Sent 0.000418 ETH | To Wallet · Base" although 0.034929 USDC moved in
+     * the same operation (Android captioned it "2 recipients" besides — a
+     * sweep is ONE recipient and N coins). The receipt lists every coin.
+     */
+    @Test
+    fun `a sweep's receipt lists every coin it sent and names none alone`() {
+        val baseEth = SendToken(network = "chain-8453", chain_id = 8453, symbol = "ETH", balance = "0.001", decimals = 18, token_address = null, price_usd = 2400.0)
+        val c = SendLive.Context(strings, mapOf(8453 to "Base"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD")), "Me", me)
+        val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
+        val coins = listOf(
+            SendReceiptCoin(amount = "0.000418", symbol = "ETH", token_address = null, usd_value = 1.0),
+            SendReceiptCoin(amount = "0.034929", symbol = "USDC", token_address = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", usd_value = 0.03),
+        )
+        val confirmed = SendView(
+            stage = SendStage.Receipt, selected_token = baseEth, recipient = wallet, multi_select_mode = true,
+            tx_status = SendTxStatus.Confirmed, tx_hash = "0x1234567890abcdef1234567890abcdef",
+            receipt = SendReceiptView(
+                status = SendReceiptStatus.Confirmed, kind = SendReceiptKind.MultiSelect,
+                transfers = listOf(
+                    SendReceiptTransfer(to = wallet, to_name = "Wallet", amount = "0.000418", symbol = "ETH", usd_value = 1.0),
+                    SendReceiptTransfer(to = wallet, to_name = "Wallet", amount = "0.034929", symbol = "USDC", usd_value = 0.03),
+                ),
+                coins = coins, amount = "", usd_value = 1.03,
+            ),
+        )
+        val d = SendLive.receipt((FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model, confirmed, c)
+        assertEquals("Send tokens", d.header.title)
+        assertEquals(strings.t(I18nKeys.Flows.TX_SENT), d.title)
+        assertFalse(d.title.contains("0.000418"))
+        assertEquals(listOf("To Wallet · Base", "0.000418 ETH", "0.034929 USDC"), d.captions)
+
+        // Waiting on the chain, the same coins are on the screen.
+        val submitted = confirmed.copy(
+            tx_status = SendTxStatus.Submitting, tx_hash = null,
+            receipt = confirmed.receipt!!.copy(status = SendReceiptStatus.Submitted),
+        )
+        val b = SendLive.receipt((FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model, submitted, c)
+        assertEquals("Send tokens", b.header.title)
+        assertTrue(b.captions.containsAll(listOf("0.000418 ETH", "0.034929 USDC")))
+
+        // A sweep whose native line the gas reserve dropped sent one coin: the
+        // title names it, and no coin line repeats it.
+        val one = confirmed.copy(
+            receipt = confirmed.receipt!!.copy(
+                transfers = confirmed.receipt!!.transfers.drop(1),
+                coins = coins.drop(1),
+                amount = "0.034929",
+                usd_value = 0.03,
+            ),
+        )
+        val o = SendLive.receipt((FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model, one, c)
+        assertEquals("Sent 0.034929 USDC", o.title)
+        assertEquals(listOf("To Wallet · Base"), o.captions)
+    }
+
+    /**
+     * Spec 097 F (S3): a split's headline is its TOTAL — the core's one coin,
+     * summed over the rows it signed — never the form's live figure, never a
+     * single row.
+     */
+    @Test
+    fun `a split's receipt title is the total the core summed`() {
+        val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
+        val confirmed = SendView(
+            stage = SendStage.Receipt, selected_token = xdai, split_mode = true,
+            // What the form says now is not what was signed; the receipt is.
+            confirm_amount = "0.001",
+            tx_status = SendTxStatus.Confirmed, tx_hash = "0x1234567890abcdef1234567890abcdef",
+            receipt = SendReceiptView(
+                status = SendReceiptStatus.Confirmed, kind = SendReceiptKind.Split,
+                transfers = listOf(
+                    SendReceiptTransfer(to = recipient, to_name = "Founder", amount = "0.001", symbol = "XDAI", usd_value = 0.001),
+                    SendReceiptTransfer(to = wallet, amount = "0.0025", symbol = "XDAI", usd_value = 0.0025),
+                ),
+                coins = listOf(SendReceiptCoin(amount = "0.0035", symbol = "XDAI", usd_value = 0.0035)),
+                amount = "0.0035", usd_value = 0.0035,
+            ),
+        )
+        val d = SendLive.receipt((FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model, confirmed, ctx())
+        assertEquals("Send XDAI", d.header.title)
+        assertEquals("Sent 0.0035 XDAI", d.title)
+        assertEquals(
+            listOf("2 recipients · Gnosis", "Founder · 0.001 XDAI", "0x14fB…eA5c · 0.0025 XDAI"),
+            d.captions,
+        )
+    }
+
+    /**
      * Spec 082 RA10 (owner ruling 1): a lost reply is "Submitting…", it may
      * have been sent, with the op hash and a close that keeps it running —
      * never a failure, never a Retry. "Not sent" (the relay never had it) is
@@ -397,16 +492,74 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "USDC")), live.rows[1].insufficientNote)
     }
 
-    /** The web's `recipientNote`: "name · source", else the first-time tell, else nothing. */
+    /**
+     * Spec 097 F (S2): the form's line is the core's payee — the name and
+     * whose word it is — else the first-time tell, else nothing. The real
+     * pass printed the resolver's own label raw: "Wallet · passkey".
+     */
     @Test
-    fun `the recipient note names the source of the name`() {
+    fun `the recipient note says whose word the name is, never the resolver's label`() {
         val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
         val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient)
         fun note(view: SendView) = SendLive.form(drawn.model, view, FeeView(), ctx()).recipient!!.note
-        assertEquals("alice.eth · ENS", note(base.copy(recipient_identity = SendRecipientIdentity(name = "alice.eth", source = "ENS"))))
-        assertEquals("Alice", note(base.copy(recipient_identity = SendRecipientIdentity(name = "Alice"))))
+        fun payee(name: String?, source: SendNameSource?) = listOf(SendPayee(recipient, name, source))
+        // The public registry: the corpus's tag, whatever the resolver called it.
+        val registry = base.copy(
+            recipient_identity = SendRecipientIdentity(name = "Wallet", source = "passkey"),
+            payees = payee("Wallet", SendNameSource.Registry),
+        )
+        assertEquals("Wallet · Vela User", note(registry))
+        assertFalse(note(registry)!!.contains("passkey"))
+        assertEquals("alice.eth · ENS", note(base.copy(payees = payee("alice.eth", SendNameSource.Service("ENS")))))
+        // The person's own word carries no tag.
+        assertEquals("Alice", note(base.copy(payees = payee("Alice", SendNameSource.Own))))
+        // A name whose source did not read is not drawn: untagged, it would pass for their own.
+        assertEquals(strings.t(I18nKeys.Flows.FIRST_TIME_SEND), note(base.copy(payees = payee("Wallet", null), recipient_risk = SendRecipientRisk(first_time = true))))
+        // The identity alone is not the payee: nothing the core did not name.
+        assertNull(note(base.copy(recipient_identity = SendRecipientIdentity(name = "Wallet", source = "passkey"))))
         assertEquals(strings.t(I18nKeys.Flows.FIRST_TIME_SEND), note(base.copy(recipient_risk = SendRecipientRisk(first_time = true))))
         assertNull(note(base))
+        // The sweep form keeps its "same address" line.
+        val sweep = registry.copy(multi_select_mode = true, tokens = listOf(xdai), multi_selected_ids = listOf(SendLive.tokenId(xdai)))
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), note(sweep))
+    }
+
+    /**
+     * Spec 097 F (S2): the confirm's To row showed "Wallet" — a name anyone
+     * can register in the public registry — with the address one tap away on
+     * the identicon. A name never stands in for the address on the page that
+     * signs: the name with whose word it is, the short address under it.
+     */
+    @Test
+    fun `the confirm's To row names the payee over the short address, and whose word the name is`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
+        val view = SendView(
+            stage = SendStage.Confirm, selected_token = xdai, recipient = wallet, confirm_amount = "0.001", fee = fee(),
+            recipient_identity = SendRecipientIdentity(name = "Wallet", source = "passkey"),
+            payees = listOf(SendPayee(wallet, "Wallet", SendNameSource.Registry)),
+        )
+        fun to(view: SendView) = SendLive.confirm(drawn.model, view, ctx()).facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+
+        val registry = to(view)
+        assertEquals("Wallet", registry.value)
+        assertEquals("Vela User · 0x14fB…eA5c", registry.detail)
+        assertEquals(FactLead.Identicon(wallet), registry.lead)
+        assertFalse(registry.mono)
+
+        // The person's own name: no tag, the address still under it.
+        val own = to(view.copy(payees = listOf(SendPayee(wallet, "Savings", SendNameSource.Own))))
+        assertEquals("Savings", own.value)
+        assertEquals("0x14fB…eA5c", own.detail)
+
+        // Nobody named them: the short address alone, in mono.
+        val bare = to(view.copy(payees = listOf(SendPayee(wallet))))
+        assertEquals("0x14fB…eA5c", bare.value)
+        assertTrue(bare.mono)
+        assertNull(bare.detail)
+
+        // A sweep's one recipient is drawn the same way.
+        assertEquals(registry, to(view.copy(multi_select_mode = true)))
     }
 
     /** Issue 209: a filter that hid every row is a different sentence from an empty account. */
@@ -437,13 +590,15 @@ class SendLiveTest {
             ),
             held.recipient,
         )
-        // The name the core resolved rides with the address, as on the confirm.
+        // The core's payee rides with the address, as on the confirm (spec 097 F).
         val named = SendLive.pick(
             drawn.model,
-            SendView(tokens = listOf(xdai), recipient = recipient, recipient_identity = SendRecipientIdentity(name = "Alice")),
+            SendView(tokens = listOf(xdai), recipient = recipient, payees = listOf(SendPayee(recipient, "Wallet", SendNameSource.Registry))),
             ctx(),
         )
-        assertEquals("Alice · ${SendLive.shortAddress(recipient)}", named.recipient?.value)
+        assertEquals("Wallet", named.recipient?.value)
+        assertEquals("Vela User · ${SendLive.shortAddress(recipient)}", named.recipient?.detail)
+        assertFalse(named.recipient!!.mono)
         // The sweep's picker is about the same person.
         assertEquals(held.recipient, SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = recipient), ctx(), sweepPicking = true).recipient)
         // Nobody held, no line; text that is not an address gets no artwork.
@@ -744,16 +899,62 @@ class SendLiveTest {
     @Test
     fun `the split's confirm names the count and every person below it`() {
         val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
-        val view = splitView.copy(stage = SendStage.Confirm, recipients = splitView.recipients.take(2), can_confirm = true, fee = fee())
+        val view = splitView.copy(
+            stage = SendStage.Confirm, recipients = splitView.recipients.take(2), can_confirm = true, fee = fee(),
+            // The core's payees, row by row: a row's own name is the person's word.
+            payees = listOf(SendPayee(recipient, "Founder", SendNameSource.Own), SendPayee(me)),
+        )
         val live = SendLive.confirm(drawn.model, view, ctx())
         assertEquals("0.002 XDAI", live.amount)
         val to = live.facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
         assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to "2")), to.value)
         assertEquals(2, live.breakdown.size)
         assertEquals("Founder", live.breakdown[0].label)
+        // Spec 097 F: a name never stands in for the address it pays.
+        assertEquals("0x7687…D141", live.breakdown[0].detail)
+        assertFalse(live.breakdown[0].mono)
         assertEquals("0.001 XDAI", live.breakdown[0].value)
         assertEquals(recipient, live.breakdown[0].identiconSeed)
         assertEquals("0x88cC…6894", live.breakdown[1].label)
+        assertTrue(live.breakdown[1].mono)
+        assertNull(live.breakdown[1].detail)
+        // A row's name is the core's payee, tag and all.
+        val tagged = SendLive.confirm(drawn.model, view.copy(payees = listOf(SendPayee(recipient, "bob.eth", SendNameSource.Service("ENS")), SendPayee(me))), ctx())
+        assertEquals("bob.eth", tagged.breakdown[0].label)
+        assertEquals("ENS · 0x7687…D141", tagged.breakdown[0].detail)
+    }
+
+    /**
+     * SD3c: a sweep has no one figure (`confirm_amount` is empty), and the
+     * confirm page drew the single-send hero over it — the first coin's
+     * symbol, "≈ $0.00" and no coin at all. It lists every coin it moves,
+     * each the amount the core reserved (what the signature moves).
+     */
+    @Test
+    fun `a sweep's confirm lists every coin it moves, at the amounts the core reserved`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val view = SendView(
+            stage = SendStage.Confirm, tokens = listOf(xdai, usdc), selected_token = xdai, recipient = recipient,
+            multi_select_mode = true, multi_chain_id = 100,
+            multi_selected_ids = listOf(SendLive.tokenId(xdai), SendLive.tokenId(usdc)),
+            multi_specs = listOf(
+                SendMultiSpecView(token_address = null, decimals = 18, amount = "0.4"),
+                SendMultiSpecView(token_address = usdc.token_address, decimals = 6, amount = "2.5"),
+            ),
+            confirm_amount = "", fee = fee(), can_confirm = true,
+            payees = listOf(SendPayee(recipient, "Wallet", SendNameSource.Registry)),
+        )
+        val live = SendLive.confirm(drawn.model, view, ctx())
+        assertNull(live.mark)
+        assertEquals(strings.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to "2")), live.amount)
+        assertNull(live.amountUnit)
+        assertEquals(strings.t(I18nKeys.Flows.CONFIRM_TOTAL_LINE, mapOf("fiat" to "$2.90", "network" to "Gnosis")), live.subline)
+        assertEquals(listOf("XDAI", "USDC"), live.breakdown.map { it.label })
+        assertEquals(listOf("0.4 XDAI · ≈$0.40", "2.5 USDC · ≈$2.50"), live.breakdown.map { it.value })
+        assertTrue(live.breakdown.all { it.lead != null && it.identiconSeed == null })
+        val to = live.facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+        assertEquals("Wallet", to.value)
+        assertEquals("Vela User · ${SendLive.shortAddress(recipient)}", to.detail)
     }
 
     // -- Spec 045 US2: the sweep pick and form -------------------------------

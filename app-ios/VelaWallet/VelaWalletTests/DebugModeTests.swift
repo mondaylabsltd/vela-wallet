@@ -210,7 +210,12 @@ struct DebugModeTests {
 
     /// The controller: an open tab follows a change, and a new tab starts in
     /// the current mode.
-    @Test(.timeLimit(.minutes(1)))
+    ///
+    /// Each tab is a real WKWebView: on a loaded CI runner launching WebKit's
+    /// processes alone passed a one-minute limit (#395, #399). The limit only
+    /// stops a hang; nothing here is about time (the same reasoning as
+    /// BrowserChromeTests, #382).
+    @Test(.timeLimit(.minutes(5)))
     func everyTabFollowsTheMode() async throws {
         let h = BrowserHarness()
         h.browser.start()

@@ -607,7 +607,48 @@ pub enum SendLockError {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SendRecipientIdentity {
     pub name: Option<String>,
+    /// Where the name came from, as the shell's resolver labels it: `self`
+    /// (one of the person's own accounts), `passkey` (the public wallet
+    /// registry), or a name service's label (`ENS`, `.bnb`, `Basename`…).
     pub source: Option<String>,
+}
+
+/// Whose word a payee's name is (spec 097 F, S2).
+///
+/// The public wallet registry is a name anyone can register for their own
+/// address: "Wallet", "Binance", the name of the friend someone is about to
+/// pay. On the page that signs, such a name is a claim about the address,
+/// never the address itself, and never the person's own name for them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendNameSource {
+    /// The person's own word: one of their own accounts, a contact they
+    /// named, a name column in a list they imported. Drawn with no tag.
+    Own,
+    /// The public wallet registry (the passkey index). Drawn with
+    /// `send.velaUser` beside it.
+    Registry,
+    /// A name service whose name resolves forward to this address
+    /// (`name_verify`). `label` is the service's own name ("ENS", ".bnb"),
+    /// drawn as it is.
+    Service { label: String },
+}
+
+/// One payee as the confirm page names them (spec 097 F, S2): the address
+/// always, and a name only beside it, with whose word that name is.
+///
+/// The shell draws `name` (or, without one, the short address in mono), the
+/// short address under a name, the tag for a name that is not the person's
+/// own, and the full address on tap — it never decides any of it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendPayee {
+    /// The address the money goes to, in full, as it will be signed.
+    pub address: String,
+    pub name: Option<String>,
+    /// `Some` exactly when `name` is.
+    pub name_source: Option<SendNameSource>,
 }
 
 /// Recipient risk signals for the confirm step, best-effort.
@@ -1364,6 +1405,8 @@ struct SendLine {
     to_name: Option<String>,
     amount: String,
     symbol: String,
+    /// `None` for the native coin — what tells a sweep's coins apart.
+    token_address: Option<String>,
     decimals: u32,
     price_usd: f64,
     logo_urls: Vec<String>,
@@ -1724,6 +1767,20 @@ pub struct SendReceiptTransfer {
     pub usd_value: f64,
 }
 
+/// One coin the operation sent, summed over its recipients (spec 097 F, S3):
+/// a sweep lists each of its coins, a split its one coin's total.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendReceiptCoin {
+    /// Token units, as signed.
+    pub amount: String,
+    pub symbol: String,
+    pub logo_urls: Vec<String>,
+    /// `None` for the native coin.
+    pub token_address: Option<String>,
+    pub usd_value: f64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -1755,8 +1812,16 @@ pub struct SendReceiptView {
     pub hold_reason: Option<SendHoldReason>,
     pub kind: Option<SendReceiptKind>,
     pub transfers: Vec<SendReceiptTransfer>,
-    /// The single-send scalar amount (token units, resolved).
+    /// Every coin the operation sent, in the order signed (spec 097 F, S3).
+    /// One for a single send or a split (its total); one per coin for a
+    /// sweep. The screen lists these; it never picks one to stand for the
+    /// rest.
+    pub coins: Vec<SendReceiptCoin>,
+    /// The headline figure when the operation sent ONE coin: `coins[0]`'s
+    /// amount (a split's total, not its first row). Empty for a sweep of
+    /// several coins, which has no one figure.
     pub amount: String,
+    /// What everything sent was worth at signing, all coins together.
     pub usd_value: f64,
     /// When the relay accepted the op (the submit result's clock), so the
     /// shell can show how long the wait has been (spec 038 #D3). The core is
@@ -1926,6 +1991,17 @@ pub struct SendView {
     pub receipt: Option<SendReceiptView>,
     pub treasury_bootstrap: Option<SendTreasuryStatus>,
     pub recipient_identity: Option<SendRecipientIdentity>,
+    /// Who the money goes to, as the form's recipient line and the confirm
+    /// page name them (spec 097 F, S2): the address always, a name only
+    /// beside it, with whose word that name is ([`SendPayee`]). One payee
+    /// for a single send or a sweep (none until the address is whole); one
+    /// per row, in `recipients` order, for a split.
+    ///
+    /// The confirm's To row used to print `recipient_identity.name` alone:
+    /// "Wallet", from the public registry, where anyone can register any
+    /// name — the address was one tap away on the identicon. A name never
+    /// stands in for the address on the page that signs.
+    pub payees: Vec<SendPayee>,
     pub recipient_risk: Option<SendRecipientRisk>,
     /// The recipient is a token's own contract on the network the money moves
     /// on (spec 096 F12): the token being sent, or any token in the person's
@@ -2325,10 +2401,70 @@ impl App for Send {
                 status
             }),
             recipient_identity: model.recipient_identity.clone(),
+            payees: payees(model),
             recipient_risk: model.recipient_risk.clone(),
             recipient_is_token_contract: recipient_is_token_contract(model),
             sim_json: model.sim_json.clone(),
         }
+    }
+}
+
+/// [`SendView::payees`]. A split row's name is the person's own word (their
+/// contact's name, a list's name column); the single recipient's comes from
+/// the identity the shell resolved, and says where from.
+fn payees(model: &Model) -> Vec<SendPayee> {
+    if model.split_mode {
+        return model
+            .recipients
+            .iter()
+            .map(|row| {
+                let name = row
+                    .name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty());
+                SendPayee {
+                    address: row.address.trim().to_owned(),
+                    name: name.map(str::to_owned),
+                    name_source: name.map(|_| SendNameSource::Own),
+                }
+            })
+            .collect();
+    }
+    let address = model.recipient.trim();
+    if !is_valid_address(address) {
+        return Vec::new();
+    }
+    let identity = model.recipient_identity.as_ref();
+    let name = identity
+        .and_then(|identity| identity.name.as_deref())
+        .map(str::trim)
+        .filter(|name| super::valid_display_name(name));
+    let source = identity.and_then(|identity| name_source_of(identity.source.as_deref()));
+    // A name with no say of where it came from is not drawn: it could only be
+    // drawn untagged, which is how the person's own names look.
+    let (name, name_source) = match (name, source) {
+        (Some(name), Some(source)) => (Some(name.to_owned()), Some(source)),
+        _ => (None, None),
+    };
+    vec![SendPayee {
+        address: address.to_owned(),
+        name,
+        name_source,
+    }]
+}
+
+/// The resolver's source label, read: `self` is one of the person's own
+/// accounts, `passkey` the public wallet registry, anything else a name
+/// service's label. Blank says nothing.
+fn name_source_of(source: Option<&str>) -> Option<SendNameSource> {
+    match source.map(str::trim)? {
+        "" => None,
+        "self" => Some(SendNameSource::Own),
+        "passkey" => Some(SendNameSource::Registry),
+        label => Some(SendNameSource::Service {
+            label: label.to_owned(),
+        }),
     }
 }
 
@@ -4763,6 +4899,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                             .and_then(|i| i.name.clone()),
                         amount: spec.amount.clone(),
                         symbol: tk.symbol.clone(),
+                        token_address: tk.token_address.clone(),
                         decimals: tk.decimals,
                         price_usd: tk.price_usd.unwrap_or(0.0),
                         logo_urls: tk.logo_urls.clone(),
@@ -4791,6 +4928,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                         .map(str::to_owned),
                     amount: r.amount.clone(),
                     symbol: token.symbol.clone(),
+                    token_address: token.token_address.clone(),
                     decimals: token.decimals,
                     price_usd: token.price_usd.unwrap_or(0.0),
                     logo_urls: token.logo_urls.clone(),
@@ -4821,6 +4959,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                     .and_then(|i| i.name.clone()),
                 amount,
                 symbol: token.symbol.clone(),
+                token_address: token.token_address.clone(),
                 decimals: token.decimals,
                 price_usd: token.price_usd.unwrap_or(0.0),
                 logo_urls: token.logo_urls.clone(),
@@ -5976,9 +6115,22 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
     // figure and the price it was worth are read off the submit-time snapshot,
     // which is the same discipline `transfers` below has always had (its lines
     // are captured at submit too).
-    let signed = model.receipt_signed.as_ref();
-    let amount = signed.map(|ln| ln.amount.clone()).unwrap_or_default();
-    let usd_value = signed.map_or(0.0, |ln| js_parse_float(&ln.amount).max(0.0) * ln.price_usd);
+    //
+    // Every coin the signature moved (097 F, S3): a sweep's success screen
+    // named its first coin alone — "Sent 0.000418 ETH" over a transaction
+    // that also moved 0.034929 USDC — and a split's headline was its first
+    // row, not its total. The lines are the batch's when it was one, else the
+    // one signed line.
+    let lines = model
+        .receipt_lines
+        .as_deref()
+        .unwrap_or(model.receipt_signed.as_slice());
+    let coins = receipt_coins(lines);
+    let amount = match coins.as_slice() {
+        [one] => one.amount.clone(),
+        _ => String::new(),
+    };
+    let usd_value: f64 = coins.iter().map(|coin| coin.usd_value).sum();
     let transfers = model
         .receipt_lines
         .as_deref()
@@ -6014,6 +6166,7 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         },
         kind: model.receipt_kind,
         transfers,
+        coins,
         amount,
         usd_value: if usd_value.is_nan() { 0.0 } else { usd_value },
         submitted_at_ms: model.submitted_at_ms,
@@ -6022,6 +6175,63 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
             .as_ref()
             .and_then(|token| super::network_admin::typical_inclusion_s(token.chain_id)),
     })
+}
+
+/// The coins of `lines`, each summed over its recipients, in the order first
+/// signed ([`SendReceiptView::coins`]). A coin with one line keeps that
+/// line's figure exactly; a coin paid to several recipients is their exact
+/// base-unit sum (empty, never a guess, if a line could not be read).
+fn receipt_coins(lines: &[SendLine]) -> Vec<SendReceiptCoin> {
+    struct Tally<'a> {
+        first: &'a SendLine,
+        units: Option<u128>,
+        count: usize,
+        usd: f64,
+    }
+    let mut tallies: Vec<Tally> = Vec::new();
+    for line in lines {
+        let usd = js_parse_float(&line.amount).max(0.0) * line.price_usd;
+        let usd = if usd.is_nan() { 0.0 } else { usd };
+        let units = to_base_units(&line.amount, line.decimals);
+        let same_coin = |tally: &&mut Tally| {
+            tally.first.decimals == line.decimals
+                && match (&tally.first.token_address, &line.token_address) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                    _ => false,
+                }
+        };
+        match tallies.iter_mut().find(same_coin) {
+            Some(tally) => {
+                tally.units = tally.units.zip(units).and_then(|(a, b)| a.checked_add(b));
+                tally.count += 1;
+                tally.usd += usd;
+            }
+            None => tallies.push(Tally {
+                first: line,
+                units,
+                count: 1,
+                usd,
+            }),
+        }
+    }
+    tallies
+        .into_iter()
+        .map(|tally| SendReceiptCoin {
+            amount: if tally.count == 1 {
+                tally.first.amount.clone()
+            } else {
+                tally
+                    .units
+                    .map(|units| from_base_units(units, tally.first.decimals))
+                    .unwrap_or_default()
+            },
+            symbol: tally.first.symbol.clone(),
+            logo_urls: tally.first.logo_urls.clone(),
+            token_address: tally.first.token_address.clone(),
+            usd_value: tally.usd,
+        })
+        .collect()
 }
 
 impl super::SplitEffect for SendEffect {

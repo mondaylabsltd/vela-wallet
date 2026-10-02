@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
@@ -14,7 +15,10 @@ import app.getvela.wallet.feature.send.core.SendChainInfo
 import app.getvela.wallet.feature.send.core.SendDisplayContext
 import app.getvela.wallet.feature.send.core.SendEvent
 import app.getvela.wallet.feature.send.core.SendOperation
+import app.getvela.wallet.feature.send.core.SendNameSource
+import app.getvela.wallet.feature.send.core.SendPayee
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.SendShellResult
 import app.getvela.wallet.feature.send.core.SendToken
@@ -64,8 +68,11 @@ class SendSplitVerdictsTest {
 
     private val xdai = SendToken(network = "chain-100", chain_id = 100, symbol = "XDAI", balance = "0.71697", decimals = 18, price_usd = 1.0)
 
-    /** The send core with a shell that holds one coin and never finishes a fee quote. */
-    private fun host(): CoreHost<SendView> {
+    /**
+     * The send core with a shell that holds one coin and never finishes a fee
+     * quote; [identity] is what its resolver says of any recipient.
+     */
+    private fun host(identity: SendRecipientIdentity? = null): CoreHost<SendView> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
         return CoreHost(
@@ -79,7 +86,7 @@ class SendSplitVerdictsTest {
                         tokens = listOf(xdai),
                         chains = listOf(SendChainInfo(100, "chain-100", "XDAI")),
                     )
-                    is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(null)
+                    is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity)
                     is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(null)
                     is SendOperation.Haptic -> SendShellResult.HapticPlayed
                     is SendOperation.ShowAlert -> SendShellResult.AlertAcknowledged
@@ -178,6 +185,37 @@ class SendSplitVerdictsTest {
         assertNull(SendLive.form(drawn.model, filled, FeeView(), ctx()).fillEmpty)
     }
 
+    /**
+     * Spec 097 F (S2), end to end: the resolver answers as Android's does for
+     * the public registry (`source = "passkey"`); the core names the payee and
+     * whose word the name is, and the form line and the confirm's To row draw
+     * "Wallet · Vela User" with the address — never "passkey", never the name
+     * alone.
+     */
+    @Test
+    fun theCoreNamesTheRegistryPayeeAndTheScreensKeepTheAddress() {
+        val h = host(SendRecipientIdentity(name = "Wallet", source = "passkey"))
+        h.send(SendEvent.Open(account = SendAccountRef("acct", ME), display = SendDisplayContext("USD", 1.0, 2)))
+        val listed = h.settle { it.tokens.isNotEmpty() }
+        h.send(SendEvent.SelectToken(SendLive.tokenId(listed.tokens.single())))
+        h.settle { it.selected_token != null }
+        h.send(SendEvent.SetRecipient(WALLET))
+        val view = h.settle { it.payees.singleOrNull()?.name != null }
+
+        assertEquals(SendPayee(WALLET, "Wallet", SendNameSource.Registry), view.payees.single())
+
+        val form = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val note = SendLive.form(form.model, view, FeeView(), ctx()).recipient!!.note
+        assertEquals("Wallet · Vela User", note)
+        assertFalse(note!!.contains("passkey"))
+
+        val confirm = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val to = SendLive.confirm(confirm.model, view, ctx()).facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+        // The name may be cut; the tag rides with the address on the line that never is.
+        assertEquals("Wallet", to.value)
+        assertEquals("Vela User · 0x14fB…eA5c", to.detail)
+    }
+
     private fun ctx() = SendLive.Context(
         strings = strings,
         chainNames = mapOf(100 to "Gnosis"),
@@ -190,6 +228,7 @@ class SendSplitVerdictsTest {
     private companion object {
         const val ME = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
+        const val WALLET = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
         const val TIMEOUT = 20_000L
     }
 }

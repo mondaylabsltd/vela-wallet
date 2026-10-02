@@ -102,8 +102,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
-use super::dapp_activity::{contract_name_of, protocol_of, DappAction, DappSummary};
+use super::dapp_activity::{contract_name_of, permit2_owner, protocol_of, DappAction, DappSummary};
 use super::token_trust::TrustSimJudgment;
+use super::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
@@ -264,6 +265,17 @@ pub struct FeedTxRecord {
         deserialize_with = "stored_or_none"
     )]
     pub summary: Option<DappSummary>,
+    /// How the operation ended, as the tracker proved it (spec 097) — the
+    /// closing patch's `settlement`, stored verbatim by the shell and handed
+    /// back untouched: what the receipt proves it moved, or why it failed.
+    /// `None` on records closed before 097, by a shell that does not keep
+    /// it, and on one this build cannot read ([`stored_or_none`]).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "stored_or_none"
+    )]
+    pub settlement: Option<TrackSettlement>,
 }
 
 /// A value the shell stored and hands back verbatim, read leniently: what
@@ -392,6 +404,12 @@ pub struct FeedItem {
     /// Numeric USD (0 when unknown) — the `txUsdValue` port, stablecoin
     /// face-value fallback included (invariant ⑧).
     pub usd_value: f64,
+    /// `usd_value` is a figure the wallet knows: a price stored with the
+    /// record, or a stablecoin's face value (spec 097 N7). `false` when no
+    /// price is known — the shell draws NO fiat figure then, never
+    /// "≈ $0.00": unknown is not zero.
+    #[serde(default)]
+    pub priced: bool,
     pub chain_id: u32,
     /// Epoch seconds (drives `relativeTime`/`dayGroupLabel` in the shell).
     pub timestamp: f64,
@@ -503,8 +521,11 @@ pub struct FeedDapp {
     /// coin the wallet trusts. Drawn beside the figure as what the
     /// simulation EXPECTED: the chain may deliver another amount (slippage).
     /// Once the chain's own "Received" record in the same transaction folds
-    /// into the row (spec 093), it is that record instead, `exact`. `None`
-    /// otherwise, and always for a failed operation.
+    /// into the row (spec 093), it is that record instead, `exact`. Once the
+    /// operation's own receipt was read (spec 097), it is the one coin the
+    /// receipt proves arrived that the wallet can name — on its own when
+    /// nothing left (a borrow): the shell draws it whether or not the row
+    /// has a figure. `None` otherwise, and always for a failed operation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub received: Option<FeedDappChange>,
     /// The row's figure is the simulation's expectation, not an amount the
@@ -544,6 +565,12 @@ pub struct FeedDapp {
     /// The detail's collapsed "Technical details", in order.
     #[serde(default)]
     pub technical: Vec<FeedFact>,
+    /// A failed operation: why — the words its request ended with (spec 097
+    /// N4), drawn beside the failed status in the detail. `None` on every
+    /// other row, and on a failed record that kept no reason (closed before
+    /// 097).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<TrackFailure>,
 }
 
 /// An allowance as Activity states it (spec 093).
@@ -667,8 +694,9 @@ pub struct FeedDappChange {
     pub value: Option<String>,
     pub decimals: Option<u32>,
     /// The wallet can vouch for this figure to the unit: a native outflow
-    /// equal to the value the wallet itself submitted, or a receipt the
-    /// chain recorded (spec 093). Every other line is
+    /// equal to the value the wallet itself submitted, a receipt the chain
+    /// recorded (spec 093), or a line the operation's own receipt logs prove
+    /// (spec 097). Every other line is
     /// what the simulation expected — an inflow may arrive short (slippage)
     /// and an exact-output swap's outflow may differ too, and the wallet
     /// cannot tell which kind of swap it signed — so the shell marks it "≈".
@@ -1416,6 +1444,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         symbol: t.symbol.clone(),
         decimals: Some(t.decimals),
         usd_value: tx_usd_value(t),
+        priced: tx_usd(t).is_some(),
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
@@ -1441,6 +1470,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         symbol: t.symbol.clone(),
         decimals: Some(t.decimals),
         usd_value: tx_usd_value(t),
+        priced: tx_usd(t).is_some(),
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
@@ -1502,11 +1532,25 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// transaction the row settled under, folded into it — exactly one is the
 /// coin the swap brought back, as the chain recorded it, which beats what the
 /// simulation expected.
+///
+/// Spec 097: a confirmed record whose settlement holds what its own receipt
+/// proves ([`TrackSettlement::moved`]) is drawn from that alone
+/// ([`proven_changes`]) — the figure, what came back and the detail's lines,
+/// all exact. The sheet's simulation then only lends a token its name. A
+/// failed record keeps why ([`FeedDapp::failure`]).
 fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
-    let recorded = if t.status == FeedTxStatus::Failed {
-        Vec::new()
-    } else {
-        recorded_changes(t)
+    let failed = t.status == FeedTxStatus::Failed;
+    // Spec 097 N5: a landed operation whose own receipt was read says what
+    // the receipt proves it moved — not what the sheet expected.
+    let proven = t
+        .settlement
+        .as_ref()
+        .and_then(|settlement| settlement.moved.as_deref())
+        .filter(|_| t.status == FeedTxStatus::Confirmed);
+    let recorded = match proven {
+        _ if failed => Vec::new(),
+        Some(moved) => proven_changes(t, moved, receipts.unwrap_or_default()),
+        None => recorded_changes(t),
     };
     let figured = |line: &&RecordedChange| {
         line.known
@@ -1521,14 +1565,36 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
             _ => None,
         }
     };
-    let taken = only(FeedDirection::Out).filter(figured);
-    let received = taken
-        .and(only(FeedDirection::In))
-        .filter(figured)
-        .map(|line| line.change.clone());
-    let received = match receipts {
-        Some([receipt]) if t.status != FeedTxStatus::Failed => Some(receipt_change(receipt)),
-        _ => received,
+    let (taken, received) = if proven.is_some() {
+        // Proven lines: the one coin out the wallet can name is the figure,
+        // the one coin in is what came back — each on its own, so a borrow
+        // (nothing out) still reads "+0.3 USDC". A line it cannot name (a
+        // debt token, an unverified token) stays in the detail.
+        let one = |direction: FeedDirection| {
+            let mut lines = recorded
+                .iter()
+                .filter(|l| l.change.direction == direction)
+                .filter(figured);
+            match (lines.next(), lines.next()) {
+                (Some(line), None) => Some(line),
+                _ => None,
+            }
+        };
+        (
+            one(FeedDirection::Out),
+            one(FeedDirection::In).map(|line| line.change.clone()),
+        )
+    } else {
+        let taken = only(FeedDirection::Out).filter(figured);
+        let received = taken
+            .and(only(FeedDirection::In))
+            .filter(figured)
+            .map(|line| line.change.clone());
+        let received = match receipts {
+            Some([receipt]) if !failed => Some(receipt_change(receipt)),
+            _ => received,
+        };
+        (taken, received)
     };
     let estimated = taken.is_some_and(|line| !line.change.exact);
     let (value, symbol, decimals) = match taken {
@@ -1537,6 +1603,8 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
             out.change.symbol.clone(),
             out.change.decimals,
         ),
+        // The receipt already stated the call's own coin, if it sent any.
+        None if proven.is_some() => (None, String::new(), None),
         None => {
             let value = wei(&t.value)
                 .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
@@ -1550,8 +1618,8 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
             (value, symbol, decimals)
         }
     };
-    let usd_value = value.as_ref().map_or(0.0, |value| {
-        tx_usd_value(&FeedTxRecord {
+    let usd = value.as_ref().and_then(|value| {
+        tx_usd(&FeedTxRecord {
             value: value.clone(),
             symbol: symbol.clone(),
             ..t.clone()
@@ -1597,9 +1665,15 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
         site.as_deref(),
         tx_hash.as_deref(),
         paid.as_deref(),
-        value.is_some(),
+        value.is_some() || received.is_some(),
         !changes.is_empty(),
     );
+    // Why it failed, as the tracker recorded it (spec 097 N4).
+    let failure = t
+        .settlement
+        .as_ref()
+        .and_then(|settlement| settlement.failure)
+        .filter(|_| failed);
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
@@ -1608,7 +1682,8 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
         symbol,
         decimals,
         value,
-        usd_value,
+        usd_value: usd.unwrap_or(0.0),
+        priced: usd.is_some(),
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
@@ -1624,6 +1699,7 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
             estimated,
             changes,
             contract_call,
+            failure,
             ..described
         }),
         subtitle: Vec::new(),
@@ -1646,6 +1722,7 @@ fn signature_item(t: &FeedTxRecord) -> FeedItem {
         symbol: String::new(),
         decimals: None,
         usd_value: 0.0,
+        priced: false,
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
@@ -1740,7 +1817,13 @@ fn describe(
 ) -> FeedDapp {
     let summary = t.summary.clone().unwrap_or_else(|| legacy_summary(t));
     let action = summary.action;
-    let (intent_term, intent) = headline(&summary, t.intent.as_deref());
+    // A signature from before 093 cannot say what it was: it reads by its
+    // kind alone, never by a descriptor's word for it.
+    let recorded = t
+        .intent
+        .as_deref()
+        .filter(|_| t.summary.is_some() || !action.is_signature());
+    let (intent_term, intent) = headline(&summary, recorded);
     // The contract a call went to: the summary's, else the record's `to` on
     // a record from before 093 — only ever an address.
     let contract = summary.contract.clone().or_else(|| {
@@ -1763,7 +1846,7 @@ fn describe(
     });
     let contract_fact = |address: &str| FeedFact::Contract {
         address: address.to_owned(),
-        name: contract_name_of(t.chain_id, address).map(str::to_owned),
+        name: contract_name(t.chain_id, &summary, address),
     };
     match action {
         DappAction::Approve | DappAction::Permit => {
@@ -1864,6 +1947,7 @@ fn describe(
         off_chain: action.is_signature(),
         facts,
         technical,
+        failure: None,
     }
 }
 
@@ -1891,8 +1975,10 @@ fn legacy_summary(t: &FeedTxRecord) -> DappSummary {
 fn headline(summary: &DappSummary, recorded: Option<&str>) -> (Option<ClearTerm>, Option<String>) {
     let recorded = recorded.map(str::trim).filter(|text| !text.is_empty());
     let own = |term: ClearTerm| (Some(term), None);
+    // A descriptor's own words are a title: capitalised, "create order" →
+    // "Create order" (spec 097 N7).
     let recorded_or = |fallback: ClearTerm| match recorded {
-        Some(text) => (ClearTerm::of(text), Some(text.to_owned())),
+        Some(text) => (ClearTerm::of(text), Some(capitalised(text))),
         None => own(fallback),
     };
     match summary.action {
@@ -1903,9 +1989,25 @@ fn headline(summary: &DappSummary, recorded: Option<&str>) -> (Option<ClearTerm>
         DappAction::Permit => own(ClearTerm::PermitIntent),
         DappAction::SignIn => own(ClearTerm::SignInIntent),
         DappAction::Message => own(ClearTerm::MessageIntent),
-        DappAction::TypedData => own(ClearTerm::TypedDataIntent),
+        // Spec 097 N7: structured data reads by what it is. A signed `Order`
+        // (1inch's limit order, CoW's) is a swap somebody fills; anything
+        // else reads by the intent its reading recorded, else as structured
+        // data.
+        DappAction::TypedData if summary.primary_type.as_deref() == Some("Order") => {
+            own(ClearTerm::IntentSwap)
+        }
+        DappAction::TypedData => recorded_or(ClearTerm::TypedDataIntent),
         DappAction::BlindSign => own(ClearTerm::EthSignIntent),
     }
+}
+
+/// `text` with its first letter in upper case — a descriptor's lower-case
+/// verb as a title.
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 /// Where it happened (spec 093): the protocol the wallet knows the contract
@@ -1917,11 +2019,14 @@ fn place_of(
     contract: Option<&str>,
     site: Option<&str>,
 ) -> Option<String> {
-    let spender = summary
-        .spender
-        .as_deref()
-        .and_then(|spender| protocol_of(chain_id, spender));
-    let called = contract.and_then(|contract| protocol_of(chain_id, contract));
+    // An allowance granted to Permit2 is granted to the protocol that owns
+    // that Permit2 (spec 097 N7).
+    let spender = summary.spender.as_deref().and_then(|spender| {
+        protocol_of(chain_id, spender).or_else(|| permit2_owner(chain_id, spender))
+    });
+    let called = contract.and_then(|contract| {
+        protocol_of(chain_id, contract).or_else(|| recorded_owner(chain_id, summary, contract))
+    });
     let known = match summary.action {
         DappAction::Approve | DappAction::Permit => spender,
         DappAction::Batch => called.or(spender),
@@ -1929,6 +2034,34 @@ fn place_of(
         DappAction::SignIn | DappAction::Message | DappAction::BlindSign => None,
     };
     known.or(site).map(str::to_owned)
+}
+
+/// What the sheet's reading said owns `contract` (spec 097 N7, N8): only for
+/// a contract the build does not know at all — a row of the built-in table
+/// says itself whether it is a place ([`protocol_of`]), and a reading must
+/// not turn plumbing (Permit2, a wrapped coin) into one.
+fn recorded_owner<'a>(chain_id: u32, summary: &'a DappSummary, contract: &str) -> Option<&'a str> {
+    let recorded = summary
+        .contract
+        .as_deref()
+        .is_some_and(|recorded| recorded.eq_ignore_ascii_case(contract));
+    (recorded && contract_name_of(chain_id, contract).is_none())
+        .then_some(summary.owner.as_deref())
+        .flatten()
+}
+
+/// A contract's name in the detail: the build's own, else what the sheet's
+/// reading called it when it read this very contract (spec 097 N8).
+fn contract_name(chain_id: u32, summary: &DappSummary, address: &str) -> Option<String> {
+    contract_name_of(chain_id, address)
+        .map(str::to_owned)
+        .or_else(|| {
+            summary
+                .contract
+                .as_deref()
+                .filter(|recorded| recorded.eq_ignore_ascii_case(address))
+                .and(summary.contract_name.clone())
+        })
 }
 
 /// The allowance a summary grants, as Activity states it: unlimited, or a
@@ -2060,18 +2193,7 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
     let Some(judgments) = t.balance_changes.as_ref() else {
         return Vec::new();
     };
-    // The chain's coin: the record names it (every client stores the native
-    // symbol on a dApp row), else the built-in table.
-    let native = Some(t.symbol.trim())
-        .filter(|symbol| !symbol.is_empty())
-        .map(str::to_owned)
-        .or_else(|| {
-            super::network_admin::BUILTIN_CHAINS
-                .iter()
-                .find(|chain| chain.chain_id == t.chain_id)
-                .map(|chain| chain.native_symbol.to_owned())
-        })
-        .unwrap_or_default();
+    let native = native_symbol(t);
     let sent = wei(&t.value);
     judgments
         .iter()
@@ -2135,6 +2257,206 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
             })
         })
         .collect()
+}
+
+/// What a landed operation's own receipt proves it moved, as lines a person
+/// reads (spec 097 N5) — the tracker's [`TrackMove`]s, plus the coin the call
+/// itself sent (`value`, which the wallet submitted and no log states), less
+/// the network fee the wallet added in a token (the summary's `fee_token`,
+/// which is the wallet's, not the dApp's).
+///
+/// Every figure here is proven, so every line is `exact`. The NAME of a
+/// token is not in a log: it is the one the sheet resolved for that contract
+/// when the person approved (the record's judgments, or the tokens its
+/// reading showed), the coin of a "Received" record the scan admitted in the
+/// same transaction with the same amount, the approval's own token, or the
+/// build's table. A token none of
+/// those names is a line with a direction and no figure. The trust rule of
+/// [`recorded_changes`] holds: a coin ARRIVING names a figure only when the
+/// wallet already trusts it — a site can emit any `Transfer` it likes from a
+/// contract it controls, and a receipt proves only that the contract emitted
+/// it.
+fn proven_changes(
+    t: &FeedTxRecord,
+    moved: &[TrackMove],
+    receipts: &[&FeedTxRecord],
+) -> Vec<RecordedChange> {
+    // Net base units per coin (`None` = the chain's own), in order. A figure
+    // past i128 is no figure: that coin's line is dropped, never guessed.
+    let mut lines: Vec<(Option<String>, Option<i128>)> = Vec::new();
+    let mut add = |token: Option<String>, delta: Option<i128>| match lines
+        .iter_mut()
+        .find(|(coin, _)| *coin == token)
+    {
+        Some((_, total)) => *total = total.zip(delta).and_then(|(a, b)| a.checked_add(b)),
+        None => lines.push((token, delta)),
+    };
+    if let Some(sent) = wei(&t.value).filter(|sent| *sent > 0) {
+        add(None, i128::try_from(sent).ok().map(|sent| -sent));
+    }
+    for line in moved {
+        let token = line
+            .token
+            .as_deref()
+            .map(|token| token.trim().to_ascii_lowercase());
+        add(token, line.delta.trim().parse::<i128>().ok());
+    }
+    let summary = t.summary.as_ref();
+    let fee = summary
+        .and_then(|summary| {
+            summary
+                .fee_token
+                .as_deref()
+                .zip(summary.fee_amount.as_deref())
+        })
+        .and_then(|(token, amount)| {
+            Some((token.to_ascii_lowercase(), amount.parse::<i128>().ok()?))
+        });
+    if let Some((token, amount)) = fee {
+        // Only onto a line the receipt holds: the fee leg ran inside the op.
+        if let Some((_, total)) = lines
+            .iter_mut()
+            .find(|(coin, _)| coin.as_deref() == Some(token.as_str()))
+        {
+            *total = total.and_then(|total| total.checked_add(amount));
+        }
+    }
+    let native = native_symbol(t);
+    let mut out: Vec<RecordedChange> = lines
+        .into_iter()
+        .filter_map(|(token, delta)| {
+            let delta = delta?;
+            if delta == 0 {
+                return None;
+            }
+            let leaves = delta < 0;
+            let magnitude = delta.unsigned_abs();
+            let (meta, known) = match &token {
+                None => (Some((native.clone(), 18)), true),
+                Some(token) => match proven_meta(t, token, magnitude, receipts) {
+                    Some((symbol, decimals, known)) => (Some((symbol, decimals)), known),
+                    None => (None, false),
+                },
+            };
+            let verified = meta.is_some() && (known || leaves);
+            let (symbol, decimals) = meta
+                .filter(|_| verified)
+                .filter(|(_, decimals)| *decimals <= MAX_DAPP_DECIMALS)
+                .map_or((String::new(), None), |(symbol, decimals)| {
+                    (symbol, Some(decimals))
+                });
+            let value =
+                decimals.map(|decimals| super::fee_policy::from_base_units(magnitude, decimals));
+            Some(RecordedChange {
+                change: FeedDappChange {
+                    direction: if leaves {
+                        FeedDirection::Out
+                    } else {
+                        FeedDirection::In
+                    },
+                    verified,
+                    symbol,
+                    decimals,
+                    value,
+                    exact: true,
+                },
+                known,
+            })
+        })
+        .collect();
+    // What left before what arrived, as the sheet lists them.
+    out.sort_by_key(|line| line.change.direction == FeedDirection::In);
+    out
+}
+
+/// A token's symbol and decimals for a proven line, and whether the wallet
+/// trusts it (see [`proven_changes`]).
+fn proven_meta(
+    t: &FeedTxRecord,
+    token: &str,
+    magnitude: u128,
+    receipts: &[&FeedTxRecord],
+) -> Option<(String, u32, bool)> {
+    let judged = t
+        .balance_changes
+        .iter()
+        .flatten()
+        .find_map(|judgment| match judgment {
+            TrustSimJudgment::Erc20Trusted {
+                token: judged,
+                symbol,
+                decimals,
+                in_trusted_set,
+                ..
+            } if judged.eq_ignore_ascii_case(token) && !symbol.trim().is_empty() => {
+                Some((symbol.trim().to_owned(), *decimals, *in_trusted_set))
+            }
+            _ => None,
+        });
+    let received = || {
+        receipts.iter().find_map(|receipt| {
+            (receipt.decimals <= MAX_DAPP_DECIMALS
+                && !receipt.symbol.trim().is_empty()
+                && super::fee_policy::from_base_units(magnitude, receipt.decimals)
+                    == receipt.value.trim())
+            .then(|| (receipt.symbol.trim().to_owned(), receipt.decimals, true))
+        })
+    };
+    // The sheet's reading named it: a name, never a trust.
+    let read = || {
+        t.summary.as_ref().and_then(|summary| {
+            summary
+                .tokens
+                .iter()
+                .find(|read| read.address.eq_ignore_ascii_case(token))
+                .map(|read| (read.symbol.clone(), read.decimals, false))
+        })
+    };
+    let granted = || {
+        t.summary.as_ref().and_then(|summary| {
+            let ours = summary
+                .token
+                .as_deref()
+                .is_some_and(|granted| granted.eq_ignore_ascii_case(token));
+            let symbol = summary
+                .symbol
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            ours.then_some(symbol.zip(summary.decimals))
+                .flatten()
+                .map(|(symbol, decimals)| (symbol.to_owned(), decimals, false))
+        })
+    };
+    // The wallet's own registry, on the record's chain (097 D).
+    let built_in = || {
+        super::token_registry::registry_token(t.chain_id, token)
+            .map(|known| (known.symbol.to_owned(), known.decimals, true))
+    };
+    // A coin the wallet trusts by another account is trusted here too.
+    let trusted = received().or_else(built_in);
+    match (judged, trusted) {
+        (Some((symbol, decimals, known)), trusted) => {
+            Some((symbol, decimals, known || trusted.is_some()))
+        }
+        (None, Some(trusted)) => Some(trusted),
+        (None, None) => read().or_else(granted),
+    }
+}
+
+/// The chain's coin, as a dApp row names it: the record's symbol (every
+/// client stores the native one on a dApp row), else the built-in table.
+fn native_symbol(t: &FeedTxRecord) -> String {
+    Some(t.symbol.trim())
+        .filter(|symbol| !symbol.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            super::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == t.chain_id)
+                .map(|chain| chain.native_symbol.to_owned())
+        })
+        .unwrap_or_default()
 }
 
 /// A signed base-unit delta: whether it leaves the account, and its size
@@ -2249,6 +2571,8 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         symbol: batch.symbol.clone().unwrap_or_default(),
         decimals: if split { Some(first.decimals) } else { None },
         usd_value: batch.total_usd,
+        // A total is known only when every line's price is.
+        priced: group.iter().all(|line| tx_usd(line).is_some()),
         chain_id: batch.chain_id,
         timestamp: batch.timestamp,
         day_start_ms: first.day_start_ms,
@@ -2322,11 +2646,23 @@ fn build_batch(group: &[&FeedTxRecord]) -> Option<FeedBatch> {
 /// missing/zero but the token is a known stablecoin, falls back to the token
 /// amount (≈ $1 each) — a received USDT never shows $0.00 (invariant ⑧).
 pub fn tx_usd_value(t: &FeedTxRecord) -> f64 {
-    usd_value_of(t.usd.as_deref(), &t.symbol, &t.value)
+    tx_usd(t).unwrap_or(0.0)
 }
 
-/// [`tx_usd_value`] over its three inputs, so a dApp row (whose stored
-/// `value` is wei) is valued on its human amount.
+/// [`tx_usd_value`], or `None` when no price is known (spec 097 N7: unknown
+/// is not zero) — what [`FeedItem::priced`] reads.
+fn tx_usd(t: &FeedTxRecord) -> Option<f64> {
+    usd_of(t.usd.as_deref(), &t.symbol, &t.value)
+}
+
+/// [`tx_usd`] over its three inputs, so a dApp row (whose stored `value` is
+/// wei) is valued on its human amount.
+fn usd_of(usd: Option<&str>, symbol: &str, value: &str) -> Option<f64> {
+    let figure = usd_value_of(usd, symbol, value);
+    (figure > 0.0).then_some(figure)
+}
+
+/// The `txUsdValue` port proper: 0 when unknown.
 fn usd_value_of(usd: Option<&str>, symbol: &str, value: &str) -> f64 {
     // `tx.usd ? parseFloat(tx.usd.replace(/[^0-9.]/g, '')) : 0` — an absent
     // OR empty string is falsy.

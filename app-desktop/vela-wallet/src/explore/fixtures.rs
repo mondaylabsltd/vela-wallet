@@ -418,23 +418,32 @@ pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
 }
 
 /// The browsing toolbar's ⋯ (M3): what you can do to the page you are on.
-pub fn site_menu(strings: &ExploreStrings) -> MenuModel {
+pub fn site_menu(strings: &ExploreStrings, connected: bool) -> MenuModel {
     // The web's `siteMenuItems`, in its order (078 E-03).
     let item = |icon, label: &SharedString| MenuItemModel {
         icon,
         label: label.clone(),
         destructive: false,
     };
+    let mut items = vec![
+        item(Icon::RefreshCw, &strings.refresh),
+        item(Icon::Share2, &strings.share),
+        item(Icon::Copy, &strings.copy_link),
+        item(Icon::Star, &strings.add_to_favorites),
+        item(Icon::ExternalLink, &strings.open_in_system_browser),
+        item(Icon::Power, &strings.disconnect),
+        item(Icon::X, &strings.close_page),
+    ];
+    // Disconnect only for a site the core holds a grant for (spec 097 E), as
+    // the phones' menus do.
+    if !connected {
+        items.remove(SITE_MENU_DISCONNECT);
+    }
     MenuModel {
-        items: vec![
-            item(Icon::RefreshCw, &strings.refresh),
-            item(Icon::Share2, &strings.share),
-            item(Icon::Copy, &strings.copy_link),
-            item(Icon::Star, &strings.add_to_favorites),
-            item(Icon::ExternalLink, &strings.open_in_system_browser),
-            item(Icon::Power, &strings.disconnect),
-            item(Icon::X, &strings.close_page),
-        ],
+        items,
         divider_after: Some(4),
     }
 }
+
+/// Where Disconnect sits in [`site_menu`] — the page arms its action there.
+pub const SITE_MENU_DISCONNECT: usize = 5;

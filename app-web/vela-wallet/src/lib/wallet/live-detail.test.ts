@@ -60,6 +60,7 @@ function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
 		symbol: 'ETH',
 		decimals: 18,
 		usd_value: 2500,
+		priced: true,
 		chain_id: 1,
 		timestamp: 1_700_000_000,
 		day_start_ms: 0,
@@ -279,6 +280,80 @@ describe('liveTxDetail', () => {
 			fact: { value: fm['componentsTx.detail.opContractInteraction'] }
 		});
 		expect(technical.rows[2]).toMatchObject({ fact: { copyValue: '0x' + 'e1'.repeat(32) } });
+	});
+
+	// Spec 097 N7: unknown is not zero.
+	it('an amount with no known price has no fiat figure — never "≈ $0.00"', () => {
+		const sent = liveTxDetail(item('p', { direction: 'out', usd_value: 0, priced: false }), ctx);
+		expect(sent.amount).toBe('−1.25 ETH');
+		expect(sent.fiat).toBe('');
+		const order = item('o', {
+			direction: 'out',
+			kind: 'dapp_tx',
+			value: '0.003',
+			symbol: 'BNB',
+			usd_value: 0,
+			priced: false,
+			dapp: feedDapp({ intent: 'Create order', place: '1inch' })
+		});
+		const detail = liveTxDetail(order, ctx);
+		expect(detail.title).toBe('Create order on 1inch');
+		expect(detail.amount).toBe('−0.003 BNB');
+		expect(detail.fiat).toBe('');
+		expect(liveTxDetail(item('q'), ctx).fiat).toBe('≈ $2,500.00');
+	});
+
+	// Spec 097 N5: a borrow moved nothing out; what it brought in is its figure.
+	it('a row with nothing out leads with what came back', () => {
+		const borrow = item('b', {
+			direction: 'out',
+			kind: 'dapp_tx',
+			value: null,
+			symbol: '',
+			decimals: null,
+			usd_value: 0,
+			priced: false,
+			dapp: feedDapp({
+				intent: 'Borrow',
+				intent_term: 'intentBorrow',
+				place: 'Aave',
+				received: {
+					direction: 'in',
+					verified: true,
+					symbol: 'USDC',
+					value: '0.3',
+					decimals: 18,
+					exact: true
+				}
+			})
+		});
+		const detail = liveTxDetail(borrow, ctx);
+		expect(detail.amount).toBe('+0.3 USDC');
+		expect(detail.positive).toBe(true);
+		expect(detail.received).toBeUndefined();
+		expect(detail.fiat).toBe('');
+	});
+
+	// Spec 097 N4: a failed operation says why, under its chip.
+	it('a failed dApp row says why it failed', () => {
+		const failed = (failure: 'reverted' | 'refused' | 'not_sent') =>
+			liveTxDetail(
+				item('f', {
+					direction: 'out',
+					kind: 'dapp_tx',
+					status: 'failed',
+					value: null,
+					tx_hash: null,
+					dapp: feedDapp({ intent: 'Withdraw', intent_term: 'intentWithdraw', failure })
+				}),
+				ctx
+			);
+		const refused = failed('refused');
+		expect(refused.status?.text).toBe(fm['componentsTx.detail.statusFailed']);
+		expect(refused.note).toBe(fm['componentsUi.signing.refused']);
+		expect(refused.note).toBe('The network refused it — nothing was sent.');
+		expect(failed('reverted').note).toBe(fm['componentsTx.receipt.failedHint']);
+		expect(failed('not_sent').note).toBe(fm['send.txErrorGeneric']);
 	});
 
 	it('the stored request is read by record id when asked — and only then', () => {

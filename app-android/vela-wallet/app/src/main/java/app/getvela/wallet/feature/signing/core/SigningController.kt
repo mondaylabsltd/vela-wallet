@@ -711,6 +711,8 @@ class SigningController(
             // Spec 093: the approval surface's token as it resolved — what lets
             // the record say "100 USDC"; the core reads it only once verified.
             token_meta = guard.meta,
+            // Spec 097: what the reading named, copied — never decided here.
+            reading = clear.record_reading,
         )
 
         /**

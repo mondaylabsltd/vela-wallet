@@ -176,6 +176,110 @@ describe('a batch id and a late receipt (083)', () => {
 		});
 	});
 
+	// Spec 097 E: the core answers a batch with its id at `op_submitted` —
+	// INSIDE the submit, before it resolves. The answer still carries the
+	// batch's chain, so the extension knows the id for `wallet_getCallsStatus`
+	// (it answered "Unknown bundle id" for an id it never recorded), and the
+	// chain is used up by that one answer.
+	it('a batch answered at op_submitted carries its chain, once', async () => {
+		const sent: { result: unknown; opHash: unknown }[] = [];
+		const transport: SignResponder = {
+			sendResponse: (_id, result, _error, opHash) => sent.push({ result, opHash })
+		};
+		const executor = createSignExecutor(
+			makePorts({
+				transportFor: () => transport,
+				// The core's answer, as `op_submitted` produces it.
+				opSubmitted: (id, hash) =>
+					void executor.execute({
+						id: 9,
+						operation: {
+							type: 'send_response',
+							transport_id: 't1',
+							id,
+							payload: { type: 'ok', result: hash }
+						}
+					})
+			})
+		);
+		submit.impl = (...args: unknown[]) => {
+			const onSubmitted = args[5] as (hash: string, maybeSent: boolean, block: number) => void;
+			onSubmitted('0xBATCH', false, 7);
+			return Promise.resolve('0xBATCH');
+		};
+		const batch: SignEffect = {
+			...signAndSubmit,
+			operation: {
+				...(signAndSubmit.operation as Extract<
+					SignEffect['operation'],
+					{ type: 'sign_and_submit' }
+				>),
+				method: 'wallet_sendCalls',
+				params_json: '[{"calls":[{"to":"0x0000000000000000000000000000000000000001"}]}]'
+			}
+		};
+		await executor.execute(batch);
+		await executor.execute({
+			id: 10,
+			operation: {
+				type: 'send_response',
+				transport_id: 't1',
+				id: 'req-2',
+				payload: { type: 'ok', result: '0xBATCH' }
+			}
+		});
+		expect(sent).toEqual([
+			{ result: '0xBATCH', opHash: { chainId: 100 } },
+			{ result: '0xBATCH', opHash: undefined }
+		]);
+	});
+
+	// A batch that may only have been sent is not answered at `op_submitted`:
+	// its id goes when the submit returns, still carrying its chain, once.
+	it('a maybe-sent batch carries its chain when the submit returns, once', async () => {
+		const sent: { result: unknown; opHash: unknown }[] = [];
+		const transport: SignResponder = {
+			sendResponse: (_id, result, _error, opHash) => sent.push({ result, opHash })
+		};
+		const executor = createSignExecutor(makePorts({ transportFor: () => transport }));
+		submit.impl = (...args: unknown[]) => {
+			const onSubmitted = args[5] as (hash: string, maybeSent: boolean, block: number) => void;
+			onSubmitted('0xLOCAL', true, 7);
+			return Promise.resolve('0xLOCAL');
+		};
+		const batch: SignEffect = {
+			...signAndSubmit,
+			operation: {
+				...(signAndSubmit.operation as Extract<
+					SignEffect['operation'],
+					{ type: 'sign_and_submit' }
+				>),
+				method: 'wallet_sendCalls',
+				params_json: '[{"calls":[{"to":"0x0000000000000000000000000000000000000001"}]}]'
+			}
+		};
+		const result = await executor.execute(batch);
+		expect(result).toMatchObject({
+			type: 'submit',
+			outcome: { type: 'receipt_pending', user_op_hash: '0xLOCAL' }
+		});
+		for (const id of [11, 12]) {
+			await executor.execute({
+				id,
+				operation: {
+					type: 'send_response',
+					transport_id: 't1',
+					id: 'req-1',
+					payload: { type: 'ok', result: '0xLOCAL' }
+				}
+			});
+		}
+		expect(sent).toEqual([
+			{ result: '0xLOCAL', opHash: { chainId: 100 } },
+			{ result: '0xLOCAL', opHash: undefined }
+		]);
+	});
+
 	// 083, owner ruling 2026-10-01: an included op that REVERTED is reported
 	// as such — the core answers the page the revert, never the tx hash a
 	// site would read as done.

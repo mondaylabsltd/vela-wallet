@@ -9,9 +9,10 @@
 //  which hand-offs reach the tracker and when, what reaches the core as
 //  `op_tracked`, and how many answers the page gets.
 //
-//  - The page's answer follows the tracker's verdict at once (its tx hash, or
-//    the "refused" error), exactly once, and the receipt wait still running
-//    neither answers again nor keeps asking the relay.
+//  - The page's answer follows the tracker's verdict at once (its tx hash),
+//    exactly once, and the receipt wait still running neither answers again
+//    nor keeps asking the relay. A "refused" verdict stays on the sheet and
+//    is answered on its close (spec 097 N4).
 //  - A "not sent" the tracker reached while the POST was still out never
 //    answers an op the relay then accepted.
 //  - A page that left after the write-ahead gets nothing POSTed: the record
@@ -21,6 +22,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 import VelaCore
 @testable import VelaWallet
@@ -33,6 +35,16 @@ struct SigningFollowsTrackerTests {
     private let feeRecipient = "0x7777777777777777777777777777777777777777"
     private let payee = "0x76875e38fc6bc2dedcaed807ce00782db5c0d141"
     private let tx = "0x" + String(repeating: "ab", count: 32)
+
+    private static let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    /// What the sheet's receipt is drawn against — the page's chain, the account.
+    private static func receiptContext() -> SigningLive.Context {
+        SigningLive.Context(
+            loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "XDAI",
+            walletName: "Me", walletAddress: "0x88cca0eedbf2c4426110bbfc998f048689266894"
+        )
+    }
 
     /// What one run saw.
     @MainActor
@@ -173,21 +185,62 @@ struct SigningFollowsTrackerTests {
 
     /// The relay refused the op after taking it (DX-W3): the page gets the
     /// core's -32603 "refused" once, and the sheet says refused.
+    ///
+    /// Spec 097 N4: after "Submitted" the refusal stays on the sheet — the
+    /// receipt says Failed and "refused", Done and no Try again — and the
+    /// page hears it when the person closes the sheet, not under the words.
     @Test func aRejectedVerdictAnswersRefusedOnce() async throws {
         let run = try await approved(post: { store, _ in Self.accept(store) })
         await Wait.until { run.seen.tracked.contains { $0.admitted } }
         let hash = try #require(run.controller.submittedUserOp)
+        await Wait.until { run.controller.sign.pendingOpHash != nil }
 
         run.controller.trackerChanged(view(hash, status: "rejected", txHash: nil))
+        await Wait.until { run.controller.sign.failureRefused }
+        let sign = run.controller.sign
+        #expect(sign.isVisible, "the sheet stays")
+        #expect(!sign.failureRetryable, "the rid went out: no Try again")
+        #expect(sign.pendingOpHash == nil, "no longer submitted")
+        let receipt = try #require(SigningLive.receipt(
+            sign: sign, blocks: [], context: Self.receiptContext()
+        ))
+        #expect(receipt.stage == .failed)
+        #expect(receipt.captions.contains(Self.loc.t("componentsUi.signing.refused")))
+        #expect(receipt.retry == nil)
+        #expect(receipt.cta == Self.loc.t("componentsTx.receipt.done"))
+        try await Task.sleep(nanoseconds: 500_000_000)
+        #expect(run.seen.answers.isEmpty, "held while it shows: \(run.seen.answers)")
+        #expect(!run.controller.hasAnswered)
+
+        run.controller.swipeDismissed()
         await Wait.until { !run.seen.answers.isEmpty }
         let answer = try #require(run.seen.answers.first)
         #expect(answer["type"] as? String == "err")
         #expect((answer["code"] as? NSNumber)?.intValue == -32603)
         #expect(answer["message"] as? String == userOpRefusedDappDetail())
-        await Wait.until { run.controller.sign.failureRefused }
+        #expect(run.controller.hasAnswered)
 
         try await Task.sleep(nanoseconds: 500_000_000)
         #expect(run.seen.answers.count == 1, "exactly one answer: \(run.seen.answers)")
+    }
+
+    /// Spec 097 N4: the page went while the refusal showed. The browser
+    /// answered it (4900); the core drops the held answer — and the
+    /// controller is no longer "committed", so it is not kept, unanswerable,
+    /// among the retired ones.
+    @Test func aPageGoneUnderTheRefusalLeavesNothingCommitted() async throws {
+        let run = try await approved(post: { store, _ in Self.accept(store) })
+        await Wait.until { run.seen.tracked.contains { $0.admitted } }
+        let hash = try #require(run.controller.submittedUserOp)
+        await Wait.until { run.controller.sign.pendingOpHash != nil }
+        #expect(run.controller.committed, "on its way")
+        run.controller.trackerChanged(view(hash, status: "rejected", txHash: nil))
+        await Wait.until { run.controller.sign.failureRefused }
+        #expect(!run.controller.committed, "a held failure ends the pipeline")
+        run.controller.transportDropped()
+        await Wait.until { !run.controller.sign.isVisible }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(run.seen.answers.isEmpty, "the page is gone; nothing more is said")
     }
 
     /// The tracker reached "not sent" while the POST was still out (the op

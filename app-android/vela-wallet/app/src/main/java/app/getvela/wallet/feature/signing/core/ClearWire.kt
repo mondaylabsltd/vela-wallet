@@ -358,6 +358,8 @@ data class ClearSigningView(
      * not say it — on `ClearSign` and `BlindTransaction` only.
      */
     val native_value: ClearNativeValue? = null,
+    /** Spec 097: what the reading named — the contract and the coins; copied to `SignApproveOpts.reading`. */
+    val record_reading: app.getvela.wallet.feature.wallet.core.DappReading? = null,
 )
 
 @Serializable

@@ -19,6 +19,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
+import type { SendPayee } from '$lib/core/generated/SendPayee';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
@@ -509,22 +510,87 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 
 /**
  * The picker's "To" line (issue 332): the recipient the core already holds,
- * worded as the confirm page words it — the name the core resolved, else the
- * short address — so the person sees whom they are paying while they choose
- * what. Nothing held, nothing drawn. Artwork only for a real address.
+ * worded as the confirm page words it (spec 097 F) — so the person sees whom
+ * they are paying while they choose what. Nothing held, nothing drawn.
+ * Artwork only for a real address.
  */
 function pickRecipient(inputs: SendLiveInputs): FactRowModel | undefined {
 	const { send, m, identicon } = inputs;
 	const address = send.recipient.trim();
 	if (address === '') return undefined;
-	const name = send.recipient_identity?.name ?? null;
+	return payeeFact(m['send.toLabel'], singlePayee(send) ?? unnamed(address), m, identicon);
+}
+
+/**
+ * The one payee of a single send or a sweep, as the core named them (spec
+ * 097 F) — never a split's first row.
+ */
+function singlePayee(send: SendView): SendPayee | undefined {
+	return send.split_mode ? undefined : send.payees[0];
+}
+
+function unnamed(address: string): SendPayee {
+	return { address, name: null, name_source: null };
+}
+
+/**
+ * Whose word a payee's name is (spec 097 F): "Vela User" for the public
+ * registry, where anyone can register any name; the service ("ENS") for a
+ * name service; nothing for the person's own names. The core decided which
+ * is which.
+ */
+function payeeTag(payee: SendPayee | undefined, m: WalletFlowMessages): string | undefined {
+	const source = payee?.name == null ? null : payee.name_source;
+	if (source?.type === 'registry') return m['send.velaUser'];
+	if (source?.type === 'service') return source.label;
+	return undefined;
+}
+
+/** "Wallet · Vela User", "bob.eth · ENS", "Savings" — a sentence's worth. */
+function payeeName(payee: SendPayee | undefined, m: WalletFlowMessages): string | undefined {
+	if (payee?.name == null) return undefined;
+	const tag = payeeTag(payee, m);
+	return tag === undefined ? payee.name : `${payee.name} · ${tag}`;
+}
+
+/**
+ * A named payee's two lines on the page that signs (spec 097 F, S2): the name
+ * alone, which a long one may cut, and under it the line nothing cuts — whose
+ * word the name is, and the short address it stands for ("Vela User ·
+ * 0x14fB…eA5c"). A long registered name can push neither out of sight.
+ * `undefined` when nobody named them: the address is then the whole row.
+ */
+function payeeLines(
+	payee: SendPayee | undefined,
+	address: string,
+	m: WalletFlowMessages
+): { name: string; detail: string } | undefined {
+	if (payee?.name == null) return undefined;
+	const tag = payeeTag(payee, m);
+	const short = shortenAddress(address);
+	return { name: payee.name, detail: tag === undefined ? short : `${tag} · ${short}` };
+}
+
+/**
+ * The To row (spec 097 F, S2): a name never stands in for the address on the
+ * page that signs — the name over its tag and short address, or the address
+ * alone. The identicon opens the full one.
+ */
+function payeeFact(
+	label: string,
+	payee: SendPayee,
+	m: WalletFlowMessages,
+	identicon: (seed: string) => string
+): FactRowModel {
+	const lines = payeeLines(payee, payee.address, m);
 	return {
-		label: m['send.toLabel'],
-		value: name ?? shortenAddress(address),
-		lead: isHexAddress(address)
-			? { kind: 'identicon', svg: identicon(address), address }
+		label,
+		value: lines?.name ?? shortenAddress(payee.address),
+		lead: isHexAddress(payee.address)
+			? { kind: 'identicon', svg: identicon(payee.address), address: payee.address }
 			: undefined,
-		mono: name === null
+		mono: lines === undefined,
+		detail: lines?.detail
 	};
 }
 
@@ -989,10 +1055,10 @@ function duplicateNote(send: SendView, id: string, m: WalletFlowMessages): strin
 }
 
 function recipientNote(send: SendView, m: WalletFlowMessages): string | undefined {
-	const identity = send.recipient_identity;
-	if (identity?.name) {
-		return identity.source ? `${identity.name} · ${identity.source}` : identity.name;
-	}
+	// Who the core says it is, and whose word that is — never the resolver's
+	// own label ("passkey") printed raw.
+	const name = payeeName(singlePayee(send), m);
+	if (name !== undefined) return name;
 	// The core's own verdict, in the corpus's words. A contract recipient has
 	// no send-screen sentence written for it yet (recorded); the first-time
 	// tell does, and it is the one that matters for a poisoned look-alike.
@@ -1043,12 +1109,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			value: identity.name,
 			lead: { kind: 'identicon', svg: identicon(identity.address), address: identity.address }
 		},
-		{
-			label: m['send.toLabel'],
-			value: send.recipient_identity?.name ?? shortenAddress(send.recipient),
-			lead: { kind: 'identicon', svg: identicon(send.recipient), address: send.recipient },
-			mono: send.recipient_identity?.name == null
-		},
+		payeeFact(m['send.toLabel'], singlePayee(send) ?? unnamed(send.recipient), m, identicon),
 		{
 			label: m['componentsTx.detail.labelChain'],
 			value: chainName(chainId),
@@ -1125,19 +1186,23 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	// full — not "3 recipients" and a total.
 	if (send.split_mode && send.recipients.length > 0) {
 		const symbol = token?.symbol ?? '';
-		const breakdown = send.recipients.map((draft) => ({
-			identiconSvg: draft.address ? identicon(draft.address) : undefined,
-			address: draft.address || undefined,
-			label: draft.name ?? shortenAddress(draft.address),
-			// A name never stands in for the address on the page that signs.
-			detail: draft.name ? shortenAddress(draft.address) : undefined,
-			mono: !draft.name,
-			value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
-			// The form's repeat warning, said again on the page that signs
-			// (issue 203): two lines paying one payee are hardest to spot
-			// exactly where the avatars are identical and the sum looks right.
-			note: duplicateNote(send, draft.id, m)
-		}));
+		const breakdown = send.recipients.map((draft, index) => {
+			// The core's name for row `index` (spec 097 F) — never instead of
+			// the address it pays.
+			const lines = payeeLines(send.payees[index], draft.address, m);
+			return {
+				identiconSvg: draft.address ? identicon(draft.address) : undefined,
+				address: draft.address || undefined,
+				label: lines?.name ?? shortenAddress(draft.address),
+				detail: lines?.detail,
+				mono: lines === undefined,
+				value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
+				// The form's repeat warning, said again on the page that signs
+				// (issue 203): two lines paying one payee are hardest to spot
+				// exactly where the avatars are identical and the sum looks right.
+				note: duplicateNote(send, draft.id, m)
+			};
+		});
 		const countLine = fill(
 			send.recipients.length === 1 ? m['send.recipientCount_one'] : m['send.recipientCount_other'],
 			{ count: send.recipients.length }
@@ -1188,12 +1253,19 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	const { send, m, identicon } = inputs;
 	const token = send.selected_token;
 	const chainId = token?.chain_id ?? 1;
-	const parts = receiptParts(send, m, token?.symbol ?? '', identicon);
+	const { peopleLine, ...parts } = receiptParts(send, m, token?.symbol ?? '', identicon);
+	// A sweep is several coins: "Send ETH" named only the first (spec 097 F).
 	const header = {
 		...model.header,
-		title: token ? fill(m['send.sendTitle'], { symbol: token.symbol }) : model.header.title
+		title: send.multi_select_mode
+			? m['send.multiSendTitle']
+			: token
+				? fill(m['send.sendTitle'], { symbol: token.symbol })
+				: model.header.title
 	};
 	const to = send.recipient_identity?.name ?? shortenAddress(send.recipient);
+	// Every coin the operation sent, as the core summed them (spec 097 F, S3).
+	const coins = send.receipt?.coins ?? [];
 	const status = send.receipt?.status;
 
 	/*
@@ -1259,14 +1331,23 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			header,
 			...parts,
 			stage: 'confirmed',
-			title: fill(m['send.txConfirmedTitle'], {
-				amount: tokenAmountText(send.receipt?.amount ?? send.confirm_amount),
-				symbol: token?.symbol ?? ''
-			}),
+			// One coin heads with its figure (a split's is its total); several
+			// have no one figure, and are listed below instead — "Sent 0.000418
+			// ETH" over a sweep that also moved USDC said less than happened.
+			title:
+				coins.length > 1
+					? m['componentsTx.detail.sent']
+					: fill(m['send.txConfirmedTitle'], {
+							amount: tokenAmountText(
+								coins[0]?.amount ?? send.receipt?.amount ?? send.confirm_amount
+							),
+							symbol: coins[0]?.symbol ?? token?.symbol ?? ''
+						}),
 			// A split names its count here and its people below; "To " with
-			// nobody after it was what the single-recipient line read as.
+			// nobody after it was what the single-recipient line read as. A
+			// sweep's one recipient stays named: its parts are its coins.
 			captions: [
-				`${parts.breakdownTitle ?? fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`
+				`${peopleLine ?? fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`
 			],
 			hash: send.tx_hash
 				? {
@@ -1346,15 +1427,28 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 /**
  * Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
  * receipt's own transfers once the core froze them, from the drafts before
- * that. Nothing for a single send or a sweep (the sweep's parts are assets,
- * and its one recipient is already the caption).
+ * that; `peopleLine` counts them for the caption. Spec 097 F (S3): a sweep's
+ * parts are its coins, every one the core says the operation sent — its one
+ * recipient stays the caption. Nothing for a single send.
  */
 function receiptParts(
 	send: SendView,
 	m: WalletFlowMessages,
 	symbol: string,
 	identicon: (seed: string) => string
-): { breakdownTitle?: string; breakdown?: BreakdownRowModel[] } {
+): { breakdownTitle?: string; breakdown?: BreakdownRowModel[]; peopleLine?: string } {
+	const coins = send.receipt?.coins ?? [];
+	if (coins.length > 1) {
+		const chainId = send.selected_token?.chain_id ?? 1;
+		return {
+			breakdownTitle: fill(m['componentsTx.receipt.assetsCount'], { n: coins.length }),
+			breakdown: coins.map((coin) => ({
+				lead: tokenMarkFor(chainId, coin.symbol, coin.token_address, coin.logo_urls),
+				label: coin.symbol,
+				value: `${tokenAmountText(coin.amount)} ${coin.symbol}`.trim()
+			}))
+		};
+	}
 	const frozen = send.receipt?.kind === 'split' ? send.receipt.transfers : [];
 	const rows: BreakdownRowModel[] =
 		frozen.length > 0
@@ -1373,10 +1467,8 @@ function receiptParts(
 					}))
 				: [];
 	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };
-	return {
-		breakdownTitle: fill(m['send.recipientCount_other'], { count: rows.length }),
-		breakdown: rows
-	};
+	const peopleLine = fill(m['send.recipientCount_other'], { count: rows.length });
+	return { breakdownTitle: peopleLine, breakdown: rows, peopleLine };
 }
 
 /**

@@ -322,6 +322,7 @@ mod tests {
             calldata: None,
             call_data: None,
             summary: None,
+            settlement: None,
         }
     }
 

@@ -1,0 +1,8 @@
+{
+ "method": "eth_signTypedData_v4",
+ "origin": "https://1inch.com",
+ "params": [
+  "0x88cca0eedbf2c4426110bbfc998f048689266894",
+  "{\"types\":{\"Order\":[{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"maker\",\"type\":\"address\"},{\"name\":\"receiver\",\"type\":\"address\"},{\"name\":\"makerAsset\",\"type\":\"address\"},{\"name\":\"takerAsset\",\"type\":\"address\"},{\"name\":\"makingAmount\",\"type\":\"uint256\"},{\"name\":\"takingAmount\",\"type\":\"uint256\"},{\"name\":\"makerTraits\",\"type\":\"uint256\"}],\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}]},\"domain\":{\"name\":\"1inch Aggregation Router\",\"version\":\"6\",\"chainId\":56,\"verifyingContract\":\"0x111111125421ca6dc452d289314280a0f8842a65\"},\"primaryType\":\"Order\",\"message\":{\"salt\":\"33701748006248133072184610391074722838607073826819837756152271511067157162131\",\"maker\":\"0x88cca0eedbf2c4426110bbfc998f048689266894\",\"receiver\":\"0x0000000000000000000000000000000000000000\",\"makerAsset\":\"0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d\",\"takerAsset\":\"0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c\",\"makingAmount\":\"1160000000000000000\",\"takingAmount\":\"1430509396956033\",\"makerTraits\":\"62645329528782394789705396186445553993653435352530577117757868129563663400960\"}}"
+ ]
+}

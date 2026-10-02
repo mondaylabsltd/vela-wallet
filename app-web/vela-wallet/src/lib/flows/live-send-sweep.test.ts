@@ -122,6 +122,7 @@ const BASE: SendView = {
 	receipt: null,
 	treasury_bootstrap: null,
 	recipient_identity: null,
+	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
 	sim_json: null

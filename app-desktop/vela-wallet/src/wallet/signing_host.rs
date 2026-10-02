@@ -1727,6 +1727,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // The approval surface's token as it resolved (spec 093), so the
         // record can say "100 USDC": the core reads it only once it resolved.
         token_meta: Some(guard.meta.clone()),
+        // What the reading named — the contract and the coins (spec 097) —
+        // so Activity names them as this sheet did. Copied, never decided.
+        reading: clear.record_reading.clone(),
     }
 }
 
@@ -1760,6 +1763,52 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
     }
 }
 
+/// How the core writes numbers, dates and times on the sheet: the person's
+/// presets from Settings → Localization (the machine's where they chose
+/// none), and this machine's UTC offset now — the web's
+/// `toClearLocale(resolvedFormatKeys())`, iOS's `defaultLocale` and Android's
+/// `ClearLocale.fromFormats`. The core owns no clock and no zone database.
+#[must_use]
+pub fn clear_locale() -> vela_core::app::clear_signing::ClearLocale {
+    clear_locale_of(
+        crate::executor::format_prefs::current(),
+        crate::executor::local_utc_offset_minutes(),
+    )
+}
+
+/// [`clear_locale`] for given presets and offset — the mapping alone.
+#[must_use]
+pub fn clear_locale_of(
+    formats: crate::executor::format_prefs::Formats,
+    tz_offset_minutes: i32,
+) -> vela_core::app::clear_signing::ClearLocale {
+    use vela_core::app::clear_signing::{
+        ClearDateFormat, ClearLocale, ClearNumberFormat, ClearTimeFormat,
+    };
+    use vela_core::l10n::datetime::{DatePreset, TimePreset};
+    use vela_core::l10n::number::NumberPreset;
+    ClearLocale {
+        number_format: match formats.number {
+            NumberPreset::CommaDot => ClearNumberFormat::CommaDot,
+            NumberPreset::DotComma => ClearNumberFormat::DotComma,
+            NumberPreset::SpaceComma => ClearNumberFormat::SpaceComma,
+            NumberPreset::Indian => ClearNumberFormat::Indian,
+        },
+        date_format: match formats.date {
+            DatePreset::YmdSlash => ClearDateFormat::YmdSlash,
+            DatePreset::MdySlash => ClearDateFormat::MdySlash,
+            DatePreset::DmySlash => ClearDateFormat::DmySlash,
+            DatePreset::DmyDot => ClearDateFormat::DmyDot,
+            DatePreset::Iso => ClearDateFormat::Iso,
+        },
+        time_format: match formats.time {
+            TimePreset::H24 => ClearTimeFormat::H24,
+            TimePreset::H12 => ClearTimeFormat::H12,
+        },
+        tz_offset_minutes,
+    }
+}
+
 /// Which rung of the clear-signing ladder a request climbs. A batch is read
 /// call by call by the core and drawn as the per-call panorama (CS26, 089 S1).
 ///
@@ -1776,6 +1825,10 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
 ///
 /// A function rather than an inline match so the mapping can be tested without
 /// a window, a transport or a dApp.
+///
+/// Spec 097 E: the locale is the person's ([`clear_locale`]) — this passed
+/// the default, so a deadline at 01:56 here read "10/02/2026, 17:56": UTC,
+/// month first, and no zone.
 #[must_use]
 pub fn clear_kickoff(
     method: &str,
@@ -1783,14 +1836,15 @@ pub fn clear_kickoff(
     chain_id: u32,
     origin: Option<String>,
 ) -> Option<ClearEvent> {
-    use vela_core::app::clear_signing::{ClearLocale, ClearSignMethod};
+    use vela_core::app::clear_signing::ClearSignMethod;
+    let locale = clear_locale();
     match method {
         // 089 S1: a batch goes over whole — the core reads EVERY call, so the
         // sheet can never describe call 1 while signing them all.
         "wallet_sendCalls" => Some(ClearEvent::ResolveBatch {
             params_json: params_json.to_owned(),
             chain_id,
-            locale: ClearLocale::default(),
+            locale,
         }),
         "eth_sendTransaction" => {
             let call = first_call(method, params_json);
@@ -1799,7 +1853,7 @@ pub fn clear_kickoff(
                 data: call.as_ref().and_then(|c| c.1.clone()),
                 value: call.and_then(|c| c.2),
                 chain_id,
-                locale: ClearLocale::default(),
+                locale,
             })
         }
         "eth_signTypedData_v4"
@@ -1808,7 +1862,7 @@ pub fn clear_kickoff(
         | "eth_signTypedData" => Some(ClearEvent::ResolveTypedData {
             typed_data_json: typed_data_of(method, params_json),
             chain_id,
-            locale: ClearLocale::default(),
+            locale,
         }),
         "personal_sign" | "eth_sign" => Some(ClearEvent::MessagePresented {
             method: if method == "eth_sign" {
@@ -2267,6 +2321,10 @@ mod tests {
     /// the core once per change — and a Rejected one is answered -32603
     /// "refused", once, the late receipt wait's own result dropped (DX-W3:
     /// the page got ok + op hash 100 s after the relay had rejected it).
+    ///
+    /// Spec 097 N4: the refusal stays on the column in its own words — the
+    /// receipt says Failed and "refused", Done only — and the page hears it
+    /// when the person closes it, not under the words.
     #[test]
     fn the_tracker_s_verdict_answers_the_page_once() {
         use vela_core::app::sign_request::{
@@ -2346,21 +2404,39 @@ mod tests {
         let rejected = [entry(TrackStatus::Rejected)];
         let (_, verdict) = tracked_event(OP, &rejected, Some(&fed), 20_000.0)
             .unwrap_or_else(|| unreachable!("a change is told"));
-        let told: Vec<_> = host
-            .dispatch(verdict)
-            .into_iter()
-            .filter_map(|op| match op.operation {
-                SignOperation::SendResponse { payload, .. } => Some(payload),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(told.len(), 1, "{told:?}");
-        assert!(matches!(
-            &told[0],
-            SignResponsePayload::Err { code: -32603, message: Some(message), .. }
-                if message == vela_core::user_op::REFUSED_DAPP_DETAIL
-        ));
-        // The receipt wait's own late result can answer nothing more.
+        let answers = |ops: Vec<Pending<SignOperation>>| -> Vec<SignResponsePayload> {
+            ops.into_iter()
+                .filter_map(|op| match op.operation {
+                    SignOperation::SendResponse { payload, .. } => Some(payload),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(
+            answers(host.dispatch(verdict)).is_empty(),
+            "held while the column says it (097 N4)"
+        );
+        // What the column draws: the receipt, failed, refused, Done only.
+        let view = host.view();
+        assert_eq!(
+            view.surface,
+            vela_core::app::sign_request::SignSurface::Sheet
+        );
+        assert!(!back_on_form_of(&view, false), "a failure is not the form");
+        let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
+        let clock = crate::signing::status::Clock {
+            now_ms: 20_000.0,
+            typical_s: Some(5),
+            chain_name: "Gnosis".to_owned(),
+            seen_submitted_ms: None,
+        };
+        let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
+            .unwrap_or_else(|| unreachable!("the refusal is drawn"));
+        assert_eq!(receipt.stage, crate::flows::fixtures::ReceiptStage::Failed);
+        assert_eq!(receipt.captions, vec![s.refused.clone()]);
+        assert_eq!(receipt.cta, s.receipt_done);
+        assert_eq!(receipt.retry, None, "the rid went out: never tried again");
+        // The receipt wait's own late result can answer nothing.
         let late: Vec<_> = host
             .resolve(
                 submit,
@@ -2374,7 +2450,16 @@ mod tests {
             .into_iter()
             .filter(|op| matches!(op.operation, SignOperation::SendResponse { .. }))
             .collect();
-        assert!(late.is_empty(), "one answer only");
+        assert!(late.is_empty(), "nothing under the words");
+        // Done: the one answer, the refusal's.
+        let told = answers(host.dispatch(SignEvent::SwipeDismissed));
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(matches!(
+            &told[0],
+            SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                if message == vela_core::user_op::REFUSED_DAPP_DETAIL
+        ));
+        assert!(answers(host.dispatch(SignEvent::SwipeDismissed)).is_empty());
     }
 
     /// Invariant ⑨: the capped params are the ones that get signed.
@@ -2475,6 +2560,19 @@ mod tests {
         assert_eq!(
             approve_opts(&fee, &clear, &guard).token_meta,
             Some(guard.meta.clone())
+        );
+
+        // Spec 097: what the reading named rides the approve verbatim.
+        assert_eq!(approve_opts(&fee, &clear, &guard).reading, None);
+        clear.record_reading = Some(vela_core::app::dapp_activity::DappReading {
+            address: Some("0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01".to_owned()),
+            name: Some("NativeOrderFactory".to_owned()),
+            owner: Some("1inch".to_owned()),
+            tokens: Vec::new(),
+        });
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).reading,
+            clear.record_reading
         );
     }
 
@@ -2682,6 +2780,130 @@ mod kickoff_tests {
         assert!(clear_kickoff("eth_chainId", "[]", 1, None).is_none());
     }
 
+    /// Spec 097 E (S3): every rung is read in the person's locale and this
+    /// machine's zone. The pass's swap deadline at 01:56 here read
+    /// "10/02/2026, 17:56" — the default: month first, 24 h, UTC, no zone.
+    #[test]
+    fn every_rung_is_read_in_the_persons_locale_and_zone() {
+        let expected = clear_locale();
+        assert_eq!(
+            expected.tz_offset_minutes,
+            crate::executor::local_utc_offset_minutes(),
+            "this machine's offset, now"
+        );
+        assert_eq!(
+            expected,
+            clear_locale_of(
+                crate::executor::format_prefs::current(),
+                crate::executor::local_utc_offset_minutes()
+            ),
+            "the presets the rest of the app writes with"
+        );
+        let locales = [
+            clear_kickoff("wallet_sendCalls", "[]", 56, None),
+            clear_kickoff("eth_sendTransaction", "[]", 56, None),
+            clear_kickoff("eth_signTypedData_v4", "[]", 56, None),
+        ]
+        .map(|event| match event {
+            Some(
+                ClearEvent::ResolveBatch { locale, .. }
+                | ClearEvent::ResolveTransaction { locale, .. }
+                | ClearEvent::ResolveTypedData { locale, .. },
+            ) => locale,
+            other => unreachable!("a reading, not {other:?}"),
+        });
+        assert_eq!(locales, [expected; 3]);
+    }
+
+    /// The presets map one for one, and the offset is passed as given.
+    #[test]
+    fn the_locale_maps_each_preset_and_keeps_the_offset() {
+        use crate::executor::format_prefs::Formats;
+        use vela_core::app::clear_signing::{
+            ClearDateFormat, ClearLocale, ClearNumberFormat, ClearTimeFormat,
+        };
+        use vela_core::l10n::datetime::{DatePreset, TimePreset};
+        use vela_core::l10n::number::NumberPreset;
+        let cases = [
+            (
+                (
+                    NumberPreset::DotComma,
+                    DatePreset::DmyDot,
+                    TimePreset::H24,
+                    120,
+                ),
+                (
+                    ClearNumberFormat::DotComma,
+                    ClearDateFormat::DmyDot,
+                    ClearTimeFormat::H24,
+                ),
+            ),
+            (
+                (
+                    NumberPreset::Indian,
+                    DatePreset::YmdSlash,
+                    TimePreset::H12,
+                    330,
+                ),
+                (
+                    ClearNumberFormat::Indian,
+                    ClearDateFormat::YmdSlash,
+                    ClearTimeFormat::H12,
+                ),
+            ),
+            (
+                (
+                    NumberPreset::SpaceComma,
+                    DatePreset::Iso,
+                    TimePreset::H24,
+                    -300,
+                ),
+                (
+                    ClearNumberFormat::SpaceComma,
+                    ClearDateFormat::Iso,
+                    ClearTimeFormat::H24,
+                ),
+            ),
+            (
+                (
+                    NumberPreset::CommaDot,
+                    DatePreset::MdySlash,
+                    TimePreset::H12,
+                    480,
+                ),
+                (
+                    ClearNumberFormat::CommaDot,
+                    ClearDateFormat::MdySlash,
+                    ClearTimeFormat::H12,
+                ),
+            ),
+            (
+                (
+                    NumberPreset::CommaDot,
+                    DatePreset::DmySlash,
+                    TimePreset::H24,
+                    0,
+                ),
+                (
+                    ClearNumberFormat::CommaDot,
+                    ClearDateFormat::DmySlash,
+                    ClearTimeFormat::H24,
+                ),
+            ),
+        ];
+        for ((number, date, time, offset), (n, d, t)) in cases {
+            assert_eq!(
+                clear_locale_of(Formats { number, date, time }, offset),
+                ClearLocale {
+                    number_format: n,
+                    date_format: d,
+                    time_format: t,
+                    tz_offset_minutes: offset,
+                }
+            );
+        }
+    }
+
     /// A params list that is not all strings loses the non-strings rather than
     /// stringifying them: the machine reads `params[0]` and `params[1]` by
     /// POSITION, and an object coerced into that list would shift the message
@@ -2755,6 +2977,7 @@ mod approve_tests {
             unlimited_approved: false,
             balance_changes: None,
             token_meta: None,
+            reading: None,
         };
 
         let signed = opts

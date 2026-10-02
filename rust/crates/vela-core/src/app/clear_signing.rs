@@ -110,6 +110,7 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::token_registry::registry_token;
 use crate::abi;
 use crate::primitives;
 
@@ -174,7 +175,7 @@ const ERC_CALLDATA_FALLBACKS: [&str; 3] = [
 const PERMIT_FALLBACK_PATH: &str = "/erc7730/ercs/eip712-erc2612-permit.json";
 
 /// Uniswap's Permit2, at the same address on every chain it is deployed to.
-const PERMIT2_ADDRESS: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+pub(crate) const PERMIT2_ADDRESS: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
 
 /// The `encodeType` strings of the typed messages this build describes itself
 /// (spec 081 FR-008). Comparing the string IS comparing the typehash — it is
@@ -209,29 +210,6 @@ const STABLE_SYMBOLS: [&str; 12] = [
     "PYUSD",
 ];
 
-/// Well-known ERC-20 static metadata (`services/tokens.ts KNOWN_TOKENS`).
-const KNOWN_TOKENS: [(&str, &str, u32); 19] = [
-    ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC", 6),
-    ("0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT", 6),
-    ("0x6b175474e89094c44da98b954eedeac495271d0f", "DAI", 18),
-    ("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "WETH", 18),
-    ("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", "WBTC", 8),
-    ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK", 18),
-    ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI", 18),
-    ("0xae7ab96520de3a18e5e111b5eaab095312d7fe84", "stETH", 18),
-    ("0xbe9895146f7af43049ca1c1ae358b0541ea49704", "cbETH", 18),
-    ("0xae78736cd615f374d3085123a210448e74fc6393", "rETH", 18),
-    ("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", "wstETH", 18),
-    ("0x5a98fcbea516cf06857215779fd812ca3bef1b32", "LDO", 18),
-    ("0xd533a949740bb3306d119cc777fa900ba034cd52", "CRV", 18),
-    ("0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9", "AAVE", 18),
-    ("0xc00e94cb662c3520282e6f5717214004a7f26888", "COMP", 18),
-    ("0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2", "MKR", 18),
-    ("0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", "USDC", 6),
-    ("0x2791bca1f2de4661ed88a30c99a7a9449aa84174", "USDC.e", 6),
-    ("0xaf88d065e77c8cc2239327c5edb3a432268e5831", "USDC", 6),
-];
-
 /// Chain id → native coin ticker (`models/chains.ts CHAINS`). Custom networks
 /// live in shell storage; unknown ids fall back to "ETH" exactly as
 /// `nativeSymbol` does when its custom-network cache misses.
@@ -257,7 +235,7 @@ const COW_SETTLEMENT: &str = "0x9008d19f58aabd9ed0d60971565aa8510560ab41";
 /// PancakeSwap's Universal Router.
 const PANCAKE_UNIVERSAL_ROUTER: &str = "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb";
 /// PancakeSwap's own Permit2 deployment (its routers draw through it).
-const PANCAKE_PERMIT2: &str = "0x31c2f6fcff4f8759b3bd5bf0e1084a055615c768";
+pub(crate) const PANCAKE_PERMIT2: &str = "0x31c2f6fcff4f8759b3bd5bf0e1084a055615c768";
 /// Spark's PSM3 on Base — USDC ⇄ USDS ⇄ sUSDS at a fixed rate.
 const SPARK_PSM3_BASE: &str = "0x1601843c5e9bc251a3272907010afa41fa18347e";
 /// Uniswap's Universal Router 2.1.2 on BNB Chain.
@@ -1299,9 +1277,9 @@ pub struct ClearBatchCall {
     /// The target's name, when the wallet itself knows the contract on this
     /// chain (096 F5): the "Interacting with" row reads "PancakeSwap Permit2",
     /// not forty hex digits. Or the token it is (097 N8): the registry's
-    /// symbol, else the symbol the token answered with its short address
-    /// beside it ("USDC (0x8ac76a...cd580d)"). Never a name a descriptor or
-    /// the dApp supplied.
+    /// symbol on this chain ("USDC"), else the symbol the token answered with
+    /// its short address beside it ("USDC (0xa0b869...06eb48)"). Never a name
+    /// a descriptor or the dApp supplied.
     #[serde(default)]
     pub to_name: Option<String>,
     /// The calldata's length in bytes — what "unable to decode" names.
@@ -1706,6 +1684,9 @@ pub struct Model {
     message: Option<ClearMessageView>,
     /// Survives the run so the surface/confirm verdicts stay decidable.
     kind: ReqKind,
+    /// The chain of the request being read, or last read (097 D): a token is
+    /// named by the registry of THIS chain, and by what this chain answered.
+    chain_id: u32,
     /// The coin the current transaction moves, read at its start (096 F4);
     /// `None` when nothing (or nothing readable) moves.
     tx_value: Option<ClearNativeValue>,
@@ -1721,12 +1702,10 @@ pub struct Model {
     token_standard_cache: BTreeMap<String, TokenStandard>,
     /// `${chain}:${addr}` → on-chain `decimals()`. Valid answers only (0–36).
     decimals_cache: BTreeMap<String, u32>,
-    /// Token symbols learned from the chain, keyed like the decimals cache.
-    ///
-    /// `KNOWN_TOKENS` is nineteen addresses with no chain id in them, so it
-    /// answers for almost nothing outside Ethereum mainnet. Everything else
-    /// used to render as `0x2a22…` beside its amount — on every shell, since
-    /// they all run this machine.
+    /// Token symbols learned from the chain, keyed like the decimals cache:
+    /// for a token the registry does not list on that chain, which used to
+    /// render as `0x2a22…` beside its amount — on every shell, since they all
+    /// run this machine.
     symbol_cache: BTreeMap<String, String>,
     erc165_scratch: BTreeMap<String, Erc165Scratch>,
     /// Bumped per request; a result carrying an older attempt is dropped
@@ -1798,6 +1777,14 @@ pub struct ClearSigningView {
     /// states it (`@.value`).
     #[serde(default)]
     pub native_value: Option<ClearNativeValue>,
+    /// What the reading named, as the record keeps it (spec 097 N5, N8): the
+    /// contract and its owner, and the coins it showed amounts of — Activity
+    /// then names them as the sheet did. The shell copies it to
+    /// [`super::sign_request::SignApproveOpts::reading`] and decides nothing.
+    /// `None` on every surface but [`ClearSurface::ClearSign`] and
+    /// [`ClearSurface::Batch`], and when the reading named nothing.
+    #[serde(default)]
+    pub record_reading: Option<super::dapp_activity::DappReading>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1922,6 +1909,7 @@ impl App for ClearSigning {
             batch: batch_view(model).filter(|_| surface == ClearSurface::Batch),
             record_intent: record_intent_of(model, surface),
             native_value: native_value_of(model, surface),
+            record_reading: record_reading_of(model, surface),
         }
     }
 }
@@ -1934,6 +1922,37 @@ fn native_value_of(model: &Model, surface: ClearSurface) -> Option<ClearNativeVa
         _ => false,
     };
     model.tx_value.clone().filter(|_| unsaid)
+}
+
+/// [`ClearSigningView::record_reading`] for the surface the sheet draws: a
+/// lone call's reading, or every call's of a batch, with the symbols and
+/// decimals the sheet named their tokens by — the registry's on the
+/// request's chain, else what that chain answered (097 D).
+fn record_reading_of(
+    model: &Model,
+    surface: ClearSurface,
+) -> Option<super::dapp_activity::DappReading> {
+    let chain_id = model.chain_id;
+    let meta = |token: &str| {
+        let (symbol, _) = token_symbol(model, chain_id, token)?;
+        let (decimals, known) = token_decimals(model, chain_id, token);
+        known.then_some((symbol, decimals))
+    };
+    match surface {
+        ClearSurface::ClearSign => {
+            let result = model.result.as_ref();
+            super::dapp_activity::reading_of(result, result, meta)
+        }
+        ClearSurface::Batch => {
+            let batch = batch_view(model)?;
+            super::dapp_activity::reading_of(
+                None,
+                batch.calls.iter().filter_map(|call| call.result.as_ref()),
+                meta,
+            )
+        }
+        _ => None,
+    }
 }
 
 /// [`ClearSigningView::record_intent`] for the surface the sheet draws.
@@ -2316,6 +2335,7 @@ fn start_tx(
     model.message = None;
     model.blind_typed = None;
     model.kind = ReqKind::TxCall;
+    model.chain_id = chain_id;
     model.value_shown = false;
     model.tx_value = plain_value_wei(value.as_deref())
         .filter(|wei| wei != "0")
@@ -2394,6 +2414,7 @@ fn start_typed(
     model.plain_send = None;
     model.message = None;
     model.kind = ReqKind::Typed;
+    model.chain_id = chain_id;
     model.tx_value = None;
     model.value_shown = false;
 
@@ -4590,9 +4611,8 @@ fn format_token_amount(
         }
     }
 
-    // The static table first (it is the TS's and stays authoritative for the
-    // nineteen it holds), then what the chain itself answered. Only when both
-    // are silent is the token known by its address alone.
+    // The registry of this chain first, then what the chain itself answered.
+    // Only when both are silent is the token known by its address alone.
     let known_symbol = token_addr
         .as_deref()
         .and_then(|addr| token_symbol(model, chain_id, addr))
@@ -4944,7 +4964,7 @@ fn unknown_token_addrs(
         .into_iter()
         .map(|a| a.to_lowercase())
         .filter(|a| {
-            known_token_decimals(a).is_none()
+            registry_token(chain_id, a).is_none()
                 && !model.decimals_cache.contains_key(&std_key(chain_id, a))
         })
         .collect()
@@ -5682,22 +5702,6 @@ fn std_key(chain_id: u32, addr: &str) -> String {
     format!("{chain_id}:{}", addr.to_lowercase())
 }
 
-pub(crate) fn known_token_symbol(addr: &str) -> Option<&'static str> {
-    let lc = addr.to_lowercase();
-    KNOWN_TOKENS
-        .iter()
-        .find(|(a, _, _)| *a == lc)
-        .map(|(_, s, _)| *s)
-}
-
-pub(crate) fn known_token_decimals(addr: &str) -> Option<u32> {
-    let lc = addr.to_lowercase();
-    KNOWN_TOKENS
-        .iter()
-        .find(|(a, _, _)| *a == lc)
-        .map(|(_, _, d)| *d)
-}
-
 /// The contract at `addr` on `chain_id`, when the wallet knows it by itself.
 pub(crate) fn known_contract(chain_id: u32, addr: &str) -> Option<&'static KnownContract> {
     let lc = addr.trim().to_lowercase();
@@ -5706,11 +5710,11 @@ pub(crate) fn known_contract(chain_id: u32, addr: &str) -> Option<&'static Known
         .find(|c| c.address == lc && (c.chains.is_empty() || c.chains.contains(&chain_id)))
 }
 
-/// A token's symbol, and whether it is the registry's (`KNOWN_TOKENS`) or
-/// the token contract's own answer to `symbol()`.
+/// A token's symbol, and whether it is the registry's on `chain_id`
+/// ([`registry_token`]) or the token contract's own answer to `symbol()`.
 fn token_symbol(model: &Model, chain_id: u32, addr: &str) -> Option<(String, bool)> {
-    known_token_symbol(addr)
-        .map(|symbol| (symbol.to_owned(), true))
+    registry_token(chain_id, addr)
+        .map(|token| (token.symbol.to_owned(), true))
         .or_else(|| {
             model
                 .symbol_cache
@@ -5750,12 +5754,13 @@ fn native_symbol(chain_id: u32) -> &'static str {
         .unwrap_or("ETH")
 }
 
-/// A token's decimals and whether anybody stood behind them: the registry,
-/// else the chain's own answer; else 18, flagged unverified (invariant ①).
+/// A token's decimals and whether anybody stood behind them: the registry
+/// on `chain_id`, else that chain's own answer; else 18, flagged unverified
+/// (invariant ①).
 fn token_decimals(model: &Model, chain_id: u32, addr: &str) -> (u32, bool) {
     let lc = addr.to_lowercase();
-    if let Some(d) = known_token_decimals(&lc) {
-        return (d, true);
+    if let Some(token) = registry_token(chain_id, &lc) {
+        return (token.decimals, true);
     }
     if let Some(d) = model.decimals_cache.get(&std_key(chain_id, &lc)) {
         return (*d, true);

@@ -315,7 +315,12 @@ enum ExploreLive {
                 ? loc.t("explore.connectionTitle")
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
-            statusLine: statusLine(secure: secure, connected: connected, host: host, loc: loc),
+            // Asking: no words under the host (the title asks). Otherwise
+            // the core's fact about the grant — "已连接", or that there is
+            // none (spec 097 E).
+            statusLine: consent == nil
+                ? statusLine(secure: secure, connected: connected, host: host, loc: loc)
+                : "",
             // WHICH account this site holds, not which one the wallet is on.
             //
             // A grant is pinned to the address it was given to, so the two can
@@ -344,11 +349,13 @@ enum ExploreLive {
             // exactly that moment — what a connection is, and what it is not
             // — above the answers, and nothing under them (spec 082 RE6: two
             // explainers said it twice). Connected: unchanged.
-            explainer: consent == nil
-                ? loc.t("explore.connectionExplainer")
-                : loc.t("connect.browser.body"),
+            // Not connected (spec 097 E): no sentence about what the site can
+            // see — it can see nothing.
+            explainer: consent != nil
+                ? loc.t("connect.browser.body")
+                : connected ? loc.t("explore.connectionExplainer") : "",
             disconnect: loc.t("explore.disconnect"),
-            footnote: consent == nil ? loc.t("explore.autoRequestHint") : "",
+            footnote: connected ? loc.t("explore.autoRequestHint") : "",
             secure: secure,
             // The approve word every client uses (spec 079): "连接" — it was
             // "批准" here alone.
@@ -356,6 +363,7 @@ enum ExploreLive {
                 approve: loc.t("connect.browser.connect"),
                 reject: loc.t("connect.dapp.reject")
             ),
+            connected: connected,
             origin: origin,
             chainId: chainId,
             // The wallet's own networks, and nothing a page named — each with
@@ -408,8 +416,12 @@ enum ExploreLive {
     /// fact about the connection — "已连接" — or nothing. Neither "安全站点"
     /// nor "不安全站点" is drawn; the http lock carries
     /// `connect.browser.a11yInsecure` for a screen reader.
+    ///
+    /// Spec 097 E: a site with no grant says so — "No active connection"
+    /// (`home.connEmptyTitle`) — where the line used to go blank over a panel
+    /// that still said what the site could see.
     static func statusLine(secure: Bool, connected: Bool, host: String, loc: Loc) -> String {
-        connected ? loc.t("explore.connectedTag") : ""
+        loc.t(connected ? "explore.connectedTag" : "home.connEmptyTitle")
     }
 
     // MARK: - Marks

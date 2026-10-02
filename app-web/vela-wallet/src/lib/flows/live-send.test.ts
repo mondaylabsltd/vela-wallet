@@ -112,6 +112,7 @@ const EMPTY_SEND: SendView = {
 	receipt: null,
 	treasury_bootstrap: null,
 	recipient_identity: null,
+	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
 	sim_json: null
@@ -221,16 +222,23 @@ describe('the token picker', () => {
 			mono: true
 		});
 
-		// The name the core resolved, when it has one — as the confirm words it.
+		// The name the core resolved, when it has one — as the confirm words it:
+		// over the address, never instead of it (spec 097 F).
 		const named = liveSendPick(
 			pickModel(),
 			inputs({
 				tokens: [USDT],
 				recipient: payee,
-				recipient_identity: { name: 'alice.eth', source: 'ens' }
+				payees: [
+					{ address: payee, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }
+				]
 			})
 		);
-		expect(named.recipient).toMatchObject({ value: 'alice.eth', mono: false });
+		expect(named.recipient).toMatchObject({
+			value: 'alice.eth',
+			detail: `ENS · ${shortenAddress(payee)}`,
+			mono: false
+		});
 
 		// Kept in the sweep's picker too: it is the same person.
 		const sweep = liveSendPick(pickModel(), {
@@ -294,9 +302,13 @@ describe('the form', () => {
 	});
 
 	it('says who the recipient is when the core resolved a name, and warns on a first send', () => {
+		const address = '0x' + 'ab'.repeat(20);
 		const named = liveSendForm(
 			formModel(),
-			inputs({ recipient_identity: { name: 'alice.eth', source: 'ENS' } })
+			inputs({
+				recipient: address,
+				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
+			})
 		);
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
 		const firstTime = liveSendForm(
@@ -626,6 +638,15 @@ describe('one figure for one balance (spec 078)', () => {
 					hold_reason: null,
 					kind: null,
 					transfers: [],
+					coins: [
+						{
+							amount: MAXED,
+							symbol: 'ETH',
+							logo_urls: [],
+							token_address: null,
+							usd_value: 110.45
+						}
+					],
 					amount: MAXED,
 					usd_value: 110.45,
 					submitted_at_ms: null,
@@ -659,15 +680,21 @@ describe('the confirm screen', () => {
 		expect(model.breakdown).toBeUndefined();
 	});
 
-	it('names a resolved recipient instead of their address', () => {
+	it('names a resolved recipient over their address, never instead of it', () => {
+		const address = '0x' + 'ab'.repeat(20);
 		const model = liveSendConfirm(
 			confirmModel(),
 			inputs({
-				recipient: '0x' + 'ab'.repeat(20),
-				recipient_identity: { name: 'alice.eth', source: 'ENS' }
+				recipient: address,
+				recipient_identity: { name: 'alice.eth', source: 'ENS' },
+				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
 			})
 		);
-		expect(model.facts.find((f) => f.label === m['send.toLabel'])?.value).toBe('alice.eth');
+		expect(model.facts.find((f) => f.label === m['send.toLabel'])).toMatchObject({
+			value: 'alice.eth',
+			detail: `ENS · ${shortenAddress(address)}`,
+			mono: false
+		});
 	});
 
 	// Device-found: the core resolves `first_time` only while the confirm page
@@ -962,6 +989,10 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 				recipients: [
 					{ id: 'a', address: alice, amount: '0.03', name: 'Alice' },
 					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
+				],
+				payees: [
+					{ address: alice, name: 'Alice', name_source: { type: 'own' } },
+					{ address: '0x' + 'cd'.repeat(20), name: null, name_source: null }
 				]
 			})
 		);
@@ -1005,6 +1036,7 @@ describe('the receipt', () => {
 		hold_reason: null,
 		kind: null,
 		transfers: [],
+		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
 		amount: '0.5',
 		usd_value: 1500,
 		submitted_at_ms: null,

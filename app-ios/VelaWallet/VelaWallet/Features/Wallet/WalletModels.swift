@@ -78,7 +78,11 @@ enum ActivityKind {
 }
 
 struct ActivityRowModel: Identifiable {
-    let id = UUID()
+    /// The feed item's own id, so a row keeps its identity across renders.
+    /// A fresh `UUID()` per build made SwiftUI replace every row on each
+    /// balance or feed update, and a tap landing in that moment opened
+    /// nothing (CI #399, the memory's "random id per render" follow-up).
+    var id: String { itemId ?? "\(kind)|\(title)|\(subtitle)|\(amount)|\(unit)" }
     let kind: ActivityKind
     let title: String
     let subtitle: String
@@ -105,7 +109,8 @@ struct ActivityRowModel: Identifiable {
 }
 
 struct ActivityGroupModel: Identifiable {
-    let id = UUID()
+    /// A day's label is unique in its list; stable across renders like the rows.
+    var id: String { label }
     let label: String
     let rows: [ActivityRowModel]
 }

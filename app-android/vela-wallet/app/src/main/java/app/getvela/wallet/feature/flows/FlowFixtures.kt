@@ -878,20 +878,25 @@ object FlowFixtures {
                 subline = "≈ $120.00",
                 facts = facts,
                 breakdown = listOf(
+                    // Spec 097 F: an unnamed payee is their short address in
+                    // mono; a named one keeps it on a second line.
                     BreakdownRowModel(
                         identiconSeed = ALICE_FULL,
                         label = ALICE_DISPLAY,
                         value = "50 USDT",
+                        mono = true,
                     ),
                     BreakdownRowModel(
                         identiconSeed = A_HAO_FULL,
                         label = "Alice",
                         value = "30 USDT",
+                        detail = "0x77Bd…4F02",
                     ),
                     BreakdownRowModel(
                         identiconSeed = HOLD_ON_FULL,
                         label = "hold on",
                         value = "40 USDT",
+                        detail = "0xCafe…F00d",
                     ),
                 ),
                 cta = s.t(I18nKeys.Flows.CONFIRM_SEND),

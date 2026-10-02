@@ -100,6 +100,9 @@ import app.getvela.wallet.feature.send.core.SendView
 import app.getvela.wallet.feature.send.core.SendSplitRowIssue
 import app.getvela.wallet.feature.send.core.SendDuplicateRowView
 import app.getvela.wallet.feature.send.core.SendRowFieldState
+import app.getvela.wallet.feature.send.core.SendNameSource
+import app.getvela.wallet.feature.send.core.SendPayee
+import app.getvela.wallet.feature.send.core.SendReceiptCoin
 import app.getvela.wallet.feature.send.core.TrackEntryView
 import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.TrackEvent
@@ -473,6 +476,13 @@ class CoreWireDriftTest {
         assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappSummary>("DappSummary")
         assertVariantFieldsExhaustive(TrustSimJudgment.serializer(), "TrustSimJudgment")
         assertFieldsExhaustive<GuardTokenMetaView>("GuardTokenMetaView")
+        // Spec 097: the coins a reading named, the reading the approve
+        // carries, and the tracker's settlement — each kept verbatim.
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappToken>("DappToken")
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappReading>("DappReading")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.TrackSettlement>("TrackSettlement")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.TrackMove>("TrackMove")
+        assertStringUnion<app.getvela.wallet.feature.send.core.TrackFailure>("TrackFailure")
     }
 
     @Test
@@ -754,6 +764,42 @@ class CoreWireDriftTest {
         assertFieldsExist<SendSplitRowIssue>("SendSplitRowIssue")
         assertFieldsExist<SendDuplicateRowView>("SendDuplicateRowView")
         assertStringUnion<SendRowFieldState>("SendRowFieldState")
+        // Spec 097 F: who is paid, and every coin a receipt sent.
+        assertFieldsExist<SendPayee>("SendPayee")
+        assertFieldsExist<SendReceiptCoin>("SendReceiptCoin")
+        assertVariantsExhaustive<SendNameSource>("SendNameSource")
+        assertTrue("payees" in serializer<SendView>().descriptor.elementNames)
+        assertTrue("coins" in serializer<SendReceiptView>().descriptor.elementNames)
+    }
+
+    /**
+     * Spec 097 F: the payee's name source is a closed enum in Rust, but a
+     * newer core may add a source; one this build cannot read must cost the
+     * payee its tag (and so, drawn, its name) — never the whole send view.
+     */
+    @Test
+    fun aPayeesNameSourceDecodesAndAnUnknownOneIsAbsent() {
+        val view = roundTrip<SendView>(
+            """{"recipient":"0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c","payees":[
+              {"address":"0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c","name":"Wallet","name_source":{"type":"registry"}},
+              {"address":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","name":"bob.eth","name_source":{"type":"service","label":"ENS"}},
+              {"address":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","name":"Savings","name_source":{"type":"own"}},
+              {"address":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","name":null,"name_source":null},
+              {"address":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","name":"Later","name_source":{"type":"some_new_source","x":1}}
+            ],"receipt":{"status":"confirmed","hold_reason":null,"kind":"multi_select","transfers":[],"coins":[
+              {"amount":"0.000418","symbol":"ETH","logo_urls":[],"token_address":null,"usd_value":1.0},
+              {"amount":"0.034929","symbol":"USDC","logo_urls":["https://x/usdc.png"],"token_address":"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913","usd_value":0.03}
+            ],"amount":"","usd_value":1.03,"submitted_at_ms":null,"typical_inclusion_s":null}}""",
+        )
+        assertEquals(
+            listOf(SendNameSource.Registry, SendNameSource.Service("ENS"), SendNameSource.Own, null, null),
+            view.payees.map { it.name_source },
+        )
+        assertEquals("Later", view.payees[4].name)
+        assertEquals(SendPayee("0x88cCA0EeDbF2C4426110bbFc998F048689266894"), view.payees[3])
+        assertEquals(listOf("ETH", "USDC"), view.receipt!!.coins.map { it.symbol })
+        assertEquals(null, view.receipt!!.coins[0].token_address)
+        assertEquals("", view.receipt!!.amount)
     }
 
     @Test

@@ -297,18 +297,33 @@ fn breakdown_list(
                 24.,
             ));
         }
-        list = list.child(
-            row.child(
+        // An address is set in mono wherever it is the thing being read.
+        let label = div()
+            .min_w(px(0.))
+            .whitespace_nowrap()
+            .truncate()
+            .when(item.mono, |label| label.font_family(theme::font_mono()))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_base)
+            .child(item.label.clone());
+        // Spec 097 F: a name and, under it, the short address it stands for.
+        let text = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .child(label)
+            .children(item.detail.clone().map(|detail| {
                 div()
-                    .flex_1()
-                    .min_w(px(0.))
                     .whitespace_nowrap()
                     .truncate()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(item.label.clone()),
-            )
-            .child(
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(detail)
+            }));
+        list = list.child(
+            row.child(text).child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)

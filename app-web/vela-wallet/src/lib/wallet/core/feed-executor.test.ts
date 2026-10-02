@@ -30,6 +30,7 @@ import {
 	createFeedExecutor,
 	firstCallData,
 	storedJudgments,
+	storedSettlement,
 	storedSummary,
 	toFeedRecord
 } from './feed-executor';
@@ -488,6 +489,54 @@ describe('a dApp record’s summary and balance changes (spec 093)', () => {
 		]) {
 			expect(storedJudgments(bad), JSON.stringify(bad)).toBeNull();
 		}
+	});
+
+	// Spec 097: the summary carries what the sheet's reading named and the fee
+	// the wallet added; the record carries how its operation ended.
+	it('the reading, the fee and the settlement pass as written; any bad part drops it whole', () => {
+		const summary = {
+			...SUMMARY,
+			action: 'call',
+			contract_name: 'NativeOrderFactory',
+			owner: '1inch',
+			fee_token: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
+			fee_amount: '20000',
+			tokens: [
+				{ address: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', symbol: 'USDC', decimals: 18 }
+			]
+		};
+		expect(storedSummary(summary)).toEqual(summary);
+		expect(storedSummary({ ...summary, tokens: [{ address: '0x1', symbol: 'X' }] })).toBeNull();
+		expect(storedSummary({ ...summary, owner: 7 })).toBeNull();
+
+		const settlement = {
+			moved: [
+				{ token: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', delta: '-1160000000000000000' },
+				{ token: null, delta: '1499036349071560' }
+			]
+		};
+		expect(storedSettlement(settlement)).toEqual(settlement);
+		expect(storedSettlement({ failure: 'refused' })).toEqual({ failure: 'refused' });
+		for (const bad of [
+			'x',
+			{ moved: 'x' },
+			{ moved: [{ token: 1, delta: '1' }] },
+			{ moved: [{ token: null, delta: 1 }] },
+			{ failure: 'exploded' }
+		]) {
+			expect(storedSettlement(bad), JSON.stringify(bad)).toBeNull();
+		}
+		const tx: LocalTransaction = {
+			...SIGNATURE,
+			id: 'dapp-1-tx',
+			type: 'dapp_tx',
+			dappSummary: summary as LocalTransaction['dappSummary'],
+			settlement
+		};
+		expect(toFeedRecord(tx)).toMatchObject({ summary, settlement });
+		expect(toFeedRecord({ ...tx, settlement: undefined })?.settlement).toBeNull();
+		// A send's record carries none of a dApp's.
+		expect(toFeedRecord({ ...tx, type: 'send' })).not.toHaveProperty('settlement');
 	});
 
 	it('through the core: a malformed summary still makes a row — by its kind', async () => {

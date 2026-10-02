@@ -71,7 +71,36 @@ enum class TrackRecordStatus {
 }
 
 @Serializable
-data class TrackRecordPatch(val status: TrackRecordStatus, val tx_hash: String? = null)
+data class TrackRecordPatch(
+    val status: TrackRecordStatus,
+    val tx_hash: String? = null,
+    /** Spec 097: how the operation ended — stored with the records verbatim, handed back to the feed. */
+    val settlement: TrackSettlement? = null,
+)
+
+/** Spec 097: what a landed operation's own receipt proved it moved, or why it failed (`TrackSettlement`). */
+@Serializable
+data class TrackSettlement(
+    val moved: List<TrackMove>? = null,
+    val failure: TrackFailure? = null,
+)
+
+/** One coin a landed operation moved: its token (`null` = the chain's coin) and the signed base units. */
+@Serializable
+data class TrackMove(val token: String? = null, val delta: String)
+
+/** Why an operation failed — the words its request ended with (spec 097 N4). */
+@Serializable
+enum class TrackFailure {
+    /** It landed and reverted: `componentsTx.receipt.failedHint`. */
+    @SerialName("reverted") Reverted,
+
+    /** The relay refused it before any block: `componentsUi.signing.refused`. */
+    @SerialName("refused") Refused,
+
+    /** The relay never had it: `send.txErrorGeneric`. */
+    @SerialName("not_sent") NotSent,
+}
 
 @Serializable
 data class TrackPendingRecord(

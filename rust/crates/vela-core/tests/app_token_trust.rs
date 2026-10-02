@@ -13,12 +13,13 @@
 mod support;
 
 use support::DomainDriver;
+use vela_core::app::token_registry::registry_token;
 use vela_core::app::token_trust::{
     address_topic, admission_allows, allowlist_for_chain, auto_add_candidates,
-    decode_transfer_logs, derive_asset_deltas, judge_delta, known_token, Event, TokenTrust,
-    TrustAssetDelta, TrustCustomToken, TrustDeltaKind, TrustLogsOutcome, TrustMetaEntry,
-    TrustNetDelta, TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res,
-    TrustSimJudgment, TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
+    decode_transfer_logs, derive_asset_deltas, judge_delta, Event, TokenTrust, TrustAssetDelta,
+    TrustCustomToken, TrustDeltaKind, TrustLogsOutcome, TrustMetaEntry, TrustNetDelta,
+    TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res, TrustSimJudgment,
+    TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
 };
 
 type Sut = DomainDriver<TokenTrust>;
@@ -390,20 +391,25 @@ fn admission_gate_is_exhaustive() {
     }
 }
 
+/// The registry this machine trusts is the core's one chain-scoped table
+/// (097 D): Ethereum's USDC on Ethereum, Arbitrum's USDT on Arbitrum, and
+/// neither anywhere else.
 #[test]
-fn known_token_table_matches_the_ts_canon() {
-    assert_eq!(known_token(KNOWN_USDC), Some(meta("USDC", 6)));
+fn the_registry_is_per_chain() {
+    let symbol_of = |chain_id: u32, addr: &str| {
+        registry_token(chain_id, addr).map(|known| (known.symbol, known.decimals))
+    };
+    assert_eq!(symbol_of(1, KNOWN_USDC), Some(("USDC", 6)));
     assert_eq!(
-        known_token(&KNOWN_USDC.to_uppercase().replace("0X", "0x")),
-        Some(meta("USDC", 6)),
+        symbol_of(1, &KNOWN_USDC.to_uppercase().replace("0X", "0x")),
+        Some(("USDC", 6)),
         "case-insensitive"
     );
-    // The Arbitrum USDT entry the drifted clear_signing copy lacks.
-    assert_eq!(
-        known_token("0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"),
-        Some(meta("USDT", 6))
-    );
-    assert_eq!(known_token(FRESH), None);
+    let arbitrum_usdt = "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9";
+    assert_eq!(symbol_of(42_161, arbitrum_usdt), Some(("USDT", 6)));
+    assert_eq!(symbol_of(1, arbitrum_usdt), None);
+    assert_eq!(symbol_of(56, KNOWN_USDC), None);
+    assert_eq!(symbol_of(1, FRESH), None);
 }
 
 // ===========================================================================
@@ -474,19 +480,19 @@ fn judge_delta_asymmetric_grid_is_exhaustive() {
 #[test]
 fn judge_delta_edges_fail_toward_unverified() {
     let m = meta("TOK", 6);
-    // A curated known token is trusted even outside the passed set.
+    // Trust is the caller's verdict, never the address alone (097 D): the
+    // same bytes are another contract on another chain. The machine folds
+    // the registry of the delta's own chain into the set
+    // (`the_registry_vouches_only_on_its_own_chain`).
     assert_eq!(
         judge_delta(
             &erc20_delta(KNOWN_USDC, "50"),
             Some(&meta("USDC", 6)),
             false
         ),
-        TrustSimJudgment::Erc20Trusted {
-            token: KNOWN_USDC.to_owned(),
+        TrustSimJudgment::Erc20Unverified {
+            token: Some(KNOWN_USDC.to_owned()),
             delta: "50".to_owned(),
-            symbol: "USDC".to_owned(),
-            decimals: 6,
-            in_trusted_set: true,
         }
     );
     // No token address → unverified even with metadata in hand.
@@ -560,7 +566,7 @@ fn untrusted_tokens_are_invisible_to_every_surface() {
             ),
             "⑥ received amount never rendered confidently"
         );
-        assert!(known_token(stranger).is_none());
+        assert!(registry_token(1, stranger).is_none());
     }
 }
 
@@ -1057,7 +1063,7 @@ fn poll_is_single_flight() {
 // ===========================================================================
 
 /// Invariant ⑥ — SENT renders on metadata alone; RECEIVED renders only for
-/// registry stables, the wrapped native, held tokens, or curated knowns.
+/// registry stables, the wrapped native, held tokens, or the build's registry.
 #[test]
 fn sim_sent_is_trusted_received_needs_the_trusted_set() {
     let mut sut = booted(vec![1]);
@@ -1084,7 +1090,8 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
             erc20_delta(KNOWN_USDC, "9"),
         ],
     });
-    // Known-table tokens skip resolution; the rest are fetched once, sorted.
+    // Registry tokens of this chain skip resolution; the rest are fetched
+    // once, sorted.
     assert_eq!(
         ops,
         vec![Op::MulticallErc20Meta {
@@ -1161,6 +1168,49 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
                 delta: "9".to_owned(),
                 symbol: "USDC".to_owned(),
                 decimals: 6,
+                in_trusted_set: true,
+            },
+        ]
+    );
+}
+
+/// 097 D — the registry vouches for a token on its own chain only. On BNB
+/// Chain, Ethereum's USDC address is a stranger: its metadata is asked of the
+/// chain, and an inflow of it answering "USDC" is still no figure. BNB
+/// Chain's own USDC (18 decimals there) is the registry's: no question asked,
+/// its inflow trusted.
+#[test]
+fn the_registry_vouches_only_on_its_own_chain() {
+    const BSC_USDC: &str = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
+    let mut sut = booted(vec![56]);
+    let ops = sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 56,
+        deltas: vec![erc20_delta(KNOWN_USDC, "9"), erc20_delta(BSC_USDC, "7")],
+    });
+    assert_eq!(
+        ops,
+        vec![Op::MulticallErc20Meta {
+            chain_id: 56,
+            addrs: vec![KNOWN_USDC.to_owned()],
+        }]
+    );
+    sut.resolve(Res::ErcMeta {
+        chain_id: 56,
+        entries: vec![meta_entry(KNOWN_USDC, Some(meta("USDC", 6)))],
+    });
+    assert_eq!(
+        sut.view().sim.expect("judged").judgments,
+        vec![
+            TrustSimJudgment::Erc20Unverified {
+                token: Some(KNOWN_USDC.to_owned()),
+                delta: "9".to_owned(),
+            },
+            TrustSimJudgment::Erc20Trusted {
+                token: BSC_USDC.to_owned(),
+                delta: "7".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 18,
                 in_trusted_set: true,
             },
         ]

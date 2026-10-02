@@ -88,6 +88,18 @@
 //! - **The answer follows the tracker (RJ4)**: [`Event::OpTracked`] answers the
 //!   waiting page the moment the tracker knows the outcome.
 //!
+//! Spec 097 N4: a refusal (or "nothing was sent") the tracker reaches after
+//! "Submitted" is held on the sheet, like a failure before the submit (096
+//! F8): shown in its own words with Done and no "Try again" (the rid is
+//! settled, ⑧), and answered once — when the person closes it, when a new
+//! request takes the sheet, or at once when nobody is looking.
+//!
+//! Spec 097 E: a `wallet_sendCalls` is answered with its id — its user
+//! operation's hash, EIP-5792's batch id — the moment the relay accepts it
+//! (`OpSubmitted` through the write-ahead), and with that id however a later
+//! wait ends; never the tx hash it landed in, which `wallet_getCallsStatus`
+//! does not know. One rule for the four shells.
+//!
 //! Ported quirks and fail-closed divergences are doc-commented inline.
 
 use crux_core::capability::Operation;
@@ -313,6 +325,13 @@ pub struct SignApproveOpts {
     /// the built-in table, or not at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_meta: Option<super::approval_guard::GuardTokenMetaView>,
+    /// What the sheet's reading named, copied verbatim from
+    /// `ClearSigningView::record_reading` (spec 097 N5, N8): the record keeps
+    /// the contract's name and the coins' names, so Activity says what the
+    /// sheet said. `None` (nothing named, a shell that predates it) names
+    /// them from the built-in table, or not at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reading: Option<super::dapp_activity::DappReading>,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -639,14 +658,15 @@ pub enum SignSponsorship {
 pub enum SignSubmitOutcome {
     /// tx: the real tx hash from a receipt whose operation EXECUTED (a
     /// receipt with `success: false` is [`Self::Reverted`], never this);
-    /// batch: the tx hash as for a transaction; signatures: the EIP-1271
-    /// signature hex. A batch id handed to the page the moment the relay
-    /// accepts it (the web's EIP-5792 answer) is the userOpHash, not a
-    /// receipt: it is [`Self::ReceiptPending`], or the record closes
-    /// "confirmed" under a hash no explorer knows and nothing ever tracks it
-    /// (083 H2 review). On the tx path the page is answered and the record
-    /// left to the tracker, which alone closes on-chain records (spec 082
-    /// RA8, W3).
+    /// batch: the tx hash as for a transaction, which the core answers as the
+    /// batch's id instead (spec 097 E: the page is answered the op hash, as
+    /// [`Self::ReceiptPending`] is); signatures: the EIP-1271 signature hex.
+    /// A batch id handed to the page the moment the relay accepts it (the
+    /// web's EIP-5792 answer) is the userOpHash, not a receipt: it is
+    /// [`Self::ReceiptPending`], or the record closes "confirmed" under a
+    /// hash no explorer knows and nothing ever tracks it (083 H2 review). On
+    /// the tx path the page is answered and the record left to the tracker,
+    /// which alone closes on-chain records (spec 082 RA8, W3).
     Succeeded { result: String },
     /// The bundler accepted the op but its receipt did not arrive inside the
     /// shell's wait (~120 s on the phones and the web). Nothing is known to
@@ -807,7 +827,9 @@ pub enum Event {
     /// Funding view cancel (and swipe over the funding view).
     FundingCancelled,
     /// The bundler accepted the op (`onSubmitted`) — mid-flight, before the
-    /// final `Submit` result.
+    /// final `Submit` result. Accepted (not `maybe_sent`) through the
+    /// write-ahead, a `wallet_sendCalls` is answered here with its id, the op
+    /// hash (spec 097 E): the shell's later `Submit` is dropped.
     OpSubmitted {
         id: String,
         user_op_hash: String,
@@ -841,10 +863,13 @@ pub enum Event {
     /// The tracker's entry for an op changed (spec 082 RJ4): the shell
     /// forwards `status` and `tx_hash` of the entry for the in-flight op
     /// whenever they change. Once the op is past `OpSubmitted` and the page
-    /// is still waiting: Confirmed with a tx hash answers Ok(tx hash);
+    /// is still waiting: Confirmed with a tx hash answers Ok(tx hash) — a
+    /// batch Ok(its id, the op hash; spec 097 E);
     /// Dropped with one (included, reverted) answers -32603
     /// [`reverted_detail`] (083, owner ruling 2026-10-01); Rejected answers
     /// -32603 refused; NotSent answers -32603 not sent; anything else waits.
+    /// A refusal or "not sent" for the request on the sheet is held there
+    /// until the close (spec 097 N4, the rule of 096 F8).
     OpTracked {
         user_op_hash: String,
         status: TrackStatus,
@@ -1446,6 +1471,13 @@ impl Model {
                 ))
     }
 
+    /// `id` went to the relay in this session (⑧).
+    fn settled_submitted(&self, id: &str) -> bool {
+        self.settled
+            .iter()
+            .any(|(rid, outcome)| rid == id && *outcome == SignSettledOutcome::Submitted)
+    }
+
     fn settle(&mut self, id: &str, outcome: SignSettledOutcome) {
         if let Some(slot) = self.settled.iter_mut().find(|(rid, _)| rid == id) {
             slot.1 = outcome;
@@ -1458,9 +1490,15 @@ impl Model {
     }
 
     /// [`SignView::failure_retryable`]: a held failure that sent nothing and
-    /// was no refusal — by the relay (RJ3) or by a rule of this machine.
+    /// was no refusal — by the relay (RJ3) or by a rule of this machine — of
+    /// a request whose operation never reached the relay. One that did is
+    /// settled `Submitted` (⑧: a settled rid never signs twice), so a
+    /// verdict the tracker reached after the submit (spec 097 N4) is shown
+    /// and answered, never signed again from the sheet.
     fn failure_retryable(&self) -> bool {
-        self.pending.as_ref().is_some_and(|p| p.held.is_some())
+        self.pending
+            .as_ref()
+            .is_some_and(|p| p.held.is_some() && !self.settled_submitted(&p.id))
             && !self.sign_error_refused
             && self
                 .sign_error
@@ -1626,7 +1664,9 @@ pub struct SignView {
     /// The failure on the sheet sent nothing, was not a refusal, and its
     /// answer is still held (spec 096 F8): the sheet offers "Try again"
     /// (`send.txRetryBtn` → [`Event::RetryTapped`]) beside its close, which
-    /// answers the page the failure.
+    /// answers the page the failure. Never for a request whose operation
+    /// reached the relay — a verdict after the submit (spec 097 N4) has only
+    /// the close.
     #[serde(default)]
     pub failure_retryable: bool,
     pub notice: Option<SignNotice>,
@@ -2313,7 +2353,12 @@ fn on_chain_switch(
         .is_some_and(|p| p.per_request_chain.is_none() && !p.responded)
         && !model.committed();
     if cancel {
-        if let Some(p) = &model.pending {
+        // A failure still on screen is owed its own answer (spec 096 F8, 097
+        // N4) — the request failed, the person never cancelled it — so the
+        // switch sends that one, never a 4001 in its place.
+        if let Some(held) = model.answer_held() {
+            ops.push(held);
+        } else if let Some(p) = &model.pending {
             ops.push(respond_op(
                 &p.transport_id,
                 &p.id,
@@ -2530,6 +2575,15 @@ fn approve_with(
         chain_id,
         &pending.origin,
         opts.token_meta.as_ref(),
+    );
+    // Spec 097: what the sheet called the contract, and the fee the wallet
+    // adds in a token — the one `Transfer` of the receipt that is not the
+    // dApp's.
+    let summary = super::dapp_activity::with_approve_facts(
+        summary,
+        opts.reading.as_ref(),
+        opts.gas_fee_token.as_deref(),
+        opts.quoted_fee.as_ref().map(|fee| fee.amount.as_str()),
     );
 
     model.inflight = Some(Inflight {
@@ -3070,13 +3124,14 @@ fn on_op_submitted(
         if maybe_sent {
             return render();
         }
-        return ops_and_render(
-            model,
-            vec![SignOperation::UpdateRecord {
-                record_id: wa.record_id.clone(),
-                close: SignRecordClose::Admitted,
-            }],
-        );
+        let mut operations = vec![SignOperation::UpdateRecord {
+            record_id: wa.record_id.clone(),
+            close: SignRecordClose::Admitted,
+        }];
+        // The relay has the batch, and its record is on disk: the page gets
+        // its id now (spec 097 E).
+        operations.extend(answer_batch_id(model));
+        return ops_and_render(model, operations);
     }
     // A relay hash that is not the local one (`userop.hash_mismatch`): the
     // write-ahead op will never land under its hash — withdraw it, and
@@ -3125,9 +3180,11 @@ fn on_op_submitted(
 }
 
 /// The tracker's word on the in-flight op (spec 082 RJ3, RJ4). Answers the
-/// waiting page at once when it is final — and only then: a relay's
-/// `submitted` tx hash can still be replaced by a fee bump, and `included`
-/// becomes Confirmed within one poll through the tracker's `TxReceipt`.
+/// waiting page when it is final — at once, or, for a refusal or "not sent"
+/// the sheet shows, when the person closes it (spec 097 N4) — and only
+/// then: a relay's `submitted` tx hash can still be replaced by a fee bump,
+/// and `included` becomes Confirmed within one poll through the tracker's
+/// `TxReceipt`.
 /// The inflight clears and the attempt moves on, so the shell's own late
 /// `Submit` result (the window's end) is dropped — never a second answer,
 /// never an answer to a newer request.
@@ -3151,9 +3208,10 @@ fn on_op_tracked(
     }
     let tx_hash = tx_hash.filter(|hash| !hash.trim().is_empty());
     let (payload, refusal) = match (status, tx_hash) {
+        // A batch's answer is its id, never the tx it landed in (spec 097 E).
         (TrackStatus::Confirmed, Some(tx_hash)) => (
             SignResponsePayload::Ok {
-                result: Some(tx_hash),
+                result: Some(batch_id(&fl).unwrap_or(tx_hash)),
             },
             None,
         ),
@@ -3203,25 +3261,31 @@ fn on_op_tracked(
                 model.clear_sheet();
             }
         }
-        Some(refused) => {
-            // Nothing was sent: the sheet says it failed — as a refusal,
-            // with no Retry, when the relay refused it — and no longer
-            // "submitting".
-            if shows_it {
-                if let Some(p) = model.pending.as_mut() {
-                    p.responded = true;
-                }
-                if let SignResponsePayload::Err { kind, message, .. } = &payload {
-                    model.sign_error = Some(SignErrorNotice {
-                        kind: *kind,
-                        detail: message.clone(),
-                    });
-                }
-                model.sign_error_refused = refused;
-                model.pending_op_hash = None;
-                model.pending_op_maybe_sent = false;
+        // Nothing was sent: the sheet says it failed — as a refusal, with no
+        // Retry, when the relay refused it — and no longer "submitting". The
+        // answer is held while it shows, as for a failure before the submit
+        // (spec 096 F8), and the close sends it (spec 097 N4): answered here,
+        // the extension worker closed the request window over the words ~12 s
+        // after "Submitted", and the person never read why. The rid is
+        // settled `Submitted`, so the sheet offers no "Try again" (⑧).
+        Some(refused) if shows_it => {
+            if let SignResponsePayload::Err { kind, message, .. } = &payload {
+                model.sign_error = Some(SignErrorNotice {
+                    kind: *kind,
+                    detail: message.clone(),
+                });
             }
+            model.sign_error_refused = refused;
+            model.pending_op_hash = None;
+            model.pending_op_maybe_sent = false;
+            if let Some(p) = model.pending.as_mut() {
+                p.held = Some(payload);
+            }
+            return render();
         }
+        // Nobody is looking (closed while it ran, or superseded): the page
+        // is answered at once.
+        Some(_) => {}
     }
     ops_and_render(model, vec![respond_op(&fl.transport_id, &fl.id, payload)])
 }
@@ -3460,8 +3524,21 @@ fn on_submit_outcome(
     // a site that looks it up waits on "pending" forever. The page is told
     // the transaction is not confirmed yet; the record stays pending for the
     // tracker. A `wallet_sendCalls` batch id IS the op hash (EIP-5792).
+    //
+    // Spec 097 E (S2): and a batch is answered with that id however the wait
+    // ended — a receipt in time included. The desktop answered its tx hash,
+    // and `wallet_getCallsStatus(<tx hash>)` read "Unknown bundle id" while
+    // PancakeSwap said "Proceed in your wallet" over a swap that had landed.
     let is_tx = fl.method == "eth_sendTransaction";
+    let is_batch = method_kind(&fl.method) == SignMethodKind::Batch;
     let outcome = match (&fl.op_hash, fl.record_id.is_some(), outcome) {
+        (
+            Some(op_hash),
+            true,
+            SignSubmitOutcome::Succeeded { .. } | SignSubmitOutcome::NotConfirmed { .. },
+        ) if is_batch => SignSubmitOutcome::ReceiptPending {
+            user_op_hash: op_hash.clone(),
+        },
         (
             Some(op_hash),
             true,
@@ -3766,6 +3843,45 @@ fn persist_pending_then(
 /// ending — [`ending_of`] reads this answer as
 /// [`SignEnding::StillConfirming`], which follows the operation rather than
 /// calling it failed (spec 082 RA8).
+/// EIP-5792's id for the batch `fl` is submitting: its user operation's hash
+/// — what `wallet_getCallsStatus` asks about and [`crate::app::dapp_rpc::calls_status`]
+/// reads back (200 with the receipt, 100 pending, 400 refused). `None` for a
+/// request that is not a batch, or before its operation exists.
+fn batch_id(fl: &Inflight) -> Option<String> {
+    (method_kind(&fl.method) == SignMethodKind::Batch)
+        .then(|| fl.op_hash.clone())
+        .flatten()
+}
+
+/// Spec 097 E (S2): a batch is answered with its id the moment the relay has
+/// taken its operation — on every shell, whatever its own receipt wait would
+/// have said. The page follows the batch by that id (`wallet_getCallsStatus`);
+/// the sheet follows the tracker ([`ending_of`] reads the id as
+/// [`SignEnding::StillConfirming`]), and the tracker alone closes the record.
+/// The desktop, iOS and Android waited for the receipt and answered the tx
+/// hash, which no status lookup knows. Like [`on_op_tracked`], the inflight
+/// clears and the attempt moves on, so the shell's own late `Submit` result
+/// is dropped — never a second answer.
+fn answer_batch_id(model: &mut Model) -> Vec<SignOperation> {
+    let Some(fl) = model.inflight.clone() else {
+        return Vec::new();
+    };
+    let Some(id) = batch_id(&fl) else {
+        return Vec::new();
+    };
+    model.settle(&fl.id, SignSettledOutcome::Submitted);
+    model.inflight = None;
+    model.attempt += 1;
+    if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+        model.clear_sheet();
+    }
+    vec![respond_op(
+        &fl.transport_id,
+        &fl.id,
+        SignResponsePayload::Ok { result: Some(id) },
+    )]
+}
+
 fn answer_still_landing(model: &mut Model, detail: String) -> Command<SignEffect, Event> {
     let Some(fl) = model.inflight.take() else {
         return render();

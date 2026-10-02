@@ -190,6 +190,14 @@ test('two assets on one network go out as ONE operation carrying both', async ({
 		`no user operation reached the relay. relay methods: ${seen.join(',')}; console: ${errors.join(' | ')}`
 	).toHaveLength(1);
 	await expect(page.getByText(en('send.txSubmittedTitle'))).toBeVisible({ timeout: 30_000 });
+	// Spec 097 F (S3): the receipt lists every coin the one operation moved,
+	// under a header that is not one coin's ("Send ETH | Sent 0.000418 ETH"
+	// over a sweep that also moved USDC was the finding).
+	await expect(page.getByRole('heading', { name: en('send.multiSendTitle') })).toBeVisible();
+	await expect(
+		page.getByText(en('componentsTx.receipt.assetsCount').replace('{{n}}', '2'))
+	).toBeVisible();
+	await expect(page.getByText('100 USDC', { exact: true })).toBeVisible();
 	const op = sent[0][0] as { callData: string };
 	const callData = op.callData.toLowerCase();
 	expect(callData).toContain(USDC.slice(2));

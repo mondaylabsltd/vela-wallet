@@ -28,9 +28,9 @@ use super::approval_guard::{
     GuardTokenMetaView,
 };
 use super::clear_signing::{
-    analyze_message, known_contract, known_token_decimals, known_token_symbol, readable_message,
-    ClearSignMethod, ClearSiweBinding,
+    analyze_message, known_contract, readable_message, ClearSignMethod, ClearSiweBinding,
 };
+use super::token_registry::registry_token;
 
 /// The most of a request a record keeps on the disk (spec 093): 8 KB of the
 /// final params' JSON, measured in UTF-8 bytes. A page chooses a request's
@@ -109,7 +109,8 @@ pub struct DappSummary {
     /// The token an allowance is for. `None` for several tokens at once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    /// The token's symbol, as the sheet resolved it (or the built-in table).
+    /// The token's symbol: the registry's on the request's chain, else as
+    /// the sheet resolved it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -136,6 +137,159 @@ pub struct DappSummary {
     /// [`PRIMARY_TYPE_MAX_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_type: Option<String>,
+    /// What the sheet's reading called [`Self::contract`] (spec 097 N8) —
+    /// a descriptor's name, from the build or Vela's descriptor service,
+    /// never the dApp's: "NativeOrderFactory". `None` when the reading named
+    /// it nothing, or named another contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_name: Option<String>,
+    /// The protocol that reading says owns [`Self::contract`] ("1inch").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// The network fee the wallet added to the operation in a token (an
+    /// in-band fee leg), so what the receipt proves left the account can be
+    /// told apart from what the dApp's call moved (spec 097 N5): the token,
+    /// lower-case, and its base units as a decimal string. `None` for a fee in
+    /// the chain's coin, which no `Transfer` log carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fee_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fee_amount: Option<String>,
+    /// The coins the sheet's reading showed amounts of, as it named them
+    /// ([`DappReading::tokens`]) — what lets Activity name a coin the
+    /// receipt proves moved (spec 097 N5).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens: Vec<DappToken>,
+}
+
+/// What a signing sheet's reading named, for the record (spec 097 N5, N8):
+/// the contract it read, with the name the sheet showed and the protocol
+/// that owns it, and the tokens it showed amounts of, with the symbol and
+/// decimals their own contracts answered. Carried from
+/// `ClearSigningView::record_reading` on the approve
+/// (`SignApproveOpts::reading`) into the record's [`DappSummary`], so
+/// Activity names the contract and the coins as the sheet did.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct DappReading {
+    /// The contract read (lower-case), when the reading named it or its
+    /// owner; `None` otherwise.
+    #[serde(default)]
+    pub address: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens: Vec<DappToken>,
+}
+
+/// A token as a reading resolved it: its contract (lower-case), and the
+/// symbol and decimals it answered. A name, not a trust: an amount of it
+/// ARRIVING is still drawn only for a coin the wallet trusts.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct DappToken {
+    pub address: String,
+    pub symbol: String,
+    pub decimals: u32,
+}
+
+/// What finished readings name, for the record (spec 097): `contract` is the
+/// reading of the one call the request is (its called, or verifying,
+/// contract with the descriptor's name and owner); `readings` every reading
+/// whose amounts the sheet drew — a lone call's, or each call of a batch.
+/// `meta` answers a token's symbol and decimals as the reading resolved them.
+/// `None` when it names nothing. A best-effort reading names a contract only
+/// from the build's own table, so whatever it carries is the wallet's word.
+#[must_use]
+pub fn reading_of<'a>(
+    contract: Option<&super::clear_signing::ClearSignResult>,
+    readings: impl IntoIterator<Item = &'a super::clear_signing::ClearSignResult>,
+    meta: impl Fn(&str) -> Option<(String, u32)>,
+) -> Option<DappReading> {
+    let text = |value: &Option<String>| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned)
+    };
+    let (name, owner) = contract.map_or((None, None), |result| {
+        (text(&result.contract_name), text(&result.owner))
+    });
+    let address = contract
+        .and_then(|result| result.contract_address.as_deref())
+        .and_then(address_of)
+        .filter(|_| name.is_some() || owner.is_some());
+    let mut tokens: Vec<DappToken> = Vec::new();
+    for field in readings.into_iter().flat_map(|result| &result.fields) {
+        let Some(token) = field.token_address.as_deref().and_then(address_of) else {
+            continue;
+        };
+        if tokens.iter().any(|known| known.address == token) {
+            continue;
+        }
+        if let Some((symbol, decimals)) = meta(&token)
+            .map(|(symbol, decimals)| (symbol.trim().to_owned(), decimals))
+            .filter(|(symbol, _)| !symbol.is_empty())
+        {
+            tokens.push(DappToken {
+                address: token,
+                symbol,
+                decimals,
+            });
+        }
+    }
+    (address.is_some() || !tokens.is_empty()).then(|| DappReading {
+        name: address.as_ref().and(name),
+        owner: address.as_ref().and(owner),
+        address,
+        tokens,
+    })
+}
+
+/// The reading's names for the summary's contract and coins, and the fee
+/// the wallet added in a token (spec 097): the facts the approve carries
+/// beside the request. A name read for another contract is not this one's.
+#[must_use]
+pub fn with_approve_facts(
+    mut summary: DappSummary,
+    reading: Option<&DappReading>,
+    fee_token: Option<&str>,
+    fee_amount: Option<&str>,
+) -> DappSummary {
+    if let Some(reading) = reading {
+        let ours = summary
+            .contract
+            .as_deref()
+            .zip(reading.address.as_deref())
+            .is_some_and(|(contract, read)| contract.eq_ignore_ascii_case(read));
+        if ours {
+            summary.contract_name.clone_from(&reading.name);
+            summary.owner.clone_from(&reading.owner);
+        }
+        summary.tokens = reading
+            .tokens
+            .iter()
+            .filter_map(|token| {
+                Some(DappToken {
+                    address: address_of(&token.address)?,
+                    ..token.clone()
+                })
+            })
+            .collect();
+    }
+    let amount = fee_amount
+        .map(str::trim)
+        .filter(|amount| !amount.is_empty() && amount.bytes().all(|b| b.is_ascii_digit()))
+        // A signature sends nothing and pays no fee.
+        .filter(|_| !summary.action.is_signature());
+    if let (Some(token), Some(amount)) = (fee_token.and_then(address_of), amount) {
+        summary.fee_token = Some(token);
+        summary.fee_amount = Some(amount.to_owned());
+    }
+    summary
 }
 
 /// Summarize one request (spec 093) from its FULL final params. `origin` is
@@ -151,7 +305,9 @@ pub fn summarize(
     token_meta: Option<&GuardTokenMetaView>,
 ) -> DappSummary {
     match method {
-        "eth_sendTransaction" => call_summary(params.get(0).unwrap_or(&Value::Null), token_meta),
+        "eth_sendTransaction" => {
+            call_summary(chain_id, params.get(0).unwrap_or(&Value::Null), token_meta)
+        }
         "wallet_sendCalls" => {
             let calls = params
                 .get(0)
@@ -165,7 +321,7 @@ pub fn summarize(
                     ..DappSummary::default()
                 },
                 // One call is that call, as its sheet reads it (089 S1).
-                [only] => call_summary(only, token_meta),
+                [only] => call_summary(chain_id, only, token_meta),
                 calls => batch_summary(chain_id, calls),
             }
         }
@@ -175,7 +331,7 @@ pub fn summarize(
             ..DappSummary::default()
         },
         method if crate::typed_data_request::looks_like_typed_data(method) => {
-            typed_summary(method, params, token_meta)
+            typed_summary(chain_id, method, params, token_meta)
         }
         // Anything else that was signed is recorded as a message
         // (`record_shape`), and says no more than that.
@@ -187,7 +343,7 @@ pub fn summarize(
 }
 
 /// One transaction: an allowance it grants, or the call it makes.
-fn call_summary(tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSummary {
+fn call_summary(chain_id: u32, tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSummary {
     let to = address_in(tx.get("to"));
     let data = tx.get("data").and_then(Value::as_str);
     let base = DappSummary {
@@ -198,6 +354,7 @@ fn call_summary(tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSumm
     };
     match detect_calldata_approval(to.as_deref(), data).filter(is_grant) {
         Some(approval) => with_grant(
+            chain_id,
             DappSummary {
                 action: DappAction::Approve,
                 ..base
@@ -227,8 +384,8 @@ fn batch_summary(chain_id: u32, calls: &[Value]) -> DappSummary {
             let data = call.get("data").and_then(Value::as_str);
             if let Some(approval) = detect_calldata_approval(to.as_deref(), data).filter(is_grant) {
                 // A leg's own token metadata never reaches the approve, so
-                // only the built-in table names its token here.
-                summary = with_grant(summary, &approval, None);
+                // only the registry names its token here.
+                summary = with_grant(chain_id, summary, &approval, None);
             }
         }
     }
@@ -258,6 +415,7 @@ fn message_summary(params: &Value, origin: &str) -> DappSummary {
 /// Typed data: a permit when it grants an allowance (the guard's reading),
 /// else plain structured data — its primary type and verifying contract.
 fn typed_summary(
+    chain_id: u32,
     method: &str,
     params: &Value,
     token_meta: Option<&GuardTokenMetaView>,
@@ -277,6 +435,7 @@ fn typed_summary(
     };
     match detect_approval(method, Some(params)).filter(is_grant) {
         Some(approval) => with_grant(
+            chain_id,
             DappSummary {
                 action: DappAction::Permit,
                 ..base
@@ -294,8 +453,9 @@ fn is_grant(approval: &GuardDetectedApproval) -> bool {
     approval.kind != GuardApprovalKind::DecreaseAllowance
 }
 
-/// The allowance's facts onto `summary`.
+/// The allowance's facts onto `summary`, its token named on `chain_id`.
 fn with_grant(
+    chain_id: u32,
     mut summary: DappSummary,
     approval: &GuardDetectedApproval,
     token_meta: Option<&GuardTokenMetaView>,
@@ -308,17 +468,22 @@ fn with_grant(
         .amount_raw
         .clone()
         .filter(|_| !approval.is_unbounded && !approval.is_boolean_grant);
-    // The sheet's resolved metadata, once it resolved; the built-in table
-    // otherwise. A token nobody could name keeps its address only.
+    // The registry on this chain, as the sheet names it (097 D); else the
+    // sheet's resolved metadata, once it resolved. A token nobody could name
+    // keeps its address only.
+    let known = summary
+        .token
+        .as_deref()
+        .and_then(|token| registry_token(chain_id, token));
     let resolved = token_meta.filter(|meta| meta.verified && !meta.loading);
-    let token = summary.token.as_deref();
-    summary.symbol = resolved
-        .map(|meta| meta.symbol.trim().to_owned())
-        .filter(|symbol| !symbol.is_empty())
-        .or_else(|| token.and_then(known_token_symbol).map(str::to_owned));
-    summary.decimals = resolved
-        .map(|meta| meta.decimals)
-        .or_else(|| token.and_then(known_token_decimals));
+    summary.symbol = known.map(|known| known.symbol.to_owned()).or_else(|| {
+        resolved
+            .map(|meta| meta.symbol.trim().to_owned())
+            .filter(|symbol| !symbol.is_empty())
+    });
+    summary.decimals = known
+        .map(|known| known.decimals)
+        .or_else(|| resolved.map(|meta| meta.decimals));
     summary.expires_at = approval.deadline.as_deref().and_then(readable_deadline);
     summary
 }
@@ -372,6 +537,20 @@ pub fn clean_primary_type(name: &str) -> Option<String> {
 pub fn protocol_of(chain_id: u32, address: &str) -> Option<&'static str> {
     known_contract(chain_id, address)
         .filter(|known| known.place)
+        .map(|known| known.owner)
+}
+
+/// The protocol whose Permit2 deployment `address` is, on `chain_id` (spec
+/// 097 N7): Uniswap's Permit2, or PancakeSwap's own. Permit2 names no place
+/// of its own ([`protocol_of`]) — it serves whoever a later permit names —
+/// but an allowance granted TO it is granted to that protocol's contract, so
+/// the approval's row takes that protocol rather than the site's host.
+#[must_use]
+pub fn permit2_owner(chain_id: u32, address: &str) -> Option<&'static str> {
+    use super::clear_signing::{PANCAKE_PERMIT2, PERMIT2_ADDRESS};
+    let address = address.trim().to_ascii_lowercase();
+    known_contract(chain_id, &address)
+        .filter(|_| address == PERMIT2_ADDRESS || address == PANCAKE_PERMIT2)
         .map(|known| known.owner)
 }
 

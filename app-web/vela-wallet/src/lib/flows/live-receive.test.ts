@@ -287,6 +287,7 @@ describe('the desktop column title (T484)', () => {
 				multi_chain_id: null,
 				multi_specs: [],
 				recipient_identity: null,
+				payees: [],
 				recipient_risk: null,
 				recipient_is_contract: false,
 				amount_warning: null,

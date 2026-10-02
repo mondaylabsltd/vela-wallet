@@ -1845,15 +1845,28 @@ fun SendConfirmBody(
                             IdenticonImage(seed = it, size = VelaIconSize.lg)
                             Spacer(modifier = Modifier.width(VelaSpacing.md))
                         }
-                        Text(
-                            text = item.label,
-                            color = colors.fgBase,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.base,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        // Spec 097 F: a named payee's short address under the
+                        // name — the name may be cut, the address is not lost.
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.label,
+                                color = colors.fgBase,
+                                fontFamily = if (item.mono) VelaMonoFontFamily else VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            item.detail?.let { detail ->
+                                Text(
+                                    text = detail,
+                                    color = colors.fgSubtle,
+                                    fontFamily = VelaMonoFontFamily,
+                                    fontSize = VelaTextSize.sm,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            }
+                        }
                         Text(
                             text = item.value,
                             color = colors.fgBase,

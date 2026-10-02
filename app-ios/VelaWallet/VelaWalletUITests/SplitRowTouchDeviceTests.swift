@@ -42,13 +42,16 @@ final class SplitRowTouchDeviceTests: XCTestCase {
         let deadline = Date().addingTimeInterval(30)
         while !form.exists && !picker.exists && Date() < deadline { settle(0.5) }
         if picker.exists {
+            // The combined label's separator follows the locale ("," in
+            // English, "，" or "、" under zh-Hans), so the row is the button
+            // that names both the coin and its network. The parallel space's
+            // golden Safe is a real account: the picker lists only what it
+            // holds, so either of the coins it is kept funded in will do.
             let row = app.buttons.matching(NSPredicate(
-                // The combined label's separator follows the locale ("," in
-                // English, "，" or "、" under zh-Hans), so the row is the button
-                // that names both the coin and its network.
-                format: "label BEGINSWITH %@ AND label CONTAINS %@", "xDAI", "Gnosis"
+                format: "(label BEGINSWITH %@ AND label CONTAINS %@) OR (label BEGINSWITH %@ AND label CONTAINS %@)",
+                "xDAI", "Gnosis", "BNB", "BNB Chain"
             )).firstMatch
-            tap(row, "the picker's xDAI row", timeout: 30)
+            tap(row, "the picker's xDAI or BNB row", timeout: 30)
         }
         tap(app.buttons["+  添加收款人"].firstMatch, "+ 添加收款人", timeout: 30)
         XCTAssertTrue(app.staticTexts["收款人 2"].waitForExistence(timeout: 15), "the split never opened")

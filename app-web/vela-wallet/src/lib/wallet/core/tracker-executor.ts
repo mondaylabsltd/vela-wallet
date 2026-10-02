@@ -331,6 +331,9 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					operation.patch.tx_hash != null
 						? { status, txHash: operation.patch.tx_hash }
 						: { status };
+				// Spec 097: how it ended — what the receipt proved it moved, or why
+				// it failed — kept with the records verbatim for the feed.
+				if (operation.patch.settlement != null) patch.settlement = operation.patch.settlement;
 				// ONE atomic read-modify-write for every sibling of a batch, same ids,
 				// in place — never a second record (invariant ⑦). Best effort, as every
 				// TS call site's `.catch(() => {})` was.

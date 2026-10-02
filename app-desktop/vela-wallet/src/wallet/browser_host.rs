@@ -2709,4 +2709,215 @@ mod tests {
             assert_eq!(driver.view().tabs[0].chain_id, 100);
         });
     }
+
+    /// Spec 097 E (S2), the pass's PancakeSwap batch: the column's landing
+    /// wait ended with the TX hash, the page got it as the batch id, and
+    /// `wallet_getCallsStatus(<it>)` read "Unknown bundle id" while the site
+    /// said "Proceed in your wallet" over a swap that had landed. Now the
+    /// signing core answers the batch with its id the moment the relay takes
+    /// it (the wait's own result answers nothing), this host hands it to the
+    /// page with no op named (as `user_op_hash_of` may name none), and that
+    /// id reads 100 on its way and 200 with the real receipt once landed.
+    #[test]
+    fn a_batch_answered_by_its_id_reads_200_once_it_landed() {
+        use crate::core_host::CoreHost;
+        use crate::executor::landing::Landing;
+        use crate::wallet::signing_host::BROWSER_TRANSPORT;
+        use vela_core::app::sign_request::{
+            Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignRequest,
+            SignShellResult,
+        };
+        const PCS: &str = "https://pancakeswap.finance";
+        const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let fixture = |name: &str| -> Value {
+            let path = format!(
+                "{}/../../rust/crates/vela-core/tests/fixtures/dapp097/{name}",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let text =
+                std::fs::read_to_string(&path).unwrap_or_else(|e| unreachable!("{path}: {e}"));
+            serde_json::from_str(&text).unwrap_or_else(|e| unreachable!("{name}: {e}"))
+        };
+        let request = fixture("req-pcs-usdc-bnb.json");
+        let receipt = fixture("receipt-pcs-usdc-bnb.json");
+        let tx = receipt["transactionHash"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let op = receipt["logs"]
+            .as_array()
+            .and_then(|logs| {
+                logs.iter().find(|log| {
+                    log["topics"][0]
+                        == "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
+                })
+            })
+            .and_then(|log| log["topics"][1].as_str())
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(op.len(), 66, "the operation's event is in the receipt");
+
+        storage::tests::with_temp_state("dbr-host-batch-id", || {
+            seed_grant(PCS, SAFE, 56);
+            let mut driver = BrowserDriver::new();
+            driver.dispatch(Event::AccountsUpdated {
+                addresses: Some(vec![SAFE.to_owned()]),
+            });
+            driver.dispatch(Event::AccountSwitched {
+                address: SAFE.to_owned(),
+                now_ms: 1_757_000_000_000.0,
+            });
+            driver.dispatch(Event::NetworksChanged {
+                chain_ids: vec![1, 56, 100],
+            });
+            driver.dispatch(Event::Start);
+            page(&mut driver, PCS, json!({"t":"hello","doc":"d1"}));
+            let out = ask(
+                &mut driver,
+                PCS,
+                "d1",
+                "1",
+                "wallet_sendCalls",
+                request["params"].clone(),
+            );
+            let forward = forwarded(&out);
+            assert_eq!(forward.len(), 1, "forwarded to the column");
+            assert_eq!(forward[0].chain_id, 56);
+
+            // The column's signing core, as it runs the forwarded request.
+            let mut sign = CoreHost::<SignRequest>::new();
+            sign.dispatch(SignEvent::NetworksChanged {
+                chain_ids: vec![1, 56, 100],
+            });
+            sign.dispatch(SignEvent::AccountsChanged {
+                accounts: vec![SignAccountRef {
+                    address: SAFE.to_owned(),
+                    credential_id: "cred0".to_owned(),
+                }],
+                active_index: 0,
+            });
+            sign.dispatch(SignEvent::RequestArrived {
+                id: forward[0].id.clone(),
+                method: forward[0].method.clone(),
+                params_json: forward[0].params_json.clone(),
+                origin: forward[0].origin.clone(),
+                transport_id: BROWSER_TRANSPORT.to_owned(),
+                dedicated_transport: true,
+                per_request_chain: Some(forward[0].chain_id),
+                dapp: None,
+                granted_address: Some(forward[0].granted_address.clone()),
+                requested_address: None,
+                request_ts_ms: None,
+                now_ms: 1_000.0,
+            });
+            let ops = sign.dispatch(SignEvent::ApproveTapped {
+                opts: SignApproveOpts::default(),
+            });
+            let ops = sign.resolve(ops[0].id, SignShellResult::PreCheck { funding: None });
+            let submit = ops[0].id;
+            for op_ in sign.dispatch(SignEvent::OpSigned {
+                id: "1".to_owned(),
+                user_op_hash: op.clone(),
+                submit_block: None,
+                now_ms: 2_000.0,
+            }) {
+                let _ = sign.resolve(op_.id, SignShellResult::RecordPersisted);
+            }
+            let answer = sign
+                .dispatch(SignEvent::OpSubmitted {
+                    id: "1".to_owned(),
+                    user_op_hash: op.clone(),
+                    now_ms: 3_000.0,
+                    maybe_sent: false,
+                    submit_block: None,
+                })
+                .into_iter()
+                .find_map(|pending| match pending.operation {
+                    SignOperation::SendResponse { payload, .. } => Some(payload),
+                    _ => None,
+                })
+                .unwrap_or_else(|| unreachable!("the relay took it: the page gets its id"));
+            assert_eq!(
+                answer,
+                SignResponsePayload::Ok {
+                    result: Some(op.clone())
+                }
+            );
+            // The column's landing wait ends with the TX hash: nobody hears it.
+            let late = sign.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: crate::executor::sign_request::after_landing(
+                        op.clone(),
+                        Some(Landing::Landed(tx.clone())),
+                    ),
+                    now_ms: 12_000.0,
+                },
+            );
+            assert!(
+                !late
+                    .iter()
+                    .any(|p| matches!(p.operation, SignOperation::SendResponse { .. })),
+                "one answer"
+            );
+
+            let out = driver.dispatch(Event::SigningAnswered {
+                tab: BROWSER_TAB.to_owned(),
+                id: "1".to_owned(),
+                payload: answer,
+                user_op_hash: None,
+            });
+            assert_eq!(answers(&out)[0]["result"], json!(op));
+
+            let work = |out: &[Outbound]| -> u64 {
+                out.iter()
+                    .find_map(|next| match next {
+                        Outbound::Work { id, .. } => Some(*id),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| unreachable!("a read goes out"))
+            };
+            let read = |driver: &mut BrowserDriver, id: u64, body: Value| {
+                driver.resolve(
+                    id,
+                    DbrShellResult::ReadAnswered {
+                        body_json: Some(body.to_string()),
+                    },
+                )
+            };
+            // On its way: 100.
+            let out = ask(
+                &mut driver,
+                PCS,
+                "d1",
+                "2",
+                "wallet_getCallsStatus",
+                json!([op]),
+            );
+            let out = read(&mut driver, work(&out), json!({"result": null}));
+            let out = read(
+                &mut driver,
+                work(&out),
+                json!({"result": {"status": "submitted"}}),
+            );
+            assert_eq!(answers(&out)[0]["result"]["status"], 100);
+            // Landed: 200, with the receipt the chain gave.
+            let out = ask(
+                &mut driver,
+                PCS,
+                "d1",
+                "3",
+                "wallet_getCallsStatus",
+                json!([op]),
+            );
+            let out = read(
+                &mut driver,
+                work(&out),
+                json!({"result": {"success": true, "logs": receipt["logs"], "receipt": receipt}}),
+            );
+            let status = &answers(&out)[0]["result"];
+            assert_eq!(status["status"], 200, "{status}");
+            assert_eq!(status["receipts"][0]["transactionHash"], json!(tx));
+        });
+    }
 }

@@ -154,6 +154,11 @@ final class TrackerExecutor {
             if let txHash = patch["tx_hash"] as? String, !txHash.isEmpty {
                 fields["txHash"] = txHash
             }
+            // Spec 097: how it ended — what its receipt proved it moved, or
+            // why it failed — kept beside the status, verbatim, for the feed.
+            if let settlement = patch["settlement"] as? [String: Any] {
+                fields["settlement"] = settlement
+            }
             TxRecords.patch(ids: ids, fields: fields, store: store)
             ports.recordsPatched()
             return CoreJSON.string(["type": "records_patched"])

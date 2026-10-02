@@ -465,6 +465,12 @@ struct CoreWire082Tests {
         #expect(kind == .send)
         let status = try CoreJSON.decoder.decode(FeedTxStatusWire.self, from: Data(#""a_future_status""#.utf8))
         #expect(status == .pending)
+        // Spec 097 F: a payee's name of a source this build does not know is
+        // `unknown` — and not drawn, since untagged it would pass as theirs.
+        let source = try CoreJSON.decoder.decode(SendNameSourceWire.self, from: Data(#"{"type":"a_future_source"}"#.utf8))
+        #expect(source == .unknown)
+        let service = try CoreJSON.decoder.decode(SendNameSourceWire.self, from: Data(#"{"type":"service","label":"ENS"}"#.utf8))
+        #expect(service == .service(label: "ENS"))
         let tracker = try CoreJSON.decode(TrackViewWire.self, from: [
             "entries": [[
                 "user_op_hash": opHash, "chain_id": 100, "record_ids": ["r"],

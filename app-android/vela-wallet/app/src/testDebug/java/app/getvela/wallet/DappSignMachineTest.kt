@@ -623,7 +623,12 @@ class DappSignMachineTest {
         assertEquals("posted once", 1, events.count { it == "relay.send" })
     }
 
-    /** Spec 082 RJ3 (DX-W3): the tracker's `rejected` answers the page -32603 "refused", once. */
+    /**
+     * Spec 082 RJ3 (DX-W3): the tracker's `rejected` answers the page -32603
+     * "refused", once. Spec 097 N4: after "Submitted" — the relay took the op —
+     * the refusal stays on the sheet in its own words, Done and no Try again,
+     * and the page hears it when the person closes it, not under the words.
+     */
     @Test
     fun `the tracker's rejection answers refused once`() = runBlocking<Unit> {
         seedAccount(); scriptRelay(receiptLands = false); relayTakesTheLocalHash()
@@ -633,12 +638,22 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
         c.approve()
         withTimeout(30_000) { while (events.none { it.startsWith("op:") }) delay(20) }
-        delay(300)
+        withTimeout(10_000) { c.sign.first { it.pending_op_hash != null } }
         trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Rejected, null)
+        val sheet = withTimeout(10_000) { c.sign.first { it.error != null } }
+        assertEquals("the sheet stays", SignSurface.Sheet, sheet.surface)
+        assertTrue("it says refused", sheet.failure_refused)
+        assertTrue("the rid went out: no Try again", !sheet.failure_retryable)
+        assertNull("no longer submitted", sheet.pending_op_hash)
+        delay(500)
+        assertTrue("held while it shows: $answers", answers.none { it.first == "tab-1/r1" })
+        assertFalse("the sheet is not over", c.closed.value)
+        c.swipeDismissed()
         withTimeout(10_000) { while (answers.none { it.first == "tab-1/r1" }) delay(20) }
         val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
         assertEquals(-32603, error.getInt("code"))
         assertTrue(error.getString("message").contains(uniffi.vela_core_uniffi.userOpRefusedDappDetail()))
+        withTimeout(10_000) { c.closed.first { it } }
         delay(500)
         assertEquals("exactly one answer", 1, answers.count { it.first == "tab-1/r1" })
     }

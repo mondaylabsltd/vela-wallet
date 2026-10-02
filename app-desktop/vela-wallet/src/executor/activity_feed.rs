@@ -136,6 +136,11 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
         summary: row
             .get("dappSummary")
             .and_then(|summary| serde_json::from_value(summary.clone()).ok()),
+        // How its operation ended (spec 097), as the tracker's patch wrote
+        // it: handed back untouched; one that will not read is none.
+        settlement: row
+            .get("settlement")
+            .and_then(|settlement| serde_json::from_value(settlement.clone()).ok()),
     })
 }
 
@@ -869,6 +874,57 @@ mod tests {
             );
             assert_eq!(records[1].summary, None, "not the core's shape");
             assert_eq!(records[2].summary, None, "a record from before 093");
+        });
+    }
+
+    /// Spec 097: the tracker's settlement, kept beside the status by the
+    /// patch, reads back untouched — and one this build cannot read is none.
+    #[test]
+    fn a_dapp_rows_settlement_reads_back_verbatim_or_not_at_all() {
+        use vela_core::app::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
+        storage::tests::with_temp_state("feed-dapp-settlement", || {
+            seed(json!([
+                {
+                    "id": "borrow", "timestamp": 1_759_100_000, "chainId": 56,
+                    "type": "dapp_tx", "status": "confirmed",
+                    "settlement": { "moved": [
+                        { "token": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+                          "delta": "300000000000000000" },
+                        { "token": null, "delta": "1499036349071560" }
+                    ] }
+                },
+                {
+                    "id": "refused", "timestamp": 1_759_000_000, "chainId": 56,
+                    "type": "dapp_tx", "status": "failed",
+                    "settlement": { "failure": "refused" }
+                },
+                {
+                    "id": "odd", "timestamp": 1_758_000_000, "chainId": 56,
+                    "type": "dapp_tx", "settlement": { "failure": "exploded" }
+                }
+            ]));
+            let records = read_records();
+            assert_eq!(
+                records[0].settlement,
+                Some(TrackSettlement {
+                    moved: Some(vec![
+                        TrackMove {
+                            token: Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d".to_owned()),
+                            delta: "300000000000000000".to_owned(),
+                        },
+                        TrackMove {
+                            token: None,
+                            delta: "1499036349071560".to_owned(),
+                        },
+                    ]),
+                    failure: None,
+                })
+            );
+            assert_eq!(
+                records[1].settlement.as_ref().and_then(|s| s.failure),
+                Some(TrackFailure::Refused)
+            );
+            assert_eq!(records[2].settlement, None, "not the core's shape");
         });
     }
 

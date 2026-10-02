@@ -176,9 +176,11 @@ vi.mock('$lib/signing/dapp-receipt', async (importOriginal) => {
 		) =>
 			entry?.status === 'confirmed'
 				? { kind: 'confirmed', opHash, txHash: entry.tx_hash ?? '' }
-				: maybeSent
-					? { kind: 'maybe_sent', opHash }
-					: { kind: 'submitted', opHash }
+				: entry?.status === 'rejected'
+					? { kind: 'refused', opHash }
+					: maybeSent
+						? { kind: 'maybe_sent', opHash }
+						: { kind: 'submitted', opHash }
 	};
 });
 
@@ -522,6 +524,83 @@ describe('a failure before anything was sent', () => {
 		await vi.waitFor(() => expect(fake.dispatched).toEqual([{ type: 'dismiss_tapped' }]), {
 			timeout: 1500
 		});
+		await view.screen.unmount();
+	});
+});
+
+/**
+ * Spec 097 N4: the relay took the op, the landing said "Submitted", and the
+ * relay then refused it. The core holds the page's answer while the refusal
+ * shows (096 F8's rule); the landing says it in its own words and stays —
+ * and its Done is the close that answers the page. Before 097 the core
+ * answered with the verdict and the extension window closed over the words.
+ */
+describe('a refusal after "Submitted"', () => {
+	const submitted = () => ({
+		...INITIAL_SIGN_VIEW,
+		surface: 'sheet' as const,
+		request: request('tx:n4', 'transaction', 'https://app.aave.com'),
+		is_submitting: true,
+		phase: 'submitting' as const,
+		swipe_action: 'dismiss' as const,
+		pending_op_hash: OP,
+		tracker_handoff: {
+			user_op_hash: OP,
+			record_ids: ['dapp-1-tx'],
+			chain_id: 56,
+			maybe_sent: false,
+			submit_block: null,
+			admitted: true
+		}
+	});
+
+	it('stays on the landing in its own words, and Done answers through the core', async () => {
+		fake = new Fake();
+		const view = mount();
+		fake.sign.view = submitted();
+		flushSync();
+		await tick();
+		// The landing rises for the op the relay took.
+		await vi.waitFor(() => expect(view.landing()).not.toBeNull());
+		fake.trackerEntries = [{ user_op_hash: OP, status: 'pending', tx_hash: null }];
+		fake.trackerChanged();
+		flushSync();
+		await tick();
+		expect(view.text()).toContain('Submitted');
+
+		// The tracker's verdict, and the core holding it on the sheet.
+		fake.trackerEntries = [{ user_op_hash: OP, status: 'rejected', tx_hash: null }];
+		fake.sign.view = {
+			...submitted(),
+			is_submitting: false,
+			phase: 'idle',
+			pending_op_hash: null,
+			error: {
+				kind: 'submit_failed',
+				detail: 'the network refused this transaction; nothing was sent'
+			},
+			failure_refused: true
+		};
+		fake.trackerChanged();
+		flushSync();
+		await tick();
+		expect(view.text()).toContain('Failed');
+		expect(view.text()).toContain(RECEIPT.refused);
+		expect(view.text()).not.toContain('Try Again');
+		// Longer than any landing's own beat: it waits for the person.
+		await pause(3_000);
+		expect(view.landing()).not.toBeNull();
+		expect(fake.dispatched).toEqual([]);
+
+		const done = [
+			...document.body.querySelectorAll<HTMLButtonElement>('.landing-over button')
+		].find((b) => b.textContent?.trim() === RECEIPT.done);
+		expect(done).toBeDefined();
+		done!.click();
+		flushSync();
+		await tick();
+		expect(fake.dispatched).toEqual([{ type: 'dismiss_tapped' }]);
+		expect(view.landing()).toBeNull();
 		await view.screen.unmount();
 	});
 });

@@ -20,7 +20,10 @@ struct SimulationSheetTests {
 
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
     private let me = "0x88cca0eedbf2c4426110bbfc998f048689266894"
-    private let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+    /// A token nobody has vouched for on Gnosis. (Gnosis's own USDC,
+    /// `0xddaf…7a83`, stood in here until 097 D; it is the registry's
+    /// stablecoin on that chain now, so the core trusts it.)
+    private let usdc = "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
 
     private func view(from dispatchResult: String) throws -> [String: Any] {
         try CoreJSON.object(dispatchResult)["view"] as? [String: Any] ?? [:]

@@ -230,6 +230,19 @@ fun FactRow(
                     textAlign = TextAlign.End,
                 )
             }
+            // Spec 097 F: the short address under a payee's name — its own
+            // line, so however long the name, the address stays on the row.
+            fact.detail?.let { detail ->
+                Text(
+                    text = detail,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.End,
+                )
+            }
         }
         fact.copy?.let { label ->
             Spacer(modifier = Modifier.width(VelaSpacing.sm))

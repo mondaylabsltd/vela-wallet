@@ -1965,6 +1965,24 @@ describe('what the approve carries (spec 093)', () => {
 		// The guard's placeholder token is handed over as it is; whether an
 		// unresolved token counts is the core's to say.
 		expect(opts.token_meta).toEqual(INITIAL_GUARD_VIEW.meta);
+		expect(opts.reading).toBeNull();
+	});
+
+	it("the record's reading is the core's record_reading, verbatim (097)", () => {
+		const reading = {
+			address: '0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01',
+			name: 'NativeOrderFactory',
+			owner: '1inch',
+			tokens: [
+				{ address: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', symbol: 'USDC', decimals: 18 }
+			]
+		};
+		const opts = approveOptsOf(
+			null,
+			{ ...INITIAL_CLEAR_VIEW, record_reading: reading },
+			INITIAL_GUARD_VIEW
+		);
+		expect(opts.reading).toBe(reading);
 	});
 });
 
@@ -2288,12 +2306,15 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 			text: m.warnPartial
 		});
 
-		// The chain is down: no figure, a caution, and the reading says it is incomplete.
+		// A token the wallet does not know on this chain, and the chain is down:
+		// no figure, a caution, and the reading says it is incomplete. (BNB
+		// Chain's USDC is the registry's, 097 D: the derived fixture names an
+		// unlisted token.)
 		const down = buildSigningModel(
-			inputs({ sign: BNB, clear: read('oneinch-native-order.json', true) })
+			inputs({ sign: BNB, clear: read('oneinch-native-order-unlisted.json', true) })
 		)!;
 		expect(down.blocks.find((b) => b.kind === 'swap')).toMatchObject({
-			receive: { sign: '', value: '\u2014 0x8ac7...', tone: 'caution' }
+			receive: { sign: '', value: '\u2014 0xa0b8...', tone: 'caution' }
 		});
 		expect(down.blocks).toContainEqual({ kind: 'warning', tone: 'caution', text: m.warnPartial });
 		expect(down.blocks).toContainEqual({
@@ -2312,13 +2333,13 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 		});
 	});
 
-	it('a batch call on a token names it, with its address beside a name the chain gave (N8)', () => {
+	it('a batch call on a token names it: the registry token by its symbol alone (N8, 097 D)', () => {
 		const model = buildSigningModel(
 			inputs({ sign: BNB, clear: read('pancakeswap-usdc-batch.json') })
 		)!;
 		const cards = model.blocks.filter((b) => b.kind === 'card');
 		expect(JSON.stringify(cards[0])).toContain(
-			JSON.stringify({ label: m.labelInteracting, value: 'USDC (0x8ac76a...cd580d)' })
+			JSON.stringify({ label: m.labelInteracting, value: 'USDC' })
 		);
 	});
 });

@@ -46,18 +46,21 @@
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
 	     draws no amount cell — never an empty one. Spec 093: a grant's
 	     allowance stands where the figure would be ("Unlimited" in red), and
-	     a swap's coin back sits under what left. -->
-	{#if row.amount !== '' || row.unit !== ''}
+	     a swap's coin back sits under what left. Spec 097 N5: what came back
+	     is drawn on its own when nothing left (a borrow's "+0.3 USDC"). -->
+	{#if row.amount !== '' || row.unit !== '' || row.received !== undefined}
 		<span class="figures">
-			<span
-				class="amount"
-				class:positive={row.positive}
-				class:masked={row.masked}
-				class:danger={row.danger === true}
-			>
-				<span class="value">{row.amount}</span>
-				<span class="unit">{row.unit}</span>
-			</span>
+			{#if row.amount !== '' || row.unit !== ''}
+				<span
+					class="amount"
+					class:positive={row.positive}
+					class:masked={row.masked}
+					class:danger={row.danger === true}
+				>
+					<span class="value">{row.amount}</span>
+					<span class="unit">{row.unit}</span>
+				</span>
+			{/if}
 			{#if row.received !== undefined}
 				<span class="amount back" class:masked={row.masked}>
 					<span class="value">{row.received.amount}</span>

@@ -17,6 +17,7 @@ import type { FeedFact } from '$lib/core/generated/FeedFact';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
 import type { FeedView } from '$lib/core/generated/FeedView';
+import type { TrackFailure } from '$lib/core/generated/TrackFailure';
 import type { WalletFlowMessages } from '$lib/flows/messages';
 import type {
 	BreakdownRowModel,
@@ -212,6 +213,27 @@ function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowMo
 	};
 }
 
+/**
+ * The fiat beside a figure: only a price the core knows (spec 097 N7,
+ * `FeedItem.priced`) — none at all when it knows none, never "≈ $0.00".
+ */
+function fiatText(item: FeedItem, ctx: TxDetailContext): string {
+	if (!item.priced) return '';
+	return ctx.hidden ? MASK : `≈ ${moneyText(item.usd_value, ctx.currency)}`;
+}
+
+/** Why a dApp operation failed, in the words its request ended with (spec 097 N4). */
+function failureText(failure: TrackFailure, m: WalletFlowMessages): string {
+	switch (failure) {
+		case 'reverted':
+			return m['componentsTx.receipt.failedHint'];
+		case 'refused':
+			return m['componentsUi.signing.refused'];
+		case 'not_sent':
+			return m['send.txErrorGeneric'];
+	}
+}
+
 /** One balance change as a line (083 F1): the figure and its coin, or "Unverified token". */
 function changeLine(change: FeedDappChange, ctx: TxDetailContext): string {
 	if (!change.verified || change.value === null) {
@@ -357,31 +379,41 @@ function dappTechnical(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): Tx
  * lines. Nothing here chooses which facts or in what order.
  */
 function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxDetailModel {
-	const { m, wm, currency, hidden } = ctx;
+	const { m, wm, hidden } = ctx;
 	const status = item.status;
 	let amount = '';
 	let fiat = '';
 	let danger = false;
+	let back = dapp.received ?? null;
+	let positive = false;
 	if (item.value !== null) {
 		const about = dapp.estimated ? '≈ ' : '';
 		const sign = item.direction === 'in' ? '+' : '−';
 		amount = hidden ? MASK : `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
-		fiat = hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`;
+		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
 		amount = hidden && figure.maskable ? MASK : `${figure.amount} ${figure.unit}`.trim();
 		danger = figure.danger;
+	} else if (back !== null) {
+		// Spec 097 N5: nothing left, something came back (a borrow) — what
+		// came back IS the figure.
+		amount = changeLine(back, ctx);
+		positive = back.direction === 'in';
+		back = null;
 	}
-	const back = dapp.received ?? null;
+	const failure = dapp.failure ?? null;
 	return {
 		title: dappTitle(dapp, wm),
 		...(dapp.off_chain
 			? { note: m['connect.detail.offChainNote'] }
 			: { status: statusChip(status, m) }),
+		// Spec 097 N4: a failed row says why, under its status.
+		...(failure === null ? {} : { note: failureText(failure, m) }),
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount,
 		fiat,
-		positive: false,
+		positive,
 		...(danger ? { danger: true } : {}),
 		...(back === null ? {} : { received: changeLine(back, ctx) }),
 		facts: dappFacts(item, dapp, ctx),
@@ -401,7 +433,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailModel {
 	// Spec 093: a dApp's transaction or signature is described by the core.
 	if (item.dapp) return dappTxDetail(item, item.dapp, ctx);
-	const { m, currency, hidden } = ctx;
+	const { m, hidden } = ctx;
 	// Spec 082 RG1: the record's lifecycle and what it is are the core's
 	// (`FeedItem.status`, `.kind`); a folded batch carries its first line's.
 	const status = item.status;
@@ -488,7 +520,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount: figureless ? '' : hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
-		fiat: figureless ? '' : hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`,
+		fiat: figureless ? '' : fiatText(item, ctx),
 		positive: received,
 		facts,
 		viewOnExplorer: m['history.viewOnExplorer'],

@@ -111,6 +111,8 @@ data class FeedTxRecord(
     val balance_changes: List<TrustSimJudgment>? = null,
     /** Spec 093: the record's summary, stored verbatim (`dappSummary`) and handed back untouched. */
     val summary: DappSummary? = null,
+    /** Spec 097: how its operation ended, as the tracker's patch stored it (`settlement`). */
+    val settlement: app.getvela.wallet.feature.send.core.TrackSettlement? = null,
 )
 
 /** What a dApp request did (spec 093) — `dapp_activity::DappAction`. */
@@ -157,6 +159,30 @@ data class DappSummary(
     val expires_at: Double? = null,
     val signin_domain: String? = null,
     val primary_type: String? = null,
+    /** Spec 097 N8: what the sheet's reading called [contract], and its owner. */
+    val contract_name: String? = null,
+    val owner: String? = null,
+    /** Spec 097 N5: the network fee the wallet added in a token — its contract and base units. */
+    val fee_token: String? = null,
+    val fee_amount: String? = null,
+    /** Spec 097 N5: the coins the sheet's reading named. */
+    val tokens: List<DappToken> = emptyList(),
+)
+
+/** A coin a reading named: its contract, and the symbol and decimals it answered (`DappToken`). */
+@Serializable
+data class DappToken(val address: String, val symbol: String, val decimals: Int)
+
+/**
+ * What a signing sheet's reading named (spec 097, `DappReading`): copied from
+ * `ClearSigningView.record_reading` to `SignApproveOpts.reading`, verbatim.
+ */
+@Serializable
+data class DappReading(
+    val address: String? = null,
+    val name: String? = null,
+    val owner: String? = null,
+    val tokens: List<DappToken> = emptyList(),
 )
 
 /** Who a row's `counterparty` is (spec 082 RJ16, G52): the person paid, or the contract a call went to. */
@@ -211,6 +237,8 @@ data class FeedItem(
     val decimals: Int? = null,
     /** Numeric USD, `0` when unknown. */
     val usd_value: Double = 0.0,
+    /** Spec 097 N7: [usd_value] is a price the core knows; `false` draws no fiat at all — unknown is not "$0.00". */
+    val priced: Boolean = false,
     val chain_id: Int,
     /** Epoch **seconds**. */
     val timestamp: Double,
@@ -446,6 +474,8 @@ data class FeedDapp(
     val facts: List<FeedFact> = emptyList(),
     @Serializable(with = FeedFactList::class)
     val technical: List<FeedFact> = emptyList(),
+    /** Spec 097 N4: a failed operation — why. */
+    val failure: app.getvela.wallet.feature.send.core.TrackFailure? = null,
 )
 
 object FeedLineList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedLine>(FeedLine.serializer())

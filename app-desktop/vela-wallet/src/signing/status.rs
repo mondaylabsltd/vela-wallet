@@ -259,8 +259,9 @@ pub fn approved(
             false,
         ));
     }
-    // A refusal AFTER the approval — the submission failed. The page already
-    // has its error; this is the send flow's sentence for it — or, when the
+    // A refusal AFTER the approval — the submission failed, or the relay
+    // refused the operation it had taken (spec 097 N4). The page hears it
+    // when this closes; this is the send flow's sentence for it — or, when the
     // relay refused the operation (spec 082 RJ3, `failure_refused`), that
     // sentence: nothing was sent and sending again meets the same refusal, so
     // no "try again". A refusal before (a 4902, the unlimited gate) stays on

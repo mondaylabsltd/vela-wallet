@@ -325,6 +325,8 @@ class FlowLiveTest {
         symbol = symbol,
         decimals = 18,
         usd_value = usd,
+        // As the core says it (spec 097 N7): a figure is a known price.
+        priced = usd > 0,
         chain_id = chainId,
         timestamp = System.currentTimeMillis() / 1000.0,
         day_start_ms = midnightToday(),

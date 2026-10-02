@@ -314,15 +314,16 @@ class SigningLiveTest {
 
     /**
      * N1 + N8: an amount the chain never scaled is no figure and the reading
-     * says it is incomplete; a batch call on USDC names the token, with its
-     * address beside a name only the chain gave.
+     * says it is incomplete (a borrow of a token the wallet does not know on
+     * BNB Chain — Ethereum's USDC address; BNB Chain's own USDC is the
+     * registry's, 097 D); a batch call on USDC names the token.
      */
     @Test
     fun `an unscaled amount is incomplete and a token target is named (097 N1, N8)`() {
         val borrow = passReading(
             ClearSigningEvent.ResolveTransaction(
                 to = "0x6807dc923806fe8fd134338eabca509979a7e0cb",
-                data = "0xa415bcad0000000000000000000000008ac76a51cc950d9822d68b83fe1ad97b32cd580d0000000000000000000000000000000000000000000000000429d069189e00000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                data = "0xa415bcad000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000429d069189e00000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
                 value = "0x0", chain_id = 56, locale = utc,
             ),
             chainDown = true,
@@ -342,7 +343,7 @@ class SigningLiveTest {
         val cards = SigningLive.model(drawn, request(batchParams).copy(method = "wallet_sendCalls"), sign, batch, GuardView(), FeeView(confirm_fee_ready = true), bnb)
             .blocks.filterIsInstance<SigningBlock.Card>()
         val interacting = strings.t("componentsUi.signing.interactingLabel")
-        assertEquals("USDC (0x8ac76a...cd580d)", cards[0].rows.single { it.label == interacting }.value)
+        assertEquals("USDC", cards[0].rows.single { it.label == interacting }.value)
     }
 
     /** F7: every machine says yes and the request is still being read — the slide stays shut, under "Loading…". */

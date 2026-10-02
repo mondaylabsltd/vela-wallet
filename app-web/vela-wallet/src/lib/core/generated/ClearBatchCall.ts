@@ -33,9 +33,9 @@ to: string | null,
  * The target's name, when the wallet itself knows the contract on this
  * chain (096 F5): the "Interacting with" row reads "PancakeSwap Permit2",
  * not forty hex digits. Or the token it is (097 N8): the registry's
- * symbol, else the symbol the token answered with its short address
- * beside it ("USDC (0x8ac76a...cd580d)"). Never a name a descriptor or
- * the dApp supplied.
+ * symbol on this chain ("USDC"), else the symbol the token answered with
+ * its short address beside it ("USDC (0xa0b869...06eb48)"). Never a name
+ * a descriptor or the dApp supplied.
  */
 to_name: string | null, 
 /**

@@ -779,6 +779,7 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(tx_hash.to_owned()),
+                settlement: None,
             },
         }),
         "the tracker closes the SAME record with the real tx hash: {ops:?}"
@@ -2722,8 +2723,8 @@ fn the_ending_state_is_the_tracker_s() {
 #[test]
 fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record() {
     use vela_core::app::tx_tracker::{
-        Event as TrackEvent, TrackOperation as TOp, TrackRecordPatch, TrackRecordStatus,
-        TrackShellResult as TRes, TxTracker,
+        Event as TrackEvent, TrackFailure, TrackOperation as TOp, TrackRecordPatch,
+        TrackRecordStatus, TrackSettlement, TrackShellResult as TRes, TxTracker,
     };
     let mut sign = submitting("req-rv");
     sign.dispatch(Event::OpSubmitted {
@@ -2765,6 +2766,10 @@ fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Failed,
                 tx_hash: None,
+                settlement: Some(TrackSettlement {
+                    moved: None,
+                    failure: Some(TrackFailure::Reverted),
+                }),
             },
         }
     );
@@ -3328,8 +3333,9 @@ fn asker_gone_after_op_signed_withdraws_and_answers_nobody() {
 }
 
 /// DX-W3 (G36): accepted, then the relay's status says rejected at 15 s.
-/// The page gets ONE answer — -32603, "refused, nothing was sent" — and the
-/// window-end result that follows is dropped: no later Ok.
+/// The page gets ONE answer — -32603, "refused, nothing was sent" — when the
+/// person closes the sheet that says so (spec 097 N4), and the window-end
+/// result that follows is dropped: no later Ok.
 #[test]
 fn a_rejection_the_tracker_learns_is_answered_refused_once() {
     let mut sut = submitting("req-t1");
@@ -3339,15 +3345,7 @@ fn a_rejection_the_tracker_learns_is_answered_refused_once() {
         .dispatch(op_tracked(TrackStatus::Pending, None, 12_000.0))
         .is_empty());
     let ops = sut.dispatch(op_tracked(TrackStatus::Rejected, None, 20_000.0));
-    assert_eq!(response_count(&ops), 1, "{ops:?}");
-    assert_eq!(
-        ops.iter().find_map(err_detail),
-        Some((
-            CODE_INTERNAL,
-            SignErrorKind::SubmitFailed,
-            Some(REFUSED_DAPP_DETAIL.to_owned())
-        ))
-    );
+    assert_eq!(response_count(&ops), 0, "held while it shows: {ops:?}");
     assert!(
         !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
         "the tracker alone closes the record"
@@ -3371,6 +3369,16 @@ fn a_rejection_the_tracker_learns_is_answered_refused_once() {
         },
     );
     assert!(late.is_empty(), "no later Ok: {late:?}");
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(response_count(&closed), 1, "{closed:?}");
+    assert_eq!(
+        closed.iter().find_map(err_detail),
+        Some((
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some(REFUSED_DAPP_DETAIL.to_owned())
+        ))
+    );
     // The rid settled: never signed twice.
     sut.dispatch(Arrive::global("req-t1", "eth_sendTransaction", &plain_send_params()).event());
     assert_eq!(
@@ -3382,26 +3390,37 @@ fn a_rejection_the_tracker_learns_is_answered_refused_once() {
 }
 
 /// EX-S5 (G36): a lost reply the tracker proves never sent at 87 s — one
-/// -32603 with the not-sent sentence, inside the window.
+/// -32603 with the not-sent sentence, inside the window, on the close of the
+/// sheet that says so (spec 097 N4). No "Try again": the rid went to the
+/// relay and is settled (⑧) — sending again is the page's to ask.
 #[test]
 fn a_not_sent_verdict_the_tracker_proves_is_answered_not_sent_once() {
     let mut sut = submitting("req-t2");
     written_ahead(&mut sut, "req-t2");
     sut.dispatch(op_submitted("req-t2", LOCAL_OP, true));
     let ops = sut.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0));
-    assert_eq!(response_count(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 0, "held while it shows: {ops:?}");
+    let view = sut.view();
+    assert!(!view.failure_refused);
+    assert!(!view.failure_retryable, "the rid already went to the relay");
+    assert!(
+        sut.dispatch(Event::RetryTapped).is_empty(),
+        "a retry the view does not offer does nothing"
+    );
+    assert!(sut
+        .dispatch(op_tracked(TrackStatus::NotSent, None, 90_000.0))
+        .is_empty());
+    let closed = sut.dispatch(Event::DismissTapped);
+    assert_eq!(response_count(&closed), 1, "{closed:?}");
     assert_eq!(
-        ops.iter().find_map(err_detail),
+        closed.iter().find_map(err_detail),
         Some((
             CODE_INTERNAL,
             SignErrorKind::SubmitFailed,
             Some(NOT_SENT_DAPP_DETAIL.to_owned())
         ))
     );
-    assert!(!sut.view().failure_refused);
-    assert!(sut
-        .dispatch(op_tracked(TrackStatus::NotSent, None, 90_000.0))
-        .is_empty());
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
 
 /// DX-W1 (G37): the chain check found the op at 72 s — the page gets the tx
@@ -3651,12 +3670,15 @@ fn a_not_sent_verdict_never_answers_an_op_the_relay_accepted() {
         ops.iter().filter_map(response_ok).collect::<Vec<_>>(),
         vec![(WP.to_owned(), Some(LANDED_TX.to_owned()))]
     );
-    // A may-have-been-sent op is still answered "not sent" (EX-S5).
+    // A may-have-been-sent op is still answered "not sent" (EX-S5) — on the
+    // close of the sheet that says so (spec 097 N4).
     let mut maybe = submitting("req-ns2");
     written_ahead(&mut maybe, "req-ns2");
     maybe.dispatch(op_submitted("req-ns2", LOCAL_OP, true));
     let ops = maybe.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0));
-    assert_eq!(response_count(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 0, "held while it shows: {ops:?}");
+    assert!(maybe.view().error.is_some());
+    assert_eq!(response_count(&maybe.dispatch(Event::SwipeDismissed)), 1);
 }
 
 /// A `Landed` ending holds a tx hash — a receipt the shell saw, or the
@@ -4760,4 +4782,278 @@ fn a_failure_nobody_watches_is_answered_at_once() {
         now_ms: NOW,
     });
     assert_eq!(response_count(&ops), 1, "{ops:?}");
+}
+
+// ===========================================================================
+// Spec 097 N4 — a refusal after "Submitted" is shown, not swallowed
+// ===========================================================================
+
+/// The golden Safe of the pass, the account the request came from.
+const GOLDEN_SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+
+/// The pass's request (`fixtures/dapp097/aave-withdraw-refused.json`): its
+/// method, its params as the page sent them, its origin and its chain.
+fn n4_request() -> (String, String, String, u32) {
+    let path = format!(
+        "{}/tests/fixtures/dapp097/aave-withdraw-refused.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let fixture: serde_json::Value = serde_json::from_str(&raw).expect("fixture json");
+    let chain = fixture["chainId"].as_u64().expect("chainId");
+    (
+        fixture["method"].as_str().expect("method").to_owned(),
+        fixture["params"].to_string(),
+        fixture["origin"].as_str().expect("origin").to_owned(),
+        u32::try_from(chain).expect("a chain id"),
+    )
+}
+
+/// The pass's moment, on the extension's own path: the request stamped onto
+/// its window's transport and its site's chain, slid, signed, written ahead,
+/// and taken by the relay — the sheet says "Submitted" with the op's hash.
+fn n4_submitted(rid: &str) -> Sut {
+    let (method, params, origin, chain) = n4_request();
+    let mut sut = Sut::new();
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![1, chain],
+    });
+    sut.dispatch(Event::AccountsChanged {
+        accounts: vec![SignAccountRef {
+            address: GOLDEN_SAFE.to_owned(),
+            credential_id: "cred-golden".to_owned(),
+        }],
+        active_index: 0,
+    });
+    sut.dispatch(Event::RequestArrived {
+        id: rid.to_owned(),
+        method,
+        params_json: params,
+        origin,
+        transport_id: EXT.to_owned(),
+        dedicated_transport: true,
+        per_request_chain: Some(chain),
+        dapp: None,
+        granted_address: Some(GOLDEN_SAFE.to_owned()),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(sut.view().surface, SignSurface::Sheet, "the sheet is up");
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    written_ahead(&mut sut, rid);
+    sut.dispatch(op_submitted(rid, LOCAL_OP, false));
+    let view = sut.view();
+    assert_eq!(view.pending_op_hash.as_deref(), Some(LOCAL_OP), "Submitted");
+    assert!(view.error.is_none());
+    sut
+}
+
+fn is_refused_answer(op: &Op) -> bool {
+    matches!(op, Op::SendResponse {
+        transport_id,
+        payload: SignResponsePayload::Err {
+            code: CODE_INTERNAL,
+            kind: SignErrorKind::SubmitFailed,
+            message: Some(message),
+        },
+        ..
+    } if transport_id == EXT && message == REFUSED_DAPP_DETAIL)
+}
+
+/// N4 (S3): the relay took the op, the sheet said "Submitted", and ~12 s
+/// later the relay refused it. The answer went out with the verdict, the
+/// extension worker closed the window on it, and the person never read why.
+///
+/// Now the refusal stays on the sheet in its own words, with Done and no
+/// "Try again" (⑧, RJ3), and nothing — a re-approve, a retry, a later
+/// verdict, the shell's late window end — answers the page. The close does,
+/// exactly once, with the refused sentence. Fails on the old code: the
+/// verdict itself answered.
+#[test]
+fn n4_a_refusal_after_submitted_stays_on_the_sheet_and_the_close_answers_it_once() {
+    let mut sut = n4_submitted("rid-n4");
+
+    let ops = sut.dispatch(op_tracked(TrackStatus::Rejected, None, 12_000.0));
+    assert_eq!(response_count(&ops), 0, "held while it shows: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Sheet, "the sheet stays");
+    assert_eq!(view.request.as_ref().map(|r| r.id.as_str()), Some("rid-n4"));
+    assert_eq!(
+        view.error,
+        Some(vela_core::app::sign_request::SignErrorNotice {
+            kind: SignErrorKind::SubmitFailed,
+            detail: Some(REFUSED_DAPP_DETAIL.to_owned()),
+        }),
+        "the refusal, in its own words"
+    );
+    assert!(view.failure_refused);
+    assert!(
+        !view.failure_retryable,
+        "refused, and the rid went out: Done only"
+    );
+    assert!(view.pending_op_hash.is_none(), "no longer 'Submitted'");
+    assert!(!view.confirm_gate_open);
+    assert_eq!(
+        view.swipe_action,
+        SignSwipeAction::Dismiss,
+        "the close is Done"
+    );
+    assert_eq!(view.phase, SignPhase::Idle);
+
+    // Nothing but the close answers it.
+    assert!(sut.dispatch(Event::RetryTapped).is_empty());
+    assert!(sut.dispatch(approve(SignApproveOpts::default())).is_empty());
+    assert!(sut
+        .dispatch(op_tracked(TrackStatus::Rejected, None, 13_000.0))
+        .is_empty());
+    let late = sut.resolve_matching(is_submit, {
+        Res::Submit {
+            outcome: SignSubmitOutcome::Failed {
+                message: "UserOperation reverted".to_owned(),
+                refused: true,
+            },
+            now_ms: 120_000.0,
+        }
+    });
+    assert!(late.is_empty(), "the window's late end: {late:?}");
+    assert!(sut.view().failure_refused, "still on screen");
+
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(response_count(&closed), 1, "{closed:?}");
+    assert!(closed.iter().any(is_refused_answer), "{closed:?}");
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(sut.dispatch(Event::SwipeDismissed).is_empty(), "once");
+    assert!(sut.dispatch(Event::DismissTapped).is_empty(), "once");
+}
+
+/// The same refusal with nobody looking — the sheet closed while the op was
+/// on its way: the page is answered at once (the rule of 096 F8).
+#[test]
+fn n4_a_refusal_nobody_is_looking_at_is_answered_at_once() {
+    let mut sut = n4_submitted("rid-n4b");
+    assert!(
+        sut.dispatch(Event::SwipeDismissed).is_empty(),
+        "a close while it is on its way refuses nothing"
+    );
+    let ops = sut.dispatch(op_tracked(TrackStatus::Rejected, None, 12_000.0));
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
+    assert!(ops.iter().any(is_refused_answer), "{ops:?}");
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(sut.dispatch(Event::SwipeDismissed).is_empty());
+}
+
+/// A new request taking the sheet answers the refusal it replaces, once —
+/// its page must not wait on words nobody will see again.
+#[test]
+fn n4_a_new_request_answers_the_refusal_it_replaces() {
+    let mut sut = n4_submitted("rid-n4c");
+    sut.dispatch(op_tracked(TrackStatus::Rejected, None, 12_000.0));
+    let ops = sut
+        .dispatch(Arrive::extension("rid-n4d", "personal_sign", r#"["0xdead","0x0"]"#, 1).event());
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
+    assert!(ops.iter().any(is_refused_answer), "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.request.expect("the new one").id, "rid-n4d");
+    assert!(view.error.is_none() && !view.failure_refused);
+}
+
+/// The page went while the refusal showed: the browser already answered it
+/// (4900); the sheet goes and nothing more is said — never a second answer.
+#[test]
+fn n4_a_page_gone_under_the_refusal_is_not_answered_again() {
+    let mut sut = n4_submitted("rid-n4e");
+    sut.dispatch(op_tracked(TrackStatus::Rejected, None, 12_000.0));
+    let ops = sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    assert_eq!(response_count(&ops), 0, "{ops:?}");
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(sut.dispatch(Event::SwipeDismissed).is_empty());
+}
+
+/// A "nothing was sent" verdict after the submit is held the same way — and
+/// is not tried again from the sheet: the rid went to the relay (⑧).
+#[test]
+fn n4_not_sent_after_the_submit_is_held_with_no_retry() {
+    let mut sut = n4_submitted("rid-n4f");
+    let ops = sut.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0));
+    // An op the relay accepted is never "not sent" (082 round-2 review)…
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(sut.view().pending_op_hash.as_deref(), Some(LOCAL_OP));
+    // …so the case is a lost reply's.
+    let mut sut = submitting("req-n4g");
+    written_ahead(&mut sut, "req-n4g");
+    sut.dispatch(op_submitted("req-n4g", LOCAL_OP, true));
+    assert_eq!(
+        response_count(&sut.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0))),
+        0
+    );
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Sheet);
+    assert!(!view.failure_refused && !view.failure_retryable);
+    assert!(sut.dispatch(Event::RetryTapped).is_empty());
+    assert_eq!(response_count(&sut.dispatch(Event::SwipeDismissed)), 1);
+}
+
+/// A failure held before the submit still offers "Try again" (096 F8): the
+/// rule that keeps it from a post-submit verdict is the rid's settlement,
+/// nothing else.
+#[test]
+fn n4_a_failure_before_the_submit_still_offers_try_again() {
+    let mut sut = submitting("req-n4h");
+    written_ahead(&mut sut, "req-n4h");
+    sut.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::Failed {
+                message: NOT_SENT_DAPP_DETAIL.to_owned(),
+                refused: false,
+            },
+            now_ms: 9_000.0,
+        },
+    );
+    assert!(sut.view().failure_retryable);
+    sut.dispatch(Event::RetryTapped);
+    assert!(sut.view().confirm_gate_open, "back to review");
+}
+
+/// A global chain switch while a failure is held answers that failure, in
+/// its own words — never a 4001 "cancelled" for a request the person
+/// approved and the network refused.
+#[test]
+fn n4_a_chain_switch_under_a_held_refusal_answers_the_refusal() {
+    let mut sut = submitting("req-n4i");
+    written_ahead(&mut sut, "req-n4i");
+    sut.dispatch(op_submitted("req-n4i", LOCAL_OP, false));
+    sut.dispatch(op_tracked(TrackStatus::Rejected, None, 12_000.0));
+    let ops = sut.dispatch(Event::ChainSwitchRequested {
+        id: Some("sw-n4".to_owned()),
+        transport_id: Some(WP.to_owned()),
+        chain_id_param: Some("0x89".to_owned()),
+    });
+    let answers = responses(&ops);
+    assert_eq!(
+        answers,
+        vec![
+            (WP.to_owned(), "req-n4i".to_owned(), Some(CODE_INTERNAL)),
+            (WP.to_owned(), "sw-n4".to_owned(), None),
+        ],
+        "{ops:?}"
+    );
+    assert_eq!(
+        ops.iter().find_map(err_detail),
+        Some((
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some(REFUSED_DAPP_DETAIL.to_owned())
+        ))
+    );
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(sut.dispatch(Event::SwipeDismissed).is_empty());
 }

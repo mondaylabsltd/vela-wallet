@@ -175,11 +175,14 @@ struct FeedItemWire: Decodable, Equatable {
     /// words each part and joins them with " · "; which parts, and their
     /// order, are the core's.
     var subtitle: [FeedLineWire] = []
+    /// `usdValue` is a price the core knows (spec 097 N7); `false` draws no
+    /// fiat at all — unknown is not "$0.00".
+    var priced = false
 
     private enum CodingKeys: String, CodingKey {
         case id, direction, counterparty, alias, value, symbol, decimals, usdValue, chainId
         case timestamp, dayStartMs, txHash, batch, kind, status, site, counterpartyRole
-        case dapp, subtitle
+        case dapp, subtitle, priced
     }
 }
 
@@ -207,7 +210,8 @@ extension FeedItemWire {
             site: try c.decodeIfPresent(String.self, forKey: .site),
             counterpartyRole: try c.decode(FeedCounterpartyRoleWire.self, forKey: .counterpartyRole),
             dapp: try c.decodeIfPresent(FeedDappWire.self, forKey: .dapp),
-            subtitle: try c.decodeIfPresent([FeedLineWire].self, forKey: .subtitle) ?? []
+            subtitle: try c.decodeIfPresent([FeedLineWire].self, forKey: .subtitle) ?? [],
+            priced: try c.decodeIfPresent(Bool.self, forKey: .priced) ?? false
         )
     }
 }
@@ -427,10 +431,13 @@ struct FeedDappWire: Decodable, Equatable {
     var facts: [FeedFactWire] = []
     /// The detail's collapsed "Technical details", in order.
     var technical: [FeedFactWire] = []
+    /// A failed operation: why (spec 097 N4) — `reverted`, `refused` or
+    /// `not_sent`, the words its request ended with. `nil` otherwise.
+    var failure: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case site, intent, intentTerm, changes, received, estimated, contractCall
-        case action, place, allowance, offChain, facts, technical
+        case action, place, allowance, offChain, facts, technical, failure
     }
 
     init(from decoder: Decoder) throws {
@@ -448,6 +455,7 @@ struct FeedDappWire: Decodable, Equatable {
         offChain = try c.decodeIfPresent(Bool.self, forKey: .offChain) ?? false
         facts = try c.decodeIfPresent([FeedFactWire].self, forKey: .facts) ?? []
         technical = try c.decodeIfPresent([FeedFactWire].self, forKey: .technical) ?? []
+        failure = try c.decodeIfPresent(String.self, forKey: .failure)
     }
 }
 

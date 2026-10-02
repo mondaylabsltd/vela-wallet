@@ -7,6 +7,7 @@ import type { ClearNativeValue } from "./ClearNativeValue";
 import type { ClearPlainSend } from "./ClearPlainSend";
 import type { ClearSignResult } from "./ClearSignResult";
 import type { ClearSurface } from "./ClearSurface";
+import type { DappReading } from "./DappReading";
 
 /**
  * The sheet's dispatch VERDICTS (`SigningSheet.tsx:407-487`). [`Self::surface`]
@@ -72,4 +73,13 @@ record_intent: string | null,
  * value is zero, or not hex-readable (RC4), or a descriptor row already
  * states it (`@.value`).
  */
-native_value: ClearNativeValue | null, };
+native_value: ClearNativeValue | null, 
+/**
+ * What the reading named, as the record keeps it (spec 097 N5, N8): the
+ * contract and its owner, and the coins it showed amounts of — Activity
+ * then names them as the sheet did. The shell copies it to
+ * [`super::sign_request::SignApproveOpts::reading`] and decides nothing.
+ * `None` on every surface but [`ClearSurface::ClearSign`] and
+ * [`ClearSurface::Batch`], and when the reading named nothing.
+ */
+record_reading: DappReading | null, };

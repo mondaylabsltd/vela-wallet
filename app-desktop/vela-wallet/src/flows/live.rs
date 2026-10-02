@@ -38,9 +38,9 @@ use vela_core::app::contacts::ContactsView;
 use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::send::{
-    SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendReceiptStatus,
-    SendRecipientDraft, SendStage, SendToken, SendTreasuryAsset, SendTxStatus, SendUnitIssue,
-    SendView,
+    SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendNameSource, SendPayee,
+    SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken,
+    SendTreasuryAsset, SendTxStatus, SendUnitIssue, SendView,
 };
 
 use crate::flows::fixtures::{
@@ -381,6 +381,7 @@ pub fn tx_detail(
             copy: Some(SharedString::from(counterparty.clone())),
             note: None,
             danger: false,
+            detail: None,
         });
     }
     facts.push(network_fact(item.chain_id, &item.symbol, s));
@@ -392,6 +393,7 @@ pub fn tx_detail(
         copy: None,
         note: None,
         danger: false,
+        detail: None,
     });
     // Only if there IS one. An empty hash row invites "which transaction?" —
     // the same reason the mock omits the contract row on a native transfer.
@@ -452,27 +454,51 @@ fn dapp_detail(
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> crate::flows::fixtures::TxDetail {
-    let (amount, fiat, danger) = match dapp.allowance.as_ref() {
-        Some(allowance) => (
+    let (amount, fiat, danger, positive) = match (dapp.allowance.as_ref(), dapp.received.as_ref()) {
+        (Some(allowance), _) => (
             crate::wallet::live::allowance_text(allowance, wallet, hidden),
             SharedString::default(),
             allowance.unlimited,
+            false,
         ),
-        None => (
+        // Spec 097 N5: nothing left and something came back (a borrow) —
+        // what came back is the figure.
+        (None, Some(back)) if item.value.is_none() => (
+            SharedString::from(
+                format!(
+                    "{} {}",
+                    crate::wallet::live::change_figure(back, hidden),
+                    back.symbol
+                )
+                .trim()
+                .to_owned(),
+            ),
+            SharedString::default(),
+            false,
+            back.direction == vela_core::app::activity_feed::FeedDirection::In,
+        ),
+        (None, _) => (
             crate::wallet::live::amount_text_of(item, false, hidden),
             fiat_of(item, hidden, locale, currency),
+            false,
             false,
         ),
     };
     crate::flows::fixtures::TxDetail {
         title: crate::wallet::live::dapp_title(dapp, wallet),
         status: (!dapp.off_chain).then(|| status_chip(item.status, s)),
-        note: dapp.off_chain.then(|| s.detail_off_chain.clone()),
+        // A signature says it was off-chain; a failed operation says why
+        // (spec 097 N4), under its chip.
+        note: if dapp.off_chain {
+            Some(s.detail_off_chain.clone())
+        } else {
+            dapp.failure.map(|failure| failure_text(failure, s))
+        },
         breakdown_title: None,
         breakdown: Vec::new(),
         amount,
         fiat,
-        positive: false,
+        positive,
         danger,
         facts: dapp
             .facts
@@ -508,6 +534,7 @@ fn dapp_fact(
         copy: None,
         note: None,
         danger: false,
+        detail: None,
     };
     match fact {
         FeedFact::Site { site } => plain(&s.detail_app, SharedString::from(site.clone())),
@@ -612,6 +639,7 @@ fn party_fact(label: &SharedString, address: &str, name: Option<&str>) -> FactRo
         copy: Some(SharedString::from(address.to_owned())),
         note: None,
         danger: false,
+        detail: None,
     }
 }
 
@@ -627,6 +655,7 @@ fn hash_fact(label: &SharedString, hash: &str) -> FactRow {
         copy: Some(SharedString::from(hash.to_owned())),
         note: None,
         danger: false,
+        detail: None,
     }
 }
 
@@ -651,6 +680,7 @@ fn network_fact(chain_id: u32, symbol: &str, s: &FlowStrings) -> FactRow {
         copy: None,
         note: None,
         danger: false,
+        detail: None,
     }
 }
 
@@ -677,15 +707,30 @@ fn status_chip(status: FeedTxStatus, s: &FlowStrings) -> StatusChip {
     }
 }
 
-/// The core already valued it, stablecoin fallback and all. `0` means
-/// unknown rather than free, so it shows nothing instead of `$0.00`.
+/// Why a dApp operation failed, in the words its request ended with (spec
+/// 097 N4) — the core's reason, worded.
+fn failure_text(
+    failure: vela_core::app::tx_tracker::TrackFailure,
+    s: &FlowStrings,
+) -> SharedString {
+    use vela_core::app::tx_tracker::TrackFailure;
+    match failure {
+        TrackFailure::Reverted => s.failed_reverted.clone(),
+        TrackFailure::Refused => s.failed_refused.clone(),
+        TrackFailure::NotSent => s.failed_not_sent.clone(),
+    }
+}
+
+/// The core already valued it, stablecoin fallback and all — and says when
+/// it knows no price (`priced`, spec 097 N7): unknown rather than free, so it
+/// shows nothing instead of `$0.00`.
 fn fiat_of(
     item: &FeedItem,
     hidden: bool,
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> SharedString {
-    if hidden || item.usd_value <= 0.0 {
+    if hidden || !item.priced {
         SharedString::from("")
     } else {
         SharedString::from(currency.text(item.usd_value, locale))
@@ -922,6 +967,7 @@ pub fn add_network_tab(
                 copy: None,
                 note: None,
                 danger: false,
+                detail: None,
             },
             FactRow {
                 label: s.label_native_token.clone(),
@@ -931,6 +977,7 @@ pub fn add_network_tab(
                 copy: None,
                 note: None,
                 danger: false,
+                detail: None,
             },
         ]
     };
@@ -1760,32 +1807,88 @@ fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, Share
 }
 
 /// Issue #332: the picker's "To" line — the recipient the core already holds,
-/// worded as the confirm page words it, so the person sees whom they are
-/// paying while they choose what. Nobody held, no line; artwork only for a
-/// real address.
+/// worded as the confirm page words it (`payee_fact`), so the person sees
+/// whom they are paying while they choose what. Nobody held, no line;
+/// artwork only for a real address.
 fn pick_recipient(i: &SendInputs<'_>) -> Option<FactRow> {
-    let address = i.send.recipient.trim();
-    if address.is_empty() {
+    single_payee(i.send).map(|payee| payee_fact(&i.s.to_label, &payee, i.s))
+}
+
+/// The one recipient of a single send or a sweep, as the core names them
+/// (`payees[0]`, spec 097 F) — or, before the core holds a whole address,
+/// what was typed, unnamed. `None` while nothing is typed, and on a split,
+/// which has no one recipient.
+fn single_payee(send: &SendView) -> Option<SendPayee> {
+    let address = send.recipient.trim();
+    if send.split_mode || address.is_empty() {
         return None;
     }
-    let name = i
-        .send
-        .recipient_identity
-        .as_ref()
-        .and_then(|identity| identity.name.clone());
-    Some(FactRow {
-        label: i.s.to_label.clone(),
-        mono: name.is_none(),
-        value: name.unwrap_or_else(|| shorten(address)).into(),
-        lead: if crate::flows::eip681::is_hex_address(address) {
-            FactLead::Identicon(address.to_owned().into())
+    Some(send.payees.first().cloned().unwrap_or_else(|| SendPayee {
+        address: address.to_owned(),
+        name: None,
+        name_source: None,
+    }))
+}
+
+/// The tag beside a payee's name — whose word the name is, as the core
+/// decided (spec 097 F, S2): the public registry's says "Vela User", a name
+/// service's its own label ("ENS"), the person's own word nothing.
+fn payee_tag(payee: &SendPayee, s: &FlowStrings) -> Option<SharedString> {
+    match payee.name_source.as_ref()? {
+        SendNameSource::Own => None,
+        SendNameSource::Registry => Some(s.vela_user.clone()),
+        SendNameSource::Service { label } => Some(label.clone().into()),
+    }
+}
+
+/// A payee's name as every send surface draws it — "Wallet · Vela User",
+/// "bob.eth · ENS", "Savings" — or `None` when the core gave no name.
+fn payee_name(payee: &SendPayee, s: &FlowStrings) -> Option<String> {
+    let name = payee.name.as_deref()?;
+    Some(match payee_tag(payee, s) {
+        Some(tag) => format!("{name} · {tag}"),
+        None => name.to_owned(),
+    })
+}
+
+/// How a payee is named on a row (spec 097 F, S2): the name alone — the line
+/// a long name may cut — over the line nothing cuts, whose word the name is
+/// and the short address it stands for ("Vela User · 0x14fB…eA5c"); or the
+/// short address alone, in mono. A name never stands in for the address on
+/// the page that signs, and a long registered name cannot push the tag out
+/// of sight.
+fn payee_lines(payee: &SendPayee, s: &FlowStrings) -> (SharedString, bool, Option<SharedString>) {
+    let short = shorten(&payee.address);
+    match payee.name.as_deref() {
+        Some(name) => {
+            let detail = match payee_tag(payee, s) {
+                Some(tag) => format!("{tag} · {short}"),
+                None => short,
+            };
+            (name.to_owned().into(), false, Some(detail.into()))
+        }
+        None => (short.into(), true, None),
+    }
+}
+
+/// The "To" row of the confirm and the picker: the payee's lines, and the
+/// identicon seeded with the whole address (a tap shows it in full).
+fn payee_fact(label: &SharedString, payee: &SendPayee, s: &FlowStrings) -> FactRow {
+    let (value, mono, detail) = payee_lines(payee, s);
+    FactRow {
+        label: label.clone(),
+        value,
+        mono,
+        detail,
+        lead: if crate::flows::eip681::is_hex_address(&payee.address) {
+            FactLead::Identicon(payee.address.clone().into())
         } else {
             FactLead::None
         },
         copy: None,
         note: None,
         danger: false,
-    })
+    }
 }
 
 /// DSD1L — which token to send, in one of the picker's two modes.
@@ -1988,22 +2091,32 @@ mod sweep_tests {
             assert!(line.mono);
             assert!(matches!(line.lead, FactLead::Identicon(ref seed) if seed.as_ref() == PAYEE));
 
-            // The sweep's picker is about the same person; a resolved name
-            // is what the confirm shows too.
-            view.recipient_identity = Some(vela_core::app::send::SendRecipientIdentity {
+            // The sweep's picker is about the same person, named as the
+            // confirm names them (spec 097 F): the core's payee — the name,
+            // whose word it is, and the short address under it. (It used to
+            // read `recipient_identity.name` alone.)
+            view.payees = vec![vela_core::app::send::SendPayee {
+                address: PAYEE.to_owned(),
                 name: Some("alice.eth".to_owned()),
-                source: None,
-            });
+                name_source: Some(vela_core::app::send::SendNameSource::Service {
+                    label: "ENS".to_owned(),
+                }),
+            }];
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), true, SendClass::All);
             let line = pick
                 .recipient
                 .unwrap_or_else(|| unreachable!("the sweep lost them"));
             assert_eq!(line.value.as_ref(), "alice.eth");
+            assert_eq!(
+                line.detail.as_deref(),
+                Some(format!("ENS · {}", shorten(PAYEE)).as_str())
+            );
             assert!(!line.mono);
 
-            // Text that is not an address is shown as read, with no artwork.
+            // Text that is not an address is shown as read, with no artwork
+            // (the core names no payee until the address is whole).
             view.recipient = "hello".to_owned();
-            view.recipient_identity = None;
+            view.payees.clear();
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
             let line = pick.recipient.unwrap_or_else(|| unreachable!("held"));
             assert!(matches!(line.lead, FactLead::None));
@@ -2466,20 +2579,16 @@ pub fn send_token_ids(view: &SendView) -> Vec<String> {
 }
 
 /// The recipient's trust line: that it is a token's own contract (spec 096
-/// F12, the core's verdict — said before anything else), else a name the
-/// core resolved, else the first-interaction tell (the one that matters for
-/// a poisoned look-alike).
+/// F12, the core's verdict — said before anything else), else the payee's
+/// name with whose word it is (spec 097 F: "Wallet · Vela User", never the
+/// resolver's raw "passkey"), else the first-interaction tell (the one that
+/// matters for a poisoned look-alike).
 fn recipient_note(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     if send.recipient_is_token_contract {
         return Some(s.recipient_token_contract.clone());
     }
-    if let Some(identity) = &send.recipient_identity
-        && let Some(name) = &identity.name
-    {
-        return Some(SharedString::from(match &identity.source {
-            Some(source) => format!("{name} · {source}"),
-            None => name.clone(),
-        }));
+    if let Some(name) = single_payee(send).and_then(|payee| payee_name(&payee, s)) {
+        return Some(name.into());
     }
     send.recipient_risk
         .as_ref()
@@ -2801,8 +2910,12 @@ fn build_notice(
 
 /// The groups' members as split rows, in the order `contact_pick` draws
 /// them — tapping a group ADDS everybody in it to the form, amounts blank,
-/// each under the name the book knows them by (`name ?? resolved_name`, the
-/// web's `seedGroup`). The core assigns the row ids.
+/// each under the name the PERSON gave them. The core assigns the row ids.
+///
+/// Only `name`, never `resolved_name` (spec 097 F, S2): a split row's name is
+/// the person's own word (the core calls it `own` and draws it untagged), and
+/// a resolved name is the registry's or a name service's — anyone's word for
+/// that address. Seeded as a row name, it would pass for the person's own.
 #[must_use]
 pub fn contact_group_members(view: &ContactsView) -> Vec<Vec<SendRecipientDraft>> {
     view.groups
@@ -2815,7 +2928,7 @@ pub fn contact_group_members(view: &ContactsView) -> Vec<Vec<SendRecipientDraft>
                     id: String::new(),
                     address: member.address.clone(),
                     amount: String::new(),
-                    name: member.name.clone().or_else(|| member.resolved_name.clone()),
+                    name: member.name.clone(),
                 })
                 .collect()
         })
@@ -3127,10 +3240,6 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     let usd = token
         .and_then(|t| t.price_usd)
         .map(|price| send.confirm_amount.parse::<f64>().unwrap_or(0.0) * price);
-    let to_name = send
-        .recipient_identity
-        .as_ref()
-        .and_then(|identity| identity.name.clone());
     let mut facts = vec![
         FactRow {
             label: s.from_label.clone(),
@@ -3140,18 +3249,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             copy: None,
             note: None,
             danger: false,
-        },
-        FactRow {
-            label: s.to_label.clone(),
-            value: to_name
-                .clone()
-                .unwrap_or_else(|| shorten(&send.recipient))
-                .into(),
-            lead: FactLead::Identicon(send.recipient.clone().into()),
-            mono: to_name.is_none(),
-            copy: None,
-            note: None,
-            danger: false,
+            detail: None,
         },
         FactRow {
             label: s.detail_chain.clone(),
@@ -3165,6 +3263,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             copy: None,
             note: None,
             danger: false,
+            detail: None,
         },
         FactRow {
             label: s.est_fee.clone(),
@@ -3185,8 +3284,15 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             copy: None,
             note: None,
             danger: false,
+            detail: None,
         },
     ];
+    // Who is paid (spec 097 F, S2): the payee the core names, with the short
+    // address under any name — never a name alone, and never the stale
+    // single `recipient` on a split, whose people are the rows below.
+    if let Some(payee) = single_payee(send) {
+        facts.insert(1, payee_fact(&s.to_label, &payee, s));
+    }
     // The speed, but only when it was CHOSEN for this send, or taken because
     // it was free (spec 068 / issue 686). The confirm is the last screen
     // before a signature: a payment bumped off the usual pace says so here,
@@ -3203,6 +3309,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             copy: None,
             note: (!speed.picked).then(|| s.fee_speed_free.clone()),
             danger: false,
+            detail: None,
         });
     }
     // The last attempt's error is a NOTICE now, not a subline: several of
@@ -3273,20 +3380,33 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         breakdown: if let Some((rows, _)) = sweep {
             rows
         } else if send.split_mode {
+            // Spec 097 F: each row is the core's payee at the same index —
+            // a name over its short address, or the address alone in mono.
             send.recipients
                 .iter()
-                .map(|draft| BreakdownRow {
-                    seed: (!draft.address.is_empty())
-                        .then(|| SharedString::from(draft.address.clone())),
-                    label: draft
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| shorten(&draft.address))
-                        .into(),
-                    value: format!("{} {symbol}", draft.amount)
-                        .trim()
-                        .to_owned()
-                        .into(),
+                .enumerate()
+                .map(|(index, draft)| {
+                    let payee = send
+                        .payees
+                        .get(index)
+                        .cloned()
+                        .unwrap_or_else(|| SendPayee {
+                            address: draft.address.trim().to_owned(),
+                            name: None,
+                            name_source: None,
+                        });
+                    let (label, mono, detail) = payee_lines(&payee, s);
+                    BreakdownRow {
+                        seed: (!payee.address.is_empty())
+                            .then(|| SharedString::from(payee.address.clone())),
+                        label,
+                        mono,
+                        detail,
+                        value: format!("{} {symbol}", draft.amount)
+                            .trim()
+                            .to_owned()
+                            .into(),
+                    }
                 })
                 .collect()
         } else {
@@ -3358,6 +3478,8 @@ fn sweep_breakdown(
             BreakdownRow {
                 seed: None,
                 label: token.symbol.clone().into(),
+                mono: false,
+                detail: None,
                 value: match row_usd {
                     Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale, currency)),
                     None => value,
@@ -3459,12 +3581,42 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         };
     }
     if status == Some(SendReceiptStatus::Confirmed) {
-        let amount = send
+        // Spec 097 F (S3): what was sent, from the receipt's own coins — one
+        // coin is "Sent 0.5 ETH" (a split's TOTAL); several have no one
+        // figure and are listed below "Sent", never the first standing for
+        // all. A receipt that lists none reads as it always did.
+        let coins = send
             .receipt
             .as_ref()
-            .map(|receipt| receipt.amount.clone())
-            .filter(|amount| !amount.is_empty())
-            .unwrap_or_else(|| send.confirm_amount.clone());
+            .map_or(&[][..], |receipt| receipt.coins.as_slice());
+        let title = match coins {
+            [coin] => fill(
+                &fill(&s.tx_confirmed_title, "amount", &trimmed_str(&coin.amount)),
+                "symbol",
+                &coin.symbol,
+            )
+            .into(),
+            [_, _, ..] => s.tx_sent.clone(),
+            [] => {
+                let amount = send
+                    .receipt
+                    .as_ref()
+                    .map(|receipt| receipt.amount.clone())
+                    .filter(|amount| !amount.is_empty())
+                    .unwrap_or_else(|| send.confirm_amount.clone());
+                fill(
+                    &fill(&s.tx_confirmed_title, "amount", &trimmed_str(&amount)),
+                    "symbol",
+                    &symbol,
+                )
+                .into()
+            }
+        };
+        // A split names its count where a single send or a sweep names its
+        // one recipient; a sweep's "N assets" heads its list, not this line.
+        let recipients = breakdown_title
+            .as_ref()
+            .filter(|_| sweep_coins(send).is_empty());
         return SendReceipt {
             stage: ReceiptStage::Confirmed,
             progress: Some(1.0),
@@ -3483,20 +3635,13 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             cta_accent: true,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
-            title: fill(
-                &fill(&s.tx_confirmed_title, "amount", &trimmed_str(&amount)),
-                "symbol",
-                &symbol,
-            )
-            .into(),
+            title,
             // A split names its count here and its people below; "To " with
             // nobody after it was what the single-recipient line read as.
             captions: vec![
                 format!(
                     "{} · {}",
-                    breakdown_title
-                        .as_ref()
-                        .map_or_else(|| fill(&s.to_name, "name", &to), ToString::to_string),
+                    recipients.map_or_else(|| fill(&s.to_name, "name", &to), ToString::to_string),
                     chain_name(chain_id)
                 )
                 .into(),
@@ -3600,15 +3745,45 @@ pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
     Some(0.92 * (1. - (-1.4 * elapsed / typical_s.max(1) as f32).exp()))
 }
 
+/// The coins a sweep's receipt lists (spec 097 F, S3): every coin the
+/// operation sent, when it sent several. Empty for one coin — a single send,
+/// a split, or a sweep whose native line the gas reserve dropped — which the
+/// title names.
+fn sweep_coins(send: &SendView) -> &[SendReceiptCoin] {
+    match send.receipt.as_ref() {
+        Some(receipt) if receipt.coins.len() > 1 => &receipt.coins,
+        _ => &[],
+    }
+}
+
 /// Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
 /// receipt's own transfers once the core froze them, from the drafts before
-/// that. Nothing for a single send or a sweep (a sweep's parts are assets,
-/// and its one recipient is already the caption).
+/// that. A sweep's parts are its coins, every one it sent (spec 097 F, S3:
+/// its success screen named the first coin and dropped the rest); its one
+/// recipient is already the caption. Nothing for a single send.
 fn receipt_parts(
     send: &SendView,
     s: &FlowStrings,
     symbol: &str,
 ) -> (Option<SharedString>, Vec<BreakdownRow>) {
+    let coins = sweep_coins(send);
+    if !coins.is_empty() {
+        let rows = coins
+            .iter()
+            .map(|coin| BreakdownRow {
+                seed: None,
+                label: coin.symbol.clone().into(),
+                mono: false,
+                detail: None,
+                value: format!("{} {}", trimmed_str(&coin.amount), coin.symbol)
+                    .trim()
+                    .to_owned()
+                    .into(),
+            })
+            .collect();
+        let title = fill(&s.assets_count, "n", &coins.len().to_string());
+        return (Some(title.into()), rows);
+    }
     let frozen: Vec<BreakdownRow> = match send.receipt.as_ref() {
         Some(receipt) if matches!(receipt.kind, Some(SendReceiptKind::Split)) => receipt
             .transfers
@@ -3620,6 +3795,8 @@ fn receipt_parts(
                     .clone()
                     .unwrap_or_else(|| shorten(&transfer.to))
                     .into(),
+                mono: false,
+                detail: None,
                 value: format!("{} {}", transfer.amount, transfer.symbol)
                     .trim()
                     .to_owned()
@@ -3641,6 +3818,8 @@ fn receipt_parts(
                     .clone()
                     .unwrap_or_else(|| shorten(&draft.address))
                     .into(),
+                mono: false,
+                detail: None,
                 value: format!("{} {symbol}", draft.amount)
                     .trim()
                     .to_owned()
@@ -3682,6 +3861,8 @@ fn detail_parts(
             } else {
                 transfer.symbol.clone().into()
             },
+            mono: false,
+            detail: None,
             value: format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
                 .trim()
                 .to_owned()
@@ -4284,7 +4465,7 @@ mod tests {
         status: vela_core::app::send::SendReceiptStatus,
         hold: Option<vela_core::app::send::SendHoldReason>,
     ) -> SendReceipt {
-        use vela_core::app::send::{Send, SendReceiptView};
+        use vela_core::app::send::{Send, SendReceiptCoin, SendReceiptView};
         let s = strings();
         let wallet = wallet_strings();
         let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
@@ -4294,6 +4475,13 @@ mod tests {
             hold_reason: hold,
             kind: None,
             transfers: Vec::new(),
+            coins: vec![SendReceiptCoin {
+                amount: "0.001".to_owned(),
+                symbol: "ETH".to_owned(),
+                logo_urls: Vec::new(),
+                token_address: None,
+                usd_value: 0.0,
+            }],
             amount: "0.001".to_owned(),
             usd_value: 0.0,
             submitted_at_ms: None,
@@ -4375,7 +4563,8 @@ mod tests {
     #[test]
     fn a_split_receipt_lists_its_recipients_and_counts_them() {
         use vela_core::app::send::{
-            Send, SendReceiptKind, SendReceiptStatus, SendReceiptTransfer, SendReceiptView,
+            Send, SendReceiptCoin, SendReceiptKind, SendReceiptStatus, SendReceiptTransfer,
+            SendReceiptView,
         };
         let s = strings();
         let wallet = wallet_strings();
@@ -4398,6 +4587,14 @@ mod tests {
                 transfer(&format!("0x{}", "cd".repeat(20)), Some("Alice"), "0.2"),
                 transfer(&format!("0x{}", "ef".repeat(20)), None, "0.3"),
             ],
+            // The core's one coin for a split: the TOTAL of its rows.
+            coins: vec![SendReceiptCoin {
+                amount: "0.5".to_owned(),
+                symbol: "ETH".to_owned(),
+                logo_urls: Vec::new(),
+                token_address: None,
+                usd_value: 0.0,
+            }],
             amount: "0.5".to_owned(),
             usd_value: 0.0,
             submitted_at_ms: None,
@@ -4429,6 +4626,18 @@ mod tests {
             receipt.captions[0].contains(&title),
             "{}",
             receipt.captions[0]
+        );
+        // Spec 097 F: the title is the split's TOTAL, in the coin it moved —
+        // not the first row's figure, and not whichever coin is selected now
+        // (none is, on this booted view).
+        assert_eq!(
+            receipt.title.as_ref(),
+            fill(
+                &fill(&s.tx_confirmed_title, "amount", "0.5"),
+                "symbol",
+                "ETH"
+            ),
+            "Sent 0.5 ETH"
         );
 
         // A single send carries no parts.
@@ -5051,6 +5260,7 @@ mod tests {
             calldata: None,
             call_data: None,
             summary: None,
+            settlement: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -5275,6 +5485,7 @@ mod tests {
                 counterparty_role: Default::default(),
                 dapp: None,
                 subtitle: Vec::new(),
+                priced: true,
             };
             let view = FeedView {
                 rows: vec![
@@ -5313,6 +5524,7 @@ mod tests {
                     calldata: None,
                     call_data: None,
                     summary: None,
+                    settlement: None,
                 }],
                 ..host.view()
             };
@@ -5535,6 +5747,157 @@ mod tests {
         assert_eq!(lines.len(), 4);
     }
 
+    /// Spec 097, through the real core: the pass's Aave borrow, closed by
+    /// the tracker with what its receipt proved, opens to the USDC it
+    /// brought in (no "−" for nothing, no fiat for an unknown price); the
+    /// refused withdraw says why under its chip; the 1inch order's BNB has no
+    /// price — no fiat, never "$0.00".
+    #[test]
+    fn a_landed_or_failed_dapp_row_says_what_the_chain_proved() {
+        use vela_core::app::activity_feed::{FeedTxKind, FeedTxRecord};
+        use vela_core::app::dapp_activity::{DappAction, DappSummary};
+        use vela_core::app::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
+        let pool = "0x6807dc923806fe8fd134338eabca509979a7e0cb";
+        let record = |id: &str, at: f64, status: FeedTxStatus| FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: format!("0x{:0>64}", id.len()),
+            tx_hash: String::new(),
+            from: "0xme".to_owned(),
+            to: pool.to_owned(),
+            to_name: None,
+            value: "0x0".to_owned(),
+            symbol: "BNB".to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id: 56,
+            timestamp: at,
+            day_start_ms: 0.0,
+            status,
+            kind: Some(FeedTxKind::DappTx),
+            usd: None,
+            dapp_url: Some("https://app.aave.com".to_owned()),
+            intent: Some("Borrow".to_owned()),
+            balance_changes: None,
+            calldata: Some(true),
+            call_data: None,
+            summary: Some(DappSummary {
+                action: DappAction::Call,
+                calls: 1,
+                contract: Some(pool.to_owned()),
+                ..DappSummary::default()
+            }),
+            settlement: None,
+        };
+        let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
+        borrow.tx_hash = format!("0x{}", "cb".repeat(32));
+        borrow.settlement = Some(TrackSettlement {
+            moved: Some(vec![
+                TrackMove {
+                    token: Some("0xcdbbed5606d9c5c98eeedd67933991dc17f0c68d".to_owned()),
+                    delta: "300000000000000001".to_owned(),
+                },
+                TrackMove {
+                    token: Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d".to_owned()),
+                    delta: "300000000000000000".to_owned(),
+                },
+            ]),
+            failure: None,
+        });
+        // The scan's "Received" of the same 0.3 USDC names the coin.
+        let received = FeedTxRecord {
+            id: "rx-1".to_owned(),
+            user_op_hash: String::new(),
+            from: pool.to_owned(),
+            to: "0xme".to_owned(),
+            value: "0.3".to_owned(),
+            symbol: "USDC".to_owned(),
+            kind: Some(FeedTxKind::Receive),
+            dapp_url: None,
+            intent: None,
+            calldata: None,
+            summary: None,
+            ..borrow.clone()
+        };
+        let mut withdraw = record("dapp-2-tx", 1_756_000_100.0, FeedTxStatus::Failed);
+        withdraw.intent = Some("Withdraw".to_owned());
+        withdraw.settlement = Some(TrackSettlement {
+            moved: None,
+            failure: Some(TrackFailure::Refused),
+        });
+        let mut order = record("dapp-3-tx", 1_756_000_200.0, FeedTxStatus::Confirmed);
+        order.value = "0xaa87bee538000".to_owned();
+        order.intent = Some("create order".to_owned());
+        order.dapp_url = Some("https://1inch.com".to_owned());
+        // What the sheet's reading named (the descriptor service's 1inch).
+        let factory = "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01";
+        order.to = factory.to_owned();
+        order.summary = Some(DappSummary {
+            action: DappAction::Call,
+            calls: 1,
+            contract: Some(factory.to_owned()),
+            contract_name: Some("NativeOrderFactory".to_owned()),
+            owner: Some("1inch".to_owned()),
+            ..DappSummary::default()
+        });
+        let view = crate::wallet::fixtures::core_feed(vec![borrow, received, withdraw, order]);
+        // English, whatever another test left the process locale at.
+        let loc = crate::loc::Loc::for_language("en");
+        let (s, w) = (
+            FlowStrings::resolve(&loc),
+            crate::wallet::WalletStrings::resolve(&loc),
+        );
+        let open = |id: &str| {
+            tx_detail(
+                &view,
+                id,
+                &s,
+                &w,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("{id} is in the feed"))
+        };
+        let borrow = open("dapp-1-tx");
+        assert_eq!(borrow.title.as_ref(), "Borrow on Aave");
+        assert_eq!(borrow.amount.as_ref(), "+0.3 USDC");
+        assert!(borrow.positive);
+        assert_eq!(borrow.fiat.as_ref(), "");
+        let withdraw = open("dapp-2-tx");
+        assert_eq!(
+            withdraw.status.as_ref().map(|chip| chip.text.clone()),
+            Some(s.status_failed.clone())
+        );
+        assert_eq!(withdraw.note.as_ref(), Some(&s.failed_refused));
+        assert_eq!(
+            withdraw.note.as_ref().map(|note| note.to_string()),
+            Some("The network refused it \u{2014} nothing was sent.".to_owned())
+        );
+        let order = open("dapp-3-tx");
+        assert_eq!(order.title.as_ref(), "Create order on 1inch");
+        assert!(
+            order
+                .facts
+                .iter()
+                .any(|fact| fact.value.as_ref() == "NativeOrderFactory")
+        );
+        assert_eq!(order.amount.as_ref(), "\u{2212}0.003 BNB");
+        assert_eq!(
+            order.fiat.as_ref(),
+            "",
+            "no price known: no fiat, not $0.00"
+        );
+        let rows = crate::wallet::live::activity_rows(&view, &w, &s, false);
+        let borrow_row = rows
+            .iter()
+            .find(|row| row.title.as_ref() == "Borrow on Aave")
+            .unwrap_or_else(|| unreachable!("the borrow's row"));
+        assert!(
+            borrow_row.received.is_some(),
+            "the folded Received still shows"
+        );
+    }
+
     /// Spec 093: a permit opens to what it granted — the allowance in the
     /// danger tone, no status chip but the off-chain note (nothing was sent),
     /// who may spend, the cap, that it never expires — and its technical
@@ -5723,6 +6086,7 @@ mod tests {
                 counterparty_role: Default::default(),
                 dapp: None,
                 subtitle: Vec::new(),
+                priced: true,
             },
         };
         let view = FeedView {
@@ -6165,8 +6529,15 @@ mod tests {
         assert_eq!(batch_merge(&blocked, full - 2, false, &s), None);
     }
 
-    /// A group pick carries each member's name — the one the person gave, or
-    /// the one the book resolved — so the split rows say WHO, not just where.
+    /// A group pick carries each member's name — the one the person gave —
+    /// so the split rows say WHO, not just where.
+    ///
+    /// Spec 097 F: never the name the book RESOLVED ("bo.eth" below). A split
+    /// row's name is the person's own word — the core draws it untagged — and
+    /// a resolved name is the registry's or a name service's, anyone's word
+    /// for that address; seeded as a row name it passed for the person's own.
+    /// That member's row is the bare address now, which the confirm sets in
+    /// mono.
     #[test]
     fn a_group_pick_carries_each_members_name() {
         use vela_core::app::contacts::{Contact, ContactGroupView, ContactKind, ContactSource};
@@ -6205,7 +6576,7 @@ mod tests {
         let groups = contact_group_members(&view);
         assert_eq!(groups.len(), 1);
         let names: Vec<Option<&str>> = groups[0].iter().map(|r| r.name.as_deref()).collect();
-        assert_eq!(names, vec![Some("Ana"), Some("bo.eth"), None]);
+        assert_eq!(names, vec![Some("Ana"), None, None]);
         assert!(
             groups[0]
                 .iter()
@@ -6285,6 +6656,7 @@ mod tests {
             counterparty_role: Default::default(),
             dapp: None,
             subtitle: Vec::new(),
+            priced: false,
         };
         let view = FeedView {
             rows: vec![
@@ -7151,6 +7523,376 @@ mod parity_tests {
                 Some("https://gnosisscan.io/address/0xabc")
             );
             assert!(qr.contract_copy.is_none(), "a network code has no contract");
+        });
+    }
+}
+
+/// Spec 097 F (real-money pass, S2 + S3): the page that signs names the
+/// ADDRESS beside any name, saying whose word the name is; the receipt lists
+/// every coin the operation sent. In English, whatever the machine speaks.
+#[cfg(test)]
+mod payee_tests {
+    use super::*;
+    use crate::core_host::CoreHost;
+    use vela_core::app::send::{
+        Event as SendEvent, Send as SendMachine, SendAccountRef, SendChainInfo, SendDisplayContext,
+        SendOpenParams, SendOperation, SendReceiptKind, SendReceiptView, SendRecipientIdentity,
+        SendShellResult,
+    };
+
+    /// The developer wallet of the real-money pass, which the public
+    /// registry calls "Wallet".
+    const DEV_WALLET: &str = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c";
+    /// One of the person's own accounts.
+    const SAVINGS: &str = "0x031d7D57c99CAF891e1C250554691Fd12D84772b";
+    const BOB: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+    /// What the desktop's resolver answers for each, `(address, name,
+    /// source)` — its own source labels (`executor::identity`).
+    const NAMES: [(&str, &str, &str); 3] = [
+        (DEV_WALLET, "Wallet", "passkey"),
+        (SAVINGS, "Savings", "self"),
+        (BOB, "bob.eth", "ENS"),
+    ];
+
+    fn en() -> (FlowStrings, crate::wallet::WalletStrings) {
+        let loc = crate::loc::Loc::for_tag("en");
+        (
+            FlowStrings::resolve(&loc),
+            crate::wallet::WalletStrings::resolve(&loc),
+        )
+    }
+
+    /// Run `f` over the screens' inputs for `send`, in English.
+    fn with_en<R>(send: &SendView, f: impl FnOnce(&SendInputs<'_>, &FlowStrings) -> R) -> R {
+        let (s, wallet) = en();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let inputs = SendInputs {
+            send,
+            fee: &fee,
+            s: &s,
+            wallet: &wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+        };
+        f(&inputs, &s)
+    }
+
+    /// `event` into the real machine, each question it asks answered inline:
+    /// the token list, and who each address is from [`NAMES`]. The timers
+    /// and the fee quote stay outstanding, as `wallet::money`'s harness
+    /// leaves them — nothing here is about the fee.
+    fn drive(host: &mut CoreHost<SendMachine>, event: SendEvent) {
+        let mut pending = host.dispatch(event);
+        while let Some(effect) = pending.pop() {
+            let result = match &effect.operation {
+                SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                    tokens: Some(vec![xdai()]),
+                    chains: vec![SendChainInfo {
+                        chain_id: 100,
+                        network: "gnosis".to_owned(),
+                        native_symbol: "xDAI".to_owned(),
+                    }],
+                },
+                SendOperation::ResolveIdentity { address } => SendShellResult::IdentityResolved {
+                    identity: NAMES
+                        .iter()
+                        .find(|(known, ..)| known.eq_ignore_ascii_case(address))
+                        .map(|(_, name, source)| SendRecipientIdentity {
+                            name: Some((*name).to_owned()),
+                            source: Some((*source).to_owned()),
+                        }),
+                },
+                SendOperation::ResolveRisk { .. } => SendShellResult::RiskResolved { risk: None },
+                SendOperation::SimulateCalls { .. } => {
+                    SendShellResult::SimResolved { sim_json: None }
+                }
+                SendOperation::LoadAccountCredential { .. } => SendShellResult::AccountCredential {
+                    public_key_hex: Some("04aa".to_owned()),
+                },
+                SendOperation::ShowAlert { .. } => SendShellResult::AlertAcknowledged,
+                SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                _ => continue,
+            };
+            pending.extend(host.resolve(effect.id, result));
+        }
+    }
+
+    fn xdai() -> SendToken {
+        SendToken {
+            network: "gnosis".to_owned(),
+            chain_id: 100,
+            symbol: "xDAI".to_owned(),
+            balance: "5".to_owned(),
+            decimals: 18,
+            token_address: None,
+            price_usd: Some(1.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    }
+
+    /// A real send form on xDAI, paying `recipient`.
+    fn form_paying(recipient: &str) -> CoreHost<SendMachine> {
+        let mut host = CoreHost::<SendMachine>::new();
+        drive(
+            &mut host,
+            SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            },
+        );
+        drive(
+            &mut host,
+            SendEvent::SelectToken {
+                token_id: xdai().id(),
+            },
+        );
+        drive(
+            &mut host,
+            SendEvent::SetRecipient {
+                recipient: recipient.to_owned(),
+            },
+        );
+        host
+    }
+
+    fn to_row(facts: &[FactRow], s: &FlowStrings) -> Option<FactRow> {
+        facts.iter().find(|fact| fact.label == s.to_label).cloned()
+    }
+
+    /// S2: the confirm's To row said "Wallet" — a name anyone can register
+    /// in the public registry — with the address one tap away, and the
+    /// form's line printed the resolver's raw source ("Wallet · passkey").
+    /// Through the real machine, all three places now say the name is the
+    /// registry's, and the two rows carry the address under it.
+    #[test]
+    fn a_registry_name_is_tagged_and_never_stands_for_the_address() {
+        crate::executor::storage::tests::with_temp_state("payee-registry", || {
+            let view = form_paying(DEV_WALLET).view();
+            with_en(&view, |i, s| {
+                let note = send_form(i)
+                    .recipient_note
+                    .unwrap_or_else(|| unreachable!("the form named nobody"));
+                assert_eq!(note.as_ref(), "Wallet · Vela User");
+                assert!(!note.contains("passkey"), "{note}");
+
+                let confirm = send_confirm(i);
+                let to = to_row(&confirm.facts, s).unwrap_or_else(|| unreachable!("no To row"));
+                // The name may be cut; the tag rides with the address on the
+                // line that never is.
+                assert_eq!(to.value.as_ref(), "Wallet");
+                assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
+                assert!(!to.mono, "the name is words; the address line is mono");
+                assert!(
+                    matches!(to.lead, FactLead::Identicon(ref seed) if seed.as_ref() == DEV_WALLET),
+                    "the identicon opens the address in full"
+                );
+
+                let pick = pick_recipient(i).unwrap_or_else(|| unreachable!("no To line"));
+                assert_eq!(pick.value, to.value);
+                assert_eq!(pick.detail, to.detail);
+            });
+        });
+    }
+
+    /// The person's own name for an account is drawn as they wrote it — no
+    /// tag — and the address is still under it; a name service's name
+    /// carries the service's own label.
+    #[test]
+    fn an_own_name_is_untagged_and_a_service_name_says_which() {
+        crate::executor::storage::tests::with_temp_state("payee-own", || {
+            let view = form_paying(SAVINGS).view();
+            with_en(&view, |i, s| {
+                assert_eq!(
+                    send_form(i).recipient_note.as_deref(),
+                    Some("Savings"),
+                    "the person's own word, untagged"
+                );
+                let to =
+                    to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
+                assert_eq!(to.value.as_ref(), "Savings");
+                assert_eq!(to.detail.as_deref(), Some("0x031d…772b"));
+            });
+
+            let view = form_paying(BOB).view();
+            with_en(&view, |i, s| {
+                let to =
+                    to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
+                assert_eq!(to.value.as_ref(), "bob.eth");
+                assert_eq!(to.detail.as_deref(), Some("ENS · 0x7687…D141"));
+            });
+        });
+    }
+
+    /// A split's confirm names each row as the core names its payee — the
+    /// person's own name over the short address, an unnamed row by its
+    /// address in mono — and has NO single To row: the address typed before
+    /// the rows were seeded is still in `recipient`, and the confirm used to
+    /// print it as whom the split paid.
+    #[test]
+    fn a_split_confirm_names_each_row_and_has_no_single_recipient() {
+        crate::executor::storage::tests::with_temp_state("payee-split", || {
+            let mut host = form_paying(DEV_WALLET);
+            let row = |address: &str, name: Option<&str>, amount: &str| SendRecipientDraft {
+                id: String::new(),
+                address: address.to_owned(),
+                amount: amount.to_owned(),
+                name: name.map(str::to_owned),
+            };
+            drive(
+                &mut host,
+                SendEvent::SeedSplitRecipients {
+                    recipients: vec![row(SAVINGS, Some("Mum"), "1"), row(DEV_WALLET, None, "2")],
+                },
+            );
+            let view = host.view();
+            assert!(view.split_mode);
+            assert_eq!(view.recipient, DEV_WALLET, "the stale single recipient");
+            with_en(&view, |i, s| {
+                let confirm = send_confirm(i);
+                assert!(
+                    to_row(&confirm.facts, s).is_none(),
+                    "a split pays its rows, not `recipient`"
+                );
+                let rows = &confirm.breakdown;
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0].label.as_ref(), "Mum");
+                assert_eq!(rows[0].detail.as_deref(), Some("0x031d…772b"));
+                assert!(!rows[0].mono);
+                assert_eq!(rows[0].seed.as_deref(), Some(SAVINGS));
+                // The registry's "Wallet" is not a row's name: a row is named
+                // only in the person's own word.
+                assert_eq!(rows[1].label.as_ref(), "0x14fB…eA5c");
+                assert!(rows[1].mono, "an address alone is set in mono");
+                assert!(rows[1].detail.is_none());
+                assert_eq!(rows[1].value.as_ref(), "2 xDAI");
+                // Nothing on the page that signs carries the registry's name.
+                assert!(
+                    confirm
+                        .facts
+                        .iter()
+                        .all(|fact| !fact.value.contains("Wallet")),
+                    "no stale To row"
+                );
+            });
+        });
+    }
+
+    fn coin(amount: &str, symbol: &str, token_address: Option<&str>) -> SendReceiptCoin {
+        SendReceiptCoin {
+            amount: amount.to_owned(),
+            symbol: symbol.to_owned(),
+            logo_urls: Vec::new(),
+            token_address: token_address.map(str::to_owned),
+            usd_value: 0.0,
+        }
+    }
+
+    /// S3: a two-coin sweep's success screen said "Sent 0.000418 ETH" while
+    /// 0.034929 USDC moved in the same operation. It lists both coins under
+    /// "2 assets", titled "Sent", and still says whom it went to.
+    #[test]
+    fn a_two_coin_sweep_receipt_lists_both_coins() {
+        crate::executor::storage::tests::with_temp_state("payee-sweep-receipt", || {
+            let mut view = CoreHost::<SendMachine>::new().view();
+            view.multi_select_mode = true;
+            view.recipient = DEV_WALLET.to_owned();
+            view.recipient_identity = Some(SendRecipientIdentity {
+                name: Some("Wallet".to_owned()),
+                source: Some("passkey".to_owned()),
+            });
+            view.tx_hash = Some("0xtx".to_owned());
+            let receipt = |status| SendReceiptView {
+                status,
+                hold_reason: None,
+                kind: Some(SendReceiptKind::MultiSelect),
+                transfers: Vec::new(),
+                coins: vec![
+                    coin("0.000418", "ETH", None),
+                    coin(
+                        "0.034929",
+                        "USDC",
+                        Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+                    ),
+                ],
+                amount: String::new(),
+                usd_value: 1.0,
+                submitted_at_ms: None,
+                typical_inclusion_s: None,
+            };
+            for status in [SendReceiptStatus::Submitted, SendReceiptStatus::Confirmed] {
+                view.receipt = Some(receipt(status));
+                with_en(&view, |i, s| {
+                    let shown = send_receipt(i);
+                    assert_eq!(shown.breakdown_title.as_deref(), Some("2 assets"));
+                    let rows: Vec<(&str, &str)> = shown
+                        .breakdown
+                        .iter()
+                        .map(|row| (row.label.as_ref(), row.value.as_ref()))
+                        .collect();
+                    assert_eq!(
+                        rows,
+                        [("ETH", "0.000418 ETH"), ("USDC", "0.034929 USDC")],
+                        "{status:?}: every coin the operation sent"
+                    );
+                    if status == SendReceiptStatus::Confirmed {
+                        assert_eq!(shown.title, s.tx_sent);
+                        assert_eq!(shown.title.as_ref(), "Sent");
+                        assert_ne!(shown.title.as_ref(), "Sent 0.000418 ETH");
+                        // One recipient: the caption still names them, not
+                        // the count of coins.
+                        assert!(
+                            shown.captions[0].starts_with("To Wallet"),
+                            "{}",
+                            shown.captions[0]
+                        );
+                    }
+                });
+            }
+        });
+    }
+
+    /// One coin is still "Sent 0.5 ETH" — from the receipt's coin, not the
+    /// token the form has selected now (none, on this view).
+    #[test]
+    fn a_one_coin_receipt_names_its_figure_and_coin() {
+        crate::executor::storage::tests::with_temp_state("payee-one-coin", || {
+            let mut view = CoreHost::<SendMachine>::new().view();
+            view.receipt = Some(SendReceiptView {
+                status: SendReceiptStatus::Confirmed,
+                hold_reason: None,
+                kind: None,
+                transfers: Vec::new(),
+                coins: vec![coin("0.5", "ETH", None)],
+                amount: "0.5".to_owned(),
+                usd_value: 0.0,
+                submitted_at_ms: None,
+                typical_inclusion_s: None,
+            });
+            with_en(&view, |i, _| {
+                let shown = send_receipt(i);
+                assert_eq!(shown.title.as_ref(), "Sent 0.5 ETH");
+                assert!(shown.breakdown.is_empty(), "one coin is the title's");
+            });
+            // A sweep whose native line the gas reserve dropped sent one coin
+            // too: the title names it, and no "1 assets" list repeats it.
+            if let Some(receipt) = view.receipt.as_mut() {
+                receipt.kind = Some(SendReceiptKind::MultiSelect);
+            }
+            with_en(&view, |i, _| {
+                let shown = send_receipt(i);
+                assert_eq!(shown.title.as_ref(), "Sent 0.5 ETH");
+                assert!(shown.breakdown.is_empty());
+                assert!(shown.breakdown_title.is_none());
+            });
         });
     }
 }

@@ -82,7 +82,7 @@ class TrackerExecutor(
                 TrackRecordStatus.Confirmed -> "confirmed"
                 TrackRecordStatus.Failed -> "failed"
             }
-            feed.patchRecords(operation.ids, status, operation.patch.tx_hash)
+            feed.patchRecords(operation.ids, status, operation.patch.tx_hash, operation.patch.settlement)
             VelaLog.event("tracker.patch", status, "ids" to operation.ids.size, "tx" to operation.patch.tx_hash?.take(12))
             ports.recordsPatched(operation.ids, operation.patch.status, operation.patch.tx_hash)
             TrackShellResult.RecordsPatched

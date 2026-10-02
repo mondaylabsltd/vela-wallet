@@ -28,9 +28,12 @@ import {
 	extensionId,
 	inSidePanel,
 	loadExtension,
+	noRequestWindow,
+	requestWindow,
 	sidePanelShowsRequest,
 	sidePanelUp,
-	sidePanelView
+	sidePanelView,
+	slideToConfirm
 } from './extension-helpers';
 import { abiWord, aggregate3CallCount, encodeAggregate3Result, happyRelay } from './stub-chain';
 
@@ -278,11 +281,21 @@ const RELAY_TX = '0x' + 'e2'.repeat(32);
  * `answerSends`: the relay takes the op AND answers — its hash, and a landed
  * receipt (spec 094 S12: a send that succeeds end to end). Without it the
  * reply to `eth_sendUserOperation` is held, G35's moment.
+ *
+ * `refusesAfter`: the relay takes the op and answers its hash, then refuses
+ * it — no receipt ever, and its status says `rejected`, naming no bundle
+ * transaction (spec 097 N4: the pass's Aave withdraw, "Submitted", then
+ * "the network refused this transaction; nothing was sent").
  */
-function serveStubNet(options: { answerSends?: boolean } = {}): Promise<StubNet> {
+function serveStubNet(
+	options: { answerSends?: boolean; refusesAfter?: boolean } = {}
+): Promise<StubNet> {
 	const seen: string[] = [];
 	const posted: StubNet['posted'] = [];
-	const relay = happyRelay(RELAY_OP, RELAY_TX, () => (options.answerSends ? 'landed' : 'pending'));
+	const answers = options.answerSends || options.refusesAfter;
+	const relay = happyRelay(RELAY_OP, RELAY_TX, () =>
+		options.refusesAfter ? 'pending' : options.answerSends ? 'landed' : 'pending'
+	);
 	const cors = {
 		'access-control-allow-origin': '*',
 		'access-control-allow-headers': '*',
@@ -347,7 +360,10 @@ function serveStubNet(options: { answerSends?: boolean } = {}): Promise<StubNet>
 				if (rpc.method === 'eth_sendUserOperation') {
 					posted.push({ at: Date.now(), params: rpc.params ?? [] });
 					// Taken, and the reply held: the op may have been sent.
-					if (!options.answerSends) return;
+					if (!answers) return;
+				}
+				if (options.refusesAfter && rpc.method === 'pimlico_getUserOperationStatus') {
+					return send(200, { jsonrpc: '2.0', id, result: { status: 'rejected' } });
 				}
 				const answer = relay(rpc.method, rpc.params ?? []);
 				return send(
@@ -945,6 +961,95 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 				receipts: [{ transactionHash: RELAY_TX, status: '0x1' }]
 			});
 		});
+	});
+
+	/**
+	 * Spec 097 N4, as the pass met it in a request WINDOW: the relay took the
+	 * op (the window said "Submitted"), then refused it — and the window
+	 * closed ~12 s later with no words, the page told -32603 by nobody the
+	 * person could see. The refusal now stays in the window, in its own
+	 * words, with Done and no "Try again"; the page is not answered under it;
+	 * Done answers it, once, and only then does the window go.
+	 *
+	 * Signed for real by the parallel space's fixture key; the relay and the
+	 * chain are the stand-ins above, so nothing leaves the machine.
+	 */
+	test('097 N4: a refusal after "Submitted" stays in the request window until Done, which answers the page once', async () => {
+		const net = await serveStubNet({ refusesAfter: true });
+		const context = await loadExtension({ surface: 'window' });
+		try {
+			const wallet = await seedWallet(context, extensionId());
+			await pointAtStubNet(wallet);
+			await context.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, (route) =>
+				route.abort('blockedbyclient')
+			);
+			const page = await context.newPage();
+			await page.goto(`http://localhost:${DAPP_PORT}/`);
+			const connected = page.evaluate(() => window.__ask('eth_requestAccounts'));
+			const consent = await requestWindow(context);
+			await consent.getByRole('button', { name: 'Connect' }).click();
+			expect((await connected).result).toEqual([FIXTURE_ONE]);
+			await noRequestWindow(context);
+
+			const asked = page.evaluate(
+				([to, value]) =>
+					window.__ask('eth_sendTransaction', [
+						{ from: window.ethereum.selectedAddress, to, value }
+					]),
+				[DUST_TO, DUST_WEI] as const
+			);
+			asked.catch(() => {});
+			const win = await requestWindow(context, 30_000);
+			// Armed first (the fee quoted): a slide made before it does nothing.
+			await expect(win.getByRole('button', { name: /^Slide to confirm/ })).toHaveAttribute(
+				'aria-disabled',
+				'false',
+				{ timeout: 60_000 }
+			);
+			await slideToConfirm(win);
+			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
+
+			// The relay's status poll says rejected (the tracker asks every ~12 s).
+			await expect(win.getByText('The network refused it — nothing was sent.')).toBeVisible({
+				timeout: 60_000
+			});
+			await expect(win.getByText('Failed', { exact: true })).toBeVisible();
+			await expect(win.getByRole('button', { name: 'Try Again' })).toHaveCount(0);
+			// The window's own size (`openRequestWindow`: 420 × 760), for the picture.
+			await win.setViewportSize({ width: 420, height: 760 });
+			await win.screenshot({ path: test.info().outputPath('097-n4-refusal-window.png') });
+
+			// Longer than every timer the window has (the 6 s hand-off grace, the
+			// 5 s close backstop): it stays, and nobody has answered the page.
+			await page.waitForTimeout(8_000);
+			expect(win.isClosed()).toBe(false);
+			await expect(win.getByText('The network refused it — nothing was sent.')).toBeVisible();
+			expect((await results(page)).eth_sendTransaction).toBeUndefined();
+			expect(await workerLog(wallet)).not.toMatch(/req\.answered[^\n]*outcome=error/);
+
+			// Done: the one answer, the refusal's own; then the window goes.
+			await win.getByRole('button', { name: 'Done' }).click();
+			expect(await asked).toEqual({
+				ok: false,
+				code: -32603,
+				message: 'the network refused this transaction; nothing was sent'
+			});
+			await noRequestWindow(context);
+			await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
+			await page.waitForTimeout(1_000);
+			const log = await workerLog(wallet);
+			expect(log.match(/req\.answered/g)).toHaveLength(2); // the connect, and this
+			expect(log).toMatch(/req\.answered delivered=true outcome=error/);
+			expect(log).not.toMatch(/maybe_sent=1|req\.settled/);
+			// The relay refused it; it was never posted twice.
+			expect(net.posted).toHaveLength(1);
+		} finally {
+			await test
+				.info()
+				.attach('stub-net', { body: net.seen.join('\n'), contentType: 'text/plain' });
+			await context.close();
+			await closeServer(net.server);
+		}
 	});
 
 	test('EX8 (G19): a worker stopped mid-request resumes; the answer arrives once, with no Chrome text', async () => {

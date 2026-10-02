@@ -1,0 +1,16 @@
+{
+ "method": "eth_sendTransaction",
+ "origin": "https://app.uniswap.org",
+ "params": [
+  {
+   "chainId": 56,
+   "data": "0x095ea7b3000000000000000000000000000000000022d473030f116ddee9f6b43ac78ba3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "from": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+   "gasLimit": "0xf4c5",
+   "maxFeePerGas": "0x0cb3a5e0",
+   "maxPriorityFeePerGas": "0x0cb3a5e0",
+   "to": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+   "value": "0x00"
+  }
+ ]
+}

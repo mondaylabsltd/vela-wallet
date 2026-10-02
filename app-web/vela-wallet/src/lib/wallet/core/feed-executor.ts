@@ -40,10 +40,14 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 
 import type { DappAction } from '$lib/core/generated/DappAction';
 import type { DappSummary } from '$lib/core/generated/DappSummary';
+import type { DappToken } from '$lib/core/generated/DappToken';
 import type { FeedShellResult } from '$lib/core/generated/FeedShellResult';
 import type { FeedTxKind } from '$lib/core/generated/FeedTxKind';
 import type { FeedTxRecord } from '$lib/core/generated/FeedTxRecord';
 import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
+import type { TrackFailure } from '$lib/core/generated/TrackFailure';
+import type { TrackMove } from '$lib/core/generated/TrackMove';
+import type { TrackSettlement } from '$lib/core/generated/TrackSettlement';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import type { FeedEffect, FeedOwnAccount, FeedRecordSink } from './feed-types';
 
@@ -68,6 +72,7 @@ const ACTIONS: DappAction[] = [
 	'typed_data',
 	'blind_sign'
 ];
+const FAILURES: TrackFailure[] = ['reverted', 'refused', 'not_sent'];
 /** `u32::MAX` — the widest count or decimals serde takes. */
 const U32_MAX = 4_294_967_295;
 
@@ -131,7 +136,11 @@ export function storedSummary(value: unknown): DappSummary | null {
 		'symbol',
 		'amount',
 		'signin_domain',
-		'primary_type'
+		'primary_type',
+		'contract_name',
+		'owner',
+		'fee_token',
+		'fee_amount'
 	] as const) {
 		const field = value[key];
 		if (field === undefined || field === null) continue;
@@ -153,7 +162,47 @@ export function storedSummary(value: unknown): DappSummary | null {
 		if (typeof value.expires_at !== 'number' || !Number.isFinite(value.expires_at)) return null;
 		summary.expires_at = value.expires_at;
 	}
+	if (value.tokens !== undefined) {
+		// Spec 097: the coins the sheet's reading named.
+		if (!Array.isArray(value.tokens)) return null;
+		const tokens: DappToken[] = [];
+		for (const token of value.tokens) {
+			const decimals = isRecord(token) ? asU32(token.decimals) : undefined;
+			if (!isRecord(token) || decimals === undefined) return null;
+			if (typeof token.address !== 'string' || typeof token.symbol !== 'string') return null;
+			tokens.push({ address: token.address, symbol: token.symbol, decimals });
+		}
+		summary.tokens = tokens;
+	}
 	return summary;
+}
+
+/**
+ * The stored settlement (`settlement`, spec 097), handed back exactly as the
+ * tracker wrote it — or `null` when any part of it is not one. Dropped whole
+ * for the reason `storedSummary` gives: a list of what moved with a line
+ * missing would be a different account of it.
+ */
+export function storedSettlement(value: unknown): TrackSettlement | null {
+	if (!isRecord(value)) return null;
+	const settlement: TrackSettlement = {};
+	if (value.moved !== undefined && value.moved !== null) {
+		if (!Array.isArray(value.moved)) return null;
+		const moved: TrackMove[] = [];
+		for (const line of value.moved) {
+			if (!isRecord(line) || typeof line.delta !== 'string') return null;
+			if (line.token !== undefined && line.token !== null && typeof line.token !== 'string') {
+				return null;
+			}
+			moved.push({ token: typeof line.token === 'string' ? line.token : null, delta: line.delta });
+		}
+		settlement.moved = moved;
+	}
+	if (value.failure !== undefined && value.failure !== null) {
+		if (!FAILURES.includes(value.failure as TrackFailure)) return null;
+		settlement.failure = value.failure as TrackFailure;
+	}
+	return settlement;
 }
 
 /**
@@ -224,7 +273,9 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 				dapp_url: typeof tx.dappUrl === 'string' && tx.dappUrl !== '' ? tx.dappUrl : null,
 				intent: typeof tx.intent === 'string' && tx.intent !== '' ? tx.intent : null,
 				summary: storedSummary(tx.dappSummary),
-				balance_changes: storedJudgments(tx.balanceChanges)
+				balance_changes: storedJudgments(tx.balanceChanges),
+				// Spec 097: how its operation ended, as the tracker proved it.
+				settlement: storedSettlement(tx.settlement)
 			}
 		: {};
 	return {

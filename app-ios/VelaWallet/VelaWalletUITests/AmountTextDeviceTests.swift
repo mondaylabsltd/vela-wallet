@@ -64,13 +64,16 @@ final class AmountTextDeviceTests: XCTestCase {
         if picker.exists {
             // The picker's own row: the home's asset list has an xDAI line
             // too, and a tap on it behind the picker opens nothing.
+            // The combined label's separator follows the locale ("," in
+            // English, "，" or "、" under zh-Hans), so the row is the button
+            // that names both the coin and its network. The parallel space's
+            // golden Safe is a real account: the picker lists only what it
+            // holds, so either of the coins it is kept funded in will do.
             let row = app.buttons.matching(NSPredicate(
-                // The combined label's separator follows the locale ("," in
-                // English, "，" or "、" under zh-Hans), so the row is the button
-                // that names both the coin and its network.
-                format: "label BEGINSWITH %@ AND label CONTAINS %@", "xDAI", "Gnosis"
+                format: "(label BEGINSWITH %@ AND label CONTAINS %@) OR (label BEGINSWITH %@ AND label CONTAINS %@)",
+                "xDAI", "Gnosis", "BNB", "BNB Chain"
             )).firstMatch
-            tap(row, "the picker's xDAI row", timeout: 30)
+            tap(row, "the picker's xDAI or BNB row", timeout: 30)
         }
         tap(field, "the amount field", timeout: 30)
         settle(0.5)

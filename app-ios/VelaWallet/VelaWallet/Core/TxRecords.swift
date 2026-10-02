@@ -211,6 +211,8 @@ enum TxRecords {
         if let intent = record["intent"] as? String, !intent.isEmpty { wire["intent"] = intent }
         if let summary = record["dappSummary"] as? [String: Any] { wire["summary"] = summary }
         if let changes = record["balanceChanges"] as? [[String: Any]] { wire["balance_changes"] = changes }
+        // Spec 097: how its operation ended, as the tracker's patch wrote it.
+        if let settlement = record["settlement"] as? [String: Any] { wire["settlement"] = settlement }
         return wire
     }
 

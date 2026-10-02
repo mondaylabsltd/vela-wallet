@@ -238,6 +238,43 @@ enum class SendTxErrorKey {
 @Serializable
 data class SendRecipientIdentity(val name: String? = null, val source: String? = null)
 
+/**
+ * Whose word a payee's name is (spec 097 F, S2) — the core reads the
+ * resolver's label; the shell only picks the tag: none for [Own], the
+ * corpus's "Vela User" for [Registry] (a public name anyone can register),
+ * the service's own label for [Service].
+ */
+@Serializable
+sealed class SendNameSource {
+    @Serializable
+    @SerialName("own")
+    data object Own : SendNameSource()
+
+    @Serializable
+    @SerialName("registry")
+    data object Registry : SendNameSource()
+
+    @Serializable
+    @SerialName("service")
+    data class Service(val label: String) : SendNameSource()
+}
+
+/** A source this build cannot read is absent, never a broken send view. */
+object SendNameSourceFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendNameSource>(SendNameSource.serializer())
+
+/**
+ * One payee as the confirm page names them (spec 097 F, S2): the address in
+ * full, as signed, and a name only beside it — `name_source` is set exactly
+ * when `name` is.
+ */
+@Serializable
+data class SendPayee(
+    val address: String,
+    val name: String? = null,
+    @Serializable(with = SendNameSourceFailSoft::class)
+    val name_source: SendNameSource? = null,
+)
+
 @Serializable
 data class SendRecipientRisk(val is_contract: Boolean? = null, val first_time: Boolean? = null)
 
@@ -441,12 +478,26 @@ data class SendReceiptTransfer(
     val usd_value: Double,
 )
 
+/** One coin the operation sent, summed over its recipients (spec 097 F, S3). `token_address = null` is the native coin. */
+@Serializable
+data class SendReceiptCoin(
+    /** Token units, as signed. */
+    val amount: String,
+    val symbol: String,
+    val logo_urls: List<String> = emptyList(),
+    val token_address: String? = null,
+    val usd_value: Double,
+)
+
 @Serializable
 data class SendReceiptView(
     val status: SendReceiptStatus,
     val hold_reason: SendHoldReason? = null,
     val kind: SendReceiptKind? = null,
     val transfers: List<SendReceiptTransfer> = emptyList(),
+    /** Spec 097 F (S3): every coin the operation sent, in signing order — a split's one total, a sweep's each. */
+    val coins: List<SendReceiptCoin> = emptyList(),
+    /** `coins[0].amount` when one coin was sent; `""` for a sweep of several. */
     val amount: String,
     val usd_value: Double,
     val submitted_at_ms: Double? = null,
@@ -564,6 +615,13 @@ data class SendView(
     val receipt: SendReceiptView? = null,
     val treasury_bootstrap: SendTreasuryStatus? = null,
     val recipient_identity: SendRecipientIdentity? = null,
+    /**
+     * Spec 097 F (S2): who the money goes to, as the form line and the confirm
+     * name them — one for a single send or a sweep (none until the address is
+     * whole), one per `recipients` row for a split. Draw from these, never
+     * from `recipient_identity`.
+     */
+    val payees: List<SendPayee> = emptyList(),
     val recipient_risk: SendRecipientRisk? = null,
     /** Spec 096 F12: the recipient is a token's own contract (the core's verdict). */
     val recipient_is_token_contract: Boolean = false,

@@ -111,6 +111,10 @@ export const WALLET_FLOW_KEYS = [
 	'connect.detail.contentMessage',
 	'connect.detail.contentMissing',
 	'componentsUi.signing.typeLabel',
+	// Spec 097 N4: why a dApp row failed — the words its request ended with
+	// (`send.txErrorGeneric` is listed with the send flow's words).
+	'componentsTx.receipt.failedHint',
+	'componentsUi.signing.refused',
 
 	// ---------------------------------------------------------------- assets
 	'assets.sectionTitle',
@@ -333,6 +337,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.confirmTitle',
 	'send.fromLabel',
 	'send.toLabel',
+	// Spec 097 F: a name from the public wallet registry is tagged as such
+	// beside the address it claims, never drawn as if it were the person's own.
+	'send.velaUser',
 	'send.estFeeLabel',
 	'send.confirmSendBtn',
 	'send.confirmTotalLine',
@@ -345,6 +352,8 @@ export const WALLET_FLOW_KEYS = [
 	'send.txCloseBackground',
 	'send.txSubmittedTitle',
 	'send.txConfirmedTitle',
+	// Spec 097 F: a sweep's success has no one figure; its coins are listed.
+	'componentsTx.detail.sent',
 	'send.txWaitingConfirm',
 	'send.txTypicalTime',
 	'send.txRemaining',

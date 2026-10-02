@@ -45,7 +45,14 @@ symbol: string, decimals: number | null,
  * Numeric USD (0 when unknown) — the `txUsdValue` port, stablecoin
  * face-value fallback included (invariant ⑧).
  */
-usd_value: number, chain_id: number, 
+usd_value: number, 
+/**
+ * `usd_value` is a figure the wallet knows: a price stored with the
+ * record, or a stablecoin's face value (spec 097 N7). `false` when no
+ * price is known — the shell draws NO fiat figure then, never
+ * "≈ $0.00": unknown is not zero.
+ */
+priced: boolean, chain_id: number, 
 /**
  * Epoch seconds (drives `relativeTime`/`dayGroupLabel` in the shell).
  */

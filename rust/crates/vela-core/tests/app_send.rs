@@ -24,11 +24,12 @@ use vela_core::app::send::{
     max_figure, receipt_outcome_of, recipients_are_valid, split_row_issues, sum_split_base_units,
     Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
-    SendHapticKind, SendHoldReason, SendLockError, SendOpenParams, SendOperation as Op,
-    SendReceiptKind, SendReceiptOutcome, SendReceiptStatus, SendRecipientDraft, SendRowFieldState,
-    SendScan, SendShellResult as Res, SendStage, SendSubmitFailure, SendTimerTag, SendToken,
-    SendTokenMeta, SendTreasuryAsset, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey,
-    SendTxRecord, SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS,
+    SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
+    SendOperation as Op, SendPayee, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
+    SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res, SendStage,
+    SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
+    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
+    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -6251,4 +6252,300 @@ fn the_token_contract_verdict_is_on_the_wire() {
     set_recipient(&mut sut, USDC);
     let json = serde_json::to_value(sut.view()).expect("serializes");
     assert_eq!(json["recipient_is_token_contract"], true);
+}
+
+// ===========================================================================
+// Spec 097 F — the page that signs names the address; the receipt every coin
+// ===========================================================================
+
+/// The developer wallet of the real-money pass, which the public registry
+/// calls "Wallet" (`sw-022-golden-gnosis-confirm.png`).
+const DEV_WALLET: &str = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c";
+
+fn identity(name: &str, source: Option<&str>) -> Res {
+    Res::IdentityResolved {
+        identity: Some(vela_core::app::send::SendRecipientIdentity {
+            name: Some(name.to_owned()),
+            source: source.map(str::to_owned),
+        }),
+    }
+}
+
+/// Type `addr` and answer its identity lookup with `answer`.
+fn set_named_recipient(sut: &mut Sut, addr: &str, answer: Res) {
+    let ops = sut.dispatch(Event::SetRecipient {
+        recipient: addr.to_owned(),
+    });
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::ResolveIdentity { .. })),
+        "a whole address is looked up: {ops:?}"
+    );
+    assert!(sut.resolve(answer).is_empty());
+}
+
+fn payee(address: &str, name: Option<&str>, source: Option<SendNameSource>) -> SendPayee {
+    SendPayee {
+        address: address.to_owned(),
+        name: name.map(str::to_owned),
+        name_source: source,
+    }
+}
+
+/// S2: the confirm's To row printed "Wallet" — a name from the public
+/// registry, where anyone can register any name — and the address only
+/// behind a tap on the identicon. The core now says who is paid: the address,
+/// the name beside it, and that the name is the registry's, not the person's.
+#[test]
+fn a_registry_name_never_stands_for_the_address_on_the_confirm() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_named_recipient(&mut sut, DEV_WALLET, identity("Wallet", Some("passkey")));
+    let expected = vec![payee(
+        DEV_WALLET,
+        Some("Wallet"),
+        Some(SendNameSource::Registry),
+    )];
+    assert_eq!(sut.view().payees, expected, "the form's line says the same");
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    let view = sut.view();
+    assert_eq!(
+        view.payees, expected,
+        "the address the slide signs, in full"
+    );
+    let json = serde_json::to_value(&view).expect("serializes");
+    assert_eq!(json["payees"][0]["address"], DEV_WALLET);
+    assert_eq!(json["payees"][0]["name_source"]["type"], "registry");
+}
+
+/// The person's own account is named in their own word, untagged — and the
+/// address is still beside it.
+#[test]
+fn an_own_name_carries_the_address_too() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_named_recipient(&mut sut, RECIPIENT, identity("Savings", Some("self")));
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    assert_eq!(
+        sut.view().payees,
+        vec![payee(RECIPIENT, Some("Savings"), Some(SendNameSource::Own))]
+    );
+}
+
+/// A name service's name is a public claim too: it says which service.
+#[test]
+fn a_name_service_name_says_which_service() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_named_recipient(&mut sut, RECIPIENT, identity("bob.eth", Some("ENS")));
+    let json = serde_json::to_value(sut.view()).expect("serializes");
+    assert_eq!(
+        json["payees"][0]["name_source"],
+        serde_json::json!({ "type": "service", "label": "ENS" })
+    );
+}
+
+/// A name nobody can say the source of could only be drawn untagged — the
+/// way the person's own names look — so it is not drawn; nor is one no
+/// screen could show. The address always is.
+#[test]
+fn a_name_of_unknown_source_or_unprintable_is_not_drawn() {
+    for answer in [
+        identity("Alice", None),
+        identity("Alice", Some(" ")),
+        identity("Al\u{fffd}ce", Some("passkey")),
+        identity("   ", Some("passkey")),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        select_eth(&mut sut);
+        set_named_recipient(&mut sut, RECIPIENT, answer);
+        assert_eq!(sut.view().payees, vec![payee(RECIPIENT, None, None)]);
+    }
+}
+
+/// Nobody is named before the address is whole.
+#[test]
+fn a_half_typed_address_names_nobody() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetRecipient {
+        recipient: "0x14fB1fB2".to_owned(),
+    });
+    assert!(sut.view().payees.is_empty());
+}
+
+/// A split row named from the person's own contacts (or the name column of
+/// their own list) is their word — and its address is carried beside it.
+#[test]
+fn a_split_rows_own_name_carries_its_address() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            SendRecipientDraft {
+                id: "rcpt_1".to_owned(),
+                address: format!(" {RECIPIENT} "),
+                amount: "0.5".to_owned(),
+                name: Some("Bob".to_owned()),
+            },
+            SendRecipientDraft {
+                id: "rcpt_2".to_owned(),
+                address: RECIPIENT_B.to_owned(),
+                amount: "0.25".to_owned(),
+                name: Some("  ".to_owned()),
+            },
+        ],
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    assert_eq!(
+        sut.view().payees,
+        vec![
+            payee(RECIPIENT, Some("Bob"), Some(SendNameSource::Own)),
+            payee(RECIPIENT_B, None, None),
+        ]
+    );
+}
+
+/// Start a two-coin sweep (ETH + USDC) to `to`, its identity answered with
+/// `answer`, and walk it to the confirm.
+fn sweep_to_confirm(to: &str, answer: Res) -> Sut {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: eth("2").id(),
+    });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: usdc("5").id(),
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.resolve(credential(Some(PK)));
+    sut.resolve(fee_ok(native_fee(1, 500_000_000_000_000_000)));
+    set_named_recipient(&mut sut, to, answer);
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve(fee_ok(native_fee(1, 500_000_000_000_000_000)));
+    let probes = sut.resolve(covered());
+    sut.drop_oldest();
+    for op in probes {
+        match op {
+            Op::ResolveRisk { .. } => {
+                sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::SimulateCalls { .. } => {
+                sut.resolve(Res::SimResolved { sim_json: None });
+            }
+            other => panic!("unexpected probe {other:?}"),
+        }
+    }
+    assert_eq!(sut.view().stage, SendStage::Confirm);
+    sut
+}
+
+/// The sweep's confirm (`sw-054-golden-base-confirm.png`) had the same
+/// "To Wallet" row.
+#[test]
+fn a_sweep_names_its_one_payee_with_the_address() {
+    let sut = sweep_to_confirm(DEV_WALLET, identity("Wallet", Some("passkey")));
+    assert_eq!(
+        sut.view().payees,
+        vec![payee(
+            DEV_WALLET,
+            Some("Wallet"),
+            Some(SendNameSource::Registry)
+        )]
+    );
+}
+
+/// S3: a two-coin sweep's success screen read "Sent 0.000418 ETH" although
+/// 0.034929 USDC moved in the same operation (`sw-054-golden-base-status-12.png`):
+/// the receipt's one figure was the first coin's. It now lists every coin,
+/// and no single figure stands for the batch.
+#[test]
+fn a_two_coin_sweep_receipt_lists_both_coins() {
+    let mut sut = sweep_to_confirm(DEV_WALLET, identity("Wallet", Some("passkey")));
+    slide_to_submit(&mut sut);
+    sut.resolve(submitted(HASH));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Receipt);
+    let receipt = view.receipt.expect("receipt");
+    assert_eq!(receipt.kind, Some(SendReceiptKind::MultiSelect));
+    let coins: Vec<(&str, &str, Option<&str>)> = receipt
+        .coins
+        .iter()
+        .map(|coin| {
+            (
+                coin.amount.as_str(),
+                coin.symbol.as_str(),
+                coin.token_address.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        coins,
+        vec![("1.5", "ETH", None), ("5", "USDC", Some(USDC))],
+        "every coin, at the amount signed (ETH net of the gas reserve)"
+    );
+    assert_eq!(receipt.amount, "", "no one coin's figure heads a sweep");
+    assert_eq!(receipt.usd_value, 1.5 * 2000.0 + 5.0, "all coins together");
+}
+
+/// A split's headline was its FIRST row ("Sent 0.5 ETH" for 0.5 + 0.25). The
+/// one coin it sent is listed at its total.
+#[test]
+fn a_split_receipt_heads_with_its_total_not_its_first_row() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            SendRecipientDraft {
+                id: "rcpt_1".to_owned(),
+                address: RECIPIENT.to_owned(),
+                amount: "0.5".to_owned(),
+                name: Some("Bob".to_owned()),
+            },
+            SendRecipientDraft {
+                id: "rcpt_2".to_owned(),
+                address: RECIPIENT_B.to_owned(),
+                amount: "0.25".to_owned(),
+                name: None,
+            },
+        ],
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(submitted(HASH));
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.coins.len(), 1);
+    assert_eq!(receipt.coins[0].amount, "0.75");
+    assert_eq!(receipt.coins[0].symbol, "ETH");
+    assert_eq!(receipt.amount, "0.75");
+    assert_eq!(receipt.usd_value, 0.75 * 2000.0);
+    assert_eq!(receipt.transfers.len(), 2, "the people are still listed");
+}
+
+/// A single send's receipt is one coin, its figure exactly as signed.
+#[test]
+fn a_single_send_receipt_is_its_one_coin() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(submitted(HASH));
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.coins.len(), 1);
+    assert_eq!(receipt.coins[0].amount, receipt.amount);
+    assert_eq!(receipt.coins[0].symbol, "ETH");
+    assert_eq!(receipt.coins[0].logo_urls, vec!["eth.png".to_owned()]);
 }

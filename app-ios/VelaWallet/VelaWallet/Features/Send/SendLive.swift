@@ -182,18 +182,77 @@ enum SendLive {
     }
 
     /// Issue #332: the picker's "To" line — the recipient the core already
-    /// holds, worded as the confirm page words it, so the person sees whom
-    /// they are paying while they choose what. Nobody held, no line; artwork
-    /// only for a real address (the founder's anti-poisoning rule).
+    /// holds, worded as the confirm page words it (spec 097 F), so the person
+    /// sees whom they are paying while they choose what. Nobody held, no line.
     static func pickRecipient(_ view: SendViewWire, loc: Loc) -> FactRowModel? {
         let address = view.recipient.trimmingCharacters(in: .whitespaces)
         guard !address.isEmpty else { return nil }
-        let name = view.recipientIdentity?.name
+        return payeeFact(
+            label: loc.t("send.toLabel"), address: address, payee: singlePayee(view), loc: loc
+        )
+    }
+
+    // MARK: - Who is paid (spec 097 F, S2)
+
+    /// The one payee of a single send or a sweep, as the core named them —
+    /// never a split's first row.
+    static func singlePayee(_ view: SendViewWire) -> SendPayeeWire? {
+        view.splitMode ? nil : view.payees?.first
+    }
+
+    /// Whose word a payee's name is, when it is not the person's own: "Vela
+    /// User" for the public registry, where anyone can register any name; a
+    /// name service's own label ("ENS") as it is.
+    static func payeeTag(_ payee: SendPayeeWire, loc: Loc) -> String? {
+        switch payee.nameSource {
+        case .registry: loc.t("send.velaUser")
+        case .service(let label): label
+        case .own, .unknown, nil: nil
+        }
+    }
+
+    /// The payee's name, when the core gave one and says whose word it is.
+    /// `nil` when nobody named them — or when nobody can say whose word the
+    /// name is, which untagged would read as the person's own.
+    static func payeeKnownName(_ payee: SendPayeeWire?) -> String? {
+        guard let payee, let name = payee.name, let source = payee.nameSource,
+              source != .unknown else { return nil }
+        return name
+    }
+
+    /// "Wallet · Vela User", "bob.eth · ENS", "Savings" — the form's line,
+    /// which wraps rather than cuts.
+    static func payeeName(_ payee: SendPayeeWire?, loc: Loc) -> String? {
+        guard let payee, let name = payeeKnownName(payee) else { return nil }
+        return payeeTag(payee, loc: loc).map { "\(name) · \($0)" } ?? name
+    }
+
+    /// The line under a named payee on a row that may cut its name: whose
+    /// word the name is and the short address together, "Vela User ·
+    /// 0x14fB…eA5c" — never cut. A long registry name must not push the tag
+    /// out of sight with itself.
+    static func payeeDetail(_ payee: SendPayeeWire, short: String, loc: Loc) -> String {
+        payeeTag(payee, loc: loc).map { "\($0) · \(short)" } ?? short
+    }
+
+    /// The To row: a name never stands in for the address on the page that
+    /// signs (S2 — "Wallet", from the public registry, with the address one
+    /// tap away). Named, the name alone (it may be cut) over the tag and the
+    /// short address (never cut); unnamed, the short address in mono. The
+    /// face is the full address's, and a tap shows it whole. Artwork only for
+    /// a real address (the founder's anti-poisoning rule).
+    static func payeeFact(
+        label: String, address: String, payee: SendPayeeWire?, loc: Loc
+    ) -> FactRowModel {
+        let address = payee?.address ?? address
+        let short = AddressText.short(address)
+        let name = payeeKnownName(payee)
         return FactRowModel(
-            label: loc.t("send.toLabel"),
-            value: name.map { "\($0) · \(AddressText.short(address))" } ?? AddressText.short(address),
+            label: label,
+            value: name ?? short,
             lead: isAddress(address) ? .identicon(address) : nil,
-            mono: name == nil
+            mono: name == nil,
+            detail: payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) }
         )
     }
 
@@ -386,10 +445,11 @@ enum SendLive {
                 pickLabel: drawn.pickLabel,
                 scanLabel: drawn.scanLabel,
                 // A token's own contract (spec 096 F12) is said first, in the
-                // warning tone; else who the core says this is.
+                // warning tone; else who the core says this is, and whose word
+                // that is (spec 097 F) — never the resolver's own label.
                 note: view.recipientIsTokenContract == true
                     ? loc.t("send.recipientTokenContract")
-                    : view.recipientIdentity?.name ?? drawn.note,
+                    : payeeName(singlePayee(view), loc: loc) ?? drawn.note,
                 noteWarn: view.recipientIsTokenContract == true
             )
         }
@@ -871,16 +931,17 @@ enum SendLive {
         let symbol = token?.symbol ?? ""
         let chain = token.map { ChainCatalog.meta($0.chainId)?.displayName ?? $0.network } ?? ""
 
-        let recipientName = view.recipientIdentity?.name
         var facts = [
             FactRowModel(
                 label: model.facts.first?.label ?? "",
                 value: from.name ?? AddressText.short(from.address)
             ),
-            FactRowModel(
+            // Who is paid, as the core names them (spec 097 F): a single send
+            // and a sweep alike. A split's has no one payee and goes below.
+            payeeFact(
                 label: model.facts.count > 1 ? model.facts[1].label : "",
-                value: recipientName.map { "\($0) · \(AddressText.short(view.recipient))" }
-                    ?? AddressText.short(view.recipient)
+                address: view.recipient.trimmingCharacters(in: .whitespaces),
+                payee: singlePayee(view), loc: loc
             ),
             FactRowModel(
                 label: model.facts.count > 2 ? model.facts[2].label : "",
@@ -944,7 +1005,7 @@ enum SendLive {
             // A split: every payee by name and face, and how many there are.
             // The single "To" row has no one address to name, so it goes —
             // the count and the list below say who instead (web 038 #D2).
-            breakdown = splitBreakdown(view)
+            breakdown = splitBreakdown(view, loc: loc)
             facts.remove(at: 1)
             let count = loc.t(
                 view.recipients.count == 1 ? "send.recipientCount_one" : "send.recipientCount_other",
@@ -1008,18 +1069,26 @@ enum SendLive {
         )
     }
 
-    /// A split's payees, one row each, from the core's drafts.
+    /// A split's payees, one row each: the amount from the core's drafts, who
+    /// from its `payees` (same index, spec 097 F).
     ///
     /// A name never stands in for the address on the page that signs: a named
-    /// row reads "Alice · 0x12…34f0". Only a real address earns a face.
-    static func splitBreakdown(_ view: SendViewWire) -> [BreakdownRowModel] {
+    /// row is the name over its tag and short address; an unnamed one the
+    /// short address in mono. Only a real address earns a face.
+    static func splitBreakdown(_ view: SendViewWire, loc: Loc) -> [BreakdownRowModel] {
         let symbol = view.selectedToken?.symbol ?? ""
-        return view.recipients.map { row in
-            let short = AddressText.short(row.address)
+        let payees = view.payees ?? []
+        return view.recipients.enumerated().map { index, row in
+            let payee = payees.indices.contains(index) ? payees[index] : nil
+            let address = payee?.address ?? row.address
+            let short = AddressText.short(address)
+            let name = payeeKnownName(payee)
             return BreakdownRowModel(
-                identiconSeed: isAddress(row.address) ? row.address : "",
-                label: row.name.map { short.isEmpty ? $0 : "\($0) · \(short)" } ?? short,
-                value: "\(trim(row.amount)) \(symbol)"
+                identiconSeed: isAddress(address) ? address : "",
+                label: name ?? short,
+                value: "\(trim(row.amount)) \(symbol)",
+                detail: payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) },
+                mono: name == nil
             )
         }
     }
@@ -1198,16 +1267,26 @@ enum SendLive {
                 }
             }
         case .confirmed:
-            let sent = view.receipt?.amount ?? view.confirmAmount
-            title = loc.t("send.txConfirmedTitle", vars: [
-                // As on the confirm page: the asset list's formatter for one
-                // send, the exact sum for a split.
-                "amount": view.splitMode ? trim(sent) : WalletLive.tokenAmountText(sent),
-                "symbol": symbol,
-            ])
+            // Every coin the operation sent, as the core summed them (spec
+            // 097 F, S3). One heads with its figure — a split's is its total;
+            // several have no one figure and are listed below: "Sent 0.000418
+            // ETH" over a sweep that also moved USDC said less than happened.
+            let coins = view.receipt?.coins ?? []
+            if coins.count > 1 {
+                title = loc.t("componentsTx.detail.sent")
+            } else {
+                let sent = coins.first?.amount ?? view.receipt?.amount ?? view.confirmAmount
+                title = loc.t("send.txConfirmedTitle", vars: [
+                    // As on the confirm page: the asset list's formatter for
+                    // one send, the exact sum for a split.
+                    "amount": view.splitMode ? trim(sent) : WalletLive.tokenAmountText(sent),
+                    "symbol": coins.first?.symbol ?? symbol,
+                ])
+            }
             // A split names its count here and its people below; "To " with
-            // nobody after it was what the single-recipient line read as.
-            let to = parts.title ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
+            // nobody after it was what the single-recipient line read as. A
+            // sweep's one recipient stays named: its parts are its coins.
+            let to = parts.people ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
             captions = ["\(to) · \(chain)"]
         case .failed where view.receipt?.status == "not_sent":
             // The relay never had it (RA4): nothing moved, nothing was spent,
@@ -1237,7 +1316,11 @@ enum SendLive {
 
         return SendReceiptModel(
             header: FlowHeaderModel(
-                title: loc.t("send.sendTitle", vars: ["symbol": symbol]),
+                // A sweep is several coins: "Send ETH" named only the first
+                // (spec 097 F).
+                title: view.multiSelectMode
+                    ? loc.t("send.multiSendTitle")
+                    : loc.t("send.sendTitle", vars: ["symbol": symbol]),
                 backLabel: model.header.backLabel,
                 action: model.header.action,
                 pill: model.header.pill
@@ -1277,13 +1360,32 @@ enum SendLive {
         )
     }
 
-    /// A split's parts on the receipt as on the confirm (web `receiptParts`,
-    /// #261): from the receipt's own frozen transfers once the core has them,
-    /// from the drafts before that. Nothing for a single send or a sweep — the
-    /// sweep's parts are assets, and its one recipient is already the caption.
+    /// A receipt's parts (web `receiptParts`). A sweep's are its coins —
+    /// every one the core says the operation sent (spec 097 F, S3); its one
+    /// recipient stays the caption. A split's are its people, as on the
+    /// confirm (#261): from the receipt's own frozen transfers once the core
+    /// has them, from the drafts before that, and `people` counts them for
+    /// the caption. Nothing for a single send.
     static func receiptParts(
         _ view: SendViewWire, symbol: String, loc: Loc
-    ) -> (title: String?, rows: [BreakdownRowModel]) {
+    ) -> (title: String?, rows: [BreakdownRowModel], people: String?) {
+        let coins = view.receipt?.coins ?? []
+        // Several coins (spec 097 F): one coin — a single send, a split, or a
+        // sweep whose native line the gas reserve dropped — is the title's.
+        if coins.count > 1 {
+            let chainId = view.multiChainId ?? view.selectedToken?.chainId ?? 0
+            let rows = coins.map { coin in
+                BreakdownRowModel(
+                    lead: TokenMarkModel.of(
+                        chainId: chainId, symbol: coin.symbol, tokenAddress: coin.tokenAddress,
+                        color: chainColor(chainId), named: coin.logoUrls
+                    ),
+                    label: coin.symbol,
+                    value: "\(WalletLive.tokenAmountText(coin.amount)) \(coin.symbol)"
+                )
+            }
+            return (loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(coins.count)]), rows, nil)
+        }
         let frozen = view.receipt?.kind == "split" ? view.receipt?.transfers ?? [] : []
         let rows: [BreakdownRowModel]
         if !frozen.isEmpty {
@@ -1305,9 +1407,10 @@ enum SendLive {
         } else {
             rows = []
         }
-        guard !rows.isEmpty else { return (nil, []) }
+        guard !rows.isEmpty else { return (nil, [], nil) }
         let key = rows.count == 1 ? "send.recipientCount_one" : "send.recipientCount_other"
-        return (loc.t(key, vars: ["count": String(rows.count)]), rows)
+        let people = loc.t(key, vars: ["count": String(rows.count)])
+        return (people, rows, people)
     }
 
     // MARK: - SD2F, the fee-token sheet
@@ -1519,9 +1622,13 @@ enum SendLive {
         )
     }
 
-    /// A whole group as split rows, amounts blank, each member by the name the
-    /// book shows for them. The core mints the ids; `nil` for an empty group,
+    /// A whole group as split rows, amounts blank, each member by the name
+    /// the person gave them. The core mints the ids; `nil` for an empty group,
     /// which adds nobody.
+    ///
+    /// Only the person's OWN name: a split row's name is drawn as their word,
+    /// untagged, on the page that signs (spec 097 F) — a registry or ENS name
+    /// seeded here would pose as one. Unnamed, the row shows the address.
     static func groupRecipients(_ group: ContactGroupWire) -> [[String: Any]]? {
         guard !group.members.isEmpty else { return nil }
         return group.members.map { member in
@@ -1529,7 +1636,7 @@ enum SendLive {
                 "id": "",
                 "address": member.address,
                 "amount": "",
-                "name": (member.name ?? member.resolvedName).map { $0 as Any } ?? NSNull(),
+                "name": member.name.map { $0 as Any } ?? NSNull(),
             ]
         }
     }

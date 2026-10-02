@@ -197,7 +197,14 @@ final class SigningController {
     /// Past the point of no return: a passkey ceremony or a submit is under
     /// way. A controller in this state is not dropped when its page goes away
     /// — the operation may land, and its record must still be written.
-    var committed: Bool { sign.isSigning || sign.isSubmitting || (submittedHash != nil && !answered) }
+    ///
+    /// A failure on the sheet ends that (spec 097 N4): the core holds a
+    /// refusal the tracker reached after the submit until the sheet closes,
+    /// and with the page gone it drops it unanswered (the browser answered
+    /// 4900) — nothing is left to land, record or answer.
+    var committed: Bool {
+        sign.isSigning || sign.isSubmitting || (submittedHash != nil && !answered && sign.error == nil)
+    }
     /// Where the simulation for the request on screen has got to.
     ///
     /// THREE states, because they are three different sentences and a boolean
@@ -1004,6 +1011,8 @@ final class SigningController {
             "unlimited_approved": guardView.unlimitedConsented,
             "token_meta": guardView.meta.wire,
             "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
+            // Spec 097: what the reading named, copied verbatim.
+            "reading": clear.recordReading?.wire as Any? ?? NSNull(),
         ]
     }
 
