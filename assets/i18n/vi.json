@@ -1026,6 +1026,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Chính sách quyền riêng tư",
+  "linkTerms": "Điều khoản dịch vụ",
+  "linkSupport": "Hỗ trợ",
   "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
   "sectionLinks": "Liên kết"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "Hình giữ chỗ demo · không quét được"
+  },
+  "appMenu": {
+   "about": "Giới thiệu về Vela Wallet",
+   "hide": "Ẩn Vela Wallet",
+   "hideOthers": "Ẩn mục khác",
+   "showAll": "Hiển thị tất cả",
+   "quit": "Thoát Vela Wallet",
+   "edit": "Sửa",
+   "undo": "Hoàn tác",
+   "redo": "Làm lại",
+   "cut": "Cắt",
+   "copy": "Sao chép",
+   "paste": "Dán",
+   "selectAll": "Chọn tất cả",
+   "view": "Xem",
+   "fullScreen": "Bật/tắt toàn màn hình",
+   "window": "Cửa sổ",
+   "minimize": "Thu nhỏ",
+   "closeWindow": "Đóng cửa sổ"
   }
  },
  "settingsModals": {

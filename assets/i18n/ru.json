@@ -1032,6 +1032,9 @@
   "linkWebsite": "Сайт",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Политика конфиденциальности",
+  "linkTerms": "Условия использования",
+  "linkSupport": "Поддержка",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
   "sectionLinks": "Ссылки"
  },
@@ -1596,6 +1599,25 @@
   },
   "qrPlaceholder": {
    "caption": "Демонстрационный шаблон · не сканируется"
+  },
+  "appMenu": {
+   "about": "О программе Vela Wallet",
+   "hide": "Скрыть Vela Wallet",
+   "hideOthers": "Скрыть остальные",
+   "showAll": "Показать все",
+   "quit": "Завершить Vela Wallet",
+   "edit": "Правка",
+   "undo": "Отменить",
+   "redo": "Повторить",
+   "cut": "Вырезать",
+   "copy": "Скопировать",
+   "paste": "Вставить",
+   "selectAll": "Выбрать все",
+   "view": "Вид",
+   "fullScreen": "Полноэкранный режим",
+   "window": "Окно",
+   "minimize": "Свернуть",
+   "closeWindow": "Закрыть окно"
   }
  },
  "settingsModals": {

@@ -1026,6 +1026,9 @@
   "linkWebsite": "Web Sitesi",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Gizlilik Politikası",
+  "linkTerms": "Hizmet Şartları",
+  "linkSupport": "Destek",
   "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
   "sectionLinks": "Bağlantılar"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo yer tutucu · taranamaz"
+  },
+  "appMenu": {
+   "about": "Vela Wallet Hakkında",
+   "hide": "Vela Wallet'ı Gizle",
+   "hideOthers": "Diğerlerini Gizle",
+   "showAll": "Tümünü Göster",
+   "quit": "Vela Wallet'tan Çık",
+   "edit": "Düzen",
+   "undo": "Geri Al",
+   "redo": "Yinele",
+   "cut": "Kes",
+   "copy": "Kopyala",
+   "paste": "Yapıştır",
+   "selectAll": "Tümünü Seç",
+   "view": "Görüntü",
+   "fullScreen": "Tam Ekranı Aç/Kapat",
+   "window": "Pencere",
+   "minimize": "Küçült",
+   "closeWindow": "Pencereyi Kapat"
   }
  },
  "settingsModals": {

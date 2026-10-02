@@ -1029,6 +1029,9 @@
   "linkWebsite": "Sito web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Informativa sulla privacy",
+  "linkTerms": "Termini di servizio",
+  "linkSupport": "Assistenza",
   "footer": "Realizzato con cura. Le tue chiavi, le tue cripto.",
   "sectionLinks": "Link"
  },
@@ -1593,6 +1596,25 @@
   },
   "qrPlaceholder": {
    "caption": "Segnaposto dimostrativo · non scansionabile"
+  },
+  "appMenu": {
+   "about": "Informazioni su Vela Wallet",
+   "hide": "Nascondi Vela Wallet",
+   "hideOthers": "Nascondi altre",
+   "showAll": "Mostra tutte",
+   "quit": "Esci da Vela Wallet",
+   "edit": "Composizione",
+   "undo": "Annulla",
+   "redo": "Ripeti",
+   "cut": "Taglia",
+   "copy": "Copia",
+   "paste": "Incolla",
+   "selectAll": "Seleziona tutto",
+   "view": "Vista",
+   "fullScreen": "Attiva/disattiva tutto schermo",
+   "window": "Finestra",
+   "minimize": "Contrai",
+   "closeWindow": "Chiudi finestra"
   }
  },
  "settingsModals": {

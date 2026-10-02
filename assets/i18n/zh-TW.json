@@ -1026,6 +1026,9 @@
   "linkWebsite": "官方網站",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "隱私政策",
+  "linkTerms": "服務條款",
+  "linkSupport": "說明與支援",
   "footer": "用心打造。您的金鑰，您的幣。",
   "sectionLinks": "連結"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "示範佔位圖案 · 無法掃描"
+  },
+  "appMenu": {
+   "about": "關於 Vela Wallet",
+   "hide": "隱藏 Vela Wallet",
+   "hideOthers": "隱藏其他",
+   "showAll": "全部顯示",
+   "quit": "結束 Vela Wallet",
+   "edit": "編輯",
+   "undo": "還原",
+   "redo": "重做",
+   "cut": "剪下",
+   "copy": "拷貝",
+   "paste": "貼上",
+   "selectAll": "全選",
+   "view": "顯示方式",
+   "fullScreen": "切換全螢幕",
+   "window": "視窗",
+   "minimize": "縮到最小",
+   "closeWindow": "關閉視窗"
   }
  },
  "settingsModals": {

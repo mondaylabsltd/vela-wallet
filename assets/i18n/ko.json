@@ -1026,6 +1026,9 @@
   "linkWebsite": "웹사이트",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "개인정보 처리방침",
+  "linkTerms": "서비스 약관",
+  "linkSupport": "고객 지원",
   "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
   "sectionLinks": "링크"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "데모 자리 표시자 · 스캔 불가"
+  },
+  "appMenu": {
+   "about": "Vela Wallet에 관하여",
+   "hide": "Vela Wallet 가리기",
+   "hideOthers": "기타 가리기",
+   "showAll": "모두 보기",
+   "quit": "Vela Wallet 종료",
+   "edit": "편집",
+   "undo": "실행 취소",
+   "redo": "실행 복귀",
+   "cut": "오려두기",
+   "copy": "복사하기",
+   "paste": "붙여넣기",
+   "selectAll": "전체 선택",
+   "view": "보기",
+   "fullScreen": "전체 화면 전환",
+   "window": "윈도우",
+   "minimize": "최소화",
+   "closeWindow": "윈도우 닫기"
   }
  },
  "settingsModals": {

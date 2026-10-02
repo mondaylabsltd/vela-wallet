@@ -1026,6 +1026,9 @@
   "linkWebsite": "ウェブサイト",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "プライバシーポリシー",
+  "linkTerms": "利用規約",
+  "linkSupport": "サポート",
   "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
   "sectionLinks": "リンク"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "デモ用プレースホルダー · スキャン不可"
+  },
+  "appMenu": {
+   "about": "Vela Walletについて",
+   "hide": "Vela Walletを非表示",
+   "hideOthers": "ほかを非表示",
+   "showAll": "すべてを表示",
+   "quit": "Vela Walletを終了",
+   "edit": "編集",
+   "undo": "取り消す",
+   "redo": "やり直す",
+   "cut": "カット",
+   "copy": "コピー",
+   "paste": "ペースト",
+   "selectAll": "すべてを選択",
+   "view": "表示",
+   "fullScreen": "フルスクリーンを切り替え",
+   "window": "ウインドウ",
+   "minimize": "しまう",
+   "closeWindow": "ウインドウを閉じる"
   }
  },
  "settingsModals": {

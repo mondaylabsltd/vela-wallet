@@ -1026,6 +1026,9 @@
   "linkWebsite": "Situs Web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Kebijakan Privasi",
+  "linkTerms": "Ketentuan Layanan",
+  "linkSupport": "Dukungan",
   "footer": "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
   "sectionLinks": "Tautan"
  },
@@ -1590,6 +1593,25 @@
   },
   "qrPlaceholder": {
    "caption": "Placeholder demo · tidak dapat dipindai"
+  },
+  "appMenu": {
+   "about": "Tentang Vela Wallet",
+   "hide": "Sembunyikan Vela Wallet",
+   "hideOthers": "Sembunyikan Lainnya",
+   "showAll": "Tampilkan Semua",
+   "quit": "Keluar dari Vela Wallet",
+   "edit": "Edit",
+   "undo": "Urungkan",
+   "redo": "Ulangi",
+   "cut": "Potong",
+   "copy": "Salin",
+   "paste": "Tempel",
+   "selectAll": "Pilih Semua",
+   "view": "Tampilan",
+   "fullScreen": "Alihkan Layar Penuh",
+   "window": "Jendela",
+   "minimize": "Minimalkan",
+   "closeWindow": "Tutup Jendela"
   }
  },
  "settingsModals": {
