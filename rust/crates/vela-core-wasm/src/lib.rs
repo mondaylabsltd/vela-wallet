@@ -234,6 +234,16 @@ pub fn typed_data_document(method: &str, params_json: &str) -> Option<String> {
     vela_core::typed_data_request::document_json_of(method, params_json)
 }
 
+/// The calls a dApp transaction request sends — `{to, value, data}[]` as
+/// JSON, value in DECIMAL wei — read by the core's one rule
+/// (`tx_request::calls_of`, spec 096 F1); `undefined` when any call is
+/// unreadable, has no recipient, or there are none.
+#[wasm_bindgen(js_name = dappRequestCalls)]
+pub fn dapp_request_calls(method: &str, params_json: &str) -> Option<String> {
+    let calls = vela_core::tx_request::calls_of(method, params_json)?;
+    serde_json::to_string(&calls).ok()
+}
+
 #[wasm_bindgen(js_name = encodeType)]
 pub fn encode_type(typed_data_json: &str) -> JsResult<String> {
     vela_core::eip712::encode_type(typed_data_json).map_err(err)
@@ -1867,13 +1877,24 @@ pub fn dapp_rpc_calls_status_id(params_json: &str) -> Option<String> {
 
 /// EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
 /// from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
-/// or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+/// or `null`: not landed) and, with no receipt, the relay's
+/// `pimlico_getUserOperationStatus` result JSON (spec 096 F3: its refusal is
+/// 400) — `dapp_rpc::calls_status`, as JSON.
 #[wasm_bindgen(js_name = dappRpcCallsStatus)]
-pub fn dapp_rpc_calls_status(id: &str, chain_id: u32, receipt_json: Option<String>) -> String {
-    let receipt: Option<serde_json::Value> = receipt_json
-        .as_deref()
-        .and_then(|json| serde_json::from_str(json).ok());
-    vela_core::app::dapp_rpc::calls_status(id, chain_id, receipt.as_ref()).to_string()
+pub fn dapp_rpc_calls_status(
+    id: &str,
+    chain_id: u32,
+    receipt_json: Option<String>,
+    relay_status_json: Option<String>,
+) -> String {
+    let parse = |json: Option<String>| -> Option<serde_json::Value> {
+        json.as_deref()
+            .and_then(|json| serde_json::from_str(json).ok())
+    };
+    let receipt = parse(receipt_json);
+    let relay = parse(relay_status_json);
+    vela_core::app::dapp_rpc::calls_status(id, chain_id, receipt.as_ref(), relay.as_ref())
+        .to_string()
 }
 
 /// EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the

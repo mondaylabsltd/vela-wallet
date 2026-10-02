@@ -12526,6 +12526,30 @@ fileprivate struct FfiConverterOptionTypeTrustedSignerRefusal: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeUserOpCall: FfiConverterRustBuffer {
+    typealias SwiftType = [UserOpCall]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeUserOpCall.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeUserOpCall.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
     typealias SwiftType = [UInt32]
 
@@ -13457,6 +13481,22 @@ public func dappReceiptWaitMs(elapsedMs: Double) -> Double  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_receipt_wait_ms(
         FfiConverterDouble.lower(elapsedMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * The calls a dApp transaction request sends — `params[0].calls` of a
+ * `wallet_sendCalls`, else `params[0]` — every one or none, value in
+ * DECIMAL wei. `None` when any call is unreadable, has no recipient, or
+ * there are none. One rule for every shell (spec 096 F1): each used to read
+ * `value` its own way, and one request could be signed as different amounts.
+ */
+public func dappRequestCalls(method: String, paramsJson: String) -> [UserOpCall]?  {
+    return try!  FfiConverterOptionSequenceTypeUserOpCall.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_request_calls(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(paramsJson),uniffiCallStatus
     )
 })
 }
@@ -15627,6 +15667,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_receipt_wait_ms() != 43354) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_request_calls() != 992) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_request_display() != 13467) {

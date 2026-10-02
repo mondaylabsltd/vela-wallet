@@ -343,6 +343,16 @@ enum OpenKind {
     QueuedSigning,
 }
 
+/// A `wallet_getCallsStatus` in flight: the batch, its chain, and the
+/// receipt read's answer once the relay is being asked too (spec 096 F3).
+#[derive(Clone, Debug)]
+struct CallsStatusRead {
+    batch: String,
+    chain: u32,
+    /// `Some` while the relay's status is the read in flight.
+    receipt: Option<Option<Value>>,
+}
+
 #[derive(Clone, Debug)]
 struct QueuedRead {
     id: String,
@@ -375,7 +385,7 @@ struct Tab {
     /// Reads that answer a `wallet_getCallsStatus` (spec 094): request id →
     /// the batch and its chain, so the bundler's receipt is answered in
     /// EIP-5792's shape ([`dapp_rpc::calls_status`]), never verbatim.
-    calls_status: BTreeMap<String, (String, u32)>,
+    calls_status: BTreeMap<String, CallsStatusRead>,
 }
 
 #[derive(Clone, Debug)]
@@ -1349,8 +1359,14 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 return;
             }
             if let Some(tab) = model.tabs.get_mut(tab_id) {
-                tab.calls_status
-                    .insert(id.clone(), (batch.clone(), chain_id));
+                tab.calls_status.insert(
+                    id.clone(),
+                    CallsStatusRead {
+                        batch: batch.clone(),
+                        chain: chain_id,
+                        receipt: None,
+                    },
+                );
             }
             let read = QueuedRead {
                 id: id.clone(),
@@ -1620,6 +1636,12 @@ fn start_read(model: &mut Model, tab_id: &str, read: QueuedRead, out: &mut Out) 
     out.read(tab_id, &read);
 }
 
+/// A JSON-RPC body's `result`, or `None` for an error or no body.
+fn answer_result(body: Option<&Value>) -> Option<&Value> {
+    body.filter(|body| body.get("error").is_none_or(Value::is_null))
+        .and_then(|body| body.get("result"))
+}
+
 fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String>, out: &mut Out) {
     let Some(tab) = model.tabs.get_mut(tab_id) else {
         return;
@@ -1627,21 +1649,59 @@ fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String
     tab.reads_in_flight = tab.reads_in_flight.saturating_sub(1);
     let doc = tab.doc.clone();
     let calls_status = tab.calls_status.remove(id);
+    let body = body_json
+        .as_deref()
+        .and_then(|body| serde_json::from_str::<Value>(body).ok());
+    // A batch with no receipt yet: the relay is asked whether it refused the
+    // operation before the page is answered (spec 096 F3) — the request stays
+    // open, its second read behind the tab's others.
+    if let (Some(read), Some(_)) = (&calls_status, &doc) {
+        let receipt = answer_result(body.as_ref()).cloned();
+        let still_open = model
+            .tabs
+            .get(tab_id)
+            .is_some_and(|tab| tab.open.contains_key(id));
+        if read.receipt.is_none() && still_open && !dapp_rpc::calls_status_landed(receipt.as_ref())
+        {
+            if let Some(tab) = model.tabs.get_mut(tab_id) {
+                tab.calls_status.insert(
+                    id.to_owned(),
+                    CallsStatusRead {
+                        receipt: Some(receipt),
+                        ..read.clone()
+                    },
+                );
+                tab.read_queue.push_front(QueuedRead {
+                    id: id.to_owned(),
+                    chain_id: read.chain,
+                    method: dapp_rpc::USER_OP_STATUS_METHOD.to_owned(),
+                    params: json!([read.batch]),
+                    bundler: true,
+                });
+            }
+            pump_reads(model, tab_id, out);
+            return;
+        }
+    }
     if let Some(doc) = doc {
         if close_open(model, tab_id, &doc, id) {
-            let body = body_json
-                .as_deref()
-                .and_then(|body| serde_json::from_str::<Value>(body).ok());
             let message = match (calls_status, body) {
-                // A batch's status: the receipt read through EIP-5792's shape.
-                // A bundler that could not be asked, or refused, says nothing
-                // the wallet knows — still pending, and the page polls on.
-                (Some((batch, chain)), body) => {
-                    let receipt = body
-                        .as_ref()
-                        .filter(|body| body.get("error").is_none_or(Value::is_null))
-                        .and_then(|body| body.get("result"));
-                    result_json(&doc, id, &dapp_rpc::calls_status(&batch, chain, receipt))
+                // A batch's status: the receipt — and, with none, the relay's
+                // status — read through EIP-5792's shape. A bundler that could
+                // not be asked, or refused, says nothing the wallet knows —
+                // still pending, and the page polls on.
+                (Some(read), body) => {
+                    let (receipt, relay) = match read.receipt {
+                        Some(receipt) => (receipt, answer_result(body.as_ref()).cloned()),
+                        None => (answer_result(body.as_ref()).cloned(), None),
+                    };
+                    let status = dapp_rpc::calls_status(
+                        &read.batch,
+                        read.chain,
+                        receipt.as_ref(),
+                        relay.as_ref(),
+                    );
+                    result_json(&doc, id, &status)
                 }
                 (None, None) => error_json(&doc, id, -32603, "No endpoint answered"),
                 (None, Some(body)) => match body.get("error").filter(|e| !e.is_null()) {

@@ -1531,7 +1531,20 @@ fn unlimited_single_approval_is_refused_at_the_submit_throat() {
     );
     sut.dispatch(approve(SignApproveOpts::default())); // no capped override
     let ops = sut.resolve(Res::PreCheck { funding: None });
-    assert_eq!(ops.len(), 1, "refusal only — nothing is signed: {ops:?}");
+    // The refusal is on the sheet, and its answer waits for the close (spec
+    // 096 F8) — with no "try again": the same bytes are refused again.
+    assert_eq!(
+        response_count(&ops),
+        0,
+        "nothing is signed or answered yet: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(
+        view.error.map(|e| e.kind),
+        Some(SignErrorKind::UnlimitedApproval)
+    );
+    assert!(!view.failure_retryable && !view.confirm_gate_open);
+    let ops = sut.dispatch(Event::SwipeDismissed);
     let (code, kind, _) = response_error(&ops[0]).expect("refusal");
     assert_eq!(
         (code, kind),
@@ -1554,7 +1567,8 @@ fn unlimited_batch_leg_is_refused_per_leg() {
     );
     sut.dispatch(Arrive::global("req-19", "wallet_sendCalls", &batch_params(&calls, None)).event());
     sut.dispatch(approve(SignApproveOpts::default()));
-    let ops = sut.resolve(Res::PreCheck { funding: None });
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.dispatch(Event::SwipeDismissed);
     let (code, kind, _) = response_error(&ops[0]).expect("refusal");
     assert_eq!(
         (code, kind),
@@ -1774,14 +1788,26 @@ fn no_second_response_after_a_terminal_error() {
         },
         now_ms: 11_000.0,
     });
-    assert!(response_error(&ops[0]).is_some(), "the one error response");
-
-    // Neither a re-approve nor a reject may answer the same id again.
-    assert!(sut.dispatch(approve(SignApproveOpts::default())).is_empty());
-    assert!(
-        sut.dispatch(Event::RejectTapped).is_empty(),
-        "reject after response = dismiss"
+    assert_eq!(
+        response_count(&ops),
+        0,
+        "held while the failure shows: {ops:?}"
     );
+
+    // A re-approve while it shows sends nothing; the reject is the close,
+    // which sends the one error response — a failure, never a 4001.
+    assert!(sut.dispatch(approve(SignApproveOpts::default())).is_empty());
+    let ops = sut.dispatch(Event::RejectTapped);
+    assert_eq!(
+        ops.iter().find_map(err_detail),
+        Some((
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some("boom".to_owned())
+        )),
+        "reject after a failure = dismiss, which answers it"
+    );
+    assert_eq!(response_count(&ops), 1);
     assert_eq!(
         sut.view().surface,
         SignSurface::Hidden,
@@ -3199,8 +3225,12 @@ fn not_sent_withdraws_the_record_and_answers_once() {
             record_id: record.record_id.clone()
         }
     );
-    assert_eq!(response_count(&ops), 1, "{ops:?}");
-    let answer = ops.iter().find_map(err_detail);
+    // Held while the sheet shows it (spec 096 F8); the close answers once.
+    assert_eq!(response_count(&ops), 0, "{ops:?}");
+    assert!(sut.view().failure_retryable, "nothing was sent: try again");
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(response_count(&closed), 1, "{closed:?}");
+    let answer = closed.iter().find_map(err_detail);
     assert_eq!(
         answer,
         Some((
@@ -3219,8 +3249,7 @@ fn not_sent_withdraws_the_record_and_answers_once() {
         })
     );
     assert!(view.tracker_handoff.is_none(), "never handed over again");
-    assert!(view.error.is_some());
-    assert!(!view.failure_refused);
+    assert_eq!(view.surface, SignSurface::Hidden, "closed");
 }
 
 /// RJ3: a submit-time refusal by the relay is answered with the refused
@@ -3239,17 +3268,20 @@ fn a_refused_submit_answers_the_refused_sentence() {
             now_ms: 9_000.0,
         },
     );
-    assert_eq!(response_count(&ops), 1);
+    assert_eq!(response_count(&ops), 0, "held for the sheet (096 F8)");
+    let view = sut.view();
+    assert!(view.failure_refused);
+    assert!(!view.failure_retryable, "a refusal is not retried");
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(response_count(&closed), 1);
     assert_eq!(
-        ops.iter().find_map(err_detail),
+        closed.iter().find_map(err_detail),
         Some((
             CODE_INTERNAL,
             SignErrorKind::SubmitFailed,
             Some(REFUSED_DAPP_DETAIL.to_owned())
         ))
     );
-    let view = sut.view();
-    assert!(view.failure_refused);
     assert_eq!(
         view.error.map(|e| e.kind),
         Some(SignErrorKind::SubmitFailed)
@@ -4173,11 +4205,16 @@ fn a_previous_pending_operation_is_never_this_requests_answer() {
         },
         now_ms: NOW,
     });
-    let answered = answers(&ops);
+    assert!(
+        answers(&ops).is_empty(),
+        "held for the sheet (096 F8): {ops:?}"
+    );
+    let closed = sut.dispatch(Event::SwipeDismissed);
+    let answered = answers(&closed);
     assert!(
         matches!(answered.as_slice(), [Err((CODE_INTERNAL, Some(message)))]
             if !message.contains(approval)),
-        "{ops:?}"
+        "{closed:?}"
     );
     assert!(
         !ops.iter()
@@ -4471,4 +4508,256 @@ fn the_balance_changes_are_optional_on_the_wire() {
     };
     let out = serde_json::to_value(record).expect("serializes");
     assert!(out.get("balance_changes").is_none());
+}
+
+// ===========================================================================
+// Spec 096 F1 — a call's value is read once, by the card's rule
+// ===========================================================================
+
+/// PancakeSwap's BNB → USDC on BNB Chain (2026-10-02): the request every shell
+/// must send as 0.003 BNB — canonical already, so it passes byte for byte.
+const PCS_ROUTER: &str = "0x13f4EA83D0bd40E75C8222255bc855a974568Dd4";
+
+fn pcs_swap(value: &str) -> String {
+    format!(r#"[{{"from":"{ACCT0}","to":"{PCS_ROUTER}","value":{value},"data":"0x3593564c"}}]"#)
+}
+
+fn submitted_params(sut: &mut Sut) -> String {
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    match ops.as_slice() {
+        [Op::SignAndSubmit { params_json, .. }] => params_json.clone(),
+        other => unreachable!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_native_value_reaches_the_submit_as_the_dapp_wrote_it() {
+    let mut sut = boot();
+    let params = pcs_swap(r#""0xaa87bee538000""#);
+    sut.dispatch(Arrive::global("req-v1", "eth_sendTransaction", &params).event());
+    assert_eq!(sut.view().request.expect("sheet").params_json, params);
+    assert_eq!(submitted_params(&mut sut), params, "byte for byte");
+}
+
+#[test]
+fn a_readable_value_is_carried_on_canonically() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::global(
+            "req-v2",
+            "eth_sendTransaction",
+            &pcs_swap(r#""0x000AA87BEE538000""#),
+        )
+        .event(),
+    );
+    let shown: serde_json::Value =
+        serde_json::from_str(&sut.view().request.expect("sheet").params_json).expect("json");
+    assert_eq!(shown[0]["value"], "0xaa87bee538000");
+    let sent: serde_json::Value = serde_json::from_str(&submitted_params(&mut sut)).expect("json");
+    assert_eq!(
+        sent[0]["value"], "0xaa87bee538000",
+        "the card's text is the submit's"
+    );
+}
+
+#[test]
+fn an_unreadable_value_is_refused_before_any_sheet() {
+    // The stripped text the web submit used to make; decimal; a JSON number.
+    for value in [
+        r#""aa87bee538000""#,
+        r#""3000000000000000""#,
+        "3000000000000000",
+    ] {
+        let mut sut = boot();
+        let ops = sut.dispatch(
+            Arrive::extension("rid-v3", "eth_sendTransaction", &pcs_swap(value), 1).event(),
+        );
+        assert!(
+            matches!(ops.as_slice(), [Op::SendResponse {
+                payload: SignResponsePayload::Err {
+                    code: CODE_INVALID_PARAMS,
+                    kind: SignErrorKind::InvalidParams,
+                    message: Some(message),
+                },
+                ..
+            }] if message.contains("0x-prefixed hex quantity")),
+            "{value}: {ops:?}"
+        );
+        assert_eq!(sut.view().surface, SignSurface::Hidden, "{value}");
+    }
+    // A batch is refused for one bad leg, never sent without it.
+    let mut sut = boot();
+    let calls = format!(
+        r#"[{{"to":"{SPENDER}","data":"0x095ea7b3","value":"0x0"}},{{"to":"{PCS_ROUTER}","value":"1000"}}]"#
+    );
+    let ops = sut.dispatch(
+        Arrive::global("req-v4", "wallet_sendCalls", &batch_params(&calls, None)).event(),
+    );
+    let (code, kind, _) = response_error(&ops[0]).expect("refusal");
+    assert_eq!(
+        (code, kind),
+        (CODE_INVALID_PARAMS, SignErrorKind::InvalidParams)
+    );
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+}
+
+#[test]
+fn a_batch_native_leg_is_kept_and_zero_legs_made_canonical() {
+    let mut sut = boot();
+    let calls = format!(
+        r#"[{{"to":"{SPENDER}","data":"0x095ea7b3","value":"0x"}},{{"to":"{PCS_ROUTER}","value":"0xaa87bee538000","data":"0x3593564c"}}]"#
+    );
+    sut.dispatch(Arrive::global("req-v5", "wallet_sendCalls", &batch_params(&calls, None)).event());
+    let sent: serde_json::Value = serde_json::from_str(&submitted_params(&mut sut)).expect("json");
+    assert_eq!(sent[0]["calls"][0]["value"], "0x0");
+    assert_eq!(sent[0]["calls"][1]["value"], "0xaa87bee538000");
+}
+
+// ===========================================================================
+// Spec 096 F8 — a failure before anything was sent stays on screen
+// ===========================================================================
+
+fn failed_before_sending(sut: &mut Sut, id: &str, message: &str) -> Vec<Op> {
+    sut.dispatch(
+        Arrive::extension(
+            id,
+            "eth_sendTransaction",
+            &pcs_swap(r#""0xaa87bee538000""#),
+            1,
+        )
+        .event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Failed {
+            message: message.to_owned(),
+            refused: false,
+        },
+        now_ms: NOW,
+    })
+}
+
+#[test]
+fn a_failure_is_shown_and_its_answer_waits_for_the_close() {
+    let mut sut = boot();
+    let ops = failed_before_sending(&mut sut, "rid-f1", "Could not estimate gas");
+    assert_eq!(response_count(&ops), 0, "the window stays: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Sheet);
+    assert_eq!(
+        view.error.as_ref().map(|e| e.kind),
+        Some(SignErrorKind::SubmitFailed)
+    );
+    assert!(view.failure_retryable && !view.failure_refused);
+    assert!(!view.confirm_gate_open, "no slide under a failure");
+    assert_eq!(view.swipe_action, SignSwipeAction::Dismiss);
+
+    let ops = sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(
+        ops.iter().find_map(err_detail),
+        Some((
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some("Could not estimate gas".to_owned())
+        ))
+    );
+    assert_eq!(response_count(&ops), 1);
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    // A later close sends nothing more.
+    assert!(sut
+        .dispatch(Event::DismissTapped)
+        .iter()
+        .all(|op| !matches!(op, Op::SendResponse { .. })));
+}
+
+#[test]
+fn try_again_goes_back_to_review_and_submits_afresh() {
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-f2", "Could not estimate gas");
+    let ops = sut.dispatch(Event::RetryTapped);
+    assert_eq!(response_count(&ops), 0, "still unanswered");
+    let view = sut.view();
+    assert!(view.error.is_none() && !view.failure_retryable);
+    assert!(view.confirm_gate_open, "the slide is live again");
+    assert_eq!(view.swipe_action, SignSwipeAction::Reject);
+    assert_eq!(view.request.expect("same request").id, "rid-f2");
+
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { id, .. }] if id == "rid-f2"),
+        "{ops:?}"
+    );
+    let ops = sut.resolve(submit_ok("0xabc"));
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert_eq!(
+        answers(&ops),
+        vec![Ok(Some("0xabc".to_owned()))],
+        "one answer, the transaction: {ops:?}"
+    );
+}
+
+#[test]
+fn a_refusal_is_not_retried() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-f3", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Failed {
+            message: "AA23".to_owned(),
+            refused: true,
+        },
+        now_ms: NOW,
+    });
+    assert!(!sut.view().failure_retryable);
+    assert!(sut.dispatch(Event::RetryTapped).is_empty());
+    assert!(sut.view().error.is_some(), "still the refusal");
+}
+
+#[test]
+fn a_new_request_answers_the_failure_it_replaces() {
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-f4", "boom");
+    let ops =
+        sut.dispatch(Arrive::global("req-f5", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    assert_eq!(
+        ops.iter().find_map(err_detail),
+        Some((
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some("boom".to_owned())
+        ))
+    );
+    let view = sut.view();
+    assert_eq!(view.request.expect("new").id, "req-f5");
+    assert!(view.error.is_none(), "the old failure's words went with it");
+}
+
+#[test]
+fn a_failure_nobody_watches_is_answered_at_once() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-f6", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    // Closed while it ran (the passkey is the shell's; the sheet went).
+    sut.dispatch(Event::DismissTapped);
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Failed {
+            message: "boom".to_owned(),
+            refused: false,
+        },
+        now_ms: NOW,
+    });
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
 }

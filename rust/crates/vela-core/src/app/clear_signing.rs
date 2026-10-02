@@ -2171,10 +2171,6 @@ fn start_typed(
 /// The native coin's decimals on every chain this wallet signs for.
 const NATIVE_DECIMALS: usize = 18;
 
-/// `2^256 − 1` has 64 hex digits; a value with more significant digits
-/// cannot be a transaction's value.
-const U256_HEX_DIGITS: usize = 64;
-
 /// Whether a transaction carries no calldata: absent, `""`, `"0x"` or
 /// `"0X"`, after trimming whitespace (082 RC1). Such a request calls no
 /// function: it is a plain transfer of the native coin, whatever the
@@ -2191,12 +2187,12 @@ pub fn is_empty_calldata(data: Option<&str>) -> bool {
 /// - `to` must be `0x` and 40 hex digits, in any case, and is written back
 ///   EIP-55. The dApp's own mixed case is not judged as a checksum: every
 ///   address rule in this crate reads the shape (`ADDRESS_RE`).
-/// - `value` is read hex-only (RC4). Absent, `""` and `"0x"` are zero;
-///   `"0x"` and hex digits are that exact number, up to `2^256 − 1`. Decimal
-///   text, `"null"`, a sign, whitespace, `"0X"`, any other character, or an
-///   overflow is refused. Three submit paths send the value as hex and the
-///   desktop's also takes decimal, so a card that printed decimal `"1000"`
-///   would state a figure some submit path reads as `0x1000`: it states none.
+/// - `value` is read hex-only (RC4), by the rule every shell's submit now
+///   shares ([`crate::tx_request`], spec 096). Absent, `""`, `"0x"` and a
+///   prefix-less zero (`"0"`) are zero; `"0x"` and hex digits are that exact
+///   number, up to `2^256 − 1`. Decimal text, `"null"`, a sign, whitespace,
+///   `"0X"`, any other character, or an overflow is refused — and a request
+///   carrying one is refused at arrival, so no submit path guesses at it.
 /// - `amount` is `value / 10^18` exactly, trailing zeros trimmed, grouped and
 ///   marked by `locale` — no rounding and no "wei" fallback (RC5).
 pub fn plain_send_of(
@@ -2216,25 +2212,10 @@ pub fn plain_send_of(
 }
 
 /// RC4: the value as exact decimal digits, or `None` when it is not
-/// hex-readable (see [`plain_send_of`]).
+/// hex-readable (see [`plain_send_of`]) — the one rule every shell's submit
+/// reads a call's value by (spec 096, [`crate::tx_request`]).
 fn plain_value_wei(value: Option<&str>) -> Option<String> {
-    let value = match value {
-        None => return Some("0".to_owned()),
-        Some(v) if v.is_empty() || v == "0x" => return Some("0".to_owned()),
-        Some(v) => v,
-    };
-    let body = value.strip_prefix("0x")?;
-    if !body.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
-    }
-    let significant = body.trim_start_matches('0');
-    if significant.len() > U256_HEX_DIGITS {
-        return None;
-    }
-    if significant.is_empty() {
-        return Some("0".to_owned());
-    }
-    hex_to_dec(significant)
+    crate::tx_request::value_wei_text(value)
 }
 
 /// `wei / 10^18` exactly, trailing zeros trimmed, with the locale's grouping

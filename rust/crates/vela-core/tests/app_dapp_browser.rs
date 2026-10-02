@@ -2217,6 +2217,67 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
 
 /// Spec 094 S6 (089 F04): `wallet_sendCalls` went through but a dApp's
 /// `waitForCallsStatus` failed — `wallet_getCallsStatus` answered 4200.
+/// Spec 096 F3: the relay refused the batch's operation before any block —
+/// the tracker's terminal `rejected` — so the page hears EIP-5792's 400 (not
+/// included, the wallet will not retry), never 100 for as long as it asks. A
+/// `rejected` naming a bundle tx is the chain's to decide: still 100.
+#[test]
+fn a_batch_the_relay_refused_reads_400() {
+    let op_hash = format!("0x{}", "cd".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_sendCalls",
+        json!([{"calls":[{"to":A2}]}]),
+    );
+    sut.dispatch(Event::SigningAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        payload: SignResponsePayload::Ok {
+            result: Some(op_hash.clone()),
+        },
+        user_op_hash: Some(op_hash.clone()),
+    });
+    for (id, relay, status) in [
+        ("2", json!({"status": "rejected"}), 400),
+        (
+            "3",
+            json!({"status": "rejected", "transactionHash": format!("0x{}", "ee".repeat(32))}),
+            100,
+        ),
+    ] {
+        ask(
+            &mut sut,
+            "t1",
+            "d1",
+            DAPP,
+            id,
+            "wallet_getCallsStatus",
+            json!([op_hash]),
+        );
+        sut.resolve_matching(
+            |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "eth_getUserOperationReceipt"),
+            Res::ReadAnswered {
+                body_json: Some(json!({"result": null}).to_string()),
+            },
+        );
+        let ops = sut.resolve_matching(
+            |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "pimlico_getUserOperationStatus"),
+            Res::ReadAnswered {
+                body_json: Some(json!({ "result": relay }).to_string()),
+            },
+        );
+        let answer = only_answer(&ops);
+        assert_eq!(answer["result"]["status"], status, "{relay}");
+        assert!(answer["result"].get("receipts").is_none());
+    }
+}
+
 #[test]
 fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
     let op_hash = format!("0x{}", "ab".repeat(32));
@@ -2257,11 +2318,30 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         params_json: json!([op_hash]).to_string(),
         bundler: true,
     }));
-    // Not landed: pending.
-    let pending = sut.resolve_matching(
+    // Not landed: the relay is asked whether it refused it (spec 096 F3);
+    // it holds it — pending.
+    let relay = sut.resolve_matching(
         |op| matches!(op, Op::Read { id, .. } if id == "2"),
         Res::ReadAnswered {
             body_json: Some(json!({"result": null}).to_string()),
+        },
+    );
+    assert_eq!(
+        relay,
+        vec![Op::Read {
+            tab: "t1".to_owned(),
+            id: "2".to_owned(),
+            chain_id: 100,
+            method: "pimlico_getUserOperationStatus".to_owned(),
+            params_json: json!([op_hash]).to_string(),
+            bundler: true,
+        }],
+        "no answer yet, one relay read"
+    );
+    let pending = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, method, .. } if id == "2" && method == "pimlico_getUserOperationStatus"),
+        Res::ReadAnswered {
+            body_json: Some(json!({"result": {"status": "submitted"}}).to_string()),
         },
     );
     let answer = only_answer(&pending);
@@ -2304,8 +2384,12 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         "wallet_getCallsStatus",
         json!([op_hash]),
     );
-    let silent = sut.resolve_matching(
+    sut.resolve_matching(
         |op| matches!(op, Op::Read { id, .. } if id == "4"),
+        Res::ReadAnswered { body_json: None },
+    );
+    let silent = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, method, .. } if id == "4" && method == "pimlico_getUserOperationStatus"),
         Res::ReadAnswered { body_json: None },
     );
     assert_eq!(only_answer(&silent)["result"]["status"], 100);

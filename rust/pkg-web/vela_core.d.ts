@@ -736,6 +736,14 @@ export function dappProviderScript(host: string, debug_mode: boolean): string;
 export function dappReceiptWaitMs(elapsed_ms: number): number;
 
 /**
+ * The calls a dApp transaction request sends — `{to, value, data}[]` as
+ * JSON, value in DECIMAL wei — read by the core's one rule
+ * (`tx_request::calls_of`, spec 096 F1); `undefined` when any call is
+ * unreadable, has no recipient, or there are none.
+ */
+export function dappRequestCalls(method: string, params_json: string): string | undefined;
+
+/**
  * A dApp record's stored request as Technical details shows it (spec 093):
  * typed data pretty-printed, a message as its text (or its hex), call data
  * pretty-printed — `dapp_activity::request_display`. `content` is the
@@ -749,9 +757,11 @@ export function dappRequestDisplay(content: string, stored_request: string): str
 /**
  * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
  * from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
- * or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+ * or `null`: not landed) and, with no receipt, the relay's
+ * `pimlico_getUserOperationStatus` result JSON (spec 096 F3: its refusal is
+ * 400) — `dapp_rpc::calls_status`, as JSON.
  */
-export function dappRpcCallsStatus(id: string, chain_id: number, receipt_json?: string | null): string;
+export function dappRpcCallsStatus(id: string, chain_id: number, receipt_json?: string | null, relay_status_json?: string | null): string;
 
 /**
  * EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
@@ -1434,8 +1444,9 @@ export interface InitOutput {
     readonly dappOffersWallet: (a: number, b: number, c: number) => number;
     readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
+    readonly dappRequestCalls: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dappRequestDisplay: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
     readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
