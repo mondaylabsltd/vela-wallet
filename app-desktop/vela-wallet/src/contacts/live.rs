@@ -574,11 +574,13 @@ mod tests {
         assert_eq!(recent.activity.len(), RECENT_ACTIVITY_ROWS);
         assert!(!recent.activity_empty);
         let gnosis = crate::flows::live::chain_name(100);
+        // The rows are minutes old, so just after midnight they are yesterday's.
+        let days = [&wallet.today, &wallet.yesterday].map(|day| format!("{gnosis} · {day}"));
         for row in &recent.activity {
-            assert_eq!(
-                row.subtitle.to_string(),
-                format!("{gnosis} · {}", wallet.today),
-                "the network and the day, never \"to Cousin\""
+            assert!(
+                days.contains(&row.subtitle.to_string()),
+                "the network and the day, never \"to Cousin\": {}",
+                row.subtitle
             );
         }
         // The transfer reads as Activity reads it: its verb, at its place.
