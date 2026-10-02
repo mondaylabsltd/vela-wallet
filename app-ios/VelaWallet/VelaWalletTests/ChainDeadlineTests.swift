@@ -112,7 +112,12 @@ struct ChainDeadlineTests {
                 if now.abandoned { return false }
             }
         }
-        let result = await withTaskCancellationHandler {
+        // The read runs in a detached task. This target's nonisolated async
+        // functions run on their caller's executor (approachable
+        // concurrency), so a test body the runner happened to start on the
+        // main actor would wait behind the holder's spin for the whole time
+        // limit, and every main-actor test running beside it with it (CI #395).
+        let reader = Task.detached { () -> TokenReads.ChainResult in
             // The read starts only once the main actor is held.
             while !hold.withLock({ $0.holding }), !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000)
@@ -122,8 +127,12 @@ struct ChainDeadlineTests {
             }
             hold.withLock { $0.answered = true }
             return result
+        }
+        let result = await withTaskCancellationHandler {
+            await reader.value
         } onCancel: {
             hold.withLock { $0.abandoned = true }
+            reader.cancel()
         }
         #expect(result.failed)
         let answeredWhileHeld = await holder.value
