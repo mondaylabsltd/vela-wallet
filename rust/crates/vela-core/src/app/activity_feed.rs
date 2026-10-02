@@ -1143,6 +1143,51 @@ fn presented(model: &Model, item: &FeedItem) -> FeedItem {
     out
 }
 
+/// A stored amount in exponent notation, read exactly as the plain decimal
+/// it is. The web wrote a receive's amount as `String(Number)`, so anything
+/// below 1e-6 was persisted as e.g. `"1.373924e-12"`, and the row drew it as
+/// "+1.373924" — 10¹² too large (097 final pass, an Aave interest mint).
+/// No float is involved; a value that is not a plain or exponent decimal is
+/// returned unchanged.
+fn plain_decimal(value: &str) -> String {
+    let unchanged = || value.to_owned();
+    let Some((mantissa, exp)) = value.trim().split_once(['e', 'E']) else {
+        return unchanged();
+    };
+    let Ok(exp) = exp.trim_start_matches('+').parse::<i32>() else {
+        return unchanged();
+    };
+    let (int, frac) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let digits = format!("{int}{frac}");
+    if exp.abs() > 80 || digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return unchanged();
+    }
+    // Where the decimal point falls among `digits`.
+    let point = int.len() as i32 + exp;
+    let (int, frac) = if point <= 0 {
+        (
+            "0".to_owned(),
+            format!("{}{digits}", "0".repeat(point.unsigned_abs() as usize)),
+        )
+    } else if point as usize >= digits.len() {
+        (
+            format!("{digits}{}", "0".repeat(point as usize - digits.len())),
+            String::new(),
+        )
+    } else {
+        let (i, f) = digits.split_at(point as usize);
+        (i.to_owned(), f.to_owned())
+    };
+    let int = match int.trim_start_matches('0') {
+        "" => "0",
+        rest => rest,
+    };
+    match frac.trim_end_matches('0') {
+        "" => int.to_owned(),
+        frac => format!("{int}.{frac}"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shell results
 // ---------------------------------------------------------------------------
@@ -1154,6 +1199,15 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             now_ms,
             read_id,
         } => {
+            // An amount the web stored in exponent notation reads as the
+            // plain decimal it is, before anything folds or draws it.
+            let records: Vec<FeedTxRecord> = records
+                .into_iter()
+                .map(|mut t| {
+                    t.value = plain_decimal(&t.value);
+                    t
+                })
+                .collect();
             // The raw account-scoped list (`loadActivityTransactions`).
             let lc = model.address.to_lowercase();
             model.records = records
@@ -2806,6 +2860,30 @@ impl super::SplitEffect for FeedEffect {
         match self {
             FeedEffect::Render(_) => None,
             FeedEffect::Shell(request) => Some(request),
+        }
+    }
+}
+
+#[cfg(test)]
+mod plain_decimal_tests {
+    use super::plain_decimal;
+
+    #[test]
+    fn an_exponent_amount_reads_as_its_plain_decimal() {
+        // The 097 final pass: an Aave interest mint the web stored.
+        assert_eq!(plain_decimal("1.373924e-12"), "0.000000000001373924");
+        assert_eq!(plain_decimal("1e-7"), "0.0000001");
+        assert_eq!(plain_decimal("2.5E3"), "2500");
+        assert_eq!(plain_decimal("1.5e+2"), "150");
+        assert_eq!(plain_decimal("12.34e1"), "123.4");
+    }
+
+    #[test]
+    fn anything_else_passes_unchanged() {
+        for value in [
+            "0.5", "1", "", "1.373924", "abc", "1e", "e5", "-1e-3", "1e999",
+        ] {
+            assert_eq!(plain_decimal(value), value, "{value}");
         }
     }
 }
