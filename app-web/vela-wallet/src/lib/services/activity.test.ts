@@ -22,7 +22,10 @@ const transfer = (value: bigint) => ({
 });
 
 const index = new Map([
-	['56:0x9b00a09492a626678e5a3009982191586c444df9', { symbol: 'aBnbWBNB', decimals: 18 }]
+	[
+		'56:0x9b00a09492a626678e5a3009982191586c444df9',
+		{ symbol: 'aBnbWBNB', decimals: 18, priceUsd: null }
+	]
 ]);
 
 describe('a received transfer is stored at its exact amount (097 final pass)', () => {
