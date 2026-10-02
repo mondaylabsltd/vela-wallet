@@ -1485,7 +1485,7 @@ impl WalletPage {
     /// network's logo is part of the card, so it is fetched here — off the
     /// UI thread, while the dialog is open, with a short timeout after which
     /// the lettered disc stands in. A card that fails to render writes
-    /// nothing. The dialog opens in the home directory for the reason the
+    /// nothing. The dialog opens in Downloads (`storage::save_panel_dir`) for the reason the
     /// contacts export does: `.` is wherever the binary was launched from,
     /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
     /// answers the dialog with the card's filename in that folder, as the
@@ -1497,7 +1497,7 @@ impl WalletPage {
         let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&model.file_name))
         });
         let png = cx.background_executor().spawn(async move {
@@ -10029,6 +10029,8 @@ impl WalletPage {
                         if let Some(word) = settings_live::picked_language(index) {
                             crate::executor::preferences::set_language(word);
                             this.relocalize();
+                            // The menu bar speaks the new language too (spec 095).
+                            crate::app_menu::install(cx);
                         }
                         this.settings_open_dropdown = None;
                         cx.notify();
@@ -17776,7 +17778,7 @@ impl WalletPage {
         // The save dialog opens where a person keeps their files, not where
         // this app keeps its state.
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&file.filename))
         });
         cx.spawn(async move |page, cx| {

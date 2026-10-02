@@ -5,6 +5,7 @@
     windows_subsystem = "windows"
 )]
 
+mod app_menu;
 mod ceremony;
 mod contacts;
 mod core_host;
@@ -31,6 +32,7 @@ mod passkey_directory;
 mod passkey_icons;
 mod raster;
 mod resident;
+mod sandbox_probe;
 mod scheme_relay;
 mod session;
 mod settings;
@@ -52,9 +54,8 @@ mod window_frame;
 
 use gallery::GalleryView;
 use gpui::{
-    App, AppContext as _, Bounds, Context, Div, IntoElement, KeyBinding, Menu, MenuItem,
-    ParentElement as _, QuitMode, Render, Styled as _, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, actions, div, px, size,
+    App, AppContext as _, Bounds, Context, Div, IntoElement, ParentElement as _, QuitMode, Render,
+    Styled as _, TitlebarOptions, Window, WindowBounds, WindowOptions, div, px, size,
 };
 use onboarding::OnboardingPage;
 use theme::{WINDOW_H, WINDOW_W};
@@ -211,37 +212,12 @@ impl RootPage {
     }
 }
 
-// TODO(i18n): menu labels are English-only until the corpus grows menu keys.
-actions!(
-    vela,
-    [
-        Quit,
-        HideApp,
-        HideOthers,
-        ShowAll,
-        ToggleFullScreen,
-        CloseWindow
-    ]
-);
-
-/// The macOS key equivalents (spec 082 RJ17: ⌘W is Close Window, the
-/// convention of a window that is not a document — it was unbound).
-fn mac_key_bindings() -> Vec<KeyBinding> {
-    vec![
-        KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-w", CloseWindow, None),
-        KeyBinding::new("cmd-h", HideApp, None),
-        KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("ctrl-cmd-f", ToggleFullScreen, None),
-    ]
-}
-
 /// Whether a close of the window goes through (spec 082 RD14, RJ17): not
 /// while a submit POST is out — once. A held close brings the window
 /// forward and says why on the page (`page::close_held`); a second close
 /// within 5 s goes through. The window's own close button, ⌘W and the menu
 /// item all come here.
-fn close_requested(window: &mut gpui::Window, cx: &mut App) -> bool {
+pub(crate) fn close_requested(window: &mut gpui::Window, cx: &mut App) -> bool {
     let allow = executor::relay::may_close(std::time::Instant::now());
     if !allow {
         window.activate_window();
@@ -336,6 +312,8 @@ fn main() {
     panic_report::install();
     // Spec 082: read (and log) a dev build's fault proxy before anything dials.
     let _ = executor::proxy::dev_proxy();
+    // Spec 095: a developer build's sandbox report, when asked for.
+    sandbox_probe::run_if_asked();
     // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
     // default renderer composes the whole window through DirectComposition
     // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE
@@ -447,102 +425,17 @@ fn main() {
         }
         session::boot(cx);
 
-        // Spec 082 RD14 (W17): not while a submit POST is out — once; a
-        // second Quit within 5 s goes through.
-        cx.on_action(|_: &Quit, cx| {
-            if executor::relay::may_close(std::time::Instant::now()) {
-                cx.quit();
-            } else {
-                cx.activate(true);
-                wallet::page::close_held(cx);
-            }
-        });
-        // ⌘W (RJ17): the same close as the window's button, hold included —
-        // gpui's `remove_window` does not ask `on_window_should_close`.
-        cx.on_action(|_: &CloseWindow, cx| {
-            if let Some(window) = cx.active_window() {
-                window
-                    .update(cx, |_, window, cx| {
-                        if close_requested(window, cx) {
-                            window.remove_window();
-                        }
-                    })
-                    .ok();
-            }
-        });
-        cx.on_action(|_: &HideApp, cx| cx.hide());
-        cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
-        cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
-        cx.on_action(|_: &ToggleFullScreen, cx| {
-            if let Some(window) = cx.active_window() {
-                window
-                    .update(cx, |_, window, _| window.toggle_fullscreen())
-                    .ok();
-            }
-        });
-
-        // The main menu is not just convention on macOS: with a nil
-        // NSApp.mainMenu, the menu-bar/titlebar reveal on a fullscreen Space
-        // never engages on secondary displays, so a fullscreened window there
-        // shows no titlebar on hover and offers no way back out. gpui installs
-        // no menu of its own — Zed always sets one, which is why upstream
-        // never trips over this.
+        // The menu bar and its actions (spec 082 RJ17, spec 095): About, Edit
+        // (the web page's clipboard), View, Window — see `app_menu`.
+        app_menu::register(cx);
         if cfg!(target_os = "macos") {
-            cx.bind_keys(mac_key_bindings());
-            cx.set_menus(vec![
-                // The first menu is the application menu; macOS titles it with
-                // the bundle name, not this string.
-                Menu::new("Vela Wallet").items(vec![
-                    MenuItem::action("Hide Vela Wallet", HideApp),
-                    MenuItem::action("Hide Others", HideOthers),
-                    MenuItem::action("Show All", ShowAll),
-                    MenuItem::separator(),
-                    MenuItem::action("Quit Vela Wallet", Quit),
-                ]),
-                Menu::new("View").items(vec![MenuItem::action(
-                    "Toggle Full Screen",
-                    ToggleFullScreen,
-                )]),
-                Menu::new("Window").items(vec![MenuItem::action("Close Window", CloseWindow)]),
-            ]);
+            cx.bind_keys(app_menu::mac_key_bindings());
         }
+        app_menu::install(cx);
         open_main_window(cx);
 
         if dev_env::var_os!("VELA_NO_ACTIVATE").is_none() {
             cx.activate(true);
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Spec 082 RJ17 (G68, DX9): ⌘W is bound, to Close Window — the action
-    /// whose handler goes through the same RD14 hold as the window's button.
-    /// macOS key equivalents: elsewhere gpui spells ⌘ as `super`.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn cmd_w_closes_the_window() {
-        let bindings = mac_key_bindings();
-        let close = bindings
-            .iter()
-            .find(|binding| binding.action().partial_eq(&CloseWindow))
-            .unwrap_or_else(|| unreachable!("Close Window has no key"));
-        let keys: Vec<String> = close
-            .keystrokes()
-            .iter()
-            .map(gpui::KeybindingKeystroke::unparse)
-            .collect();
-        assert_eq!(keys, ["cmd-w"]);
-        // And ⌘Q stays Quit.
-        assert!(bindings.iter().any(|binding| {
-            binding.action().partial_eq(&Quit)
-                && binding
-                    .keystrokes()
-                    .iter()
-                    .map(gpui::KeybindingKeystroke::unparse)
-                    .eq(["cmd-q".to_owned()])
-        }));
-    }
 }
