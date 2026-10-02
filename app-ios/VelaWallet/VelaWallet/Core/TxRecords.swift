@@ -233,7 +233,9 @@ enum TxRecords {
 
     /// The request a dApp record stored (`signedRequest`, the core's cut of
     /// it), by record id — read only when the detail's technical section is
-    /// opened. `nil` when the record kept none.
+    /// opened. `nil` when the record kept none — including the core's `""`
+    /// for a request whose shape alone was past its budget — and the detail
+    /// then says `connect.detail.contentMissing`.
     @MainActor
     static func storedRequest(id: String, store: VelaStore) -> String? {
         guard let record = load(store: store).first(where: { ($0["id"] as? String) == id }),

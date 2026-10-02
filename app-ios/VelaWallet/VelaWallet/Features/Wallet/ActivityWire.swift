@@ -346,7 +346,11 @@ enum FeedDappContentWire: String, Decodable {
 enum FeedFactWire: Decodable, Equatable {
     case site(String)
     case network(chainId: Int)
+    /// The contract a call went to, when it paid nobody.
     case contract(address: String, name: String?)
+    /// Who got the money — a plain send's recipient, or the one a token
+    /// `transfer` names; `name` is the row's name for them.
+    case recipient(address: String, name: String?)
     case spender(address: String, name: String?)
     case spendingCap(FeedAllowanceWire)
     /// Epoch seconds, or `nil`: no expiry.
@@ -373,6 +377,9 @@ enum FeedFactWire: Decodable, Equatable {
         case "contract":
             self = .contract(address: try c.decode(String.self, forKey: .address),
                              name: try c.decodeIfPresent(String.self, forKey: .name))
+        case "recipient":
+            self = .recipient(address: try c.decode(String.self, forKey: .address),
+                              name: try c.decodeIfPresent(String.self, forKey: .name))
         case "spender":
             self = .spender(address: try c.decode(String.self, forKey: .address),
                             name: try c.decodeIfPresent(String.self, forKey: .name))

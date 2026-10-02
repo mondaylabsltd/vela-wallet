@@ -99,18 +99,7 @@ final class DappActivityScreenshotTests: XCTestCase {
                   technical: "Technical details", all: "All"),
         ]
         for words in languages {
-            let app = XCUIApplication()
-            app.launchArguments += ["-vela.parallelSpace", "0"]
-            app.launchArguments += [
-                "-vela.transactionHistory",
-                Self.argument(Self.history(now: Int(Date().timeIntervalSince1970))),
-            ]
-            app.launchEnvironment["VELA_ACCOUNT"] = Self.me
-            app.launchEnvironment["VELA_LANG"] = words.lang
-            app.launchEnvironment["VELA_THEME"] = "light"
-            app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
-            app.launchArguments += ["-AppleLanguages", "(\(words.lang))"]
-            app.launch()
+            let app = launch(words.lang)
 
             // The rows are the core's words, from the stored records.
             XCTAssertTrue(app.staticTexts[words.swapTitle].waitForExistence(timeout: 40),
@@ -139,7 +128,33 @@ final class DappActivityScreenshotTests: XCTestCase {
             Thread.sleep(forTimeInterval: 1)
             attach(app.screenshot(), named: "\(words.lang)-permit-technical-scrolled")
             app.terminate()
+
+            // The swap's detail: its chip, what it moved, the contract it called.
+            let again = launch(words.lang)
+            tap(again.staticTexts[words.swapTitle].firstMatch, "the swap row", timeout: 40)
+            XCTAssertTrue(again.staticTexts[words.technical].waitForExistence(timeout: 10),
+                          "the swap's detail never opened")
+            Thread.sleep(forTimeInterval: 1)
+            attach(again.screenshot(), named: "\(words.lang)-swap-detail")
+            again.terminate()
         }
+    }
+
+    /// The live app over the three records, in `lang`.
+    private func launch(_ lang: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-vela.parallelSpace", "0"]
+        app.launchArguments += [
+            "-vela.transactionHistory",
+            Self.argument(Self.history(now: Int(Date().timeIntervalSince1970))),
+        ]
+        app.launchEnvironment["VELA_ACCOUNT"] = Self.me
+        app.launchEnvironment["VELA_LANG"] = lang
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(\(lang))"]
+        app.launch()
+        return app
     }
 
     // MARK: - Plumbing

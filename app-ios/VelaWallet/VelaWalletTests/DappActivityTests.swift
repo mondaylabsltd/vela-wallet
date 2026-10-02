@@ -337,15 +337,94 @@ struct DappActivityTests {
     }
 
     /// The detail reads the stored request by record id — the whole stored
-    /// text, or nothing when the record kept none.
-    @Test func theStoredRequestIsReadByRecordId() {
+    /// text, or nothing when the record kept none: the core's `""` for a
+    /// request whose shape alone was past its budget is "not recorded"
+    /// (`connect.detail.contentMissing`), never an empty block.
+    @Test func theStoredRequestIsReadByRecordId() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        var permit = F.permit(nowMs: now)
+        permit["stored_request"] = ""
+        permit["request_truncated"] = true
         var rows = F.stored(nowMs: now)
-        rows[2]["signedRequest"] = ""
+        rows[1] = SignExecutor.recordRow(permit, nativeSymbol: "ETH")
+        #expect(rows[1]["signedRequest"] as? String == "")
+        #expect(rows[1]["requestTruncated"] as? Bool == true)
         TxRecords.writeRecords(rows, store: store)
-        #expect(TxRecords.storedRequest(id: "dapp-permit-sig", store: store) == F.permitRequest)
-        #expect(TxRecords.storedRequest(id: "dapp-siwe-msg", store: store) == nil)
+        #expect(TxRecords.storedRequest(id: "dapp-swap-tx", store: store) == F.swapRequest)
+        #expect(TxRecords.storedRequest(id: "dapp-permit-sig", store: store) == nil)
         #expect(TxRecords.storedRequest(id: "nope", store: store) == nil)
+
+        // The detail, wired to the store as `RootView` wires it.
+        let view = try feed(rows)
+        let detail = FlowsLive.txDetail(
+            try item("dapp-permit-sig", in: view), record: nil, on: try drawnDetail, loc: zh,
+            readRequest: { TxRecords.storedRequest(id: $0, store: store) }
+        )
+        let content = try #require(detail.technical?.lines.compactMap { line -> TxContentModel? in
+            if case .content(let content) = line { return content } else { return nil }
+        }.first)
+        #expect(content.read() == nil)
+        #expect(content.missing == zh.t("connect.detail.contentMissing"))
+    }
+
+    /// A summary this build cannot read (an action from a newer build) never
+    /// stops the feed: the core reads that record by its kind, and the rest
+    /// of the feed is as it was.
+    @Test func aSummaryThisBuildCannotReadNeverStopsTheFeed() throws {
+        var rows = F.stored(nowMs: now)
+        rows[1]["dappSummary"] = ["action": "a_future_action", "calls": 1]
+        rows[0]["balanceChanges"] = [["type": "a_future_judgment", "delta": "-1"]]
+        let view = try feed(rows)
+        #expect(items(view).count == 3)
+        let permit = try item("dapp-permit-sig", in: view)
+        #expect(permit.dapp?.action == .typedData, "read by its kind")
+        #expect(permit.dapp?.allowance == nil)
+        let swap = try item("dapp-swap-tx", in: view)
+        #expect(swap.dapp?.changes.isEmpty == true)
+        #expect(swap.dapp?.place == "Uniswap", "its summary still reads")
+    }
+
+    /// Who got the money is the detail's recipient (`componentsTx.detail.to`)
+    /// — a plain send's, named as the row names them, or the one a token
+    /// `transfer` names — never the contract the transfer was called on; a
+    /// call that paid nobody names its contract with the noun.
+    @Test func aCallThatPaidSomebodyNamesTheRecipient() throws {
+        let alice = "0x76875e38fc6bc2dedcaed807ce00782db5c0d141"
+        let bob = "0x00000000000000000000000000000000000b0b0b"
+        func record(_ id: String, to: String, data: String?) -> [String: Any] {
+            let call = data.map { #"[{"to":"\#(to)","value":"0x0","data":"\#($0)"}]"# }
+                ?? #"[{"to":"\#(to)","value":"0x38d7ea4c68000"}]"#
+            return SignExecutor.recordRow([
+                "record_id": id, "kind": "dapp_tx", "method": "eth_sendTransaction",
+                "params_json": call, "stored_request": call, "request_truncated": false,
+                "result": F.txHash, "from": F.me, "chain_id": 1, "now_ms": now,
+                "status": "confirmed", "user_op_hash": F.opHash,
+                "dapp_origin": F.site, "dapp_url": F.site,
+                "summary": ["action": "call", "calls": 1, "contract": to],
+            ], nativeSymbol: "ETH")
+        }
+        var send = record("dapp-send-tx", to: alice, data: nil)
+        send["toName"] = "Alice"
+        let transfer = "0xa9059cbb" + String(repeating: "0", count: 24) + String(bob.dropFirst(2))
+            + String(repeating: "0", count: 56) + "05f5e100"
+        let view = try feed([send, record("dapp-transfer-tx", to: F.usdc, data: transfer)])
+
+        let paid = FlowsLive.txDetail(
+            try item("dapp-send-tx", in: view), record: nil, on: try drawnDetail, loc: en
+        )
+        let to = try #require(paid.facts.first { $0.label == en.t("componentsTx.detail.to") })
+        #expect(to.value == "Alice", "named as the row names them")
+        #expect(to.copyValue?.lowercased() == alice)
+        #expect(!paid.facts.contains { $0.label == en.t("tokenDetail.labelContract") })
+
+        let token = FlowsLive.txDetail(
+            try item("dapp-transfer-tx", in: view), record: nil, on: try drawnDetail, loc: en
+        )
+        let recipient = try #require(token.facts.first { $0.label == en.t("componentsTx.detail.to") })
+        #expect(recipient.copyValue?.lowercased() == bob)
+        #expect(recipient.value == AddressText.short(recipient.copyValue ?? ""))
+        #expect(!token.facts.contains { $0.copyValue?.lowercased() == F.usdc },
+                "never the contract the transfer was called on")
     }
 
     // MARK: - Decode (ActivityWire)
@@ -561,7 +640,11 @@ struct DappActivityTests {
         let changes = try #require(detail.facts.first { $0.label == zh.t("componentsUi.signing.balanceChangesTitle") })
         #expect(changes.lines.map { "\($0.delta) \($0.symbol)" } == ["≈ \u{2212}100 USDC", "≈ +0.03 ETH"])
         #expect(changes.lines.map(\.tone) == [.neutral, .success])
-        #expect(detail.facts.contains { $0.label == zh.t("componentsUi.signing.interactingLabel") && $0.copyValue == F.router })
+        // A call that paid nobody names its contract — with the noun (083 F3
+        // review), never "Interacting with", and never "To".
+        #expect(detail.facts.contains { $0.label == zh.t("tokenDetail.labelContract") && $0.copyValue == F.router })
+        #expect(!detail.facts.contains { $0.label == zh.t("componentsUi.signing.interactingLabel") })
+        #expect(!detail.facts.contains { $0.label == zh.t("componentsTx.detail.to") })
         let technical = try #require(detail.technical)
         let facts = technical.lines.compactMap { line -> FactRowModel? in
             if case .fact(let fact) = line { return fact } else { return nil }

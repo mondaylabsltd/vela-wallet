@@ -373,7 +373,10 @@ enum FlowsLive {
         case .network(let chainId):
             return chainFact(chainId, loc: loc)
         case .contract(let address, let name):
-            return partyFact(loc.t("componentsUi.signing.interactingLabel"), address, name, loc: loc)
+            // A noun — the record is of something done (083 F3 review).
+            return partyFact(loc.t("tokenDetail.labelContract"), address, name, loc: loc)
+        case .recipient(let address, let name):
+            return partyFact(loc.t("componentsTx.detail.to"), address, name, loc: loc)
         case .spender(let address, let name):
             return partyFact(loc.t("componentsUi.signing.labelSpender"), address, name, loc: loc)
         case .spendingCap(let allowance):
@@ -461,8 +464,8 @@ enum FlowsLive {
         )
     }
 
-    /// A contract or a spender: its built-in name, else its short address —
-    /// copying the ADDRESS either way.
+    /// A contract, a recipient or a spender: its name, else its short
+    /// address — copying the ADDRESS either way.
     private static func partyFact(_ label: String, _ address: String, _ name: String?, loc: Loc) -> FactRowModel {
         FactRowModel(
             label: label,
