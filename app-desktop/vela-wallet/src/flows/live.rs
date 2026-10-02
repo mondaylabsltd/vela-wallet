@@ -452,27 +452,51 @@ fn dapp_detail(
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> crate::flows::fixtures::TxDetail {
-    let (amount, fiat, danger) = match dapp.allowance.as_ref() {
-        Some(allowance) => (
+    let (amount, fiat, danger, positive) = match (dapp.allowance.as_ref(), dapp.received.as_ref()) {
+        (Some(allowance), _) => (
             crate::wallet::live::allowance_text(allowance, wallet, hidden),
             SharedString::default(),
             allowance.unlimited,
+            false,
         ),
-        None => (
+        // Spec 097 N5: nothing left and something came back (a borrow) —
+        // what came back is the figure.
+        (None, Some(back)) if item.value.is_none() => (
+            SharedString::from(
+                format!(
+                    "{} {}",
+                    crate::wallet::live::change_figure(back, hidden),
+                    back.symbol
+                )
+                .trim()
+                .to_owned(),
+            ),
+            SharedString::default(),
+            false,
+            back.direction == vela_core::app::activity_feed::FeedDirection::In,
+        ),
+        (None, _) => (
             crate::wallet::live::amount_text_of(item, false, hidden),
             fiat_of(item, hidden, locale, currency),
+            false,
             false,
         ),
     };
     crate::flows::fixtures::TxDetail {
         title: crate::wallet::live::dapp_title(dapp, wallet),
         status: (!dapp.off_chain).then(|| status_chip(item.status, s)),
-        note: dapp.off_chain.then(|| s.detail_off_chain.clone()),
+        // A signature says it was off-chain; a failed operation says why
+        // (spec 097 N4), under its chip.
+        note: if dapp.off_chain {
+            Some(s.detail_off_chain.clone())
+        } else {
+            dapp.failure.map(|failure| failure_text(failure, s))
+        },
         breakdown_title: None,
         breakdown: Vec::new(),
         amount,
         fiat,
-        positive: false,
+        positive,
         danger,
         facts: dapp
             .facts
@@ -677,15 +701,30 @@ fn status_chip(status: FeedTxStatus, s: &FlowStrings) -> StatusChip {
     }
 }
 
-/// The core already valued it, stablecoin fallback and all. `0` means
-/// unknown rather than free, so it shows nothing instead of `$0.00`.
+/// Why a dApp operation failed, in the words its request ended with (spec
+/// 097 N4) — the core's reason, worded.
+fn failure_text(
+    failure: vela_core::app::tx_tracker::TrackFailure,
+    s: &FlowStrings,
+) -> SharedString {
+    use vela_core::app::tx_tracker::TrackFailure;
+    match failure {
+        TrackFailure::Reverted => s.failed_reverted.clone(),
+        TrackFailure::Refused => s.failed_refused.clone(),
+        TrackFailure::NotSent => s.failed_not_sent.clone(),
+    }
+}
+
+/// The core already valued it, stablecoin fallback and all — and says when
+/// it knows no price (`priced`, spec 097 N7): unknown rather than free, so it
+/// shows nothing instead of `$0.00`.
 fn fiat_of(
     item: &FeedItem,
     hidden: bool,
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> SharedString {
-    if hidden || item.usd_value <= 0.0 {
+    if hidden || !item.priced {
         SharedString::from("")
     } else {
         SharedString::from(currency.text(item.usd_value, locale))
@@ -5051,6 +5090,7 @@ mod tests {
             calldata: None,
             call_data: None,
             summary: None,
+            settlement: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -5275,6 +5315,7 @@ mod tests {
                 counterparty_role: Default::default(),
                 dapp: None,
                 subtitle: Vec::new(),
+                priced: true,
             };
             let view = FeedView {
                 rows: vec![
@@ -5313,6 +5354,7 @@ mod tests {
                     calldata: None,
                     call_data: None,
                     summary: None,
+                    settlement: None,
                 }],
                 ..host.view()
             };
@@ -5535,6 +5577,157 @@ mod tests {
         assert_eq!(lines.len(), 4);
     }
 
+    /// Spec 097, through the real core: the pass's Aave borrow, closed by
+    /// the tracker with what its receipt proved, opens to the USDC it
+    /// brought in (no "−" for nothing, no fiat for an unknown price); the
+    /// refused withdraw says why under its chip; the 1inch order's BNB has no
+    /// price — no fiat, never "$0.00".
+    #[test]
+    fn a_landed_or_failed_dapp_row_says_what_the_chain_proved() {
+        use vela_core::app::activity_feed::{FeedTxKind, FeedTxRecord};
+        use vela_core::app::dapp_activity::{DappAction, DappSummary};
+        use vela_core::app::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
+        let pool = "0x6807dc923806fe8fd134338eabca509979a7e0cb";
+        let record = |id: &str, at: f64, status: FeedTxStatus| FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: format!("0x{:0>64}", id.len()),
+            tx_hash: String::new(),
+            from: "0xme".to_owned(),
+            to: pool.to_owned(),
+            to_name: None,
+            value: "0x0".to_owned(),
+            symbol: "BNB".to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id: 56,
+            timestamp: at,
+            day_start_ms: 0.0,
+            status,
+            kind: Some(FeedTxKind::DappTx),
+            usd: None,
+            dapp_url: Some("https://app.aave.com".to_owned()),
+            intent: Some("Borrow".to_owned()),
+            balance_changes: None,
+            calldata: Some(true),
+            call_data: None,
+            summary: Some(DappSummary {
+                action: DappAction::Call,
+                calls: 1,
+                contract: Some(pool.to_owned()),
+                ..DappSummary::default()
+            }),
+            settlement: None,
+        };
+        let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
+        borrow.tx_hash = format!("0x{}", "cb".repeat(32));
+        borrow.settlement = Some(TrackSettlement {
+            moved: Some(vec![
+                TrackMove {
+                    token: Some("0xcdbbed5606d9c5c98eeedd67933991dc17f0c68d".to_owned()),
+                    delta: "300000000000000001".to_owned(),
+                },
+                TrackMove {
+                    token: Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d".to_owned()),
+                    delta: "300000000000000000".to_owned(),
+                },
+            ]),
+            failure: None,
+        });
+        // The scan's "Received" of the same 0.3 USDC names the coin.
+        let received = FeedTxRecord {
+            id: "rx-1".to_owned(),
+            user_op_hash: String::new(),
+            from: pool.to_owned(),
+            to: "0xme".to_owned(),
+            value: "0.3".to_owned(),
+            symbol: "USDC".to_owned(),
+            kind: Some(FeedTxKind::Receive),
+            dapp_url: None,
+            intent: None,
+            calldata: None,
+            summary: None,
+            ..borrow.clone()
+        };
+        let mut withdraw = record("dapp-2-tx", 1_756_000_100.0, FeedTxStatus::Failed);
+        withdraw.intent = Some("Withdraw".to_owned());
+        withdraw.settlement = Some(TrackSettlement {
+            moved: None,
+            failure: Some(TrackFailure::Refused),
+        });
+        let mut order = record("dapp-3-tx", 1_756_000_200.0, FeedTxStatus::Confirmed);
+        order.value = "0xaa87bee538000".to_owned();
+        order.intent = Some("create order".to_owned());
+        order.dapp_url = Some("https://1inch.com".to_owned());
+        // What the sheet's reading named (the descriptor service's 1inch).
+        let factory = "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01";
+        order.to = factory.to_owned();
+        order.summary = Some(DappSummary {
+            action: DappAction::Call,
+            calls: 1,
+            contract: Some(factory.to_owned()),
+            contract_name: Some("NativeOrderFactory".to_owned()),
+            owner: Some("1inch".to_owned()),
+            ..DappSummary::default()
+        });
+        let view = crate::wallet::fixtures::core_feed(vec![borrow, received, withdraw, order]);
+        // English, whatever another test left the process locale at.
+        let loc = crate::loc::Loc::for_language("en");
+        let (s, w) = (
+            FlowStrings::resolve(&loc),
+            crate::wallet::WalletStrings::resolve(&loc),
+        );
+        let open = |id: &str| {
+            tx_detail(
+                &view,
+                id,
+                &s,
+                &w,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("{id} is in the feed"))
+        };
+        let borrow = open("dapp-1-tx");
+        assert_eq!(borrow.title.as_ref(), "Borrow on Aave");
+        assert_eq!(borrow.amount.as_ref(), "+0.3 USDC");
+        assert!(borrow.positive);
+        assert_eq!(borrow.fiat.as_ref(), "");
+        let withdraw = open("dapp-2-tx");
+        assert_eq!(
+            withdraw.status.as_ref().map(|chip| chip.text.clone()),
+            Some(s.status_failed.clone())
+        );
+        assert_eq!(withdraw.note.as_ref(), Some(&s.failed_refused));
+        assert_eq!(
+            withdraw.note.as_ref().map(|note| note.to_string()),
+            Some("The network refused it \u{2014} nothing was sent.".to_owned())
+        );
+        let order = open("dapp-3-tx");
+        assert_eq!(order.title.as_ref(), "Create order on 1inch");
+        assert!(
+            order
+                .facts
+                .iter()
+                .any(|fact| fact.value.as_ref() == "NativeOrderFactory")
+        );
+        assert_eq!(order.amount.as_ref(), "\u{2212}0.003 BNB");
+        assert_eq!(
+            order.fiat.as_ref(),
+            "",
+            "no price known: no fiat, not $0.00"
+        );
+        let rows = crate::wallet::live::activity_rows(&view, &w, &s, false);
+        let borrow_row = rows
+            .iter()
+            .find(|row| row.title.as_ref() == "Borrow on Aave")
+            .unwrap_or_else(|| unreachable!("the borrow's row"));
+        assert!(
+            borrow_row.received.is_some(),
+            "the folded Received still shows"
+        );
+    }
+
     /// Spec 093: a permit opens to what it granted — the allowance in the
     /// danger tone, no status chip but the off-chain note (nothing was sent),
     /// who may spend, the cap, that it never expires — and its technical
@@ -5723,6 +5916,7 @@ mod tests {
                 counterparty_role: Default::default(),
                 dapp: None,
                 subtitle: Vec::new(),
+                priced: true,
             },
         };
         let view = FeedView {
@@ -6285,6 +6479,7 @@ mod tests {
             counterparty_role: Default::default(),
             dapp: None,
             subtitle: Vec::new(),
+            priced: false,
         };
         let view = FeedView {
             rows: vec![

@@ -287,6 +287,11 @@ pub struct FlowStrings {
     /// "Off-chain signature — nothing was sent on-chain": a dApp signature's
     /// detail, where a transaction's status chip would be (spec 093).
     pub detail_off_chain: SharedString,
+    /// Why a dApp operation failed (spec 097 N4): it landed and reverted,
+    /// the network refused it, or the relay never had it.
+    pub failed_reverted: SharedString,
+    pub failed_refused: SharedString,
+    pub failed_not_sent: SharedString,
     /// The collapsed "Technical details" (spec 093) and its lines' words.
     pub detail_technical: SharedString,
     pub detail_operation: SharedString,
@@ -667,6 +672,9 @@ impl FlowStrings {
             detail_hash: s("componentsTx.detail.labelHash"),
             detail_section_title: s("componentsTx.detail.sectionTitle"),
             detail_off_chain: s("connect.detail.offChainNote"),
+            failed_reverted: s("componentsTx.receipt.failedHint"),
+            failed_refused: s("componentsUi.signing.refused"),
+            failed_not_sent: s("send.txErrorGeneric"),
             detail_technical: s("componentsUi.signing.advancedToggle"),
             detail_operation: s("componentsTx.detail.labelOperation"),
             op_contract_interaction: s("componentsTx.detail.opContractInteraction"),

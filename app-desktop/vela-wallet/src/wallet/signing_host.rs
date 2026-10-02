@@ -1727,6 +1727,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // The approval surface's token as it resolved (spec 093), so the
         // record can say "100 USDC": the core reads it only once it resolved.
         token_meta: Some(guard.meta.clone()),
+        // What the reading named — the contract and the coins (spec 097) —
+        // so Activity names them as this sheet did. Copied, never decided.
+        reading: clear.record_reading.clone(),
     }
 }
 
@@ -2476,6 +2479,19 @@ mod tests {
             approve_opts(&fee, &clear, &guard).token_meta,
             Some(guard.meta.clone())
         );
+
+        // Spec 097: what the reading named rides the approve verbatim.
+        assert_eq!(approve_opts(&fee, &clear, &guard).reading, None);
+        clear.record_reading = Some(vela_core::app::dapp_activity::DappReading {
+            address: Some("0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01".to_owned()),
+            name: Some("NativeOrderFactory".to_owned()),
+            owner: Some("1inch".to_owned()),
+            tokens: Vec::new(),
+        });
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).reading,
+            clear.record_reading
+        );
     }
 
     /// A transaction decodes from its call. A batch's first leg is still what
@@ -2755,6 +2771,7 @@ mod approve_tests {
             unlimited_approved: false,
             balance_changes: None,
             token_meta: None,
+            reading: None,
         };
 
         let signed = opts

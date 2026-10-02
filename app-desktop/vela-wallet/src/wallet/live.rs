@@ -705,6 +705,7 @@ mod tests {
             calldata: None,
             call_data: None,
             summary: None,
+            settlement: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -829,6 +830,7 @@ mod tests {
             counterparty_role: Default::default(),
             dapp: None,
             subtitle: Vec::new(),
+            priced: false,
         }
     }
 
@@ -853,6 +855,7 @@ mod tests {
             off_chain: false,
             facts: Vec::new(),
             technical: Vec::new(),
+            failure: None,
         }
     }
 
@@ -893,6 +896,7 @@ mod tests {
             calldata: None,
             call_data: None,
             summary: None,
+            settlement: None,
         }
     }
 
@@ -1920,6 +1924,7 @@ mod tests {
                         counterparty_role: Default::default(),
                         dapp: None,
                         subtitle: Vec::new(),
+                        priced: true,
                     },
                 }],
                 ..host.view()

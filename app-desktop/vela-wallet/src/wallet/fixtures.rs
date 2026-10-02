@@ -600,6 +600,7 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
         calldata: None,
         call_data: None,
         summary: Some(summary),
+        settlement: None,
     };
     let swap = FeedTxRecord {
         user_op_hash: "0x5c1e3fa0b2d4c6e8f0a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5"
