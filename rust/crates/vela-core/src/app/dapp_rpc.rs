@@ -129,6 +129,12 @@ pub enum Route {
     WatchAsset,
     /// Needs a signature: the signing sheet.
     Sign,
+    /// `wallet_getCapabilities` (EIP-5792) — what the wallet can do on each of
+    /// its chains, for the granted account ([`capabilities`]).
+    Capabilities,
+    /// `wallet_getCallsStatus` (EIP-5792) — a batch this wallet sent, read
+    /// from the bundler's receipt of its operation ([`calls_status`]).
+    CallsStatus,
     /// A node (or bundler) read on the site's chain.
     Read {
         bundler: bool,
@@ -165,6 +171,8 @@ pub fn classify(method: &str) -> Route {
         "wallet_switchEthereumChain" => Route::SwitchChain,
         "wallet_addEthereumChain" => Route::AddChain,
         "wallet_watchAsset" => Route::WatchAsset,
+        "wallet_getCapabilities" => Route::Capabilities,
+        "wallet_getCallsStatus" => Route::CallsStatus,
         _ if BUNDLER_METHODS.contains(&method) => Route::Read { bundler: true },
         _ if READ_ONLY_RPC_METHODS.contains(&method) || EXTRA_READ_METHODS.contains(&method) => {
             Route::Read { bundler: false }
@@ -221,6 +229,120 @@ pub fn requested_address(method: &str, params: &Value) -> Option<String> {
 /// `1` → `"0x1"`.
 pub fn hex_chain_id(chain_id: u32) -> String {
     format!("0x{chain_id:x}")
+}
+
+// ---------------------------------------------------------------------------
+// EIP-5792 — what a batch can be asked after it was sent (spec 094 S6)
+// ---------------------------------------------------------------------------
+
+/// `wallet_getCallsStatus` for an id this wallet never handed out (EIP-5792
+/// "Unknown bundle id").
+pub const UNKNOWN_BUNDLE_ID: i64 = 5730;
+/// The EIP-5792 answer shape [`calls_status`] speaks.
+pub const CALLS_STATUS_VERSION: &str = "2.0.0";
+
+/// The batch id a `wallet_getCallsStatus` asks about — `[id]`, a 32-byte hex
+/// operation hash (the id `wallet_sendCalls` answered with), lower-cased.
+pub fn calls_status_id(params: &Value) -> Option<String> {
+    let id = params.as_array()?.first()?.as_str()?;
+    let well_formed =
+        id.len() == 66 && id.starts_with("0x") && id[2..].bytes().all(|b| b.is_ascii_hexdigit());
+    well_formed.then(|| id.to_ascii_lowercase())
+}
+
+/// The EIP-5792 status of batch `id`, sent on `chain_id`, from the bundler's
+/// `eth_getUserOperationReceipt` result — the operation IS the batch: one
+/// atomic user operation (a MultiSend), so every call landed or none did.
+///
+/// - no receipt yet (`None`, `null`, no `receipt.transactionHash`) → `100`,
+///   pending — also what a bundler that could not be asked reads as: the
+///   wallet does not know otherwise, and a page polls on;
+/// - `success: false` → `500`, reverted on chain (completely: it is atomic);
+/// - else → `200`, with the one receipt. Its `logs` are the OPERATION's (the
+///   receipt's top-level `logs`, ERC-4337) — the bundle transaction's carry
+///   every operation in the bundle — and its `status` is the operation's.
+pub fn calls_status(id: &str, chain_id: u32, user_op_receipt: Option<&Value>) -> Value {
+    let mut status = json!({
+        "version": CALLS_STATUS_VERSION,
+        "id": id,
+        "chainId": hex_chain_id(chain_id),
+        "status": 100,
+        "atomic": true,
+    });
+    let found = user_op_receipt.filter(|value| value.is_object());
+    let receipt = found
+        .and_then(|value| value.get("receipt"))
+        .filter(|receipt| {
+            receipt
+                .get("transactionHash")
+                .and_then(Value::as_str)
+                .is_some()
+        });
+    let (Some(found), Some(receipt)) = (found, receipt) else {
+        return status;
+    };
+    let succeeded = found.get("success").and_then(Value::as_bool) != Some(false);
+    let logs = found
+        .get("logs")
+        .filter(|logs| logs.is_array())
+        .or_else(|| receipt.get("logs").filter(|logs| logs.is_array()))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    status["status"] = json!(if succeeded { 200 } else { 500 });
+    status["receipts"] = json!([{
+        "logs": logs,
+        "status": if succeeded { "0x1" } else { "0x0" },
+        "blockHash": receipt.get("blockHash").cloned().unwrap_or(Value::Null),
+        "blockNumber": receipt.get("blockNumber").cloned().unwrap_or(Value::Null),
+        "gasUsed": receipt.get("gasUsed").cloned().unwrap_or(Value::Null),
+        "transactionHash": receipt.get("transactionHash").cloned().unwrap_or(Value::Null),
+    }]);
+    status
+}
+
+/// `wallet_getCapabilities` (EIP-5792): `[address, chainIds?]` → for each of
+/// the wallet's `chains` (only those the page names, when it names some), what
+/// Vela can do there — one capability, `atomic: supported`: `wallet_sendCalls`
+/// goes out as ONE user operation. Nothing else is claimed (a
+/// `paymasterService` is refused at signing).
+///
+/// The address must be one the site was granted (EIP-5792: an error when the
+/// page is not connected to it) — `Err((4100, …))`; no address is `-32602`.
+pub fn capabilities(
+    params: &Value,
+    granted: &[String],
+    chains: &[u32],
+) -> Result<Value, (i64, &'static str)> {
+    let list = params.as_array();
+    let address = list
+        .and_then(|list| list.first())
+        .and_then(Value::as_str)
+        .filter(|a| {
+            a.len() == 42 && a.starts_with("0x") && a[2..].bytes().all(|b| b.is_ascii_hexdigit())
+        })
+        .ok_or((-32602, "Expected [address, chainIds?]"))?;
+    if !granted.iter().any(|g| g.eq_ignore_ascii_case(address)) {
+        return Err((4100, "The address is not connected to this site"));
+    }
+    let asked: Option<Vec<u32>> = list
+        .and_then(|list| list.get(1))
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| chain_param(&json!([{ "chainId": id }])))
+                .collect()
+        });
+    let mut answer = serde_json::Map::new();
+    for chain in chains {
+        if asked.as_ref().is_some_and(|asked| !asked.contains(chain)) {
+            continue;
+        }
+        answer.insert(
+            hex_chain_id(*chain),
+            json!({ "atomic": { "status": "supported" } }),
+        );
+    }
+    Ok(Value::Object(answer))
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,5 +1152,122 @@ mod tests {
         ] {
             assert!(js.contains(table), "{table} in {js}");
         }
+    }
+
+    /// Spec 094: the provider says nothing in the console of every page.
+    #[test]
+    fn the_provider_logs_nothing_into_a_page() {
+        assert!(!PROVIDER_JS.contains("console.log"));
+        assert!(!PROVIDER_JS.contains("console.info"));
+    }
+
+    // ---- EIP-5792 (spec 094 S6) ------------------------------------------
+
+    const ID: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const ALICE: &str = "0xA1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1A1a1";
+
+    #[test]
+    fn the_two_status_methods_are_routed_not_refused() {
+        assert_eq!(classify("wallet_getCapabilities"), Route::Capabilities);
+        assert_eq!(classify("wallet_getCallsStatus"), Route::CallsStatus);
+        assert_eq!(classify("wallet_showCallsStatus"), Route::Unsupported);
+    }
+
+    #[test]
+    fn a_calls_status_id_is_one_32_byte_hash() {
+        assert_eq!(
+            calls_status_id(&json!([ID.to_uppercase().replace("0X", "0x")])),
+            Some(ID.to_owned())
+        );
+        assert_eq!(calls_status_id(&json!([])), None);
+        assert_eq!(calls_status_id(&json!(["0x1234"])), None);
+        assert_eq!(calls_status_id(&json!([{ "id": ID }])), None);
+    }
+
+    #[test]
+    fn a_batch_with_no_receipt_yet_is_pending() {
+        for receipt in [None, Some(json!(null)), Some(json!({ "receipt": {} }))] {
+            let status = calls_status(ID, 100, receipt.as_ref());
+            assert_eq!(status["status"], 100, "{receipt:?}");
+            assert_eq!(status["version"], "2.0.0");
+            assert_eq!(status["id"], ID);
+            assert_eq!(status["chainId"], "0x64");
+            assert_eq!(status["atomic"], true);
+            assert!(status.get("receipts").is_none());
+        }
+    }
+
+    #[test]
+    fn a_landed_batch_carries_its_operation_s_logs_and_status() {
+        let op_log = json!({ "address": "0x01", "topics": [], "data": "0x" });
+        let other_op_log = json!({ "address": "0x02", "topics": [], "data": "0x" });
+        let receipt = json!({
+            "success": true,
+            "logs": [op_log],
+            "receipt": {
+                "transactionHash": "0xbb",
+                "blockHash": "0xcc",
+                "blockNumber": "0x10",
+                "gasUsed": "0x5208",
+                "status": "0x1",
+                "logs": [op_log, other_op_log]
+            }
+        });
+        let status = calls_status(ID, 100, Some(&receipt));
+        assert_eq!(status["status"], 200);
+        let one = &status["receipts"][0];
+        assert_eq!(one["transactionHash"], "0xbb");
+        assert_eq!(one["blockNumber"], "0x10");
+        assert_eq!(one["status"], "0x1");
+        // The operation's own logs — never the other operations in its bundle.
+        assert_eq!(one["logs"], json!([op_log]));
+    }
+
+    #[test]
+    fn a_reverted_batch_is_500_even_when_its_bundle_succeeded() {
+        let receipt = json!({
+            "success": false,
+            "receipt": { "transactionHash": "0xbb", "status": "0x1", "logs": [] }
+        });
+        let status = calls_status(ID, 8453, Some(&receipt));
+        assert_eq!(status["status"], 500);
+        assert_eq!(status["receipts"][0]["status"], "0x0");
+        assert_eq!(status["chainId"], "0x2105");
+    }
+
+    #[test]
+    fn capabilities_are_atomic_batches_on_every_chain_for_the_connected_account() {
+        let granted = vec![ALICE.to_lowercase()];
+        let all = capabilities(&json!([ALICE]), &granted, &[1, 100]);
+        assert_eq!(
+            all,
+            Ok(json!({
+                "0x1": { "atomic": { "status": "supported" } },
+                "0x64": { "atomic": { "status": "supported" } }
+            }))
+        );
+        // Only the chains the page names, when it names some.
+        let some = capabilities(&json!([ALICE, ["0x64", "0x2105"]]), &granted, &[1, 100]);
+        assert_eq!(
+            some,
+            Ok(json!({ "0x64": { "atomic": { "status": "supported" } } }))
+        );
+    }
+
+    #[test]
+    fn capabilities_are_told_only_to_a_site_connected_to_that_address() {
+        let other = format!("0x{}", "b2".repeat(20));
+        assert_eq!(
+            capabilities(&json!([other]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            Err(4100)
+        );
+        assert_eq!(
+            capabilities(&json!([ALICE]), &[], &[1]).map_err(|e| e.0),
+            Err(4100)
+        );
+        assert_eq!(
+            capabilities(&json!([]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            Err(-32602)
+        );
     }
 }

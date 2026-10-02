@@ -19,8 +19,11 @@
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { FeedAllowance } from '$lib/core/generated/FeedAllowance';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
+import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { formatDate, groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
@@ -34,6 +37,13 @@ import { fill } from './messages';
 import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
+
+/**
+ * The words an Activity row is built from — the wallet bundle's `activity`
+ * part, which a contact's page ships too (spec 093), so both draw the core's
+ * rows through one builder.
+ */
+export type RowMessages = Pick<WalletMessages, 'activity'>;
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,
@@ -307,6 +317,26 @@ export function exactAmount(amount: string): string {
 // Sections
 // ---------------------------------------------------------------------------
 
+/**
+ * Spec 092: the line over the networks the wallet cannot reach — the home's
+ * status line and the title of the list it opens. The core chooses the
+ * sentence (`unreachable_key`: one network named, several counted); this only
+ * fills it. `undefined` when every network answered.
+ */
+export function unreachableLine(
+	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'>,
+	words: { unreachableOne: string; unreachableMany: string }
+): string | undefined {
+	const first = view.unreachable_networks[0];
+	if (view.unreachable_key === 'assets.unreachableOne' && first !== undefined) {
+		return fill(words.unreachableOne, { name: chainName(first.chain_id) });
+	}
+	if (view.unreachable_key === 'assets.unreachableMany') {
+		return fill(words.unreachableMany, { n: view.unreachable_networks.length });
+	}
+	return undefined;
+}
+
 export function liveBalance(
 	view: BalanceView,
 	currency: CurrencyView,
@@ -351,21 +381,14 @@ export function liveBalance(
 		total === 0 && !view.balance_unknown && !view.balance_partial && view.tokens.length === 0;
 	const onCache = view.display_total_usd === null && view.cached_total_usd !== null;
 
-	// One status line, most actionable first. `banner_chain_ids` is already
-	// failed MINUS rate-limited — the core's exclusion (a rate limit heals on
-	// its own; the balance quietly stays on cache, no nag) — so a chain here
-	// really is unreachable and the person can fix its RPC (the Expo
-	// `RpcTroubleBanner`, worded with its corpus). Then the core's notice.
-	const banner = view.banner_chain_ids;
+	// One status line, most actionable first: the networks the wallet cannot
+	// reach (spec 092 — every one, held or not; a rate limit heals on its own
+	// and is never listed), then the core's notice.
+	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
-		banner.length === 1
-			? {
-					kind: 'warning',
-					text: fill(m.assets.rpcUnavailableSingle, { name: chainName(banner[0]) })
-				}
-			: banner.length > 1
-				? { kind: 'warning', text: fill(m.assets.rpcUnavailableMultiple, { count: banner.length }) }
-				: view.refreshing || onCache || view.notice === 'still_updating'
+		unreachable !== undefined
+			? { kind: 'warning', text: unreachable }
+			: view.refreshing || onCache || view.notice === 'still_updating'
 					? { kind: 'refreshing', text: m.balance.stale }
 					: view.notice === 'unpriced'
 						? { kind: 'warning', text: m.balance.unpriced }
@@ -432,7 +455,7 @@ function localMidnight(ms: number): number {
 }
 
 /** "Today" / "Yesterday" from the corpus; older days in the date preset. */
-export function dayLabel(dayStartMs: number, m: WalletMessages, now = Date.now()): string {
+export function dayLabel(dayStartMs: number, m: RowMessages, now = Date.now()): string {
 	const today = localMidnight(now);
 	if (dayStartMs === today) return m.activity.today;
 	if (dayStartMs === today - 86_400_000) return m.activity.yesterday;
@@ -444,45 +467,25 @@ export function dayLabel(dayStartMs: number, m: WalletMessages, now = Date.now()
 
 export function liveActivityRow(
 	item: FeedItem,
-	m: WalletMessages,
-	hidden: boolean
+	m: RowMessages,
+	hidden: boolean,
+	/** The clock a `day` part is worded against (tests inject one). */
+	now = Date.now()
 ): ActivityRowModel {
-	// Spec 082 RG1: what the row IS, and where it stands, are the core's
-	// (`FeedItem.kind`, `.status`) — never guessed from a direction or looked up
-	// in the store here.
+	// Spec 082 RG1, spec 093: what the row IS, and where it stands, are the
+	// core's (`FeedItem.kind`, `.status`, `.dapp`) — never guessed from a
+	// direction or looked up in the store here. A row the core describes as a
+	// dApp's (its transactions and its signatures) is a dApp row.
 	const kind: ActivityRowModel['kind'] =
-		item.kind === 'receive' ? 'received' : item.kind === 'dapp_tx' ? 'dapp' : 'sent';
+		item.dapp != null || (item.kind !== 'receive' && item.kind !== 'send')
+			? 'dapp'
+			: item.kind === 'receive'
+				? 'received'
+				: 'sent';
 	const received = kind === 'received';
-	const who = item.alias ?? (item.counterparty !== null ? shortenAddress(item.counterparty) : null);
-	// A dApp's transaction is labelled with the site that asked (083 H2, spec
-	// 082 RG2) — the router it called is an address nobody chose; else who it
-	// went to; else the chain.
-	const site = item.dapp?.site ?? item.site ?? null;
-	const base =
-		site !== null
-			? site
-			: kind === 'dapp'
-				? (who ?? chainName(item.chain_id))
-				: who === null
-					? chainName(item.chain_id)
-					: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
-	// A row the tracker has not closed says so first (RG2, RG4): a may-have-
-	// been-sent op reads "Pending · <site>" until the tracker patches it.
-	// 087 F04: one nothing will settle reads "Unknown · <site>".
-	const lead =
-		item.status === 'pending'
-			? m.activity.pending
-			: item.status === 'failed'
-				? m.activity.failed
-				: item.status === 'unknown'
-					? m.activity.unknown
-					: null;
-	const subtitle = lead === null ? base : `${lead} · ${base}`;
-	const amount =
-		item.value === null
-			? String(item.batch?.count ?? '')
-			: `${received ? '+' : '−'}${trimBalance(item.value)}`;
-	const figureless = item.dapp != null && item.value === null;
+	const figure = rowFigure(item, received, m);
+	const masked = hidden && figure.maskable;
+	const back = item.dapp?.received ?? null;
 	return {
 		id: item.id,
 		kind,
@@ -493,28 +496,136 @@ export function liveActivityRow(
 				: kind === 'sent'
 					? m.activity.sent
 					: m.activity.dapp,
-		subtitle,
-		// A dApp call that moved no coin has no figure, and nothing to mask:
-		// "••••" would claim one (083 H2 review).
-		amount: hidden && !figureless ? MASK : amount,
-		unit: item.symbol,
+		// The core's second line (spec 093), worded: status first when the
+		// tracker has not closed the row (RG2, 087 F04), then the site, the
+		// network, or whom a transfer went to — in the core's order.
+		subtitle: subtitleText(item.subtitle ?? [], m, now),
+		amount: masked ? MASK : figure.amount,
+		unit: figure.unit,
 		positive: received,
-		masked: hidden && !figureless,
+		masked,
+		...(figure.danger ? { danger: true } : {}),
+		...(back === null
+			? {}
+			: { received: { amount: hidden ? MASK : changeFigure(back), unit: back.symbol } }),
 		badgeColor: chainColor(item.chain_id),
 		badgeLogoUrl: chainLogoURL(item.chain_id)
 	};
 }
 
 /**
- * What a dApp's transaction did, as a title (083 H2): the intent recorded at
- * approve time in the reader's words ("Send" for a plain native send,
- * "Swap"…), the descriptor's own word when there is no translation, and
- * "Contract interaction" for a call nobody decoded — the signing sheet's
- * words for the same call, and the desktop's (`wallet/live.rs dapp_title`).
+ * The right column of a row: the money it moved (as before; "≈" when the
+ * figure is the simulation's expectation, 083 F1), else the allowance a grant
+ * states (spec 093) — "Unlimited" in the danger tone, never masked: it is a
+ * risk to see, not a balance — else a batch's count, else nothing. A dApp row
+ * that moved and granted nothing has no figure, and nothing to mask: "••••"
+ * would claim one (083 H2 review).
  */
-export function dappTitle(dapp: FeedDapp, m: WalletMessages): string {
+function rowFigure(
+	item: FeedItem,
+	received: boolean,
+	m: RowMessages
+): { amount: string; unit: string; danger: boolean; maskable: boolean } {
+	if (item.value !== null) {
+		const about = item.dapp?.estimated ? '≈ ' : '';
+		return {
+			amount: `${about}${received ? '+' : '−'}${trimBalance(item.value)}`,
+			unit: item.symbol,
+			danger: false,
+			maskable: true
+		};
+	}
+	const allowance = item.dapp?.allowance ?? null;
+	if (allowance !== null) return allowanceFigure(allowance, m);
+	if (item.dapp != null) return { amount: '', unit: '', danger: false, maskable: false };
+	return {
+		amount: String(item.batch?.count ?? ''),
+		unit: item.symbol,
+		danger: false,
+		maskable: true
+	};
+}
+
+/** An allowance as a row figure (spec 093): the core's cap and symbol, worded. */
+export function allowanceFigure(
+	allowance: FeedAllowance,
+	m: RowMessages
+): { amount: string; unit: string; danger: boolean; maskable: boolean } {
+	if (allowance.unlimited) {
+		return { amount: m.activity.unlimited, unit: allowance.symbol, danger: true, maskable: false };
+	}
+	return {
+		amount: allowance.value === null ? '' : trimBalance(allowance.value),
+		unit: allowance.symbol,
+		danger: false,
+		maskable: allowance.value !== null
+	};
+}
+
+/**
+ * One line of what a dApp operation moved (083 F1): "−", "+" and the figure,
+ * "≈" on every one the wallet cannot vouch for to the unit (`exact` is the
+ * core's), and only a direction for a token nobody verified.
+ */
+export function changeFigure(change: FeedDappChange): string {
+	const sign = change.direction === 'in' ? '+' : '−';
+	if (!change.verified || change.value === null) return sign;
+	return `${change.exact ? '' : '≈ '}${sign}${trimBalance(change.value)}`;
+}
+
+/**
+ * A row's second line (spec 093): the core's parts, in its order, each worded
+ * here and joined " · ". Which parts there are — a status the tracker has not
+ * closed, the site when the title named a protocol, the network, whom a
+ * transfer went to or came from, the day on a contact's page — is the core's
+ * (`FeedItem.subtitle`). The day reads as the date headers do.
+ */
+export function subtitleText(lines: readonly FeedLine[], m: RowMessages, now = Date.now()): string {
+	return lines
+		.map((line) => {
+			switch (line.type) {
+				case 'status':
+					return line.status === 'pending'
+						? m.activity.pending
+						: line.status === 'failed'
+							? m.activity.failed
+							: line.status === 'unknown'
+								? m.activity.unknown
+								: '';
+				case 'to':
+					return fill(m.activity.toName, { name: line.name ?? shortenAddress(line.address) });
+				case 'from':
+					return fill(m.activity.fromName, { name: line.name ?? shortenAddress(line.address) });
+				case 'site':
+					return line.site;
+				case 'network':
+					return chainName(line.chain_id);
+				case 'day':
+					return dayLabel(line.day_start_ms, m, now);
+			}
+		})
+		.filter((part) => part !== '')
+		.join(' · ');
+}
+
+/**
+ * The headline verb of a dApp row (spec 093): the wallet's own word for the
+ * core's `intent_term` in the reader's language, else the descriptor's text
+ * when the wallet has no word for it.
+ */
+function dappVerb(dapp: FeedDapp, m: RowMessages): string {
 	const word = dapp.intent_term ? m.activity.intents[dapp.intent_term] : undefined;
 	return word || dapp.intent || m.activity.contractCall;
+}
+
+/**
+ * What a dApp row is titled (spec 093): "<verb> on <place>" — the place being
+ * a protocol the wallet knows by address, else the site's host, as the core
+ * decided — or the verb alone when there is no place.
+ */
+export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
+	const intent = dappVerb(dapp, m);
+	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
 }
 
 /** The core emits headers and items already interleaved (invariant ⑥). */

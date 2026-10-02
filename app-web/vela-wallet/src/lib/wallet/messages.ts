@@ -34,10 +34,15 @@ export interface WalletMessages {
 		 */
 		contractCall: string;
 		/**
-		 * A dApp's transaction's recorded intent in the reader's words, keyed
-		 * by `ClearTerm` (`INTENT_TERMS`) — the words the signing sheet used.
+		 * A dApp row's headline verb in the reader's words, keyed by
+		 * `ClearTerm` (`INTENT_TERMS`) — the recorded intent's word, or the
+		 * wallet's own for what the request is (spec 093).
 		 */
 		intents: Record<string, string>;
+		/** Spec 093: "{{intent}} on {{place}}" — a dApp row's title. */
+		dappRowTitle: string;
+		/** Spec 093: an allowance with no limit, where a figure would be. */
+		unlimited: string;
 		today: string;
 		yesterday: string;
 		/** Template with `{{name}}`. */
@@ -63,10 +68,13 @@ export interface WalletMessages {
 	assets: {
 		emptyTitle: string;
 		emptyCaption: string;
-		/** Template with `{{name}}` — one chain's RPC is failing (not rate-limited). */
-		rpcUnavailableSingle: string;
-		/** Template with `{{count}}`. */
-		rpcUnavailableMultiple: string;
+		/**
+		 * Spec 092: the home line over networks the wallet cannot reach — the
+		 * core names which (`unreachable_key`). `{{name}}` for one network …
+		 */
+		unreachableOne: string;
+		/** … `{{n}}` for several. */
+		unreachableMany: string;
 	};
 	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
 	sidebar: { networks: string };
@@ -154,9 +162,11 @@ export const WALLET_KEYS = [
 	'history.labelSent',
 	'history.labelReceived',
 	'history.txLabelDappTx',
-	// 083 H2: a dApp's transaction is titled by what it did.
-	'componentsUi.signing.intentContractCall',
+	// 083 H2, spec 093: a dApp row is titled by what it did, and where
+	// (`intentContractCall` and the signatures' verbs are among the terms).
 	...INTENT_TERMS.map((term) => `componentsUi.signing.${term}` as const),
+	'history.dappRowTitle',
+	'componentsUi.signingApprove.unlimitedValue',
 	'componentsUi.dayGroup.today',
 	'componentsUi.dayGroup.yesterday',
 	'history.toName',
@@ -170,8 +180,8 @@ export const WALLET_KEYS = [
 	'componentsUi.signing.intentUnknown',
 	'assets.emptyTitle',
 	'assets.emptySubtext',
-	'assets.rpcUnavailableSingle',
-	'assets.rpcUnavailableMultiple',
+	'assets.unreachableOne',
+	'assets.unreachableMany',
 	// Spec 038: the home's sentence for a first launch with no network.
 	'onboarding.common.networkBody',
 	'componentsUi.networkFilter.pillAll',

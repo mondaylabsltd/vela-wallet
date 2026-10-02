@@ -461,6 +461,8 @@ enum GalleryTab {
     Dst7,
     Dst8,
     Dsr1,
+    /// Spec 092 — the hero's "can't reach" line and the list it opens.
+    Dsr6,
     Components,
     ContactsComponents,
     Identicons,
@@ -469,7 +471,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 23] = [
+    const ALL: [(GalleryTab, &'static str); 24] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -490,6 +492,7 @@ impl GalleryTab {
         (GalleryTab::Dst7, "DST7"),
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
+        (GalleryTab::Dsr6, "DSR6"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -506,7 +509,7 @@ impl GalleryTab {
     /// (data-model.md §Screen states — `dc1`…`dc6`).
     /// The chip `VELA_SETTINGS_STATE` names, if it names one.
     fn from_settings_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_SETTINGS_STATE").ok()?;
+        let want = crate::dev_env::var!("VELA_SETTINGS_STATE")?;
         GalleryTab::ALL
             .into_iter()
             .find_map(|(tab, _)| (tab.settings_state()? == want).then_some(tab))
@@ -520,7 +523,7 @@ impl GalleryTab {
     /// click. Same env-pin family, same case-insensitive label match
     /// `FlowPanel::from_env` uses.
     fn from_gallery_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_GALLERY_TAB").ok()?;
+        let want = crate::dev_env::var!("VELA_GALLERY_TAB")?;
         GalleryTab::ALL
             .into_iter()
             .find(|(_, label)| label.eq_ignore_ascii_case(want.trim()))
@@ -666,6 +669,9 @@ pub struct WalletPage {
     contacts_query: String,
     /// SR3, the balance breakdown the hero's status line opens (078 H-03).
     balance_detail_open: bool,
+    /// Spec 092: the list of networks the wallet cannot reach, which the
+    /// hero's status line opens while any is.
+    unreachable_open: bool,
     contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
@@ -921,6 +927,11 @@ pub struct WalletPage {
     /// then closes rather than showing a stale detail over a row that no
     /// longer exists.
     tx_detail: Option<String>,
+    /// DA2L, live: the dApp record whose "Technical details" are open
+    /// (spec 093), with the request read from the store when they were
+    /// opened — `None` (or another record's id) is collapsed. Read on the
+    /// tap, never before: the stored request is what the section is for.
+    tx_technical: Option<(String, Option<String>)>,
     /// DR2L, live: WHICH network's QR the receive flow stepped into.
     ///
     /// The mock never needed this — every fixture row opened the same picture.
@@ -959,6 +970,9 @@ pub struct WalletPage {
     /// The address the core was last asked to inspect, so opening a panel that
     /// redraws every frame asks once.
     inspected_contact: Option<String>,
+    /// The contact whose page the feed was last told is open (spec 093,
+    /// `ContactFilterChanged`) — told again only when it changes.
+    feed_contact: Option<String>,
     /// The accounts the switcher last announced. `None` = it is not on screen,
     /// and the core has been told so.
     switcher_addresses: Option<Vec<String>>,
@@ -1103,10 +1117,10 @@ impl WalletPage {
     /// same thing and must not become it — that route has no session behind it
     /// and renders the mocks on purpose.
     pub fn signed_in(identity: Identity, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let section = match std::env::var("VELA_SECTION").as_deref() {
-            Ok("settings") => Section::Settings,
-            Ok("contacts") => Section::Contacts,
-            Ok("explore") => Section::Explore,
+        let section = match crate::dev_env::var!("VELA_SECTION").as_deref() {
+            Some("settings") => Section::Settings,
+            Some("contacts") => Section::Contacts,
+            Some("explore") => Section::Explore,
             _ => Section::Wallet,
         }
         .or_wallet();
@@ -1138,7 +1152,7 @@ impl WalletPage {
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
         if section == Section::Settings
-            && let Ok(state) = std::env::var("VELA_FEEDBACK_STATE")
+            && let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE")
         {
             page.pin_feedback_state(&state);
         }
@@ -1166,7 +1180,7 @@ impl WalletPage {
         }
         // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
         // screenshot pass that cannot click, drop or paste (078 round 3).
-        if let Ok(state) = std::env::var("VELA_FEEDBACK_STATE") {
+        if let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE") {
             page.pin_feedback_state(&state);
         }
         page
@@ -1277,6 +1291,7 @@ impl WalletPage {
             chain_filter: None,
             feed_privacy: None,
             tx_detail: None,
+            tx_technical: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
             add_token_native: false,
@@ -1295,6 +1310,7 @@ impl WalletPage {
             signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
+            unreachable_open: false,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
             send_background: Vec::new(),
@@ -1303,12 +1319,10 @@ impl WalletPage {
             backup_for: None,
             backup_check: None,
             keys_check: None,
-            // `VELA_KEYS_OPEN=1` (debug builds): the first key row starts open, so
+            // `VELA_KEYS_OPEN=1` (developer builds): the first key row starts open, so
             // the details card can be looked at without a click — the same env-pin
             // family as `VELA_PAGE` / `VELA_THEME`.
-            keys_open: if cfg!(debug_assertions)
-                && std::env::var("VELA_KEYS_OPEN").as_deref() == Ok("1")
-            {
+            keys_open: if crate::dev_env::flag!("VELA_KEYS_OPEN") {
                 std::collections::HashSet::from([0])
             } else {
                 std::collections::HashSet::new()
@@ -1407,6 +1421,7 @@ impl WalletPage {
             group: None,
             contact: 0,
             inspected_contact: None,
+            feed_contact: None,
             switcher_addresses: None,
             removing_account: None,
             account_switcher: false,
@@ -1496,7 +1511,7 @@ impl WalletPage {
     /// network's logo is part of the card, so it is fetched here — off the
     /// UI thread, while the dialog is open, with a short timeout after which
     /// the lettered disc stands in. A card that fails to render writes
-    /// nothing. The dialog opens in the home directory for the reason the
+    /// nothing. The dialog opens in Downloads (`storage::save_panel_dir`) for the reason the
     /// contacts export does: `.` is wherever the binary was launched from,
     /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
     /// answers the dialog with the card's filename in that folder, as the
@@ -1505,10 +1520,10 @@ impl WalletPage {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&model.file_name))
         });
         let png = cx.background_executor().spawn(async move {
@@ -3489,7 +3504,10 @@ impl WalletPage {
         } else if self.balance_detail_open {
             self.balance_detail_open = false;
         } else if self.settings_dialog.is_some() {
+            // An RPC editor opened from the unreachable list closes back to it.
             self.close_settings_dialog(cx);
+        } else if self.unreachable_open {
+            self.close_unreachable(cx);
         } else {
             return false;
         }
@@ -3788,6 +3806,7 @@ impl WalletPage {
                         let id = home_tx_ids.get(i).cloned();
                         cx.listener(move |this, _, _, cx| {
                             this.tx_detail = id.clone();
+                            this.tx_technical = None;
                             this.enter_flow(FlowEntry::TxDetail, cx);
                             cx.notify();
                         })
@@ -4318,7 +4337,6 @@ impl WalletPage {
             self.contact,
             &feed,
             &self.strings,
-            &self.flow_strings,
             self.contact_all_activity,
             hidden,
         )
@@ -4508,6 +4526,22 @@ impl WalletPage {
         );
     }
 
+    /// Tell the feed whose contact page is open, when that changes (spec
+    /// 093): another contact, or `None` once the page closes. The page's
+    /// 最近往来 is the core's `contact_rows` for that address.
+    fn sync_feed_contact(&mut self, cx: &mut Context<Self>) {
+        let open = if self.panel == PanelId::ContactDetail {
+            self.selected_contact_address(cx)
+                .map(|address| address.to_string())
+        } else {
+            None
+        };
+        if self.feed_contact != open {
+            self.feed_contact.clone_from(&open);
+            crate::executor::activity_feed::contact_changed(open, cx);
+        }
+    }
+
     /// Tell the feed what the hero is doing about privacy, when it changes.
     ///
     /// The core withholds the toast while balances are hidden — but only if it
@@ -4641,6 +4675,15 @@ impl WalletPage {
     /// the app showing somebody a stranger's money and calling it theirs.
     fn balance_model(&mut self, cx: &mut Context<Self>) -> fixtures::BalanceModel {
         if self.identity.is_none() {
+            if self.tab == GalleryTab::Dsr6 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::unreachable_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
             return fixtures::balance_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
@@ -6543,7 +6586,7 @@ impl WalletPage {
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
-                        flows_live::tx_detail(
+                        let mut detail = flows_live::tx_detail(
                             &feed,
                             id,
                             &self.flow_strings,
@@ -6551,7 +6594,22 @@ impl WalletPage {
                             hidden,
                             &self.locale,
                             &currency,
-                        )
+                        )?;
+                        // Open only for the record it was opened on (spec 093).
+                        if let Some((_, request)) =
+                            self.tx_technical.as_ref().filter(|(open, _)| open == id)
+                        {
+                            flows_live::open_technical(
+                                &mut detail,
+                                &feed,
+                                id,
+                                request.as_deref(),
+                                &self.flow_strings,
+                                &self.strings,
+                                &self.locale,
+                            );
+                        }
+                        Some(detail)
                     })
                     .map_or_else(
                         // The record is gone. The mock is not a substitute for
@@ -6768,6 +6826,7 @@ impl WalletPage {
             open_add_token: bind(FlowStep::AddToken, cx),
             open_receive: None,
             delete_tx: None,
+            toggle_technical: None,
             open_scan: bind(FlowStep::Scan, cx),
             add_recipient: bind(FlowStep::AddRecipient, cx),
             open_batch_import: bind(FlowStep::BatchImport, cx),
@@ -6833,6 +6892,7 @@ impl WalletPage {
                 .map(|id| -> panels::Click {
                     Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.tx_detail = Some(id.clone());
+                        this.tx_technical = None;
                         this.push_step(FlowStep::TxDetail);
                         cx.notify();
                     }))
@@ -6847,6 +6907,25 @@ impl WalletPage {
             actions.open_receive = Some(Box::new(cx.listener(
                 |this, _: &gpui::ClickEvent, _, cx| {
                     this.enter_flow(FlowEntry::Receive, cx);
+                    cx.notify();
+                },
+            )));
+        }
+
+        // DA2L, live: a dApp record's "Technical details" (spec 093). Opening
+        // them is what reads the stored request, by the record's id — once,
+        // on the tap; folding them forgets it.
+        if live && matches!(panel, FlowPanel::Da2 | FlowPanel::Da3) {
+            actions.toggle_technical = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(id) = this.tx_detail.clone() else {
+                        return;
+                    };
+                    this.tx_technical = flows_live::technical_toggled(
+                        this.tx_technical.take(),
+                        id,
+                        crate::executor::activity_feed::stored_request,
+                    );
                     cx.notify();
                 },
             )));
@@ -7735,6 +7814,7 @@ impl WalletPage {
                         let Some(id) = id.clone() else { return };
                         this.asset_detail = None;
                         this.tx_detail = Some(id);
+                        this.tx_technical = None;
                         this.enter_flow(FlowEntry::TxDetail, cx);
                         cx.notify();
                     })),
@@ -7850,6 +7930,7 @@ impl WalletPage {
         // core, because the drawing has none — and cleared by every other chip,
         // so a toast cannot leak onto the state next door.
         self.celebrating = tab == GalleryTab::D1b;
+        self.unreachable_open = tab == GalleryTab::Dsr6;
         self.contact = 0;
         self.contacts_empty = tab == GalleryTab::Dc3;
         self.group = match tab {
@@ -8596,12 +8677,18 @@ impl WalletPage {
         //
         // Live since 031, and this is SC-003's visible half: the fetch reports
         // an unreachable chain separately from an empty one, the core turns
-        // that into `banner_chain_ids` (failed MINUS rate-limited), and this is
-        // where the person finally sees it. A correct verdict nobody is shown
-        // is, from the chair in front of the screen, no verdict.
+        // that into `unreachable_networks` (failed MINUS rate-limited, spec
+        // 092's order), and this is where the person finally sees it. A
+        // correct verdict nobody is shown is, from the chair in front of the
+        // screen, no verdict.
         let live = self.identity.is_some().then(|| {
             let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-            (wallet_live::unreachable_chips(&view), view.banner_chain_ids)
+            let ids: Vec<u32> = view
+                .unreachable_networks
+                .iter()
+                .map(|network| network.chain_id)
+                .collect();
+            (wallet_live::unreachable_chips(&view), ids)
         });
         let banner_chain_ids = live
             .as_ref()
@@ -9206,7 +9293,7 @@ impl WalletPage {
         // app from a shell. A zero-value call to
         // itself on Gnosis; nothing is signed unless somebody slides.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
-        if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
+        if crate::dev_env::flag!("VELA_SIGN_PROBE") {
             self.open_backup_signing(
                 vela_core::registry_backup::BackupCall {
                     chain_id: 100,
@@ -10025,7 +10112,7 @@ impl WalletPage {
         let prefs = crate::executor::preferences::current();
         let pinned = crate::executor::preferences::pinned_language();
         // What "follow the system" follows, by the locale it resolves to.
-        let system_language = vela_core::i18n::resolve_language(&crate::loc::system_tag()).language;
+        let system_language = crate::loc::system_language();
         let page = cx.entity();
 
         let language_value = settings_live::language_value(pinned.as_deref(), &system_language, s);
@@ -10042,6 +10129,8 @@ impl WalletPage {
                         if let Some(word) = settings_live::picked_language(index) {
                             crate::executor::preferences::set_language(word);
                             this.relocalize();
+                            // The menu bar speaks the new language too (spec 095).
+                            crate::app_menu::install(cx);
                         }
                         this.settings_open_dropdown = None;
                         cx.notify();
@@ -12585,7 +12674,7 @@ impl WalletPage {
             return;
         }
         self.browser_url_pinned = true;
-        let Ok(url) = std::env::var("VELA_BROWSER_URL") else {
+        let Some(url) = crate::dev_env::var!("VELA_BROWSER_URL") else {
             return;
         };
         if url.trim().is_empty() {
@@ -16785,18 +16874,136 @@ impl WalletPage {
     }
 
     /// The hero's status line, pressed (078 H-03) — the web's `openRescue`:
-    /// an unreachable chain opens ITS RPC editor, the first of them when
-    /// several are down; anything else opens the breakdown.
+    /// networks the wallet cannot reach open their list (spec 092 — every one,
+    /// each with its RPC editor); anything else opens the breakdown.
     fn open_balance_status(&mut self, cx: &mut Context<Self>) {
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-        match view.banner_chain_ids.first() {
-            Some(&chain_id) => {
-                self.settings_fix_chain = Some(chain_id);
-                self.settings_dialog = Some(SettingsDialog::FixRpc);
-            }
-            None => self.balance_detail_open = true,
+        if view.unreachable_networks.is_empty() {
+            self.balance_detail_open = true;
+        } else {
+            self.unreachable_open = true;
+            // Read every chain again while the list is open: one that has come
+            // back leaves it (and the hero's count) on the next settle.
+            crate::executor::balance_dashboard::dispatch(
+                vela_core::app::balance_dashboard::Event::UnreachableListOpened,
+                cx,
+            );
         }
         cx.notify();
+    }
+
+    /// The unreachable list closed: its re-reads stop.
+    fn close_unreachable(&mut self, cx: &mut Context<Self>) {
+        self.unreachable_open = false;
+        if self.identity.is_some() {
+            crate::executor::balance_dashboard::dispatch(
+                vela_core::app::balance_dashboard::Event::UnreachableListClosed,
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
+    /// Spec 092, the list the hero's "can't reach" line opens (the web's
+    /// `UnreachableBody`), in the desktop's dialog: every network the core
+    /// lists, in its order, with what was last read there and its RPC editor.
+    /// Drawn from the live view, so a network that comes back leaves it.
+    fn unreachable_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.unreachable_open {
+            return None;
+        }
+        // The gallery's DSR6 draws the fixture view through the same builders.
+        let view = if self.identity.is_some() {
+            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else {
+            fixtures::unreachable_view()
+        };
+        let money = self.money(cx);
+        let list = wallet_live::unreachable_list(&view, &self.strings, &self.locale, &money);
+        let mut body = div().flex().flex_col();
+        if let Some(summary) = list.summary.clone() {
+            body = body.child(
+                div()
+                    .mb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .line_height(gpui::relative(1.4))
+                    .text_color(theme.fg_subtle)
+                    .child(summary),
+            );
+        }
+        for row in &list.rows {
+            let chain_id = row.chain_id;
+            let fix = div()
+                .id(("unreachable-fix", chain_id as usize))
+                .flex_none()
+                .cursor_pointer()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.info_base)
+                .active(|el| el.opacity(0.6))
+                .child(self.strings.unreachable_fix.clone())
+                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                    // Its RPC editor opens over the list; closing it comes back.
+                    this.settings_fix_chain = Some(chain_id);
+                    this.settings_dialog = Some(SettingsDialog::FixRpc);
+                    cx.notify();
+                }));
+            body = body.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .py(px(12.))
+                    .border_b_1()
+                    .border_color(theme.border_card)
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(&row.name),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        32.,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(theme.fg_base)
+                                    .child(row.name.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_subtle)
+                                    .child(row.line.clone()),
+                            ),
+                    )
+                    .child(fix),
+            );
+        }
+        Some(
+            crate::ui::dialog::dialog(
+                "unreachable",
+                theme,
+                window,
+                list.title,
+                None,
+                self.dialog_close_icon(theme),
+                body.pb(px(8.)),
+                &self.dialog_scroll("unreachable"),
+                Self::closer(cx, |this, cx| this.close_unreachable(cx)),
+            )
+            .into_any_element(),
+        )
     }
 
     /// SR3, the balance by network (`settings/ui/BalanceDetailBody.svelte`)
@@ -17600,7 +17807,7 @@ impl WalletPage {
         // file dialog is a system window this app cannot drive, so without it
         // no screenshot pass and no headless run can ever reach the far side
         // of a scan.
-        if let Ok(path) = std::env::var("VELA_SCAN_FILE") {
+        if let Some(path) = crate::dev_env::var!("VELA_SCAN_FILE") {
             self.scan_notice = None;
             match std::fs::read(&path)
                 .ok()
@@ -17744,7 +17951,7 @@ impl WalletPage {
         // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
         // seam, for the same reason: a system file dialog is a window no
         // verification pass can drive.
-        let pinned = std::env::var_os("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
+        let pinned = crate::dev_env::var_os!("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
         let paths = pinned.is_none().then(|| {
             cx.prompt_for_paths(gpui::PathPromptOptions {
                 files: true,
@@ -17886,12 +18093,12 @@ impl WalletPage {
         // `VELA_EXPORT_DIR=<dir>` answers the save dialog with the core's
         // filename in that folder — the `VELA_IMPORT_FILE` seam, the other
         // way.
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&file.filename));
         // The save dialog opens where a person keeps their files, not where
         // this app keeps its state.
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&file.filename))
         });
         cx.spawn(async move |page, cx| {
@@ -18558,6 +18765,10 @@ impl Render for WalletPage {
             self.identity.is_some() && self.section == Section::Wallet,
             crate::onboarding::native_window_handle(window),
         );
+        // …and which contact's page is open, for its 最近往来 (spec 093).
+        if self.identity.is_some() {
+            self.sync_feed_contact(cx);
+        }
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.
@@ -18666,6 +18877,7 @@ impl Render for WalletPage {
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
+        let unreachable = self.unreachable_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -18701,6 +18913,10 @@ impl Render for WalletPage {
         }
         if let Some(menu) = menu {
             root = root.child(menu);
+        }
+        // Under the settings dialog: a row's RPC editor opens over the list.
+        if let Some(unreachable) = unreachable {
+            root = root.child(unreachable);
         }
         // Over everything, including the anchored menu: it is the one dialog
         // whose answer changes which screen the app is on.
@@ -19472,6 +19688,7 @@ mod tests {
                 "DST7",
                 "DST8",
                 "DSR1",
+                "DSR6",
                 "Components",
                 "Contacts",
                 "Identicons",

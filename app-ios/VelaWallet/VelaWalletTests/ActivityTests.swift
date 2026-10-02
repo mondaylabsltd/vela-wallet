@@ -297,8 +297,10 @@ struct DappActivityRowTests {
         view.rows.compactMap { if case .item(let item) = $0 { return item } else { return nil } }
     }
 
-    /// A pending dApp transaction is a row at once: "dApp 交易", "处理中 · the
-    /// site", its native amount — from the core's kind, status and site.
+    /// A pending dApp transaction is a row at once, in the core's words (spec
+    /// 093): a call nobody decoded on a site the wallet does not know is
+    /// 「在 <site> 合约交互」, "处理中 · <network>" beneath (the title already
+    /// named the site), and its native amount.
     @Test func aPendingDappRowShowsItsSite() throws {
         let view = try feed([dappRecord("dapp-1-tx", status: "pending")])
         let item = try #require(items(view).first)
@@ -307,8 +309,11 @@ struct DappActivityRowTests {
         #expect(item.site == "192.168.50.9:8137")
         let row = WalletLive.activityRow(item, loc: zh, hidden: false)
         #expect(row.kind == .dapp)
-        #expect(row.title == zh.t("history.txLabelDappTx"))
-        #expect(row.subtitle == "\(zh.t("componentsTx.detail.statusPending")) · 192.168.50.9:8137")
+        let title = zh.t("history.dappRowTitle", vars: [
+            "intent": zh.t("componentsUi.signing.intentContractCall"), "place": "192.168.50.9:8137",
+        ])
+        #expect(row.title == title)
+        #expect(row.subtitle == "\(zh.t("componentsTx.detail.statusPending")) · \(WalletLive.chainName(100))")
         #expect(row.amount == "\u{2212}0.001")
 
         // The detail says who asked, and the row's own lifecycle.
@@ -316,9 +321,9 @@ struct DappActivityRowTests {
             item, record: view.transactions.first,
             on: try detailFixture(), loc: zh
         )
-        #expect(detail.title == zh.t("history.txLabelDappTx"))
-        #expect(detail.status.text == zh.t("componentsTx.detail.statusPending"))
-        #expect(detail.facts.contains { $0.label == zh.t("componentsUi.signing.siweOrigin") && $0.value == "192.168.50.9:8137" })
+        #expect(detail.title == title)
+        #expect(detail.status?.text == zh.t("componentsTx.detail.statusPending"))
+        #expect(detail.facts.contains { $0.label == zh.t("connect.detail.labelApp") && $0.value == "192.168.50.9:8137" })
     }
 
     /// 082 X-FIRST-TAP: every row carries its record's feed id, on the home

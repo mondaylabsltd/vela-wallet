@@ -33,7 +33,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	blind_typed: null,
 	danger_haptic: false,
 	plain_send: null,
-	batch: null
+	batch: null,
+	record_intent: null
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
@@ -44,6 +45,7 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	confirm_allowed: true,
 	rewritten_params_json: null,
 	unlimited_consented: false,
+	unlimited_warning: false,
 	increase_total: null,
 	decimals_unverified: false,
 	expired: false,

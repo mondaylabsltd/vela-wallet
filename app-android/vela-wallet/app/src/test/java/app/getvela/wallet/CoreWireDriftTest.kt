@@ -436,6 +436,45 @@ class CoreWireDriftTest {
         assertStringUnion<app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole>("FeedCounterpartyRole")
     }
 
+    /**
+     * Spec 093: a dApp row's payload, its second line and its detail lines.
+     * The view parts may be a subset; the variants must all be known — an
+     * unknown one is dropped by the fail-soft lists, which is a part of the
+     * row nobody sees.
+     */
+    @Test
+    fun dappActivityWiresMatchTheGeneratedMirrors() {
+        assertFieldsExist<app.getvela.wallet.feature.wallet.core.FeedDapp>("FeedDapp")
+        assertFieldsExist<app.getvela.wallet.feature.wallet.core.FeedAllowance>("FeedAllowance")
+        assertFieldsExist<app.getvela.wallet.feature.wallet.core.FeedDappChange>("FeedDappChange")
+        assertVariantsExhaustive<app.getvela.wallet.feature.wallet.core.FeedLine>("FeedLine")
+        assertVariantsExhaustive<app.getvela.wallet.feature.wallet.core.FeedFact>("FeedFact")
+        assertVariantsExhaustive<app.getvela.wallet.feature.wallet.core.FeedDappOperation>("FeedDappOperation")
+        assertStringUnion<app.getvela.wallet.feature.wallet.core.FeedDappContent>("FeedDappContent")
+        assertStringUnion<app.getvela.wallet.feature.wallet.core.DappAction>("DappAction")
+        // A contact's rows (spec 093): the view's list, the event that fills
+        // it, and the day part of their second line — each declared here and
+        // checked against the mirror by the gates above.
+        assertTrue("contact_rows" in serializer<FeedView>().descriptor.elementNames)
+        assertTrue("contact_filter_changed" in variantNames(FeedEvent.serializer()))
+        assertTrue("day" in variantNames(app.getvela.wallet.feature.wallet.core.FeedLine.serializer()))
+        assertFieldsExist<FeedView>("FeedView")
+        assertVariantsExist<FeedEvent>("FeedEvent")
+    }
+
+    /**
+     * Spec 093: what the shell stores VERBATIM and hands back — a dApp
+     * record's summary and the sheet's judgments — must carry every field
+     * the core writes. A field missing here would be dropped on the disk and
+     * the feed would read the record as something it was not.
+     */
+    @Test
+    fun whatTheRecordKeepsVerbatimLosesNoField() {
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappSummary>("DappSummary")
+        assertVariantFieldsExhaustive(TrustSimJudgment.serializer(), "TrustSimJudgment")
+        assertFieldsExhaustive<GuardTokenMetaView>("GuardTokenMetaView")
+    }
+
     @Test
     fun aFeedRecordKeepsSecondsAndMillisecondsApart() {
         // `timestamp` is epoch SECONDS and `day_start_ms` is epoch
@@ -1214,6 +1253,23 @@ class CoreWireDriftTest {
                     "(fields there: ${mirror.sorted()}) — a Rust rename, or a typo here",
                 field in mirror,
             )
+        }
+    }
+
+    /** Every field of the mirror is declared in Kotlin, and vice versa (a type stored verbatim). */
+    private inline fun <reified T> assertFieldsExhaustive(tsName: String) {
+        val descriptor = serializer<T>().descriptor
+        val kotlin = (0 until descriptor.elementsCount).map { descriptor.getElementName(it) }
+        assertEquals("$tsName fields must match the generated mirror exactly", tsMembers(tsName).single().keys.sorted(), kotlin.sorted())
+    }
+
+    /** Each variant's payload fields match that variant of the mirror exactly. */
+    private fun assertVariantFieldsExhaustive(serializer: KSerializer<*>, tsName: String) {
+        val members = tsMembers(tsName).associateBy { it["type"] ?: "" }
+        for ((variant, descriptor) in subclassDescriptors(serializer.descriptor)) {
+            val kotlin = (0 until descriptor.elementsCount).map { descriptor.getElementName(it) }
+            val mirror = members[variant]?.keys.orEmpty() - "type"
+            assertEquals("$tsName.$variant fields must match the generated mirror exactly", mirror.sorted(), kotlin.sorted())
         }
     }
 

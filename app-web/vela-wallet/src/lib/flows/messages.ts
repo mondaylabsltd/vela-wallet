@@ -66,9 +66,8 @@ export const WALLET_FLOW_KEYS = [
 	'history.labelReceived',
 	'history.txLabelSent',
 	'history.txLabelReceived',
-	// Spec 082 RG2: a dApp's transaction, and the site that asked for it.
+	// Spec 082 RG2: a dApp's transaction from a core that did not describe it.
 	'history.txLabelDappTx',
-	'componentsUi.signing.siweOrigin',
 	// Spec 082 RJ16: a dApp call's counterparty that is the contract it went to.
 	'componentsUi.signing.interactingLabel',
 	'history.deleteRecord',
@@ -92,6 +91,26 @@ export const WALLET_FLOW_KEYS = [
 	// detail's word for it.
 	'connect.detail.labelApp',
 	'componentsTx.detail.sectionTitle',
+	// Spec 093: a dApp record's detail — the core's facts and its collapsed
+	// technical lines, in the words the signing sheet and Connections use.
+	'connect.detail.offChainNote',
+	'componentsUi.signing.labelSpender',
+	'componentsUi.signingApprove.spendingCap',
+	'componentsUi.signingApprove.expiresLabel',
+	'componentsUi.signingApprove.noExpiry',
+	'componentsUi.signing.balanceChangesTitle',
+	'componentsUi.signing.balanceUnverifiedToken',
+	'componentsUi.signing.advancedToggle',
+	'componentsTx.detail.labelOperation',
+	'componentsTx.detail.opContractInteraction',
+	'componentsUi.signing.batchSubtitle',
+	'componentsTx.detail.opSignature',
+	'componentsTx.detail.opTypedDataSignature',
+	'connect.detail.contentCallData',
+	'connect.detail.contentTypedData',
+	'connect.detail.contentMessage',
+	'connect.detail.contentMissing',
+	'componentsUi.signing.typeLabel',
 
 	// ---------------------------------------------------------------- assets
 	'assets.sectionTitle',

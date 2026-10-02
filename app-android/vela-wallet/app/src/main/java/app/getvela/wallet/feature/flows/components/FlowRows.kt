@@ -214,16 +214,23 @@ fun FactRow(
             }
             null -> Unit
         }
-        Text(
-            text = fact.value,
-            color = colors.fgBase,
-            fontFamily = if (fact.mono) VelaMonoFontFamily else VelaFontFamily,
-            fontWeight = VelaFontWeight.medium,
-            fontSize = VelaTextSize.base,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.End,
-        )
+        // Spec 093: further lines sit under the value, on its edge (a dApp's
+        // balance changes, one per coin); a spending cap with no limit is the
+        // risk to see.
+        Column(horizontalAlignment = Alignment.End) {
+            (listOf(fact.value) + fact.lines).forEach { line ->
+                Text(
+                    text = line,
+                    color = if (fact.danger) colors.errorBase else colors.fgBase,
+                    fontFamily = if (fact.mono) VelaMonoFontFamily else VelaFontFamily,
+                    fontWeight = VelaFontWeight.medium,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
         fact.copy?.let { label ->
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
             Icon(

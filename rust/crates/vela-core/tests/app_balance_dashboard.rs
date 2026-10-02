@@ -15,9 +15,10 @@ use support::DomainDriver;
 use vela_core::app::balance_dashboard::{
     best_group_price, best_native_dex_price, choose_native_price, first_grouped_quote_price,
     pegged_native_usd, token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard,
-    BalanceNotice, BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event,
-    NativePriceSource, NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES,
-    PARTIAL_RETRY_DELAYS_MS,
+    BalanceNotice, BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, BalanceView,
+    Event, LastKnown, NativePriceSource, NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, LAST_SEEN,
+    LAST_SEEN_EMPTY, LAST_SEEN_UNPRICED, MAX_PARTIAL_RETRIES, NOT_READ_YET,
+    PARTIAL_RETRY_DELAYS_MS, UNREACHABLE_MANY, UNREACHABLE_ONE, UNREACHABLE_RECHECK_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -50,6 +51,20 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         tokens,
         failed_chain_ids: failed,
         rate_limited_chain_ids: limited,
+        read_chain_ids: vec![],
+        now_ms: NOW,
+    }
+}
+
+/// A settle from a shell that says which chains it asked (spec 092).
+fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> Res {
+    Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens,
+        failed_chain_ids: failed,
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: read,
         now_ms: NOW,
     }
 }
@@ -1050,8 +1065,13 @@ fn rate_limited_chains_fall_back_quietly_without_banner() {
     // The balance quietly stays on the max(live, cached) fallback …
     assert!(view.balance_partial);
     assert_eq!(view.display_total_usd, Some(100.0));
-    // … and the "fix your RPC" banner excludes the self-healing chain.
-    assert_eq!(view.banner_chain_ids, vec![56]);
+    // … and the unreachable list excludes the self-healing chain.
+    let listed: Vec<u32> = view
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    assert_eq!(listed, vec![56]);
     assert_eq!(view.failed_chain_ids, vec![196, 56]);
     assert_eq!(view.rate_limited_chain_ids, vec![196]);
 }
@@ -1160,6 +1180,7 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         tokens: vec![token(1, "ETH", "5", Some(1.0))],
         failed_chain_ids: vec![],
         rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1240,6 +1261,347 @@ fn fix_resolved_removes_the_chain_and_reloads() {
         vec![56],
         "only the fixed chain leaves"
     );
+}
+
+// ===========================================================================
+// Spec 092 — every network the wallet cannot reach, and what it last read
+// ===========================================================================
+
+/// `(chain, line key)` per row, in the order the list draws them.
+fn unreachable_rows(view: &BalanceView) -> Vec<(u32, &str)> {
+    view.unreachable_networks
+        .iter()
+        .map(|n| (n.chain_id, n.line_key.as_str()))
+        .collect()
+}
+
+/// F08: one network is named, more are counted — and the count is every
+/// unreachable network, held or not.
+#[test]
+fn the_home_line_names_one_network_and_counts_several() {
+    let sut = booted(ADDR_A, None, settled_read(vec![], vec![56], vec![1, 56]));
+    let view = sut.view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+    assert_eq!(view.unreachable_networks.len(), 1);
+
+    let sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![], vec![56, 137, 10], vec![1, 56, 137, 10]),
+    );
+    let view = sut.view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_MANY));
+    assert_eq!(view.unreachable_networks.len(), 3);
+
+    let sut = booted(ADDR_A, None, settled_read(vec![], vec![], vec![1, 56]));
+    let view = sut.view();
+    assert_eq!(view.unreachable_key, None, "every network answered");
+    assert!(view.unreachable_networks.is_empty());
+}
+
+/// Each row says what was last read there: held (with its worth), held but
+/// unpriced, empty, or not read since the account opened.
+#[test]
+fn each_unreachable_network_says_what_was_last_read_there() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(56, "BNB", "2", Some(300.0)),
+                token(137, "MYSTERY", "5", None),
+            ],
+            vec![],
+            vec![1, 56, 137, 10],
+        ),
+    );
+    // Next round: 56, 137 and 10 go quiet; 8453 was never read at all.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(1.0))],
+        vec![56, 137, 10, 8453],
+        vec![1, 56, 137, 10, 8453],
+    ));
+    let view = sut.view();
+    assert_eq!(
+        unreachable_rows(&view),
+        vec![
+            (56, LAST_SEEN),
+            (137, LAST_SEEN_UNPRICED),
+            (10, LAST_SEEN_EMPTY),
+            (8453, NOT_READ_YET),
+        ]
+    );
+    let bnb = &view.unreachable_networks[0];
+    assert_eq!(bnb.last_known, LastKnown::Held);
+    assert_eq!(bnb.last_seen_usd, Some(600.0));
+    assert_eq!(view.unreachable_networks[1].last_known, LastKnown::Held);
+    assert_eq!(view.unreachable_networks[1].last_seen_usd, None);
+    assert_eq!(view.unreachable_networks[2].last_known, LastKnown::Empty);
+    assert_eq!(view.unreachable_networks[3].last_known, LastKnown::NotRead);
+}
+
+/// Holdings first, by their worth; then the rest in the wallet's network
+/// order (Ethereum, BNB Chain, Polygon, … then added networks by id) —
+/// whatever order the shell reported them in.
+#[test]
+fn held_networks_come_first_then_the_rest_in_network_order() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(10, "ETH", "1", Some(10.0)),
+                token(8453, "ETH", "1", Some(50.0)),
+            ],
+            vec![],
+            vec![1, 56, 10, 8453],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![],
+        vec![999_999, 10, 56, 8453, 1],
+        vec![1, 56, 10, 8453, 999_999],
+    ));
+    let order: Vec<u32> = sut
+        .view()
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    assert_eq!(order, vec![8453, 10, 1, 56, 999_999]);
+}
+
+/// A network that comes back leaves the list and the count at the next
+/// settle; the one left is named again.
+#[test]
+fn a_network_that_comes_back_leaves_the_list_live() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![], vec![56, 137], vec![1, 56, 137]),
+    );
+    assert_eq!(sut.view().unreachable_networks.len(), 2);
+    assert_eq!(
+        sut.view().unreachable_key.as_deref(),
+        Some(UNREACHABLE_MANY)
+    );
+
+    // Opening the list reads every chain again, quietly.
+    let ops = sut.dispatch(Event::UnreachableListOpened);
+    assert_eq!(
+        ops,
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: true,
+            pull: false
+        }]
+    );
+    assert!(!sut.view().refreshing, "no pull spinner for the list");
+    sut.resolve(settled_read(
+        vec![token(56, "BNB", "1", Some(300.0))],
+        vec![137],
+        vec![1, 56, 137],
+    ));
+    let view = sut.view();
+    assert_eq!(unreachable_rows(&view), vec![(137, NOT_READ_YET)]);
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+
+    // A fixed RPC takes its network off at once, before the re-read lands.
+    sut.dispatch(Event::FixChainResolved { chain_id: 137 });
+    let view = sut.view();
+    assert!(view.unreachable_networks.is_empty());
+    assert_eq!(view.unreachable_key, None);
+}
+
+/// While the list is open it keeps reading: the silent partial retries come
+/// first, then a re-read [`UNREACHABLE_RECHECK_MS`] after each read, until the
+/// list closes or nothing is left in it.
+#[test]
+fn an_open_list_keeps_reading_until_it_closes_or_empties() {
+    let mut sut = booted(ADDR_A, None, settled_read(vec![], vec![56], vec![1, 56]));
+    // Exhaust the silent retries first (they own the timer while they last).
+    for _ in 0..MAX_PARTIAL_RETRIES {
+        let timer = sut.outstanding().into_iter().find_map(|op| match op {
+            Op::StartRetryTimer { timer_id, .. } => Some(timer_id),
+            _ => None,
+        });
+        let Some(timer_id) = timer else {
+            panic!("a partial retry is armed");
+        };
+        sut.resolve(Res::RetryElapsed { timer_id });
+        sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
+    }
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
+        "nothing re-reads while the list is closed"
+    );
+
+    sut.dispatch(Event::UnreachableListOpened);
+    let ops = sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
+    let timer_id = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::StartRetryTimer { ms, timer_id } if *ms == UNREACHABLE_RECHECK_MS => {
+                Some(*timer_id)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("the open list arms its re-read: {ops:?}"));
+    let ops = sut.resolve(Res::RetryElapsed { timer_id });
+    assert_eq!(
+        ops,
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: true,
+            pull: false
+        }]
+    );
+
+    // Closed: the next armed re-read is a late echo and reads nothing.
+    let ops = sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
+    let timer_id = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::StartRetryTimer { timer_id, .. } => Some(*timer_id),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("armed again: {ops:?}"));
+    sut.dispatch(Event::UnreachableListClosed);
+    assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
+
+    // Open again, and everything answers: an empty list stops reading.
+    sut.dispatch(Event::UnreachableListOpened);
+    let ops = sut.resolve(settled_read(vec![], vec![], vec![1, 56]));
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
+        "nothing left to wait for: {ops:?}"
+    );
+}
+
+/// What a network last held survives the rounds it stays quiet, and a newer
+/// answer replaces it — including an answer that it now holds nothing.
+#[test]
+fn the_last_read_is_kept_while_quiet_and_replaced_by_a_newer_answer() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![token(56, "BNB", "1", Some(300.0))], vec![], vec![56]),
+    );
+    for _ in 0..2 {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(settled_read(vec![], vec![56], vec![56]));
+        let view = sut.view();
+        assert_eq!(unreachable_rows(&view), vec![(56, LAST_SEEN)]);
+        assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(300.0));
+    }
+    // It answers holding nothing (spent elsewhere), then goes quiet again.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![56]));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![56], vec![56]));
+    assert_eq!(unreachable_rows(&sut.view()), vec![(56, LAST_SEEN_EMPTY)]);
+}
+
+/// The web and the desktop carry a quiet chain's previous rows into the
+/// settle; they stand for the last read when this account has none of its
+/// own — a shell that does not say which chains it asked still gets "held".
+#[test]
+fn carried_rows_stand_in_for_a_read_the_core_never_saw() {
+    let sut = booted(
+        ADDR_A,
+        None,
+        settled(
+            ADDR_A,
+            vec![token(56, "BNB", "1", Some(300.0))],
+            vec![56],
+            vec![],
+        ),
+    );
+    let view = sut.view();
+    assert_eq!(unreachable_rows(&view), vec![(56, LAST_SEEN)]);
+    assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(300.0));
+}
+
+/// Privacy withholds the worth, never the row: the network is still listed,
+/// its line still "last seen", and the shell writes its mask.
+#[test]
+fn privacy_withholds_the_worth_not_the_network() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![token(56, "BNB", "1", Some(300.0))], vec![], vec![56]),
+    );
+    sut.dispatch(Event::PrivacyToggled);
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![56], vec![56]));
+    let view = sut.view();
+    assert_eq!(unreachable_rows(&view), vec![(56, LAST_SEEN)]);
+    assert_eq!(view.unreachable_networks[0].last_seen_usd, None);
+}
+
+/// Spam is not a holding: a network whose last read listed only spam was
+/// empty.
+#[test]
+fn spam_alone_is_not_a_holding() {
+    let mut spam = token(56, "AIRDROP", "9999", Some(1.0));
+    spam.spam = true;
+    let mut sut = booted(ADDR_A, None, settled_read(vec![spam], vec![], vec![56]));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![56], vec![56]));
+    assert_eq!(unreachable_rows(&sut.view()), vec![(56, LAST_SEEN_EMPTY)]);
+}
+
+/// Another account's reads are not this one's: a switch forgets them.
+#[test]
+fn an_account_switch_forgets_the_last_reads() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![token(56, "BNB", "1", Some(300.0))], vec![], vec![56]),
+    );
+    sut.dispatch(Event::AccountChanged {
+        address: ADDR_B.to_owned(),
+    });
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_B.to_owned(),
+        usd: None,
+    });
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_B.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![56],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![56],
+        now_ms: NOW,
+    });
+    assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
 }
 
 // ===========================================================================

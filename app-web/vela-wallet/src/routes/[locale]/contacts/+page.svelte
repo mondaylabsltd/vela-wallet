@@ -162,7 +162,25 @@
 	let copied = $state<string | null>(null);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
-	const extras = $derived({ feed: feed.view });
+	/**
+	 * Spec 093: the core is told whose page is open, and hands back that
+	 * contact's rows (`contact_rows`) — on every network, worded as Activity
+	 * words them. Nobody's, once the page closes or the route is left.
+	 */
+	const openContact = $derived(
+		ui.screen === 'detail' && ui.selectedAddress !== undefined ? ui.selectedAddress : null
+	);
+	$effect(() => {
+		void feed.contactFilter(openContact);
+	});
+	onMount(() => () => void feed.contactFilter(null));
+
+	const extras = $derived({
+		feed: feed.view,
+		contactAddress: feed.contactAddress,
+		rowMessages: data.rowMessages,
+		hidden: balance.view.hidden
+	});
 
 	const model = $derived.by(() => {
 		if (view === null) return null;

@@ -16,8 +16,8 @@ import Testing
 struct WalletFixturesTests {
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
 
-    @Test func allTenMobileStatesExist() {
-        #expect(MobileStateId.allCases.count == 10)
+    @Test func allElevenMobileStatesExist() {
+        #expect(MobileStateId.allCases.count == 11)
         for state in MobileStateId.allCases {
             let model = WalletFixtures.buildMobileState(state, loc: loc)
             #expect(model.state == state)

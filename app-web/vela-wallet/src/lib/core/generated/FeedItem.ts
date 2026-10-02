@@ -3,6 +3,7 @@ import type { FeedBatch } from "./FeedBatch";
 import type { FeedCounterpartyRole } from "./FeedCounterpartyRole";
 import type { FeedDapp } from "./FeedDapp";
 import type { FeedDirection } from "./FeedDirection";
+import type { FeedLine } from "./FeedLine";
 import type { FeedTxKind } from "./FeedTxKind";
 import type { FeedTxStatus } from "./FeedTxStatus";
 
@@ -55,7 +56,8 @@ timestamp: number,
 day_start_ms: number, tx_hash: string | null, batch: FeedBatch | null, 
 /**
  * What the row is (spec 082 RG1): `Send` (a folded batch too),
- * `Receive` or `DappTx`. The shell draws from this and never guesses.
+ * `Receive`, `DappTx`, or a dApp's `SignMessage` / `SignTypedData`
+ * (spec 093). The shell draws from this and never guesses.
  */
 kind: FeedTxKind, 
 /**
@@ -63,12 +65,14 @@ kind: FeedTxKind,
  * tracker is the only thing that moves a record off `Pending`, so a row
  * says "confirmed" or "failed" only when the stored record does — and
  * `Unknown` when it is pending and nothing will ever settle it (087 F04).
+ * A signature is always `Confirmed`: it was given, and nothing settles
+ * it (spec 093).
  */
 status: FeedTxStatus, 
 /**
- * `DappTx` only: the site that asked, read from the origin the request
- * arrived from (`dapp_url`, never the dApp's own name) — the same value
- * as `dapp.site`.
+ * A dApp row only (a transaction or a signature): the site that asked,
+ * read from the origin the request arrived from (`dapp_url`, never the
+ * dApp's own name) — the same value as `dapp.site`.
  */
 site: string | null, 
 /**
@@ -77,8 +81,15 @@ site: string | null,
  */
 counterparty_role: FeedCounterpartyRole, 
 /**
- * A dApp transaction's site, intent and what it moved (083 H2); `None`
- * on every other row. Its `site` and `contract_call` are the row's own
- * [`FeedItem::site`] and [`FeedItem::counterparty_role`], read once.
+ * A dApp interaction's site, headline, place and what it moved or
+ * granted (083 H2, spec 093); `None` on every other row. Its `site` and
+ * `contract_call` are the row's own [`FeedItem::site`] and
+ * [`FeedItem::counterparty_role`], read once.
  */
-dapp?: FeedDapp | null, };
+dapp?: FeedDapp | null, 
+/**
+ * The row's second line, in order (spec 093): the shell words each part
+ * and joins them with " · ". Decided here for every row, so no shell
+ * keeps its own "status · site/contract/chain" rule.
+ */
+subtitle: Array<FeedLine>, };

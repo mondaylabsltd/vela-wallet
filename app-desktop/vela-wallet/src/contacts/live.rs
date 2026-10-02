@@ -88,31 +88,18 @@ pub fn detail(
     index: usize,
     feed: &vela_core::app::activity_feed::FeedView,
     wallet: &crate::wallet::WalletStrings,
-    flow: &crate::flows::FlowStrings,
     all: bool,
     hidden: bool,
 ) -> Option<ContactDetailModel> {
     let contact = rows(view).into_iter().nth(index)?;
     let address = contact.address_full.to_string();
     let lower = address.to_lowercase();
-    // What this person and I have actually exchanged, from the same feed the
-    // home draws. Matched on the counterparty, which is the only thing that
-    // makes a row "theirs".
-    let items: Vec<_> = feed
-        .rows
-        .iter()
-        .filter_map(|row| match row {
-            vela_core::app::activity_feed::FeedRow::Item { item }
-                if item
-                    .counterparty
-                    .as_ref()
-                    .is_some_and(|other| other.to_lowercase() == lower) =>
-            {
-                Some(item)
-            }
-            _ => None,
-        })
-        .collect();
+    // What this person and I have exchanged is the core's (spec 093):
+    // `contact_rows`, for the contact the page told it is open
+    // (`ContactFilterChanged`, sent before this frame reads the feed) —
+    // every network, the same rows Activity draws, each second line the
+    // network and the day rather than "to <this person>".
+    let items = &feed.contact_rows;
     let activity_empty = items.is_empty();
     // The web's three, until "view all activity" asks for the rest (078 C-04).
     let shown = if all {
@@ -139,19 +126,9 @@ pub fn detail(
             .collect(),
         address_full: contact.address_full,
         activity: items
-            .into_iter()
+            .iter()
             .take(shown)
-            .map(|item| {
-                let mut row = crate::wallet::live::activity_row(item, wallet, hidden);
-                // On this person's own page "to Alice" is noise: the web's
-                // subtitle is the network and the day (`contactActivityRow`).
-                row.subtitle = SharedString::from(format!(
-                    "{} · {}",
-                    crate::flows::live::chain_name(item.chain_id),
-                    crate::flows::live::day_label(item.day_start_ms, flow),
-                ));
-                row
-            })
+            .map(|item| crate::wallet::live::activity_row(item, wallet, hidden))
             .collect(),
         activity_empty,
     })
@@ -305,6 +282,49 @@ mod tests {
     /// A view whose directory is built by the CORE's rule, not by an empty
     /// `Vec` — an empty `sections` would file every row under `#` and leave
     /// these tests passing while proving nothing about the letters.
+    const COUSIN: &str = "0xBBB0000000000000000000000000000000000002";
+    const USDC: &str = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83";
+
+    /// One stored record as the executor hands it to the feed: `from` →
+    /// `to`, one xDAI on Gnosis, settled.
+    fn record(
+        id: &str,
+        kind: vela_core::app::activity_feed::FeedTxKind,
+        from: &str,
+        to: &str,
+        at: f64,
+    ) -> vela_core::app::activity_feed::FeedTxRecord {
+        vela_core::app::activity_feed::FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: String::new(),
+            // One transaction each: a hash of its own, from its id.
+            tx_hash: format!(
+                "0x{:064x}",
+                id.bytes()
+                    .fold(0u128, |hash, byte| hash * 31 + u128::from(byte))
+            ),
+            from: from.to_owned(),
+            to: to.to_owned(),
+            to_name: None,
+            value: "1".to_owned(),
+            symbol: "xDAI".to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id: 100,
+            timestamp: at,
+            day_start_ms: crate::executor::day_start_ms(at * 1000.0),
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            kind: Some(kind),
+            usd: None,
+            dapp_url: None,
+            intent: None,
+            balance_changes: None,
+            calldata: None,
+            call_data: None,
+            summary: None,
+        }
+    }
+
     fn view(contacts: Vec<Contact>) -> ContactsView {
         ContactsView {
             loaded: true,
@@ -425,9 +445,7 @@ mod tests {
     /// seeded by the address rather than the name.
     #[test]
     fn the_detail_is_about_the_contact_that_was_opened() {
-        use vela_core::app::activity_feed::{
-            ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedRow, FeedView,
-        };
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent, FeedTxKind};
         use vela_core::app::contacts::ContactGroupView;
 
         let mut book = view(vec![
@@ -453,41 +471,27 @@ mod tests {
             )],
         }];
 
-        let mut host = crate::core_host::CoreHost::<ActivityFeed>::new();
-        let _ = host.dispatch(FeedEvent::AccountSwitched {
-            address: "0xme".to_owned(),
-        });
-        let feed = FeedView {
-            rows: vec![FeedRow::Item {
-                item: FeedItem {
-                    id: "t1".to_owned(),
-                    direction: FeedDirection::Out,
-                    // Cousin's, in a different case — the match must not care.
-                    counterparty: Some("0xbbb0000000000000000000000000000000000002".to_owned()),
-                    alias: None,
-                    value: Some("2".to_owned()),
-                    symbol: "xDAI".to_owned(),
-                    decimals: Some(18),
-                    usd_value: 2.0,
-                    chain_id: 100,
-                    timestamp: 1_788_500_000.0,
-                    day_start_ms: 0.0,
-                    tx_hash: None,
-                    batch: None,
-                    kind: vela_core::app::activity_feed::FeedTxKind::Send,
-                    status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
-                    site: None,
-                    counterparty_role: Default::default(),
-                    dapp: None,
-                },
-            }],
-            ..host.view()
+        // One send to the cousin, through the REAL feed core; the page tells
+        // the core whose page is open, and draws what it lists for them.
+        let mut host = crate::wallet::fixtures::core_feed_host(vec![record(
+            "t1",
+            FeedTxKind::Send,
+            "0xme",
+            COUSIN,
+            1_788_500_000.0,
+        )]);
+        let open = |host: &mut crate::core_host::CoreHost<ActivityFeed>, address: &str| {
+            let _ = host.dispatch(FeedEvent::ContactFilterChanged {
+                address: Some(address.to_owned()),
+            });
+            host.view()
         };
         let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
-        let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
 
         // Row 1 is the cousin, and the panel must be about the cousin.
-        let cousin = detail(&book, 1, &feed, &wallet, &flow, false, false)
+        // The page's own spelling (upper-case hex); the core matches any case.
+        let feed = open(&mut host, "0xBBB0000000000000000000000000000000000002");
+        let cousin = detail(&book, 1, &feed, &wallet, false, false)
             .unwrap_or_else(|| unreachable!("row 1 exists"));
         assert_eq!(cousin.name, "Cousin");
         assert_eq!(
@@ -502,7 +506,8 @@ mod tests {
         assert_eq!(cousin.activity.len(), 1);
 
         // Alice is in no group and has nothing with me.
-        let alice = detail(&book, 0, &feed, &wallet, &flow, false, false)
+        let feed = open(&mut host, "0xAAA0000000000000000000000000000000000001");
+        let alice = detail(&book, 0, &feed, &wallet, false, false)
             .unwrap_or_else(|| unreachable!("row 0 exists"));
         assert_eq!(alice.name, "Alice");
         assert!(alice.chips.is_empty());
@@ -512,7 +517,7 @@ mod tests {
         assert!(!cousin.activity_empty);
 
         // The roster moved: no panel rather than the wrong one.
-        assert!(detail(&book, 9, &feed, &wallet, &flow, false, false).is_none());
+        assert!(detail(&book, 9, &feed, &wallet, false, false).is_none());
 
         // And a group's members are that group's.
         let (name, members) =
@@ -523,62 +528,89 @@ mod tests {
         assert!(group_members(&book, 5).is_none());
     }
 
-    /// 最近往来 shows the web's three until "view all" asks for the rest, and
-    /// each row says where and when rather than "to <this person>" (078 C-04).
+    /// 最近往来 is the core's `contact_rows` (spec 093): the web's three until
+    /// "view all" asks for the rest, each second line the network and the day
+    /// (`FeedLine::Day`, worded as the history's headers) rather than "to
+    /// <this person>" (078 C-04) — and a dApp's token transfer to them reads
+    /// as the verb it was, as it does in Activity.
     #[test]
     fn recent_activity_is_three_rows_until_all_is_asked_for() {
-        use vela_core::app::activity_feed::{
-            ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedRow, FeedView,
-        };
-        let book = view(vec![contact(
-            "0xBBB0000000000000000000000000000000000002",
-            Some("Cousin"),
-            None,
-        )]);
-        let mut host = crate::core_host::CoreHost::<ActivityFeed>::new();
-        let _ = host.dispatch(FeedEvent::AccountSwitched {
-            address: "0xme".to_owned(),
-        });
-        let item = |id: usize| FeedRow::Item {
-            item: FeedItem {
-                id: format!("t{id}"),
-                direction: FeedDirection::In,
-                counterparty: Some("0xbbb0000000000000000000000000000000000002".to_owned()),
-                alias: None,
-                value: Some("1".to_owned()),
-                symbol: "xDAI".to_owned(),
-                decimals: Some(18),
-                usd_value: 1.0,
-                chain_id: 100,
-                timestamp: 1_788_500_000.0,
-                day_start_ms: 0.0,
-                tx_hash: None,
-                batch: None,
-                kind: vela_core::app::activity_feed::FeedTxKind::Receive,
-                status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
-                site: None,
-                counterparty_role: Default::default(),
-                dapp: None,
-            },
-        };
-        let feed = FeedView {
-            rows: (0..5).map(item).collect(),
-            ..host.view()
-        };
-        let loc = crate::loc::Loc::from_env();
-        let wallet = crate::wallet::WalletStrings::resolve(&loc);
-        let flow = crate::flows::FlowStrings::resolve(&loc);
+        use vela_core::app::activity_feed::{Event as FeedEvent, FeedRow, FeedTxKind};
+        use vela_core::app::clear_signing::ClearTerm;
 
-        let recent = detail(&book, 0, &feed, &wallet, &flow, false, false)
+        let book = view(vec![contact(COUSIN, Some("Cousin"), None)]);
+        let now = crate::executor::now_ms() / 1000.0;
+        let mut records: Vec<_> = (0..5)
+            .map(|i| {
+                record(
+                    &format!("t{i}"),
+                    FeedTxKind::Receive,
+                    COUSIN,
+                    "0xme",
+                    now - 600.0 - f64::from(i) * 60.0,
+                )
+            })
+            .collect();
+        // A dApp's USDC `transfer` to the cousin, newest of all.
+        let mut transfer = record("dapp-1-tx", FeedTxKind::DappTx, "0xme", USDC, now - 60.0);
+        transfer.value = "0x0".to_owned();
+        transfer.intent = Some("Send".to_owned());
+        transfer.dapp_url = Some("https://app.example.org".to_owned());
+        transfer.call_data = Some(format!(
+            "0xa9059cbb{:0>64}{:064x}",
+            COUSIN.trim_start_matches("0x").to_lowercase(),
+            1_000_000u128
+        ));
+        records.push(transfer);
+        let mut host = crate::wallet::fixtures::core_feed_host(records);
+        let _ = host.dispatch(FeedEvent::ContactFilterChanged {
+            address: Some(COUSIN.to_owned()),
+        });
+        let feed = host.view();
+        let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+
+        let recent = detail(&book, 0, &feed, &wallet, false, false)
             .unwrap_or_else(|| unreachable!("row 0 exists"));
         assert_eq!(recent.activity.len(), RECENT_ACTIVITY_ROWS);
         assert!(!recent.activity_empty);
-        let subtitle = recent.activity[0].subtitle.to_string();
-        assert!(subtitle.starts_with("Gnosis · "), "{subtitle}");
+        let gnosis = crate::flows::live::chain_name(100);
+        for row in &recent.activity {
+            assert_eq!(
+                row.subtitle.to_string(),
+                format!("{gnosis} · {}", wallet.today),
+                "the network and the day, never \"to Cousin\""
+            );
+        }
+        // The transfer reads as Activity reads it: its verb, at its place.
+        let activity = feed
+            .rows
+            .iter()
+            .find_map(|row| match row {
+                FeedRow::Item { item } if item.id == "dapp-1-tx" => {
+                    Some(crate::wallet::live::activity_row(item, &wallet, false))
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| unreachable!("the transfer is in Activity"));
+        assert_eq!(recent.activity[0].title, activity.title);
+        let send = wallet
+            .terms
+            .get(&ClearTerm::IntentSend)
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            recent.activity[0].title.contains(send.as_ref()),
+            "{}",
+            recent.activity[0].title
+        );
 
-        let all = detail(&book, 0, &feed, &wallet, &flow, true, false)
+        let all = detail(&book, 0, &feed, &wallet, true, false)
             .unwrap_or_else(|| unreachable!("row 0 exists"));
-        assert_eq!(all.activity.len(), 5);
+        assert_eq!(all.activity.len(), 6);
+
+        // The page closed: the core lists nothing.
+        let _ = host.dispatch(FeedEvent::ContactFilterChanged { address: None });
+        assert!(host.view().contact_rows.is_empty());
     }
 
     /// The rail lists the person's own groups, with the id each row needs.

@@ -256,6 +256,10 @@ struct TxDetailBody: View {
     var onDelete: (() -> Void)?
 
     @State private var copiedIndex: Int?
+    /// "Technical details" — collapsed until tapped (spec 093).
+    @State private var technicalOpen = false
+    /// The stored request, once read: `.some(nil)` is "the record kept none".
+    @State private var storedRequest: String??
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
@@ -263,9 +267,28 @@ struct TxDetailBody: View {
                 Text(verbatim: model.title)
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                StatusChipView(chip: model.status)
+                if let status = model.status {
+                    StatusChipView(chip: status)
+                }
             }
-            AmountHeroView(amount: model.amount, fiat: model.fiat, positive: model.positive)
+            // An off-chain signature has no status to show; it says what it
+            // was instead (spec 093).
+            if let note = model.note {
+                Text(verbatim: note)
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Tokens.Space.s4)
+            }
+            if !model.amount.isEmpty || !model.fiat.isEmpty || model.received != nil {
+                AmountHeroView(
+                    amount: model.amount, fiat: model.fiat, positive: model.positive,
+                    danger: model.amountDanger, received: model.received
+                )
+            } else {
+                // A signature that granted nothing has no figure; no blank hero.
+                Spacer().frame(height: Tokens.Space.s16)
+            }
             FlowDivider()
             ForEach(Array(model.facts.enumerated()), id: \.element.id) { index, fact in
                 if index > 0 { FlowDivider() }
@@ -274,6 +297,10 @@ struct TxDetailBody: View {
                     copied: copiedIndex == index,
                     onCopy: { copiedIndex = index }
                 )
+            }
+            if let technical = model.technical {
+                FlowDivider()
+                technicalSection(technical)
             }
             if let explorer = model.viewOnExplorer {
                 VelaButton(title: explorer, kind: .secondary, action: onExplorer)
@@ -299,6 +326,69 @@ struct TxDetailBody: View {
                 }
             }
         }
+    }
+
+    /// The collapsed "Technical details" (spec 093): the toggle, then the
+    /// core's lines. The stored request is read the first time it opens.
+    @ViewBuilder private func technicalSection(_ technical: TxTechnicalModel) -> some View {
+        Button {
+            technicalOpen.toggle()
+            if technicalOpen, storedRequest == nil {
+                for case .content(let content) in technical.lines {
+                    storedRequest = .some(content.read())
+                }
+            }
+        } label: {
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: technical.title)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                Spacer(minLength: Tokens.Space.s8)
+                LucideIcon(technicalOpen ? .chevronDown : .chevronRight, size: LucideIconSize.disclosure)
+                    .foregroundStyle(theme.fgSubtle)
+            }
+            .frame(minHeight: Tokens.Layout.hitTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainTextButtonStyle())
+        .accessibilityValue(Text(verbatim: technicalOpen ? "▾" : "▸"))
+
+        if technicalOpen {
+            ForEach(Array(technical.lines.enumerated()), id: \.offset) { index, line in
+                if index > 0 { FlowDivider() }
+                switch line {
+                case .fact(let fact):
+                    FactRowView(fact: fact)
+                case .content(let content):
+                    contentBlock(content)
+                }
+            }
+        }
+    }
+
+    /// The request the record kept, whole and selectable — or the sentence
+    /// that says it kept none.
+    private func contentBlock(_ content: TxContentModel) -> some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+            Text(verbatim: content.label)
+                .typeRole(Typography.body.scaled(textScale))
+                .foregroundStyle(theme.fgSubtle)
+            if let text = storedRequest ?? nil {
+                Text(verbatim: text)
+                    .typeRole(Typography.monoSmall.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Tokens.Space.s12)
+                    .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+            } else {
+                Text(verbatim: content.missing)
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+            }
+        }
+        .padding(.vertical, Tokens.Space.s12)
     }
 }
 

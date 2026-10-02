@@ -32,6 +32,23 @@ describe('settings messages', () => {
 	});
 });
 
+// Spec 095 (App Review 5.1.1(i)): About links the privacy policy, the terms
+// and the support page, on every shell, in every language.
+describe('Settings → About', () => {
+	it.each(SUPPORTED_LOCALES)('links the policy, the terms and support in %s', (locale) => {
+		const about = buildMobileState('st14', resolveSettingsMessages(locale), IDENTICON_STUB).about;
+		expect(about.links.slice(-3).map((link) => link.href)).toEqual([
+			'https://getvela.app/privacy',
+			'https://getvela.app/terms',
+			'https://getvela.app/support'
+		]);
+		for (const link of about.links) {
+			expect(link.label, locale).not.toMatch(/^about\./);
+			expect(link.href).toBe(`https://${link.value}`);
+		}
+	});
+});
+
 // 078 (founder, 2026-09-27): the official accounts in Settings. The strings
 // are pinned here so this shell cannot drift from getvela.app's footer or from
 // the three native shells, which pin the same three.

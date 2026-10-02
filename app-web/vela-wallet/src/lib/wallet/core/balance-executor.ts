@@ -32,7 +32,7 @@
 
 import { setItem } from '$lib/services/storage';
 
-import { chainName, networkId } from '$lib/services/networks';
+import { chainName, getAllNetworksSync, networkId } from '$lib/services/networks';
 import { tokenChainId, type APIToken } from '$lib/services/tokens-model';
 import {
 	getAccountBalance,
@@ -127,6 +127,10 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					tokens: tokens.map(toBalanceToken),
 					failed_chain_ids: failed,
 					rate_limited_chain_ids: [...getRateLimitedChains()],
+					// Spec 092: every chain the round asks — the same list
+					// `fetchAllChainTokens` walks — so one that answered holding
+					// nothing is "nothing when last read", not "not read yet".
+					read_chain_ids: getAllNetworksSync().map((net) => net.chainId),
 					now_ms: Date.now()
 				};
 			}

@@ -692,3 +692,60 @@ readings are given with their consequence.
 | 4, 5 | Review notes: "No Bluetooth", "dApp Connect pairs … WalletConnect-style relay" | Bluetooth **is** used for caBLE on both platforms (§5). WalletPair/dApp-session pairing was dropped by founder ruling 2026-09-08 — describing a feature the binary does not have is its own review risk. |
 | 6 | "Removed all `BLUETOOTH*` … `ACCESS_FINE_LOCATION`" | Reversed by spec 019; both are back in `AndroidManifest.xml:59-71`. |
 | 2 | Play: no deletion caveat for iOS | Erase-this-device is not complete on iPhone (`privacy/+page.svelte:172-177`); do not claim a full in-app deletion path on the iOS side. |
+
+---
+
+## 9. Desktop — the Mac App Store build (spec 095)
+
+Added 2026-10-02. Until now the desktop app was out of scope (header). The Mac
+app now joins the iOS record as a Universal Purchase, so **one App Privacy
+answer covers both**. This section is the desktop's evidence that the answer
+does not change. Paths are under `app-desktop/vela-wallet/` unless they start
+with `rust/`.
+
+### 9.1 What the Mac app sends, to whom — same as iOS unless marked
+
+| Destination | Same as iOS? | What it carries | Evidence |
+|---|---|---|---|
+| Relay, public-key index, chain data, rates (§1.1) | **Same** — the defaults come from the core | As in §2 | `rust/crates/vela-core/src/app/network_admin.rs:152-155`; desktop pool `src/executor/pool.rs` |
+| Default and curated RPC endpoints (§1.2–1.3) | **Same** | Wallet address + IP | `src/executor/pool.rs:57-108` |
+| Feedback proxy `getvela.app/api/bug-report` (§3a) | **Same** | Typed text, version/platform/language lines, ≤5 screenshots re-encoded on the Mac (`src/executor/screenshot_prep.rs`); a public GitHub issue | `src/executor/bug_report.rs:35` |
+| Passkey directory `aaguid-explorer.awesometools.dev` | **Same** | An AAGUID (authenticator model) | `src/passkey_directory.rs:94-141` |
+| Function-selector lookups | **Desktop adds `api.4byte.sourcify.dev`** beside the two iOS uses | A 4-byte selector + IP, never the address | `src/executor/clear_signing.rs:155` |
+| Site icons | **Same pattern** | `{origin}/apple-touch-icon.png`, `/favicon.ico` of a site the person opened (the site sees the IP) | `src/explore/live.rs:234-251` |
+| caBLE tunnel `cable.ua5v.com` / `cable.auth.com` | **Desktop only** (the phone side of the same exchange is the phone's) | The standard hybrid-passkey tunnel: an end-to-end encrypted passkey assertion between this Mac and the person's phone; operated by the phone platform's vendor | `rust/crates/vela-core/src/cable/tunnel_domain.rs:13`, `src/ctap/cable.rs` |
+| `sign.getvela.app` (Trusted Signer) | **Same page**, opened in the default browser instead of an in-app browser view | The request to sign, in the URL fragment the page reads; the answer returns through `velawallet://sign-result` | `packaging/macos/Info.plist.in` (`CFBundleURLTypes`), `src/executor/trusted_signer.rs` |
+
+No analytics, crash-report, advertising, push, remote-config or update-check
+host is contacted: `Cargo.toml` has no such SDK, and the only update check is
+none (the App Store updates the store build).
+
+### 9.2 On the Mac itself
+
+- **One state file**, `<config dir>/VelaWallet/wallet.json`
+  (`src/executor/storage.rs:95-106`): accounts (public keys, addresses, names),
+  contacts and groups, preferences, history. No private key, no seed: the keys
+  are passkeys held by the person's passkey provider or security key. Sandboxed,
+  it lives in `~/Library/Containers/app.getvela.VelaWallet/Data/Library/Application Support/VelaWallet/`
+  (measured, spec 095 §10). Settings → **Erase This Device** removes it
+  (`settings.eraseDevice.*`).
+- **Files the person picks** (open/save panels only): contacts import/export,
+  batch-send import and template, the receive share card, feedback screenshots.
+  Nothing is read from the person's folders otherwise
+  (`files.user-selected.read-write` is the only file entitlement).
+- **Camera** frames are decoded on the Mac for a QR code and never stored or
+  sent (`src/executor/camera.rs`, `src/executor/qr.rs`).
+- **Required-reason APIs**, measured on the release binary with `nm -u` and
+  `strings` (`packaging/macos/PrivacyInfo.xcprivacy` header): `stat`/`fstat`/
+  `lstat`/`fstatat` (FileTimestamp: C617.1, 3B52.1), `mach_absolute_time`
+  (SystemBootTime: 35F9.1), `standardUserDefaults` (UserDefaults: CA92.1 — gpui
+  writes one key of its own and reads the person's window-tabbing and
+  title-bar double-click preferences).
+
+### 9.3 Consequence for the forms
+
+None. The Mac collects the same five types, for the same purpose, linked or
+unlinked exactly as §6.1 says; the desktop-only hosts (the caBLE tunnel, an
+extra selector database) carry nothing that is collected in Apple's sense by
+Vela. `packaging/macos/PrivacyInfo.xcprivacy` declares the iPhone manifest's
+five types unchanged.

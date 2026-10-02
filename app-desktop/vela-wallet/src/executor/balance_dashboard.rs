@@ -228,6 +228,7 @@ impl Machine for BalanceDashboard {
                     // Counted while it reads: a "network came back" joins it
                     // rather than starting a second round beside it (G53).
                     let _reading = RoundGuard::enter();
+                    let read_chain_ids = balances::chain_ids();
                     let (tokens, failed) = balances::fetch_all_streaming(&address, &arrived);
                     // A chain that did not answer keeps what the last round
                     // knew it held; it is still reported as failed below.
@@ -248,6 +249,7 @@ impl Machine for BalanceDashboard {
                         // — nobody is sent to swap RPCs over a busy provider
                         // (the web's `getRateLimitedChains`, 078 W-08).
                         rate_limited_chain_ids,
+                        read_chain_ids,
                         now_ms: crate::executor::now_ms(),
                     }
                 }))

@@ -22,6 +22,8 @@
 	import { normalizePackagedUrl } from '$lib/extension/page-url';
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
+	import ExtensionNotices from '$lib/extension/ExtensionNotices.svelte';
+	import type { ExtensionMessages } from '$lib/extension/messages';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { inExtension } from '$lib/dapp/transport';
@@ -259,6 +261,10 @@
 		{#if offline}
 			<p class="offline" role="status">{offlineLabel}</p>
 		{/if}
+		<!-- The packaged extension's own notices (spec 094); nothing elsewhere. -->
+		<ExtensionNotices
+			messages={(page.data as { extension?: ExtensionMessages } | undefined)?.extension}
+		/>
 		{@render children()}
 	</div>
 

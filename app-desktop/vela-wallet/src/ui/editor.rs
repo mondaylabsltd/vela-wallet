@@ -971,7 +971,7 @@ impl Element for Editor {
 /// see what an IME actually sends a well.
 fn trace(what: std::fmt::Arguments<'_>) {
     thread_local! {
-        static ON: bool = std::env::var_os("VELA_EDITOR_TRACE").is_some();
+        static ON: bool = crate::dev_env::var_os!("VELA_EDITOR_TRACE").is_some();
     }
     if ON.with(|on| *on) {
         eprintln!("[vela-wallet] editor: {what}");

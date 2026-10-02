@@ -14,6 +14,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedLine
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import java.io.File
@@ -349,19 +350,25 @@ class WalletLiveTest {
     }
 
     /**
-     * The chain that is down is named — from `banner_chain_ids`, which the core
-     * already cut to failed MINUS rate-limited. A chain that is only
+     * The chain that is down is named — from `unreachable_networks`, which the
+     * core already cut to failed MINUS rate-limited, and in the sentence the
+     * core chose (spec 092: no "RPC" on the home). A chain that is only
      * rate-limited is not in it, so the hero never nags to swap an RPC that
      * will heal on its own; the balance just says it is updating.
      */
     @Test
     fun `a failing chain is named, a rate-limited one is not`() {
-        val one = home(BalanceView(display_total_usd = 4.5, failed_chain_ids = listOf(137), banner_chain_ids = listOf(137))).balance.status
+        fun down(vararg ids: Int) = ids.map { app.getvela.wallet.feature.wallet.core.UnreachableNetwork(it, "not_read", null, "assets.notReadYet") }
+        val one = home(
+            BalanceView(display_total_usd = 4.5, failed_chain_ids = listOf(137), unreachable_networks = down(137), unreachable_key = "assets.unreachableOne"),
+        ).balance.status
         assertEquals(BalanceStatusKind.Warning, one?.kind)
-        assertEquals("Polygon RPC unavailable", one?.text)
+        assertEquals("Can't reach Polygon right now", one?.text)
 
-        val two = home(BalanceView(display_total_usd = 4.5, banner_chain_ids = listOf(137, 42161))).balance.status
-        assertEquals("2 networks RPC unavailable", two?.text)
+        val two = home(
+            BalanceView(display_total_usd = 4.5, unreachable_networks = down(137, 42161), unreachable_key = "assets.unreachableMany"),
+        ).balance.status
+        assertEquals("Can't reach 2 networks right now", two?.text)
 
         val limited = home(
             BalanceView(display_total_usd = 4.5, refreshing = true, failed_chain_ids = listOf(137), rate_limited_chain_ids = listOf(137)),
@@ -394,6 +401,10 @@ class WalletLiveTest {
         chain_id = 137,
         timestamp = dayStart / 1000.0 + 3600,
         day_start_ms = dayStart.toDouble(),
+        // The second line as the core words a transfer (spec 093): the person, by name or address.
+        subtitle = listOf(
+            counterparty?.let { if (received) FeedLine.From(it, alias) else FeedLine.To(it, alias) } ?: FeedLine.Network(137),
+        ),
     )
 
     private fun midnight(daysAgo: Int, now: Long): Long {
@@ -494,7 +505,11 @@ class WalletLiveTest {
         val now = System.currentTimeMillis()
         val today = midnight(0, now)
         val call = item("d", received = false, value = null, symbol = "", dayStart = today)
-            .copy(kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx, site = "app.uniswap.org")
+            .copy(
+                kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx,
+                site = "app.uniswap.org",
+                subtitle = listOf(FeedLine.Site("app.uniswap.org"), FeedLine.Network(137)),
+            )
         val feed = FeedView(
             rows = listOf(
                 FeedRow.Header("day-$today", today.toDouble(), today / 1000.0),
@@ -503,12 +518,12 @@ class WalletLiveTest {
             ),
         )
 
-        val rows = WalletLive.activity(feed, strings, now).single().rows
+        val rows = WalletLive.activity(feed, strings, now, chains).single().rows
 
         assertEquals("", rows[0].amount)
         assertEquals("", rows[0].unit)
         assertFalse(rows[0].hasFigure)
-        assertTrue(rows[0].subtitle.endsWith("app.uniswap.org"))
+        assertEquals("the core's parts, worded and joined", "app.uniswap.org · Polygon", rows[0].subtitle)
         assertTrue(rows[1].hasFigure)
     }
 

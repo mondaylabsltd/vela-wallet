@@ -44,11 +44,26 @@
 		<span class="subtitle">{row.subtitle}</span>
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
-	     draws no amount cell — never an empty one. -->
+	     draws no amount cell — never an empty one. Spec 093: a grant's
+	     allowance stands where the figure would be ("Unlimited" in red), and
+	     a swap's coin back sits under what left. -->
 	{#if row.amount !== '' || row.unit !== ''}
-		<span class="amount" class:positive={row.positive} class:masked={row.masked}>
-			<span class="value">{row.amount}</span>
-			<span class="unit">{row.unit}</span>
+		<span class="figures">
+			<span
+				class="amount"
+				class:positive={row.positive}
+				class:masked={row.masked}
+				class:danger={row.danger === true}
+			>
+				<span class="value">{row.amount}</span>
+				<span class="unit">{row.unit}</span>
+			</span>
+			{#if row.received !== undefined}
+				<span class="amount back" class:masked={row.masked}>
+					<span class="value">{row.received.amount}</span>
+					<span class="unit">{row.received.unit}</span>
+				</span>
+			{/if}
 		</span>
 	{/if}
 {/snippet}
@@ -136,12 +151,19 @@
 		text-overflow: ellipsis;
 	}
 
+	.figures {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--space-xs);
+		flex-shrink: 0;
+	}
+
 	.amount {
 		display: inline-flex;
 		align-items: baseline;
 		gap: var(--space-sm);
 		color: var(--color-fg-base);
-		flex-shrink: 0;
 	}
 
 	.value {
@@ -157,6 +179,17 @@
 	}
 
 	.positive .value {
+		color: var(--color-success-base);
+	}
+
+	.danger .value {
+		color: var(--color-error-base);
+	}
+
+	/* What came back: smaller, under the figure, in the colour of money in. */
+	.back .value {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
 		color: var(--color-success-base);
 	}
 

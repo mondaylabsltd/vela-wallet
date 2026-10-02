@@ -480,6 +480,8 @@ class FeedExecutorTest {
                     status = app.getvela.wallet.feature.signing.core.SignRecordStatus.Pending, user_op_hash = op,
                     dapp_origin = "http://127.0.0.1:8137",
                     dapp_url = "http://127.0.0.1:8137",
+                    // Spec 093: the request as the core kept it — what the row stores.
+                    stored_request = """[{"to":"$usdc","value":"0x0","data":"$data"}]""",
                 ),
                 "XDAI",
             ).put("txHash", op)

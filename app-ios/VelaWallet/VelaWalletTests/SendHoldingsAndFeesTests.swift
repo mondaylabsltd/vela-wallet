@@ -114,7 +114,7 @@ struct SendHoldingsAndFeesTests {
           "unreachable": \(unreachable), "notice": null, "hidden": false, "refreshing": false,
           "last_refreshed_at_ms": \(refreshedAt.map { String($0) } ?? "null"),
           "tokens": [\(rows)], "unpriced_tokens": [\(unpriced)],
-          "failed_chain_ids": \(failed), "rate_limited_chain_ids": [], "banner_chain_ids": \(failed),
+          "failed_chain_ids": \(failed), "rate_limited_chain_ids": [], "unreachable_networks": [],
           "holdings_loading": false, "cached_total_usd": null,
           "switcher": { "open": false, "loading": false, "balances": [] }
         }

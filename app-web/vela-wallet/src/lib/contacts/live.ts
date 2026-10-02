@@ -19,16 +19,11 @@
 import type { Contact } from '$lib/core/generated/Contact';
 import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { formatDate } from '$lib/services/locale-format';
-import { chainName } from '$lib/services/networks';
-import { chainLogoURL } from '$lib/services/tokens-model';
-import { chainColor } from '$lib/wallet/fixtures';
-import { trimBalance } from '$lib/wallet/live';
+import { liveActivityRow, type RowMessages } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
-import type { ActivityRowModel, SidebarModel } from '$lib/wallet/model';
+import type { SidebarModel } from '$lib/wallet/model';
 import { contactContextMenu, groupContextMenu, headerDropdown } from './fixtures';
 import type { ContactsMessages } from './messages';
 import type {
@@ -46,13 +41,23 @@ import type {
 /**
  * What the contacts screens read beyond the book itself (spec 028 US5).
  *
- * The feed is the wallet's `activity_feed` view; which of its rows belong to a
- * contact is display-side narrowing (counterparty = this address), the same
- * class of work as the chain filter on the wallet home — the core already
- * ruled on every row's direction, amount and day.
+ * The feed is the wallet's `activity_feed` view. Which of its rows belong to
+ * a contact is the core's (spec 093, `contact_rows` after
+ * `contact_filter_changed`): every row on every network whose counterparty is
+ * that address, worded as Activity words it — a dApp's transfer to the
+ * contact reads as its verb, never "Sent".
  */
 export interface ContactsLiveExtras {
 	feed?: FeedView | null;
+	/**
+	 * The contact the core was last told is open (`feed.contactAddress`):
+	 * `feed.contact_rows` are that contact's, and are drawn under no other.
+	 */
+	contactAddress?: string | null;
+	/** The Activity row's words (the wallet bundle's `activity`). */
+	rowMessages?: RowMessages;
+	/** Balance privacy: the rows mask their figures as Activity's do. */
+	hidden?: boolean;
 	/** "全部 ›" was tapped: every row, not the recent few. */
 	allActivity?: boolean;
 	/** Injected clock for the day labels (tests). */
@@ -61,59 +66,6 @@ export interface ContactsLiveExtras {
 
 /** 最近往来 shows this many before "全部 ›" (018 drew two; three fits the column). */
 export const RECENT_ACTIVITY_ROWS = 3;
-
-/** The feed's rows whose counterparty is this contact, in feed order (newest first). */
-export function contactFeedItems(feed: FeedView | null | undefined, address: string): FeedItem[] {
-	if (!feed) return [];
-	const target = address.toLowerCase();
-	const items: FeedItem[] = [];
-	for (const row of feed.rows) {
-		if (row.type === 'item' && row.item.counterparty?.toLowerCase() === target)
-			items.push(row.item);
-	}
-	return items;
-}
-
-function localMidnight(ms: number): number {
-	const d = new Date(ms);
-	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-/** "Today" / "Yesterday" from the corpus; older days in the person's date preset. */
-function dayLabel(dayStartMs: number, m: ContactsMessages, now: number): string {
-	const today = localMidnight(now);
-	if (dayStartMs === today) return m.activity.today;
-	if (dayStartMs === today - 86_400_000) return m.activity.yesterday;
-	return formatDate(dayStartMs);
-}
-
-/**
- * One feed item as a contact's 最近往来 row. The wallet's own row builder says
- * "to Alice" in its subtitle; on Alice's page that is noise, so the subtitle
- * is the network and the day instead.
- */
-export function contactActivityRow(
-	item: FeedItem,
-	m: ContactsMessages,
-	now = Date.now()
-): ActivityRowModel {
-	const received = item.direction === 'in';
-	return {
-		id: item.id,
-		kind: received ? 'received' : 'sent',
-		title: received ? m.activity.received : m.activity.sent,
-		subtitle: `${chainName(item.chain_id)} · ${dayLabel(item.day_start_ms, m, now)}`,
-		amount:
-			item.value === null
-				? String(item.batch?.count ?? '')
-				: `${received ? '+' : '-'}${trimBalance(item.value)}`,
-		unit: item.symbol,
-		positive: received,
-		masked: false,
-		badgeColor: chainColor(item.chain_id),
-		badgeLogoUrl: chainLogoURL(item.chain_id)
-	};
-}
 
 /** The full rail, always — letters without a section still render (018 D4). */
 const INDEX_LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
@@ -241,8 +193,13 @@ export function liveContactDetail(
 	const model = toContactModel(contact, view, identicon);
 	// The address block wraps to two even halves on the phone (018 canon).
 	const half = Math.ceil(contact.address.length / 2);
-	const items = contactFeedItems(extras.feed, contact.address);
+	// The core's rows for the contact it was told is open — this one's only.
+	const items =
+		extras.contactAddress?.toLowerCase() === contact.address.toLowerCase()
+			? (extras.feed?.contact_rows ?? [])
+			: [];
 	const shown = extras.allActivity ? items : items.slice(0, RECENT_ACTIVITY_ROWS);
+	const words = extras.rowMessages;
 	return {
 		contact: model,
 		chips: model.groups,
@@ -257,7 +214,13 @@ export function liveContactDetail(
 		activityTitle: m.recentActivity,
 		activityAction: m.activity.all,
 		activityLink: m.viewAllActivity,
-		rows: shown.map((item) => contactActivityRow(item, m, extras.now)),
+		// The rows Activity draws, through Activity's own builder.
+		rows:
+			words === undefined
+				? []
+				: shown.map((item) =>
+						liveActivityRow(item, words, extras.hidden ?? false, extras.now ?? Date.now())
+					),
 		emptyActivity: items.length === 0 ? m.noActivity : undefined,
 		editLabel: m.edit,
 		deleteLabel: m.deleteContact,

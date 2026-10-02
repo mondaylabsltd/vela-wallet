@@ -1,7 +1,7 @@
 ---
 title: 安装 Vela
 description: "运行 Vela 的每一种方式——网页、浏览器扩展、桌面版和手机——各自多少钱、能做什么，以及你的设备需要什么。"
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -29,7 +29,7 @@ source: fa80f5cfdb95
 
 ## 浏览器扩展
 
-适用于 Chromium 系浏览器：Chrome、Edge 和 Brave（Chrome 116 及以上）。它把钱包放进工具栏，让 dApp
+适用于 Chromium 系浏览器：Chrome、Edge 和 Brave（Chrome 122 及以上）。它把钱包放进工具栏，让 dApp
 可以直接连接。在上架 Chrome 应用商店之前：
 
 1. 从[获取 Vela](/zh/get-started) 下载扩展，解压到一个你会一直保留的文件夹——浏览器从那里运行它。

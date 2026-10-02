@@ -111,19 +111,24 @@ struct SignRequestReadingTests {
         #expect(row["timestamp"] as? Int == 1_757_000_000)
     }
 
-    @Test func aTransactionRecordCarriesTheCallAndClipsALongRequest() {
+    /// Spec 093: the request is stored as the CORE cut it — `stored_request`
+    /// and `request_truncated`, verbatim — never a cut of the shell's own;
+    /// the call itself is still read from the whole request.
+    @Test func aTransactionRecordCarriesTheCallAndStoresTheCoresCut() {
         let long = String(repeating: "a", count: 9000)
+        let cut = #"[{"to":"0x76875e","value":"0x38d7ea4c68000","data":"0xaaaa"}]"#
         let row = SignExecutor.recordRow([
             "record_id": "dapp-1-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
             "params_json": #"[{"to":"0x76875e","value":"0x38d7ea4c68000","data":"0x\#(long)"}]"#,
             "result": "", "from": "0xme", "chain_id": 100, "now_ms": 1_757_000_000_000,
             "status": "pending", "user_op_hash": "0xcf9f", "dapp_origin": "https://x.test",
+            "stored_request": cut, "request_truncated": true,
         ], nativeSymbol: "xDAI")
         #expect(row["type"] as? String == "dapp_tx")
         #expect(row["to"] as? String == "0x76875e")
         #expect(row["symbol"] as? String == "xDAI")
         #expect(row["requestTruncated"] as? Bool == true)
-        #expect((row["signedRequest"] as? String)?.count == 4096)
+        #expect(row["signedRequest"] as? String == cut, "the core's cut, not the shell's")
     }
 }
 
@@ -667,7 +672,7 @@ struct SigningLiveTests {
             "surface": "batch", "detected": NSNull(),
             "meta": ["symbol": "…", "decimals": 18, "verified": false, "loading": false],
             "editor": NSNull(), "confirm_allowed": true, "rewritten_params_json": NSNull(),
-            "unlimited_consented": false, "increase_total": NSNull(), "decimals_unverified": false,
+            "unlimited_consented": false, "unlimited_warning": false, "increase_total": NSNull(), "decimals_unverified": false,
             "expired": false,
             "batch": [
                 "legs": [
@@ -1092,6 +1097,7 @@ struct SigningLiveTests {
             ),
             meta: GuardTokenMetaViewWire(symbol: "USDC", decimals: 6, verified: true, loading: false),
             editor: editor, confirmAllowed: true, rewrittenParamsJson: nil, unlimitedConsented: true,
+            unlimitedWarning: true,
             increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
         )
         let blocks = SigningLive.guardBlocks(guardView, loc: loc)
@@ -1176,6 +1182,32 @@ struct SigningLiveTests {
     /// An off-chain permit says plainly that the wallet cannot cap it, and
     /// why. Rewriting one would desync the signature and revert the dApp's own
     /// transaction.
+    /// Spec 094 S8: an UNLIMITED off-chain permit (Permit2's, Uniswap's) is
+    /// also said in the danger tone, from the core's flag — and still gets no
+    /// cap editor, which would only revert the dApp's transaction.
+    @Test func anUnlimitedPermitIsWarnedAboutLikeAnUnlimitedApproval() {
+        let guardView = GuardViewWire(
+            surface: .permitSign,
+            detected: GuardDetectedApprovalWire(
+                kind: .permit2Single, tokenAddress: "0xtoken", spender: "0xspender",
+                amountRaw: nil, amountBits: 160, isUnbounded: true, isBooleanGrant: false,
+                isReducing: false, editable: false, blockReason: .offChainPermit,
+                deadline: nil, locus: .typedPath("details.amount")
+            ),
+            meta: GuardViewWire.empty.meta, editor: nil, confirmAllowed: true,
+            rewrittenParamsJson: nil, unlimitedConsented: false, unlimitedWarning: true,
+            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
+        )
+        let blocks = SigningLive.guardBlocks(guardView, loc: loc)
+        let warnings = blocks.compactMap { block -> String? in
+            if case .warning(.danger, let text) = block { return text }
+            return nil
+        }
+        #expect(warnings.contains(loc.t("componentsUi.signing.unlimitedWarning")))
+        #expect(warnings.contains(loc.t("componentsUi.signingApprove.permitCantCap")))
+        #expect(!blocks.contains { if case .allowance = $0 { return true } else { return false } })
+    }
+
     @Test func anOffChainPermitSaysItCannotBeCapped() {
         let guardView = GuardViewWire(
             surface: .permitSign,

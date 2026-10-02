@@ -627,7 +627,7 @@ class SigningController(
         scope.launch { closed.first { it }; requoting?.cancel(); speedControl.dispose(); following?.cancel() }
     }
 
-    fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value)))
+    fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
 
     // -- the speed control (spec 069) -----------------------------------------------
 
@@ -676,8 +676,12 @@ class SigningController(
         fun mayRequote(view: SignView, answered: Boolean): Boolean =
             view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && view.pending_op_hash == null && !answered
 
-        /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
-        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
+        /**
+         * What the confirm slides into: the fee as quoted, the guard's rewrite,
+         * and what the record keeps (the desktop's `approve_opts`) — every one
+         * copied from the view that drew it, none decided here.
+         */
+        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView, sim: SimOutcome? = null): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,
             bundler_cost_wei = null,
             // The coin the person picked pays, and the amount signed is in THAT
@@ -695,11 +699,26 @@ class SigningController(
             },
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
-            intent = clear.result?.intent,
+            // Spec 093: the verb the record keeps is the core's (no best-effort
+            // guess; a batch's one shared verb) — `null` records none.
+            intent = clear.record_intent,
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             unlimited_approved = guard.unlimited_consented,
+            balance_changes = approvedChanges(sim),
+            // Spec 093: the approval surface's token as it resolved — what lets
+            // the record say "100 USDC"; the core reads it only once verified.
+            token_meta = guard.meta,
         )
+
+        /**
+         * 083 F1: the lines the sheet drew under "Balance changes" — the
+         * judgments of its own simulation, as they are. None while it is still
+         * out, and none when a notice stood there instead (a revert, "could
+         * not check"); an empty list is nothing to keep.
+         */
+        fun approvedChanges(sim: SimOutcome?): List<TrustSimJudgment>? =
+            (sim as? SimOutcome.Ready)?.judgments?.takeIf { it.isNotEmpty() }
 
         /**
          * The first call of a request: `(to, data, value)` (the desktop's

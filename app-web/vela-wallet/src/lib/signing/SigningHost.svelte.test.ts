@@ -118,6 +118,8 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 	txTrackerView: () => ({ entries: fake.trackerEntries })
 }));
 vi.mock('$lib/signing/live', () => ({
+	// What the approve carries is `signing/live.test.ts`'s (spec 093).
+	approveOptsOf: () => ({}),
 	signingCloseEvent: (status: { closable: boolean } | undefined) =>
 		!status ? 'reject_tapped' : status.closable ? 'dismiss_tapped' : null,
 	buildSigningModel: (raw: any) => {

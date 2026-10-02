@@ -125,7 +125,8 @@
       "syncFailedBody": "A carteira foi criada, mas a chave pública não foi enviada — outros dispositivos ainda não conseguem entrar.",
       "copyAddress": "Copiar endereço",
       "copied": "Copiado",
-      "close": "Fechar"
+      "close": "Fechar",
+      "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo."
     },
     "create": {
       "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",

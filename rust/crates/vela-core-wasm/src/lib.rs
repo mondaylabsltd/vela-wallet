@@ -1857,6 +1857,42 @@ pub fn dapp_rpc_classify(method: &str) -> String {
         .unwrap_or_else(|_| "{\"type\":\"unsupported\"}".to_owned())
 }
 
+/// EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
+/// asks about, lower-cased — `undefined` when it is not one 32-byte hash.
+#[wasm_bindgen(js_name = dappRpcCallsStatusId)]
+pub fn dapp_rpc_calls_status_id(params_json: &str) -> Option<String> {
+    let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
+    vela_core::app::dapp_rpc::calls_status_id(&params)
+}
+
+/// EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+/// from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
+/// or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+#[wasm_bindgen(js_name = dappRpcCallsStatus)]
+pub fn dapp_rpc_calls_status(id: &str, chain_id: u32, receipt_json: Option<String>) -> String {
+    let receipt: Option<serde_json::Value> = receipt_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str(json).ok());
+    vela_core::app::dapp_rpc::calls_status(id, chain_id, receipt.as_ref()).to_string()
+}
+
+/// EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+/// request's params, the site's granted addresses and the wallet's chains (all
+/// JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+#[wasm_bindgen(js_name = dappRpcCapabilities)]
+pub fn dapp_rpc_capabilities(params_json: &str, granted_json: &str, chains_json: &str) -> String {
+    let params: serde_json::Value =
+        serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
+    let granted: Vec<String> = serde_json::from_str(granted_json).unwrap_or_default();
+    let chains: Vec<u32> = serde_json::from_str(chains_json).unwrap_or_default();
+    match vela_core::app::dapp_rpc::capabilities(&params, &granted, &chains) {
+        Ok(result) => serde_json::json!({ "result": result }).to_string(),
+        Err((code, message)) => {
+            serde_json::json!({ "error": { "code": code, "message": message } }).to_string()
+        }
+    }
+}
+
 /// The document-start script an in-app browser injects, for `host`
 /// (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
 /// — exported so the web suite can run the real bridge in a real browser,
@@ -1947,6 +1983,20 @@ pub fn sign_ending_state(ending_json: &str, entry_json: Option<String>) -> JsRes
     sign_ending_state_inner(ending_json, entry_json.as_deref()).map_err(err)
 }
 
+/// A dApp record's stored request as Technical details shows it (spec 093):
+/// typed data pretty-printed, a message as its text (or its hex), call data
+/// pretty-printed — `dapp_activity::request_display`. `content` is the
+/// detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+/// `stored_request` the params' JSON text as the record kept it. `undefined`
+/// when the record kept nothing, or for a content word this build does not
+/// know.
+#[wasm_bindgen(js_name = dappRequestDisplay)]
+#[must_use]
+pub fn dapp_request_display(content: &str, stored_request: &str) -> Option<String> {
+    let content = serde_json::from_value(serde_json::Value::String(content.to_owned())).ok()?;
+    vela_core::app::dapp_activity::request_display(content, stored_request)
+}
+
 /// How long to wait for the receipt when the submit answered `elapsed_ms`
 /// after the approve tap: what is left of the 120 s answer window, never less
 /// than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
@@ -1974,10 +2024,28 @@ pub fn sign_request_ttl_ms() -> f64 {
     vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS
 }
 
+/// The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+/// (spec 094 S9). The web shell bounds the deployment read it makes before a
+/// quote by the same figure.
+#[wasm_bindgen(js_name = feeQuoteDeadlineMs)]
+#[must_use]
+pub fn fee_quote_deadline_ms() -> u32 {
+    vela_core::app::fee_policy::QUOTE_DEADLINE_MS
+}
+
 // ---------------------------------------------------------------------------
 // rpc_pool — the two clocks the extension worker keeps in JavaScript (RF2).
 // The worker cannot load the core; its tests pin its copies to these.
 // ---------------------------------------------------------------------------
+
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed, ms (spec 092) —
+/// `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[wasm_bindgen(js_name = balanceChainReadDeadlineMs)]
+#[must_use]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
+}
 
 /// The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
 #[wasm_bindgen(js_name = rpcReadTimeoutMs)]
@@ -2087,6 +2155,21 @@ pub fn balance_read_plan(
 mod core_082_exports {
     use super::*;
     use serde_json::{json, Value};
+
+    /// Spec 093: the stored request's display is the core's, by content word.
+    #[test]
+    fn the_request_display_is_the_core_s() {
+        assert_eq!(
+            dapp_request_display(
+                "message",
+                r#"["0x68656c6c6f","0x1111111111111111111111111111111111111111"]"#
+            )
+            .as_deref(),
+            Some("hello")
+        );
+        assert_eq!(dapp_request_display("call_data", ""), None);
+        assert_eq!(dapp_request_display("haiku", "[]"), None);
+    }
 
     /// Round 2 (T196): the new exports answer the core's own values.
     #[test]
@@ -2334,6 +2417,7 @@ mod core_082_exports {
         assert!((dapp_receipt_wait_ms(115_000.0) - 10_000.0).abs() < f64::EPSILON);
         assert!((sign_request_ttl_ms() - 300_000.0).abs() < f64::EPSILON);
         assert_eq!(rpc_read_timeout_ms(), 8_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let cooldowns: Vec<f64> = (0..=6).map(rpc_cooldown_ms).collect();
         assert_eq!(
             cooldowns,

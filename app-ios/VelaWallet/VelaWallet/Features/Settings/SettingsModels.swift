@@ -21,6 +21,8 @@ enum SettingsStateId: String, CaseIterable, Identifiable {
     case st1, st1b, st2, st3, st3b, st4, st5, st6, st7, st8
     case st9, st9b, st10, st10b, st10c, st11, st12, st13, st13b, st14, st15, st16
     case sr1, sr2, sr2b, sr3, sr4, sr5
+    /// Spec 092: every network the wallet cannot reach, in one list.
+    case sr6
 
     var id: String { rawValue }
 
@@ -37,6 +39,8 @@ enum SettingsPage: Equatable {
 enum SettingsOverlay: Equatable, Identifiable {
     case none, accounts, signOut, language, currency, numberFormat, dateFormat, timeFormat
     case clearCaches, eraseDevice, feedback, rpcFix, balanceDetail, relayer
+    /// SR6 (spec 092): every network the wallet cannot reach, in one place.
+    case unreachable
     /// One storage row's 清除, asked before it happens (058, the founder's
     /// ruling): "联系人与分组 · 清除" removed the whole address book on a
     /// single tap, with nothing in between.
@@ -484,6 +488,29 @@ struct BalanceDetailModel {
     let done: [BalanceDetailRowModel]
 }
 
+/// SR6 (spec 092): every network the wallet cannot reach, in the core's order
+/// (last seen holding something first), each with what was last read there
+/// and its RPC fix.
+struct UnreachableModel {
+    /// The home's own line, live — or "every network is back" once none is.
+    let title: String
+    /// Absent once the list is empty.
+    let summary: String?
+    let rows: [UnreachableRowModel]
+
+    static let empty = UnreachableModel(title: "", summary: nil, rows: [])
+}
+
+struct UnreachableRowModel: Identifiable {
+    let id: String
+    let chainId: Int
+    let mark: ChainMarkModel
+    let name: String
+    /// "Last seen $1,234.50", "Not read yet", …
+    let line: String
+    let action: String
+}
+
 /// SR4: fund this chain's bundler treasury.
 struct RelayerModel {
     let title: String
@@ -673,6 +700,8 @@ struct SettingsScreenContent {
     /// is this device's chains rather than the drawing's two.
     var rpcFix: RpcFixModel
     var balanceDetail: BalanceDetailModel
+    /// SR6 (spec 092), built live from the balance core's view.
+    var unreachable: UnreachableModel = .empty
     let relayer: RelayerModel
     let indexDown: IndexDownModel
     /// Scrim title behind a rescue sheet — "钱包", "转账", "设备存储".

@@ -23,13 +23,16 @@ struct ActivityRowView: View {
             iconCircle
             // Amounts always render fully (spec: numbers never clip); the
             // subtitle is the yielding element — it middle-truncates when the
-            // row runs out of width. The title keeps its natural width.
+            // row runs out of width. The title is never cut: a dApp's title
+            // names its place (spec 093, "Spending permit on Uniswap"), so a
+            // long one takes a second line rather than squeezing the figure
+            // ("Unlimited USDC") into an ellipsis.
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: model.title)
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(verbatim: model.subtitle)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
@@ -39,19 +42,30 @@ struct ActivityRowView: View {
             Spacer(minLength: Tokens.Space.s12)
             // 087 F11: a dApp call that moved no coin of ours has no figure,
             // and draws no amount cell — never an empty one.
-            if !model.amount.isEmpty || !model.unit.isEmpty {
-                // Inline when it fits (H1 −2 POL); otherwise the unit drops to
-                // a second line (mock H7 −0.0000001 / BNB).
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s4) {
-                        amountText.lineLimit(1)
-                        unitText.lineLimit(1)
+            if !model.amount.isEmpty || !model.unit.isEmpty || model.received != nil {
+                VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
+                    if !model.amount.isEmpty || !model.unit.isEmpty {
+                        // Inline when it fits (H1 −2 POL); otherwise the unit
+                        // drops to a second line (mock H7 −0.0000001 / BNB).
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s4) {
+                                amountText.lineLimit(1)
+                                unitText.lineLimit(1)
+                            }
+                            VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
+                                amountText
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(WalletGeometry.heroMinScale)
+                                unitText.lineLimit(1)
+                            }
+                        }
                     }
-                    VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
-                        amountText
+                    // A swap's coin back, under what left (spec 093).
+                    if let received = model.received {
+                        Text(verbatim: received)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.successBase)
                             .lineLimit(1)
-                            .minimumScaleFactor(WalletGeometry.heroMinScale)
-                        unitText.lineLimit(1)
                     }
                 }
                 .layoutPriority(1)
@@ -61,7 +75,8 @@ struct ActivityRowView: View {
     }
 
     private var amountColor: Color {
-        model.positive ? theme.successBase : theme.fgBase
+        if model.danger { return theme.errorBase }
+        return model.positive ? theme.successBase : theme.fgBase
     }
 
     private var amountText: Text {

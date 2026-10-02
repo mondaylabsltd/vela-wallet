@@ -1,6 +1,15 @@
 package app.getvela.wallet.feature.flows
 
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.graphics.graphicsLayer
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.designsystem.components.VelaDangerButton
@@ -384,6 +393,11 @@ fun TxDetailBody(
     onExplorer: () -> Unit = {},
     /** 删除记录 (spec 058). Absent in the gallery, where nothing is real. */
     onDelete: (() -> Unit)? = null,
+    /**
+     * Spec 093: a dApp record's stored request, read by record id — called
+     * only once its "Technical details" are opened. Absent in the gallery.
+     */
+    onLoadRequest: (suspend (String) -> String?)? = null,
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
@@ -398,15 +412,44 @@ fun TxDetailBody(
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,
+                modifier = Modifier.weight(1f, fill = false),
             )
-            Spacer(modifier = Modifier.width(VelaSpacing.md))
-            StatusChip(chip = model.status)
+            // Spec 093: a signature has no chip — nothing settles it.
+            model.status?.let { chip ->
+                Spacer(modifier = Modifier.width(VelaSpacing.md))
+                StatusChip(chip = chip)
+            }
         }
-        AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive)
+        model.note?.let { note ->
+            Spacer(modifier = Modifier.height(VelaSpacing.xs))
+            Text(
+                text = note,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+            )
+        }
+        // A request that moved and granted nothing (a sign-in) has no figure,
+        // and an empty hero would only be a gap.
+        if (model.amount.isNotBlank() || model.fiat.isNotBlank()) {
+            AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive, danger = model.amountDanger, received = model.received)
+        } else {
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        }
         HairlineDivider()
         model.facts.forEachIndexed { index, fact ->
             if (index > 0) HairlineDivider()
             FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
+        }
+        model.technical?.let { technical ->
+            TxTechnicalSection(
+                model = technical,
+                onLoadRequest = onLoadRequest,
+                copied = copied,
+                // Copy ticks share one counter: technical rows count on from the facts.
+                firstIndex = model.facts.size,
+                onCopy = { index, fact -> if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } },
+            )
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         // Spec 082 RJ16: no explorer control without a transaction to open.
@@ -435,6 +478,124 @@ fun TxDetailBody(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Spec 093 — a dApp record's "Technical details": folded by default, opened
+ * by a tap (the row gives under the finger and ticks). The stored request is
+ * read from the store only once the section is open, and only then.
+ */
+@Composable
+private fun TxTechnicalSection(
+    model: TxTechnicalModel,
+    onLoadRequest: (suspend (String) -> String?)?,
+    copied: Int,
+    firstIndex: Int,
+    onCopy: (Int, FactRowModel) -> Unit,
+) {
+    val colors = VelaTheme.colors
+    val haptic = rememberVelaHaptic()
+    var open by remember(model) { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        if (pressed) VelaMotion.pressScaleRow else 1f,
+        VelaMotion.pressSpring,
+        label = "technicalPress",
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HairlineDivider()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .semantics {
+                    contentDescription = model.title
+                    // The disclosure's state, as the design system's own exposes it.
+                    if (open) collapse { open = false; true } else expand { open = true; true }
+                }
+                .clickable(interactionSource = interaction, indication = null) {
+                    haptic(VelaHaptic.Press)
+                    open = !open
+                }
+                .padding(vertical = VelaSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = model.title,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = VelaIcons.ChevronDown,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier
+                    .rotate(if (open) 180f else 0f)
+                    .size(VelaIconSize.md),
+            )
+        }
+        if (open) {
+            model.lines.forEachIndexed { offset, line ->
+                HairlineDivider()
+                when (line) {
+                    is TxTechnicalLine.Fact -> FactRow(
+                        fact = line.fact,
+                        copied = copied == firstIndex + offset,
+                        onCopy = { onCopy(firstIndex + offset, line.fact) },
+                    )
+                    is TxTechnicalLine.Content -> StoredRequest(line, onLoadRequest)
+                }
+            }
+        }
+    }
+}
+
+/** The request a record kept, read by its id when first drawn — the open section's only store read — and shown as the core displays it. */
+@Composable
+private fun StoredRequest(line: TxTechnicalLine.Content, onLoadRequest: (suspend (String) -> String?)?) {
+    val colors = VelaTheme.colors
+    var text by remember(line.recordId) { mutableStateOf<String?>(null) }
+    var read by remember(line.recordId) { mutableStateOf(false) }
+    LaunchedEffect(line.recordId) {
+        val stored = onLoadRequest?.let { load -> runCatching { load(line.recordId) }.getOrNull() }
+        // The core says how a request reads (spec 093); none → "not recorded".
+        text = runCatching { FlowLive.requestDisplay(line.content, stored) }.getOrNull()
+        read = true
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg)) {
+        Text(
+            text = line.label,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        val body = text
+        when {
+            body != null -> SelectionContainer {
+                Text(
+                    text = body,
+                    color = colors.fgBase,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+                        .padding(VelaSpacing.lg),
+                )
+            }
+            // Read, and nothing there: the record kept no content.
+            read -> Text(
+                text = line.missing,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+            )
         }
     }
 }

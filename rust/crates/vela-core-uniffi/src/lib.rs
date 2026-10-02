@@ -1006,6 +1006,25 @@ pub fn i18n_plural_suffixes(locale: String) -> Vec<String> {
     vela_core::i18n::plural_suffixes(&locale)
 }
 
+/// What "follow the system" resolves to: the first of the platform's
+/// preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+/// locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+/// copy of).
+#[uniffi::export]
+pub fn i18n_system_language(preferred: Vec<String>) -> String {
+    vela_core::i18n::system_language(&preferred).to_owned()
+}
+
+/// The Apple localization codes for the shipped locales, in their order
+/// (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+#[uniffi::export]
+pub fn i18n_apple_localizations() -> Vec<String> {
+    vela_core::i18n::apple_localizations()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
 #[uniffi::export]
 pub fn i18n_plural_suffix_legacy(count: f64) -> String {
     vela_core::i18n::plural_suffix_legacy(count)
@@ -1911,6 +1930,18 @@ pub fn sign_ending_state(
     )
 }
 
+/// A dApp record's stored request as Technical details shows it (spec 093):
+/// typed data pretty-printed, a message as its text (or its hex), call data
+/// pretty-printed. `content` is the detail's `content` word (`"call_data"`,
+/// `"typed_data"`, `"message"`); `stored_request` the params' JSON text as the
+/// record kept it. `None` when the record kept nothing, or for a content word
+/// this build does not know. One rule for every client's detail.
+#[uniffi::export]
+pub fn dapp_request_display(content: String, stored_request: String) -> Option<String> {
+    let content = serde_json::from_value(serde_json::Value::String(content)).ok()?;
+    vela_core::app::dapp_activity::request_display(content, &stored_request)
+}
+
 /// How long to wait for the receipt when the submit answered `elapsed_ms`
 /// after the approve tap: what is left of the 120 s answer window, never less
 /// than 10 s (RA12). One number for every client's dApp wait.
@@ -2136,6 +2167,15 @@ pub fn browser_load_visit(
 #[uniffi::export]
 pub fn browser_site_letter(host: String) -> String {
     vela_core::app::browser_load::site_letter(&host)
+}
+
+// -- balance rounds (spec 092) --
+
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed — `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[uniffi::export]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
 }
 
 // -- page loads, the address bar, a site named once (spec 082, contract §10) --
@@ -2593,6 +2633,27 @@ mod tests_082 {
     /// calldata and the EntryPoint's own `userOpHash`.
     const FIXTURE: &str = include_str!("../../vela-core/tests/fixtures/userop-hash-gnosis.json");
 
+    /// Spec 093: the stored request's display is the core's, by content word.
+    #[test]
+    fn the_request_display_is_the_core_s() {
+        assert_eq!(
+            dapp_request_display(
+                "message".to_owned(),
+                r#"["0x68656c6c6f","0x1111111111111111111111111111111111111111"]"#.to_owned()
+            )
+            .as_deref(),
+            Some("hello")
+        );
+        assert_eq!(
+            dapp_request_display("call_data".to_owned(), String::new()),
+            None
+        );
+        assert_eq!(
+            dapp_request_display("haiku".to_owned(), "[]".to_owned()),
+            None
+        );
+    }
+
     fn halves(word: &[u8]) -> (u128, u128) {
         let mut high = [0u8; 16];
         let mut low = [0u8; 16];
@@ -2988,6 +3049,7 @@ mod tests_082 {
             "the network refused this transaction; nothing was sent"
         );
         assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let reverts = user_op_estimate_failure(
             r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#.into(),
         );

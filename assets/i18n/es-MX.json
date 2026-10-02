@@ -498,8 +498,14 @@
   "sectionTitle": "Activos",
   "addToken": "Agregar",
   "searchPlaceholder": "Buscar tokens...",
-  "rpcUnavailableSingle": "RPC de {{name}} no disponible",
-  "rpcUnavailableMultiple": "RPC no disponible en {{count}} redes",
+  "unreachableOne": "No podemos conectar con {{name}} por ahora",
+  "unreachableMany": "No podemos conectar con {{n}} redes por ahora",
+  "unreachableBody": "Tus activos no se ven afectados; solo no podemos leerlos por ahora.",
+  "unreachableNone": "Todas las redes vuelven a estar disponibles.",
+  "lastSeen": "Última lectura: {{amount}}",
+  "lastSeenUnpriced": "Tenía tokens en la última lectura",
+  "lastSeenEmpty": "Vacía en la última lectura",
+  "notReadYet": "Aún sin leer",
   "rpcFix": "Corregir",
   "emptyTitle": "Deposita tu primer activo",
   "emptySubtext": "Toca aquí para ver tu dirección y recibir tokens",
@@ -597,7 +603,8 @@
   "labelSent": "Enviado",
   "labelReceived": "Recibido",
   "toName": "Para {{name}}",
-  "fromName": "De {{name}}"
+  "fromName": "De {{name}}",
+  "dappRowTitle": "{{intent}} en {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -725,7 +732,8 @@
    "syncFailedBody": "Se creó la billetera, pero la llave pública no se subió — otros dispositivos aún no pueden iniciar sesión.",
    "copyAddress": "Copiar dirección",
    "copied": "Copiado",
-   "close": "Cerrar"
+   "close": "Cerrar",
+   "siteAccessBody": "El acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba y vuelve a intentarlo."
   },
   "create": {
    "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
@@ -981,6 +989,11 @@
    "clearAllTitle": "¿Borrar el historial?",
    "clearAllBody": "Esto elimina todas las dApps abiertas recientemente.",
    "a11yDeleteHistory": "Quitar del historial"
+  },
+  "ext": {
+   "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
+   "accessNote": "El acceso a sitios está limitado: los sitios no ven Vela y tu passkey no funciona.",
+   "accessAllow": "Permitir acceso"
   }
  },
  "signHandoff": {
@@ -1029,6 +1042,9 @@
   "linkWebsite": "Sitio web",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Política de privacidad",
+  "linkTerms": "Términos del servicio",
+  "linkSupport": "Soporte",
   "footer": "Hecho con cariño. Tus llaves, tus monedas.",
   "sectionLinks": "Enlaces",
   "debugMode": "Modo de depuración",
@@ -1596,6 +1612,25 @@
   },
   "qrPlaceholder": {
    "caption": "Marcador de demostración · no escaneable"
+  },
+  "appMenu": {
+   "about": "Acerca de Vela Wallet",
+   "hide": "Ocultar Vela Wallet",
+   "hideOthers": "Ocultar otros",
+   "showAll": "Mostrar todo",
+   "quit": "Salir de Vela Wallet",
+   "edit": "Edición",
+   "undo": "Deshacer",
+   "redo": "Rehacer",
+   "cut": "Cortar",
+   "copy": "Copiar",
+   "paste": "Pegar",
+   "selectAll": "Seleccionar todo",
+   "view": "Visualización",
+   "fullScreen": "Activar o desactivar pantalla completa",
+   "window": "Ventana",
+   "minimize": "Minimizar",
+   "closeWindow": "Cerrar ventana"
   }
  },
  "settingsModals": {

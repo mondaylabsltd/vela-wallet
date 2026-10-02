@@ -30,6 +30,36 @@
 	  index, relay) on their own network. Either one raises iOS's local-network
 	  prompt, and this is the sentence it shows.
 	-->
+	<!--
+	  The 15 languages the corpus ships, as Apple codes
+	  (`i18nAppleLocalizations()`, vela_core::i18n::apple_localizations;
+	  spec 095). iOS then speaks the person's language in its own UI (share
+	  sheets, pickers) and the App Store lists the languages; Settings → Vela
+	  gains iOS's per-app Language row. The wallet's strings do not depend on
+	  this: `Loc` resolves them from the corpus, in the language picked in
+	  Settings or followed from `Locale.preferredLanguages`.
+	  `LocalizationsTests` holds this list to the core's.
+	-->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+		<string>zh-HK</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>vi</string>
+		<string>id</string>
+		<string>tr</string>
+		<string>es-MX</string>
+		<string>pt-BR</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>ru</string>
+		<string>it</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vela reaches your local network only to open a page or a service address on it that you entered yourself.</string>
 	<!--

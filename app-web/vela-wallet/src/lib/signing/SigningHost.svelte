@@ -19,7 +19,7 @@
 	 * defeated at the last step.
 	 */
 	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { buildSigningModel, signingCloseEvent } from '$lib/signing/live';
+	import { approveOptsOf, buildSigningModel, signingCloseEvent } from '$lib/signing/live';
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -509,36 +509,13 @@
 	});
 
 	/**
-	 * What the approve carries. The fee is the live session's, and the params
-	 * override is the GUARD's rewrite — the capped approval, not the requested
-	 * one.
+	 * What the approve carries (`approveOptsOf`): the fee this sheet displayed,
+	 * the GUARD's rewritten params — the capped approval, not the requested
+	 * one — and, since spec 093, the record's intent and the guard's token,
+	 * each copied from its machine's view.
 	 */
 	function approveOpts() {
-		const quote = fee.view?.fee ?? null;
-		return {
-			max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
-			bundler_cost_wei: null,
-			gas_fee_token: fee.view?.fee_token ?? null,
-			// The fee this sheet DISPLAYED, signed verbatim — amount, recipient
-			// and the speed it was priced at (spec 069), as the phones and the
-			// desktop always have. Until now the web sent none, so its submit
-			// re-priced on its own and a speed picked here could not reach the
-			// relay. No recipient, no in-band quote: the core's own rule.
-			quoted_fee:
-				quote && quote.fee_recipient
-					? {
-							amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
-							recipient: quote.fee_recipient,
-							tier: quote.tier
-						}
-					: null,
-			fee_collector: null,
-			params_override_json: signingSheet.guard.rewritten_params_json,
-			intent: null,
-			// The approval surface showed an unbounded amount and it was kept as
-			// the site asked — the submit guard's only waiver, copied, not decided.
-			unlimited_approved: signingSheet.guard.unlimited_consented
-		};
+		return approveOptsOf(fee.view, signingSheet.clear, signingSheet.guard);
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */

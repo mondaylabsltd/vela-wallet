@@ -495,8 +495,14 @@
   "sectionTitle": "Assets",
   "addToken": "Hinzufügen",
   "searchPlaceholder": "Token suchen ...",
-  "rpcUnavailableSingle": "RPC für {{name}} nicht verfügbar",
-  "rpcUnavailableMultiple": "RPC für {{count}} Netzwerke nicht verfügbar",
+  "unreachableOne": "{{name}} ist gerade nicht erreichbar",
+  "unreachableMany": "{{n}} Netzwerke sind gerade nicht erreichbar",
+  "unreachableBody": "Ihre Assets sind nicht betroffen – wir können sie gerade nur nicht lesen.",
+  "unreachableNone": "Alle Netzwerke sind wieder erreichbar.",
+  "lastSeen": "Zuletzt gesehen: {{amount}}",
+  "lastSeenUnpriced": "Beim letzten Lesen: Token vorhanden",
+  "lastSeenEmpty": "Beim letzten Lesen: leer",
+  "notReadYet": "Noch nicht gelesen",
   "rpcFix": "Beheben",
   "emptyTitle": "Empfangen Sie Ihr erstes Asset",
   "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
@@ -594,7 +600,8 @@
   "labelSent": "Gesendet",
   "labelReceived": "Erhalten",
   "toName": "An {{name}}",
-  "fromName": "Von {{name}}"
+  "fromName": "Von {{name}}",
+  "dappRowTitle": "{{intent}} bei {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -722,7 +729,8 @@
    "syncFailedBody": "Wallet erstellt, aber der öffentliche Schlüssel wurde nicht hochgeladen — andere Geräte können sich noch nicht anmelden.",
    "copyAddress": "Adresse kopieren",
    "copied": "Kopiert",
-   "close": "Schließen"
+   "close": "Schließen",
+   "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut."
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
@@ -978,6 +986,11 @@
    "clearAllTitle": "Verlauf löschen?",
    "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
    "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+  },
+  "ext": {
+   "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
+   "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
+   "accessAllow": "Zugriff erlauben"
   }
  },
  "signHandoff": {
@@ -1026,6 +1039,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Datenschutzerklärung",
+  "linkTerms": "Nutzungsbedingungen",
+  "linkSupport": "Support",
   "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
   "sectionLinks": "Links",
   "debugMode": "Debug-Modus",
@@ -1593,6 +1609,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo-Platzhalter · nicht scannbar"
+  },
+  "appMenu": {
+   "about": "Über Vela Wallet",
+   "hide": "Vela Wallet ausblenden",
+   "hideOthers": "Andere ausblenden",
+   "showAll": "Alle einblenden",
+   "quit": "Vela Wallet beenden",
+   "edit": "Bearbeiten",
+   "undo": "Widerrufen",
+   "redo": "Wiederholen",
+   "cut": "Ausschneiden",
+   "copy": "Kopieren",
+   "paste": "Einsetzen",
+   "selectAll": "Alles auswählen",
+   "view": "Darstellung",
+   "fullScreen": "Vollbildmodus ein/aus",
+   "window": "Fenster",
+   "minimize": "Im Dock ablegen",
+   "closeWindow": "Fenster schließen"
   }
  },
  "settingsModals": {

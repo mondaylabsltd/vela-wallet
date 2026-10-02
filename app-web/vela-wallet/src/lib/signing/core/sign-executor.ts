@@ -20,9 +20,11 @@
  *   this side maps the typed verdicts it throws — a passkey cancel, a page that
  *   is gone (`asker_gone`), the relay's underfunded refusal with the live
  *   `fetchBundlerAccountInfo` composition — into `SignSubmitOutcome`.
- * - **The record codec.** The core owns the id scheme, the status and the FINAL
- *   (capped) params; `buildSigningRecord` still owns `capRequest` clipping,
- *   `signedContent`, the recipient/value projection and the asset-sim blob.
+ * - **The record codec.** The core owns the id scheme, the status, the FINAL
+ *   (capped) params, the request's summary and its stored cut (spec 093:
+ *   `summary`, `stored_request`, `request_truncated`, all kept verbatim);
+ *   `buildSigningRecord` still owns `signedContent`, the recipient/value
+ *   projection and the asset-sim blob.
  * - **Persist/Update serialisation per `record_id`** — the core states the shell
  *   must do it, and it is load-bearing: `updateTransaction` on a row that has
  *   not been written yet is a silent no-op, which would strand a confirmed op
@@ -468,6 +470,12 @@ export function createSignExecutor(ports: SignShellPorts) {
 				const row = buildSigningRecord({
 					method: record.method,
 					params: parseParams(record.params_json),
+					// Spec 093: the core's cut of the request and its summary, kept as
+					// they are — this side neither clips nor reads either.
+					storedRequest: record.stored_request,
+					requestTruncated: record.request_truncated,
+					summary: record.summary ?? null,
+					balanceChanges: record.balance_changes ?? null,
 					result: record.result,
 					from: record.from,
 					chainId: record.chain_id,

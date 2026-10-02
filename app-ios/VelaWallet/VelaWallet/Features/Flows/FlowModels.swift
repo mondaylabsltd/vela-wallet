@@ -124,6 +124,12 @@ struct FactRowModel: Identifiable {
     /// the confirm's speed row uses it for a speed taken because it was free
     /// (issue 686), so the tier and its reason reach the last screen together.
     var note: String?
+    /// The value is a risk to see — an unlimited spending cap (spec 093).
+    var danger = false
+    /// Several values under one label — a dApp's balance changes (spec 093),
+    /// one line each in the signing sheet's own form and tones. Drawn in
+    /// place of `value` when present.
+    var lines: [BalanceDeltaRow] = []
 }
 
 enum StatusTone {
@@ -268,7 +274,9 @@ struct HistoryModel {
 /// A2 / A3 — one transaction, opened from a history row.
 struct TxDetailModel {
     let title: String
-    let status: StatusChipModel
+    /// `nil` for an off-chain signature (spec 093): nothing settles it, and
+    /// `note` says so instead.
+    let status: StatusChipModel?
     let closeLabel: String
     let amount: String
     let fiat: String
@@ -289,6 +297,35 @@ struct TxDetailModel {
     /// "may have been sent" record — forgetting it is how a person sends the
     /// same money again.
     var deleteQuiet = false
+    /// One calm sentence where the status chip would be: "Off-chain
+    /// signature — nothing was sent on-chain" (spec 093).
+    var note: String? = nil
+    /// The figure is an unlimited allowance, drawn in the danger tone.
+    var amountDanger = false
+    /// A swap's coin back, under the figure (spec 093).
+    var received: String? = nil
+    /// A dApp record's collapsed "Technical details" (spec 093).
+    var technical: TxTechnicalModel? = nil
+}
+
+/// A dApp record's "Technical details" (spec 093), collapsed until tapped.
+struct TxTechnicalModel {
+    let title: String
+    let lines: [TxTechnicalLine]
+}
+
+enum TxTechnicalLine {
+    case fact(FactRowModel)
+    /// The request the record kept. Read from the store by record id only
+    /// when the section is opened — never while the detail is built.
+    case content(TxContentModel)
+}
+
+struct TxContentModel {
+    let label: String
+    /// Said when the record kept nothing (`connect.detail.contentMissing`).
+    let missing: String
+    let read: () -> String?
 }
 
 // MARK: - Assets

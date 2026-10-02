@@ -1,7 +1,7 @@
 ---
 title: Vela installieren
 description: "Alle Wege, Vela zu nutzen – Web, Browser-Erweiterung, Desktop und Handy –, was jeder kostet, was jeder kann und was dein Gerät braucht."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -32,7 +32,7 @@ einem deiner Schlüssel an.
 
 ## Browser-Erweiterung
 
-Für Chromium-Browser: Chrome, Edge und Brave (Chrome 116 oder neuer). Sie legt die
+Für Chromium-Browser: Chrome, Edge und Brave (Chrome 122 oder neuer). Sie legt die
 Wallet in die Symbolleiste und lässt dApps sich direkt mit ihr verbinden. Solange sie
 nicht im Chrome Web Store ist:
 

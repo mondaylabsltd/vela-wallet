@@ -556,6 +556,10 @@ fun AmountHero(
     modifier: Modifier = Modifier,
     positive: Boolean = false,
     centred: Boolean = false,
+    /** Spec 093: an unlimited allowance — the risk to see. */
+    danger: Boolean = false,
+    /** 083 F1: a swap's one coin back, under the figure. */
+    received: String? = null,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -566,13 +570,27 @@ fun AmountHero(
     ) {
         Text(
             text = amount,
-            color = if (positive) colors.successBase else colors.fgBase,
+            color = when {
+                danger -> colors.errorBase
+                positive -> colors.successBase
+                else -> colors.fgBase
+            },
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.xl4,
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
             maxLines = 1,
         )
+        received?.let { back ->
+            Text(
+                text = back,
+                color = colors.successBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+                maxLines = 1,
+            )
+        }
         Text(
             text = fiat,
             color = colors.fgSubtle,

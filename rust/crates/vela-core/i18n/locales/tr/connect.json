@@ -108,6 +108,11 @@
       "clearAllTitle": "Geçmiş temizlensin mi?",
       "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
       "a11yDeleteHistory": "Geçmişten kaldır"
+    },
+    "ext": {
+      "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
+      "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
+      "accessAllow": "Erişime izin ver"
     }
   },
   "signHandoff": {

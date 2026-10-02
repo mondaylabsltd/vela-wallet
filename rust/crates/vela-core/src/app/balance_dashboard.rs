@@ -72,8 +72,14 @@
 //! Also here, pure: [`read_plan`] (spec 082, RE9) — which balances one
 //! chain's read covers, in which order, each contract once — so no client
 //! decides alone which tokens count (the iPhone never counted stablecoins).
+//!
+//! And the networks it cannot reach (spec 092, finding F08): the home line
+//! counts every one of them and the list behind it names them all, each with
+//! what the wallet last read there — [`BalanceView::unreachable_networks`].
+//! While a network cannot be read nobody knows what it holds now, so none is
+//! left out for having looked empty.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -105,6 +111,32 @@ pub const BALANCE_CACHE_TTL_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
 /// Quote-token decimals fallback when the `decimals()` read failed
 /// (`wallet-api.ts:360, 379`).
 pub const DEFAULT_QUOTE_DECIMALS: u32 = 6;
+
+/// How long one chain's balance read may take before the round gives up on it
+/// (spec 092). That chain is a failed chain for the round — it joins the
+/// unreachable list like any other — and every other chain's answer still
+/// lands: a connection held open, which is a real mode behind a blocking
+/// network, must never keep the round, and the home, from settling. The
+/// web's and the desktop's 18 s, now the one rule every shell reads.
+pub const CHAIN_READ_DEADLINE_MS: u32 = 18_000;
+
+/// While the list of unreachable networks is open, how long after each read
+/// the next one starts (spec 092): a network that comes back leaves the list
+/// in front of the person, not at the next 10-minute poll.
+pub const UNREACHABLE_RECHECK_MS: u32 = 10_000;
+
+/// The home line when exactly one network cannot be reached (`{{name}}`).
+pub const UNREACHABLE_ONE: &str = "assets.unreachableOne";
+/// The home line when more than one cannot (`{{n}}`, the count).
+pub const UNREACHABLE_MANY: &str = "assets.unreachableMany";
+/// A row in the list: it held something worth `{{amount}}` when last read.
+pub const LAST_SEEN: &str = "assets.lastSeen";
+/// A row: it held something when last read, none of it priced.
+pub const LAST_SEEN_UNPRICED: &str = "assets.lastSeenUnpriced";
+/// A row: it held nothing when last read.
+pub const LAST_SEEN_EMPTY: &str = "assets.lastSeenEmpty";
+/// A row: not read since this account opened — nothing is known.
+pub const NOT_READ_YET: &str = "assets.notReadYet";
 
 // ---------------------------------------------------------------------------
 // Pure value math — `models/types.ts` helpers, f64 verbatim (open question 5:
@@ -650,8 +682,9 @@ pub enum BalanceOperation {
     /// Persist a total. The CORE decides when this may happen — the complete-
     /// results-only write gate (invariant ⑥) plus the verbatim switcher poke.
     WriteBalanceCache { address: String, usd: f64 },
-    /// One-shot timer for a silent partial retry. `timer_id` comes back in
-    /// [`BalanceShellResult::RetryElapsed`]; only the live id fires.
+    /// One-shot timer for a silent partial retry — or, while the unreachable
+    /// list is open, its next re-read (spec 092). `timer_id` comes back in
+    /// [`BalanceShellResult::RetryElapsed`]; only a live id fires.
     StartRetryTimer { ms: u32, timer_id: u32 },
     /// Persist `vela.balanceHidden` ('1'/'0', best effort —
     /// `use-balance-privacy.ts:35-40`).
@@ -676,6 +709,13 @@ pub enum BalanceShellResult {
         tokens: Vec<BalanceToken>,
         failed_chain_ids: Vec<u32>,
         rate_limited_chain_ids: Vec<u32>,
+        /// Every chain this round asked (spec 092). Those not in
+        /// `failed_chain_ids` answered — holding something or nothing — which
+        /// is how a network that later goes quiet is "nothing when last read"
+        /// rather than "not read yet". Empty from a shell that does not say:
+        /// then only a chain with tokens counts as having answered.
+        #[serde(default)]
+        read_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -770,6 +810,13 @@ pub enum Event {
     FixChainResolved {
         chain_id: u32,
     },
+    /// The list of networks the wallet cannot reach was opened (spec 092):
+    /// read every chain again now, quietly (no pull spinner), and again
+    /// [`UNREACHABLE_RECHECK_MS`] after each read while it stays open — a
+    /// network that comes back leaves the list while the person looks at it.
+    UnreachableListOpened,
+    /// That list closed: the re-reads stop.
+    UnreachableListClosed,
     /// The account switcher was tapped open. `addresses` is the full roster
     /// (context the caller holds — the session machine owns accounts). The
     /// ≤1-account tap-copies-address branch stays in the shell (clipboard).
@@ -806,6 +853,10 @@ pub struct Model {
     /// NOT cleared on account change — ported verbatim (the reset effect at
     /// `useHomeController.ts:399-416` never touches it).
     rate_limited_chain_ids: Vec<u32>,
+    /// Per chain, what it held the last time it answered for this account
+    /// (spec 092) — empty for one that answered holding nothing. A chain
+    /// missing here has not been read since the account opened.
+    last_read: BTreeMap<u32, Vec<BalanceToken>>,
     /// Last-known-good total from a round EVERY chain answered (the
     /// `max(live, cached)` floor for rounds that miss one).
     cached_total: Option<f64>,
@@ -818,6 +869,10 @@ pub struct Model {
     /// cancelled timer's late echo and is ignored (`clearTimeout`).
     live_timer: Option<u32>,
     timer_seq: u32,
+    /// The unreachable-networks list is on screen (spec 092).
+    list_open: bool,
+    /// Its re-read timer — armed after a read only when no partial retry is.
+    list_timer: Option<u32>,
     notice_allowed: bool,
     /// Outstanding pull-gesture fetches; the spinner shows while > 0.
     pending_pulls: u32,
@@ -878,6 +933,35 @@ pub struct BalanceSwitcherView {
     pub balances: Vec<BalanceCacheEntry>,
 }
 
+/// What the wallet last knew about a network it cannot reach now (spec 092).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum LastKnown {
+    /// It answered, holding something.
+    Held,
+    /// It answered, holding nothing — which says nothing about now.
+    Empty,
+    /// It has not answered since this account opened.
+    NotRead,
+}
+
+/// One network the last read could not reach, and what was last read there.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct UnreachableNetwork {
+    pub chain_id: u32,
+    pub last_known: LastKnown,
+    /// The priced worth of what it held when last read, in USD. `None` when
+    /// it held nothing priced — and while privacy hides, withheld like the
+    /// hero's figure (the shell writes its mask in `{{amount}}`).
+    pub last_seen_usd: Option<f64>,
+    /// The corpus key of the row's line: [`LAST_SEEN`] (`{{amount}}`, the
+    /// worth in the display currency), [`LAST_SEEN_UNPRICED`],
+    /// [`LAST_SEEN_EMPTY`] or [`NOT_READ_YET`].
+    pub line_key: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct BalanceView {
@@ -907,10 +991,17 @@ pub struct BalanceView {
     pub unpriced_tokens: Vec<BalanceToken>,
     pub failed_chain_ids: Vec<u32>,
     pub rate_limited_chain_ids: Vec<u32>,
-    /// Failed minus rate-limited (invariant ⑦): a rate limit lifts on its
-    /// own, so the "fix your RPC" banner must never nag for it — the balance
-    /// quietly stays on cache (`HomeScreen.tsx:133-139`).
-    pub banner_chain_ids: Vec<u32>,
+    /// Every network the last read could not reach (spec 092): failed minus
+    /// rate-limited (invariant ⑦ — a rate limit lifts on its own, so it is
+    /// never offered an RPC fix; the balance quietly stays on cache). ALL of
+    /// them, held or not: while a network cannot be read nobody knows what it
+    /// holds now. Ordered: those last seen holding something first, by that
+    /// worth, then the rest in the wallet's network order.
+    pub unreachable_networks: Vec<UnreachableNetwork>,
+    /// The corpus key of the home line over them: [`UNREACHABLE_ONE`]
+    /// (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
+    /// `None` when every network answered.
+    pub unreachable_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
     pub cached_total_usd: Option<f64>,
@@ -987,6 +1078,18 @@ impl App for BalanceDashboard {
                     render()
                 }
             }
+            // Forced past the shell's TTL, never a pull: no spinner over the
+            // hero for a list the person opened.
+            Event::UnreachableListOpened => {
+                model.list_open = true;
+                model.list_timer = None;
+                begin_fetch(model, true, false)
+            }
+            Event::UnreachableListClosed => {
+                model.list_open = false;
+                model.list_timer = None;
+                Command::done()
+            }
             Event::SwitcherOpened { addresses } => switcher_opened(model, addresses),
             Event::SwitcherClosed => {
                 model.switcher_open = false;
@@ -1025,12 +1128,12 @@ impl App for BalanceDashboard {
         } else {
             None
         };
-        let banner_chain_ids = model
-            .failed_chain_ids
-            .iter()
-            .copied()
-            .filter(|id| !model.rate_limited_chain_ids.contains(id))
-            .collect();
+        let unreachable_networks = unreachable_networks(model);
+        let unreachable_key = match unreachable_networks.len() {
+            0 => None,
+            1 => Some(UNREACHABLE_ONE.to_owned()),
+            _ => Some(UNREACHABLE_MANY.to_owned()),
+        };
         let unpriced_tokens = model
             .tokens
             .iter()
@@ -1057,7 +1160,8 @@ impl App for BalanceDashboard {
             unpriced_tokens,
             failed_chain_ids: model.failed_chain_ids.clone(),
             rate_limited_chain_ids: model.rate_limited_chain_ids.clone(),
-            banner_chain_ids,
+            unreachable_networks,
+            unreachable_key,
             holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
             cached_total_usd: model.cached_total,
             switcher: BalanceSwitcherView {
@@ -1085,11 +1189,14 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     // switch, ported verbatim.
     model.tokens.clear();
     model.failed_chain_ids.clear();
+    model.last_read.clear();
     model.cached_total = None;
     model.bootstrapped = false;
     model.partial_retries_left = MAX_PARTIAL_RETRIES;
     model.notice_allowed = false;
     model.live_timer = None; // drop any pending retry from the old account
+    model.list_open = false;
+    model.list_timer = None;
     model.pending_pulls = 0; // stale pull settles are dropped by attempt
 
     // The fetch issued below is out from this moment (#188): the figure only
@@ -1226,6 +1333,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             tokens,
             failed_chain_ids,
             rate_limited_chain_ids,
+            read_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1244,6 +1352,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 .map(with_display_symbol)
                 .collect();
             sort_by_usd_desc(&mut live);
+            remember_reads(model, &live, &failed_chain_ids, &read_chain_ids);
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
@@ -1311,6 +1420,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 model.notice_allowed = true;
             }
             model.bootstrapped = true;
+            arm_list_recheck(model, &mut operations);
             requests(model, operations)
         }
 
@@ -1328,7 +1438,9 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // Nothing known at all: the home must say so rather than show a
             // settled-looking $0.00 (spec 038 finding 15).
             model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
-            render()
+            let mut operations = Vec::new();
+            arm_list_recheck(model, &mut operations);
+            requests(model, operations)
         }
 
         BalanceShellResult::CachedTotalLoaded { address, usd } => {
@@ -1346,6 +1458,14 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
         }
 
         BalanceShellResult::RetryElapsed { timer_id } => {
+            if model.list_timer == Some(timer_id) {
+                model.list_timer = None;
+                // A backgrounded app reads again when it is focused.
+                if model.list_open && !model.backgrounded {
+                    return begin_fetch(model, true, false);
+                }
+                return Command::done();
+            }
             if model.live_timer != Some(timer_id) {
                 return Command::done(); // a cancelled timer's late echo
             }
@@ -1438,6 +1558,100 @@ fn display_total(model: &Model) -> f64 {
         Some(cached) if coverage_partial(model) => live.max(cached),
         _ => live,
     }
+}
+
+/// While the unreachable list is open and still lists something, the next
+/// read starts [`UNREACHABLE_RECHECK_MS`] after this one ended (spec 092) —
+/// unless a partial retry is already armed, which comes sooner.
+fn arm_list_recheck(model: &mut Model, operations: &mut Vec<BalanceOperation>) {
+    model.list_timer = None;
+    if !model.list_open || model.live_timer.is_some() || unreachable_networks(model).is_empty() {
+        return;
+    }
+    model.timer_seq = model.timer_seq.wrapping_add(1);
+    model.list_timer = Some(model.timer_seq);
+    operations.push(BalanceOperation::StartRetryTimer {
+        ms: UNREACHABLE_RECHECK_MS,
+        timer_id: model.timer_seq,
+    });
+}
+
+/// What each chain held when it last answered (spec 092), spam left out. A
+/// chain that answered this round is believed, holding something or nothing.
+/// A failed chain keeps what it last answered with; the rows a shell carried
+/// over for it (the web's and the desktop's `carry_over_unanswered`) stand in
+/// only when this account has no read of it yet — they are that shell's last
+/// read.
+fn remember_reads(model: &mut Model, live: &[BalanceToken], failed: &[u32], read: &[u32]) {
+    let mut answered: BTreeSet<u32> = read.iter().copied().collect();
+    answered.extend(live.iter().map(|t| t.chain_id));
+    for chain in answered {
+        let held: Vec<BalanceToken> = live
+            .iter()
+            .filter(|t| t.chain_id == chain && !t.spam)
+            .cloned()
+            .collect();
+        if !failed.contains(&chain) {
+            model.last_read.insert(chain, held);
+        } else if !held.is_empty() {
+            model.last_read.entry(chain).or_insert(held);
+        }
+    }
+}
+
+/// Where a chain sits in the wallet's own network list: the built-ins in
+/// their shipped order, then any added network by id.
+fn network_rank(chain_id: u32) -> (usize, u32) {
+    let index = super::network_admin::BUILTIN_CHAINS
+        .iter()
+        .position(|c| c.chain_id == chain_id)
+        .unwrap_or(usize::MAX);
+    (index, chain_id)
+}
+
+/// The list behind the home line (spec 092): every failed chain that is not
+/// merely rate-limited, each with what it held when last read — those last
+/// seen holding something first, by that worth, then the rest in network
+/// order.
+fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
+    let chains: BTreeSet<u32> = model
+        .failed_chain_ids
+        .iter()
+        .copied()
+        .filter(|id| !model.rate_limited_chain_ids.contains(id))
+        .collect();
+    let mut rows: Vec<(f64, UnreachableNetwork)> = chains
+        .into_iter()
+        .map(|chain_id| {
+            let held = model.last_read.get(&chain_id);
+            let worth = held.map_or(0.0, |held| live_total(held));
+            let (last_known, line_key) = match held {
+                None => (LastKnown::NotRead, NOT_READ_YET),
+                Some(held) if held.is_empty() => (LastKnown::Empty, LAST_SEEN_EMPTY),
+                Some(_) if worth > 0.0 => (LastKnown::Held, LAST_SEEN),
+                Some(_) => (LastKnown::Held, LAST_SEEN_UNPRICED),
+            };
+            let row = UnreachableNetwork {
+                chain_id,
+                last_known,
+                last_seen_usd: (worth > 0.0 && !model.hidden).then_some(worth),
+                line_key: line_key.to_owned(),
+            };
+            (worth, row)
+        })
+        .collect();
+    rows.sort_by(|(worth_a, a), (worth_b, b)| {
+        let held = |row: &UnreachableNetwork| row.last_known == LastKnown::Held;
+        held(b)
+            .cmp(&held(a))
+            .then_with(|| {
+                worth_b
+                    .partial_cmp(worth_a)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| network_rank(a.chain_id).cmp(&network_rank(b.chain_id)))
+    });
+    rows.into_iter().map(|(_, row)| row).collect()
 }
 
 /// `.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a))` — stable in both

@@ -49,13 +49,42 @@ class SettingsFixturesTest {
         }
     }
 
+    /** Spec 095 (App Review 5.1.1(i)): About links the policy, the terms and support. */
     @Test
-    fun `the state inventory covers ST1-ST16 and SR1-SR5`() {
+    fun `about links the privacy policy, terms and support`() {
+        for (locale in SHIPPED_LOCALES) {
+            val about = SettingsFixtures.buildState(SettingsScreenState.ST14, strings(locale)).about
+            assertEquals(
+                listOf("getvela.app/privacy", "getvela.app/terms", "getvela.app/support"),
+                about.links.takeLast(3).map { it.value },
+            )
+            for (row in about.links) {
+                assertTrue("$locale: ${row.label}", row.label.isNotBlank() && !row.label.startsWith("about."))
+                assertTrue(row.external)
+            }
+        }
+    }
+
+    @Test
+    fun `the state inventory covers ST1-ST16 and SR1-SR6`() {
         val states = SettingsScreenState.entries
         // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
-        assertEquals(29, states.size)
+        assertEquals(30, states.size)
         assertEquals(23, states.count { it.name.startsWith("ST") })
-        assertEquals(6, states.count { it.name.startsWith("SR") })
+        assertEquals(7, states.count { it.name.startsWith("SR") })
+    }
+
+    /** Spec 092: SR6 is the unreachable list, drawn through the live builder. */
+    @Test
+    fun `SR6 lists every unreachable network with what was last read there`() {
+        val model = SettingsFixtures.buildState(SettingsScreenState.SR6, strings("en"))
+        assertEquals(SettingsOverlay.Unreachable, model.overlay)
+        assertEquals("Can't reach 3 networks right now", model.unreachable.title)
+        assertEquals(listOf("Ethereum", "BNB Chain", "Polygon"), model.unreachable.rows.map { it.name })
+        assertEquals(
+            listOf("Last seen \$4,500.00", "Held nothing when last read", "Not read yet"),
+            model.unreachable.rows.map { it.line },
+        )
     }
 
     @Test

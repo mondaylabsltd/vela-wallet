@@ -1,7 +1,7 @@
 ---
 title: Vela をインストールする
 description: "ウェブ、ブラウザ拡張、デスクトップ、スマートフォン——Vela を使うすべての方法と、それぞれの費用、できること、端末に必要なもの。"
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -27,7 +27,7 @@ source: fa80f5cfdb95
 
 ## ブラウザ拡張
 
-Chromium 系のブラウザ（Chrome、Edge、Brave。Chrome は 116 以降）で使えます。ウォレットをツールバーに置き、dApp から直接接続できるようにします。Chrome ウェブストアに掲載されるまでは、次の手順で読み込みます。
+Chromium 系のブラウザ（Chrome、Edge、Brave。Chrome は 122 以降）で使えます。ウォレットをツールバーに置き、dApp から直接接続できるようにします。Chrome ウェブストアに掲載されるまでは、次の手順で読み込みます。
 
 1. [Vela を入手](/ja/get-started)から拡張機能をダウンロードし、残しておくフォルダーに展開します。ブラウザはそのフォルダーから拡張機能を実行します。
 2. `chrome://extensions` を開き、**デベロッパー モード**をオンにします。

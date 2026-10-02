@@ -237,8 +237,9 @@ fn scheme_of(url: &str) -> Scheme {
 /// A new-window request: only a person's gesture opens anything (083 W6).
 /// A web address is a tab, whichever frame asked, as in any browser; another
 /// app only from the page's own document (see [`other_app_leave`]). Windows
-/// only for now: wry's macOS hook carries no gesture.
-#[cfg_attr(not(windows), allow(dead_code))]
+/// reads the gesture off the request; macOS has WebKit's own popup blocker
+/// enforce it before the request exists (spec 095, [`mac_leaves`]).
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 fn new_window_leave(url: &str, gesture: bool, from_page: bool) -> Option<Leave> {
     match (gesture, scheme_of(url)) {
         (true, Scheme::Web) => Some(Leave::NewTab(url.to_owned())),
@@ -247,12 +248,14 @@ fn new_window_leave(url: &str, gesture: bool, from_page: bool) -> Option<Leave> 
     }
 }
 
-/// WebView2 about to hand an address to another app, already cancelled (083
-/// W7): only `mailto:`/`tel:`, only on a person's tap, only from the page's
-/// own document — a tap inside a cross-origin frame (an ad) is not the page's
-/// — and only as [`crate::executor::opener::command_value`] escapes it, since
-/// Vela now launches what the engine would have escaped.
-#[cfg_attr(not(windows), allow(dead_code))]
+/// An address for another app, already cancelled in the engine (083 W7;
+/// macOS since spec 095): only `mailto:`/`tel:`, only on a person's tap, only
+/// from the page's own document — a tap inside a cross-origin frame (an ad)
+/// is not the page's — and only as [`crate::executor::opener::command_value`]
+/// escapes it, since Vela now launches what the engine would have escaped.
+/// The iOS browser's rule (main frame + link activated), in the desktop's
+/// words.
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 fn other_app_leave(url: &str, gesture: bool, from_page: bool) -> Option<Leave> {
     (gesture && from_page && scheme_of(url) == Scheme::External)
         .then(|| crate::executor::opener::command_value(url))
@@ -311,7 +314,7 @@ pub fn on_leave_to(sink: LeaveSink) {
     LEAVES.with(|slot| *slot.borrow_mut() = Some(sink));
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn leave_to_page(leave: Leave) {
     LEAVES.with(|slot| {
         if let Some(sink) = slot.borrow().as_ref() {
@@ -376,6 +379,10 @@ struct Browser {
     /// (spec 083 D2), in the window's own pixels.
     #[cfg(windows)]
     hole: Option<[i32; 4]>,
+    /// The navigation delegate in front of wry's (spec 095). WKWebView holds
+    /// its delegate weakly, so the gate lives exactly as long as the view.
+    #[cfg(target_os = "macos")]
+    _gate: Option<objc2::rc::Retained<mac_leaves::NavigationGate>>,
 }
 
 thread_local! {
@@ -1047,6 +1054,8 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             .with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
             // 083 W15: WKWebView has no word on a page's own entries.
             .with_initialization_script(HISTORY_JS)
+            // Spec 095: `window.open` / `target=_blank` — a tab, as on Windows.
+            .with_new_window_req_handler(mac_leaves::new_window)
     };
     // Spec 082: a dev build's fault proxy carries the page too. It is set on
     // this webview's own data store, not the system, so nothing else on the
@@ -1070,6 +1079,14 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             if let Err(error) = listen_for_leaves(&view) {
                 eprintln!("[vela-wallet] browser: WebView2 new windows: {error}");
             }
+            #[cfg(target_os = "macos")]
+            let gate = mac_leaves::install(&view);
+            #[cfg(target_os = "macos")]
+            if gate.is_none() {
+                eprintln!(
+                    "[vela-wallet] browser: no navigation gate; mail and phone links stay refused"
+                );
+            }
             // Built hidden: `place` turns it on in the same frame, and a
             // webview that flashed into the wallet before its first layout
             // would be visible for exactly one frame in the wrong place.
@@ -1085,6 +1102,8 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
                 _context: context,
                 #[cfg(windows)]
                 hole: None,
+                #[cfg(target_os = "macos")]
+                _gate: gate,
             })
         }
         Err(error) => {
@@ -1174,6 +1193,182 @@ fn engine_leave(leave: crate::webview2_events::EngineLeave) {
     };
     if let Some(leave) = leave {
         leave_to_page(leave);
+    }
+}
+
+/// WKWebView's new windows and other apps' addresses, through the one scheme
+/// rule (spec 095 — 083 W6/W7 on macOS). wry's hooks carry no gesture: its
+/// UI-delegate handler gets a URL, and its navigation handler a URL for
+/// every frame, so before this a `window.open` / `target=_blank` showed
+/// nothing and a `mailto:` link did nothing.
+///
+/// * New windows: WebKit's popup blocker (`javaScriptCanOpenWindowsAutomatically
+///   = NO`, set here) lets a window through only on a person's gesture, so a
+///   request that reaches [`new_window`] IS one. A web address becomes a tab;
+///   which frame asked is not said, so another app's address in a new window
+///   stays refused, as on iOS.
+/// * `mailto:` / `tel:`: a [`NavigationGate`] in front of wry's navigation
+///   delegate reads what wry drops — `navigationType` and `sourceFrame` —
+///   and hands the address on only for a link a person activated in the top
+///   document (the iOS browser's rule). Everything else goes to wry's
+///   delegate untouched, and from there to [`allow_navigation`].
+#[cfg(target_os = "macos")]
+mod mac_leaves {
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, Bool, Sel};
+    use objc2::{ClassType, DeclaredClass, declare_class, msg_send, msg_send_id, mutability};
+    use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSString};
+
+    use super::{Leave, Scheme, leave_to_page, new_window_leave, other_app_leave, scheme_of};
+
+    /// `WKNavigationTypeLinkActivated`.
+    const LINK_ACTIVATED: isize = 0;
+    /// `WKNavigationActionPolicyCancel`.
+    const CANCEL: isize = 0;
+
+    /// wry's new-window handler: a web address opens a tab; nothing opens a
+    /// window.
+    pub(super) fn new_window(
+        url: String,
+        _features: wry::NewWindowFeatures,
+    ) -> wry::NewWindowResponse {
+        if let Some(leave) = new_window_leave(&url, true, false) {
+            leave_to_page(leave);
+        }
+        wry::NewWindowResponse::Deny
+    }
+
+    /// Popups on a gesture only, and the gate in front of wry's delegate.
+    /// `None` when the view has no delegate to stand in front of — mail and
+    /// phone links then stay refused by [`super::allow_navigation`].
+    pub(super) fn install(view: &wry::WebView) -> Option<Retained<NavigationGate>> {
+        use wry::WebViewExtMacOS as _;
+        let mtm = MainThreadMarker::new()?;
+        let webview = view.webview();
+        let raw = std::ptr::from_ref(&*webview).cast::<AnyObject>().cast_mut();
+        // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`,
+        // used on the main thread. `configuration` returns a copy that shares
+        // the view's live `WKPreferences`; `navigationDelegate` is wry's
+        // delegate object, retained here so the gate can forward to it.
+        unsafe {
+            let configuration: *mut AnyObject = msg_send![raw, configuration];
+            if let Some(configuration) = configuration.as_ref() {
+                let preferences: *mut AnyObject = msg_send![configuration, preferences];
+                if let Some(preferences) = preferences.as_ref() {
+                    let _: () =
+                        msg_send![preferences, setJavaScriptCanOpenWindowsAutomatically: Bool::NO];
+                }
+            }
+            let inner: *mut AnyObject = msg_send![raw, navigationDelegate];
+            let inner = Retained::retain(inner)?;
+            let gate = NavigationGate::new(mtm, inner);
+            let _: () = msg_send![raw, setNavigationDelegate: &*gate];
+            Some(gate)
+        }
+    }
+
+    pub(super) struct GateIvars {
+        /// wry's navigation delegate, which every other call goes to.
+        inner: Retained<AnyObject>,
+    }
+
+    declare_class!(
+        pub(super) struct NavigationGate;
+
+        unsafe impl ClassType for NavigationGate {
+            type Super = NSObject;
+            type Mutability = mutability::MainThreadOnly;
+            const NAME: &'static str = "VelaNavigationGate";
+        }
+
+        impl DeclaredClass for NavigationGate {
+            type Ivars = GateIvars;
+        }
+
+        unsafe impl NSObjectProtocol for NavigationGate {}
+
+        unsafe impl NavigationGate {
+            #[method(webView:decidePolicyForNavigationAction:decisionHandler:)]
+            fn decide(
+                &self,
+                webview: &AnyObject,
+                action: &AnyObject,
+                handler: &block2::Block<dyn Fn(isize)>,
+            ) {
+                if let Some(url) = action_url(action)
+                    && scheme_of(&url) == Scheme::External
+                {
+                    // SAFETY: WKNavigationAction getters, no arguments;
+                    // `sourceFrame` is checked for nil before it is asked.
+                    let (link, top) = unsafe {
+                        let kind: isize = msg_send![action, navigationType];
+                        let source: *mut AnyObject = msg_send![action, sourceFrame];
+                        let top = match source.as_ref() {
+                            Some(frame) => {
+                                let main: Bool = msg_send![frame, isMainFrame];
+                                main.as_bool()
+                            }
+                            None => false,
+                        };
+                        (kind == LINK_ACTIVATED, top)
+                    };
+                    if let Some(leave @ Leave::External(_)) = other_app_leave(&url, link, top) {
+                        leave_to_page(leave);
+                    }
+                    handler.call((CANCEL,));
+                    return;
+                }
+                // SAFETY: the same message, to the delegate WebKit would have
+                // sent it to; it answers through `handler` exactly once.
+                unsafe {
+                    let _: () = msg_send![
+                        &*self.ivars().inner,
+                        webView: webview,
+                        decidePolicyForNavigationAction: action,
+                        decisionHandler: handler
+                    ];
+                }
+            }
+
+            // WebKit asks which delegate methods exist once, when the
+            // delegate is set: the gate answers for wry's too, and the
+            // runtime forwards those to wry's object.
+            #[method(respondsToSelector:)]
+            fn responds_to(&self, selector: Sel) -> bool {
+                // SAFETY: NSObject's own answer, then wry's delegate's.
+                unsafe {
+                    let own: bool = msg_send![super(self), respondsToSelector: selector];
+                    own || msg_send![&*self.ivars().inner, respondsToSelector: selector]
+                }
+            }
+
+            #[method(forwardingTargetForSelector:)]
+            fn forwarding_target(&self, _selector: Sel) -> *mut AnyObject {
+                Retained::as_ptr(&self.ivars().inner).cast_mut()
+            }
+        }
+    );
+
+    impl NavigationGate {
+        fn new(mtm: MainThreadMarker, inner: Retained<AnyObject>) -> Retained<Self> {
+            let this = mtm.alloc().set_ivars(GateIvars { inner });
+            // SAFETY: NSObject's designated initializer.
+            unsafe { msg_send_id![super(this), init] }
+        }
+    }
+
+    /// `action.request.URL.absoluteString`, if all three are there.
+    fn action_url(action: &AnyObject) -> Option<String> {
+        // SAFETY: getters with no arguments on a WKNavigationAction, an
+        // NSURLRequest and an NSURL; each result is checked for nil.
+        unsafe {
+            let request: *mut AnyObject = msg_send![action, request];
+            let request = request.as_ref()?;
+            let url: *mut AnyObject = msg_send![request, URL];
+            let url = url.as_ref()?;
+            let text: *mut NSString = msg_send![url, absoluteString];
+            text.as_ref().map(|text| text.to_string())
+        }
     }
 }
 
