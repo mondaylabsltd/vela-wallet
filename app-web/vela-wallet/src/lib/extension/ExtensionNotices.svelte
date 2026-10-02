@@ -97,7 +97,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: var(--space-xs, 4px) var(--space-md);
+		gap: var(--space-xs) var(--space-md);
 		padding: var(--space-sm) var(--layout-screenPaddingX);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
 		font-size: var(--text-sm);
@@ -118,7 +118,7 @@
 		width: auto;
 		min-height: var(--size-control-sm);
 		padding-inline: var(--space-lg);
-		padding-block: var(--space-xs, 4px);
+		padding-block: var(--space-xs);
 		font-size: var(--text-sm);
 	}
 	.notice.warning {
