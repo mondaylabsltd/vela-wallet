@@ -1,7 +1,7 @@
 ---
 title: Instalar a Vela
 description: "Todas as formas de usar a Vela — web, extensão de navegador, desktop e celular —, quanto cada uma custa, o que cada uma faz e do que o seu aparelho precisa."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -31,7 +31,7 @@ navegador; em outro aparelho, basta fazer login de novo com uma das suas chaves.
 
 ## Extensão de navegador
 
-Para navegadores Chromium: Chrome, Edge e Brave (Chrome 116 ou mais recente). Ela
+Para navegadores Chromium: Chrome, Edge e Brave (Chrome 122 ou mais recente). Ela
 coloca a carteira na barra de ferramentas e deixa os dApps se conectarem direto a
 ela. Enquanto não estiver na Chrome Web Store:
 
