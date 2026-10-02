@@ -52,6 +52,12 @@ None of the four shells already did the right thing: every one opened only the f
 - Under the suite's load recipe (`TEST_RUNNER_VELA_TEST_LOAD_SECONDS=60` with `MainActorLoadTests`, plus `yes` × 12 cores), all five pass in 0.16 s (the held-main one in 3 s).
 - Android has no such dependency: the balance executor runs on the wallet scope's IO dispatcher, and `withTimeoutOrNull` times out through the coroutine scheduler, not the main looper.
 
+**CI #386, second round: a contract test depended on wall-clock speed.**
+- `ReadPathContractTests.anUnreachableChainIsReportedFailedRatherThanEmpty` reads through an unbooted pool, which refuses every call at once. But each chain's read still needs the main actor. On the starved runner the core's 18 s deadline cut every chain, Tempo included, so "failed" came back as all 24.
+- **Fix:** the iOS `BalanceExecutor` takes `chainDeadlineMs` (default `balanceChainReadDeadlineMs()`), and the three read-path contract tests give it one no run reaches. Their verdict is now the read's own; `ChainDeadlineTests` still proves the cut.
+- The deadline tests now give the *answering* chain a long deadline and only the silent one a short one. Android's stall test likewise uses 5 s instead of 300 ms, so an answering chain on a loaded box is never cut by mistake.
+- Under the load recipe (90 s and 60 s main-actor floods, plus `yes` × 12), the contract tests took the flood's full length and still passed; the deadline tests passed in 0.16 s.
+
 **Android: ✕ on a row's fix closed everything.**
 - Before: the wallet route sent the sheet's ✕ AND Material's own dismissal (swipe, scrim, Back) through one callback, "back to the list". Material calls that only after it has already hidden the sheet. Its path therefore left the list open but invisible, which looks like "the whole sheet closed, Home shown". Its re-reads kept running, and the next tap on the Home line changed nothing, because the state was already "list".
 - Now the two ways out are separate, as on the iPhone:
