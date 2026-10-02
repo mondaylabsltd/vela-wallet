@@ -237,9 +237,7 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				title: t('onboarding.create.alertErrorTitle'),
 				// Except the one refusal a person can undo in one click (spec 094 S2).
 				message:
-					kind.detail === SITE_ACCESS_WITHHELD
-						? t('onboarding.common.siteAccessBody')
-						: kind.detail
+					kind.detail === SITE_ACCESS_WITHHELD ? t('onboarding.common.siteAccessBody') : kind.detail
 			};
 		case 'recover_offer':
 			return {

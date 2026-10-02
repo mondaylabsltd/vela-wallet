@@ -213,7 +213,8 @@ function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceC
  */
 function guardWarnings(guard: GuardView, m: SigningMessages): Block[] {
 	const blocks: Block[] = [];
-	if (guard.unlimited_warning) blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	if (guard.unlimited_warning)
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
 	if (guard.surface === 'permit_sign') {
 		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnPermitCantCap });
 	}
