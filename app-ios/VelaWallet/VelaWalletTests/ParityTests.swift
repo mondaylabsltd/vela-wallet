@@ -92,6 +92,19 @@ struct ParityTests {
         // A plain failure is still a plain failure.
         let failed = receipt(sendView(txStatus: "idle", receiptStatus: "failed"))
         #expect(!failed.captions.contains(loc.t("send.txRejectedFees")))
+
+        // A fee hold survives into a later failure: that failure is not "the
+        // fee rose" — only a fee refusal is.
+        let heldThenFailed = receipt(sendView(txStatus: "idle", receiptStatus: "failed",
+                                              holdReason: "fee_hold"))
+        #expect(!heldThenFailed.captions.contains(loc.t("send.txRejectedFees")))
+
+        // The relay topping up its gas (098 follow-up): its own words, not the
+        // fee hold's, and no confirmation clock.
+        let funding = receipt(sendView(txStatus: "submitted", receiptStatus: "submitted",
+                                       holdReason: "relay_funding"))
+        #expect(funding.captions == [loc.t("send.txRelayFunding")])
+        #expect(!funding.captions.contains(loc.t("send.txHeldFees")))
     }
 
     /// #199: the core says WHEN the op was handed over; the receipt counts

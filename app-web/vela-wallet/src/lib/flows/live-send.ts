@@ -1389,7 +1389,13 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			...parts,
 			stage: 'submitted',
 			title: m['send.txSubmittedTitle'],
-			captions: [m['send.txWaitingConfirm']],
+			// While the relay tops up its gas it says so, instead of a wait
+			// that reads like the network's (098 follow-up).
+			captions: [
+				receipt?.hold_reason === 'relay_funding'
+					? m['send.txRelayFunding']
+					: m['send.txWaitingConfirm']
+			],
 			eta,
 			// Spec 082 RJ16: an operation hash is named as one — never as the
 			// transaction hash it is not (there is no transaction until it lands).

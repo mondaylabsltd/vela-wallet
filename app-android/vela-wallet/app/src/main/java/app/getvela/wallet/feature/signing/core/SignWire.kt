@@ -407,6 +407,8 @@ sealed class SignEndingState {
         val user_op_hash: String,
         val outcome: app.getvela.wallet.feature.send.core.TrackOutcome,
         val fee_held: Boolean = false,
+        /** The relay is topping up its gas before it sends (098 follow-up). */
+        val relay_funding: Boolean = false,
     ) : SignEndingState()
 }
 

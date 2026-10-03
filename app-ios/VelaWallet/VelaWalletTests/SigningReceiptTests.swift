@@ -363,7 +363,7 @@ struct SigningReceiptTests {
 
     /// Every `SignEndingState` the core can name, as the core names it.
     @Test func everyEndingStateIsTheCores() {
-        #expect(landed().state(track: nil) == .following(userOpHash: op, outcome: "landing", feeHeld: false))
+        #expect(landed().state(track: nil) == .following(userOpHash: op, outcome: "landing", feeHeld: false, relayFunding: false))
         #expect(landed().state(track: entry("confirmed", "final", txHash: tx)) == .confirmed(txHash: tx))
         #expect(landed().state(track: entry("dropped", "final", txHash: tx)) == .reverted(txHash: tx))
         #expect(stillConfirming().state(track: entry("not_sent", "final")) == .notSent)
@@ -374,9 +374,12 @@ struct SigningReceiptTests {
         #expect(landed().state(track: entry("rejected", "final")) != .refused)
         #expect(landed().state(track: entry("not_sent", "final")) != .notSent)
         #expect(stillConfirming().state(track: entry("pending", "maybe_sent"))
-            == .following(userOpHash: op, outcome: "maybe_sent", feeHeld: false))
+            == .following(userOpHash: op, outcome: "maybe_sent", feeHeld: false, relayFunding: false))
         #expect(stillConfirming().state(track: entry("fee_held", "landing"))
-            == .following(userOpHash: op, outcome: "landing", feeHeld: true))
+            == .following(userOpHash: op, outcome: "landing", feeHeld: true, relayFunding: false))
+        // The relay topping up its gas (098 follow-up) comes through the core.
+        #expect(stillConfirming().state(track: entry("relay_funding", "landing"))
+            == .following(userOpHash: op, outcome: "landing", feeHeld: false, relayFunding: true))
         let signed = SigningAftercare.of(
             method: "personal_sign", chainId: 100, payload: ["type": "ok", "result": "0xsig"], submittedUserOp: nil
         )

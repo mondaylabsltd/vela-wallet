@@ -936,6 +936,34 @@ class CoreWireDriftTest {
         assertEquals("0xcc", view.entries[1].relay_tx_hash)
     }
 
+    /**
+     * 098 follow-up: the relay topping up its gas is a status, a receipt
+     * outcome, a hold reason and an ending flag. A Kotlin enum without the
+     * name fails the WHOLE view's decode — the tracker would go silent for
+     * every op the moment one waited on the relay's gas.
+     */
+    @Test
+    fun theRelayToppingUpItsGasDecodesEverywhereItIsSaid() {
+        val view = roundTrip<TrackView>(
+            """{"entries":[
+              {"user_op_hash":"0xaa","chain_id":42161,"record_ids":["0xaa"],"status":"relay_funding","tx_hash":null,"polling":true,"submitted_at_ms":1.0,"outcome":"landing","relay_tx_hash":null}
+            ]}""",
+        )
+        assertEquals(TrackStatus.RelayFunding, view.entries[0].status)
+        assertEquals(
+            app.getvela.wallet.feature.send.core.SendReceiptOutcome.RelayFunding,
+            roundTrip<app.getvela.wallet.feature.send.core.SendReceiptOutcome>("""{"type":"relay_funding"}"""),
+        )
+        assertEquals(
+            app.getvela.wallet.feature.send.core.SendHoldReason.RelayFunding,
+            roundTrip<app.getvela.wallet.feature.send.core.SendHoldReason>("\"relay_funding\""),
+        )
+        assertEquals(
+            SignEndingState.Following("0xop", TrackOutcome.Landing, fee_held = false, relay_funding = true),
+            roundTrip<SignEndingState>("""{"type":"following","user_op_hash":"0xop","outcome":"landing","fee_held":false,"relay_funding":true}"""),
+        )
+    }
+
     @Test
     fun theTrackerOperationsAndAnswersOf082Decode() {
         val find = roundTrip<TrackOperation>(

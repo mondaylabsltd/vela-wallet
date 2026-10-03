@@ -696,7 +696,12 @@ object SigningLive {
                     title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
                     captions = listOfNotNull(
                         summary,
-                        if (state.fee_held) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
+                        when {
+                            state.fee_held -> s.t(I18nKeys.Flows.TX_HELD_FEES)
+                            // The relay holds it while it tops up its gas (098 follow-up).
+                            state.relay_funding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
+                            else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
+                        },
                     ),
                     cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
                     ctaAccent = false,
@@ -710,6 +715,7 @@ object SigningLive {
                         when {
                             state.fee_held -> s.t(I18nKeys.Flows.TX_HELD_FEES)
                             state.outcome == TrackOutcome.Unknown -> s.s("unknownOutcome")
+                            state.relay_funding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
                             else -> s.s("stillConfirming")
                         },
                     ),

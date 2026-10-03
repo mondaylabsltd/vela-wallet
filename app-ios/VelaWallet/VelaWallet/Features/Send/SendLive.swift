@@ -1297,8 +1297,15 @@ enum SendLive {
             // Held for fees: the payment is not stuck and not lost — it goes
             // out by itself when fees settle, and saying so is the difference
             // between waiting and sending it twice.
-            if view.receipt?.holdReason != nil {
+            if view.receipt?.holdReason == "fee_hold" {
                 captions = [loc.t("send.txHeldFees")]
+                break
+            }
+            // The relay holds it while it tops up its gas on the chain (098
+            // follow-up): why it waits — and no confirmation clock, since
+            // nothing is on the network yet.
+            if view.receipt?.holdReason == "relay_funding" {
+                captions = [loc.t("send.txRelayFunding")]
                 break
             }
             captions = [loc.t("send.txWaitingConfirm")]
@@ -1354,7 +1361,9 @@ enum SendLive {
             // rose above what was approved and NOTHING was sent, which is a
             // different sentence and a different next step. `hold_reason` was
             // on this client's wire and read by no Swift at all until 058.
-            if view.receipt?.holdReason != nil {
+            // Only the fee refusal: a fee hold survives into a later failure,
+            // and "the fee rose" over a transfer that reverted is untrue.
+            if view.receipt?.holdReason == "fee_rejected" {
                 captions = [loc.t("send.txRejectedFees")]
                 break
             }

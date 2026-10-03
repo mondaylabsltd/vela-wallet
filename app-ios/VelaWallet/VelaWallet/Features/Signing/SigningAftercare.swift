@@ -88,7 +88,7 @@ struct SigningAftercare: Equatable {
               let state = SignEndingStateWire(object)
         else {
             // A shape this build cannot read: still on its way, never a tick.
-            return .following(userOpHash: userOpHash ?? "", outcome: "landing", feeHeld: false)
+            return .following(userOpHash: userOpHash ?? "", outcome: "landing", feeHeld: false, relayFunding: false)
         }
         return state
     }
@@ -129,7 +129,8 @@ enum SignEndingStateWire: Equatable {
     case refused
     /// Still on its way. `outcome` is the tracker's `TrackOutcome` wire name
     /// (`maybe_sent`, `landing`, `still_confirming`, `unknown`).
-    case following(userOpHash: String, outcome: String, feeHeld: Bool)
+    /// `relayFunding`: the relay is topping up its gas before it sends.
+    case following(userOpHash: String, outcome: String, feeHeld: Bool, relayFunding: Bool)
 
     init?(_ object: [String: Any]) {
         switch object["type"] as? String {
@@ -142,7 +143,8 @@ enum SignEndingStateWire: Equatable {
             self = .following(
                 userOpHash: object["user_op_hash"] as? String ?? "",
                 outcome: object["outcome"] as? String ?? "landing",
-                feeHeld: object["fee_held"] as? Bool ?? false
+                feeHeld: object["fee_held"] as? Bool ?? false,
+                relayFunding: object["relay_funding"] as? Bool ?? false
             )
         default: return nil
         }

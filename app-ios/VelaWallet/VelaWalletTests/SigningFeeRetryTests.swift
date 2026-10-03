@@ -91,11 +91,18 @@ struct SigningFeeRetryTests {
                 "a message has no network fee to refresh")
 
         let down = SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: "quote_unavailable"), context: context())
-        #expect(warning(down) == loc.t("componentsUi.funding.denialNetworkError"))
+        #expect(warning(down) == loc.t("componentsUi.gas.reasonQuote"))
         #expect(tappable(down), "a failed quote is tapped to ask again")
-        for failure in ["fee_token_unavailable", "estimate_failed", "gas_quote_too_high"] {
+        // Each relay failure says which it was — never "check your
+        // connection" over a simulation the relay did not answer.
+        for (failure, key) in [
+            ("fee_token_unavailable", "componentsUi.gas.reasonFeeToken"),
+            ("estimate_failed", "componentsUi.gas.reasonSimulation"),
+            ("gas_quote_too_high", "componentsUi.gas.reasonQuoteHigh"),
+        ] {
             #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: failure), context: context()))
-                    == loc.t("componentsUi.funding.denialNetworkError"), "\(failure)")
+                    == loc.t(key), "\(failure)")
+            #expect(loc.t(key) != key, "\(key) resolves")
         }
         for failure in ["missing_public_key", "calculation_failed", "would_fail"] {
             #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: failure), context: context()))
@@ -116,7 +123,7 @@ struct SigningFeeRetryTests {
         )
         #expect(warning(unreachable) == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
         #expect(warning(unreachable)?.contains("Gnosis") == true)
-        #expect(warning(unreachable) != loc.t("componentsUi.funding.denialNetworkError"))
+        #expect(warning(unreachable) != loc.t("componentsUi.gas.reasonQuote"))
     }
 
     /// The fee view takes `FeeFailure`'s object form (RJ13) — a string
