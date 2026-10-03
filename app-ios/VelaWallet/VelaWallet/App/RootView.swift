@@ -2942,7 +2942,11 @@ struct RootView: View {
                     sendAmount: sendStates.contains(state) ? amountBinding : nil,
                     sendRecipient: sendStates.contains(state) ? recipientBinding : nil,
                     sendRow: splitRows(for: state),
-                    sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
+                    // The relay's stops first: the core opens them at Continue,
+                    // on this page (spec 098).
+                    sendWarning: send.view.flatMap {
+                        SendLive.stopNotice($0, loc: loc) ?? SendLive.formWarning($0, loc: loc)
+                    },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
@@ -2983,7 +2987,17 @@ struct RootView: View {
                             send.done()
                         }
                     },
-                    onContinueSend: { send.advance() },
+                    // While a relay stop is up the button is its retry — the
+                    // core clears the stop and re-runs the pre-check (098).
+                    onContinueSend: {
+                        if send.view?.relayUnreachable != nil {
+                            send.retryRelayUnreachable()
+                        } else if send.view?.treasuryBootstrap != nil {
+                            send.retryAfterBootstrap()
+                        } else {
+                            send.advance()
+                        }
+                    },
                     onRefreshFee: { fees.refresh() },
                     onToggleSpeed: { fees.toggleSpeed() },
                     onPickSpeed: { tier in fees.pickSpeed(tier) },
@@ -2992,7 +3006,9 @@ struct RootView: View {
                         // decides which — a funded relayer re-runs the
                         // pre-check, a refused submit re-signs, and a prompt
                         // that is up is cancelled at its own checkpoint.
-                        if send.view?.treasuryBootstrap != nil {
+                        if send.view?.relayUnreachable != nil {
+                            send.retryRelayUnreachable()
+                        } else if send.view?.treasuryBootstrap != nil {
                             send.retryAfterBootstrap()
                         } else if send.view?.txError != nil {
                             send.retryAfterError()
@@ -3001,7 +3017,13 @@ struct RootView: View {
                         }
                     },
                     // 暂不: the pause is dismissed and the facts are kept.
-                    onNoticeSecondary: { send.dismissTreasurySheet() },
+                    onNoticeSecondary: {
+                        if send.view?.relayUnreachable != nil {
+                            send.dismissRelayUnreachable()
+                        } else {
+                            send.dismissTreasurySheet()
+                        }
+                    },
                     onPickFeeToken: pickFeeToken,
                     onPickContact: pickSendContact,
                     onPickGroup: pickSendGroup,
@@ -3106,13 +3128,17 @@ struct RootView: View {
     private func sendCtaDisabled(_ state: FlowStateId) -> Bool {
         guard let view = send.view else { return false }
         switch state {
-        case .sd2, .sd2b, .sd2d: return !view.canContinue
+        // A relay stop turns the button into its retry, which is always
+        // pressable (spec 098).
+        case .sd2, .sd2b, .sd2d:
+            return !view.canContinue && view.treasuryBootstrap == nil && view.relayUnreachable == nil
         // Three more reasons the confirm CTA is inert, and each one now has a
         // line on the page saying so: a depleted relayer, a submit the relay
         // refused, and a signature already under way.
         case .sd3, .sd3b, .sd3c:
             return !view.canConfirm || view.sending
-                || view.treasuryBootstrap != nil || view.txError != nil
+                || view.treasuryBootstrap != nil || view.relayUnreachable != nil
+                || view.txError != nil
         default: return false
         }
     }
