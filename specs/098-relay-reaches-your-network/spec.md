@@ -33,6 +33,8 @@ the relay") — by ruling, with disclosure in its place (§0.1).
 4. **The wallet never sends silently into a relay that cannot serve the chain** (§2).
 5. **The funding sheet is made good** (§4).
 6. **The design lives in the documents, not only in this spec** (§6).
+7. **A chain the relay's directory does not list is not supported** — ruled after the
+   FR-007 measurement (§3.3): 「你说的对，如果目录里没有的，可以不支持」.
 
 ## 1. What is wrong today — measured, not recalled
 
@@ -297,7 +299,7 @@ route), so FR-003 is the English page; the docs that reach every locale say it t
 | FR-004 | done — words split on `operator_served`, not on `reason` (§2 as built) |
 | FR-005 | done in vela-relay PR #15 — needs a deploy of both shells |
 | FR-006 | done in vela-relay PR #15, as `VELA_RELAY_ALLOW_PRIVATE_RPC` |
-| FR-007 | **not built** — measured, §3.3 as built |
+| FR-007 | **not built** — measured (§3.3 as built); ruled out by the owner (§0.7) |
 | FR-008 | done — QR on the web only; address with copy on all four (§4 as built) |
 | FR-009 | done — §6 as built |
 | FR-010 | done — `results.md` lists each test and the mutation that fails it |

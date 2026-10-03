@@ -50,19 +50,20 @@ const CORPUS_BYTES: usize = 990_499;
 /// branches, which each make this identical edit; later the same day, to
 /// 141,800 (096's order-terms warning, "All" and "Order" among them).
 ///
-/// 2026-10-03 (098), PROPOSED — the owner's call, as every move here is: the
-/// founder asked for the wallet to stop sending silently into a relay that
+/// 2026-10-03 (098): the founder asked for the wallet to stop sending silently into a relay that
 /// cannot serve the chain, and for a funding sheet that resumes by itself. The
 /// "relay can't reach this network" sheet (7 strings) and the sheet's balance,
 /// network, scan and watching lines (4) put the runtime route at 143,429 after
 /// `en` and `ja` were tightened. Same rule: ~1 KB above the measurement.
+/// Approved by the owner the same day, with the reduction claim below:
+/// 「i18n 体积预算上调 统一」.
 const SC005_BUDGET: usize = 144_400;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
 ///
 /// It was 86%; every word added since July has eaten into it, and 098's put the
-/// measurement at 85.94%. PROPOSED with the budget, the same way: ~1.4 KB of
-/// room above the measurement. The sentence SC-005 requires — one language plus
+/// measurement at 85.94%. Moved with the budget, the same way and approved with
+/// it: ~1.4 KB of room above the measurement. The sentence SC-005 requires — one language plus
 /// `en` — is asserted separately and does not move.
 const SC005_REDUCTION_PERCENT: f64 = 85.8;
 
