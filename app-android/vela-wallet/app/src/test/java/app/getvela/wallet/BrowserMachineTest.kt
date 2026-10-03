@@ -11,8 +11,18 @@ import app.getvela.wallet.feature.browser.core.DbrShellResult
 import app.getvela.wallet.feature.browser.core.DbrView
 import app.getvela.wallet.feature.browser.core.ProviderBridge
 import app.getvela.wallet.feature.browser.core.ProviderScript
+import app.getvela.wallet.feature.signing.core.SignAccountRef
+import app.getvela.wallet.feature.signing.core.SignApproveOpts
 import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignEvent
+import app.getvela.wallet.feature.signing.core.SignOperation
 import app.getvela.wallet.feature.signing.core.SignResponsePayload
+import app.getvela.wallet.feature.signing.core.SignShellResult
+import app.getvela.wallet.feature.signing.core.SignSponsorship
+import app.getvela.wallet.feature.signing.core.SignSubmitOutcome
+import app.getvela.wallet.feature.signing.core.SignSurface
+import app.getvela.wallet.feature.signing.core.SignView
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,6 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -31,6 +43,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_core_uniffi.DappBrowserCore
+import uniffi.vela_core_uniffi.SignRequestCore
 import uniffi.vela_core_uniffi.dappBrowserInput
 import uniffi.vela_core_uniffi.dappProviderScript
 
@@ -381,7 +394,7 @@ class BrowserMachineTest {
         ask(h, "tab-1", "d1", "b1", "wallet_sendCalls", JSONArray().put(JSONObject().put("from", safe).put("calls", calls)))
         withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
         assertEquals(56, forwarded.single().chain_id)
-        h.dispatch(DbrEvent.SigningAnswered("tab-1", "b1", SignResponsePayload.Ok(op), null), DbrEvent.serializer())
+        h.dispatch(DbrEvent.SigningAnswered("tab-1", "b1", SignResponsePayload.Ok(JsonPrimitive(op)), null), DbrEvent.serializer())
         assertEquals(op, answerFor("b1").second.getString("result"))
 
         readResult = { method ->
@@ -404,5 +417,96 @@ class BrowserMachineTest {
         // The tx hash is no batch id.
         ask(h, "tab-1", "d1", "s2", "wallet_getCallsStatus", JSONArray().put(tx))
         assertEquals(5730, answerFor("s2").second.getJSONObject("error").getInt("code"))
+    }
+
+    /**
+     * Spec 097 G (S2): Uniswap's `wallet_sendCalls` declared EIP-5792
+     * `version: "2.0.0"`, whose answer is `{ id }`; it read `.id` off the bare
+     * string it got, asked `wallet_getCallsStatus([null])` and called a landed
+     * swap failed. The real signing core shapes the answer; this shell decodes
+     * it (`SignResponsePayload.Ok.result` is any JSON now, not a string) and
+     * hands it to the browser untouched. The page reads `.id`, as Uniswap and
+     * viem do, and that id reads 200 with the receipt.
+     */
+    @Test
+    fun `a 2_0_0 batch reaches the page as the core formed it, and its id reads 200`() = runBlocking<Unit> {
+        val op = "0x1d75e3a13bc905a127da07682056ebaf9e5118e67148bb02076c036b2104f694"
+        val tx = "0xc4566172c559d3db846d2dcf222f36f0f6d469026b68832301635fc756821482"
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":56,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        h.dispatch(DbrEvent.NetworksChanged(listOf(1, 56, 100)), DbrEvent.serializer())
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        val calls = JSONArray().put(JSONObject().put("to", "0x55d398326f99059fF775485246999027B3197955").put("data", "0x").put("value", "0x0"))
+        val batch = JSONObject().put("version", "2.0.0").put("chainId", "0x38").put("from", safe).put("atomicRequired", true).put("calls", calls)
+        ask(h, "tab-1", "d1", "g1", "wallet_sendCalls", JSONArray().put(batch))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        val forward = forwarded.single()
+        assertEquals(56, forward.chain_id)
+
+        // The real signing core, as this shell's executor answers it: the relay
+        // took the op and its receipt is late (the record lands first, §4).
+        val answered = CompletableDeferred<SignResponsePayload>()
+        val sign = CoreHost(
+            bridge = SignRequestCore().asBridge(), scope = scope, initial = SignView(), serializer = SignView.serializer(),
+            perform = JsonShell.perform(SignOperation.serializer(), SignShellResult.serializer()) { operation ->
+                when (operation) {
+                    is SignOperation.SendResponse -> {
+                        answered.complete(operation.payload)
+                        SignShellResult.Responded
+                    }
+                    is SignOperation.CheckBundlerFunding -> SignShellResult.PreCheck(null)
+                    is SignOperation.AttemptSponsorship -> SignShellResult.Sponsorship(SignSponsorship.Denied(null))
+                    is SignOperation.SignAndSubmit -> SignShellResult.Submit(SignSubmitOutcome.ReceiptPending(op), 2.0e12)
+                    is SignOperation.PersistRecord -> SignShellResult.RecordPersisted
+                    is SignOperation.UpdateRecord -> SignShellResult.RecordUpdated
+                    is SignOperation.ClearToPost -> SignShellResult.Responded
+                    is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
+                    is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+                }
+            },
+            escapedFailure = JsonShell.escapedFailure(SignOperation.serializer(), SignShellResult.serializer(), fallback = SignShellResult.Responded) { SignShellResult.Responded },
+            onFault = { error -> throw AssertionError("sign fault: $error", error) },
+        )
+        sign.dispatch(SignEvent.NetworksChanged(listOf(1, 56, 100)), SignEvent.serializer())
+        sign.dispatch(SignEvent.AccountsChanged(listOf(SignAccountRef(safe, "cred-1")), 0), SignEvent.serializer())
+        sign.dispatch(
+            SignEvent.RequestArrived(
+                id = forward.id, method = forward.method, params_json = forward.params_json, origin = forward.origin,
+                transport_id = "tab-1", dedicated_transport = true, per_request_chain = forward.chain_id,
+                granted_address = forward.granted_address, now_ms = 1.0e12,
+            ),
+            SignEvent.serializer(),
+        )
+        withTimeout(10_000) { sign.view.first { it.surface == SignSurface.Sheet && !it.reconcile_pending } }
+        sign.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+        val payload = withTimeout(20_000) { answered.await() }
+        assertEquals(SignResponsePayload.Ok(JsonObject(mapOf("id" to JsonPrimitive(op)))), payload)
+
+        h.dispatch(DbrEvent.SigningAnswered("tab-1", "g1", payload, null), DbrEvent.serializer())
+        val result = answerFor("g1").second.getJSONObject("result")
+        assertEquals(listOf("id"), result.keys().asSequence().toList())
+        val id = result.getString("id")
+        assertEquals(op, id)
+
+        // What Uniswap asked with when `.id` was undefined: still -32602.
+        ask(h, "tab-1", "d1", "g2", "wallet_getCallsStatus", JSONArray().put(JSONObject.NULL))
+        assertEquals(-32602, answerFor("g2").second.getJSONObject("error").getInt("code"))
+
+        readResult = { method ->
+            when (method) {
+                "eth_getUserOperationReceipt" -> JSONObject()
+                    .put("success", true)
+                    .put("logs", JSONArray())
+                    .put("receipt", JSONObject().put("transactionHash", tx).put("blockNumber", "0x7795a57").put("status", "0x1"))
+                else -> JSONObject.NULL
+            }
+        }
+        ask(h, "tab-1", "d1", "g3", "wallet_getCallsStatus", JSONArray().put(id))
+        val status = answerFor("g3").second.getJSONObject("result")
+        assertEquals(200, status.getInt("status"))
+        assertEquals(op, status.getString("id"))
+        assertEquals("0x38", status.getString("chainId"))
+        assertEquals(tx, status.getJSONArray("receipts").getJSONObject(0).getString("transactionHash"))
     }
 }

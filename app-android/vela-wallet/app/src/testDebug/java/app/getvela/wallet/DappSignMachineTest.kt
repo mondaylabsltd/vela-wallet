@@ -148,7 +148,7 @@ class DappSignMachineTest {
                     events += "respond"
                     // The page's shape, as the browser core renders it (spec 070).
                     val json = when (payload) {
-                        is app.getvela.wallet.feature.signing.core.SignResponsePayload.Ok -> JSONObject().put("result", payload.result ?: JSONObject.NULL)
+                        is app.getvela.wallet.feature.signing.core.SignResponsePayload.Ok -> JSONObject().put("result", payload.result?.let { org.json.JSONTokener(it.toString()).nextValue() } ?: JSONObject.NULL)
                         is app.getvela.wallet.feature.signing.core.SignResponsePayload.Err -> JSONObject().put("error", JSONObject().put("code", payload.code).put("message", payload.message.orEmpty()))
                     }
                     answers += "$transportId/$id" to json

@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.signing.core
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /*
  * The `sign_request` machine's wire (spec 044) — a dApp request's life
@@ -232,9 +233,15 @@ sealed class SignRecordClose {
 
 @Serializable
 sealed class SignResponsePayload {
+    /**
+     * The page's `result` exactly as the core formed it: a hash or a
+     * signature (a JSON string), or a `wallet_sendCalls` batch's id in the
+     * shape its request declared — `{ "id": … }` for EIP-5792 2.0.0 (spec
+     * 097 G). Forwarded to the browser untouched; this shell never shapes it.
+     */
     @Serializable
     @SerialName("ok")
-    data class Ok(val result: String? = null) : SignResponsePayload()
+    data class Ok(val result: JsonElement? = null) : SignResponsePayload()
 
     @Serializable
     @SerialName("err")

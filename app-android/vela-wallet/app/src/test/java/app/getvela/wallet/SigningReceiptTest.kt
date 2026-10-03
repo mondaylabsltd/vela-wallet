@@ -21,6 +21,7 @@ import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.signing.core.SignSurface
 import app.getvela.wallet.feature.signing.core.SignView
 import java.io.File
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -181,16 +182,16 @@ class SigningReceiptTest {
     /** Spec 082 RA8: the ending is the core's reading of the answer (`sign_ending_of`). */
     @Test
     fun `an answer becomes the ending the aftercare shows`() {
-        val signed = SigningAftercare.of("personal_sign", 100, SignResponsePayload.Ok("0xsig"), null)
+        val signed = SigningAftercare.of("personal_sign", 100, SignResponsePayload.Ok(JsonPrimitive("0xsig")), null)
         assertEquals(SigningAftercare(100, SignEnding.Signed), signed)
         assertEquals(
             SigningAftercare(100, SignEnding.Landed(tx, op)),
-            SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(tx), op),
+            SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(JsonPrimitive(tx)), op),
         )
         assertEquals(
             "the wait ran out: the page got the operation hash",
             SigningAftercare(100, SignEnding.StillConfirming(op)),
-            SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(op.uppercase().replace("0X", "0x")), op),
+            SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(JsonPrimitive(op.uppercase().replace("0X", "0x"))), op),
         )
         assertNull(SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Err(4001, SignErrorKind.UserRejected), op))
     }
