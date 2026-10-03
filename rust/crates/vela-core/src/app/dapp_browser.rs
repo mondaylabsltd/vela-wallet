@@ -1588,13 +1588,13 @@ fn signing_answered(
     // operation's hash, spec 097 E): known here by the method, whatever the
     // shell says — the desktop told only an answer equal to the op it had
     // seen, and `wallet_getCallsStatus` read "Unknown bundle id".
+    // In either shape the request declared (spec 097 G: `{ id }` for
+    // EIP-5792 2.0.0).
     let batch = job
         .as_ref()
         .filter(|job| job.method == "wallet_sendCalls")
-        .and_then(|_| match &payload {
-            SignResponsePayload::Ok { result: Some(id) } => dapp_rpc::calls_status_id(&json!([id])),
-            _ => None,
-        });
+        .and_then(|_| payload.answered())
+        .and_then(|id| dapp_rpc::calls_status_id(&json!([id])));
     if let Some(chain) = chain {
         for hash in user_op_hash
             .map(|hash| hash.to_ascii_lowercase())
@@ -1607,11 +1607,10 @@ fn signing_answered(
     if let Some(job) = job {
         if close_open(model, tab_id, &job.doc, id) {
             let message = match payload {
-                SignResponsePayload::Ok { result } => result_json(
-                    &job.doc,
-                    id,
-                    &result.map(Value::String).unwrap_or(Value::Null),
-                ),
+                // The signing machine's answer, as it formed it.
+                SignResponsePayload::Ok { result } => {
+                    result_json(&job.doc, id, &result.unwrap_or(Value::Null))
+                }
                 // The refusal carries its `kind` to the page, and the detail
                 // is named INSIDE the sentence rather than sent as the whole
                 // answer — spec 081's two halves, stated once in `dapp_rpc`
