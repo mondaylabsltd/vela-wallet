@@ -362,6 +362,110 @@ struct DappBrowserTests {
         #expect(h.answer("t1", id: "s2")?.errorCode == 5730)
     }
 
+    /// Spec 097 G (S2): Uniswap's `wallet_sendCalls` declared EIP-5792
+    /// `version: "2.0.0"`, whose answer is `{ id }`; it read `.id` off the bare
+    /// string it got, asked `wallet_getCallsStatus([null])` and called a landed
+    /// swap failed. The REAL signing core shapes the answer; this shell takes
+    /// it out of `send_response` as `SignExecutor` does and hands it to the
+    /// browser untouched (with the op it names, as `SigningController` does).
+    /// The page reads `.id`, as Uniswap and viem do, and that id reads 200.
+    @Test func aBatchDeclaring2_0_0IsAnsweredAnObjectAndItsIdReads200() async throws {
+        let op = "0x1d75e3a13bc905a127da07682056ebaf9e5118e67148bb02076c036b2104f694"
+        let tx = "0xc4566172c559d3db846d2dcf222f36f0f6d469026b68832301635fc756821482"
+        let now = 1_757_000_000_000.0
+        let batch: [String: Any] = [
+            "version": "2.0.0", "chainId": "0x38", "from": a1, "atomicRequired": true,
+            "calls": [["to": "0x55d398326f99059fF775485246999027B3197955", "data": "0x", "value": "0x0"]],
+        ]
+        let batchJson = try #require(String(data: try JSONSerialization.data(withJSONObject: [batch]), encoding: .utf8))
+        let h = BrowserHarness(seed: { store in
+            store.writeString("vela.perm.\(dapp)", BrowserHarness.grant(dapp, a1, chain: 56))
+        })
+        await h.boot()
+        h.browser.networksChanged([1, 56, 100])
+        await h.hello("t1", doc: "d1", origin: dapp)
+        await h.ask("t1", doc: "d1", origin: dapp, id: "g1", method: "wallet_sendCalls", params: [batch])
+        await h.until { !h.forwards.isEmpty }
+        let forward = try #require(h.forwards.first)
+        #expect(forward.chainId == 56)
+
+        // The signing core runs the forwarded request: approved, signed as
+        // `op`, its record ahead, cleared, and the relay takes it.
+        let core = SignRequestCore()
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "networks_changed", "chain_ids": [1, 56, 100]]))
+        _ = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "accounts_changed", "accounts": [["address": a1, "credential_id": "cred-1"]], "active_index": 0,
+        ]))
+        _ = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "request_arrived", "id": "g1", "method": "wallet_sendCalls",
+            "params_json": batchJson, "origin": dapp, "transport_id": "t1",
+            "dedicated_transport": true, "per_request_chain": 56, "dapp": NSNull(),
+            "granted_address": a1, "requested_address": NSNull(), "request_ts_ms": NSNull(), "now_ms": now,
+        ]))
+        var run = BridgeRun()
+        try run.take(core.dispatch(eventJson: CoreJSON.string([
+            "type": "approve_tapped",
+            "opts": [
+                "max_fee_per_gas": NSNull(), "bundler_cost_wei": NSNull(), "gas_fee_token": NSNull(),
+                "quoted_fee": NSNull(), "fee_collector": NSNull(), "params_override_json": NSNull(),
+                "intent": NSNull(), "unlimited_approved": false,
+            ],
+        ])))
+        let answerEach: ([String: Any]) -> String? = { operation in
+            switch operation["type"] as? String {
+            case "check_bundler_funding": return CoreJSON.string(["type": "pre_check", "funding": NSNull()])
+            case "persist_record": return CoreJSON.string(["type": "record_persisted"])
+            case "update_record": return CoreJSON.string(["type": "record_updated"])
+            case "clear_to_post", "send_response": return CoreJSON.string(["type": "responded"])
+            default: return nil
+            }
+        }
+        try run.drain(core, answer: answerEach)
+        #expect(run.tags.last == "sign_and_submit")
+        try run.take(core.dispatch(eventJson: CoreJSON.string([
+            "type": "op_signed", "id": "g1", "user_op_hash": op, "submit_block": NSNull(), "now_ms": now,
+        ])))
+        try run.drain(core, answer: answerEach)
+        try run.take(core.dispatch(eventJson: CoreJSON.string([
+            "type": "op_submitted", "id": "g1", "user_op_hash": op, "now_ms": now,
+            "maybe_sent": false, "submit_block": NSNull(),
+        ])))
+        try run.drain(core, answer: answerEach)
+        let response = try #require(run.operations.last { $0["type"] as? String == "send_response" })
+        // What `SignExecutor.perform` hands `ports.respond`.
+        let payload = try #require(response["payload"] as? [String: Any])
+        #expect(payload["type"] as? String == "ok")
+        #expect((payload["result"] as? [String: Any])?.keys.sorted() == ["id"])
+
+        h.browser.signingAnswered(
+            tab: "t1", id: "g1", payload: payload,
+            userOpHash: SigningController.opHashAnswer(payload, submitted: op)
+        )
+        await h.until { h.answer("t1", id: "g1") != nil }
+        let answered = try #require(h.answer("t1", id: "g1")?.result as? [String: Any])
+        #expect(answered.keys.sorted() == ["id"])
+        let id = try #require(answered["id"] as? String)
+        #expect(id == op)
+
+        // What Uniswap asked with when `.id` was undefined: still -32602.
+        await h.ask("t1", doc: "d1", origin: dapp, id: "g2", method: "wallet_getCallsStatus", params: [NSNull()])
+        await h.until { h.answer("t1", id: "g2") != nil }
+        #expect(h.answer("t1", id: "g2")?.errorCode == -32602)
+
+        h.readAnswer = ["result": [
+            "success": true, "logs": [Any](),
+            "receipt": ["transactionHash": tx, "blockNumber": "0x7795a57", "status": "0x1"],
+        ] as [String: Any]]
+        await h.ask("t1", doc: "d1", origin: dapp, id: "g3", method: "wallet_getCallsStatus", params: [id])
+        await h.until { h.answer("t1", id: "g3") != nil }
+        let status = h.answer("t1", id: "g3")?.result as? [String: Any]
+        #expect((status?["status"] as? NSNumber)?.intValue == 200)
+        #expect(status?["id"] as? String == op)
+        #expect(status?["chainId"] as? String == "0x38")
+        #expect((status?["receipts"] as? [[String: Any]])?.first?["transactionHash"] as? String == tx)
+        #expect(h.reads.last?.chainId == 56)
+    }
+
     /// A page answered with a user-operation hash can ask for its receipt by
     /// that hash: the relay is asked which transaction carried it, and the
     /// node is asked about THAT.

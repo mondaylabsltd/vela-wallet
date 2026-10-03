@@ -24,7 +24,9 @@
 //  sheet and Activity say it failed) — and with the op hash when it is late;
 //  the tracker alone closes the row. A `wallet_sendCalls` is the core's to
 //  answer with its id — the op hash — the moment `op_submitted` says the
-//  relay took it (spec 097 E); the wait below then ends answered.
+//  relay took it (spec 097 E); the wait below then ends answered. Its
+//  `result` is in the shape the request declared — `{ id }` for EIP-5792
+//  2.0.0 (spec 097 G) — and goes to the page as the core formed it.
 //
 //  ## A lost reply is not a failure (spec 082 RA1–RA3)
 //
