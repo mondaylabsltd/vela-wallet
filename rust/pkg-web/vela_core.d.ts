@@ -781,6 +781,14 @@ export function dappRpcCapabilities(params_json: string, granted_json: string, c
  */
 export function dappRpcClassify(method: string): string;
 
+/**
+ * EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
+ * request (`params_json`) declared — `{ "id": … }` for 2.0.0, the bare id
+ * for 1.0 or none (spec 097 G) — as JSON. The extension's worker mirrors it
+ * for the answer it forms itself (a batch that may have been sent).
+ */
+export function dappRpcSendCallsResult(params_json: string, id: string): string;
+
 export function decodeCalldata(sig: string, calldata: Uint8Array): AbiValue;
 
 export function derSignatureToRawLowS(der: Uint8Array): Uint8Array;
@@ -1106,6 +1114,14 @@ export function rpcReadTimeoutMs(): number;
 export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
+
+/**
+ * The hash or signature an answer to a page names (`payload_json`, the
+ * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
+ * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`;
+ * `undefined` for an error, a `null` answer or unreadable JSON.
+ */
+export function signAnswered(payload_json: string): string | undefined;
 
 /**
  * The ending of a request whose answer to the page was `payload_json` (the
@@ -1450,6 +1466,7 @@ export interface InitOutput {
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
     readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
+    readonly dappRpcSendCallsResult: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
     readonly dapppermissionscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1580,6 +1597,7 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signAnswered: (a: number, b: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signInRoute: (a: number, b: number) => [number, number];
