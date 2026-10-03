@@ -241,7 +241,7 @@ final class RpcPool {
     ///
     /// `nil` invalidates every chain; a chain id reloads that one and drops its
     /// cached winner — which matters more than it sounds: the winner is handed
-    /// to the bundler as `X-Rpc-Url` for up to an hour, so a stale one keeps
+    /// to the relay as `x-vela-rpc-url` for up to an hour, so a stale one keeps
     /// sending traffic to the endpoint the person just replaced.
     func invalidate(chainId: Int?) {
         guard booted else { return }
@@ -397,6 +397,12 @@ final class RpcPool {
     /// did it answer, with what JSON-RPC error, or did the transport fail and
     /// how. The body stays here under the URL that produced it, because the
     /// core's `Conclude` names a URL rather than carrying a result.
+    /// The headers of one `json_rpc_post`: the relay's RPC header exactly when
+    /// the core set `x_rpc_url` — which it does on bundler calls only.
+    static func postHeaders(_ operation: [String: Any]) -> [String: String] {
+        CoreHTTP.relayRpcHeaders(operation["x_rpc_url"] as? String)
+    }
+
     private func post(_ operation: [String: Any]) async -> String {
         let callId = operation["call_id"] as? String ?? ""
         let url = operation["url"] as? String ?? ""
@@ -413,8 +419,12 @@ final class RpcPool {
             ])
         }
 
+        // Spec 098 §5: a bundler call names the chain's RPC to the relay. The
+        // core sets `x_rpc_url` on bundler calls only — never on a call to an
+        // RPC provider.
         let reply = await CoreHTTP.rpcEnvelope(
-            url, method: entry.method, params: entry.params, timeout: timeout(operation)
+            url, method: entry.method, params: entry.params, timeout: timeout(operation),
+            headers: Self.postHeaders(operation)
         )
         let latency = Date().timeIntervalSince(started) * 1000
 

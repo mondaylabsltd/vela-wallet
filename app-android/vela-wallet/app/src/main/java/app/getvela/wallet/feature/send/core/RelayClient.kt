@@ -38,7 +38,7 @@ import uniffi.vela_core_uniffi.userOpSubmitStep
  * Every JSON-RPC call goes through the pool, so bans and cooldowns apply to
  * the relay as they do to a chain endpoint; every REST call goes to the
  * bundler base THE POOL names for that chain, with the pool's best RPC URL
- * riding `X-Rpc-Url` so the relay reads the chain through the endpoint this
+ * riding `x-vela-rpc-url` so the relay reads the chain through the endpoint this
  * wallet trusts. No number is computed here: quantities cross as decimal
  * strings for the core to price, and the relay's sentences cross for the
  * core to classify.
@@ -848,8 +848,10 @@ class PoolRelayPort(
 
     override suspend fun restGet(url: String, xRpcUrl: String?): RestAnswer = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().header("accept", "application/json")
-            // Spec 081 FR-007: see RpcPoolExecutor — the endpoint stays local.
-            .apply { @Suppress("UNUSED_EXPRESSION") xRpcUrl }
+            // Spec 098 §5: the relay reads the chain through the RPC named here
+            // first — without it, a treasury on a network its directory cannot
+            // reach is a 503, which the send used to walk straight through.
+            .relayRpcHeader(xRpcUrl)
             .build()
         runCatching {
             http.newCall(request).execute().use { response ->
