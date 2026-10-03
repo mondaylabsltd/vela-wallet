@@ -824,7 +824,9 @@ enum SettingsLive {
             id: "custom-rpc",
             label: loc.t(k.addCustomRpcTitle),
             value: wizard.customRpc,
-            placeholder: loc.t(k.addCustomRpcPlaceholder)
+            placeholder: loc.t(k.addCustomRpcPlaceholder),
+            // Spec 098 §5.1: the relay is sent this RPC, key and all.
+            hint: loc.t(k.networkRelayNotice)
         )
         func candidate(meta: String, badge: StatusPillModel?) -> SettingsNetworkRowModel {
             SettingsNetworkRowModel(
@@ -1226,6 +1228,7 @@ enum SettingsLive {
                 label: loc.t(k.rpcFixLabel),
                 value: endpoint,
                 placeholder: model.rpcFix.field.placeholder,
+                hint: loc.t(k.networkRelayNotice),
                 tone: model.rpcFix.field.tone
             ),
             primary: model.rpcFix.primary,

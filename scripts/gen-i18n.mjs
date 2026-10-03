@@ -516,8 +516,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   and fail after the passkey — and `componentsUi.treasuryBootstrap.
 //   {balanceLine,networkLine,watching,qrLabel}` for the funding sheet that now
 //   closes by itself. 11 leaves, 1 branch: 1829 + 12 = 1841.
-if (PATHS.length !== 1841) fail(`expected 1841 paths (1749 leaf + 92 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1749) fail(`expected 1749 leaf paths, got ${leafSet.size}`);
+// 1843 (098 §5.1, 2026-10-03): + `settingsModals.network.relayNotice` and
+//   `settingsModals.rpcProviders.relayNotice` — said where an RPC or a provider
+//   key is set: the relay is sent the RPC the wallet uses, key and all. Same
+//   branches: 1841 + 2 = 1843.
+if (PATHS.length !== 1843) fail(`expected 1843 paths (1751 leaf + 92 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1751) fail(`expected 1751 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 92) fail(`expected 92 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

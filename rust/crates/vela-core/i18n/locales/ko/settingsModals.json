@@ -10,7 +10,8 @@
       "removeTitle": "네트워크 제거",
       "removeBody": "이 사용자 지정 네트워크를 제거할까요?",
       "removeCancel": "취소",
-      "removeConfirm": "제거"
+      "removeConfirm": "제거",
+      "relayNotice": "거래를 제출하는 릴레이에는 이 네트워크의 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다."
     },
     "account": {
       "modalTitle": "계정",
@@ -28,7 +29,8 @@
       "activeNetworks": "네트워크 {{count}}개",
       "supportsCount": "네트워크 {{total}}개 중 {{count}}개 지원",
       "unavailable": "사용 불가",
-      "avgLatency": "평균 {{ms}}ms"
+      "avgLatency": "평균 {{ms}}ms",
+      "relayNotice": "거래를 제출하는 릴레이에는 지갑이 각 네트워크에 쓰는 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다."
     },
     "endpoints": {
       "modalTitle": "서비스 엔드포인트",

@@ -415,7 +415,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			removeCancel: k('settingsModals.network.removeCancel'),
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
-			mismatch: k('settingsModals.network.rpcChainMismatch')
+			mismatch: k('settingsModals.network.rpcChainMismatch'),
+			relayNotice: k('settingsModals.network.relayNotice')
 		},
 		addNetwork: {
 			description: k('settingsModals.addNetwork.description'),
@@ -445,6 +446,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		},
 		rpcProviders: {
 			description: k('settingsModals.rpcProviders.description'),
+			relayNotice: k('settingsModals.rpcProviders.relayNotice'),
 			getKey: k('settingsModals.rpcProviders.getKey'),
 			checkKey: k('settingsModals.rpcProviders.checkKey'),
 			notSet: k('settingsModals.rpcProviders.notSet'),

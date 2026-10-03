@@ -10,7 +10,8 @@
       "removeTitle": "Rimuovi rete",
       "removeBody": "Rimuovere questa rete personalizzata?",
       "removeCancel": "Annulla",
-      "removeConfirm": "Rimuovi"
+      "removeConfirm": "Rimuovi",
+      "relayNotice": "Il relay che invia le tue transazioni riceve l'indirizzo RPC di questa rete — compresa l'eventuale chiave API — per raggiungere la rete che usi."
     },
     "account": {
       "modalTitle": "Account",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} reti",
       "supportsCount": "Supporta {{count}} di {{total}} reti",
       "unavailable": "Non disponibile",
-      "avgLatency": "media {{ms}}ms"
+      "avgLatency": "media {{ms}}ms",
+      "relayNotice": "Il relay che invia le tue transazioni riceve l'indirizzo RPC che il wallet usa per ogni rete — compresa la chiave API — per raggiungere le reti che usi."
     },
     "endpoints": {
       "modalTitle": "Endpoint dei servizi",

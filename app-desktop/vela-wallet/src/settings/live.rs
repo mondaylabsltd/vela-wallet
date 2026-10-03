@@ -840,7 +840,8 @@ pub fn override_hint(row: &NetNetworkRow, s: &SettingsStrings) -> SharedString {
     if row.rpc_save_deferred {
         return s.network_save_checking.clone();
     }
-    s.network_save_hint.clone()
+    // Spec 098 §5.1: where the RPC is set, that the relay is sent it.
+    SharedString::from(format!("{} {}", s.network_save_hint, s.network_relay_notice))
 }
 
 /// The one line the add-network dialog owes the person: what the wizard is
@@ -1048,7 +1049,11 @@ mod wizard_tests {
     #[test]
     fn a_pending_verdict_does_not_claim_the_save_landed() {
         let s = strings();
-        assert_eq!(override_hint(&row(None, false), &s), s.network_save_hint);
+        assert_eq!(
+            override_hint(&row(None, false), &s),
+            SharedString::from(format!("{} {}", s.network_save_hint, s.network_relay_notice)),
+            "the standing hint, and that the relay is sent this RPC (098 §5.1)"
+        );
         assert_eq!(override_hint(&row(None, true), &s), s.network_save_checking);
     }
 

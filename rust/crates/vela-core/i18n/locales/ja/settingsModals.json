@@ -10,7 +10,8 @@
       "removeTitle": "ネットワークを削除",
       "removeBody": "このカスタムネットワークを削除しますか？",
       "removeCancel": "キャンセル",
-      "removeConfirm": "削除"
+      "removeConfirm": "削除",
+      "relayNotice": "取引を送信するリレーには、このネットワークの RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。"
     },
     "account": {
       "modalTitle": "アカウント",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} ネットワーク",
       "supportsCount": "{{total}} 件中 {{count}} 件のネットワークに対応",
       "unavailable": "利用不可",
-      "avgLatency": "平均 {{ms}}ms"
+      "avgLatency": "平均 {{ms}}ms",
+      "relayNotice": "取引を送信するリレーには、各ネットワークでウォレットが使う RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。"
     },
     "endpoints": {
       "modalTitle": "サービスエンドポイント",

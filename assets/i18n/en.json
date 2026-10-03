@@ -1669,7 +1669,8 @@
    "removeTitle": "Remove Network",
    "removeBody": "Remove this custom network?",
    "removeCancel": "Cancel",
-   "removeConfirm": "Remove"
+   "removeConfirm": "Remove",
+   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
   },
   "account": {
    "modalTitle": "Accounts",
@@ -1687,7 +1688,8 @@
    "activeNetworks": "{{count}} networks",
    "supportsCount": "Supports {{count}} of {{total}} networks",
    "unavailable": "Unavailable",
-   "avgLatency": "avg {{ms}}ms"
+   "avgLatency": "avg {{ms}}ms",
+   "relayNotice": "The relay that submits your transactions is sent the RPC address your wallet uses for each network — including the API key in it — so it can reach the networks you use."
   },
   "endpoints": {
    "modalTitle": "Service Endpoints",

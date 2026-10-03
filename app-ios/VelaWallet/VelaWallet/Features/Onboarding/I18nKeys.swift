@@ -343,6 +343,10 @@ enum I18nKeys {
         static let networkCustom = "settings.networks.custom"
         static let networkBuiltinNote = "settings.networks.builtinNote"
         static let networkSaveHint = "settings.networks.saveHint"
+        /// Spec 098 §5.1: the relay is sent this network's RPC, key and all.
+        static let networkRelayNotice = "settingsModals.network.relayNotice"
+        /// Spec 098 §5.1: …and the RPC built from a provider key.
+        static let providersRelayNotice = "settingsModals.rpcProviders.relayNotice"
         static let networkOnline = "settings.networks.online"
         static let networkSlow = "settings.networks.slow"
             // Ethereum backup of the founding keys (spec 062).

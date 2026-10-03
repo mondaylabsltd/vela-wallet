@@ -1659,7 +1659,8 @@
    "removeTitle": "Xóa mạng",
    "removeBody": "Xóa mạng tùy chỉnh này?",
    "removeCancel": "Hủy",
-   "removeConfirm": "Xóa"
+   "removeConfirm": "Xóa",
+   "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng."
   },
   "account": {
    "modalTitle": "Tài khoản",
@@ -1677,7 +1678,8 @@
    "activeNetworks": "{{count}} mạng",
    "supportsCount": "Hỗ trợ {{count}}/{{total}} mạng",
    "unavailable": "Không khả dụng",
-   "avgLatency": "TB {{ms}}ms"
+   "avgLatency": "TB {{ms}}ms",
+   "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC mà ví dùng cho từng mạng — kể cả khóa API trong đó — để kết nối được tới các mạng bạn dùng."
   },
   "endpoints": {
    "modalTitle": "Điểm cuối dịch vụ",

@@ -10,7 +10,8 @@
       "removeTitle": "Netzwerk entfernen",
       "removeBody": "Dieses eigene Netzwerk entfernen?",
       "removeCancel": "Abbrechen",
-      "removeConfirm": "Entfernen"
+      "removeConfirm": "Entfernen",
+      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt."
     },
     "account": {
       "modalTitle": "Konten",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} Netzwerke",
       "supportsCount": "Unterstützt {{count}} von {{total}} Netzwerken",
       "unavailable": "Nicht verfügbar",
-      "avgLatency": "Ø {{ms}}ms"
+      "avgLatency": "Ø {{ms}}ms",
+      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse, die deine Wallet für jedes Netzwerk nutzt – samt darin enthaltenem API-Schlüssel –, damit er deine Netzwerke erreicht."
     },
     "endpoints": {
       "modalTitle": "Dienst-Endpunkte",

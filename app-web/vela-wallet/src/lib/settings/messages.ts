@@ -132,6 +132,8 @@ export interface SettingsMessages {
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
+		/** Spec 098 §5.1: the relay is sent this RPC, key and all. */
+		relayNotice: string;
 	};
 	addNetwork: {
 		description: string;
@@ -169,6 +171,8 @@ export interface SettingsMessages {
 	};
 	rpcProviders: {
 		description: string;
+		/** Spec 098 §5.1: the relay is sent the RPC the wallet uses, key and all. */
+		relayNotice: string;
 		getKey: string;
 		checkKey: string;
 		notSet: string;
@@ -590,6 +594,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.removeConfirm',
 	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
+	'settingsModals.network.relayNotice',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
 	'settingsModals.addNetwork.description',
@@ -610,6 +615,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.checkSigner',
 	'settingsModals.addNetwork.checkRemaining',
 	'settingsModals.rpcProviders.description',
+	'settingsModals.rpcProviders.relayNotice',
 	'settingsModals.rpcProviders.getKey',
 	'settingsModals.rpcProviders.checkKey',
 	'settingsModals.rpcProviders.notSet',

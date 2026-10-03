@@ -1659,7 +1659,8 @@
    "removeTitle": "Hapus Jaringan",
    "removeBody": "Hapus jaringan kustom ini?",
    "removeCancel": "Batal",
-   "removeConfirm": "Hapus"
+   "removeConfirm": "Hapus",
+   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
   },
   "account": {
    "modalTitle": "Akun",
@@ -1677,7 +1678,8 @@
    "activeNetworks": "{{count}} jaringan",
    "supportsCount": "Mendukung {{count}} dari {{total}} jaringan",
    "unavailable": "Tidak tersedia",
-   "avgLatency": "rata-rata {{ms}}ms"
+   "avgLatency": "rata-rata {{ms}}ms",
+   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC yang dipakai dompet untuk tiap jaringan — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
   },
   "endpoints": {
    "modalTitle": "Endpoint Layanan",

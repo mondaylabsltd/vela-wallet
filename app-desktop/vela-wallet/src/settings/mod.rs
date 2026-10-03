@@ -187,6 +187,9 @@ pub struct SettingsStrings {
     /// The prefix a slow endpoint's pill wears: "Slower · 1.2s".
     pub network_slow: SharedString,
     pub network_save_hint: SharedString,
+    /// Spec 098 §5.1: the relay is sent this network's RPC, key and all — said
+    /// under every field where an RPC is set.
+    pub network_relay_notice: SharedString,
     /// While the blur's chain-id verdict is outstanding. The standing hint
     /// says "saved as soon as you leave the field", which for those seconds
     /// is not yet true — the override is written only once the RPC agrees
@@ -473,6 +476,7 @@ impl SettingsStrings {
             network_remove_confirm: s("settingsModals.network.removeConfirm"),
             network_slow: s("settings.networks.slow"),
             network_save_hint: s("settings.networks.saveHint"),
+            network_relay_notice: s("settingsModals.network.relayNotice"),
             network_save_checking: s("componentsUi.funding.checking"),
             compatible: s("settingsModals.addNetwork.compatible"),
             compatibility_check: s("settingsModals.addNetwork.compatibilityCheck"),
@@ -483,7 +487,13 @@ impl SettingsStrings {
             custom_rpc_title: s("settingsModals.addNetwork.customRpcTitle"),
             custom_rpc_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
             best_rpc: raw("settingsModals.addNetwork.bestRpc"),
-            providers_desc: s("settingsModals.rpcProviders.description"),
+            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is
+            // sent, and that is said where the key is set.
+            providers_desc: SharedString::from(format!(
+                "{} {}",
+                s("settingsModals.rpcProviders.description"),
+                s("settingsModals.rpcProviders.relayNotice")
+            )),
             provider_connected: s("activity.connected"),
             provider_not_set: s("settingsModals.rpcProviders.notSet"),
             provider_test: s("settingsModals.rpcProviders.test"),

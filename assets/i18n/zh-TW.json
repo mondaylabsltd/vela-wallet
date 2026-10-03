@@ -1659,7 +1659,8 @@
    "removeTitle": "移除網路",
    "removeBody": "要移除此自訂網路嗎？",
    "removeCancel": "取消",
-   "removeConfirm": "移除"
+   "removeConfirm": "移除",
+   "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
   },
   "account": {
    "modalTitle": "帳戶",
@@ -1677,7 +1678,8 @@
    "activeNetworks": "{{count}} 個網路",
    "supportsCount": "支援 {{total}} 個網路中的 {{count}} 個",
    "unavailable": "無法使用",
-   "avgLatency": "平均 {{ms}}ms"
+   "avgLatency": "平均 {{ms}}ms",
+   "relayNotice": "提交你交易的中繼會收到錢包為每條網路使用的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
   },
   "endpoints": {
    "modalTitle": "服務端點",

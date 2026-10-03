@@ -1662,7 +1662,8 @@
    "removeTitle": "Supprimer le réseau",
    "removeBody": "Supprimer ce réseau personnalisé ?",
    "removeCancel": "Annuler",
-   "removeConfirm": "Supprimer"
+   "removeConfirm": "Supprimer",
+   "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez."
   },
   "account": {
    "modalTitle": "Comptes",
@@ -1680,7 +1681,8 @@
    "activeNetworks": "{{count}} réseaux",
    "supportsCount": "Prend en charge {{count}} réseaux sur {{total}}",
    "unavailable": "Indisponible",
-   "avgLatency": "moy. {{ms}}ms"
+   "avgLatency": "moy. {{ms}}ms",
+   "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC que votre portefeuille utilise pour chaque réseau — clé d'API comprise — pour atteindre les réseaux que vous utilisez."
   },
   "endpoints": {
    "modalTitle": "Points d'accès des services",

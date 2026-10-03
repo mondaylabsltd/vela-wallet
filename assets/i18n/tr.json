@@ -1659,7 +1659,8 @@
    "removeTitle": "Ağı Kaldır",
    "removeBody": "Bu özel ağ kaldırılsın mı?",
    "removeCancel": "İptal",
-   "removeConfirm": "Kaldır"
+   "removeConfirm": "Kaldır",
+   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir."
   },
   "account": {
    "modalTitle": "Hesaplar",
@@ -1677,7 +1678,8 @@
    "activeNetworks": "{{count}} ağ",
    "supportsCount": "{{total}} ağdan {{count}} tanesini destekliyor",
    "unavailable": "Kullanılamıyor",
-   "avgLatency": "ort. {{ms}}ms"
+   "avgLatency": "ort. {{ms}}ms",
+   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağlara ulaşabilmesi için cüzdanınızın her ağda kullandığı RPC adresi — içindeki API anahtarı dahil — iletilir."
   },
   "endpoints": {
    "modalTitle": "Servis Uç Noktaları",

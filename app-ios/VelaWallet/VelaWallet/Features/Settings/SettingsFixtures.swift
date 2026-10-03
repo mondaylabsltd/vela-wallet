@@ -271,7 +271,7 @@ enum SettingsFixtures {
             badge: latency(eth.latencyMs, prefix: loc.t(k.networkOnline)),
             rpc: UrlFieldModel(id: "rpc", label: loc.t(k.fieldRpcUrl),
                                value: "https://eth.llamarpc.com",
-                               hint: loc.t(k.networkSaveHint),
+                               hint: loc.t(k.networkSaveHint) + " " + loc.t(k.networkRelayNotice),
                                badge: latency(eth.latencyMs),
                                tone: mismatch ? .error : nil),
             explorer: UrlFieldModel(id: "explorer", label: loc.t(k.fieldExplorer),
@@ -372,7 +372,8 @@ enum SettingsFixtures {
         return RpcProvidersModel(
             title: loc.t(k.rpcProvidersTitle),
             subtitle: loc.t(k.rpcProvidersSubtitle),
-            description: loc.t(k.providersDescription),
+            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
+            description: loc.t(k.providersDescription) + " " + loc.t(k.providersRelayNotice),
             providers: [
                 ProviderCardModel(
                     id: "alchemy", name: "Alchemy",

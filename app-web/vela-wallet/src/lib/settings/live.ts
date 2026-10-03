@@ -165,7 +165,8 @@ export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): Netw
 		id: 'rpc',
 		label: m.networks.rpcUrl,
 		value: row.rpc_url,
-		hint: m.networks.saveHint,
+		// Spec 098 §5.1: said where it is set — the relay receives this URL.
+		hint: `${m.networks.saveHint} ${m.networks.relayNotice}`,
 		badge: probePill(row.rpc_health, m),
 		tone: mismatch !== null ? 'error' : 'default'
 	};
@@ -299,7 +300,8 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
 				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder
+				placeholder: m.addNetwork.customRpcPlaceholder,
+				hint: m.networks.relayNotice
 			},
 			primary: m.addNetwork.addNetworkBtn
 		};
@@ -320,7 +322,8 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
 				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder
+				placeholder: m.addNetwork.customRpcPlaceholder,
+				hint: m.networks.relayNotice
 			},
 			primary: m.addNetwork.retry,
 			recheck: m.addNetwork.recheckWithRpc
@@ -355,7 +358,8 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 	return {
 		title: m.advanced.rpcProvidersTitle,
 		subtitle: m.advanced.rpcProvidersSubtitle,
-		description: m.rpcProviders.description,
+		// Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
+		description: `${m.rpcProviders.description} ${m.rpcProviders.relayNotice}`,
 		providers: view.providers.map((p) => {
 			const test = p.test;
 			return {
@@ -1172,7 +1176,7 @@ export interface RescueMessages {
 	relayUnreachable: SettingsMessages['relayUnreachable'];
 	networks: Pick<
 		SettingsMessages['networks'],
-		'chainId' | 'online' | 'slow' | 'offline' | 'mismatch'
+		'chainId' | 'online' | 'slow' | 'offline' | 'mismatch' | 'relayNotice'
 	>;
 	addNetwork: Pick<SettingsMessages['addNetwork'], 'checkingCompatibility'>;
 	common: Pick<SettingsMessages['common'], 'done' | 'close'>;
@@ -1190,7 +1194,8 @@ export function pickRescueMessages(m: SettingsMessages): RescueMessages {
 			online: m.networks.online,
 			slow: m.networks.slow,
 			offline: m.networks.offline,
-			mismatch: m.networks.mismatch
+			mismatch: m.networks.mismatch,
+			relayNotice: m.networks.relayNotice
 		},
 		addNetwork: { checkingCompatibility: m.addNetwork.checkingCompatibility },
 		common: { done: m.common.done, close: m.common.close }
@@ -1269,6 +1274,7 @@ export function liveRpcFix(input: LiveRpcFixInput, m: RescueMessages): RpcFixMod
 			id: 'rpc',
 			label: m.rescue.rpcFixLabel,
 			value: draft ?? row.rpc_url,
+			hint: m.networks.relayNotice,
 			badge: restored ? badge : undefined,
 			tone: restored ? 'success' : 'error'
 		},

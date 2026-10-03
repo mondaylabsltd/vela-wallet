@@ -11869,6 +11869,7 @@ impl WalletPage {
         let s = &self.settings;
         let custom_title = s.custom_rpc_title.clone();
         let custom_placeholder = s.custom_rpc_placeholder.clone();
+        let relay_notice = s.network_relay_notice.clone();
         let checks_title = s.compatibility_check.clone();
         let hover_accent = theme.accent_hover;
         let chain_id = wizard.chain_info.as_ref().map(|info| info.chain_id);
@@ -12036,7 +12037,8 @@ impl WalletPage {
                 &wizard.custom_rpc,
                 custom_placeholder,
                 None,
-                None,
+                // Spec 098 §5.1: the relay is sent this RPC, key and all.
+                Some(relay_notice),
                 None,
                 &rpc_focus,
                 window,
@@ -12346,7 +12348,7 @@ impl WalletPage {
                 custom_placeholder,
                 theme.fg_subtle,
                 None,
-                None,
+                Some(s.network_relay_notice.clone()),
                 None,
                 None,
             ))
@@ -12586,7 +12588,7 @@ impl WalletPage {
                 Some(label),
                 gpui::SharedString::from(settings_fixtures::RPC_FIX_URL),
                 None,
-                None,
+                Some(s.network_relay_notice.clone()),
                 Some(Tone::Error),
                 None,
             ))

@@ -321,7 +321,8 @@ object SettingsFixtures {
                 id = "rpc",
                 label = s.t(I18nKeys.SettingsUi.FIELD_RPC_URL),
                 value = "https://eth.llamarpc.com",
-                hint = s.t(I18nKeys.SettingsUi.NETWORK_SAVE_HINT),
+                // Spec 098 §5.1: said where the RPC is set — the relay is sent it.
+                hint = s.t(I18nKeys.SettingsUi.NETWORK_SAVE_HINT) + " " + s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 badge = latency(eth.latencyMs),
                 tone = if (mismatch) SettingsTone.Error else null,
             ),
@@ -414,6 +415,7 @@ object SettingsFixtures {
                     label = s.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
                     value = "",
                     placeholder = s.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_PLACEHOLDER),
+                    hint = s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 ),
                 primary = s.t(I18nKeys.SettingsUi.ADD_BUTTON),
             )
@@ -458,7 +460,8 @@ object SettingsFixtures {
         return RpcProvidersModel(
             title = s.t(I18nKeys.SettingsUi.RPC_PROVIDERS_TITLE),
             subtitle = s.t(I18nKeys.SettingsUi.RPC_PROVIDERS_SUBTITLE),
-            description = s.t(I18nKeys.SettingsUi.PROVIDERS_DESCRIPTION),
+            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
+            description = s.t(I18nKeys.SettingsUi.PROVIDERS_DESCRIPTION) + " " + s.t(I18nKeys.SettingsUi.PROVIDERS_RELAY_NOTICE),
             providers = listOf(
                 ProviderCardModel(
                     id = "alchemy",
@@ -891,6 +894,7 @@ object SettingsFixtures {
                 id = "rpc",
                 label = s.t(I18nKeys.SettingsUi.RPC_FIX_LABEL),
                 value = "https://polygon-rpc.com",
+                hint = s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 badge = if (restored) latency(96) else null,
                 tone = if (restored) SettingsTone.Ok else SettingsTone.Error,
             ),
