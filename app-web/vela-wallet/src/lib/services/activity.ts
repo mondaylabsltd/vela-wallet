@@ -14,6 +14,7 @@
  * disagree — `STABLE_SYMBOLS` is mirrored verbatim in `activity_feed.rs`.
  */
 
+import { fromBaseUnits } from './eip681';
 import { fetchIncomingTransfers } from './incoming-transfers';
 import { nativeSymbol } from './networks';
 import { mergeTransactions } from './records';
@@ -87,7 +88,7 @@ function buildTokenIndex(tokens: APIToken[]): Map<string, TokenMeta> {
 }
 
 /** Map a discovered incoming transfer into a persistable 'receive' record. */
-function incomingToRecord(
+export function incomingToRecord(
 	tx: IncomingTransfer,
 	address: string,
 	index: Map<string, TokenMeta>
@@ -118,7 +119,9 @@ function incomingToRecord(
 		txHash: tx.txHash,
 		from: tx.from,
 		to: address,
-		value: String(amount),
+		// Exact, never `String(Number)`: a receive below 1e-6 became
+		// "1.373924e-12" and read 10¹² too large (097 final pass).
+		value: fromBaseUnits(tx.value, decimals),
 		symbol,
 		decimals,
 		...(logoUrls.length ? { logoUrls } : {}),
