@@ -17,7 +17,8 @@ use vela_core::app::tx_tracker::{
     TrackSettlement, TrackShellResult as Res, TrackStatus, TrackStatusAnswer, TxTracker,
     ABANDON_AGE_MS, FEE_HOLD_STAGE, FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS,
     FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
-    SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
+    RELAY_FUNDING_STAGE, SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS,
+    USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::USER_OPERATION_EVENT_TOPIC;
@@ -187,6 +188,50 @@ fn timeout_never_marks_records_failed() {
         .resolve(receipt_pending(T0 + WAIT_WINDOW_MS + 800.0))
         .is_empty());
     assert_eq!(sut.outstanding(), vec![], "no patch was issued anywhere");
+}
+
+// ---------------------------------------------------------------------------
+// The relay topping up its gas: said while it lasts, gone when it moves on
+// ---------------------------------------------------------------------------
+
+/// Arbitrum, 2026-10-03: the relay held the op at stage `funding` while its
+/// treasury → relayer top-up was meant to land, and the wallet said only
+/// "taking longer than usual". The stage is said as soon as the relay says it
+/// — inside the window, unlike the fee hold's window verdict — and it is not
+/// sticky: the next status that moves on takes it away.
+#[test]
+fn the_relay_topping_up_its_gas_is_said_while_it_lasts() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+
+    let ops = tick(&mut sut, T0 + 12_400.0);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
+    assert!(sut.resolve(receipt_pending(T0 + 12_700.0)).is_empty());
+    assert!(sut
+        .resolve(Res::Status {
+            user_op_hash: HASH.to_owned(),
+            status: TrackLifecycle::Queued,
+            stage: Some(RELAY_FUNDING_STAGE.to_owned()),
+            now_ms: T0 + 12_800.0,
+            tx_hash: None,
+        })
+        .is_empty());
+    assert_eq!(entry_status(&sut), TrackStatus::RelayFunding);
+    assert!(sut.view().entries[0].polling, "still pending, still asking");
+
+    // Funded: the relay sends the bundle and says so.
+    let ops = tick(&mut sut, T0 + 25_000.0);
+    assert!(ops.contains(&poll_status()), "{ops:?}");
+    assert!(sut
+        .resolve(Res::Status {
+            user_op_hash: HASH.to_owned(),
+            status: TrackLifecycle::Submitted,
+            stage: None,
+            now_ms: T0 + 25_100.0,
+            tx_hash: None,
+        })
+        .is_empty());
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
 }
 
 // ---------------------------------------------------------------------------

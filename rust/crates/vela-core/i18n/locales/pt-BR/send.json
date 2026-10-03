@@ -49,6 +49,7 @@
     "txSubmitting": "Enviando para a rede...",
     "txSubmitted": "Transação enviada para a rede",
     "txSlowConfirm": "Está demorando mais que o normal, aguarde...",
+    "txRelayFunding": "O relay está reabastecendo o gas dele nesta rede. Ele envia sua transação assim que isso chegar.",
     "txWaitingConfirm": "Aguardando confirmação na blockchain...",
     "txElapsed": "{{elapsed}}s decorridos — quase lá",
     "txRemaining": "~{{remaining}}s restantes",

@@ -4,4 +4,4 @@ import type { TrackOutcome } from "./TrackOutcome";
 /**
  * What the sheet draws for an ending, once the tracker has had its say.
  */
-export type SignEndingState = { "type": "signed" } | { "type": "confirmed", tx_hash: string, } | { "type": "reverted", tx_hash: string, } | { "type": "not_sent" } | { "type": "refused" } | { "type": "following", user_op_hash: string, outcome: TrackOutcome, fee_held: boolean, };
+export type SignEndingState = { "type": "signed" } | { "type": "confirmed", tx_hash: string, } | { "type": "reverted", tx_hash: string, } | { "type": "not_sent" } | { "type": "refused" } | { "type": "following", user_op_hash: string, outcome: TrackOutcome, fee_held: boolean, relay_funding: boolean, };

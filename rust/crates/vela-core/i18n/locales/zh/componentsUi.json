@@ -1,37 +1,10 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "发送前，还差一步",
-      "lead": "交易需要一小笔 {{symbol}} 作为网络费储备，转入一次即可 — 之后会随每笔交易自动回补。",
-      "statusConfirming": "网络费在路上 — 通常不到一分钟。",
-      "fundedTitle": "网络费已就绪",
-      "amountLabel": "需转入",
-      "addressLabel": "充值地址",
-      "networkHint": "从交易所提现时，请选择 {{network}} 网络。",
-      "openInWallet": "用其他钱包支付",
       "showQr": "显示二维码",
-      "hideQr": "收起二维码",
-      "qrHint": "扫码自动带入金额与网络",
       "autoCheckNote": "到账后自动继续",
-      "checkNow": "立即检查",
       "checking": "正在检查…",
-      "retryFree": "重试免费充值",
-      "retrying": "正在申请…",
-      "detailsTitle": "这笔钱去哪了？",
-      "detailsBody": "它会存入 Vela 为你维护的专属网络费储备（每条网络一个），用于垫付交易的链上费用，并从每笔交易的手续费中回补。这笔储备只用于支付网络费，无法提回。",
-      "continue": "继续",
-      "cancel": "暂不",
-      "cancelDapp": "取消这笔交易",
-      "denialDefault": "免费网络费这次没能生效。可以在下方转入，或稍后再试。",
-      "denialNotRecognized": "新钱包需要几分钟才能被识别，稍后会自动重试免费网络费 — 也可以现在转入，立即发送。",
-      "denialNonceExceeded": "免费网络费仅限钱包最初几笔交易，本钱包已超出。请在下方转入后继续。",
-      "denialTreasuryDepleted": "Vela 的免费额度暂时用完了。请在下方转入，或稍后再来。",
-      "denialBalanceTooLow": "免费网络费需要钱包已持有少量 {{symbol}}。请先接收一些，或从任意钱包、交易所转入下方地址。",
-      "denialRateLimited": "几分钟前刚为你充值过。若仍不足，请在下方补足。",
-      "denialTransferFailed": "免费充值转账失败了。可以重试，或自行转入。",
-      "denialServiceUnavailable": "免费充值服务暂时不稳定，稍后会自动重试 — 也可以直接转入。",
-      "denialNetworkError": "无法连接 Vela 服务 — 请检查网络，稍后会自动重试。",
-      "denialPendingUnknown": "上次充值结果未能确认 — 正在检查余额。若迟迟未到账，请在下方自行转入。"
+      "cancel": "暂不"
     },
     "signing": {
       "loading": "加载中...",
@@ -291,7 +264,11 @@
       "paidWith": "用 {{symbol}} 支付",
       "rowBalance": "余额",
       "rowSpend": "本次消耗",
-      "feeCoinSpent": "这笔交易也会用到你的 {{sym}}，剩下的不够付网络费时，交易会失败。"
+      "feeCoinSpent": "这笔交易也会用到你的 {{sym}}，剩下的不够付网络费时，交易会失败。",
+      "reasonQuote": "没能从中继拿到报价，正在自动重试。",
+      "reasonFeeToken": "中继暂时无法给这个币报价。正在重试——也可以换一个币付手续费。",
+      "reasonSimulation": "中继暂时没能试运行这笔交易，正在自动重试。",
+      "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。"
     },
     "dock": {
       "receive": "收款",
@@ -412,7 +389,6 @@
       "selfFundToggle": "等不及？自己启动它",
       "customLead": "这是你自己添加的网络，Vela 运营方可能根本没法在上面持有 gas——本地或内部的链不该由别人来充值。启动它的中继要由你自己来。",
       "balanceLine": "现有 {{balance}}，需要 {{floor}} {{symbol}}",
-      "networkLine": "网络：{{network}}",
       "watching": "每隔几秒会自动检查一次——充值到账后这里会自动关闭。",
       "qrLabel": "用另一个钱包扫码转账"
     },

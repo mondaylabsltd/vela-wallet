@@ -11,4 +11,4 @@ export type SendReceiptOutcome = { "type": "confirmed", tx_hash: string, } | { "
  * The relay never had a may-have-been-sent op (tracker `NotSent`,
  * spec 082 RA4): "not sent", never the fee-rejected words.
  */
-not_sent: boolean, } | { "type": "fee_held" } | { "type": "acknowledged" };
+not_sent: boolean, } | { "type": "fee_held" } | { "type": "relay_funding" } | { "type": "acknowledged" };

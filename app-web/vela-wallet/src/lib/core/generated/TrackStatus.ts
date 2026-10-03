@@ -4,4 +4,4 @@
  * The six-way verdict from the machine's scope, plus plain `Pending`. i18n
  * keys and wording live in the shell — this is the semantic axis only.
  */
-export type TrackStatus = "pending" | "fee_held" | "confirmed" | "dropped" | "rejected" | "unreachable" | "accepted_not_landed" | "not_sent";
+export type TrackStatus = "pending" | "fee_held" | "relay_funding" | "confirmed" | "dropped" | "rejected" | "unreachable" | "accepted_not_landed" | "not_sent";

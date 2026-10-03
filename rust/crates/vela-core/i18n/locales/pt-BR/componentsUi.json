@@ -1,37 +1,10 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "Um passo rápido antes de enviar",
-      "lead": "Suas transações usam uma pequena reserva de {{symbol}} para taxas de rede. Adicione uma vez abaixo — as próximas transações repõem a reserva.",
-      "statusConfirming": "Sua taxa de rede está a caminho — geralmente leva menos de um minuto.",
-      "fundedTitle": "Taxa de rede pronta",
-      "amountLabel": "Valor a adicionar",
-      "addressLabel": "Endereço de depósito",
-      "networkHint": "Sacando de uma corretora? Escolha a rede {{network}}.",
-      "openInWallet": "Pagar com outra carteira",
       "showQr": "Mostrar QR code",
-      "hideQr": "Ocultar QR code",
-      "qrHint": "Escanear preenche o valor e a rede automaticamente",
       "autoCheckNote": "Continua automaticamente assim que chegar",
-      "checkNow": "Verificar agora",
       "checking": "Verificando…",
-      "retryFree": "Tentar recarga gratuita de novo",
-      "retrying": "Solicitando…",
-      "detailsTitle": "Para onde vai esse dinheiro?",
-      "detailsBody": "Ele vai para uma reserva dedicada a taxas de rede que a Vela mantém para você — uma por rede. Ela adianta o custo on-chain das suas transações e é reposta com a taxa de cada transação. Só pode ser usada para taxas de rede e não pode ser sacada.",
-      "continue": "Continuar",
-      "cancel": "Agora não",
-      "cancelDapp": "Cancelar esta transação",
-      "denialDefault": "A recarga gratuita não funcionou desta vez. Adicione abaixo ou tente de novo mais tarde.",
-      "denialNotRecognized": "Carteiras recém-criadas podem levar alguns minutos para serem reconhecidas — vamos tentar a recarga gratuita de novo automaticamente. Ou adicione abaixo para enviar agora mesmo.",
-      "denialNonceExceeded": "A recarga gratuita cobre as primeiras transações de uma carteira, e esta carteira já passou desse ponto. Adicione abaixo para continuar.",
-      "denialTreasuryDepleted": "O limite gratuito da Vela está temporariamente esgotado. Adicione abaixo ou volte mais tarde.",
-      "denialBalanceTooLow": "A recarga gratuita exige que sua carteira já tenha algum {{symbol}}. Receba um pouco primeiro, ou adicione abaixo a partir de qualquer carteira ou corretora.",
-      "denialRateLimited": "Você recebeu uma recarga há pouco. Se ainda faltar, adicione a diferença abaixo.",
-      "denialTransferFailed": "A transferência da recarga gratuita falhou. Tente de novo ou adicione abaixo.",
-      "denialServiceUnavailable": "O serviço de recarga gratuita está instável no momento — vamos tentar de novo automaticamente. Ou adicione abaixo.",
-      "denialNetworkError": "Não foi possível conectar à Vela — verifique sua conexão. Vamos tentar de novo automaticamente.",
-      "denialPendingUnknown": "Não foi possível confirmar a última recarga — estamos acompanhando seu saldo. Se nada chegar em breve, adicione abaixo."
+      "cancel": "Agora não"
     },
     "signing": {
       "loading": "Carregando...",
@@ -330,7 +303,11 @@
       "paidWith": "Pago com {{symbol}}",
       "rowBalance": "Saldo",
       "rowSpend": "Custo est.",
-      "feeCoinSpent": "Esta transação também usa seu {{sym}}. Se não sobrar o suficiente para a taxa, ela vai falhar."
+      "feeCoinSpent": "Esta transação também usa seu {{sym}}. Se não sobrar o suficiente para a taxa, ela vai falhar.",
+      "reasonQuote": "Não foi possível obter um preço do relay. Tentando de novo automaticamente.",
+      "reasonFeeToken": "O relay não consegue cotar esta moeda agora. Tentando de novo — ou pague a taxa com outra moeda.",
+      "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
+      "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente."
     },
     "dock": {
       "receive": "Receber",
@@ -412,7 +389,6 @@
       "selfFundToggle": "Não dá para esperar? Inicie você mesmo",
       "customLead": "Você adicionou esta rede, então o operador da Vela pode não ter como manter gás nela — uma cadeia local ou interna não é de mais ninguém. Iniciar o relayer é com você.",
       "balanceLine": "Tem {{balance}} dos {{floor}} {{symbol}} necessários",
-      "networkLine": "Rede: {{network}}",
       "watching": "Verificando a cada poucos segundos — isto fecha sozinho assim que tiver saldo.",
       "qrLabel": "Escaneie para enviar de outra carteira"
     },

@@ -49,6 +49,7 @@
     "txSubmitting": "네트워크에 제출 중...",
     "txSubmitted": "거래가 네트워크에 제출되었습니다",
     "txSlowConfirm": "평소보다 오래 걸리고 있습니다. 잠시 기다려 주세요...",
+    "txRelayFunding": "릴레이가 이 네트워크에서 쓸 가스를 채우는 중입니다. 채워지는 즉시 거래를 보냅니다.",
     "txWaitingConfirm": "블록체인 확인 대기 중...",
     "txElapsed": "{{elapsed}}초 경과 — 거의 다 됐어요",
     "txRemaining": "약 {{remaining}}초 남음",
