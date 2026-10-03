@@ -1,7 +1,7 @@
 ---
 title: Reti e commissioni
 description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
-source: 8f8059955244
+source: 174184f507e3
 ---
 
 <script>
@@ -152,17 +152,35 @@ potrebbe anticiparti con una propria operazione entro il tuo slippage.
 ### Quando un relay resta senza gas
 
 Un relay paga il gas dalla propria **tesoreria** su ogni rete. Se quella tesoreria
-è vuota, la schermata di invio te lo dice prima che tu firmi:
+è vuota, l'invio si ferma a **Continua** — prima di qualsiasi firma — e mostra
+l'indirizzo della tesoreria (come testo e come codice QR), quanto ha rispetto a
+quanto le serve, e in quale moneta:
 
 - Su una rete servita dal relay di Vela, deve ricaricarla il gestore del relay
   (Vela); puoi segnalarlo. Se non puoi aspettare, puoi **facoltativamente**
   inviare tu stesso alla tesoreria un piccolo importo della moneta nativa. Quel
   contributo **non è rimborsabile** e **non** paga la tua transazione.
-- Su una rete personalizzata, finanziare il relay spetta a chi lo gestisce — che
-  potresti essere tu.
+- Su una rete che hai aggiunto tu, finanziare il relay spetta a chi lo gestisce —
+  che potresti essere tu.
+
+Finché quella schermata è aperta, il wallet ricontrolla ogni pochi secondi. Appena
+la tesoreria ha fondi, prosegue da solo; sulla schermata di conferma si limita a
+chiudere l'avviso, perché la firma la avvii sempre tu.
 
 Non esiste un account di gas per wallet né un deposito di attivazione: una
 versione precedente di Vela ne aveva uno, e non esiste più.
+
+### Quando un relay non riesce a raggiungere una rete
+
+Un relay può servire solo una rete che riesce a leggere. Quando non ci riesce,
+l'invio si ferma a **Continua** e lo dice: ricaricarlo non servirebbe.
+
+- Su una rete inclusa in Vela, sistemarlo spetta al gestore; puoi segnalarlo.
+- Su una rete che hai aggiunto tu, il relay la legge tramite l'indirizzo RPC che
+  hai impostato per quella rete, quindi quell'indirizzo deve essere un `https`
+  pubblico. Un nodo sul tuo computer o sulla tua rete locale (`localhost`,
+  `192.168.…`) può essere servito solo da un relay che gira accanto a lui — vedi
+  [gestire un tuo relay](/it/docs/self-hosting#relay).
 
 ## Come Vela legge ogni rete
 
@@ -172,5 +190,10 @@ provider o endpoint che aggiungi tu — e passa al successivo quando uno è lent
 non risponde. Puoi impostare un tuo endpoint per ogni rete in **Impostazioni →
 Reti**. (L'app Android per ora usa un solo endpoint per rete, senza failover, e
 l'app iPhone non permette ancora di cambiarlo.)
+
+A ogni richiesta, il relay riceve l'indirizzo RPC che il wallet usa per una rete —
+compresa qualsiasi chiave API che contiene — così da poter raggiungere la rete che
+usi. Il wallet lo dice dove imposti un indirizzo o una chiave di un provider; vedi
+l'[informativa sulla privacy](/privacy).
 
 Poi: [come funzionano le passkey](/it/docs/passkeys).

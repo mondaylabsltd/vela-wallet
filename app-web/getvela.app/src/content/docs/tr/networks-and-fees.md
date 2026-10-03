@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
 description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: 8f8059955244
+source: 174184f507e3
 ---
 
 <script>
@@ -142,18 +142,37 @@ sizden önce işlem yapabilir.
 
 ### Bir relay'in gas'ı bittiğinde
 
-Bir relay, gas bedelini her ağdaki kendi **kasasından** öder. Kasa boşsa, gönderme
-ekranı bunu siz imzalamadan önce söyler:
+Bir relay, gas bedelini her ağdaki kendi **kasasından** öder. Kasa boşsa gönderim,
+hiçbir şey imzalanmadan önce **Devam Et** adımında durur ve kasanın adresini (metin
+ve QR kod olarak), kasada ne kadar olduğunu, ne kadar gerektiğini ve hangi coin
+cinsinden olduğunu gösterir:
 
 - Vela'nın relay'inin hizmet verdiği bir ağda kasayı relay'in işletmecisinin (Vela)
   doldurması gerekir; durumu bildirebilirsiniz. Bekleyemiyorsanız, **isteğe bağlı
   olarak** kasaya kendiniz az miktarda yerel coin gönderebilirsiniz. Bu katkı **iade
   edilmez** ve kendi işleminizin ücretini **karşılamaz**.
-- Özel bir ağda relay'i fonlamak, onu kim çalıştırıyorsa ona kalmıştır — bu siz de
-  olabilirsiniz.
+- Sizin eklediğiniz bir ağda relay'i fonlamak, onu kim çalıştırıyorsa ona kalmıştır —
+  bu siz de olabilirsiniz.
+
+O ekran açık olduğu sürece cüzdan birkaç saniyede bir yeniden kontrol eder. Kasa
+fonlandığında kendiliğinden devam eder; onay ekranında ise yalnızca uyarıyı kapatır,
+çünkü imzayı her zaman siz başlatırsınız.
 
 Cüzdan başına bir gas hesabı ya da etkinleştirme depozitosu yoktur: Vela'nın eski bir
 sürümünde vardı, artık yok.
+
+### Bir relay bir ağa ulaşamadığında
+
+Bir relay yalnızca okuyabildiği bir ağa hizmet verebilir. Okuyamadığında gönderim
+**Devam Et** adımında durur ve bunu söyler — kasaya para göndermek işe yaramaz.
+
+- Vela ile gelen bir ağda bunu düzeltmek işletmecinin işidir; durumu
+  bildirebilirsiniz.
+- Sizin eklediğiniz bir ağda relay, ağı onun için tanımladığınız RPC adresi üzerinden
+  okur; bu yüzden o adresin herkese açık bir `https` adresi olması gerekir. Kendi
+  bilgisayarınızdaki ya da yerel ağınızdaki bir düğüme (`localhost`, `192.168.…`)
+  ancak yanında çalışan bir relay hizmet verebilir —
+  [kendi relay'inizi çalıştırma](/tr/docs/self-hosting#relay) bölümüne bakın.
 
 ## Vela her ağı nasıl okur
 
@@ -164,5 +183,10 @@ sağlayıcı anahtarları ya da uç noktalar — ve bir uç nokta yavaşladığ�
 bölümünden tanımlayabilirsiniz. (Android uygulaması şu anda her ağ için tek bir uç
 nokta kullanıyor ve otomatik geçiş yapmıyor; iPhone uygulaması ise bunu değiştirmenize
 henüz izin vermiyor.)
+
+Relay'e her istekte, cüzdanın o ağ için kullandığı RPC adresi — içindeki API anahtarı
+da dahil — gönderilir; böylece relay kullandığınız ağa ulaşabilir. Cüzdan bunu bir
+adres ya da sağlayıcı anahtarı tanımladığınız yerde söyler; bkz.
+[gizlilik politikası](/privacy).
 
 Sırada: [geçiş anahtarları nasıl çalışır](/tr/docs/passkeys).

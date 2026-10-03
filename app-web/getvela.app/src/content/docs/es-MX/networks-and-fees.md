@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
 description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: 8f8059955244
+source: 174184f507e3
 ---
 
 <script>
@@ -151,17 +151,35 @@ tu operación dentro de tu tolerancia al deslizamiento.
 ### Cuando un relay se queda sin gas
 
 Un relay paga el gas desde su propia **tesorería** en cada red. Si esa tesorería
-está vacía, la pantalla de envío te avisa antes de que firmes:
+está vacía, el envío se detiene en **Continuar** (antes de que se firme nada) y te
+muestra la dirección de la tesorería (como texto y como código QR), cuánto tiene
+frente a cuánto necesita, y en qué moneda:
 
 - En una red que atiende el relay de Vela, el operador del relay (Vela) tiene que
   recargarla; puedes reportarlo. Si no puedes esperar, puedes, **si quieres**,
   enviar tú mismo una pequeña cantidad de la moneda nativa a la tesorería. Esa
   aportación **no es reembolsable** y **no** paga tu propia transacción.
-- En una red personalizada, fondear el relay le toca a quien lo opere, que puedes
-  ser tú.
+- En una red que agregaste tú, fondear el relay le toca a quien lo opere, que
+  puedes ser tú.
+
+Mientras esa pantalla está abierta, la wallet vuelve a revisar cada pocos segundos.
+En cuanto la tesorería tiene fondos, sigue sola; en la pantalla de confirmación solo
+cierra el aviso, porque firmar siempre lo inicias tú.
 
 No hay una cuenta de gas por wallet ni un depósito de activación: una versión
 anterior de Vela tenía uno, y ya no existe.
+
+### Cuando un relay no puede llegar a una red
+
+Un relay solo puede atender una red que puede leer. Cuando no puede, el envío se
+detiene en **Continuar** y te lo dice: fondearlo no serviría de nada.
+
+- En una red que viene con Vela, arreglarlo le toca al operador; puedes reportarlo.
+- En una red que agregaste tú, el relay la lee a través de la dirección RPC que
+  configuraste para ella, así que esa dirección tiene que ser una `https` pública.
+  Un nodo en tu propia computadora o en tu red local (`localhost`, `192.168.…`)
+  solo lo puede atender un relay que corra junto a él; consulta
+  [cómo correr tu propio relay](/es-MX/docs/self-hosting#relay).
 
 ## Cómo lee Vela cada red
 
@@ -171,5 +189,10 @@ proveedor o endpoint que agregues) y pasa al siguiente cuando uno está lento o
 caído. Puedes configurar tu propio endpoint por red en **Ajustes → Redes**. (La app
 de Android por ahora usa un solo endpoint por red, sin conmutación, y la app de
 iPhone todavía no te deja cambiarlo.)
+
+Con cada solicitud, el relay recibe la dirección RPC que la wallet usa para una red
+(incluida cualquier llave de API que contenga) para poder llegar a la red que usas.
+La wallet lo dice donde configuras una dirección o una llave de proveedor; consulta
+el [aviso de privacidad](/privacy).
 
 Sigue: [cómo funcionan las passkeys](/es-MX/docs/passkeys).

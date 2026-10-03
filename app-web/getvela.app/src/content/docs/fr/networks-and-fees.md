@@ -1,7 +1,7 @@
 ---
 title: Réseaux et frais
 description: "Les 24 réseaux intégrés à Vela, comment en ajouter un autre, comment les frais d'une transaction sont calculés exactement et à qui ils reviennent, et ce qui se passe quand un relais n'a plus de gas."
-source: 8f8059955244
+source: 174184f507e3
 ---
 
 <script>
@@ -158,18 +158,38 @@ votre slippage.
 ### Quand un relais n'a plus de gas
 
 Un relais paie le gas depuis sa propre **trésorerie** sur chaque réseau. Si cette
-trésorerie est vide, l'écran d'envoi vous le dit avant que vous signiez :
+trésorerie est vide, l'envoi s'arrête à **Continuer** — avant que quoi que ce soit ne
+soit signé — et affiche l'adresse de la trésorerie (en texte et en QR code), ce
+qu'elle détient face à ce qu'il lui faut, et dans quelle monnaie :
 
 - Sur un réseau servi par le relais de Vela, c'est l'exploitant du relais (Vela)
   qui doit la réapprovisionner ; vous pouvez signaler le problème. Si vous ne
   pouvez pas attendre, vous pouvez **si vous le souhaitez** envoyer vous-même un
   petit montant de monnaie native à la trésorerie. Cette contribution est **non
   remboursable** et ne paie **pas** votre propre transaction.
-- Sur un réseau personnalisé, approvisionner le relais revient à celui qui
+- Sur un réseau que vous avez ajouté, approvisionner le relais revient à celui qui
   l'exploite — ce qui peut être vous.
+
+Tant que cet écran est ouvert, le portefeuille vérifie de nouveau à quelques
+secondes d'intervalle. Dès que la trésorerie est approvisionnée, il reprend tout
+seul ; sur l'écran de confirmation, il se contente de fermer l'avis, car c'est
+toujours vous qui lancez la signature.
 
 Il n'y a ni compte de gas par portefeuille, ni dépôt d'activation : une ancienne
 version de Vela en avait un, qui n'existe plus.
+
+### Quand un relais ne peut pas atteindre un réseau
+
+Un relais ne peut servir qu'un réseau qu'il peut lire. Quand il ne le peut pas,
+l'envoi s'arrête à **Continuer** et le dit — l'approvisionner n'y changerait rien.
+
+- Sur un réseau livré avec Vela, c'est à l'exploitant de corriger cela ; vous pouvez
+  le signaler.
+- Sur un réseau que vous avez ajouté, le relais le lit via l'adresse RPC que vous
+  avez définie pour lui : cette adresse doit donc être une adresse `https` publique.
+  Un nœud sur votre propre ordinateur ou votre réseau local (`localhost`,
+  `192.168.…`) ne peut être servi que par un relais qui tourne juste à côté — voir
+  [faire tourner votre propre relais](/fr/docs/self-hosting#relay).
 
 ## Comment Vela lit chaque réseau
 
@@ -180,5 +200,10 @@ d'accès est lent ou indisponible. Vous pouvez définir votre propre point d'acc
 pour chaque réseau dans **Réglages → Réseaux**. (L'app Android utilise pour
 l'instant un seul point d'accès par réseau, sans bascule, et l'app iPhone ne permet
 pas encore de le modifier.)
+
+À chaque requête, le relais reçoit l'adresse RPC que le portefeuille utilise pour un
+réseau — y compris toute clé d'API qu'elle contient — afin de pouvoir atteindre le
+réseau que vous utilisez. Le portefeuille l'indique là où vous définissez une adresse
+ou une clé de fournisseur ; voir la [politique de confidentialité](/privacy).
 
 Ensuite : [comment fonctionnent les passkeys](/fr/docs/passkeys).
