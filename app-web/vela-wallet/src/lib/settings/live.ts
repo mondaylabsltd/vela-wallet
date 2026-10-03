@@ -22,6 +22,7 @@ import {
 	type StorageItemReport
 } from '$lib/services/device-storage';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { SendRelayUnreachable } from '$lib/core/generated/SendRelayUnreachable';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { chainName } from '$lib/services/networks';
 import { chainMeta as chainInfo } from '$lib/services/chains';
@@ -56,6 +57,7 @@ import type {
 	BalanceDetailModel,
 	ChainMarkModel,
 	RelayerModel,
+	RelayUnreachableModel,
 	RpcFixModel,
 	SettingsDesktopModel,
 	CheckItemModel,
@@ -1167,6 +1169,7 @@ export interface RescueMessages {
 	rescue: SettingsMessages['rescue'];
 	balanceDetail: SettingsMessages['balanceDetail'];
 	relayer: SettingsMessages['relayer'];
+	relayUnreachable: SettingsMessages['relayUnreachable'];
 	networks: Pick<
 		SettingsMessages['networks'],
 		'chainId' | 'online' | 'slow' | 'offline' | 'mismatch'
@@ -1181,6 +1184,7 @@ export function pickRescueMessages(m: SettingsMessages): RescueMessages {
 		rescue: m.rescue,
 		balanceDetail: m.balanceDetail,
 		relayer: m.relayer,
+		relayUnreachable: m.relayUnreachable,
 		networks: {
 			chainId: m.networks.chainId,
 			online: m.networks.online,
@@ -1298,9 +1302,7 @@ export function liveUnreachable(
 			name: chainName(row.chain_id),
 			line: fill(m.rescue.lines[row.line_key] ?? '', {
 				amount:
-					view.hidden || row.last_seen_usd === null
-						? MASK
-						: moneyText(row.last_seen_usd, currency)
+					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
 			}),
 			action: m.rescue.rpcFix
 		}))
@@ -1453,7 +1455,42 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 		code: encodeQr(status.address),
 		copyLabel: m.relayer.copyBtn,
 		callout: { tone: 'warning', text: m.relayer.disclaimer },
-		primary: m.relayer.retryBtn
+		primary: m.relayer.retryBtn,
+		// Spec 098 §4: what it has against what it needs, and that the sheet is
+		// watching — it closes by itself once somebody has funded it.
+		balanceLine: fill(m.relayer.balanceLine, {
+			balance: unitsText(status.balance, decimals),
+			floor: unitsText(status.floor, decimals),
+			symbol
+		}),
+		watching: m.relayer.watching,
+		scanHint: m.relayer.qrLabel
+	};
+}
+
+/** A base-unit decimal string in whole coin, trimmed (a dotted value is already whole coin). */
+function unitsText(amount: string, decimals: number): string {
+	return amount.includes('.') ? trimBalance(amount) : shortfallText(amount, '0', decimals);
+}
+
+/**
+ * Spec 098 §2: the relay cannot serve this chain. Whose it is to fix is the
+ * core's verdict (`operator_served`), as on the treasury sheet: a network Vela
+ * ships is the operator's — report it; one the person added is theirs — its
+ * RPC must be public `https`, or a relay must run beside their node.
+ */
+export function liveRelayUnreachable(
+	sheet: SendRelayUnreachable,
+	m: RescueMessages
+): RelayUnreachableModel {
+	return {
+		title: m.relayUnreachable.title,
+		lead: sheet.operator_served ? m.relayUnreachable.operatorLead : m.relayUnreachable.customLead,
+		mark: rescueMark(sheet.chain_id),
+		name: chainName(sheet.chain_id),
+		hint: sheet.operator_served ? undefined : m.relayUnreachable.settingsHint,
+		report: sheet.operator_served ? { label: m.relayUnreachable.reportBtn } : undefined,
+		primary: m.relayUnreachable.retryBtn
 	};
 }
 

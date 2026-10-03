@@ -427,6 +427,22 @@ export interface SettingsMessages {
 		selfFundToggle: string;
 		/** Shown when the person added the network themselves. */
 		customLead: string;
+		/** `{{balance}}` / `{{floor}}` / `{{symbol}}` — what it has against what it needs (098 §4). */
+		balanceLine: string;
+		/** The sheet asks again on its own and closes once funded (098 §4). */
+		watching: string;
+		/** Under the code: send from another wallet. */
+		qrLabel: string;
+	};
+	/** The relay cannot serve this chain at all (spec 098 §2). */
+	relayUnreachable: {
+		title: string;
+		operatorLead: string;
+		customLead: string;
+		settingsHint: string;
+		reportBtn: string;
+		retryBtn: string;
+		closeBtn: string;
 	};
 	indexDown: {
 		title: string;
@@ -758,6 +774,16 @@ export const SETTINGS_KEYS = [
 	'componentsUi.treasuryBootstrap.selfFundToggle',
 	'componentsUi.treasuryBootstrap.customLead',
 	'componentsUi.treasuryBootstrap.copyBtn',
+	'componentsUi.treasuryBootstrap.balanceLine',
+	'componentsUi.treasuryBootstrap.watching',
+	'componentsUi.treasuryBootstrap.qrLabel',
+	'componentsUi.relayUnreachable.title',
+	'componentsUi.relayUnreachable.operatorLead',
+	'componentsUi.relayUnreachable.customLead',
+	'componentsUi.relayUnreachable.settingsHint',
+	'componentsUi.relayUnreachable.reportBtn',
+	'componentsUi.relayUnreachable.retryBtn',
+	'componentsUi.relayUnreachable.closeBtn',
 	'settings.indexDown.title',
 	'settings.indexDown.subtitle',
 	'onboarding.settings.warningText',

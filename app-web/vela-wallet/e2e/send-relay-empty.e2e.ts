@@ -133,3 +133,56 @@ test('a relay with no gas on this chain stops the send at Continue, and says wha
 	// …and the step after it never arrives: nothing to sign, nothing submitted.
 	await expect(page.getByRole('button', { name: en('send.confirmSendBtn') })).toHaveCount(0);
 });
+
+/**
+ * Spec 098 §2: the relay says it cannot serve this chain (404). Funding would
+ * not help, so this is not the funding sheet — and before 098 it went on to
+ * confirm and the passkey, and failed after the person had signed.
+ */
+test('a relay that cannot serve this chain stops the send at Continue, and says so', async ({
+	page
+}) => {
+	await stubChain(page);
+	await stubRelay(page, RELAY, happyRelay('0x' + 'a1'.repeat(32), '0x' + 'b2'.repeat(32)), {
+		treasury: null
+	});
+	await toTheAmount(page);
+
+	const proceed = page.getByRole('button', { name: en('send.continueBtn') });
+	await expect(proceed).toBeEnabled({ timeout: 30_000 });
+	await proceed.click();
+
+	await expect(page.getByText(en('componentsUi.relayUnreachable.title'))).toBeVisible({
+		timeout: 30_000
+	});
+	// Chain 1 ships, so it is the operator's to fix: the report row is there.
+	await expect(page.getByText(en('componentsUi.relayUnreachable.operatorLead'))).toBeVisible();
+	await expect(page.getByRole('button', { name: en('send.confirmSendBtn') })).toHaveCount(0);
+	// No funding sheet: gas cannot help a relay that cannot reach the network.
+	await expect(page.getByText(en('componentsUi.treasuryBootstrap.title'))).toHaveCount(0);
+});
+
+/** Spec 098 §4: the funding sheet says what it has against what it needs, and that it is watching. */
+test('the funding sheet shows the balance against the floor, and says it closes by itself', async ({
+	page
+}) => {
+	await stubChain(page);
+	await stubRelay(page, RELAY, happyRelay('0x' + 'a1'.repeat(32), '0x' + 'b2'.repeat(32)), {
+		treasury: EMPTY_TREASURY
+	});
+	await toTheAmount(page);
+	await page.getByRole('button', { name: en('send.continueBtn') }).click();
+	await expect(page.getByText(en('componentsUi.treasuryBootstrap.title'))).toBeVisible({
+		timeout: 30_000
+	});
+	// 0 against a floor of 0x5af3107a4000 wei = 0.0001 ETH.
+	await expect(
+		page.getByText(
+			en('componentsUi.treasuryBootstrap.balanceLine')
+				.replace('{{balance}}', '0')
+				.replace('{{floor}}', '0.0001')
+				.replace('{{symbol}}', 'ETH')
+		)
+	).toBeVisible();
+	await expect(page.getByText(en('componentsUi.treasuryBootstrap.watching'))).toBeVisible();
+});

@@ -652,9 +652,31 @@ export interface BalanceDetailModel {
 }
 
 /** SR4: fund this chain's bundler treasury. */
+/**
+ * The relay cannot serve this chain (spec 098 §2). Not the funding sheet:
+ * gas would not help a relay that cannot reach the network at all.
+ */
+export interface RelayUnreachableModel {
+	title: string;
+	lead: string;
+	mark: ChainMarkModel;
+	name: string;
+	/** Where to change it — the network's RPC, or the relay endpoint. */
+	hint?: string;
+	/** Present on a network Vela ships: the operator's to fix, so report it. */
+	report?: { label: string };
+	primary: string;
+}
+
 export interface RelayerModel {
 	title: string;
 	lead: string;
+	/** What the treasury has against what it needs, in its coin (spec 098 §4). Live only. */
+	balanceLine?: string;
+	/** "Checking every few seconds…" — the sheet closes by itself (098 §4). Live only. */
+	watching?: string;
+	/** Under the code: scan it from another wallet. */
+	scanHint?: string;
 	mark: ChainMarkModel;
 	name: string;
 	amountHint: string;
