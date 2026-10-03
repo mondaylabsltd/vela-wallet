@@ -1295,7 +1295,7 @@ mod tests {
     #[test]
     fn the_answer_says_how_it_ended() {
         let ok = |result: &str| SignResponsePayload::Ok {
-            result: Some(result.to_owned()),
+            result: Some(result.into()),
         };
         assert_eq!(
             ending_of("personal_sign", &ok("0xsig"), None),

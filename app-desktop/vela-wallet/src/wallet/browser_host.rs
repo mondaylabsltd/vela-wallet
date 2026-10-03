@@ -1328,7 +1328,7 @@ mod tests {
             tab: BROWSER_TAB.to_owned(),
             id: id.to_owned(),
             payload: SignResponsePayload::Ok {
-                result: Some(result.to_owned()),
+                result: Some(result.into()),
             },
             user_op_hash: None,
         })
@@ -2718,6 +2718,11 @@ mod tests {
     /// it (the wait's own result answers nothing), this host hands it to the
     /// page with no op named (as `user_op_hash_of` may name none), and that
     /// id reads 100 on its way and 200 with the real receipt once landed.
+    ///
+    /// Spec 097 G (S2): the batch declares EIP-5792 2.0.0, so the page gets
+    /// `{ "id": <op> }` — as the signing core formed it, through this host
+    /// untouched — and asks with the `.id` it reads off it, as Uniswap and
+    /// viem do (Uniswap read `.id` off a bare string and asked `[null]`).
     #[test]
     fn a_batch_answered_by_its_id_reads_200_once_it_landed() {
         use crate::core_host::CoreHost;
@@ -2840,7 +2845,7 @@ mod tests {
             assert_eq!(
                 answer,
                 SignResponsePayload::Ok {
-                    result: Some(op.clone())
+                    result: Some(json!({ "id": op }))
                 }
             );
             // The column's landing wait ends with the TX hash: nobody hears it.
@@ -2867,7 +2872,22 @@ mod tests {
                 payload: answer,
                 user_op_hash: None,
             });
-            assert_eq!(answers(&out)[0]["result"], json!(op));
+            assert_eq!(answers(&out)[0]["result"], json!({ "id": op }));
+            // What the page asks with: the `.id` it read off the answer.
+            let id = answers(&out)[0]["result"]["id"].clone();
+            let out = ask(
+                &mut driver,
+                PCS,
+                "d1",
+                "9",
+                "wallet_getCallsStatus",
+                json!([null]),
+            );
+            assert_eq!(
+                answers(&out)[0]["error"]["code"],
+                -32602,
+                "[null] has no id"
+            );
 
             let work = |out: &[Outbound]| -> u64 {
                 out.iter()
@@ -2892,7 +2912,7 @@ mod tests {
                 "d1",
                 "2",
                 "wallet_getCallsStatus",
-                json!([op]),
+                json!([id]),
             );
             let out = read(&mut driver, work(&out), json!({"result": null}));
             let out = read(
@@ -2908,7 +2928,7 @@ mod tests {
                 "d1",
                 "3",
                 "wallet_getCallsStatus",
-                json!([op]),
+                json!([id]),
             );
             let out = read(
                 &mut driver,
