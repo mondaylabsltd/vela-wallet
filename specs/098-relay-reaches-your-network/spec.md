@@ -1,6 +1,8 @@
 # 098 — The relay reaches the network you send on
 
-**Status**: design AGREED 2026-10-03 (§0); being built.
+**Status**: design AGREED 2026-10-03 (§0); BUILT 2026-10-03 — see `results.md`. One
+requirement was measured and not built: FR-007 (§3.3). Where the build departed from the
+design below, the section says so under **As built**.
 **Origin**: founder, 2026-10-03, on the web wallet sending without a word on a network
 whose relay had no gas.
 **Repos**: `vela-wallet` (core, web, desktop, iOS, Android, getvela.app) and `vela-relay`
@@ -93,6 +95,15 @@ The "can't reach" sheet says which of two things is true, from the relay's reaso
 The core owns the decision and the words (keys under `componentsUi.relayUnreachable.*`);
 the shells draw it.
 
+**As built.** The wallet reads only the status: any `404` is `Uncovered`, and the words
+split on one thing, whether the network is one Vela ships (`operator_served`, from
+`network_admin::is_builtin_chain`) — "report it" on a shipped network; "its RPC must be a
+public `https` address, or run a relay beside it" on one the person added. The relay's
+`reason` (§3.1) is for whoever reads the response, not for the sheet: a self-hosted relay
+with a chain list answers the same `404` as one that cannot reach the RPC, and the advice to
+a person who added the network covers both. The sheet's buttons are "Try again" (re-runs the
+pre-check) and "Close" (`DismissRelayUnreachable`, back to the form, facts kept).
+
 ## 3. The relay
 
 ### 3.1 The treasury answer separates "cannot" from "not now"
@@ -107,6 +118,30 @@ the shells draw it.
 
 "No entry" includes the directory's SPA fallback: a 200 that is not chain JSON is *not
 listed*, not a failure.
+
+**As built** (vela-relay PR #15; the decision is the core's `treasury::unreadable`, both
+shells render the same bytes):
+
+| Case | Status | `reason` |
+|---|---|---|
+| balance read | 200 | — |
+| the directory does not list the chain — a 404, or its HTML page | 404 | `not_listed` |
+| no endpoint the relay may use: no usable header, no Alchemy, none in the entry (1337) | 404 | `no_rpc` |
+| the wallet's RPC was refused (private or `http`) **and** nothing else answered (31337: the person's Anvil; the directory's GoChain endpoint is dead) | 404 | `no_rpc` |
+| a usable endpoint did not answer, the directory did not answer, or not a balance | 503 | — |
+
+Two departures from the table above, both found while building it:
+
+- **The directory is asked first, and a chain it does not list is `404` even when the
+  wallet's RPC answers.** The relay's quote and its executor both need the chain's native
+  asset from the directory, so a balance read for an unlisted chain would only have sent the
+  person on to a send that fails after signing. (123456789 would have read `200` once the
+  header arrived.)
+- **A refused wallet RPC plus silent directory endpoints is `404`, not `503`.** Without it
+  the commonest local-chain case — Anvil on 31337, whose id the directory gives to a dead
+  public testnet — kept answering "not now" and the wallet kept carrying on.
+
+The directory's HTML page is no longer retried three times: it is definitive.
 
 ### 3.2 Reads already prefer the client's RPC
 
@@ -128,12 +163,37 @@ relay re-send, burning the float. So:
 The blast radius is the float of that one chain — which, on a network the directory does not
 serve, the person put there themselves (§4).
 
+**As built: not built — measured first.** On the chain list the directory serves
+(ethereum-lists, snapshot of 2026-05-06), 198 of 2,602 chains have no public `https`
+endpoint, nearly all deprecated testnets or local development ids (1337). That is the whole
+population this would serve, because:
+
+- a chain the directory does not list cannot be served either way — the quote and the
+  executor need its native asset from the directory (§3.1 as built answers it `not_listed`);
+- a private chain is served by a relay run beside it (§3.4), with the operator's own
+  `VELA_RELAY_EXECUTOR_RPC_URLS` — never a stranger's URL.
+
+Persisting a caller's URL with each operation and broadcasting through it would have touched
+both executors (docker's engine and Iggy envelope, Cloudflare's lane Durable Object) for that
+population. The broadcaster stays as it was: it never uses `x-vela-rpc-url`. Recorded in
+vela-relay `docs/rpc.md`.
+
 ### 3.4 Private RPC hosts: refused, unless the operator opts in
 
 The SSRF guard stays: only `https`, never `localhost`, loopback, RFC1918, link-local or `::1`
 — on any URL a caller supplies, so a stranger cannot make the relay fetch its own cloud
 metadata or the Redis beside it. A self-hosted relay serving a chain on its own network sets
 `VELA_ALLOW_PRIVATE_RPC=true` (also allows `http`). The official deployment never sets it.
+
+**As built.** The setting is `VELA_RELAY_ALLOW_PRIVATE_RPC` — every relay setting carries the
+`VELA_RELAY_` prefix. The rule moved into the relay's core (`rpc_host`) and covers every URL
+the relay did not choose: the header, and the directory's endpoints for reads and for the
+executor alike; the operator's own `VELA_RELAY_EXECUTOR_RPC_URLS` stays exempt. Building it
+found two gaps: the docker check never refused `[::1]` (it parsed the bracketed form a URL
+parser reports, which is not an IP literal), and the Cloudflare shell accepted **any** `http`
+or `https` header URL. Both now apply one rule, which also refuses IPv4-mapped IPv6, IPv6
+unique-local and link-local, and `100.64/10`. It judges the host as written, not where a name
+resolves.
 
 ## 4. The funding sheet, made good
 
@@ -151,6 +211,22 @@ Made good:
 
 Desktop still shows the pre-028 "your fee reserve" wording here (080 research) — replaced by
 the same sheet.
+
+**As built**, per shell:
+
+| | Web | Desktop | iOS | Android |
+|---|---|---|---|---|
+| Where | sheet, opened at Continue | notice card on the form and confirm page | notice on the form and confirm page | notice on the form and confirm page |
+| Address | text + QR | text + copy | text (selectable) + copy | text (selectable) + copy |
+| Has / needs, in the chain's coin | ✓ | ✓ | ✓ | ✓ |
+| Network named | ✓ (the sheet's header) | — (the form already names it) | — (same) | — (same) |
+| Resumes by itself | ✓ | ✓ | ✓ | ✓ |
+
+The re-probe is the core's (`TREASURY_WATCH_MS` = 10 s); on the form a covered float moves the
+send to confirm, **on the confirm page it only closes the stop — it never starts a signature**.
+The phones never showed the address at all — on `main` either; found while writing the docs
+and fixed here. A QR on desktop and the phones is not built: the phones are usually where the
+money already is, and desktop has text to copy.
 
 ## 5. The wallet sends the RPC
 
@@ -171,6 +247,10 @@ the same sheet.
   replaceable.
 - The in-app privacy summary, where one exists, agrees.
 
+**As built.** The privacy policy page exists in English only (`/privacy` has no localized
+route), so FR-003 is the English page; the docs that reach every locale say it too
+(networks-and-fees, 15 languages). No app has an in-app privacy summary.
+
 ## 6. Where the design is written down
 
 - this spec;
@@ -179,6 +259,11 @@ the same sheet.
 - `vela-wallet/docs/project-takeover/` — the services page: what the wallet sends the relay
   and why; the treasury sheet's three cases;
 - the privacy policy (§5.1).
+
+**As built:** vela-relay `docs/rpc.md` (plus README, `.env.example`, `wrangler.jsonc`,
+`docs/cloudflare.md`); `docs/project-takeover/03-core-flows.md` and `07-maintenance-guide.md`
+(the cross-repo coupling); getvela.app `networks-and-fees` (both stops) and `self-hosting`
+(a chain on your own machine), each in 15 languages; the privacy policy.
 
 ## Requirements
 
@@ -201,6 +286,21 @@ the same sheet.
   float covered (§4); desktop's old reserve wording is gone.
 - **FR-009** The design is written in the documents of §6.
 - **FR-010** Each FR has a test that fails without it; the e2e of §1.1 stays.
+
+### Status (2026-10-03)
+
+| FR | Status |
+|---|---|
+| FR-001 | done — four shells, at the bundler, account, sponsor and treasury sites |
+| FR-002 | done — four shells, RPC endpoints and provider keys |
+| FR-003 | done — the English policy, the only one there is (§5.1 as built) |
+| FR-004 | done — words split on `operator_served`, not on `reason` (§2 as built) |
+| FR-005 | done in vela-relay PR #15 — needs a deploy of both shells |
+| FR-006 | done in vela-relay PR #15, as `VELA_RELAY_ALLOW_PRIVATE_RPC` |
+| FR-007 | **not built** — measured, §3.3 as built |
+| FR-008 | done — QR on the web only; address with copy on all four (§4 as built) |
+| FR-009 | done — §6 as built |
+| FR-010 | done — `results.md` lists each test and the mutation that fails it |
 
 ## Not in this spec
 
