@@ -1600,7 +1600,20 @@
    "operatorLead": "O operador da Vela mantém o relayer desta rede, e ele ficou sem gás. Avisá-lo é o mais rápido — e, uma vez resolvido, vale para todo mundo.",
    "reportBtn": "Relatar isso",
    "selfFundToggle": "Não dá para esperar? Inicie você mesmo",
-   "customLead": "Você adicionou esta rede, então o operador da Vela pode não ter como manter gás nela — uma cadeia local ou interna não é de mais ninguém. Iniciar o relayer é com você."
+   "customLead": "Você adicionou esta rede, então o operador da Vela pode não ter como manter gás nela — uma cadeia local ou interna não é de mais ninguém. Iniciar o relayer é com você.",
+   "balanceLine": "Tem {{balance}} dos {{floor}} {{symbol}} necessários",
+   "networkLine": "Rede: {{network}}",
+   "watching": "Verificando a cada poucos segundos — isto fecha sozinho assim que tiver saldo.",
+   "qrLabel": "Escaneie para enviar de outra carteira"
+  },
+  "relayUnreachable": {
+   "title": "O relay não alcança esta rede",
+   "operatorLead": "O relay da Vela não alcança esta rede no momento, então ainda não dá para enviar nela. Cabe ao operador consertar — avisá-lo é o caminho mais rápido.",
+   "customLead": "Você adicionou esta rede e o relay não a alcança. O relay lê uma rede pelo RPC que você configurou, então esse RPC precisa ser um endereço https público — um nó neste computador ou na sua rede local só pode ser atendido por um relay rodando ao lado dele.",
+   "settingsHint": "Troque o RPC desta rede ou aponte Configurações → Endpoints de serviço → Vela Relay para um relay que a alcance.",
+   "reportBtn": "Reportar",
+   "retryBtn": "Tentar de novo",
+   "closeBtn": "Fechar"
   },
   "mainNav": {
    "wallet": "Carteira",

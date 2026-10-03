@@ -1600,7 +1600,20 @@
    "operatorLead": "Il relayer di questa rete è gestito dall'operatore Vela ed è rimasto senza gas. Segnalarlo è la via più rapida, e una volta risolto vale per tutti.",
    "reportBtn": "Segnala",
    "selfFundToggle": "Non puoi aspettare? Avvialo tu",
-   "customLead": "Questa rete l'hai aggiunta tu: su una catena locale o interna l'operatore Vela potrebbe non avere modo di tenerci gas. Avviare il relayer sta a te."
+   "customLead": "Questa rete l'hai aggiunta tu: su una catena locale o interna l'operatore Vela potrebbe non avere modo di tenerci gas. Avviare il relayer sta a te.",
+   "balanceLine": "{{balance}} dei {{floor}} {{symbol}} necessari",
+   "networkLine": "Rete: {{network}}",
+   "watching": "Controllo ogni pochi secondi: si chiude da solo appena è finanziato.",
+   "qrLabel": "Scansiona per inviare da un altro wallet"
+  },
+  "relayUnreachable": {
+   "title": "Il relay non raggiunge questa rete",
+   "operatorLead": "Il relay di Vela non raggiunge questa rete in questo momento, quindi non si può ancora inviare. Tocca all'operatore sistemarlo: avvisarlo è la via più rapida.",
+   "customLead": "Hai aggiunto tu questa rete e il relay non la raggiunge. Il relay legge una rete tramite l'RPC che hai impostato, quindi quell'RPC deve essere un indirizzo https pubblico: un nodo su questo computer o sulla tua rete locale può servirlo solo un relay che gira accanto.",
+   "settingsHint": "Cambia l'RPC di questa rete, oppure punta Impostazioni → Endpoint di servizio → Vela Relay su un relay che la raggiunge.",
+   "reportBtn": "Segnala",
+   "retryBtn": "Riprova",
+   "closeBtn": "Chiudi"
   },
   "mainNav": {
    "wallet": "Portafoglio",

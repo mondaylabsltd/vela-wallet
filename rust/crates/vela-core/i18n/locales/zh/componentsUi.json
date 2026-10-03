@@ -410,7 +410,20 @@
       "operatorLead": "这个网络的中继由 Vela 运营方维护，现在它没有 gas 了。告诉他们是最快的办法——修好之后对所有人都有效。",
       "reportBtn": "报告这个问题",
       "selfFundToggle": "等不及？自己启动它",
-      "customLead": "这是你自己添加的网络，Vela 运营方可能根本没法在上面持有 gas——本地或内部的链不该由别人来充值。启动它的中继要由你自己来。"
+      "customLead": "这是你自己添加的网络，Vela 运营方可能根本没法在上面持有 gas——本地或内部的链不该由别人来充值。启动它的中继要由你自己来。",
+      "balanceLine": "现有 {{balance}}，需要 {{floor}} {{symbol}}",
+      "networkLine": "网络：{{network}}",
+      "watching": "每隔几秒会自动检查一次——充值到账后这里会自动关闭。",
+      "qrLabel": "用另一个钱包扫码转账"
+    },
+    "relayUnreachable": {
+      "title": "中继连不上这条网络",
+      "operatorLead": "Vela 的中继暂时连不上这条网络，所以现在还不能在上面发送。这要由运营方来修——告诉他们是最快的办法。",
+      "customLead": "这是你自己添加的网络，中继连不上它。中继通过你为这条网络设置的 RPC 来读取它，所以这个 RPC 必须是公网可访问的 https 地址——本机或局域网里的节点，只有运行在它旁边的中继才能服务。",
+      "settingsHint": "更换这条网络的 RPC，或在「设置 → 服务端点 → Vela Relay」里换成一个能连上它的中继。",
+      "reportBtn": "报告此问题",
+      "retryBtn": "重试",
+      "closeBtn": "关闭"
     },
     "mainNav": {
       "wallet": "钱包",

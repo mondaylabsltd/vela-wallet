@@ -1600,7 +1600,20 @@
    "operatorLead": "L'opérateur de Vela fait tourner le relayeur de ce réseau, et il n'a plus de gas. Le prévenir est le plus rapide — et une fois réglé, c'est réglé pour tout le monde.",
    "reportBtn": "Signaler",
    "selfFundToggle": "Pas le temps d'attendre ? Démarrez-le vous-même",
-   "customLead": "Vous avez ajouté ce réseau : sur une chaîne locale ou interne, l'opérateur de Vela n'a peut-être aucun moyen d'y détenir du gas. Démarrer son relayeur vous revient."
+   "customLead": "Vous avez ajouté ce réseau : sur une chaîne locale ou interne, l'opérateur de Vela n'a peut-être aucun moyen d'y détenir du gas. Démarrer son relayeur vous revient.",
+   "balanceLine": "{{balance}} sur les {{floor}} {{symbol}} nécessaires",
+   "networkLine": "Réseau : {{network}}",
+   "watching": "Vérifié toutes les quelques secondes — ceci se ferme seul dès que c'est approvisionné.",
+   "qrLabel": "Scannez pour envoyer depuis un autre portefeuille"
+  },
+  "relayUnreachable": {
+   "title": "Le relais n'atteint pas ce réseau",
+   "operatorLead": "Le relais de Vela n'atteint pas ce réseau pour le moment : rien ne peut encore y être envoyé. C'est à l'opérateur de le réparer — le prévenir est le plus rapide.",
+   "customLead": "Vous avez ajouté ce réseau, et le relais ne l'atteint pas. Le relais lit un réseau via le RPC que vous avez configuré : ce RPC doit donc être une adresse https publique. Un nœud sur cet ordinateur ou sur votre réseau local ne peut être servi que par un relais qui tourne à côté.",
+   "settingsHint": "Changez le RPC de ce réseau, ou faites pointer Réglages → Points de service → Vela Relay vers un relais qui l'atteint.",
+   "reportBtn": "Signaler",
+   "retryBtn": "Réessayer",
+   "closeBtn": "Fermer"
   },
   "mainNav": {
    "wallet": "Portefeuille",

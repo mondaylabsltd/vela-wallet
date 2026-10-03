@@ -395,8 +395,10 @@ pub enum RpcOperation {
         call_id: String,
         url: String,
         method: String,
-        /// Bundler calls only: the verified same-chain RPC URL for the
-        /// `X-Rpc-Url` header (invariant ②). `None` ⇒ send no header.
+        /// Bundler calls only: the verified same-chain RPC URL the shell sends
+        /// the relay as `x-vela-rpc-url` (invariant ②; spec 098 §5 — before
+        /// 081 the shells used `X-Rpc-Url`, a name the relay never read).
+        /// `None` ⇒ send no header. Never set on a call to an RPC provider.
         x_rpc_url: Option<String>,
         timeout_ms: u32,
     },

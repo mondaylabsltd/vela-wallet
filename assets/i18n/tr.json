@@ -1597,7 +1597,20 @@
    "operatorLead": "Bu ağın relayer'ını Vela operatörü çalıştırıyor ve gazı bitti. Onlara haber vermek en hızlı çözüm — düzelince herkes için düzelir.",
    "reportBtn": "Bunu bildir",
    "selfFundToggle": "Bekleyemiyor musun? Kendin başlat",
-   "customLead": "Bu ağı sen ekledin; yerel ya da kurum içi bir zincirde Vela operatörünün gaz tutma imkânı olmayabilir. Relayer'ı başlatmak sana kalmış."
+   "customLead": "Bu ağı sen ekledin; yerel ya da kurum içi bir zincirde Vela operatörünün gaz tutma imkânı olmayabilir. Relayer'ı başlatmak sana kalmış.",
+   "balanceLine": "Gereken {{floor}} {{symbol}} içinden {{balance}} var",
+   "networkLine": "Ağ: {{network}}",
+   "watching": "Birkaç saniyede bir kontrol ediliyor — bakiye gelince bu kendiliğinden kapanır.",
+   "qrLabel": "Başka bir cüzdandan göndermek için tarayın"
+  },
+  "relayUnreachable": {
+   "title": "Relay bu ağa ulaşamıyor",
+   "operatorLead": "Vela'nın relay'i şu an bu ağa ulaşamıyor, bu yüzden henüz burada gönderim yapılamaz. Bunu operatör düzeltmeli; haber vermek en hızlı yol.",
+   "customLead": "Bu ağı siz eklediniz ve relay ona ulaşamıyor. Relay bir ağı onun için ayarladığınız RPC üzerinden okur; bu yüzden o RPC herkese açık bir https adresi olmalı. Bu bilgisayardaki veya yerel ağınızdaki bir düğüme yalnızca yanında çalışan bir relay hizmet verebilir.",
+   "settingsHint": "Bu ağın RPC'sini değiştirin ya da Ayarlar → Hizmet uç noktaları → Vela Relay'i ona ulaşabilen bir relay'e yönlendirin.",
+   "reportBtn": "Bildir",
+   "retryBtn": "Tekrar dene",
+   "closeBtn": "Kapat"
   },
   "mainNav": {
    "wallet": "Cüzdan",

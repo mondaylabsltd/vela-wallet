@@ -1597,7 +1597,20 @@
    "operatorLead": "呢個網絡嘅中繼由 Vela 營運方維護，而家佢冇咗 gas。話俾佢哋知係最快嘅辦法——整好咗之後對所有人都有效。",
    "reportBtn": "報告呢個問題",
    "selfFundToggle": "等唔切？自己啟動佢",
-   "customLead": "呢個係你自己加嘅網絡，Vela 營運方可能根本冇辦法喺上面持有 gas——本地或者內部嘅鏈唔應該由第個人嚟充。啟動佢嘅中繼要由你自己嚟。"
+   "customLead": "呢個係你自己加嘅網絡，Vela 營運方可能根本冇辦法喺上面持有 gas——本地或者內部嘅鏈唔應該由第個人嚟充。啟動佢嘅中繼要由你自己嚟。",
+   "balanceLine": "而家有 {{balance}}，需要 {{floor}} {{symbol}}",
+   "networkLine": "網絡：{{network}}",
+   "watching": "每隔幾秒會自動再查一次——增值到咗之後呢度會自動關閉。",
+   "qrLabel": "用另一個錢包掃碼轉賬"
+  },
+  "relayUnreachable": {
+   "title": "中繼連唔到呢條網絡",
+   "operatorLead": "Vela 嘅中繼暫時連唔到呢條網絡，所以而家仲未可以喺上面發送。呢個要由營運方嚟修——話俾佢哋知係最快嘅方法。",
+   "customLead": "呢條係你自己加嘅網絡，中繼連唔到佢。中繼係透過你為呢條網絡設定嘅 RPC 嚟讀取佢，所以呢個 RPC 一定要係公開可以連到嘅 https 地址——本機或者區域網絡入面嘅節點，只有喺佢隔籬運行嘅中繼先服務到。",
+   "settingsHint": "換呢條網絡嘅 RPC，或者喺「設定 → 服務端點 → Vela Relay」改用一個連得到佢嘅中繼。",
+   "reportBtn": "回報呢個問題",
+   "retryBtn": "再試",
+   "closeBtn": "關閉"
   },
   "mainNav": {
    "wallet": "錢包",

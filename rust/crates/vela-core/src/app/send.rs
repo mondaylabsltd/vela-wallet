@@ -555,6 +555,24 @@ pub enum SendTreasuryProbe {
     Unknown,
 }
 
+/// The relay said it cannot serve this chain (spec 098 §2): the treasury probe
+/// came back `Uncovered` — a 404, which the relay answers when it has no RPC it
+/// can use for the chain, and a self-hosted one answers for a chain it does not
+/// list. Funding cannot fix that, so it is NOT the treasury sheet: until 098
+/// this case walked straight on to the passkey and failed after the person had
+/// signed, without a word.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendRelayUnreachable {
+    pub chain_id: u32,
+    /// As [`SendTreasuryStatus::operator_served`]: on a network Vela ships the
+    /// relay is the operator's to fix; on one the person added, reaching it is
+    /// theirs (a public `https` RPC, or a relay beside their node). Filled by
+    /// the core when it publishes the sheet.
+    #[serde(default)]
+    pub operator_served: bool,
+}
+
 /// A scan, already parsed by the shell (`parseEIP681` — the parser itself is
 /// wave D's `payment_request`; this machine only consumes the parse).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -823,6 +841,9 @@ pub enum SendTimerTag {
     EstimateTimeout,
     /// The form's own quote, debounced (spec 028 Phase 9, T490).
     FormEstimate,
+    /// The treasury sheet is open: ask the relay again (spec 098 §4), so the
+    /// send carries on by itself once somebody has funded it.
+    TreasuryWatch,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1322,6 +1343,11 @@ pub enum Event {
     /// Treasury sheet "retry" — re-runs the step-appropriate flow.
     RetryAfterBootstrap,
     DismissTreasurySheet,
+    /// The "relay can't reach this network" sheet's retry (spec 098 §2) —
+    /// after the person changed the network's RPC or the relay, re-runs the
+    /// step-appropriate flow, as the treasury sheet's does.
+    RetryRelayUnreachable,
+    DismissRelayUnreachable,
     /// The error panel's retry — back to idle.
     RetryAfterError,
     /// Receipt convergence from the tracker (shell-mapped, typed).
@@ -1422,6 +1448,39 @@ enum FailureFallback {
 
 /// The single in-flight orchestration. Every variant embeds the request ids it
 /// is waiting on; a result carrying any other id is stale and dropped.
+/// What the pre-check's treasury half concluded (spec 098 §2). `Unknown` — the
+/// relay did not answer — is `Serves`: transient, and a submission that then
+/// fails re-probes, as it always has.
+#[derive(Clone, Debug, PartialEq)]
+enum TreasuryAnswer {
+    Serves,
+    LowFloat(SendTreasuryStatus),
+    Unreachable,
+}
+
+impl TreasuryAnswer {
+    fn of(probe: &SendTreasuryProbe) -> Self {
+        match probe {
+            SendTreasuryProbe::LowFloat { status } => Self::LowFloat(status.clone()),
+            SendTreasuryProbe::Uncovered => Self::Unreachable,
+            SendTreasuryProbe::Covered | SendTreasuryProbe::Unknown => Self::Serves,
+        }
+    }
+}
+
+/// The open treasury sheet's watch (spec 098 §4): the timer in flight, then
+/// the probe it started. Ids, so a late answer to a sheet that has since
+/// closed changes nothing.
+#[derive(Clone, Debug, PartialEq)]
+struct TreasuryWatch {
+    chain_id: u32,
+    timer_id: u64,
+    probe_id: Option<u64>,
+}
+
+/// How often the open treasury sheet asks the relay again (spec 098 §4).
+pub const TREASURY_WATCH_MS: u32 = 10_000;
+
 #[derive(Clone, Debug, Default, PartialEq)]
 // One `Pipeline` exists at a time, inside the model. Boxing the wide variants
 // would add an allocation to every state transition to save bytes nothing counts.
@@ -1439,7 +1498,7 @@ enum Pipeline {
         treasury_id: u64,
         timer_id: u64,
         fee: Option<FeeEstimate>,
-        treasury: Option<Option<SendTreasuryStatus>>,
+        treasury: Option<TreasuryAnswer>,
     },
     /// After the timeout alert: a late successful estimate still lands in the
     /// model (ported verbatim — TS's raced-out `preCheck` keeps running its
@@ -1622,6 +1681,8 @@ pub struct Model {
     /// pick, `None` is native, said on purpose.
     fee_coin_chosen: bool,
     treasury_bootstrap: Option<SendTreasuryStatus>,
+    treasury_watch: Option<TreasuryWatch>,
+    relay_unreachable: Option<SendRelayUnreachable>,
     lock: ReentryLock,
     /// The ported `sendCancelledRef` intent: every pre-sign hop checks it.
     cancelled: bool,
@@ -1990,6 +2051,8 @@ pub struct SendView {
     pub user_op_hash: Option<String>,
     pub receipt: Option<SendReceiptView>,
     pub treasury_bootstrap: Option<SendTreasuryStatus>,
+    /// Spec 098 §2: the relay cannot serve this chain; the send stops here.
+    pub relay_unreachable: Option<SendRelayUnreachable>,
     pub recipient_identity: Option<SendRecipientIdentity>,
     /// Who the money goes to, as the form's recipient line and the confirm
     /// page name them (spec 097 F, S2): the address always, a name only
@@ -2163,6 +2226,19 @@ impl App for Send {
             Event::RetryAfterBootstrap => retry_after_bootstrap(model),
             Event::DismissTreasurySheet => {
                 model.treasury_bootstrap = None;
+                model.treasury_watch = None;
+                render()
+            }
+            Event::RetryRelayUnreachable => {
+                model.relay_unreachable = None;
+                match model.step {
+                    SendStep::EnterDetails => handle_continue(model),
+                    SendStep::Confirm => slide_confirm(model),
+                    SendStep::SelectToken => render(),
+                }
+            }
+            Event::DismissRelayUnreachable => {
+                model.relay_unreachable = None;
                 render()
             }
             Event::RetryAfterError => {
@@ -2399,6 +2475,10 @@ impl App for Send {
             treasury_bootstrap: model.treasury_bootstrap.clone().map(|mut status| {
                 status.operator_served = super::network_admin::is_builtin_chain(status.chain_id);
                 status
+            }),
+            relay_unreachable: model.relay_unreachable.clone().map(|mut sheet| {
+                sheet.operator_served = super::network_admin::is_builtin_chain(sheet.chain_id);
+                sheet
             }),
             recipient_identity: model.recipient_identity.clone(),
             payees: payees(model),
@@ -4687,11 +4767,14 @@ fn precheck_settle(model: &mut Model) -> Cmd {
     model.pipeline = Pipeline::Idle;
     model.estimating_gas = false;
     model.fee_estimate = Some(fee);
-    if let Some(status) = treasury {
+    match treasury {
         // A depleted relayer opens the bootstrap sheet HERE, replacing the
         // personal funding sheet entirely; confirm is not entered.
-        model.treasury_bootstrap = Some(status);
-        return render();
+        TreasuryAnswer::LowFloat(status) => return open_bootstrap(model, status),
+        // Spec 098 §2: a relay that cannot serve the chain stops the send
+        // here too — before 098 it went on to the passkey and failed there.
+        TreasuryAnswer::Unreachable => return open_unreachable(model),
+        TreasuryAnswer::Serves => {}
     }
     model.step = SendStep::Confirm;
     Command::all([confirm_probes(model), render()])
@@ -5055,6 +5138,7 @@ fn cancel_signing(model: &mut Model) -> Cmd {
 
 fn retry_after_bootstrap(model: &mut Model) -> Cmd {
     model.treasury_bootstrap = None;
+    model.treasury_watch = None;
     // After funding the relayer, return through the step-appropriate flow
     // (`SendScreen.tsx:214-224`): enter-details re-runs the pre-confirm
     // pre-check; confirm re-runs the slide.
@@ -5551,6 +5635,13 @@ fn precheck_fail(model: &mut Model, kind: SendEstimateFailure) -> Cmd {
 }
 
 fn accept_timer(model: &mut Model, id: u64) -> Cmd {
+    if model
+        .treasury_watch
+        .as_ref()
+        .is_some_and(|watch| watch.timer_id == id && watch.probe_id.is_none())
+    {
+        return watch_timer_fired(model);
+    }
     if let Pipeline::FormDebounce { timer_id } = model.pipeline {
         // Only the newest debounce is answered; an older timer firing late is
         // a keystroke that was typed past.
@@ -5591,10 +5682,15 @@ fn accept_timer(model: &mut Model, id: u64) -> Cmd {
 }
 
 fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd {
-    let low_float = |probe: &SendTreasuryProbe| match probe {
-        SendTreasuryProbe::LowFloat { status } => Some(status.clone()),
-        _ => None,
-    };
+    // The open sheet's watch is answered first: it is not a pipeline, and
+    // runs while the pipeline is idle (spec 098 §4).
+    if model
+        .treasury_watch
+        .as_ref()
+        .is_some_and(|watch| watch.probe_id == Some(id))
+    {
+        return accept_watch_probe(model, probe);
+    }
     match model.pipeline.clone() {
         Pipeline::PreCheck {
             fee_id,
@@ -5608,7 +5704,7 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
                 treasury_id,
                 timer_id,
                 fee,
-                treasury: Some(low_float(&probe)),
+                treasury: Some(TreasuryAnswer::of(&probe)),
             };
             precheck_settle(model)
         }
@@ -5616,35 +5712,44 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
             id: expect,
             gen,
             public_key_hex,
-        } if expect == id => {
-            match low_float(&probe) {
-                Some(status) => {
-                    // The float fell below its floor after the preflight —
-                    // stop BEFORE the passkey (invariant ⑭).
-                    model.pipeline = Pipeline::Idle;
-                    model.treasury_bootstrap = Some(status);
-                    model.tx = SendTxStatus::Idle;
-                    model.lock.end(gen);
-                    render()
-                }
-                None => submit_user_op(model, gen, public_key_hex),
+        } if expect == id => match TreasuryAnswer::of(&probe) {
+            TreasuryAnswer::LowFloat(status) => {
+                // The float fell below its floor after the preflight —
+                // stop BEFORE the passkey (invariant ⑭).
+                model.pipeline = Pipeline::Idle;
+                model.tx = SendTxStatus::Idle;
+                model.lock.end(gen);
+                open_bootstrap(model, status)
             }
-        }
+            TreasuryAnswer::Unreachable => {
+                // Spec 098 §2, and for the same reason: nothing to sign for.
+                model.pipeline = Pipeline::Idle;
+                model.tx = SendTxStatus::Idle;
+                model.lock.end(gen);
+                open_unreachable(model)
+            }
+            TreasuryAnswer::Serves => submit_user_op(model, gen, public_key_hex),
+        },
         Pipeline::FailureProbe {
             id: expect,
             gen,
             fallback,
         } if expect == id => {
             model.pipeline = Pipeline::Idle;
-            let cmd = match low_float(&probe) {
-                Some(status) => {
+            let cmd = match TreasuryAnswer::of(&probe) {
+                TreasuryAnswer::LowFloat(status) => {
                     // The honest ask: the community bootstrap sheet, not a
                     // "try again" loop.
-                    model.treasury_bootstrap = Some(status);
                     model.tx = SendTxStatus::Idle;
-                    render()
+                    open_bootstrap(model, status)
                 }
-                None => {
+                TreasuryAnswer::Unreachable => {
+                    // The submission failed because the relay cannot serve
+                    // this chain: say that, not "something went wrong".
+                    model.tx = SendTxStatus::Idle;
+                    open_unreachable(model)
+                }
+                TreasuryAnswer::Serves => {
                     model.tx = SendTxStatus::Error;
                     model.tx_error = Some(match fallback {
                         FailureFallback::Generic => SendTxErrorKey::Generic,
@@ -5663,6 +5768,103 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
             cmd
         }
         _ => Command::done(),
+    }
+}
+
+/// Open the treasury sheet and start watching the relay (spec 098 §4).
+fn open_bootstrap(model: &mut Model, status: SendTreasuryStatus) -> Cmd {
+    let chain_id = status.chain_id;
+    model.treasury_bootstrap = Some(status);
+    model.relay_unreachable = None;
+    Command::all([watch_treasury(model, chain_id), render()])
+}
+
+/// Open the "relay can't reach this network" sheet (spec 098 §2).
+fn open_unreachable(model: &mut Model) -> Cmd {
+    let Some(chain_id) = model.selected_token.as_ref().map(|token| token.chain_id) else {
+        return render();
+    };
+    model.treasury_bootstrap = None;
+    model.treasury_watch = None;
+    model.relay_unreachable = Some(SendRelayUnreachable {
+        chain_id,
+        operator_served: false,
+    });
+    render()
+}
+
+/// Start the next wait of the open sheet's watch.
+fn watch_treasury(model: &mut Model, chain_id: u32) -> Cmd {
+    let timer_id = next(model);
+    model.treasury_watch = Some(TreasuryWatch {
+        chain_id,
+        timer_id,
+        probe_id: None,
+    });
+    issue(
+        timer_id,
+        SendOperation::StartTimer {
+            ms: TREASURY_WATCH_MS,
+            tag: SendTimerTag::TreasuryWatch,
+        },
+    )
+}
+
+/// The watch's wait elapsed: ask the relay, if the sheet is still open.
+fn watch_timer_fired(model: &mut Model) -> Cmd {
+    let Some(watch) = model.treasury_watch.clone() else {
+        return Command::done();
+    };
+    if model.treasury_bootstrap.is_none() {
+        model.treasury_watch = None;
+        return Command::done();
+    }
+    let probe_id = next(model);
+    model.treasury_watch = Some(TreasuryWatch {
+        probe_id: Some(probe_id),
+        ..watch.clone()
+    });
+    issue(
+        probe_id,
+        SendOperation::ProbeTreasury {
+            chain_id: watch.chain_id,
+        },
+    )
+}
+
+/// The watch's probe answered (spec 098 §4).
+///
+/// Funded: the sheet closes. On the form the send goes on to confirm by
+/// itself — that is a screen, not a signature. On confirm it only closes:
+/// the passkey is the person's to start, and browsers refuse a WebAuthn
+/// prompt nobody pressed for. Still short: the balance shown is refreshed and
+/// the watch waits again. No answer: it waits again — transient, as always.
+fn accept_watch_probe(model: &mut Model, probe: SendTreasuryProbe) -> Cmd {
+    let Some(watch) = model.treasury_watch.clone() else {
+        return Command::done();
+    };
+    if model.treasury_bootstrap.is_none() {
+        model.treasury_watch = None;
+        return Command::done();
+    }
+    match TreasuryAnswer::of(&probe) {
+        TreasuryAnswer::LowFloat(status) => {
+            model.treasury_bootstrap = Some(status);
+            Command::all([watch_treasury(model, watch.chain_id), render()])
+        }
+        TreasuryAnswer::Serves if matches!(probe, SendTreasuryProbe::Covered) => {
+            model.treasury_watch = None;
+            match model.step {
+                SendStep::EnterDetails => retry_after_bootstrap(model),
+                _ => {
+                    model.treasury_bootstrap = None;
+                    render()
+                }
+            }
+        }
+        // `Unknown`, or a relay that has since stopped serving the chain
+        // while a sheet about its gas is open: keep the sheet, ask again.
+        _ => watch_treasury(model, watch.chain_id),
     }
 }
 

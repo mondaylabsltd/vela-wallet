@@ -410,7 +410,20 @@
       "operatorLead": "Bên vận hành Vela chạy relayer của mạng này, và nó đã hết gas. Báo cho họ là cách nhanh nhất — và sửa xong thì ai cũng dùng được.",
       "reportBtn": "Báo lỗi này",
       "selfFundToggle": "Không đợi được? Tự khởi động nó",
-      "customLead": "Bạn đã tự thêm mạng này, nên bên vận hành Vela có thể không có cách nào giữ gas trên đó — một chuỗi nội bộ hoặc cục bộ không phải việc của người khác. Khởi động relayer là tùy bạn."
+      "customLead": "Bạn đã tự thêm mạng này, nên bên vận hành Vela có thể không có cách nào giữ gas trên đó — một chuỗi nội bộ hoặc cục bộ không phải việc của người khác. Khởi động relayer là tùy bạn.",
+      "balanceLine": "Đang có {{balance}} trên {{floor}} {{symbol}} cần thiết",
+      "networkLine": "Mạng: {{network}}",
+      "watching": "Đang kiểm tra mỗi vài giây — mục này sẽ tự đóng khi đã có tiền.",
+      "qrLabel": "Quét để gửi từ một ví khác"
+    },
+    "relayUnreachable": {
+      "title": "Relay không kết nối được mạng này",
+      "operatorLead": "Relay của Vela hiện không kết nối được mạng này, nên chưa thể gửi gì trên đó. Việc này do bên vận hành sửa — báo cho họ là nhanh nhất.",
+      "customLead": "Bạn đã tự thêm mạng này, và relay không kết nối được tới nó. Relay đọc một mạng qua RPC bạn đặt cho mạng đó, nên RPC ấy phải là một địa chỉ https công khai — một node trên máy này hoặc trong mạng nội bộ của bạn chỉ có thể được phục vụ bởi một relay chạy ngay bên cạnh.",
+      "settingsHint": "Đổi RPC của mạng này, hoặc trỏ Cài đặt → Điểm dịch vụ → Vela Relay tới một relay kết nối được tới nó.",
+      "reportBtn": "Báo cáo",
+      "retryBtn": "Thử lại",
+      "closeBtn": "Đóng"
     },
     "mainNav": {
       "wallet": "Ví",

@@ -297,6 +297,7 @@ export * from './SendReceiptView';
 export * from './SendRecipientDraft';
 export * from './SendRecipientIdentity';
 export * from './SendRecipientRisk';
+export * from './SendRelayUnreachable';
 export * from './SendRowFieldState';
 export * from './SendScan';
 export * from './SendShellResult';

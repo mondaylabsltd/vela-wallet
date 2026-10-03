@@ -29,7 +29,7 @@ use vela_core::app::send::{
     SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res, SendStage,
     SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
     SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
-    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS,
+    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -254,6 +254,58 @@ fn covered() -> Res {
     Res::TreasuryProbed {
         probe: SendTreasuryProbe::Covered,
     }
+}
+
+fn uncovered() -> Res {
+    Res::TreasuryProbed {
+        probe: SendTreasuryProbe::Uncovered,
+    }
+}
+
+fn unknown() -> Res {
+    Res::TreasuryProbed {
+        probe: SendTreasuryProbe::Unknown,
+    }
+}
+
+/// The treasury watch's wait elapses — answered by tag, not by age: the
+/// pre-check's own 15 s timer is still outstanding, and older.
+fn elapse_the_watch(sut: &mut Sut) -> Vec<Op> {
+    sut.resolve_matching(
+        |op| {
+            matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::TreasuryWatch,
+                    ..
+                }
+            )
+        },
+        Res::TimerElapsed {
+            tag: SendTimerTag::TreasuryWatch,
+        },
+    )
+}
+
+/// The probe the watch started, answered by kind.
+fn answer_the_watch(sut: &mut Sut, result: Res) -> Vec<Op> {
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), result)
+}
+
+/// The treasury sheet opened, and the only thing it asked for is its watch's
+/// first wait (spec 098 §4) — no confirm probes, no submission.
+#[track_caller]
+fn assert_only_the_watch(ops: &[Op], why: &str) {
+    assert!(
+        matches!(
+            ops,
+            [Op::StartTimer {
+                ms: TREASURY_WATCH_MS,
+                tag: SendTimerTag::TreasuryWatch
+            }]
+        ),
+        "{why}: expected only the treasury watch, got {ops:?}"
+    );
 }
 
 fn credential(pk: Option<&str>) -> Res {
@@ -3605,7 +3657,7 @@ fn a_depleted_treasury_opens_the_bootstrap_sheet_instead_of_confirm() {
     drain_form_quote(&mut sut);
     assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
     let ops = sut.resolve(low_float());
-    assert!(ops.is_empty(), "no confirm probes: {ops:?}");
+    assert_only_the_watch(&ops, "no confirm probes");
     let view = sut.view();
     assert_eq!(view.stage, SendStage::EnterDetails);
     assert!(view.treasury_bootstrap.is_some());
@@ -3806,7 +3858,7 @@ fn the_race_window_after_preflight_is_covered_by_a_pre_sign_recheck() {
     assert_eq!(sut.view().tx_status, SendTxStatus::Preparing);
     // The float fell below its floor after the preflight.
     let ops = sut.resolve(low_float());
-    assert!(ops.is_empty(), "⑭: no SubmitUserOp: {ops:?}");
+    assert_only_the_watch(&ops, "⑭: no SubmitUserOp");
     let view = sut.view();
     assert!(view.treasury_bootstrap.is_some());
     assert_eq!(view.tx_status, SendTxStatus::Idle);
@@ -4315,7 +4367,7 @@ fn relayer_unavailable_with_a_depleted_treasury_shows_the_honest_bootstrap_ask()
     });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
     let ops = sut.resolve(low_float());
-    assert!(ops.is_empty());
+    assert_only_the_watch(&ops, "the honest ask, and nothing else");
     let view = sut.view();
     assert!(view.treasury_bootstrap.is_some());
     assert_eq!(view.tx_status, SendTxStatus::Idle, "not an error — an ask");
@@ -5115,7 +5167,7 @@ fn the_relayer_sheet_says_whether_the_operator_owns_this_network() {
     assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
     // The shell reported the probe WITHOUT this verdict (`operator_served`
     // is false in `treasury_status()`); the core supplies it.
-    assert!(sut.resolve(low_float()).is_empty());
+    assert_only_the_watch(&sut.resolve(low_float()), "the sheet opens");
 
     let status = sut
         .view()
@@ -6548,4 +6600,182 @@ fn a_single_send_receipt_is_its_one_coin() {
     assert_eq!(receipt.coins[0].amount, receipt.amount);
     assert_eq!(receipt.coins[0].symbol, "ETH");
     assert_eq!(receipt.coins[0].logo_urls, vec!["eth.png".to_owned()]);
+}
+
+// ===========================================================================
+// Spec 098 — the relay reaches the network you send on
+// ===========================================================================
+
+/// Continue on a 1-ETH send, with the estimate in, waiting on the treasury.
+fn to_the_treasury_answer(sut: &mut Sut) {
+    select_eth(sut);
+    set_recipient(sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(sut);
+    assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
+}
+
+/// §2: the relay said it cannot serve this chain. Before 098 this went on to
+/// confirm and the passkey, and failed after the person had signed.
+#[test]
+fn a_relay_that_cannot_serve_the_chain_stops_the_send_before_confirm() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    let ops = sut.resolve(uncovered());
+    assert!(ops.is_empty(), "no confirm probes, no watch: {ops:?}");
+    let view = sut.view();
+    assert_eq!(
+        view.stage,
+        SendStage::EnterDetails,
+        "confirm is not entered"
+    );
+    let sheet = view.relay_unreachable.expect("the can't-reach sheet");
+    assert_eq!(sheet.chain_id, 1);
+    // The core, not the shell, says whose relay it is (chain 1 ships).
+    assert!(sheet.operator_served);
+    assert!(view.treasury_bootstrap.is_none(), "not the funding sheet");
+}
+
+/// §2: "the relay did not answer" stays transient — the send goes on.
+#[test]
+fn a_relay_that_did_not_answer_is_still_transient() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    sut.resolve(unknown());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.relay_unreachable.is_none());
+}
+
+/// §2: retry re-runs the pre-check (after the person changed the RPC or relay);
+/// dismiss just closes.
+#[test]
+fn the_cant_reach_sheet_retries_through_the_precheck_and_dismisses_cleanly() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    sut.resolve(uncovered());
+    let ops = sut.dispatch(Event::RetryRelayUnreachable);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { .. },
+                Op::StartTimer { .. }
+            ]
+        ),
+        "{ops:?}"
+    );
+    assert!(sut.view().relay_unreachable.is_none());
+    // The first run's 15 s timer is still outstanding and older: answer by kind.
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 1_000)),
+    );
+    answer_the_watch(&mut sut, uncovered());
+    assert!(
+        sut.view().relay_unreachable.is_some(),
+        "still unreachable: shown again"
+    );
+    sut.dispatch(Event::DismissRelayUnreachable);
+    assert!(sut.view().relay_unreachable.is_none());
+}
+
+/// §2: the pre-sign recheck stops on "can't reach" too — before the passkey.
+#[test]
+fn the_pre_sign_recheck_stops_on_a_relay_that_cannot_serve_the_chain() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let ops = sut.dispatch(Event::SlideConfirm);
+    assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
+    let ops = sut.resolve(uncovered());
+    assert!(ops.is_empty(), "no SubmitUserOp: {ops:?}");
+    let view = sut.view();
+    assert!(view.relay_unreachable.is_some());
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert!(!view.sending, "the lock is released");
+}
+
+/// §4: the open sheet asks the relay again on its own; once funded, the send
+/// goes on to confirm by itself.
+#[test]
+fn a_funded_relay_closes_the_sheet_and_the_send_carries_on() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    assert_only_the_watch(&sut.resolve(low_float()), "the sheet opens");
+
+    // The wait elapses: one probe.
+    let ops = elapse_the_watch(&mut sut);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 1 }]),
+        "{ops:?}"
+    );
+    // Funded: the pre-check runs again, and that is what leads to confirm.
+    let ops = answer_the_watch(&mut sut, covered());
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { .. },
+                Op::StartTimer { .. }
+            ]
+        ),
+        "{ops:?}"
+    );
+    assert!(sut.view().treasury_bootstrap.is_none());
+}
+
+/// §4: still short — the sheet shows the new balance and waits again.
+#[test]
+fn a_relay_still_short_refreshes_the_balance_and_waits_again() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    sut.resolve(low_float());
+    elapse_the_watch(&mut sut);
+    let mut topped = treasury_status();
+    topped.balance = "7".to_owned();
+    let ops = answer_the_watch(
+        &mut sut,
+        Res::TreasuryProbed {
+            probe: SendTreasuryProbe::LowFloat { status: topped },
+        },
+    );
+    assert_only_the_watch(&ops, "waits again");
+    assert_eq!(
+        sut.view().treasury_bootstrap.expect("still open").balance,
+        "7"
+    );
+}
+
+/// §4: on confirm, funding closes the sheet but NEVER starts the passkey —
+/// that is the person's to press, and browsers refuse one nobody pressed for.
+#[test]
+fn on_confirm_a_funded_relay_closes_the_sheet_without_signing() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    sut.dispatch(Event::SlideConfirm);
+    sut.resolve(low_float());
+    elapse_the_watch(&mut sut);
+    let ops = answer_the_watch(&mut sut, covered());
+    assert!(ops.is_empty(), "no submission, no passkey: {ops:?}");
+    let view = sut.view();
+    assert!(view.treasury_bootstrap.is_none());
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+}
+
+/// §4: a closed sheet stops watching — a late wait or answer changes nothing.
+#[test]
+fn a_dismissed_sheet_stops_watching() {
+    let mut sut = boot(vec![eth("2")]);
+    to_the_treasury_answer(&mut sut);
+    sut.resolve(low_float());
+    sut.dispatch(Event::DismissTreasurySheet);
+    let ops = elapse_the_watch(&mut sut);
+    assert!(ops.is_empty(), "no probe after the sheet closed: {ops:?}");
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
 }

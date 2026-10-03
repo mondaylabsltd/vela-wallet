@@ -12,4 +12,4 @@ export type SendEvent = { "type": "open", account: SendAccountRef | null, params
 /**
  * The head read before the first POST (ruling 8); `None` = unknown.
  */
-submit_block: number | null, now_ms: number, } | { "type": "cancel_signing" } | { "type": "retry_after_bootstrap" } | { "type": "dismiss_treasury_sheet" } | { "type": "retry_after_error" } | { "type": "receipt_update", user_op_hash: string, outcome: SendReceiptOutcome, } | { "type": "done" };
+submit_block: number | null, now_ms: number, } | { "type": "cancel_signing" } | { "type": "retry_after_bootstrap" } | { "type": "dismiss_treasury_sheet" } | { "type": "retry_relay_unreachable" } | { "type": "dismiss_relay_unreachable" } | { "type": "retry_after_error" } | { "type": "receipt_update", user_op_hash: string, outcome: SendReceiptOutcome, } | { "type": "done" };
