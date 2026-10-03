@@ -2947,6 +2947,7 @@ struct RootView: View {
                     sendWarning: send.view.flatMap {
                         SendLive.stopNotice($0, loc: loc) ?? SendLive.formWarning($0, loc: loc)
                     },
+                    sendFund: send.view.flatMap { SendLive.fundAddress($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },

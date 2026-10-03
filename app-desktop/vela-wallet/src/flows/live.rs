@@ -2328,6 +2328,11 @@ mod treasury_tests {
             let detail = notice.detail.unwrap_or_default();
             assert!(detail.contains("0xTreasury"), "{detail}");
             assert!(detail.contains("0.02"), "{detail}");
+            // ...and copies it: read off the screen it is 42 characters to retype.
+            assert_eq!(
+                notice.copy,
+                Some((s.funding_copy.clone(), "0xTreasury".into()))
+            );
             // Spec 098 §4: what it has against what it needs, and that it is
             // watching — and spec 080's finding, gone: no "fee reserve".
             assert!(detail.contains(s.funding_watching.as_ref()), "{detail}");
@@ -2376,6 +2381,7 @@ mod treasury_tests {
                 assert_eq!(notice.title.as_ref(), Some(&s.unreachable_title));
                 assert_eq!(notice.body, lead);
                 assert_eq!(notice.dismiss.as_ref(), Some(&s.unreachable_close));
+                assert_eq!(notice.copy, None, "nothing to fund");
                 assert_eq!(
                     notice_way_out(&inputs, false),
                     Some(NoticeWayOut::RetryRelayUnreachable)
@@ -2767,6 +2773,7 @@ fn build_notice(
             },
             detail: (!sheet.operator_served).then(|| s.unreachable_hint.clone()),
             action: Some(s.unreachable_retry.clone()),
+            copy: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryRelayUnreachable)));
@@ -2828,6 +2835,9 @@ fn build_notice(
                 .into(),
             ),
             action: Some(s.funding_check_now.clone()),
+            // Spec 098 §4: the address is what a person needs to fund it —
+            // read off the screen it is 42 characters to retype.
+            copy: Some((s.funding_copy.clone(), treasury.address.clone().into())),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryAfterBootstrap)));
@@ -2873,6 +2883,7 @@ fn build_notice(
             body,
             detail,
             action,
+            copy: None,
             error: true,
         };
         return Some((notice, way_out));
@@ -2935,6 +2946,7 @@ fn build_notice(
                 .into(),
             ),
             action: Some(s.same_fee_edit.clone()),
+            copy: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -2948,6 +2960,7 @@ fn build_notice(
             body: s.insufficient_body.clone(),
             detail: None,
             action: None,
+            copy: None,
             error: true,
         };
         return Some((notice, None));
@@ -2970,6 +2983,7 @@ fn build_notice(
             body: cannot_convert(issue, s),
             detail: None,
             action: Some(s.same_fee_edit.clone()),
+            copy: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -3001,6 +3015,7 @@ fn build_notice(
             body,
             detail: None,
             action: None,
+            copy: None,
             error: false,
         },
         None,
@@ -3424,6 +3439,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             body,
             detail: None,
             action: None,
+            copy: None,
             error: true,
         })
     });
@@ -4309,6 +4325,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 },
                 detail: None,
                 action: None,
+                copy: None,
                 error: true,
             })
         // Over the balance is said on the total line (`batch_total`), beside
@@ -4320,6 +4337,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 body: s.batch_over_cap.clone(),
                 detail: None,
                 action: None,
+                copy: None,
                 error: false,
             })
         } else {

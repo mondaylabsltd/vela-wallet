@@ -796,6 +796,16 @@ struct BreakdownRowModel: Identifiable {
     var mono = false
 }
 
+/// Spec 098 §4: where the relay's gas goes, under its treasury stop — the
+/// address in full and the button that copies it. Until 098 the phone said
+/// "fund it" and never said where.
+struct FundAddressModel: Hashable {
+    let label: String
+    let address: String
+    let copy: String
+    let copied: String
+}
+
 struct SendConfirmModel {
     let header: FlowHeaderModel
     /// The coin being sent, drawn above the figure (founder, 2026-09-17). The
@@ -820,6 +830,8 @@ struct SendConfirmModel {
     /// Without this the page was silent about all three — the CTA simply
     /// stopped working and nothing said why.
     var notice: String?
+    /// Spec 098 §4: the treasury stop's address, under [notice].
+    var noticeFund: FundAddressModel? = nil
     /// The notice's own buttons. The primary retries what the notice is about;
     /// the secondary is 暂不, which keeps the facts and lets somebody go on
     /// looking at the page (spec 054 US4).

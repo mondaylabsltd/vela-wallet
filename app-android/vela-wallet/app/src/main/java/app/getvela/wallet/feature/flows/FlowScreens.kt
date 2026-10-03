@@ -108,6 +108,42 @@ import app.getvela.wallet.feature.wallet.components.TokenIcon
  * is the caller's business.
  */
 
+/**
+ * Spec 098 §4: where the relay's gas goes — the treasury address in full,
+ * selectable, and a button that copies it, under the stop that asks for it.
+ */
+@Composable
+private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
+    val (copied, setCopied) = rememberCopyTick()
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = model.label,
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.xs))
+        SelectionContainer {
+            Text(
+                text = model.address,
+                color = colors.fgBase,
+                fontFamily = VelaMonoFontFamily,
+                fontSize = VelaTextSize.sm,
+            )
+        }
+        Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        FlowCta(
+            label = if (copied == 0) model.copied else model.copy,
+            onClick = { if (Clipboard.copy(context, model.label, model.address)) { haptic(VelaHaptic.Select); setCopied(0) } },
+            accent = false,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 /** The 150 ms copy tick the SPEC sheet specifies, as reusable screen state. */
 @Composable
 private fun rememberCopyTick(): Pair<Int, (Int) -> Unit> {
@@ -1185,6 +1221,7 @@ fun SendFormBody(
                 lineHeight = VelaTextSize.sm * VelaLeading.normal,
                 modifier = Modifier.padding(bottom = VelaSpacing.lg),
             )
+            model.fund?.let { fund -> FundAddress(fund, Modifier.padding(bottom = VelaSpacing.lg)) }
         }
         model.recipient?.let {
             RecipientField(
@@ -1273,6 +1310,7 @@ fun SendFormBody(
                     modifier = Modifier.padding(bottom = VelaSpacing.md),
                 )
             }
+            model.fund?.let { fund -> FundAddress(fund, Modifier.padding(bottom = VelaSpacing.md)) }
         }
         FlowCta(
             label = model.cta,
@@ -1892,6 +1930,10 @@ fun SendConfirmBody(
                     fontSize = VelaTextSize.sm,
                     lineHeight = VelaTextSize.sm * VelaLeading.normal,
                 )
+                model.noticeFund?.let { fund ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    FundAddress(fund)
+                }
                 model.noticeAction?.let { action ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))
                     FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())

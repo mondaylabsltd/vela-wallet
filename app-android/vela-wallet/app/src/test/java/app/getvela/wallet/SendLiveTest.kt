@@ -157,12 +157,17 @@ class SendLiveTest {
         assertTrue(text, text.contains(strings.t("componentsUi.treasuryBootstrap.disclaimer")))
         assertEquals(strings.t("componentsUi.treasuryBootstrap.retryBtn"), funding.cta)
         assertTrue(funding.ctaEnabled)
+        // ...and where the gas goes: the treasury in full, with its copy button.
+        // Until 098 the phone said "fund it" and never said where.
+        assertEquals("0x3e59292e18417f814112f731e7163534c6d2fe3c", funding.fund?.address)
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.copyBtn"), funding.fund?.copy)
 
         // The relay cannot reach this network at all — a network the person added.
         val unreachable = base.copy(relay_unreachable = SendRelayUnreachable(chain_id = 1337, operator_served = false))
         val stop = SendLive.form(drawn.model, unreachable, FeeView(), ctx())
         val words = stop.warning.orEmpty()
         assertTrue(words, words.startsWith(strings.t("componentsUi.relayUnreachable.title")))
+        assertNull("nothing to fund when the relay cannot reach the network", stop.fund)
         assertTrue(words, words.contains(strings.t("componentsUi.relayUnreachable.customLead")))
         assertTrue(words, words.contains(strings.t("componentsUi.relayUnreachable.settingsHint")))
         assertEquals(strings.t("componentsUi.relayUnreachable.retryBtn"), stop.cta)
@@ -780,6 +785,7 @@ class SendLiveTest {
         assertTrue(treasury.notice!!.contains(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
         assertTrue("the hint carries the shortfall in the chain's coin", treasury.notice!!.contains("0.9"))
         assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), treasury.noticeAction)
+        assertEquals("0x1111111111111111111111111111111111111111", treasury.noticeFund?.address)
         assertFalse(treasury.ctaEnabled)
 
         val fine = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())

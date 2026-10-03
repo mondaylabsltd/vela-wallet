@@ -4,6 +4,7 @@ import app.getvela.wallet.core.format.TokenRounding
 import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.feature.flows.FeeSpeedModel
+import app.getvela.wallet.feature.flows.FundAddressModel
 import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
 import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeTier
@@ -487,6 +488,7 @@ object SendLive {
             cta = formCta(view, ctx, s.t(I18nKeys.Flows.CONTINUE)),
             ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
+            fund = fundAddress(view, ctx),
         )
     }
 
@@ -557,6 +559,7 @@ object SendLive {
             cta = formCta(view, ctx, fallback.cta),
             ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
+            fund = fundAddress(view, ctx),
             hint = splitHint(view, ctx),
             fillEmpty = splitFillEmpty(view, symbol, ctx),
         )
@@ -1105,6 +1108,7 @@ object SendLive {
             ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null &&
                 view.relay_unreachable == null && view.tx_error == null,
             notice = confirmNotice(view, ctx),
+            noticeFund = fundAddress(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
             // and "not now" — DismissTreasurySheet, the facts kept. The
             // can't-reach stop (spec 098 §2) has the same two, its own.
@@ -1205,6 +1209,17 @@ object SendLive {
             return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead $hint\n$balance\n${s.t(I18nKeys.Flows.TREASURY_DISCLAIMER)}\n${s.t(I18nKeys.Flows.TREASURY_WATCHING)}"
         }
         return null
+    }
+
+    /** Spec 098 §4: the treasury stop's address and its copy button — the one thing a person needs to fund it. */
+    internal fun fundAddress(view: SendView, ctx: Context): FundAddressModel? = view.treasury_bootstrap?.let { status ->
+        val s = ctx.strings
+        FundAddressModel(
+            label = s.t(I18nKeys.Flows.TREASURY_ADDRESS_LABEL),
+            address = status.address,
+            copy = s.t(I18nKeys.Flows.TREASURY_COPY),
+            copied = s.t(I18nKeys.Flows.TREASURY_COPIED),
+        )
     }
 
     /** The form's button while a relay stop is up: its retry, which is Continue again. */

@@ -841,7 +841,10 @@ pub fn override_hint(row: &NetNetworkRow, s: &SettingsStrings) -> SharedString {
         return s.network_save_checking.clone();
     }
     // Spec 098 §5.1: where the RPC is set, that the relay is sent it.
-    SharedString::from(format!("{} {}", s.network_save_hint, s.network_relay_notice))
+    SharedString::from(format!(
+        "{} {}",
+        s.network_save_hint, s.network_relay_notice
+    ))
 }
 
 /// The one line the add-network dialog owes the person: what the wizard is
@@ -1051,7 +1054,10 @@ mod wizard_tests {
         let s = strings();
         assert_eq!(
             override_hint(&row(None, false), &s),
-            SharedString::from(format!("{} {}", s.network_save_hint, s.network_relay_notice)),
+            SharedString::from(format!(
+                "{} {}",
+                s.network_save_hint, s.network_relay_notice
+            )),
             "the standing hint, and that the relay is sent this RPC (098 §5.1)"
         );
         assert_eq!(override_hint(&row(None, true), &s), s.network_save_checking);

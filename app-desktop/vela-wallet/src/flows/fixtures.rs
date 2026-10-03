@@ -594,6 +594,9 @@ pub struct SendNotice {
     /// relay-treasury stop, whose "Close" puts a person back on the form
     /// instead of leaving them staring at a top-up address until it clears.
     pub dismiss: Option<SharedString>,
+    /// A button that copies a value, and its label — today only the
+    /// relay-treasury stop's address (spec 098 §4).
+    pub copy: Option<(SharedString, SharedString)>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
 }

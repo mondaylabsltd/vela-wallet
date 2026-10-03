@@ -549,6 +549,7 @@ pub struct FlowStrings {
     pub funding_address_label: SharedString,
     pub funding_amount_label: SharedString,
     pub funding_check_now: SharedString,
+    pub funding_copy: SharedString,
     /// "Not now" — the phone's own word for leaving this stop. The desktop
     /// draws the stop inline rather than as a sheet, so this is the way back
     /// to the form.
@@ -888,6 +889,7 @@ impl FlowStrings {
             funding_address_label: s("componentsUi.treasuryBootstrap.addressLabel"),
             funding_amount_label: s("componentsUi.treasuryBootstrap.suggested"),
             funding_check_now: s("componentsUi.treasuryBootstrap.retryBtn"),
+            funding_copy: s("componentsUi.treasuryBootstrap.copyBtn"),
             funding_close: s("componentsUi.treasuryBootstrap.closeBtn"),
             unreachable_title: s("componentsUi.relayUnreachable.title"),
             unreachable_operator_lead: s("componentsUi.relayUnreachable.operatorLead"),

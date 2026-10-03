@@ -589,6 +589,9 @@ object I18nKeys {
         const val TREASURY_BALANCE_LINE = "componentsUi.treasuryBootstrap.balanceLine"
         const val TREASURY_WATCHING = "componentsUi.treasuryBootstrap.watching"
         const val TREASURY_DISCLAIMER = "componentsUi.treasuryBootstrap.disclaimer"
+        const val TREASURY_ADDRESS_LABEL = "componentsUi.treasuryBootstrap.addressLabel"
+        const val TREASURY_COPY = "componentsUi.treasuryBootstrap.copyBtn"
+        const val TREASURY_COPIED = "componentsUi.treasuryBootstrap.copied"
         // Spec 098 §2: the relay cannot serve this chain at all.
         const val RELAY_UNREACHABLE_TITLE = "componentsUi.relayUnreachable.title"
         const val RELAY_UNREACHABLE_OPERATOR_LEAD = "componentsUi.relayUnreachable.operatorLead"

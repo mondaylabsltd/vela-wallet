@@ -1038,6 +1038,7 @@ enum SendLive {
             facts: facts,
             breakdown: breakdown,
             notice: confirmNotice(view, loc: loc),
+            noticeFund: fundAddress(view, loc: loc),
             // The treasury pause has TWO exits (spec 054 US4): the core's
             // retry, and 暂不 — which keeps the facts on screen rather than
             // throwing the attempt away. A submit the relay refused has one,
@@ -1195,6 +1196,18 @@ enum SendLive {
 
     /// The form's button while a relay stop is up: its retry, which is
     /// Continue again (the core clears the stop and re-runs the pre-check).
+    /// Spec 098 §4: the treasury stop's address and its copy button — the one
+    /// thing a person needs to fund it.
+    static func fundAddress(_ view: SendViewWire, loc: Loc) -> FundAddressModel? {
+        guard let status = view.treasuryBootstrap else { return nil }
+        return FundAddressModel(
+            label: loc.t("componentsUi.treasuryBootstrap.addressLabel"),
+            address: status.address,
+            copy: loc.t("componentsUi.treasuryBootstrap.copyBtn"),
+            copied: loc.t("componentsUi.treasuryBootstrap.copied")
+        )
+    }
+
     static func stopRetry(_ view: SendViewWire, loc: Loc) -> String? {
         if view.relayUnreachable != nil { return loc.t("componentsUi.relayUnreachable.retryBtn") }
         if view.treasuryBootstrap != nil { return loc.t("componentsUi.treasuryBootstrap.retryBtn") }

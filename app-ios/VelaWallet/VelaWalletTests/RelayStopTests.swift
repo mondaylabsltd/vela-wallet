@@ -76,9 +76,36 @@ struct RelayStopTests {
         #expect(model.notice?.hasPrefix(loc.t("componentsUi.relayUnreachable.title")) == true)
     }
 
+    /// Until 098 the phone said "fund it" and never said where: the address
+    /// was in the core's view and on no screen.
+    @Test func theTreasuryStopSaysWhereTheGasGoesOnBothPages() throws {
+        let form = try sendView(["stage": "enter_details", "treasury_bootstrap": emptyFloat])
+        let fund = try #require(SendLive.fundAddress(form, loc: loc))
+        #expect(fund.address == "0x3e59292e18417f814112f731e7163534c6d2fe3c")
+        #expect(fund.copy == loc.t("componentsUi.treasuryBootstrap.copyBtn"))
+
+        let confirm = try sendView(["stage": "confirm", "treasury_bootstrap": emptyFloat])
+        guard case .sendConfirm(let drawn) = WalletFlowFixtures.build(.sd3, loc: loc).base else {
+            throw Missing()
+        }
+        let model = SendLive.confirm(
+            confirm, from: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", name: nil),
+            display: .usd, on: drawn, loc: loc
+        )
+        #expect(model.noticeFund?.address == "0x3e59292e18417f814112f731e7163534c6d2fe3c")
+
+        // Nothing to fund when the relay cannot reach the network at all.
+        let unreachable = try sendView([
+            "stage": "enter_details",
+            "relay_unreachable": ["chain_id": 1337, "operator_served": false],
+        ])
+        #expect(SendLive.fundAddress(unreachable, loc: loc) == nil)
+    }
+
     @Test func noStopNoRetry() throws {
         let view = try sendView(["stage": "enter_details"])
         #expect(SendLive.stopNotice(view, loc: loc) == nil)
         #expect(SendLive.stopRetry(view, loc: loc) == nil)
+        #expect(SendLive.fundAddress(view, loc: loc) == nil)
     }
 }
