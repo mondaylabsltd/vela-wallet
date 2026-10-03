@@ -1126,10 +1126,7 @@ pub fn ending_of(
     let result = match payload {
         // A batch answered in EIP-5792 2.0.0's `{ id }` names its id the same
         // (spec 097 G).
-        SignResponsePayload::Ok { .. } => match payload.answered() {
-            Some(result) => result,
-            None => return None,
-        },
+        SignResponsePayload::Ok { .. } => payload.answered()?,
         // 083's two errors for an operation that went out (owner ruling
         // 2026-10-01): a revert names its transaction; "not confirmed yet"
         // leaves the operation to the tracker. Every other error is no

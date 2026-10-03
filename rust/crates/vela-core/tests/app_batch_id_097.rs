@@ -243,10 +243,6 @@ fn browser_with_forwarded(origin: &str, params: Value) -> Browser {
     browser
 }
 
-fn page(browser: &mut Browser, message: Value) -> Vec<DbrOperation> {
-    page_from(browser, ORIGIN, message)
-}
-
 fn page_from(browser: &mut Browser, origin: &str, message: Value) -> Vec<DbrOperation> {
     browser.dispatch(DbrEvent::PageMessage {
         tab: TAB.to_owned(),
