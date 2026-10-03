@@ -1,7 +1,7 @@
 ---
 title: 自架指南
 description: "Vela 替你執行的每一樣東西、各自的用途，以及怎麼換成你自己的——中繼、公鑰索引、鏈資料、匯率和各個應用程式；還有唯一無法取代的那一樣，以及沒有 getvela.app 時該怎麼辦。"
-source: f37e59b617dc
+source: f24224b633b4
 ---
 
 <script>
@@ -164,6 +164,10 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的金庫位址，�
 - 中繼會從鏈目錄讀取每條鏈的資訊和它接受的穩定幣：預設是 `ethereum-data.getvela.app`，
   把 `VELA_RELAY_CHAIN_DIRECTORY_URL` 設成[你自己的鏈資料](#chain-data)就能換掉。
   這個設定需要 vela-relay v0.9.6 以上；更早的版本一律讀取 Vela 的那一份。
+- 跑在你自己電腦或區域網路裡的網路（`localhost`、`192.168.…`），只有連得到它的中繼才能服務。
+  在只有你能存取的中繼上設定 `VELA_RELAY_ALLOW_PRIVATE_RPC=true`，並把節點位址填進
+  `VELA_RELAY_EXECUTOR_RPC_URLS`；兩者在中繼的 [RPC 說明](https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md)裡都有解釋。Vela 自己的中繼
+  從不呼叫私有位址。
 
 ## 架設你自己的公鑰索引
 

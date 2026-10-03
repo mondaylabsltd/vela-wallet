@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
 description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -150,7 +150,8 @@ bertransaksi mendahului Anda (front-running) dalam batas slippage Anda.
 
 Relay membayar gas dari **treasury**-nya sendiri di tiap jaringan. Kalau treasury itu
 kosong, pengiriman berhenti di **Lanjutkan** — sebelum apa pun ditandatangani — dan
-menampilkan alamat treasury (sebagai teks dan kode QR), berapa yang dimilikinya
+menampilkan alamat treasury beserta tombol untuk menyalinnya (dan, di dompet web,
+kode QR), berapa yang dimilikinya
 dibanding berapa yang dibutuhkannya, dan dalam koin apa:
 
 - Di jaringan yang dilayani relay Vela, operator relay (Vela) perlu mengisinya kembali;

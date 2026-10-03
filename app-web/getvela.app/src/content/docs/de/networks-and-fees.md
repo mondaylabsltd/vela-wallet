@@ -1,7 +1,7 @@
 ---
 title: Netzwerke und Gebühren
 description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -153,8 +153,8 @@ grundsätzlich innerhalb deiner Slippage zuvorkommen.
 ### Wenn einem Relay das Gas ausgeht
 
 Ein Relay bezahlt das Gas in jedem Netzwerk aus seiner eigenen **Treasury**. Ist diese
-leer, hält das Senden bei **Weiter** an – bevor irgendetwas signiert ist – und zeigt die
-Adresse der Treasury (als Text und als QR-Code), wie viel sie hat, wie viel sie braucht
+leer, hält das Senden bei **Weiter** an – bevor irgendetwas signiert ist – und zeigt die Adresse der Treasury mit einer Schaltfläche zum Kopieren (in der Web-Wallet
+auch als QR-Code), wie viel sie hat, wie viel sie braucht
 und in welchem Coin:
 
 - In einem Netzwerk, das Velas Relay bedient, muss der Betreiber des Relays (Vela) sie

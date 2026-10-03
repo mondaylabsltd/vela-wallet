@@ -1,7 +1,7 @@
 ---
 title: Reti e commissioni
 description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -152,8 +152,8 @@ potrebbe anticiparti con una propria operazione entro il tuo slippage.
 ### Quando un relay resta senza gas
 
 Un relay paga il gas dalla propria **tesoreria** su ogni rete. Se quella tesoreria
-è vuota, l'invio si ferma a **Continua** — prima di qualsiasi firma — e mostra
-l'indirizzo della tesoreria (come testo e come codice QR), quanto ha rispetto a
+è vuota, l'invio si ferma a **Continua** — prima di qualsiasi firma — e mostra l'indirizzo della tesoreria con un pulsante per copiarlo (e, nel wallet
+web, un codice QR), quanto ha rispetto a
 quanto le serve, e in quale moneta:
 
 - Su una rete servita dal relay di Vela, deve ricaricarla il gestore del relay

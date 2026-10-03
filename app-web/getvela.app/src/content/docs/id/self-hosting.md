@@ -1,7 +1,7 @@
 ---
 title: Panduan hosting sendiri
 description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
-source: f37e59b617dc
+source: f24224b633b4
 ---
 
 <script>
@@ -190,6 +190,11 @@ Lalu isikan `https://your-relay` di kolom **Vela Relay**.
 - Relay membaca detail tiap chain dan stablecoin yang diterimanya dari sebuah direktori
   chain: `ethereum-data.getvela.app`, kecuali Anda mengisi
   `VELA_RELAY_CHAIN_DIRECTORY_URL` dengan [milik Anda sendiri](#chain-data). Pengaturan ini ada sejak vela-relay v0.9.6; build yang lebih lama selalu membaca salinan milik Vela.
+- Jaringan di komputer Anda sendiri atau di jaringan lokal (`localhost`, `192.168.…`)
+  hanya bisa dilayani relay yang bisa menjangkaunya. Di relay yang hanya bisa Anda
+  jangkau, atur `VELA_RELAY_ALLOW_PRIVATE_RPC=true` dan masukkan alamat node ke
+  `VELA_RELAY_EXECUTOR_RPC_URLS`; [catatan RPC](https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md) relay menjelaskan keduanya.
+  Relay milik Vela tidak pernah memanggil alamat privat.
 
 ## Jalankan indeks kunci publik Anda sendiri
 

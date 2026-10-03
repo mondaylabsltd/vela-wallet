@@ -1,7 +1,7 @@
 ---
 title: Réseaux et frais
 description: "Les 24 réseaux intégrés à Vela, comment en ajouter un autre, comment les frais d'une transaction sont calculés exactement et à qui ils reviennent, et ce qui se passe quand un relais n'a plus de gas."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -159,7 +159,8 @@ votre slippage.
 
 Un relais paie le gas depuis sa propre **trésorerie** sur chaque réseau. Si cette
 trésorerie est vide, l'envoi s'arrête à **Continuer** — avant que quoi que ce soit ne
-soit signé — et affiche l'adresse de la trésorerie (en texte et en QR code), ce
+soit signé — et affiche l'adresse de la trésorerie avec un bouton pour la copier (et, dans le
+portefeuille web, un QR code), ce
 qu'elle détient face à ce qu'il lui faut, et dans quelle monnaie :
 
 - Sur un réseau servi par le relais de Vela, c'est l'exploitant du relais (Vela)

@@ -1,7 +1,7 @@
 ---
 title: Redes e taxas
 description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -151,7 +151,8 @@ na sua frente dentro da sua tolerância de slippage.
 
 Um relay paga o gas com a própria **tesouraria** em cada rede. Se essa tesouraria
 estiver vazia, o envio para em **Continuar** — antes de qualquer assinatura — e
-mostra o endereço da tesouraria (em texto e em QR code), quanto ela tem diante de
+mostra o endereço da tesouraria com um botão para copiá-lo (e, na carteira web,
+um QR code), quanto ela tem diante de
 quanto precisa, e em qual moeda:
 
 - Numa rede atendida pelo relay da Vela, quem opera o relay (a Vela) precisa

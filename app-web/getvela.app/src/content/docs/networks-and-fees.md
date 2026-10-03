@@ -147,8 +147,8 @@ within your slippage.
 
 A relay pays gas from its own **treasury** on each network. If that treasury is
 empty, the send stops at **Continue** — before anything is signed — and shows
-the treasury's address (as text and as a QR code), how much it has against how
-much it needs, and in which coin:
+the treasury's address with a button to copy it (and, in the web wallet, a QR
+code), how much it has against how much it needs, and in which coin:
 
 - On a network Vela's relay serves, the relay's operator (Vela) needs to top it
   up; you can report it. If you can't wait, you can **optionally** send a small

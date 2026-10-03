@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
 description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -141,8 +141,7 @@ trong phạm vi trượt giá của bạn.
 ### Khi relay hết gas
 
 Relay trả gas từ **ngân quỹ** của chính nó trên từng mạng. Nếu ngân quỹ đó cạn, việc gửi
-sẽ dừng ở bước **Tiếp tục** — trước khi bất cứ thứ gì được ký — và hiển thị địa chỉ ngân
-quỹ (dạng chữ và mã QR), số dư hiện có so với số cần có, và bằng coin nào:
+sẽ dừng ở bước **Tiếp tục** — trước khi bất cứ thứ gì được ký — và hiển thị địa chỉ ngân quỹ kèm nút sao chép (trên ví web còn có cả mã QR), số dư hiện có so với số cần có, và bằng coin nào:
 
 - Trên một mạng do relay của Vela phục vụ, bên vận hành relay (Vela) cần nạp thêm; bạn có
   thể báo lỗi này. Nếu không đợi được, bạn có thể **tùy ý** tự gửi một ít coin gốc vào

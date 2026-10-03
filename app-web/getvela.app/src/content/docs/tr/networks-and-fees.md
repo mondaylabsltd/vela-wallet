@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
 description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -143,8 +143,8 @@ sizden önce işlem yapabilir.
 ### Bir relay'in gas'ı bittiğinde
 
 Bir relay, gas bedelini her ağdaki kendi **kasasından** öder. Kasa boşsa gönderim,
-hiçbir şey imzalanmadan önce **Devam Et** adımında durur ve kasanın adresini (metin
-ve QR kod olarak), kasada ne kadar olduğunu, ne kadar gerektiğini ve hangi coin
+hiçbir şey imzalanmadan önce **Devam Et** adımında durur ve kasanın adresini bir kopyalama düğmesiyle (web cüzdanında ayrıca bir QR kodla),
+kasada ne kadar olduğunu, ne kadar gerektiğini ve hangi coin
 cinsinden olduğunu gösterir:
 
 - Vela'nın relay'inin hizmet verdiği bir ağda kasayı relay'in işletmecisinin (Vela)

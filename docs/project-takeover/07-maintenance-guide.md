@@ -39,6 +39,8 @@
 |---|---|---|
 | `parseBundlerUnderfunded`(bundler-service.ts:367) | vela-relay handlers.ts | **错误文案字符串** |
 | gas 报价消费逻辑 | vela-relay 报价接口 | `pimlico_getUserOperationGasPrice` 语义/markup |
+| 核心 `send.rs` 金库探针分路(spec 098) | vela-relay `GET /v1/treasury/{chainId}` | **状态码语义**:200+`bootstrapNeeded` → 充值单;404 → 到不了,签名前停;503 → 暂时,继续。中继侧规则 `docs/rpc.md` |
+| 每个中继请求的 `x-vela-rpc-url` 头(四壳) | vela-relay `utils/rpc.rs` / `arms/rpc.rs` | 头名、只收公开 https(除非中继设 `VELA_RELAY_ALLOW_PRIVATE_RPC`)、广播不用它 |
 | `public-key-index.ts` | p256-index(biubiu-projects 仓库) | API 契约 + Idempotency-Key 格式 |
 | `.well-known` 两个路由(getvela.app) | iOS entitlements / Android 签名指纹 | rpId=getvela.app、Team ID、SHA-256 指纹 |
 | WalletPair v1 协议实现 | WalletPair relay | `protocols/{relay,encryption,ethereum}.md` 兼容性 |

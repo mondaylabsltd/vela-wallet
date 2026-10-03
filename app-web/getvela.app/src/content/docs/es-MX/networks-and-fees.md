@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
 description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: 174184f507e3
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -152,7 +152,8 @@ tu operación dentro de tu tolerancia al deslizamiento.
 
 Un relay paga el gas desde su propia **tesorería** en cada red. Si esa tesorería
 está vacía, el envío se detiene en **Continuar** (antes de que se firme nada) y te
-muestra la dirección de la tesorería (como texto y como código QR), cuánto tiene
+muestra la dirección de la tesorería con un botón para copiarla (y, en la wallet
+web, un código QR), cuánto tiene
 frente a cuánto necesita, y en qué moneda:
 
 - En una red que atiende el relay de Vela, el operador del relay (Vela) tiene que
