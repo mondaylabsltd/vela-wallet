@@ -57,7 +57,12 @@ import {
 	type SigningAccount
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { dappReceiptWaitMs, userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
+import {
+	dappReceiptWaitMs,
+	signAnswered,
+	userOpNotSentDetail,
+	userOpWriteAheadWaitMs
+} from '$lib/core/kernels';
 
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
@@ -244,13 +249,14 @@ export function createSignExecutor(ports: SignShellPorts) {
 					// An on-chain request answered by its op hash — the receipt is
 					// late, or the op may only have been sent — carries the chain, so
 					// the extension can translate the page's receipt reads for that
-					// hash (spec 082 RF3).
-					const result = operation.payload.result;
-					const opChain = result ? answeredOps.get(result.toLowerCase()) : undefined;
-					if (result) answeredOps.delete(result.toLowerCase());
+					// hash (spec 082 RF3). The answer goes as the core formed it: a
+					// 2.0.0 batch's is `{ id }` (spec 097 G), whose id is the hash.
+					const hash = signAnswered(operation.payload)?.toLowerCase();
+					const opChain = hash ? answeredOps.get(hash) : undefined;
+					if (hash) answeredOps.delete(hash);
 					transport?.sendResponse(
 						operation.id,
-						result,
+						operation.payload.result,
 						undefined,
 						opChain !== undefined ? { chainId: opChain } : undefined
 					);

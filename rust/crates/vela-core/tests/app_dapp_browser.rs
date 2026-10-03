@@ -1314,7 +1314,7 @@ fn a_signature_is_forwarded_with_the_sites_chain_and_granted_address() {
         tab: "t1".to_owned(),
         id: "7".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some("0xabc".to_owned()),
+            result: Some("0xabc".into()),
         },
         user_op_hash: None,
     });
@@ -1383,7 +1383,7 @@ fn a_second_signature_waits_in_line_and_opens_when_the_first_is_answered() {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some("0x11".to_owned()),
+            result: Some("0x11".into()),
         },
         user_op_hash: None,
     });
@@ -1408,7 +1408,7 @@ fn an_answer_is_delivered_exactly_once() {
         json!(["0x01", A1]),
     );
     let answered = SignResponsePayload::Ok {
-        result: Some("0x11".to_owned()),
+        result: Some("0x11".into()),
     };
     sut.dispatch(Event::SigningAnswered {
         tab: "t1".to_owned(),
@@ -1469,7 +1469,7 @@ fn a_navigation_mid_signature_settles_4900_and_closes_the_sheet() {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some("0x11".to_owned()),
+            result: Some("0x11".into()),
         },
         user_op_hash: None,
     });
@@ -2155,7 +2155,7 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some(op_hash.clone()),
+            result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
     });
@@ -2239,7 +2239,7 @@ fn a_batch_the_relay_refused_reads_400() {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some(op_hash.clone()),
+            result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
     });
@@ -2296,7 +2296,7 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: SignResponsePayload::Ok {
-            result: Some(op_hash.clone()),
+            result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
     });

@@ -100,6 +100,10 @@
 //! wait ends; never the tx hash it landed in, which `wallet_getCallsStatus`
 //! does not know. One rule for the four shells.
 //!
+//! Spec 097 G: and in the shape the request declared — EIP-5792 2.0.0's
+//! `{ "id": … }`, 1.0's (or no version's) bare id ([`ok_answer`],
+//! `dapp_rpc::send_calls_result`). The shells forward the answer untouched.
+//!
 //! Ported quirks and fail-closed divergences are doc-commented inline.
 
 use crux_core::capability::Operation;
@@ -392,13 +396,33 @@ pub enum SignErrorKind {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignResponsePayload {
     Ok {
-        result: Option<String>,
+        /// The page's `result`, exactly as it is delivered: a hash or a
+        /// signature (a string) — or a `wallet_sendCalls` batch's id in the
+        /// shape its request declared, `{ "id": … }` for EIP-5792 2.0.0
+        /// (spec 097 G, [`super::dapp_rpc::send_calls_result`]). Shells forward it
+        /// untouched; [`SignResponsePayload::answered`] reads the hash back.
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        result: Option<Value>,
     },
     Err {
         code: i32,
         kind: SignErrorKind,
         message: Option<String>,
     },
+}
+
+impl SignResponsePayload {
+    /// The hash or signature an `Ok` answer names — a batch's id read out of
+    /// EIP-5792 2.0.0's `{ id }` ([`super::dapp_rpc::batch_id_of`]). `None`
+    /// for an error or a `null` answer.
+    pub fn answered(&self) -> Option<&str> {
+        match self {
+            Self::Ok {
+                result: Some(result),
+            } => super::dapp_rpc::batch_id_of(result),
+            _ => None,
+        }
+    }
 }
 
 /// History-record lifecycle (`dapp-history.ts` `status`).
@@ -1100,9 +1124,9 @@ pub fn ending_of(
     );
     let op = submitted_user_op.filter(|op| !op.trim().is_empty());
     let result = match payload {
-        SignResponsePayload::Ok {
-            result: Some(result),
-        } => result,
+        // A batch answered in EIP-5792 2.0.0's `{ id }` names its id the same
+        // (spec 097 G).
+        SignResponsePayload::Ok { .. } => payload.answered()?,
         // 083's two errors for an operation that went out (owner ruling
         // 2026-10-01): a revert names its transaction; "not confirmed yet"
         // leaves the operation to the tracker. Every other error is no
@@ -1137,7 +1161,7 @@ pub fn ending_of(
             user_op_hash: op.to_owned(),
         },
         _ => SignEnding::Landed {
-            tx_hash: result.clone(),
+            tx_hash: result.to_owned(),
             user_op_hash: op.map(str::to_owned),
         },
     })
@@ -1383,6 +1407,10 @@ struct Inflight {
     /// browser. A passkey that then comes back cancelled owes it nothing more;
     /// see `on_submit`.
     page_gone: bool,
+    /// Spec 097 G: a `wallet_sendCalls` whose declared EIP-5792 version wants
+    /// its id as `{ id }` ([`super::dapp_rpc::send_calls_answers_object`]) —
+    /// read from the params the page SENT, whatever the sheet rewrote.
+    batch_answers_object: bool,
 }
 
 /// The write-ahead record of one submit (RJ1).
@@ -2615,6 +2643,9 @@ fn approve_with(
         write_ahead: None,
         accepted: false,
         page_gone: false,
+        batch_answers_object: method_kind(&pending.method) == SignMethodKind::Batch
+            && serde_json::from_str::<Value>(&pending.params_json)
+                .is_ok_and(|sent| super::dapp_rpc::send_calls_answers_object(&sent)),
     });
 
     if matches!(
@@ -3209,12 +3240,9 @@ fn on_op_tracked(
     let tx_hash = tx_hash.filter(|hash| !hash.trim().is_empty());
     let (payload, refusal) = match (status, tx_hash) {
         // A batch's answer is its id, never the tx it landed in (spec 097 E).
-        (TrackStatus::Confirmed, Some(tx_hash)) => (
-            SignResponsePayload::Ok {
-                result: Some(batch_id(&fl).unwrap_or(tx_hash)),
-            },
-            None,
-        ),
+        (TrackStatus::Confirmed, Some(tx_hash)) => {
+            (ok_answer(&fl, batch_id(&fl).unwrap_or(tx_hash)), None)
+        }
         // Included and reverted (the tracker's `Dropped` with a transaction):
         // the page hears the revert, never the hash a site would read as
         // done (083, owner ruling 2026-10-01). The tracker has closed the
@@ -3617,13 +3645,7 @@ fn on_submit_outcome(
                 // `ExecutionFailure` inside a "successful" op) is judged, and
                 // two writers of one record race. A receipt that reverted is
                 // the shell's `Reverted`, never this (083).
-                let ops = vec![respond_op(
-                    &fl.transport_id,
-                    &fl.id,
-                    SignResponsePayload::Ok {
-                        result: Some(result),
-                    },
-                )];
+                let ops = vec![respond_op(&fl.transport_id, &fl.id, ok_answer(fl, result))];
                 let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
                 model.inflight = None;
                 if clears_sheet {
@@ -3686,13 +3708,7 @@ fn on_submit_outcome(
             // The pending record from `OpSubmitted` stays pending — the
             // tracker already holds it (`tracker_handoff`) and alone may
             // close it. Answer the page, emit NO confirming patch.
-            let respond = respond_op(
-                &fl.transport_id,
-                &fl.id,
-                SignResponsePayload::Ok {
-                    result: Some(user_op_hash),
-                },
-            );
+            let respond = respond_op(&fl.transport_id, &fl.id, ok_answer(fl, user_op_hash));
             let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
             model.inflight = None;
             if clears_sheet {
@@ -3853,6 +3869,20 @@ fn batch_id(fl: &Inflight) -> Option<String> {
         .flatten()
 }
 
+/// The page's `Ok` answer to `fl`, which went out as `result`: the hash or
+/// signature itself — except a batch's id, which takes the shape its request
+/// declared (spec 097 G: EIP-5792 2.0.0 is answered `{ id }`, 1.0 the bare
+/// id; [`super::dapp_rpc::send_calls_result`]). Every `Ok` with a result goes
+/// through here, so no answer path can skip the rule.
+fn ok_answer(fl: &Inflight, result: String) -> SignResponsePayload {
+    SignResponsePayload::Ok {
+        result: Some(super::dapp_rpc::send_calls_result(
+            &result,
+            fl.batch_answers_object,
+        )),
+    }
+}
+
 /// Spec 097 E (S2): a batch is answered with its id the moment the relay has
 /// taken its operation — on every shell, whatever its own receipt wait would
 /// have said. The page follows the batch by that id (`wallet_getCallsStatus`);
@@ -3875,11 +3905,7 @@ fn answer_batch_id(model: &mut Model) -> Vec<SignOperation> {
     if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
         model.clear_sheet();
     }
-    vec![respond_op(
-        &fl.transport_id,
-        &fl.id,
-        SignResponsePayload::Ok { result: Some(id) },
-    )]
+    vec![respond_op(&fl.transport_id, &fl.id, ok_answer(&fl, id))]
 }
 
 fn answer_still_landing(model: &mut Model, detail: String) -> Command<SignEffect, Event> {
@@ -3945,18 +3971,12 @@ fn on_record_persisted(model: &mut Model) -> Command<SignEffect, Event> {
             }],
         );
     }
-    let Stage::PersistingResult { then } = fl.stage else {
+    let Stage::PersistingResult { then } = &fl.stage else {
         return Command::done();
     };
-    match then {
+    match then.clone() {
         AfterRecord::Result(result) => {
-            let op = respond_op(
-                &fl.transport_id,
-                &fl.id,
-                SignResponsePayload::Ok {
-                    result: Some(result),
-                },
-            );
+            let op = respond_op(&fl.transport_id, &fl.id, ok_answer(&fl, result));
             let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
             model.inflight = None;
             if clears_sheet {

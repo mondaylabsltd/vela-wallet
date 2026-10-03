@@ -211,6 +211,14 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 			error: { code: -32603, message: signNotConfirmedDetail(op) }
 		});
 		expect(maybeSentPayload('wallet_sendCalls', op)).toEqual({ result: op });
+		// Spec 097 G: in the shape the batch declared — 2.0.0's `{ id }`.
+		const v2 = [{ version: '2.0.0', calls: [] }];
+		expect(maybeSentPayload('wallet_sendCalls', op, v2)).toEqual({ result: { id: op } });
+		const v1 = [{ version: '1.0', calls: [] }];
+		expect(maybeSentPayload('wallet_sendCalls', op, v1)).toEqual({ result: op });
+		expect(maybeSentPayload('eth_sendTransaction', op, v2)).toEqual({
+			error: { code: -32603, message: signNotConfirmedDetail(op) }
+		});
 	});
 
 

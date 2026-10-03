@@ -904,6 +904,12 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		});
 	});
 
+	/**
+	 * Spec 097 G: the request declares EIP-5792 2.0.0, so the answer is the
+	 * object `{ id }`. The page reads `.id` off it exactly as Uniswap (and
+	 * viem) do — Uniswap read `.id` off the bare string it got, asked
+	 * `wallet_getCallsStatus([null])` and called a landed swap failed.
+	 */
 	test('wallet_sendCalls: the page gets the batch id, and wallet_getCallsStatus reads it as confirmed', async () => {
 		await withAnsweringNet(async (wallet, page, net) => {
 			const asked = page.evaluate(
@@ -924,7 +930,8 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 			const sent = (await asked) as AskResult;
 			expect(sent.ok).toBe(true);
-			const id = typeof sent.result === 'string' ? sent.result : (sent.result as { id: string }).id;
+			expect(sent.result).toEqual({ id: expect.any(String) });
+			const id = (sent.result as { id: string }).id;
 			expect(id.toLowerCase()).toBe(RELAY_OP);
 
 			// What viem's `waitForCallsStatus` asks next — 4200 before 094 (089 F04).

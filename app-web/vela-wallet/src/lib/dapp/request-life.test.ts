@@ -373,6 +373,17 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		]);
 	});
 
+	// Spec 097 G: a 2.0.0 batch whose window went is told its id as `{ id }`.
+	it('a window closing on a 2.0.0 batch answers its id in the shape it declared', () => {
+		const batch = submitting({
+			method: 'wallet_sendCalls',
+			params: [{ version: '2.0.0', calls: [] }]
+		} as Partial<Rec>);
+		expect(affectedBy([batch], { type: 'window_removed', windowId: 3 })).toEqual([
+			{ rid: '7:tx', cause: 'surface_closed', answer: { result: { id: OP } }, opHash: OP }
+		]);
+	});
+
 	it('the page leaving is still page_left: nobody is there to hear a hash', () => {
 		expect(affectedBy([submitting()], { type: 'doc_closed', documentId: 'doc-a' })).toEqual([
 			{ rid: '7:tx', cause: 'page_left' }
@@ -408,6 +419,12 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		// A batch's id IS the op hash (EIP-5792): a batch still gets it.
 		const batch = submitting({ method: 'wallet_sendCalls' } as Partial<Rec>);
 		expect(surfaceAnswer(batch, closing)).toEqual({ payload: { result: OP }, maybeSent: OP });
+		// Spec 097 G: in the shape the batch declared — 2.0.0's `{ id }`.
+		const v2 = submitting({
+			method: 'wallet_sendCalls',
+			params: [{ version: '2.0.0', calls: [] }]
+		} as Partial<Rec>);
+		expect(surfaceAnswer(v2, closing)).toEqual({ payload: { result: { id: OP } }, maybeSent: OP });
 		// Before the hash exists nothing was sent: 4900 is right.
 		const signOnly = record({ state: 'claimed', phase: 'sign' } as Partial<Rec>);
 		expect(surfaceAnswer(signOnly, closing)).toEqual({ payload: closing, maybeSent: null });

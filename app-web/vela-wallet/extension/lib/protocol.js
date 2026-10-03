@@ -284,14 +284,16 @@ export const NOT_CONFIRMED_MESSAGE =
 /**
  * The answer a may-have-been-sent request is owed (RJ2): for a transaction,
  * `-32603` "not confirmed yet" naming its operation; for a `wallet_sendCalls`
- * batch, its id — the op hash, by EIP-5792's own terms.
+ * batch, its id — the op hash, by EIP-5792's own terms — in the shape the
+ * request declared (`sendCallsResult`, spec 097 G).
  *
  * @param {unknown} method
  * @param {string} hash
+ * @param {unknown} [params] the request's params, as the page sent them
  */
-export function maybeSentPayload(method, hash) {
+export function maybeSentPayload(method, hash, params) {
 	return method === 'wallet_sendCalls'
-		? { result: hash }
+		? { result: sendCallsResult(params, hash) }
 		: { error: rpcError(-32603, `${NOT_CONFIRMED_MESSAGE} (user operation ${hash})`) };
 }
 
@@ -428,10 +430,39 @@ export const UNKNOWN_BUNDLE_ID = 5730;
 
 const HASH32_RE = /^0x[0-9a-fA-F]{64}$/;
 
-/** The batch id `[id]` names, lower-cased; `null` unless it is one 32-byte hash. */
+/**
+ * The batch id `[id]` names, lower-cased; `null` unless it is one 32-byte
+ * hash. `[{ id }]` — the 2.0.0 answer handed back whole — reads the same.
+ */
 export function callsStatusId(params) {
-	const id = Array.isArray(params) ? params[0] : undefined;
+	const id = Array.isArray(params) ? batchIdOf(params[0]) : null;
 	return typeof id === 'string' && HASH32_RE.test(id) ? id.toLowerCase() : null;
+}
+
+/**
+ * The id a `wallet_sendCalls` answer carries, in either shape: the bare
+ * string, or the `id` of `{ id, capabilities? }` (`dapp_rpc::batch_id_of`).
+ * `null` when there is none.
+ */
+export function batchIdOf(answer) {
+	if (typeof answer === 'string') return answer;
+	const id = answer && typeof answer === 'object' ? answer.id : undefined;
+	return typeof id === 'string' ? id : null;
+}
+
+/**
+ * `wallet_sendCalls`'s answer for batch `id`, in the shape the request
+ * declared (spec 097 G, `dapp_rpc::send_calls_answers_object` +
+ * `send_calls_result`): EIP-5792 2.0.0 — a `version` whose major is 2 or more
+ * — is answered `{ id }`; "1.0", no version, or a version whose major is no
+ * number keeps the bare id.
+ */
+export function sendCallsResult(params, id) {
+	const first = Array.isArray(params) ? params[0] : undefined;
+	const version = first && typeof first === 'object' ? first.version : undefined;
+	const major = typeof version === 'string' ? version.trim().split('.')[0] : '';
+	const object = /^\d+$/.test(major) && Number(major) >= 2;
+	return object ? { id } : id;
 }
 
 /**

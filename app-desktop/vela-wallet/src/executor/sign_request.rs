@@ -1610,10 +1610,16 @@ mod tests {
         use vela_core::app::sign_request::SignResponsePayload;
         ops.iter()
             .filter_map(|op| match &op.operation {
+                // A string as it is; anything else (a batch's `{ id }`, spec
+                // 097 G) as its JSON, so a shape never reads as a bare hash.
                 SignOperation::SendResponse {
                     payload: SignResponsePayload::Ok { result },
                     ..
-                } => Some(result.clone()),
+                } => Some(result.as_ref().map(|result| {
+                    result
+                        .as_str()
+                        .map_or_else(|| result.to_string(), str::to_owned)
+                })),
                 // An error the page was told — its message, marked as one.
                 SignOperation::SendResponse {
                     payload: SignResponsePayload::Err { message, .. },

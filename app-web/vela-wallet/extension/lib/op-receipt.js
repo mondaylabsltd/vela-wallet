@@ -18,6 +18,8 @@
  * out is forwarded untouched.
  */
 
+import { batchIdOf } from './protocol.js';
+
 /** `vela.ext.op.<lower-case hash>` → `{ chainId, at }`, in storage.local. */
 export const OP_PREFIX = 'vela.ext.op.';
 /** How long a handed-out operation hash is translated. */
@@ -39,13 +41,15 @@ export function opKey(hash) {
 
 /**
  * What to write when an answer went out: `{ key, value }` for an answer that
- * is an operation hash with a chain, else `null`.
+ * is an operation hash with a chain, else `null`. A batch answered in
+ * EIP-5792 2.0.0's `{ id }` (spec 097 G) names its hash as `id`.
  */
 export function opRecord(result, opHash, now) {
-	if (!isHash32(result)) return null;
+	const hash = batchIdOf(result);
+	if (!isHash32(hash)) return null;
 	const chainId = opHash && typeof opHash === 'object' ? Number(opHash.chainId) : NaN;
 	if (!Number.isInteger(chainId) || chainId <= 0) return null;
-	return { key: opKey(result), value: { chainId, at: now } };
+	return { key: opKey(hash), value: { chainId, at: now } };
 }
 
 /**

@@ -5,4 +5,12 @@ import type { SignErrorKind } from "./SignErrorKind";
  * What goes back to the dApp. `Ok { result: None }` serialises the `null`
  * success of `wallet_switchEthereumChain`.
  */
-export type SignResponsePayload = { "type": "ok", result: string | null, } | { "type": "err", code: number, kind: SignErrorKind, message: string | null, };
+export type SignResponsePayload = { "type": "ok", 
+/**
+ * The page's `result`, exactly as it is delivered: a hash or a
+ * signature (a string) — or a `wallet_sendCalls` batch's id in the
+ * shape its request declared, `{ "id": … }` for EIP-5792 2.0.0
+ * (spec 097 G, [`super::dapp_rpc::send_calls_result`]). Shells forward it
+ * untouched; [`SignResponsePayload::answered`] reads the hash back.
+ */
+result: unknown, } | { "type": "err", code: number, kind: SignErrorKind, message: string | null, };

@@ -201,9 +201,18 @@ fn response_ok(op: &Op) -> Option<(String, Option<String>)> {
             transport_id,
             payload: SignResponsePayload::Ok { result },
             ..
-        } => Some((transport_id.clone(), result.clone())),
+        } => Some((transport_id.clone(), result.as_ref().map(page_text))),
         _ => None,
     }
+}
+
+/// The page's `result` as text: a string as it is, anything else (a batch's
+/// `{ id }`, spec 097 G) as its JSON — so a shape a test did not expect never
+/// reads as a bare hash.
+fn page_text(result: &serde_json::Value) -> String {
+    result
+        .as_str()
+        .map_or_else(|| result.to_string(), str::to_owned)
 }
 
 /// The page was told its transaction is not confirmed yet (083, owner ruling
@@ -2501,7 +2510,7 @@ fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> T
 
 fn ok_answer(result: &str) -> SignResponsePayload {
     SignResponsePayload::Ok {
-        result: Some(result.to_owned()),
+        result: Some(result.into()),
     }
 }
 
@@ -3938,7 +3947,7 @@ fn answers(ops: &[Op]) -> Vec<PageAnswer> {
             Op::SendResponse {
                 payload: SignResponsePayload::Ok { result },
                 ..
-            } => Some(Ok(result.clone())),
+            } => Some(Ok(result.as_ref().map(page_text))),
             Op::SendResponse {
                 payload: SignResponsePayload::Err { code, message, .. },
                 ..

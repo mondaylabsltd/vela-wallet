@@ -969,7 +969,9 @@ final class SigningController {
 
     /// The user-operation hash when it is what the page is being answered
     /// with — `receipt_pending` answers `ok` with the op hash; a landed one
-    /// answers with the TRANSACTION hash and needs no translation.
+    /// answers with the TRANSACTION hash and needs no translation. A batch
+    /// answered `{ id }` (EIP-5792 2.0.0, spec 097 G) names none here: the
+    /// browser core knows a batch by its method, with no op named.
     static func opHashAnswer(_ payload: [String: Any], submitted: String?) -> String? {
         guard payload["type"] as? String == "ok",
               let result = payload["result"] as? String,

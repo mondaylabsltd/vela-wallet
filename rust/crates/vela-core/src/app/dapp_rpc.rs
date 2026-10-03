@@ -243,11 +243,58 @@ pub const CALLS_STATUS_VERSION: &str = "2.0.0";
 
 /// The batch id a `wallet_getCallsStatus` asks about — `[id]`, a 32-byte hex
 /// operation hash (the id `wallet_sendCalls` answered with), lower-cased.
+/// EIP-5792 says `GetCallsParams = [string]`; a page that hands back the
+/// whole 2.0.0 answer, `[{ id }]`, is read the same ([`batch_id_of`]).
+/// `[null]`, `[]` or anything not one hash is no id (the page gets -32602).
 pub fn calls_status_id(params: &Value) -> Option<String> {
-    let id = params.as_array()?.first()?.as_str()?;
+    let id = batch_id_of(params.as_array()?.first()?)?;
     let well_formed =
         id.len() == 66 && id.starts_with("0x") && id[2..].bytes().all(|b| b.is_ascii_hexdigit());
     well_formed.then(|| id.to_ascii_lowercase())
+}
+
+/// The id a `wallet_sendCalls` answer carries, in either of its shapes
+/// ([`send_calls_result`]): the bare string, or the `id` of
+/// `{ id, capabilities? }`. Not checked to be a hash.
+pub fn batch_id_of(answer: &Value) -> Option<&str> {
+    answer.as_str().or_else(|| answer.get("id")?.as_str())
+}
+
+/// Spec 097 G (S2): does this `wallet_sendCalls` want its answer as an
+/// object? EIP-5792 (ethereum/EIPs `EIPS/eip-5792.md`, status Final):
+/// `SendCallsParams.version: string`, and the answer is
+/// `SendCallsResult = { id: string; capabilities?: Record<string, any> }`
+/// (example: `{ "id": "0x…" }`). Version "1.0" answered the bare id, and the
+/// dApps built on it read a string. So: a declared `version` whose major is 2
+/// or more ("2.0.0") is `true`; "1.0", no version, or one whose major is not
+/// a number is `false`. Uniswap sent "2.0.0", read `.id` off the bare string,
+/// polled `wallet_getCallsStatus([null])` and called a landed swap failed.
+pub fn send_calls_answers_object(params: &Value) -> bool {
+    params
+        .as_array()
+        .and_then(|list| list.first())
+        .and_then(|first| first.get("version"))
+        .and_then(Value::as_str)
+        .and_then(|version| version.trim().split('.').next())
+        .is_some_and(|major| {
+            !major.is_empty()
+                && major.bytes().all(|b| b.is_ascii_digit())
+                // Too large for a u64 is still a major of 2 or more.
+                && major.parse::<u64>().ok().is_none_or(|major| major >= 2)
+        })
+}
+
+/// A `wallet_sendCalls` answered with batch `id`: `{ "id": id }` when the
+/// request wants the object ([`send_calls_answers_object`]), else the bare
+/// id. No `capabilities`: the only one Vela has is `atomic`, which EIP-5792
+/// carries in the request's `atomicRequired` and the status's `atomic`, not
+/// in this answer — and the wallet has nothing else to attach.
+pub fn send_calls_result(id: &str, as_object: bool) -> Value {
+    if as_object {
+        json!({ "id": id })
+    } else {
+        Value::String(id.to_owned())
+    }
 }
 
 /// The EIP-5792 status of batch `id`, sent on `chain_id`, from the bundler's
@@ -1226,7 +1273,56 @@ mod tests {
         );
         assert_eq!(calls_status_id(&json!([])), None);
         assert_eq!(calls_status_id(&json!(["0x1234"])), None);
-        assert_eq!(calls_status_id(&json!([{ "id": ID }])), None);
+        // Uniswap read `.id` off a bare string and asked with `[null]`.
+        assert_eq!(calls_status_id(&json!([null])), None);
+        assert_eq!(calls_status_id(&json!([{ "id": null }])), None);
+        assert_eq!(calls_status_id(&json!([{ "id": "0x12" }])), None);
+        // The 2.0.0 answer handed back whole is the same id.
+        assert_eq!(calls_status_id(&json!([{ "id": ID }])), Some(ID.to_owned()));
+    }
+
+    /// Spec 097 G: the answer follows the version the request declared.
+    #[test]
+    fn a_batch_is_answered_in_the_shape_its_version_declares() {
+        let asked = |version: Value| json!([{ "version": version, "calls": [] }]);
+        for object in [
+            "2.0.0",
+            "2.0",
+            "2",
+            " 2.1.0 ",
+            "3.0.0",
+            "10.0.0",
+            "02.0",
+            "99999999999999999999.0",
+        ] {
+            assert!(send_calls_answers_object(&asked(json!(object))), "{object}");
+        }
+        for bare in [
+            "1.0", "1.0.0", "1", "0.9", "", "v2", "two", "-2.0.0", "+2.0.0", "00.1",
+        ] {
+            assert!(!send_calls_answers_object(&asked(json!(bare))), "{bare}");
+        }
+        assert!(
+            !send_calls_answers_object(&asked(json!(2))),
+            "a number is no version"
+        );
+        assert!(!send_calls_answers_object(&asked(Value::Null)));
+        assert!(
+            !send_calls_answers_object(&json!([{ "calls": [] }])),
+            "no version"
+        );
+        assert!(!send_calls_answers_object(&json!([])));
+        assert!(!send_calls_answers_object(&json!({ "version": "2.0.0" })));
+
+        assert_eq!(send_calls_result(ID, true), json!({ "id": ID }));
+        assert_eq!(send_calls_result(ID, false), json!(ID));
+        // Either shape reads back as the same id.
+        for answer in [send_calls_result(ID, true), send_calls_result(ID, false)] {
+            assert_eq!(batch_id_of(&answer), Some(ID));
+            assert_eq!(calls_status_id(&json!([answer])), Some(ID.to_owned()));
+        }
+        assert_eq!(batch_id_of(&json!({ "id": 1 })), None);
+        assert_eq!(batch_id_of(&Value::Null), None);
     }
 
     #[test]

@@ -1032,6 +1032,15 @@ export function parseUserOpStatus(resultJson: string): TrackStatusAnswer | null 
 	return answer === undefined ? null : (JSON.parse(answer) as TrackStatusAnswer);
 }
 
+/**
+ * The hash (or signature) an answer to a page names — a batch's id read out
+ * of EIP-5792 2.0.0's `{ id }`, which the core shaped (spec 097 G) —
+ * `SignResponsePayload::answered`. `null` for an error or a `null` answer.
+ */
+export function signAnswered(payload: SignResponsePayload): string | null {
+	return wasm.signAnswered(JSON.stringify(payload)) ?? null;
+}
+
 /** What the answer to a request stands for, before the tracker is asked (RA8). */
 export function signEndingOf(
 	method: string,

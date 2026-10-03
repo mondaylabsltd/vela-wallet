@@ -44,7 +44,9 @@ import uniffi.vela_core_uniffi.userOpRefusedDappDetail
  * hash is translated by the router once the receipt exists. A
  * `wallet_sendCalls` is answered by the core with its id — the op hash — the
  * moment `OpSubmitted` says the relay took it (spec 097 E); the receipt wait
- * then ends answered (RJ4), and its result is dropped.
+ * then ends answered (RJ4), and its result is dropped. That answer is in the
+ * shape the request declared — `{ id }` for EIP-5792 2.0.0 (spec 097 G) — and
+ * reaches the page as the core formed it.
  */
 class SignExecutor(
     private val spine: UserOpSpine,

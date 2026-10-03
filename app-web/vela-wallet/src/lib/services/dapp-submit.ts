@@ -878,9 +878,11 @@ export async function handleSendCalls(
 }
 
 /**
- * EIP-5792's answer: the batch id, which is the op hash — at once, with no
- * receipt wait. Reported to the core first, so the batch is recorded and
- * followed; an op that may only have been sent answers its local hash.
+ * The batch id, which is the op hash — at once, with no receipt wait.
+ * Reported to the core first, so the batch is recorded and followed; an op
+ * that may only have been sent answers its local hash. The page's answer is
+ * the core's to shape (spec 097 G: `{ id }` for a request declaring
+ * EIP-5792 2.0.0, the bare id for 1.0), never this function's.
  */
 function batchIdFor(txResult: SubmitResult, onSubmitted: OnSubmitted | undefined): string {
 	onSubmitted?.(txResult.userOpHash, txResult.maybeSent, txResult.submitBlock);

@@ -3410,6 +3410,32 @@ export function dappRpcClassify(method) {
 }
 
 /**
+ * EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
+ * request (`params_json`) declared — `{ "id": … }` for 2.0.0, the bare id
+ * for 1.0 or none (spec 097 G) — as JSON. The extension's worker mirrors it
+ * for the answer it forms itself (a batch that may have been sent).
+ * @param {string} params_json
+ * @param {string} id
+ * @returns {string}
+ */
+export function dappRpcSendCallsResult(params_json, id) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcSendCallsResult(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {string} sig
  * @param {Uint8Array} calldata
  * @returns {AbiValue}
@@ -4582,6 +4608,26 @@ export function sha256(data) {
     const ret = wasm.sha256(ptr0, len0);
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
+/**
+ * The hash or signature an answer to a page names (`payload_json`, the
+ * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
+ * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`;
+ * `undefined` for an error, a `null` answer or unreadable JSON.
+ * @param {string} payload_json
+ * @returns {string | undefined}
+ */
+export function signAnswered(payload_json) {
+    const ptr0 = passStringToWasm0(payload_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.signAnswered(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
     return v2;
 }
 

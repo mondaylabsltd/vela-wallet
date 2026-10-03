@@ -234,6 +234,60 @@ describe('a batch id and a late receipt (083)', () => {
 		]);
 	});
 
+	// Spec 097 G: a batch declaring EIP-5792 2.0.0 is answered `{ id }` — the
+	// core's shape, sent as it is; its id is the hash whose chain goes with it.
+	it('a 2.0.0 batch’s `{ id }` goes as the core formed it, with its chain, once', async () => {
+		const sent: { result: unknown; opHash: unknown }[] = [];
+		const transport: SignResponder = {
+			sendResponse: (_id, result, _error, opHash) => sent.push({ result, opHash })
+		};
+		const executor = createSignExecutor(
+			makePorts({
+				transportFor: () => transport,
+				opSubmitted: (id, hash) =>
+					void executor.execute({
+						id: 9,
+						operation: {
+							type: 'send_response',
+							transport_id: 't1',
+							id,
+							payload: { type: 'ok', result: { id: hash } }
+						}
+					})
+			})
+		);
+		submit.impl = (...args: unknown[]) => {
+			const onSubmitted = args[5] as (hash: string, maybeSent: boolean, block: number) => void;
+			onSubmitted('0xBATCH', false, 7);
+			return Promise.resolve('0xBATCH');
+		};
+		await executor.execute({
+			...signAndSubmit,
+			operation: {
+				...(signAndSubmit.operation as Extract<
+					SignEffect['operation'],
+					{ type: 'sign_and_submit' }
+				>),
+				method: 'wallet_sendCalls',
+				params_json:
+					'[{"version":"2.0.0","calls":[{"to":"0x0000000000000000000000000000000000000001"}]}]'
+			}
+		});
+		await executor.execute({
+			id: 10,
+			operation: {
+				type: 'send_response',
+				transport_id: 't1',
+				id: 'req-2',
+				payload: { type: 'ok', result: { id: '0xBATCH' } }
+			}
+		});
+		expect(sent).toEqual([
+			{ result: { id: '0xBATCH' }, opHash: { chainId: 100 } },
+			{ result: { id: '0xBATCH' }, opHash: undefined }
+		]);
+	});
+
 	// A batch that may only have been sent is not answered at `op_submitted`:
 	// its id goes when the submit returns, still carrying its chain, once.
 	it('a maybe-sent batch carries its chain when the submit returns, once', async () => {

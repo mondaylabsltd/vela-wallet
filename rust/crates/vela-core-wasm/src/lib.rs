@@ -1875,6 +1875,18 @@ pub fn dapp_rpc_calls_status_id(params_json: &str) -> Option<String> {
     vela_core::app::dapp_rpc::calls_status_id(&params)
 }
 
+/// EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
+/// request (`params_json`) declared — `{ "id": … }` for 2.0.0, the bare id
+/// for 1.0 or none (spec 097 G) — as JSON. The extension's worker mirrors it
+/// for the answer it forms itself (a batch that may have been sent).
+#[wasm_bindgen(js_name = dappRpcSendCallsResult)]
+pub fn dapp_rpc_send_calls_result(params_json: &str, id: &str) -> String {
+    use vela_core::app::dapp_rpc::{send_calls_answers_object, send_calls_result};
+    let params: serde_json::Value =
+        serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
+    send_calls_result(id, send_calls_answers_object(&params)).to_string()
+}
+
 /// EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
 /// from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
 /// or `null`: not landed) and, with no receipt, the relay's
@@ -1958,6 +1970,18 @@ fn sign_ending_of_inner(
                 .map_err(|e| vela_core::CoreError::Internal(format!("signEndingOf: {e}")))
         })
         .transpose()
+}
+
+/// The hash or signature an answer to a page names (`payload_json`, the
+/// core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
+/// 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`;
+/// `undefined` for an error, a `null` answer or unreadable JSON.
+#[wasm_bindgen(js_name = signAnswered)]
+pub fn sign_answered(payload_json: &str) -> Option<String> {
+    serde_json::from_str::<vela_core::app::sign_request::SignResponsePayload>(payload_json)
+        .ok()?
+        .answered()
+        .map(str::to_owned)
 }
 
 /// The ending of a request whose answer to the page was `payload_json` (the

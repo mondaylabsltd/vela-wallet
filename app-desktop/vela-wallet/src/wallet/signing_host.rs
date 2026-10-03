@@ -1471,17 +1471,13 @@ impl SigningHost {
 
     /// The answer is the user operation this sheet submitted — the hash the
     /// tracker was handed, or the one the core is still waiting on. A
-    /// transaction hash or a signature is not, and is not claimed to be.
+    /// transaction hash or a signature is not, and is not claimed to be. A
+    /// batch answered `{ id }` (EIP-5792 2.0.0, spec 097 G) names its id.
     fn user_op_hash_of(
         &self,
         payload: &vela_core::app::sign_request::SignResponsePayload,
     ) -> Option<String> {
-        let vela_core::app::sign_request::SignResponsePayload::Ok {
-            result: Some(result),
-        } = payload
-        else {
-            return None;
-        };
+        let result = payload.answered()?;
         let submitted = [
             self.handed_off.as_ref().map(|(_, hash)| hash.as_str()),
             self.view.pending_op_hash.as_deref(),
@@ -1494,7 +1490,7 @@ impl SigningHost {
             .into_iter()
             .flatten()
             .any(|hash| hash.eq_ignore_ascii_case(result))
-            .then(|| result.clone())
+            .then(|| result.to_owned())
     }
 
     /// The one screen-owned operation: answering the site.
