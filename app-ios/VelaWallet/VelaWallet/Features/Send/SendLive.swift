@@ -566,7 +566,7 @@ enum SendLive {
             summary: live.summary,
             fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed),
             speed: speed.map { speedModel($0, view: view, display: display, loc: loc) },
-            cta: live.cta,
+            cta: stopRetry(view, loc: loc) ?? live.cta,
             // While the pre-check is out the button is busy, not unfinished.
             hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil,
             fillEmpty: view.splitMode ? fillEmpty(view, issues: issues, symbol: symbol, loc: loc) : nil
@@ -1038,13 +1038,16 @@ enum SendLive {
             facts: facts,
             breakdown: breakdown,
             notice: confirmNotice(view, loc: loc),
+            noticeFund: fundAddress(view, loc: loc),
             // The treasury pause has TWO exits (spec 054 US4): the core's
             // retry, and 暂不 — which keeps the facts on screen rather than
             // throwing the attempt away. A submit the relay refused has one,
             // and a passkey prompt that is up has only cancel, which is the
             // core's own checkpoint.
             noticeAction: {
-                if view.treasuryBootstrap != nil {
+                if view.relayUnreachable != nil {
+                    loc.t("componentsUi.relayUnreachable.retryBtn")
+                } else if view.treasuryBootstrap != nil {
                     loc.t("componentsUi.treasuryBootstrap.retryBtn")
                 } else if view.txError != nil {
                     loc.t("send.txRetryBtn")
@@ -1054,9 +1057,11 @@ enum SendLive {
                     nil
                 }
             }(),
-            noticeSecondary: view.treasuryBootstrap != nil
-                ? loc.t("componentsUi.funding.cancel")
-                : nil,
+            noticeSecondary: view.relayUnreachable != nil
+                ? loc.t("componentsUi.relayUnreachable.closeBtn")
+                : view.treasuryBootstrap != nil
+                    ? loc.t("componentsUi.funding.cancel")
+                    : nil,
             repeatNote: confirmRepeatNote(view, loc: loc),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
@@ -1134,6 +1139,28 @@ enum SendLive {
     /// What stopped the confirm page: the relay's treasury, or a submit the
     /// relay refused.
     static func confirmNotice(_ view: SendViewWire, loc: Loc) -> String? {
+        if let stop = stopNotice(view, loc: loc) { return stop }
+        switch view.txError {
+        case "bundler_fund": return loc.t("send.txErrorBundlerFund")
+        case "generic": return loc.t("send.txErrorGeneric")
+        default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
+        }
+    }
+
+    /// The relay's two stops, in words — on the form AND on confirm.
+    ///
+    /// The core opens both at Continue, while the stage is still the form
+    /// (spec 098): until 098 this app drew them on the confirm page only, so
+    /// pressing Continue into a relay with no gas did nothing anyone could see.
+    static func stopNotice(_ view: SendViewWire, loc: Loc) -> String? {
+        if let sheet = view.relayUnreachable {
+            // Whose it is to fix is the core's verdict (spec 098 §2).
+            let lead = sheet.operatorServed
+                ? loc.t("componentsUi.relayUnreachable.operatorLead")
+                : loc.t("componentsUi.relayUnreachable.customLead") + " "
+                    + loc.t("componentsUi.relayUnreachable.settingsHint")
+            return loc.t("componentsUi.relayUnreachable.title") + " · " + lead
+        }
         if let status = view.treasuryBootstrap {
             let decimals = status.asset == "path_usd" ? 6 : 18
             let symbol = status.asset == "path_usd"
@@ -1147,17 +1174,44 @@ enum SendLive {
             let lead = status.operatorServed
                 ? loc.t("componentsUi.treasuryBootstrap.operatorLead")
                 : loc.t("componentsUi.treasuryBootstrap.customLead")
+            // Spec 098 §4: what it has against what it needs, the line that
+            // must not be missed (non-refundable, not Vela's), and that the
+            // sheet watches — the core closes it once funded.
+            let balance = loc.t("componentsUi.treasuryBootstrap.balanceLine", vars: [
+                "balance": fromBase(status.balance, decimals: decimals),
+                "floor": fromBase(status.floor, decimals: decimals),
+                "symbol": symbol,
+            ])
             return loc.t("componentsUi.treasuryBootstrap.title") + " · "
                 + lead + " "
                 + loc.t("componentsUi.treasuryBootstrap.amountHint", vars: [
                     "amount": fromBase(short, decimals: decimals), "symbol": symbol,
                 ])
+                + "\n" + balance
+                + "\n" + loc.t("componentsUi.treasuryBootstrap.disclaimer")
+                + "\n" + loc.t("componentsUi.treasuryBootstrap.watching")
         }
-        switch view.txError {
-        case "bundler_fund": return loc.t("send.txErrorBundlerFund")
-        case "generic": return loc.t("send.txErrorGeneric")
-        default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
-        }
+        return nil
+    }
+
+    /// The form's button while a relay stop is up: its retry, which is
+    /// Continue again (the core clears the stop and re-runs the pre-check).
+    /// Spec 098 §4: the treasury stop's address and its copy button — the one
+    /// thing a person needs to fund it.
+    static func fundAddress(_ view: SendViewWire, loc: Loc) -> FundAddressModel? {
+        guard let status = view.treasuryBootstrap else { return nil }
+        return FundAddressModel(
+            label: loc.t("componentsUi.treasuryBootstrap.addressLabel"),
+            address: status.address,
+            copy: loc.t("componentsUi.treasuryBootstrap.copyBtn"),
+            copied: loc.t("componentsUi.treasuryBootstrap.copied")
+        )
+    }
+
+    static func stopRetry(_ view: SendViewWire, loc: Loc) -> String? {
+        if view.relayUnreachable != nil { return loc.t("componentsUi.relayUnreachable.retryBtn") }
+        if view.treasuryBootstrap != nil { return loc.t("componentsUi.treasuryBootstrap.retryBtn") }
+        return nil
     }
 
     /// Title and body for every alert the core raises, in the core's words.

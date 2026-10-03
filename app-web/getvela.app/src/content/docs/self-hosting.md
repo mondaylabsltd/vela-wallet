@@ -185,6 +185,11 @@ Then put `https://your-relay` in the **Vela relay** field.
 - The relay reads each chain's details and the stablecoins it accepts from a
   chain directory: `ethereum-data.getvela.app` unless you set
   `VELA_RELAY_CHAIN_DIRECTORY_URL` to [your own](#chain-data). It needs vela-relay v0.9.6 or later; older builds always read Vela's copy.
+- A network on your own machine or local network (`localhost`, `192.168.…`) can
+  only be served by a relay that can reach it. On a relay that only you can
+  reach, set `VELA_RELAY_ALLOW_PRIVATE_RPC=true` and put the node's address in
+  `VELA_RELAY_EXECUTOR_RPC_URLS`; the relay's [RPC notes](https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md) explain both.
+  Vela's own relay never calls a private address.
 
 ## Run your own public-key index
 

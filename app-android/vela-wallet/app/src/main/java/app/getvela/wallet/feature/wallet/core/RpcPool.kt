@@ -171,7 +171,7 @@ class RpcPool(
 
     /**
      * The RPC URL this chain's pool would reach for first — it rides
-     * `X-Rpc-Url` on the relay's REST calls so the relay reads the chain
+     * `x-vela-rpc-url` on the relay's REST calls so the relay reads the chain
      * through the endpoint this wallet trusts (invariant ②).
      */
     suspend fun bestRpcUrl(chainId: Int): String? = ask(chainId) { callId, now ->

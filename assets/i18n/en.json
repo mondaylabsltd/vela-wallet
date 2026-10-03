@@ -1607,7 +1607,20 @@
    "operatorLead": "Vela's operator runs this network's relayer, and it is out of gas. Telling them is the fastest fix — and it stays fixed for everyone.",
    "reportBtn": "Report this",
    "selfFundToggle": "Can't wait? Start it yourself",
-   "customLead": "You added this network, so Vela's operator may have no way to hold gas on it — a local or private chain is nobody else's to fund. Starting its relayer is up to you."
+   "customLead": "You added this network, so Vela's operator may have no way to hold gas on it — a local or private chain is nobody else's to fund. Starting its relayer is up to you.",
+   "balanceLine": "Has {{balance}} of the {{floor}} {{symbol}} it needs",
+   "networkLine": "Network: {{network}}",
+   "watching": "Checking every few seconds — closes by itself once funded.",
+   "qrLabel": "Scan to send from another wallet"
+  },
+  "relayUnreachable": {
+   "title": "The relay can't reach this network",
+   "operatorLead": "Vela's relay can't reach this network right now. It's the operator's to fix — telling them is the fastest way.",
+   "customLead": "You added this network, and the relay can't reach it. The relay reads it through the RPC you set, so that RPC must be a public https address — a node on your own computer or network needs a relay running beside it.",
+   "settingsHint": "Change the network's RPC, or set Settings → Service endpoints → Vela Relay to one that reaches it.",
+   "reportBtn": "Report this",
+   "retryBtn": "Try again",
+   "closeBtn": "Close"
   },
   "mainNav": {
    "wallet": "Wallet",
@@ -1656,7 +1669,8 @@
    "removeTitle": "Remove Network",
    "removeBody": "Remove this custom network?",
    "removeCancel": "Cancel",
-   "removeConfirm": "Remove"
+   "removeConfirm": "Remove",
+   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
   },
   "account": {
    "modalTitle": "Accounts",
@@ -1674,7 +1688,8 @@
    "activeNetworks": "{{count}} networks",
    "supportsCount": "Supports {{count}} of {{total}} networks",
    "unavailable": "Unavailable",
-   "avgLatency": "avg {{ms}}ms"
+   "avgLatency": "avg {{ms}}ms",
+   "relayNotice": "The relay that submits your transactions is sent the RPC address your wallet uses for each network — including the API key in it — so it can reach the networks you use."
   },
   "endpoints": {
    "modalTitle": "Service Endpoints",

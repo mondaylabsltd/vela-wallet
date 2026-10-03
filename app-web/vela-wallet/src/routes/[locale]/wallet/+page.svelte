@@ -36,9 +36,11 @@
 	import BalanceDetailBody from '$lib/settings/ui/BalanceDetailBody.svelte';
 	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
 	import RelayerBody from '$lib/settings/ui/RelayerBody.svelte';
+	import RelayUnreachableBody from '$lib/settings/ui/RelayUnreachableBody.svelte';
 	import {
 		liveBalanceDetail,
 		liveRelayer,
+		liveRelayUnreachable,
 		liveRpcFix,
 		liveUnreachable
 	} from '$lib/settings/live';
@@ -1682,7 +1684,7 @@
 	// the wallet cannot reach open their list (spec 092 — all of them, each with
 	// its RPC fix), anything else opens the breakdown. The treasury sheet opens
 	// itself, from the send core's probe.
-	type Rescue = 'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer';
+	type Rescue = 'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer' | 'relay-unreachable';
 	let rescue = $state<Rescue | null>(null);
 	let rescueChainId = $state<number | null>(null);
 	/** The RPC fix was opened from the list: Done goes back to it. */
@@ -1712,6 +1714,10 @@
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);
+	// Spec 098 §2: the relay cannot serve this chain — a sheet of its own.
+	const relayUnreachableModel = $derived(
+		sendView?.relay_unreachable ? liveRelayUnreachable(sendView.relay_unreachable, rm) : undefined
+	);
 	const rescueTitle = $derived(
 		rescue === 'unreachable'
 			? unreachableModel.title
@@ -1719,7 +1725,9 @@
 				? rm.rescue.rpcFixTitle
 				: rescue === 'balance-detail'
 					? rm.balanceDetail.title
-					: rm.relayer.title
+					: rescue === 'relay-unreachable'
+						? rm.relayUnreachable.title
+						: rm.relayer.title
 	);
 
 	function openRescue() {
@@ -1747,6 +1755,8 @@
 
 	function closeRescue() {
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
+		if (rescue === 'relay-unreachable')
+			sendSession?.dispatch({ type: 'dismiss_relay_unreachable' });
 		// The list, or a fix opened from it: the list's re-reads stop.
 		if (rescue === 'unreachable' || fixFromList) balance.unreachableListClosed();
 		fixFromList = false;
@@ -1785,6 +1795,12 @@
 		rescue = null;
 	}
 
+	/** After changing the network's RPC or the relay: the core re-runs the pre-check. */
+	function relayUnreachableRetry() {
+		sendSession?.dispatch({ type: 'retry_relay_unreachable' });
+		rescue = null;
+	}
+
 	function copyRelayerAddress() {
 		const address = sendView?.treasury_bootstrap?.address;
 		if (address) void navigator.clipboard?.writeText(address).catch(() => {});
@@ -1794,6 +1810,11 @@
 	$effect(() => {
 		if (sendView?.treasury_bootstrap) rescue = 'relayer';
 		else if (rescue === 'relayer') rescue = null;
+	});
+	// …and the "relay can't reach this network" one (spec 098 §2).
+	$effect(() => {
+		if (sendView?.relay_unreachable) rescue = 'relay-unreachable';
+		else if (rescue === 'relay-unreachable') rescue = null;
 	});
 </script>
 
@@ -2086,6 +2107,8 @@
 		/>
 	{:else if rescue === 'relayer' && relayerModel !== undefined}
 		<RelayerBody panel={relayerModel} onprimary={relayerRetry} oncopy={copyRelayerAddress} />
+	{:else if rescue === 'relay-unreachable' && relayUnreachableModel !== undefined}
+		<RelayUnreachableBody panel={relayUnreachableModel} onprimary={relayUnreachableRetry} />
 	{/if}
 {/snippet}
 

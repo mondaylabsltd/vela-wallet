@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: f37e59b617dc
+source: f24224b633b4
 ---
 
 <script>
@@ -193,6 +193,11 @@ Ardından `https://your-relay` adresini **Vela Relay** alanına girin.
 - Relay, her zincirin ayrıntılarını ve kabul ettiği stabilcoinleri bir zincir
   dizininden okur. `VELA_RELAY_CHAIN_DIRECTORY_URL` ile [kendinizinkini](#chain-data)
   belirtmediğiniz sürece bu dizin `ethereum-data.getvela.app` adresidir. Bu ayar vela-relay v0.9.6 ve sonrasında vardır; daha eski sürümler her zaman Vela'nın kopyasını okur.
+- Kendi bilgisayarınızdaki ya da yerel ağınızdaki bir ağa (`localhost`, `192.168.…`)
+  ancak ona ulaşabilen bir relay hizmet verebilir. Yalnızca sizin erişebildiğiniz bir
+  relay'de `VELA_RELAY_ALLOW_PRIVATE_RPC=true` ayarlayın ve düğümün adresini
+  `VELA_RELAY_EXECUTOR_RPC_URLS` içine yazın; relay'in [RPC notları](https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md) ikisini de
+  açıklar. Vela'nın relay'i hiçbir zaman özel bir adresi çağırmaz.
 
 ## Kendi açık anahtar dizininizi çalıştırın
 

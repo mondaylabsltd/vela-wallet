@@ -10,7 +10,8 @@
       "removeTitle": "Eliminar red",
       "removeBody": "¿Eliminar esta red personalizada?",
       "removeCancel": "Cancelar",
-      "removeConfirm": "Eliminar"
+      "removeConfirm": "Eliminar",
+      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
     },
     "account": {
       "modalTitle": "Cuentas",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} redes",
       "supportsCount": "Admite {{count}} de {{total}} redes",
       "unavailable": "No disponible",
-      "avgLatency": "prom. {{ms}}ms"
+      "avgLatency": "prom. {{ms}}ms",
+      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC que tu billetera usa en cada red —incluida la clave de API— para poder llegar a las redes que usas."
     },
     "endpoints": {
       "modalTitle": "Endpoints de servicio",

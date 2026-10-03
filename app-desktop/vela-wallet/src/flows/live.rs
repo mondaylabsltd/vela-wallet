@@ -2328,6 +2328,67 @@ mod treasury_tests {
             let detail = notice.detail.unwrap_or_default();
             assert!(detail.contains("0xTreasury"), "{detail}");
             assert!(detail.contains("0.02"), "{detail}");
+            // ...and copies it: read off the screen it is 42 characters to retype.
+            assert_eq!(
+                notice.copy,
+                Some((s.funding_copy.clone(), "0xTreasury".into()))
+            );
+            // Spec 098 §4: what it has against what it needs, and that it is
+            // watching — and spec 080's finding, gone: no "fee reserve".
+            assert!(detail.contains(s.funding_watching.as_ref()), "{detail}");
+            assert!(detail.contains(s.funding_disclaimer.as_ref()), "{detail}");
+            assert_eq!(notice.title.as_ref(), Some(&s.funding_title));
+            assert_eq!(
+                notice.body.as_ref(),
+                s.funding_lead.as_str(),
+                "the operator's relayer"
+            );
+        });
+    }
+
+    /// Spec 098 §2: a relay that cannot serve the chain is its own stop —
+    /// not the funding one — with its own way back and its own way out.
+    #[test]
+    fn a_relay_that_cannot_serve_the_chain_says_so_and_whose_it_is() {
+        crate::executor::storage::tests::with_temp_state("unreachable-notice", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let host = CoreHost::<SendMachine>::new();
+            for (operator_served, lead) in [
+                (true, s.unreachable_operator_lead.clone()),
+                (false, s.unreachable_custom_lead.clone()),
+            ] {
+                let view = SendView {
+                    relay_unreachable: Some(vela_core::app::send::SendRelayUnreachable {
+                        chain_id: 1337,
+                        operator_served,
+                    }),
+                    ..host.view()
+                };
+                let inputs = SendInputs {
+                    send: &view,
+                    fee: &fee,
+                    s: &s,
+                    wallet: &wallet,
+                    locale: "en-US",
+                    money: crate::wallet::live::Money::usd(),
+                    identity_name: "MultiTest",
+                    identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    speed: None,
+                };
+                let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
+                assert_eq!(notice.title.as_ref(), Some(&s.unreachable_title));
+                assert_eq!(notice.body, lead);
+                assert_eq!(notice.dismiss.as_ref(), Some(&s.unreachable_close));
+                assert_eq!(notice.copy, None, "nothing to fund");
+                assert_eq!(
+                    notice_way_out(&inputs, false),
+                    Some(NoticeWayOut::RetryRelayUnreachable)
+                );
+                // Only a network the person added is theirs to point elsewhere.
+                assert_eq!(notice.detail.is_some(), !operator_served);
+            }
         });
     }
 }
@@ -2667,6 +2728,9 @@ fn cannot_convert(issue: &SendUnitIssue, s: &FlowStrings) -> SharedString {
 pub enum NoticeWayOut {
     /// The relay's float was topped up — probe it again.
     RetryAfterBootstrap,
+    /// The network's RPC or the relay was changed — run the pre-check again
+    /// (spec 098 §2).
+    RetryRelayUnreachable,
     /// Add the network this locked request names.
     AddNetwork { chain_id: u32 },
     /// Back to the amount field.
@@ -2694,6 +2758,27 @@ fn build_notice(
         .as_ref()
         .map_or(1, |token| token.chain_id);
 
+    // Spec 098 §2: the relay cannot serve this chain at all. Gas would not
+    // help, so this is not the funding stop — and before 098 the send went on
+    // to the passkey here and failed after the person had signed.
+    if let Some(sheet) = &send.relay_unreachable {
+        let notice = SendNotice {
+            dismiss: Some(s.unreachable_close.clone()),
+            title: Some(s.unreachable_title.clone()),
+            // Whose it is to fix is the core's verdict, as on the funding stop.
+            body: if sheet.operator_served {
+                s.unreachable_operator_lead.clone()
+            } else {
+                s.unreachable_custom_lead.clone()
+            },
+            detail: (!sheet.operator_served).then(|| s.unreachable_hint.clone()),
+            action: Some(s.unreachable_retry.clone()),
+            copy: None,
+            error: true,
+        };
+        return Some((notice, Some(NoticeWayOut::RetryRelayUnreachable)));
+    }
+
     // The relay cannot carry anything on this chain until its float is topped
     // up. A stop, and the only one that names an address to send to.
     if let Some(treasury) = &send.treasury_bootstrap {
@@ -2704,31 +2789,55 @@ fn build_notice(
         } else {
             "pathUSD".to_owned()
         };
-        let short = treasury
-            .floor
-            .parse::<u128>()
-            .unwrap_or(0)
-            .saturating_sub(treasury.balance.parse::<u128>().unwrap_or(0));
-        #[allow(clippy::cast_precision_loss, reason = "a displayed top-up figure")]
-        let short = short as f64 / 10f64.powi(decimals);
+        let units = |value: &str| value.parse::<u128>().unwrap_or(0);
+        #[allow(clippy::cast_precision_loss, reason = "displayed figures")]
+        let coin = |value: u128| trimmed(value as f64 / 10f64.powi(decimals));
+        let short = units(&treasury.floor).saturating_sub(units(&treasury.balance));
+        // Spec 098 §4: what it has against what it needs, in its own coin.
+        let balance_line = fill(
+            &fill(
+                &fill(
+                    &s.funding_balance_line,
+                    "balance",
+                    &coin(units(&treasury.balance)),
+                ),
+                "floor",
+                &coin(units(&treasury.floor)),
+            ),
+            "symbol",
+            &symbol,
+        );
         let notice = SendNotice {
             // The way out of the stop itself. Without it the only exit from a
             // treasury that cannot pay is closing the whole journey — the core
             // has had `DismissTreasurySheet` since 026 and nothing sent it.
             dismiss: Some(s.funding_close.clone()),
             title: Some(s.funding_title.clone()),
-            body: fill(&s.funding_lead, "symbol", &symbol).into(),
+            // Whose relayer it is — the operator's on a network Vela ships,
+            // the person's on one they added (spec 060) — is the core's verdict.
+            body: SharedString::from(if treasury.operator_served {
+                s.funding_lead.clone()
+            } else {
+                s.funding_custom_lead.clone()
+            }),
             detail: Some(
                 format!(
-                    "{} {}  ·  {} {} {symbol}",
+                    "{} {}  ·  {} {} {symbol}\n{balance_line}\n{}\n{}",
                     s.funding_address_label,
                     treasury.address,
                     s.funding_amount_label,
-                    trimmed(short),
+                    coin(short),
+                    s.funding_disclaimer,
+                    // The core asks the relay again every 10 s and closes this
+                    // once funded (spec 098 §4); "Retry" is for the impatient.
+                    s.funding_watching,
                 )
                 .into(),
             ),
             action: Some(s.funding_check_now.clone()),
+            // Spec 098 §4: the address is what a person needs to fund it —
+            // read off the screen it is 42 characters to retype.
+            copy: Some((s.funding_copy.clone(), treasury.address.clone().into())),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryAfterBootstrap)));
@@ -2774,6 +2883,7 @@ fn build_notice(
             body,
             detail,
             action,
+            copy: None,
             error: true,
         };
         return Some((notice, way_out));
@@ -2836,6 +2946,7 @@ fn build_notice(
                 .into(),
             ),
             action: Some(s.same_fee_edit.clone()),
+            copy: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -2849,6 +2960,7 @@ fn build_notice(
             body: s.insufficient_body.clone(),
             detail: None,
             action: None,
+            copy: None,
             error: true,
         };
         return Some((notice, None));
@@ -2871,6 +2983,7 @@ fn build_notice(
             body: cannot_convert(issue, s),
             detail: None,
             action: Some(s.same_fee_edit.clone()),
+            copy: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -2902,6 +3015,7 @@ fn build_notice(
             body,
             detail: None,
             action: None,
+            copy: None,
             error: false,
         },
         None,
@@ -3325,6 +3439,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             body,
             detail: None,
             action: None,
+            copy: None,
             error: true,
         })
     });
@@ -4210,6 +4325,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 },
                 detail: None,
                 action: None,
+                copy: None,
                 error: true,
             })
         // Over the balance is said on the total line (`batch_total`), beside
@@ -4221,6 +4337,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 body: s.batch_over_cap.clone(),
                 detail: None,
                 action: None,
+                copy: None,
                 error: false,
             })
         } else {

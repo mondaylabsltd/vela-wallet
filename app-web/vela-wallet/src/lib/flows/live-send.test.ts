@@ -111,6 +111,7 @@ const EMPTY_SEND: SendView = {
 	user_op_hash: null,
 	receipt: null,
 	treasury_bootstrap: null,
+	relay_unreachable: null,
 	recipient_identity: null,
 	payees: [],
 	recipient_risk: null,

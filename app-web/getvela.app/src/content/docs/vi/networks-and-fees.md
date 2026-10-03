@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
 description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: 8f8059955244
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -140,18 +140,33 @@ trong phạm vi trượt giá của bạn.
 
 ### Khi relay hết gas
 
-Relay trả gas từ **ngân quỹ** của chính nó trên từng mạng. Nếu ngân quỹ đó cạn, màn hình
-gửi sẽ báo cho bạn trước khi bạn ký:
+Relay trả gas từ **ngân quỹ** của chính nó trên từng mạng. Nếu ngân quỹ đó cạn, việc gửi
+sẽ dừng ở bước **Tiếp tục** — trước khi bất cứ thứ gì được ký — và hiển thị địa chỉ ngân quỹ kèm nút sao chép (trên ví web còn có cả mã QR), số dư hiện có so với số cần có, và bằng coin nào:
 
 - Trên một mạng do relay của Vela phục vụ, bên vận hành relay (Vela) cần nạp thêm; bạn có
   thể báo lỗi này. Nếu không đợi được, bạn có thể **tùy ý** tự gửi một ít coin gốc vào
   ngân quỹ. Khoản đóng góp đó **không được hoàn lại** và **không** dùng để trả cho giao
   dịch của chính bạn.
-- Trên một mạng tùy chỉnh, việc nạp tiền cho relay là việc của người vận hành nó — có
+- Trên một mạng bạn tự thêm, việc nạp tiền cho relay là việc của người vận hành nó — có
   thể chính là bạn.
+
+Trong lúc màn hình đó đang mở, ví sẽ kiểm tra lại sau mỗi vài giây. Khi ngân quỹ đã có
+tiền, ví tự đi tiếp; còn ở màn hình xác nhận, ví chỉ đóng thông báo, vì việc ký luôn do
+bạn bắt đầu.
 
 Không có tài khoản gas riêng cho từng ví, cũng không có khoản đặt cọc kích hoạt nào: một
 phiên bản trước đây của Vela từng có cơ chế đó, và giờ nó không còn nữa.
+
+### Khi relay không kết nối được tới một mạng
+
+Relay chỉ phục vụ được mạng mà nó đọc được. Khi không đọc được, việc gửi dừng ở bước
+**Tiếp tục** và nói rõ điều đó — nạp tiền cũng không giúp được gì.
+
+- Trên một mạng có sẵn trong Vela, đó là việc bên vận hành phải sửa; bạn có thể báo lỗi.
+- Trên một mạng bạn tự thêm, relay đọc mạng đó qua địa chỉ RPC bạn đặt cho nó, nên địa
+  chỉ đó phải là một địa chỉ `https` công khai. Một node trên máy tính của bạn hoặc
+  trong mạng nội bộ (`localhost`, `192.168.…`) chỉ có thể được phục vụ bởi một relay
+  chạy ngay bên cạnh nó — xem [tự chạy relay của bạn](/vi/docs/self-hosting#relay).
 
 ## Vela đọc dữ liệu từng mạng thế nào
 
@@ -161,5 +176,9 @@ Vela đọc số dư và mô phỏng giao dịch qua một **nhóm điểm cuố
 ngừng hoạt động. Bạn có thể đặt điểm cuối riêng cho từng mạng trong **Cài đặt → Mạng
 lưới**. (Ứng dụng Android hiện chỉ dùng một điểm cuối cho mỗi mạng, không có chuyển dự
 phòng, và ứng dụng iPhone chưa cho phép thay đổi.)
+
+Với mỗi yêu cầu, relay nhận được địa chỉ RPC mà ví dùng cho một mạng — kể cả khóa API
+nằm trong đó, nếu có — để có thể kết nối tới mạng bạn đang dùng. Ví nói rõ điều này ở nơi
+bạn đặt địa chỉ hoặc khóa nhà cung cấp; xem [chính sách quyền riêng tư](/privacy).
 
 Tiếp theo: [passkey hoạt động thế nào](/vi/docs/passkeys).

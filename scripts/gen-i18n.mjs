@@ -510,9 +510,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   warnOrderTerms}` — a CoW order named by its id, `type(uint256).max` read as
 //   "All", and the plain caution that a pre-signed order's amounts are not on
 //   the sheet. Same branches: 1826 + 3 = 1829.
-if (PATHS.length !== 1829) fail(`expected 1829 paths (1738 leaf + 91 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1738) fail(`expected 1738 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 91) fail(`expected 91 branch paths, got ${branchSet.size}`);
+// 1841 (098, 2026-10-03): + `componentsUi.relayUnreachable.{title,
+//   operatorLead,customLead,settingsHint,reportBtn,retryBtn,closeBtn}` — the
+//   sheet for a relay that cannot serve the chain, which used to send through
+//   and fail after the passkey — and `componentsUi.treasuryBootstrap.
+//   {balanceLine,networkLine,watching,qrLabel}` for the funding sheet that now
+//   closes by itself. 11 leaves, 1 branch: 1829 + 12 = 1841.
+// 1843 (098 §5.1, 2026-10-03): + `settingsModals.network.relayNotice` and
+//   `settingsModals.rpcProviders.relayNotice` — said where an RPC or a provider
+//   key is set: the relay is sent the RPC the wallet uses, key and all. Same
+//   branches: 1841 + 2 = 1843.
+if (PATHS.length !== 1843) fail(`expected 1843 paths (1751 leaf + 92 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1751) fail(`expected 1751 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 92) fail(`expected 92 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
@@ -825,7 +835,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 141,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 144,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

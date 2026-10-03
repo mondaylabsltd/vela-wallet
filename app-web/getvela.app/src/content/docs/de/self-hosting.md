@@ -1,7 +1,7 @@
 ---
 title: Anleitung zum Selbsthosten
 description: "Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst."
-source: f37e59b617dc
+source: f24224b633b4
 ---
 
 <script>
@@ -196,6 +196,11 @@ Trag dann `https://your-relay` in das Feld **Vela Relay** ein.
 - Das Relay liest die Details jeder Chain und die Stablecoins, die es akzeptiert, aus
   einem Chain-Verzeichnis: `ethereum-data.getvela.app`, sofern du
   `VELA_RELAY_CHAIN_DIRECTORY_URL` nicht auf [dein eigenes](#chain-data) setzt. Die Einstellung gibt es ab vela-relay v0.9.6; ältere Builds lesen immer Velas Kopie.
+- Ein Netzwerk auf deinem eigenen Rechner oder in deinem lokalen Netz (`localhost`,
+  `192.168.…`) kann nur ein Relay bedienen, das es erreicht. Auf einem Relay, das nur du
+  erreichen kannst, setze `VELA_RELAY_ALLOW_PRIVATE_RPC=true` und trage die Adresse des
+  Knotens in `VELA_RELAY_EXECUTOR_RPC_URLS` ein; die [RPC-Hinweise](https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md) des Relays
+  erklären beides. Velas eigenes Relay ruft nie eine private Adresse auf.
 
 ## Einen eigenen Public-Key-Index betreiben
 

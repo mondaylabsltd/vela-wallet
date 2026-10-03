@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
 description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: 8f8059955244
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -149,17 +149,36 @@ bertransaksi mendahului Anda (front-running) dalam batas slippage Anda.
 ### Kalau gas sebuah relay habis
 
 Relay membayar gas dari **treasury**-nya sendiri di tiap jaringan. Kalau treasury itu
-kosong, layar kirim memberi tahu Anda sebelum Anda menandatangani:
+kosong, pengiriman berhenti di **Lanjutkan** — sebelum apa pun ditandatangani — dan
+menampilkan alamat treasury beserta tombol untuk menyalinnya (dan, di dompet web,
+kode QR), berapa yang dimilikinya
+dibanding berapa yang dibutuhkannya, dan dalam koin apa:
 
 - Di jaringan yang dilayani relay Vela, operator relay (Vela) perlu mengisinya kembali;
   Anda bisa melaporkannya. Kalau tidak bisa menunggu, Anda **boleh** mengirim sedikit
   koin native ke treasury itu sendiri. Kontribusi itu **tidak dapat dikembalikan** dan
   **tidak** membayar transaksi Anda sendiri.
-- Di jaringan kustom, mengisi dana relay menjadi urusan siapa pun yang menjalankannya —
-  bisa jadi Anda sendiri.
+- Di jaringan yang Anda tambahkan, mengisi dana relay menjadi urusan siapa pun yang
+  menjalankannya — bisa jadi Anda sendiri.
+
+Selama layar itu terbuka, dompet memeriksa lagi setiap beberapa detik. Begitu treasury
+terisi, dompet melanjutkan sendiri; di layar konfirmasi, dompet hanya menutup
+pemberitahuannya, karena penandatanganan selalu Anda yang memulai.
 
 Tidak ada akun gas per dompet dan tidak ada deposit aktivasi: versi awal Vela pernah
 punya mekanisme itu, dan sekarang sudah tidak ada.
+
+### Kalau relay tidak bisa menjangkau sebuah jaringan
+
+Relay hanya bisa melayani jaringan yang bisa dibacanya. Kalau tidak bisa, pengiriman
+berhenti di **Lanjutkan** dan mengatakannya — mengisi dana tidak akan membantu.
+
+- Di jaringan bawaan Vela, memperbaikinya adalah urusan operator; Anda bisa
+  melaporkannya.
+- Di jaringan yang Anda tambahkan, relay membacanya lewat alamat RPC yang Anda atur
+  untuknya, jadi alamat itu harus alamat `https` publik. Node di komputer Anda sendiri
+  atau di jaringan lokal (`localhost`, `192.168.…`) hanya bisa dilayani relay yang
+  berjalan di sebelahnya — lihat [menjalankan relay sendiri](/id/docs/self-hosting#relay).
 
 ## Cara Vela membaca tiap jaringan
 
@@ -169,5 +188,10 @@ tambahkan — dan pindah ke endpoint berikutnya kalau satu endpoint lambat atau 
 bisa mengatur endpoint sendiri per jaringan di **Pengaturan → Jaringan**. (Aplikasi
 Android saat ini memakai satu endpoint per jaringan, tanpa pengalihan otomatis, dan
 aplikasi iPhone belum mengizinkan Anda mengubahnya.)
+
+Di setiap permintaan, relay dikirimi alamat RPC yang dipakai dompet untuk sebuah
+jaringan — termasuk kunci API apa pun di dalamnya — supaya relay bisa menjangkau
+jaringan yang Anda pakai. Dompet menyebutkannya di tempat Anda mengatur alamat atau
+kunci penyedia; lihat [kebijakan privasi](/privacy).
 
 Berikutnya: [cara kerja passkey](/id/docs/passkeys).

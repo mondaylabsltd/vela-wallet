@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.core
 
+import app.getvela.wallet.feature.send.core.relayRpcHeader
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.net.NetHealth
@@ -303,10 +304,9 @@ class OkHttpTransport : RpcTransport {
         val request = Request.Builder()
             .url(url)
             .post(body)
-            // Spec 081 FR-007: the relay is never told which RPC endpoint this
-            // wallet prefers — that URL can carry a provider API key, and the
-            // relay reads `x-vela-rpc-url`, never this header.
-            .apply { @Suppress("UNUSED_EXPRESSION") xRpcUrl }
+            // Spec 098 §5: a bundler call names the chain's RPC to the relay;
+            // the core sets `x_rpc_url` on bundler calls only.
+            .relayRpcHeader(xRpcUrl)
             .build()
 
         val call = VelaHttp.client.newBuilder()

@@ -1600,7 +1600,20 @@
    "operatorLead": "El operador de Vela mantiene el relayer de esta red y se quedó sin gas. Avisarle es lo más rápido, y al arreglarse queda arreglado para todos.",
    "reportBtn": "Reportar esto",
    "selfFundToggle": "¿No puedes esperar? Inícialo tú",
-   "customLead": "Tú agregaste esta red, así que el operador de Vela quizá no tenga forma de tener gas ahí — una cadena local o interna no le toca a nadie más. Iniciar su relayer depende de ti."
+   "customLead": "Tú agregaste esta red, así que el operador de Vela quizá no tenga forma de tener gas ahí — una cadena local o interna no le toca a nadie más. Iniciar su relayer depende de ti.",
+   "balanceLine": "Tiene {{balance}} de los {{floor}} {{symbol}} que necesita",
+   "networkLine": "Red: {{network}}",
+   "watching": "Se revisa cada pocos segundos; esto se cierra solo en cuanto tenga fondos.",
+   "qrLabel": "Escanea para enviar desde otra billetera"
+  },
+  "relayUnreachable": {
+   "title": "El relay no llega a esta red",
+   "operatorLead": "El relay de Vela no llega a esta red por ahora, así que todavía no se puede enviar en ella. Le toca al operador arreglarlo: avisarle es lo más rápido.",
+   "customLead": "Tú agregaste esta red y el relay no llega a ella. El relay lee una red a través del RPC que configuraste, así que ese RPC tiene que ser una dirección https pública: un nodo en esta computadora o en tu red local solo puede atenderlo un relay que corra junto a él.",
+   "settingsHint": "Cambia el RPC de esta red, o apunta Configuración → Puntos de servicio → Vela Relay a un relay que sí llegue.",
+   "reportBtn": "Reportar",
+   "retryBtn": "Intentar de nuevo",
+   "closeBtn": "Cerrar"
   },
   "mainNav": {
    "wallet": "Cartera",
@@ -1649,7 +1662,8 @@
    "removeTitle": "Eliminar red",
    "removeBody": "¿Eliminar esta red personalizada?",
    "removeCancel": "Cancelar",
-   "removeConfirm": "Eliminar"
+   "removeConfirm": "Eliminar",
+   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
   },
   "account": {
    "modalTitle": "Cuentas",
@@ -1667,7 +1681,8 @@
    "activeNetworks": "{{count}} redes",
    "supportsCount": "Admite {{count}} de {{total}} redes",
    "unavailable": "No disponible",
-   "avgLatency": "prom. {{ms}}ms"
+   "avgLatency": "prom. {{ms}}ms",
+   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC que tu billetera usa en cada red —incluida la clave de API— para poder llegar a las redes que usas."
   },
   "endpoints": {
    "modalTitle": "Endpoints de servicio",

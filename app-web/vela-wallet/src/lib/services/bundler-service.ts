@@ -25,6 +25,7 @@ import {
 import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
 import { fetchWithTimeout, isTimeoutError, NET_TIMEOUTS } from './net';
+import { relayRpcHeader } from './relay-rpc-header';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -333,7 +334,11 @@ export async function probeGasSponsorship(funding: FundingNeeded): Promise<Spons
 			url,
 			{
 				method: 'POST',
-				headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+				headers: {
+					Accept: 'application/json',
+					'Content-Type': 'application/json',
+					...relayRpcHeader(await getChainRpcUrl(chainId))
+				},
 				body: JSON.stringify({ requiredWei: '0x' + thresholdWei.toString(16), dryRun: true })
 			},
 			// Sponsor-tier timeout, NOT the short REST one: an old server without
@@ -413,9 +418,8 @@ async function requestSponsorship(
 			// header collapses the same (chain, safe, amount) request into one transfer.
 			'Idempotency-Key': `sponsor:${chainId}:${safeAddress.toLowerCase()}:0x${requiredWei.toString(16)}`
 		};
-		// Spec 081 FR-007: the wallet no longer names its preferred RPC endpoint to
-		// the relay. That URL can carry a provider API key, and the relay read a
-		// different header (`x-vela-rpc-url`) anyway, so nothing depended on it.
+		// Spec 098 §5: the relay is told the RPC this wallet uses for the chain.
+		Object.assign(headers, relayRpcHeader(chainRpc));
 
 		const res = await fetchWithTimeout(
 			url,
@@ -499,11 +503,12 @@ async function readBundlerAccountInfo(
 		const baseUrl = await getActiveBundlerBaseUrl(chainId);
 		const url = `${baseUrl}/v1/account/${chainId}/${safeAddress.toLowerCase()}`;
 
-		// Spec 081 FR-007: the relay is not told which RPC endpoint this wallet
-		// prefers — that URL can carry a provider API key. (The claim this
-		// replaced, "so the bundler can reach non-registry chains", was already
-		// false: the relay reads `x-vela-rpc-url`, never this header.)
-		const headers: Record<string, string> = { Accept: 'application/json' };
+		// Spec 098 §5: the relay reads the chain through the RPC named here first,
+		// which is what lets it reach a network its directory cannot.
+		const headers: Record<string, string> = {
+			Accept: 'application/json',
+			...relayRpcHeader(await getChainRpcUrl(chainId))
+		};
 
 		const res = await fetchWithTimeout(url, { headers }, { timeoutMs: NET_TIMEOUTS.bundlerRest });
 		if (!res.ok) return null;
@@ -919,7 +924,9 @@ export async function probeTreasury(chainId: number): Promise<TreasuryProbe> {
 		const baseUrl = await getActiveBundlerBaseUrl(chainId);
 		const res = await fetchWithTimeout(
 			`${baseUrl}/v1/treasury/${chainId}`,
-			{ headers: { Accept: 'application/json' } },
+			// Spec 098 §5: without the chain's RPC the relay cannot read a
+			// treasury on a network its directory does not reach.
+			{ headers: { Accept: 'application/json', ...relayRpcHeader(await getChainRpcUrl(chainId)) } },
 			{ timeoutMs: NET_TIMEOUTS.bundlerRest }
 		);
 		// 404 = this bundler has no service for this chain (uncovered). Any other non-OK is transient.

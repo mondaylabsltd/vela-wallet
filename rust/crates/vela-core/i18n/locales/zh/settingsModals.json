@@ -10,7 +10,8 @@
       "removeTitle": "移除网络",
       "removeBody": "移除此自定义网络？",
       "removeCancel": "取消",
-      "removeConfirm": "移除"
+      "removeConfirm": "移除",
+      "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
     },
     "account": {
       "modalTitle": "账户",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} 个网络",
       "supportsCount": "支持 {{count}} 个网络，共 {{total}} 个",
       "unavailable": "不可用",
-      "avgLatency": "平均 {{ms}}ms"
+      "avgLatency": "平均 {{ms}}ms",
+      "relayNotice": "提交你交易的中继会收到钱包为每条网络使用的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
     },
     "endpoints": {
       "modalTitle": "服务节点",

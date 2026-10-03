@@ -1,7 +1,7 @@
 ---
 title: Netzwerke und Gebühren
 description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
-source: 8f8059955244
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -153,18 +153,37 @@ grundsätzlich innerhalb deiner Slippage zuvorkommen.
 ### Wenn einem Relay das Gas ausgeht
 
 Ein Relay bezahlt das Gas in jedem Netzwerk aus seiner eigenen **Treasury**. Ist diese
-leer, sagt dir der Sendebildschirm das, bevor du signierst:
+leer, hält das Senden bei **Weiter** an – bevor irgendetwas signiert ist – und zeigt die Adresse der Treasury mit einer Schaltfläche zum Kopieren (in der Web-Wallet
+auch als QR-Code), wie viel sie hat, wie viel sie braucht
+und in welchem Coin:
 
 - In einem Netzwerk, das Velas Relay bedient, muss der Betreiber des Relays (Vela) sie
   auffüllen; du kannst das melden. Wenn du nicht warten kannst, kannst du
   **freiwillig** selbst einen kleinen Betrag des nativen Coins an die Treasury
   schicken. Dieser Beitrag ist **nicht erstattungsfähig** und bezahlt **nicht** deine
   eigene Transaktion.
-- In einem eigenen Netzwerk ist es Sache des Betreibers, das Relay zu finanzieren – und
-  das bist womöglich du.
+- In einem Netzwerk, das du hinzugefügt hast, ist es Sache des Betreibers, das Relay zu
+  finanzieren – und das bist womöglich du.
+
+Solange dieser Bildschirm offen ist, prüft die Wallet alle paar Sekunden erneut. Sobald
+die Treasury gefüllt ist, geht es von selbst weiter; auf dem Bestätigungsbildschirm
+schließt sie nur den Hinweis, denn das Signieren startest immer du.
 
 Es gibt kein Gas-Konto pro Wallet und keine Aktivierungseinzahlung: Eine frühere
 Version von Vela hatte so etwas, und es existiert nicht mehr.
+
+### Wenn ein Relay ein Netzwerk nicht erreicht
+
+Ein Relay kann nur ein Netzwerk bedienen, das es lesen kann. Kann es das nicht, hält das
+Senden bei **Weiter** an und sagt es – Auffüllen würde hier nicht helfen.
+
+- In einem Netzwerk, das Vela mitliefert, muss der Betreiber das beheben; du kannst es
+  melden.
+- In einem Netzwerk, das du hinzugefügt hast, liest das Relay es über die RPC-Adresse, die
+  du dafür festgelegt hast – sie muss also eine öffentliche `https`-Adresse sein. Ein
+  Knoten auf deinem eigenen Computer oder in deinem lokalen Netz (`localhost`,
+  `192.168.…`) kann nur von einem Relay bedient werden, das direkt daneben läuft – siehe
+  [ein eigenes Relay betreiben](/de/docs/self-hosting#relay).
 
 ## Wie Vela die Netzwerke liest
 
@@ -175,5 +194,10 @@ wenn ein Endpunkt langsam ist oder ausfällt. Einen eigenen Endpunkt pro Netzwer
 du unter **Einstellungen → Netzwerke** fest. (Die Android-App nutzt derzeit einen
 Endpunkt pro Netzwerk, ohne Umschalten, und in der iPhone-App lässt er sich noch nicht
 ändern.)
+
+Das Relay bekommt bei jeder Anfrage die RPC-Adresse, die die Wallet für ein Netzwerk
+nutzt – einschließlich eines darin enthaltenen API-Schlüssels –, damit es das Netzwerk
+erreicht, das du nutzt. Die Wallet sagt das dort, wo du eine Adresse oder einen
+Anbieterschlüssel festlegst; siehe die [Datenschutzerklärung](/privacy).
 
 Weiter: [So funktionieren Passkeys](/de/docs/passkeys).

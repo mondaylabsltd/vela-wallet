@@ -535,14 +535,32 @@ pub struct FlowStrings {
     /// The relay's float is empty and someone has to top it up before this
     /// chain can carry anything.
     pub funding_title: SharedString,
+    /// On a network Vela ships: the operator's relayer, out of gas.
     pub funding_lead: String,
+    /// On a network the person added: starting its relayer is theirs (060).
+    pub funding_custom_lead: String,
+    /// `{{balance}}`/`{{floor}}`/`{{symbol}}` — what it has against what it
+    /// needs (spec 098 §4).
+    pub funding_balance_line: String,
+    /// It checks again on its own and closes once funded (spec 098 §4).
+    pub funding_watching: SharedString,
+    /// Non-refundable, and not Vela's: the line that must not be missed.
+    pub funding_disclaimer: SharedString,
     pub funding_address_label: SharedString,
     pub funding_amount_label: SharedString,
     pub funding_check_now: SharedString,
+    pub funding_copy: SharedString,
     /// "Not now" — the phone's own word for leaving this stop. The desktop
     /// draws the stop inline rather than as a sheet, so this is the way back
     /// to the form.
     pub funding_close: SharedString,
+    /// The relay cannot serve this chain at all (spec 098 §2).
+    pub unreachable_title: SharedString,
+    pub unreachable_operator_lead: SharedString,
+    pub unreachable_custom_lead: SharedString,
+    pub unreachable_hint: SharedString,
+    pub unreachable_retry: SharedString,
+    pub unreachable_close: SharedString,
     /// A locked payment request that cannot be fulfilled.
     pub lock_net_title: SharedString,
     pub lock_net_body: String,
@@ -856,12 +874,29 @@ impl FlowStrings {
             insufficient_title: s("send.alertInsufficientBalanceTitle"),
             insufficient_body: s("send.alertInsufficientBalanceBody"),
             estimating: s("componentsUi.gas.estimating"),
-            funding_title: s("componentsUi.funding.title"),
-            funding_lead: raw("componentsUi.funding.lead"),
-            funding_address_label: s("componentsUi.funding.addressLabel"),
-            funding_amount_label: s("componentsUi.funding.amountLabel"),
-            funding_check_now: s("componentsUi.funding.checkNow"),
-            funding_close: s("componentsUi.funding.cancel"),
+            // Spec 098 §4, and spec 080's finding: this stop means THE RELAY
+            // HAS NO GAS ON THIS CHAIN. It used to wear `componentsUi.funding.*`
+            // — the retired per-wallet "fee reserve", whose sentences are false
+            // here (the money is not a reserve Vela holds for you, and it is
+            // not refundable). The treasury vocabulary is the one every other
+            // shell, and this app's own signing surface, already speaks.
+            funding_title: s("componentsUi.treasuryBootstrap.title"),
+            funding_lead: raw("componentsUi.treasuryBootstrap.operatorLead"),
+            funding_custom_lead: raw("componentsUi.treasuryBootstrap.customLead"),
+            funding_balance_line: raw("componentsUi.treasuryBootstrap.balanceLine"),
+            funding_watching: s("componentsUi.treasuryBootstrap.watching"),
+            funding_disclaimer: s("componentsUi.treasuryBootstrap.disclaimer"),
+            funding_address_label: s("componentsUi.treasuryBootstrap.addressLabel"),
+            funding_amount_label: s("componentsUi.treasuryBootstrap.suggested"),
+            funding_check_now: s("componentsUi.treasuryBootstrap.retryBtn"),
+            funding_copy: s("componentsUi.treasuryBootstrap.copyBtn"),
+            funding_close: s("componentsUi.treasuryBootstrap.closeBtn"),
+            unreachable_title: s("componentsUi.relayUnreachable.title"),
+            unreachable_operator_lead: s("componentsUi.relayUnreachable.operatorLead"),
+            unreachable_custom_lead: s("componentsUi.relayUnreachable.customLead"),
+            unreachable_hint: s("componentsUi.relayUnreachable.settingsHint"),
+            unreachable_retry: s("componentsUi.relayUnreachable.retryBtn"),
+            unreachable_close: s("componentsUi.relayUnreachable.closeBtn"),
             lock_net_title: s("send.lock.netTitle"),
             lock_net_body: raw("send.lock.netBody"),
             lock_token_title: s("send.lock.tokenTitle"),

@@ -143,6 +143,11 @@ enum Request {
         chain_id: u32,
         reply: Sender<Option<String>>,
     },
+    /// Which RPC the pool would name to the relay for this chain (spec 098 §5).
+    BestRpcUrl {
+        chain_id: u32,
+        reply: Sender<Option<String>>,
+    },
     /// The chains whose last failure was the providers' rate limit.
     RateLimited { reply: Sender<Vec<u32>> },
     /// The chains whose whole RPC pool failed on the last attempt.
@@ -325,6 +330,18 @@ fn route_within(
 /// pool is empty — the caller falls back to the built-in base. **Blocks.**
 pub fn bundler_base(chain_id: u32) -> Option<String> {
     query(chain_id, |chain_id, reply| Request::BundlerBase {
+        chain_id,
+        reply,
+    })
+}
+
+/// The RPC this wallet uses for a chain, as the core names it to the relay
+/// (`getChainRpcUrl`, the core's `answer_best_rpc_url`): the same eligible set
+/// the JSON-RPC bundler leg reads, so the REST and JSON-RPC doors to the relay
+/// name the same endpoint. `None` when the core has none to vouch for — the
+/// caller then sends no header. **Blocks.** (Spec 098 §5.)
+pub fn best_rpc_url(chain_id: u32) -> Option<String> {
+    query(chain_id, |chain_id, reply| Request::BestRpcUrl {
         chain_id,
         reply,
     })
@@ -716,6 +733,17 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 let call_id = format!("b{next_id}");
                 queries.insert(call_id.clone(), reply);
                 let pending = host.dispatch(Event::BundlerBaseRequested {
+                    call_id,
+                    chain_id,
+                    now_ms: now_ms(),
+                });
+                drain(&mut host, pending, &mut inflight, &mut queries, workers);
+            }
+            Request::BestRpcUrl { chain_id, reply } => {
+                next_id += 1;
+                let call_id = format!("r{next_id}");
+                queries.insert(call_id.clone(), reply);
+                let pending = host.dispatch(Event::BestRpcUrlRequested {
                     call_id,
                     chain_id,
                     now_ms: now_ms(),
@@ -1466,12 +1494,16 @@ fn post(
     // reached, and a dead proxy is named in the log rather than routed around.
     let timeout = Duration::from_millis(u64::from(timeout_ms));
     let mut response = match proxy::with_routes(url, timeout, |agent| {
-        // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
-        let _ = x_rpc_url;
-        agent
-            .post(url)
-            .header("content-type", "application/json")
-            .send_json(&payload)
+        // Spec 098 §5: a bundler call names the chain's RPC to the relay, under
+        // the name the relay reads. The core sets `x_rpc_url` on bundler calls
+        // only, so an RPC provider is never sent one.
+        let request = agent.post(url).header("content-type", "application/json");
+        match x_rpc_url {
+            Some(rpc) => request
+                .header(super::relay::RELAY_RPC_URL_HEADER, rpc)
+                .send_json(&payload),
+            None => request.send_json(&payload),
+        }
     }) {
         Ok(response) => response,
         Err(failure) => return (transport_outcome_of(&failure.error), None),
@@ -2269,6 +2301,75 @@ mod tests {
                 .unwrap_or_else(|_| unreachable!("the slow caller panicked"));
             assert!(slow_answer.is_ok(), "the slow endpoint never answered");
         });
+    }
+
+    /// The header block of the one request a loopback server receives, lower-cased.
+    fn headers_of_one_post(x_rpc_url: Option<&str>) -> String {
+        use std::io::{BufRead as _, Read as _, Write as _};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+        let port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or_else(|error| unreachable!("no port: {error}"));
+        let (seen_tx, seen) = channel();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = std::io::BufReader::new(
+                stream
+                    .try_clone()
+                    .unwrap_or_else(|error| unreachable!("clone: {error}")),
+            );
+            let (mut head, mut line, mut length) = (String::new(), String::new(), 0usize);
+            while reader.read_line(&mut line).unwrap_or(0) > 0 && line != "\r\n" {
+                if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+                head.push_str(&line.to_lowercase());
+                line.clear();
+            }
+            let mut body = vec![0u8; length];
+            let _ = reader.read_exact(&mut body);
+            let payload = r#"{"jsonrpc":"2.0","id":1,"result":"0x1"}"#;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{payload}",
+                payload.len()
+            );
+            let _ = seen_tx.send(head);
+        });
+        let url = format!("http://127.0.0.1:{port}/");
+        let _ = post(&url, "eth_sendUserOperation", &json!([]), x_rpc_url, 5_000);
+        seen.recv_timeout(Duration::from_secs(5))
+            .unwrap_or_else(|_| unreachable!("the server never saw the request"))
+    }
+
+    /// Spec 098 §5: a bundler call names the chain's RPC to the relay, under
+    /// the name the relay reads — key and all.
+    #[test]
+    fn a_bundler_post_names_the_chains_rpc_to_the_relay() {
+        let head = headers_of_one_post(Some("https://rpc.one/v2/KEY"));
+        assert!(
+            head.contains("x-vela-rpc-url: https://rpc.one/v2/key"),
+            "the relay was not told the RPC: {head}"
+        );
+        assert!(
+            !head.contains("x-rpc-url:"),
+            "the pre-081 name the relay never read"
+        );
+    }
+
+    /// …and a call the core did not mark as a bundler call names none.
+    #[test]
+    fn a_plain_rpc_post_names_no_rpc() {
+        let head = headers_of_one_post(None);
+        assert!(
+            !head.contains("x-vela-rpc-url"),
+            "an RPC provider was sent an RPC: {head}"
+        );
     }
 
     /// A JSON-RPC server on a loopback port that answers after `delay`.

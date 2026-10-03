@@ -32,6 +32,17 @@
 - gas 档位:slow 1.1× / standard 1.2× / rapid 1.5× / fast 2.0×(`GAS_TIER_MULTIPLIERS`)
 - bundler 余额不足 → `parseBundlerUnderfunded()`(`bundler-service.ts:367`)字符串匹配错误文案弹充值 modal —— **与 vela-relay 仓库 handlers.ts 文案强耦合,改任何一边必须同步**
 
+### 签名前问中继:它能不能替这条链付 gas(spec 098)
+
+- **钱包把自己用的 RPC 发给中继**:每个中继请求(金库探针、报价、gas 价、估算、提交、回执)都带 `x-vela-rpc-url` = 核心 `best_rpc_url` 对这条链的判定——用户自设的地址、由服务商密钥拼出的地址或内置池,**含其中的 API key**。设置里填 RPC / 服务商密钥的地方和隐私政策都写明了。中继读链时优先用它;**广播永远不用它**(中继自己的 `VELA_RELAY_EXECUTOR_RPC_URLS` → Alchemy → 链目录)。四壳位置:web `services/relay-rpc-header.ts`、桌面 `executor/relay.rs`(`RELAY_RPC_URL_HEADER`)、iOS `Core/CoreHTTP.swift`、Android `feature/send/core/RelayRpcHeader.kt`。
+- **点「继续」时探 `GET /v1/treasury/{chainId}`**,核心(`send.rs` 的 `TreasuryAnswer`)按结果分三路:
+  | 中继答 | 含义 | 钱包 |
+  |---|---|---|
+  | 200,`bootstrapNeeded: true` | 中继服务这条链,但金库低于下限 | **充值单**:金库地址(web/移动端带二维码,桌面只有文字)、「有 X,需 Y」、哪条网络;开着时每 10 s 复探,到账后在填写页自动进入确认,**在确认页只关单、绝不自动签名** |
+  | 404(`reason` 为 `not_listed` / `no_rpc`) | 中继到不了这条链 | **「中继连不上这条网络」单**,不进确认:内置网络 → 运营方的事,可报告;用户自加的网络 → RPC 须为公开 `https`,本机/局域网节点只能由跑在旁边的中继服务 |
+  | 503 / 超时 / 其他 | 暂时读不到 | 视为暂时,照常继续;提交失败后复探 |
+- 404 与 503 的边界由中继核心决定(vela-relay `treasury::unreadable`),规则与实测见 vela-relay 仓库 `docs/rpc.md`。**这是跨仓库语义耦合**:中继若把「到不了」答成 503,钱包就会让人签完名再失败——2026-10-03 之前就是这样(1337 / 31337 / 123456789 全是 503)。
+
 ## 3. Tempo 链(4217)特殊规则
 
 无原生币,gas 用 TIP-20 稳定币(`src/services/tempo.ts`):UserOp 以 maxFee=0 签名,MultiSend 里内嵌 `feeToken.transfer(bundlerEOA, fee)` 报销;fee = 实际成本×2,callGasLimit 每子调用垫到 380k(TIP-20 转账 308k+,估算器会低报)。**改批量逻辑时勿动报销 transfer 的位置。**

@@ -103,11 +103,24 @@ enum CoreHTTP {
         case failed
     }
 
-    /// `GET url` with extra headers → a classified REST answer.
+    /// The header the relay reads a chain's RPC from (`vela-relay/src/utils/rpc.rs`).
     ///
-    /// Spec 081 (FR-007): no RPC-endpoint header is sent to the relay. It used
-    /// to carry the endpoint this wallet picked — which can contain a provider
-    /// API key — and the relay read a different header name anyway.
+    /// Spec 098 §5. Before 081 the apps sent `X-Rpc-Url`, which the relay never
+    /// read; 081 removed it as inert, and a network the relay's directory cannot
+    /// reach could then never be probed, quoted or served. The URL may carry a
+    /// provider key — ruled acceptable (098 §0.1) and said where it is set. Sent
+    /// to the RELAY only: the core sets `x_rpc_url` on bundler calls alone.
+    static let relayRpcUrlHeader = "x-vela-rpc-url"
+
+    /// The headers a request to the relay carries for a chain's RPC: the one
+    /// header when there is a URL to name, none otherwise. One function, so the
+    /// JSON-RPC and REST doors to the relay cannot disagree on the name.
+    static func relayRpcHeaders(_ url: String?) -> [String: String] {
+        guard let url, !url.isEmpty else { return [:] }
+        return [relayRpcUrlHeader: url]
+    }
+
+    /// `GET url` with extra headers → a classified REST answer.
     static func getREST(
         _ url: String,
         headers: [String: String] = [:],
@@ -199,7 +212,8 @@ enum CoreHTTP {
         _ url: String,
         method: String,
         params: [Any],
-        timeout: TimeInterval = Timeout.rpcRead
+        timeout: TimeInterval = Timeout.rpcRead,
+        headers: [String: String] = [:]
     ) async -> RpcReply {
         // Refused before sending (not https) or never encoded: nothing left.
         guard var request = request(url, timeout: timeout) else { return .notConnected }
@@ -211,6 +225,9 @@ enum CoreHTTP {
         }
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (name, value) in headers where !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         request.httpBody = body
 
         do {

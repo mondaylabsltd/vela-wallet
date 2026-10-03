@@ -1,7 +1,7 @@
 ---
 title: Redes e taxas
 description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
-source: 8f8059955244
+source: 5613b3a9fa56
 ---
 
 <script>
@@ -150,18 +150,38 @@ na sua frente dentro da sua tolerância de slippage.
 ### Quando um relay fica sem gas
 
 Um relay paga o gas com a própria **tesouraria** em cada rede. Se essa tesouraria
-estiver vazia, a tela de envio avisa você antes de assinar:
+estiver vazia, o envio para em **Continuar** — antes de qualquer assinatura — e
+mostra o endereço da tesouraria com um botão para copiá-lo (e, na carteira web,
+um QR code), quanto ela tem diante de
+quanto precisa, e em qual moeda:
 
 - Numa rede atendida pelo relay da Vela, quem opera o relay (a Vela) precisa
   reabastecê-la; você pode relatar o problema. Se não puder esperar, você pode,
   **se quiser**, enviar você mesmo uma pequena quantia da moeda nativa para a
   tesouraria. Essa contribuição **não é reembolsável** e **não** paga a sua própria
   transação.
-- Numa rede personalizada, abastecer o relay é responsabilidade de quem o opera — que
-  pode ser você.
+- Numa rede que você adicionou, abastecer o relay é responsabilidade de quem o
+  opera — que pode ser você.
+
+Enquanto essa tela estiver aberta, a carteira verifica de novo a cada poucos
+segundos. Assim que a tesouraria tiver saldo, ela segue sozinha; na tela de
+confirmação, ela só fecha o aviso, porque a assinatura é sempre você quem inicia.
 
 Não existe conta de gas por carteira nem depósito de ativação: uma versão anterior
 da Vela tinha isso, e não existe mais.
+
+### Quando um relay não consegue alcançar uma rede
+
+Um relay só consegue atender uma rede que ele consegue ler. Quando não consegue, o
+envio para em **Continuar** e diz isso — abastecê-lo não ajudaria.
+
+- Numa rede que vem com a Vela, resolver é com o operador; você pode relatar o
+  problema.
+- Numa rede que você adicionou, o relay a lê pelo endereço RPC que você definiu para
+  ela, então esse endereço precisa ser um `https` público. Um nó no seu próprio
+  computador ou na sua rede local (`localhost`, `192.168.…`) só pode ser atendido
+  por um relay rodando ao lado dele — veja
+  [como rodar seu próprio relay](/pt-BR/docs/self-hosting#relay).
 
 ## Como a Vela lê cada rede
 
@@ -171,5 +191,10 @@ ou endpoints que você adicionar — e passa para o próximo quando um endpoint 
 lento ou fora do ar. Você pode definir seu próprio endpoint para cada rede em
 **Configurações → Redes**. (O app de Android hoje usa um único endpoint por rede,
 sem troca automática, e o app de iPhone ainda não deixa você mudá-lo.)
+
+A cada solicitação, o relay recebe o endereço RPC que a carteira usa para uma rede —
+inclusive qualquer chave de API contida nele — para conseguir alcançar a rede que
+você usa. A carteira avisa isso onde você define um endereço ou uma chave de
+provedor; veja a [política de privacidade](/privacy).
 
 A seguir: [como as passkeys funcionam](/pt-BR/docs/passkeys).

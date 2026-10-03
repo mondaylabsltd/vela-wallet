@@ -185,13 +185,19 @@ describe('json_rpc_post outcomes are transport facts', () => {
 		expect(result).toMatchObject({ outcome: { type: 'network' } });
 	});
 
-	it('never tells the relay which RPC endpoint this wallet prefers (spec 081)', async () => {
-		const fetchSpy = vi.fn(
+	function fetchOk() {
+		return vi.fn(
 			async () =>
 				new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x1' }), {
 					headers: { 'content-type': 'application/json' }
 				})
 		);
+	}
+	const headersOf = (spy: ReturnType<typeof fetchOk>) =>
+		((spy.mock.calls[0] as unknown[])[1] as { headers: Record<string, string> }).headers;
+
+	it('tells the RELAY the RPC this wallet uses for the chain, under the name it reads (spec 098)', async () => {
+		const fetchSpy = fetchOk();
 		vi.stubGlobal('fetch', fetchSpy);
 		const executor = createRpcPoolExecutor(makeRegistry());
 		await executor.execute(
@@ -200,16 +206,31 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				call_id: 'c1',
 				url: 'https://relay.example',
 				method: 'eth_sendUserOperation',
-				x_rpc_url: 'https://rpc.one',
+				x_rpc_url: 'https://rpc.one/v2/KEY',
 				timeout_ms: 1000
 			})
 		);
-		const init = (fetchSpy.mock.calls[0] as unknown[])[1] as { headers: Record<string, string> };
-		// FR-007: that URL can carry a provider API key, and the relay reads
-		// `x-vela-rpc-url` anyway — so it is never sent, even when the core
-		// still names its own fastest pick.
-		expect(Object.keys(init.headers ?? {})).not.toContain('X-Rpc-Url');
-		expect(JSON.stringify(init.headers ?? {})).not.toContain('rpc.one');
+		// Key included — ruled (098 §0.1), and said where it is set.
+		expect(headersOf(fetchSpy)['x-vela-rpc-url']).toBe('https://rpc.one/v2/KEY');
+		// Not the pre-081 name the relay never read.
+		expect(Object.keys(headersOf(fetchSpy))).not.toContain('X-Rpc-Url');
+	});
+
+	it('never names an RPC to an RPC provider — the core sets it on bundler calls only', async () => {
+		const fetchSpy = fetchOk();
+		vi.stubGlobal('fetch', fetchSpy);
+		const executor = createRpcPoolExecutor(makeRegistry());
+		await executor.execute(
+			effect({
+				type: 'json_rpc_post',
+				call_id: 'c1',
+				url: 'https://rpc.two',
+				method: 'eth_call',
+				x_rpc_url: null,
+				timeout_ms: 1000
+			})
+		);
+		expect(Object.keys(headersOf(fetchSpy))).not.toContain('x-vela-rpc-url');
 	});
 });
 

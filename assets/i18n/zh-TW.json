@@ -1597,7 +1597,20 @@
    "operatorLead": "這個網路的中繼由 Vela 營運方維護，現在它沒有 gas 了。告訴他們是最快的辦法——修好之後對所有人都有效。",
    "reportBtn": "回報這個問題",
    "selfFundToggle": "等不及？自己啟動它",
-   "customLead": "這是你自己新增的網路，Vela 營運方可能根本無法在上面持有 gas——本地或內部的鏈不該由別人來儲值。啟動它的中繼要由你自己來。"
+   "customLead": "這是你自己新增的網路，Vela 營運方可能根本無法在上面持有 gas——本地或內部的鏈不該由別人來儲值。啟動它的中繼要由你自己來。",
+   "balanceLine": "現有 {{balance}}，需要 {{floor}} {{symbol}}",
+   "networkLine": "網路：{{network}}",
+   "watching": "每隔幾秒會自動檢查一次——儲值到帳後這裡會自動關閉。",
+   "qrLabel": "用另一個錢包掃碼轉帳"
+  },
+  "relayUnreachable": {
+   "title": "中繼連不上這條網路",
+   "operatorLead": "Vela 的中繼暫時連不上這條網路，所以現在還不能在上面傳送。這要由營運方來修——告訴他們是最快的辦法。",
+   "customLead": "這是你自己新增的網路，中繼連不上它。中繼透過你為這條網路設定的 RPC 來讀取它，所以這個 RPC 必須是公開可存取的 https 位址——本機或區域網路裡的節點，只有執行在它旁邊的中繼才能服務。",
+   "settingsHint": "更換這條網路的 RPC，或在「設定 → 服務端點 → Vela Relay」改成一個能連上它的中繼。",
+   "reportBtn": "回報此問題",
+   "retryBtn": "重試",
+   "closeBtn": "關閉"
   },
   "mainNav": {
    "wallet": "錢包",
@@ -1646,7 +1659,8 @@
    "removeTitle": "移除網路",
    "removeBody": "要移除此自訂網路嗎？",
    "removeCancel": "取消",
-   "removeConfirm": "移除"
+   "removeConfirm": "移除",
+   "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
   },
   "account": {
    "modalTitle": "帳戶",
@@ -1664,7 +1678,8 @@
    "activeNetworks": "{{count}} 個網路",
    "supportsCount": "支援 {{total}} 個網路中的 {{count}} 個",
    "unavailable": "無法使用",
-   "avgLatency": "平均 {{ms}}ms"
+   "avgLatency": "平均 {{ms}}ms",
+   "relayNotice": "提交你交易的中繼會收到錢包為每條網路使用的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
   },
   "endpoints": {
    "modalTitle": "服務端點",

@@ -237,7 +237,7 @@ sealed class RpcOperation {
         val method: String,
         /**
          * Bundler calls only: the verified same-chain RPC URL for the
-         * `X-Rpc-Url` header. `null` ⇒ send no header.
+         * `x-vela-rpc-url` header (spec 098 §5). `null` ⇒ send no header.
          */
         val x_rpc_url: String? = null,
         val timeout_ms: Int,

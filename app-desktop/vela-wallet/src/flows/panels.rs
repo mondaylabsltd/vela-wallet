@@ -1569,6 +1569,20 @@ fn notice_card(
             pill(theme, label.clone()),
         ));
     }
+    // A copy is the card's own business, not a step of the journey: it needs
+    // no listener from the page.
+    if let Some((label, value)) = &notice.copy {
+        any = true;
+        let value = value.to_string();
+        let copy: Click = Box::new(move |_, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(value.clone()));
+        });
+        row = row.child(clickable(
+            "flow-notice-copy",
+            Some(copy),
+            pill(theme, label.clone()),
+        ));
+    }
     if let Some(label) = &notice.dismiss {
         any = true;
         row = row.child(clickable(

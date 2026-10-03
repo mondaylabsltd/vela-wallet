@@ -10,7 +10,8 @@
       "removeTitle": "Remover rede",
       "removeBody": "Remover esta rede personalizada?",
       "removeCancel": "Cancelar",
-      "removeConfirm": "Remover"
+      "removeConfirm": "Remover",
+      "relayNotice": "O relay que envia suas transações recebe o endereço RPC desta rede — incluindo qualquer chave de API — para alcançar a rede que você usa."
     },
     "account": {
       "modalTitle": "Contas",
@@ -28,7 +29,8 @@
       "activeNetworks": "{{count}} redes",
       "supportsCount": "Suporta {{count}} de {{total}} redes",
       "unavailable": "Indisponível",
-      "avgLatency": "méd. {{ms}}ms"
+      "avgLatency": "méd. {{ms}}ms",
+      "relayNotice": "O relay que envia suas transações recebe o endereço RPC que sua carteira usa em cada rede — incluindo a chave de API — para alcançar as redes que você usa."
     },
     "endpoints": {
       "modalTitle": "Endpoints de serviço",

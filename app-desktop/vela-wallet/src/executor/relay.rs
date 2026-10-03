@@ -93,6 +93,14 @@ pub fn base_url(chain_id: u32) -> String {
     pool::bundler_base(chain_id).unwrap_or_else(builtin_base)
 }
 
+/// The header the relay reads a chain's RPC from (`vela-relay/src/utils/rpc.rs`).
+///
+/// Spec 098 §5. Before 081 the apps sent `X-Rpc-Url`, a name the relay never
+/// read; 081 removed it as inert, and a network the relay's directory cannot
+/// reach could then never be probed, quoted or served. The URL may carry a
+/// provider key: ruled acceptable (098 §0.1), and said where it is set.
+pub const RELAY_RPC_URL_HEADER: &str = "x-vela-rpc-url";
+
 // ---------------------------------------------------------------------------
 // REST
 // ---------------------------------------------------------------------------
@@ -107,12 +115,18 @@ enum Rest {
 
 fn rest_get(chain_id: u32, path: &str) -> Rest {
     let url = format!("{}{path}", base_url(chain_id));
-    // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
+    // Spec 098 §5: the relay reads the chain through the RPC named here first —
+    // without it a treasury on a network its directory cannot reach is a 503.
+    let rpc = pool::best_rpc_url(chain_id);
     //
     // Over the system's routes (spec 082 RD2): a proxy that cannot be
     // reached moves on to the next route, and says so in the log.
     let mut response = match proxy::with_routes(&url, REST_TIMEOUT, |agent| {
-        agent.get(&url).header("accept", "application/json").call()
+        let request = agent.get(&url).header("accept", "application/json");
+        match &rpc {
+            Some(rpc) => request.header(RELAY_RPC_URL_HEADER, rpc).call(),
+            None => request.call(),
+        }
     }) {
         Ok(response) => response,
         Err(failure) => {
@@ -1189,15 +1203,21 @@ fn request_sponsorship(chain_id: u32, safe: &str, required_wei: u128) -> (bool, 
     // pay twice, and a relay that honours the key collapses the two.
     let idempotency = format!("sponsor:{chain_id}:{safe}:{required}");
     let body = json!({ "requiredWei": required });
+    let rpc = pool::best_rpc_url(chain_id);
     let answer = proxy::with_routes(&url, SPONSOR_TIMEOUT, |agent| {
-        let mut response = agent
+        let request = agent
             .post(&url)
             .config()
             .http_status_as_error(false)
             .build()
             .header("accept", "application/json")
-            .header("idempotency-key", &idempotency)
-            .send_json(&body)?;
+            .header("idempotency-key", &idempotency);
+        // Spec 098 §5, as on every other request to the relay.
+        let request = match &rpc {
+            Some(rpc) => request.header(RELAY_RPC_URL_HEADER, rpc),
+            None => request,
+        };
+        let mut response = request.send_json(&body)?;
         let status = response.status().as_u16();
         let text = response.body_mut().read_to_string().unwrap_or_default();
         Ok((status, text))

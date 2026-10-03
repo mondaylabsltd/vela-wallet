@@ -62,6 +62,10 @@
 		<span class="text">
 			<span class="name">{panel.name}</span>
 			<span class="hint">{panel.amountHint}</span>
+			{#if panel.balanceLine}
+				<!-- Spec 098 §4: what it has against what it needs, in its coin. -->
+				<span class="hint balance">{panel.balanceLine}</span>
+			{/if}
 		</span>
 	</div>
 
@@ -83,6 +87,7 @@
 		{#if panel.code !== undefined}
 			<!-- A live sheet encodes the treasury's real address (spec 028 Phase 8). -->
 			<div class="qr"><QRCard label={panel.qrCaption} code={panel.code} /></div>
+			{#if panel.scanHint}<p class="scan">{panel.scanHint}</p>{/if}
 		{:else}
 			<div class="qr"><QRPlaceholder caption={panel.qrCaption} /></div>
 		{/if}
@@ -95,6 +100,11 @@
 		<Callout callout={panel.callout} />
 	{/if}
 
+	{#if panel.watching}
+		<!-- Spec 098 §4: the core asks the relay again on its own; this closes
+		     by itself once funded, so "Retry" is for the impatient. -->
+		<p class="watching" role="status">{panel.watching}</p>
+	{/if}
 	<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>
 </div>
 
@@ -133,6 +143,19 @@
 
 	.hint {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.balance {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.scan,
+	.watching {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-subtle);
 	}
 

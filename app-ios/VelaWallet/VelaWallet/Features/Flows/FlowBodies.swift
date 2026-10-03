@@ -88,6 +88,42 @@ struct ReceiveListBody: View {
     }
 }
 
+/// Spec 098 §4: where the relay's gas goes — the treasury address in full,
+/// selectable, and a button that copies it, under the stop that asks for it.
+struct FundAddressView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let model: FundAddressModel
+
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            Text(verbatim: model.label)
+                .typeRole(Typography.rowSub.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+            Text(verbatim: model.address)
+                .monoRole(Typography.monoAddress.scaled(textScale))
+                .foregroundStyle(theme.fgBase)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            VelaButton(title: copied ? model.copied : model.copy, kind: .secondary, action: copy)
+                .padding(.top, Tokens.Space.s4)
+        }
+    }
+
+    private func copy() {
+        // The button's press already answered the finger: one gesture, one haptic.
+        velaCopy(model.address, haptic: false)
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(Tokens.Motion.fast))
+            copied = false
+        }
+    }
+}
+
 /// R2 / R3 — the address, as a code.
 struct ReceiveQrBody: View {
     @Environment(\.theme) private var theme
@@ -818,6 +854,8 @@ struct SendFormBody: View {
     var rowText: ((String) -> (address: Binding<String>, amount: Binding<String>))?
     /// The core's live refusal, under the fields.
     var warning: String?
+    /// Spec 098 §4: the treasury stop's address, under [warning].
+    var fund: FundAddressModel?
     var ctaDisabled = false
     /// Spec 069: measure the fee again; fold or unfold the speed control; a
     /// one-shot pick. Absent in the gallery.
@@ -885,6 +923,7 @@ struct SendFormBody: View {
                 Text(verbatim: warning)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.warningBase)
+                if let fund { FundAddressView(model: fund) }
             }
             if let add = model.addRecipient {
                 Button(action: onAddRecipient) {
@@ -943,6 +982,7 @@ struct SendFormBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(warning != nil ? theme.warningBase : theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let fund { FundAddressView(model: fund) }
             }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
@@ -1400,6 +1440,7 @@ struct SendConfirmBody: View {
             if let notice = model.notice {
                 VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                     NoticeBannerView(text: notice)
+                    if let fund = model.noticeFund { FundAddressView(model: fund) }
                     if model.noticeAction != nil || model.noticeSecondary != nil {
                         HStack(spacing: Tokens.Space.s8) {
                             if let secondary = model.noticeSecondary {

@@ -17,7 +17,7 @@
 //  invariant ③: account-info must resolve to the same bundler the pool would
 //  submit to — Tempo's gas reimbursement is paid to that bundler's per-Safe
 //  EOA, and reading it from a different one reimburses the wrong address),
-//  with the pool's best RPC URL riding `X-Rpc-Url` so the relay reads the
+//  with the pool's best RPC URL riding `x-vela-rpc-url` so the relay reads the
 //  chain through the endpoint this wallet picked.
 //
 //  ## The caches, and what clears them
@@ -87,11 +87,12 @@ struct PoolRelayPort: RelayPort {
     func bestRpcUrl(chainId: Int) async -> String? { await pool.bestRpcUrl(chainId: chainId) }
 
     func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer {
-        // Spec 081 FR-007: the wallet no longer names its preferred RPC endpoint
-        // to the relay — that URL can carry a provider API key, and the relay
-        // reads `x-vela-rpc-url`, never this header.
-        _ = xRpcUrl
-        return await CoreHTTP.getREST(url, headers: [:], timeout: CoreHTTP.Timeout.networkCheck)
+        // Spec 098 §5: the relay reads the chain through the RPC named here
+        // first — without it, a treasury on a network its directory cannot
+        // reach is a 503, which the send used to walk straight through.
+        return await CoreHTTP.getREST(
+            url, headers: CoreHTTP.relayRpcHeaders(xRpcUrl), timeout: CoreHTTP.Timeout.networkCheck
+        )
     }
 }
 

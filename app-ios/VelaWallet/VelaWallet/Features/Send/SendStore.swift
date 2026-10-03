@@ -296,6 +296,11 @@ final class SendStore {
     func slideConfirm() { dispatch(["type": "slide_confirm"]) }
     func cancelSigning() { dispatch(["type": "cancel_signing"]) }
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
+
+    /// Spec 098 §2: after the network's RPC or the relay changed — the pre-check again.
+    func retryRelayUnreachable() { dispatch(["type": "retry_relay_unreachable"]) }
+
+    func dismissRelayUnreachable() { dispatch(["type": "dismiss_relay_unreachable"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
 
     // MARK: - The TRACKER's verdict, back to the send machine (spec 056)

@@ -146,17 +146,34 @@ within your slippage.
 ### When a relay runs out of gas
 
 A relay pays gas from its own **treasury** on each network. If that treasury is
-empty, the send screen tells you before you sign:
+empty, the send stops at **Continue** — before anything is signed — and shows
+the treasury's address with a button to copy it (and, in the web wallet, a QR
+code), how much it has against how much it needs, and in which coin:
 
 - On a network Vela's relay serves, the relay's operator (Vela) needs to top it
   up; you can report it. If you can't wait, you can **optionally** send a small
   amount of the native coin to the treasury yourself. That contribution is
   **non-refundable** and does **not** pay for your own transaction.
-- On a custom network, funding the relay is up to whoever runs it — which may be
-  you.
+- On a network you added, funding the relay is up to whoever runs it — which may
+  be you.
+
+The wallet checks again every few seconds while that screen is open. Once the
+treasury is funded it carries on by itself; on the confirm screen it only closes
+the notice, because signing is always yours to start.
 
 There is no per-wallet gas account and no activation deposit: an earlier version
 of Vela had one, and it no longer exists.
+
+### When a relay can't reach a network
+
+A relay can only serve a network it can read. When it can't, the send stops at
+**Continue** and says so — funding would not help.
+
+- On a network Vela ships, that is the operator's to fix; you can report it.
+- On a network you added, the relay reads it through the RPC address you set for
+  it, so that address has to be a public `https` one. A node on your own computer
+  or local network (`localhost`, `192.168.…`) can only be served by a relay
+  running beside it — see [running your own relay](/docs/self-hosting#relay).
 
 ## How Vela reads each network
 
@@ -166,5 +183,10 @@ keys or endpoints you add — and moves to the next one when an endpoint is slow
 or down. You can set your own endpoint per network under **Settings →
 Networks**. (The Android app currently uses one endpoint per network, without
 failover, and the iPhone app doesn't let you change it yet.)
+
+The relay is sent the RPC address the wallet uses for a network — including any
+API key in it — with every request, so it can reach the network you use. The
+wallet says so where you set an address or a provider key; see the
+[privacy policy](/privacy).
 
 Next: [how passkeys work](/docs/passkeys).

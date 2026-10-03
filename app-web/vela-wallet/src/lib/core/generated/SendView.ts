@@ -11,6 +11,7 @@ import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
 import type { SendRecipientRisk } from "./SendRecipientRisk";
+import type { SendRelayUnreachable } from "./SendRelayUnreachable";
 import type { SendSplitRowIssue } from "./SendSplitRowIssue";
 import type { SendStage } from "./SendStage";
 import type { SendToken } from "./SendToken";
@@ -179,7 +180,11 @@ fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendA
  * The confirm slide gate: fee settled ∧ nothing re-quoting ∧ no
  * same-asset breach ∧ idle.
  */
-can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, recipient_identity: SendRecipientIdentity | null, 
+can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, 
+/**
+ * Spec 098 §2: the relay cannot serve this chain; the send stops here.
+ */
+relay_unreachable: SendRelayUnreachable | null, recipient_identity: SendRecipientIdentity | null, 
 /**
  * Who the money goes to, as the form's recipient line and the confirm
  * page name them (spec 097 F, S2): the address always, a name only

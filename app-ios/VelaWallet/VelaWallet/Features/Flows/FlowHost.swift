@@ -103,6 +103,8 @@ struct FlowHost: View {
     /// One binding pair per split row, by the core's row id.
     var sendRow: ((String) -> (address: Binding<String>, amount: Binding<String>))?
     var sendWarning: String?
+    /// Spec 098 §4: the treasury stop's address, under [sendWarning].
+    var sendFund: FundAddressModel?
     var sendCtaDisabled = false
     /// Which row of the picker was tapped. The index travels because the core
     /// keys tokens by id and the screen only knows positions — the same defect
@@ -396,6 +398,7 @@ struct FlowHost: View {
                     onFillEmpty: onFillEmpty,
                     rowText: sendRow,
                     warning: sendWarning,
+                    fund: sendFund,
                     ctaDisabled: sendCtaDisabled,
                     onRefreshFee: onRefreshFee,
                     onToggleSpeed: { onToggleSpeed?() },

@@ -7082,10 +7082,22 @@ impl WalletPage {
             // the machine was written and nothing ever sent it, so the only
             // way out of "the relay cannot pay on this chain" was closing the
             // whole journey.
-            actions.notice_dismiss = Some(to_host(SendEvent::DismissTreasurySheet));
+            // Each stop is left by its own event: the core keeps the two
+            // sheets apart (spec 098 §2), and "Close" on one must not leave
+            // the other standing.
+            actions.notice_dismiss = Some(to_host(
+                if send.way_out == Some(flows_live::NoticeWayOut::RetryRelayUnreachable) {
+                    SendEvent::DismissRelayUnreachable
+                } else {
+                    SendEvent::DismissTreasurySheet
+                },
+            ));
             actions.notice_action = send.way_out.map(|way_out| match way_out {
                 flows_live::NoticeWayOut::RetryAfterBootstrap => {
                     to_host(SendEvent::RetryAfterBootstrap)
+                }
+                flows_live::NoticeWayOut::RetryRelayUnreachable => {
+                    to_host(SendEvent::RetryRelayUnreachable)
                 }
                 flows_live::NoticeWayOut::AddNetwork { chain_id } => {
                     to_host(SendEvent::AddNetworkTapped { chain_id })
@@ -11857,6 +11869,7 @@ impl WalletPage {
         let s = &self.settings;
         let custom_title = s.custom_rpc_title.clone();
         let custom_placeholder = s.custom_rpc_placeholder.clone();
+        let relay_notice = s.network_relay_notice.clone();
         let checks_title = s.compatibility_check.clone();
         let hover_accent = theme.accent_hover;
         let chain_id = wizard.chain_info.as_ref().map(|info| info.chain_id);
@@ -12024,7 +12037,8 @@ impl WalletPage {
                 &wizard.custom_rpc,
                 custom_placeholder,
                 None,
-                None,
+                // Spec 098 §5.1: the relay is sent this RPC, key and all.
+                Some(relay_notice),
                 None,
                 &rpc_focus,
                 window,
@@ -12334,7 +12348,7 @@ impl WalletPage {
                 custom_placeholder,
                 theme.fg_subtle,
                 None,
-                None,
+                Some(s.network_relay_notice.clone()),
                 None,
                 None,
             ))
@@ -12574,7 +12588,7 @@ impl WalletPage {
                 Some(label),
                 gpui::SharedString::from(settings_fixtures::RPC_FIX_URL),
                 None,
-                None,
+                Some(s.network_relay_notice.clone()),
                 Some(Tone::Error),
                 None,
             ))

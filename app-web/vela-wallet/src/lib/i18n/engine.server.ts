@@ -415,7 +415,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			removeCancel: k('settingsModals.network.removeCancel'),
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
-			mismatch: k('settingsModals.network.rpcChainMismatch')
+			mismatch: k('settingsModals.network.rpcChainMismatch'),
+			relayNotice: k('settingsModals.network.relayNotice')
 		},
 		addNetwork: {
 			description: k('settingsModals.addNetwork.description'),
@@ -445,6 +446,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		},
 		rpcProviders: {
 			description: k('settingsModals.rpcProviders.description'),
+			relayNotice: k('settingsModals.rpcProviders.relayNotice'),
 			getKey: k('settingsModals.rpcProviders.getKey'),
 			checkKey: k('settingsModals.rpcProviders.checkKey'),
 			notSet: k('settingsModals.rpcProviders.notSet'),
@@ -655,7 +657,19 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			operatorLead: k('componentsUi.treasuryBootstrap.operatorLead'),
 			reportBtn: k('componentsUi.treasuryBootstrap.reportBtn'),
 			selfFundToggle: k('componentsUi.treasuryBootstrap.selfFundToggle'),
-			customLead: k('componentsUi.treasuryBootstrap.customLead')
+			customLead: k('componentsUi.treasuryBootstrap.customLead'),
+			balanceLine: k('componentsUi.treasuryBootstrap.balanceLine'),
+			watching: k('componentsUi.treasuryBootstrap.watching'),
+			qrLabel: k('componentsUi.treasuryBootstrap.qrLabel')
+		},
+		relayUnreachable: {
+			title: k('componentsUi.relayUnreachable.title'),
+			operatorLead: k('componentsUi.relayUnreachable.operatorLead'),
+			customLead: k('componentsUi.relayUnreachable.customLead'),
+			settingsHint: k('componentsUi.relayUnreachable.settingsHint'),
+			reportBtn: k('componentsUi.relayUnreachable.reportBtn'),
+			retryBtn: k('componentsUi.relayUnreachable.retryBtn'),
+			closeBtn: k('componentsUi.relayUnreachable.closeBtn')
 		},
 		indexDown: {
 			title: k('settings.indexDown.title'),

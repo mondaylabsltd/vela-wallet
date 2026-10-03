@@ -307,6 +307,8 @@ object SettingsLive {
                         label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
                         value = wizard.custom_rpc,
                         placeholder = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_PLACEHOLDER),
+                        // Spec 098 §5.1: the relay is sent this RPC, key and all.
+                        hint = strings.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                     )
                 } else {
                     null

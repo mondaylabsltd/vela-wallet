@@ -398,6 +398,14 @@ data class SendSelectionModel(
 @Immutable
 data class SendCtaModel(val label: String, val accent: Boolean)
 
+/**
+ * Spec 098 §4: where the relay's gas goes, under its treasury stop — the
+ * address in full and the button that copies it. Until 098 the phone said
+ * "fund it" and never said where.
+ */
+@Immutable
+data class FundAddressModel(val label: String, val address: String, val copy: String, val copied: String)
+
 /** SD1 / SD1b — pick the token, or several of them. */
 @Immutable
 data class SendPickModel(
@@ -592,6 +600,8 @@ data class SendFormModel(
     val ctaEnabled: Boolean = true,
     /** Spec 043 phase 5: the core's amount warning or same-asset fee ceiling, as a sentence. */
     val warning: String? = null,
+    /** Spec 098 §4: the treasury stop's address, drawn under [warning]. */
+    val fund: FundAddressModel? = null,
     /** A split's dark Continue, explained: which recipient still needs what. */
     val hint: String? = null,
     /** Split only: "Use 0.5 ETH for the empty rows" — one typed figure into every row that has none. */
@@ -746,6 +756,8 @@ data class SendConfirmModel(
     val ctaEnabled: Boolean = true,
     /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
     val notice: String? = null,
+    /** Spec 098 §4: the treasury stop's address, drawn under [notice]. */
+    val noticeFund: FundAddressModel? = null,
     val noticeAction: String? = null,
     /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
     val noticeSecondary: String? = null,

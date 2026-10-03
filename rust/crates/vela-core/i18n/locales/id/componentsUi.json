@@ -410,7 +410,20 @@
       "operatorLead": "Relayer jaringan ini dijalankan operator Vela, dan gasnya habis. Memberi tahu mereka adalah cara tercepat — dan perbaikannya berlaku untuk semua orang.",
       "reportBtn": "Laporkan ini",
       "selfFundToggle": "Tidak bisa menunggu? Mulai sendiri",
-      "customLead": "Jaringan ini Anda tambahkan sendiri, jadi operator Vela mungkin tidak punya cara menyimpan gas di sana — rantai lokal atau internal bukan urusan orang lain. Memulai relayer-nya terserah Anda."
+      "customLead": "Jaringan ini Anda tambahkan sendiri, jadi operator Vela mungkin tidak punya cara menyimpan gas di sana — rantai lokal atau internal bukan urusan orang lain. Memulai relayer-nya terserah Anda.",
+      "balanceLine": "Ada {{balance}} dari {{floor}} {{symbol}} yang dibutuhkan",
+      "networkLine": "Jaringan: {{network}}",
+      "watching": "Diperiksa setiap beberapa detik — ini akan tertutup sendiri begitu dananya masuk.",
+      "qrLabel": "Pindai untuk mengirim dari dompet lain"
+    },
+    "relayUnreachable": {
+      "title": "Relay tidak dapat menjangkau jaringan ini",
+      "operatorLead": "Relay Vela saat ini tidak dapat menjangkau jaringan ini, jadi belum ada yang bisa dikirim di sana. Ini harus diperbaiki operator — memberi tahu mereka adalah cara tercepat.",
+      "customLead": "Anda menambahkan jaringan ini, dan relay tidak dapat menjangkaunya. Relay membaca jaringan melalui RPC yang Anda atur untuknya, jadi RPC itu harus berupa alamat https publik — node di komputer ini atau di jaringan lokal Anda hanya bisa dilayani relay yang berjalan di sampingnya.",
+      "settingsHint": "Ganti RPC jaringan ini, atau arahkan Pengaturan → Endpoint layanan → Vela Relay ke relay yang dapat menjangkaunya.",
+      "reportBtn": "Laporkan",
+      "retryBtn": "Coba lagi",
+      "closeBtn": "Tutup"
     },
     "mainNav": {
       "wallet": "Dompet",

@@ -10,6 +10,7 @@ import app.getvela.wallet.feature.flows.ReceiptStage
 import app.getvela.wallet.feature.send.core.SendAlertKind
 import app.getvela.wallet.feature.send.core.SendFeeIssueView
 import app.getvela.wallet.feature.send.core.SendAmountWarning
+import app.getvela.wallet.feature.send.core.SendRelayUnreachable
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
@@ -130,6 +131,53 @@ class SendLiveTest {
         // ×2 on 0.0546 USD = 0.1092, written with the preset's own two places,
         // rounded half up like every money figure (spec 078 round 2).
         assertEquals("0.000091 BNB · ≈€0.11", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+    }
+
+    /**
+     * Spec 098: the core opens both relay stops at Continue, while the stage is
+     * still the form. Until 098 this app drew them on the confirm page only, so
+     * pressing Continue into a relay with no gas did nothing anyone could see.
+     */
+    @Test
+    fun `the form shows the relay's stops, and its button is their retry`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient, amount = "0.1", fee = fee())
+
+        // The float is empty: the treasury stop, its numbers, and that it watches.
+        val empty = base.copy(
+            treasury_bootstrap = SendTreasuryStatus(
+                chain_id = 100, address = "0x3e59292e18417f814112f731e7163534c6d2fe3c", asset = SendTreasuryAsset.Native,
+                balance = "0", floor = "100000000000000", bootstrap_needed = true, operator_served = true,
+            ),
+        )
+        val funding = SendLive.form(drawn.model, empty, FeeView(), ctx())
+        val text = funding.warning.orEmpty()
+        assertTrue(text, text.startsWith(strings.t("componentsUi.treasuryBootstrap.title")))
+        assertTrue(text, text.contains(strings.t("componentsUi.treasuryBootstrap.watching")))
+        assertTrue(text, text.contains(strings.t("componentsUi.treasuryBootstrap.disclaimer")))
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.retryBtn"), funding.cta)
+        assertTrue(funding.ctaEnabled)
+        // ...and where the gas goes: the treasury in full, with its copy button.
+        // Until 098 the phone said "fund it" and never said where.
+        assertEquals("0x3e59292e18417f814112f731e7163534c6d2fe3c", funding.fund?.address)
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.copyBtn"), funding.fund?.copy)
+
+        // The relay cannot reach this network at all — a network the person added.
+        val unreachable = base.copy(relay_unreachable = SendRelayUnreachable(chain_id = 1337, operator_served = false))
+        val stop = SendLive.form(drawn.model, unreachable, FeeView(), ctx())
+        val words = stop.warning.orEmpty()
+        assertTrue(words, words.startsWith(strings.t("componentsUi.relayUnreachable.title")))
+        assertNull("nothing to fund when the relay cannot reach the network", stop.fund)
+        assertTrue(words, words.contains(strings.t("componentsUi.relayUnreachable.customLead")))
+        assertTrue(words, words.contains(strings.t("componentsUi.relayUnreachable.settingsHint")))
+        assertEquals(strings.t("componentsUi.relayUnreachable.retryBtn"), stop.cta)
+
+        // …and on confirm, the same stop with its own way out.
+        val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val confirm = SendLive.confirm(confirmDrawn.model, unreachable.copy(stage = SendStage.Confirm), ctx())
+        assertFalse(confirm.ctaEnabled)
+        assertEquals(strings.t("componentsUi.relayUnreachable.closeBtn"), confirm.noticeSecondary)
+        assertEquals(strings.t("componentsUi.relayUnreachable.retryBtn"), confirm.noticeAction)
     }
 
     /**
@@ -737,6 +785,7 @@ class SendLiveTest {
         assertTrue(treasury.notice!!.contains(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
         assertTrue("the hint carries the shortfall in the chain's coin", treasury.notice!!.contains("0.9"))
         assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), treasury.noticeAction)
+        assertEquals("0x1111111111111111111111111111111111111111", treasury.noticeFund?.address)
         assertFalse(treasury.ctaEnabled)
 
         val fine = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())

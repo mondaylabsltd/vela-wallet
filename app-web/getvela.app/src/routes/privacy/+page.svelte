@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 2 October 2026</p>
+	<p class="updated">Last updated: 3 October 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -112,8 +112,13 @@
 				along with your IP address. It logs your address and each operation's hash, keeps operations
 				for between one hour and 14 days so it can retry them, forwards them to node providers
 				(Alchemy and public RPC nodes) to submit them, and may include operation hashes in alerts to
-				its operators. The apps also send it, in a request header, the RPC address they rank first —
-				which can include an API key if you added one for a provider.
+				its operators. With every request, the apps also send it the RPC address they use for that
+				network — the one you set for it, the one built from a provider key you added, or the
+				built-in one — <strong>including any API key that address contains</strong>. The relay reads
+				the network through it, which is what lets it serve a network you added yourself; it may also
+				submit your transactions through it on a network its own directory cannot reach. The apps
+				say this where you set an RPC address or a provider key. To keep your key from the relay,
+				use an address without one, or point the apps at your own relay.
 			</li>
 			<li>
 				<strong>Chain data</strong> (<code>ethereum-data.getvela.app</code>) — serves network

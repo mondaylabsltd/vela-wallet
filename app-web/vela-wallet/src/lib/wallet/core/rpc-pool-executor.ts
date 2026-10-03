@@ -16,6 +16,7 @@
  * one more endpoint failure for the core to route around.
  */
 
+import { relayRpcHeader } from '$lib/services/relay-rpc-header';
 import { getItem, setItem } from '$lib/services/storage';
 import {
 	BANNED_STORAGE_KEY,
@@ -192,8 +193,9 @@ export function createRpcPoolExecutor(registry: RpcPoolCallRegistry): RpcPoolExe
 							operation.url,
 							operation.method,
 							held.params,
-							// Spec 081 FR-007: never forward the user's RPC endpoint.
-							undefined,
+							// Spec 098 §5: a bundler call names the chain's RPC to the
+							// relay; the core sets `x_rpc_url` on bundler calls only.
+							relayRpcHeader(operation.x_rpc_url),
 							operation.timeout_ms
 						)
 					: // The caller is already gone. Report the endpoint as failing so

@@ -272,6 +272,27 @@ struct SendTreasuryStatusWire: Decodable, Equatable {
     }
 }
 
+/// The relay said it cannot serve this chain (spec 098 §2) — a 404 from the
+/// treasury probe. Not the funding sheet: gas cannot help a relay that cannot
+/// reach the network. `operatorServed` is the core's verdict, as above.
+struct SendRelayUnreachableWire: Decodable, Equatable {
+    let chainId: Int
+    let operatorServed: Bool
+
+    private enum CodingKeys: String, CodingKey { case chainId, operatorServed }
+
+    init(chainId: Int, operatorServed: Bool) {
+        self.chainId = chainId
+        self.operatorServed = operatorServed
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainId = try c.decode(Int.self, forKey: .chainId)
+        operatorServed = try c.decodeIfPresent(Bool.self, forKey: .operatorServed) ?? false
+    }
+}
+
 /// One leg of a receipt.
 struct SendReceiptTransferWire: Decodable, Equatable {
     let to: String
@@ -417,6 +438,8 @@ struct SendViewWire: Decodable, Equatable {
     let userOpHash: String?
     let receipt: SendReceiptWire?
     let treasuryBootstrap: SendTreasuryStatusWire?
+    /// Spec 098 §2: the relay cannot serve this chain; the send stops here.
+    let relayUnreachable: SendRelayUnreachableWire?
     /// The resolver's raw answer. Only the receipt's caption still names the
     /// recipient by it, after the money moved (as the web does); every screen
     /// before the signature draws `payees`, and `source` is never printed.

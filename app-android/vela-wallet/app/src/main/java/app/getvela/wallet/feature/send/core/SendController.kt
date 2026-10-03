@@ -580,6 +580,10 @@ class SendController(
 
     fun dismissTreasurySheet() = dispatch(SendEvent.DismissTreasurySheet)
 
+    fun retryRelayUnreachable() = dispatch(SendEvent.RetryRelayUnreachable)
+
+    fun dismissRelayUnreachable() = dispatch(SendEvent.DismissRelayUnreachable)
+
     fun retryAfterError() = dispatch(SendEvent.RetryAfterError)
 
     fun done() = dispatch(SendEvent.Done)
