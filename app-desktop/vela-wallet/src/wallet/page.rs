@@ -7082,10 +7082,22 @@ impl WalletPage {
             // the machine was written and nothing ever sent it, so the only
             // way out of "the relay cannot pay on this chain" was closing the
             // whole journey.
-            actions.notice_dismiss = Some(to_host(SendEvent::DismissTreasurySheet));
+            // Each stop is left by its own event: the core keeps the two
+            // sheets apart (spec 098 §2), and "Close" on one must not leave
+            // the other standing.
+            actions.notice_dismiss = Some(to_host(
+                if send.way_out == Some(flows_live::NoticeWayOut::RetryRelayUnreachable) {
+                    SendEvent::DismissRelayUnreachable
+                } else {
+                    SendEvent::DismissTreasurySheet
+                },
+            ));
             actions.notice_action = send.way_out.map(|way_out| match way_out {
                 flows_live::NoticeWayOut::RetryAfterBootstrap => {
                     to_host(SendEvent::RetryAfterBootstrap)
+                }
+                flows_live::NoticeWayOut::RetryRelayUnreachable => {
+                    to_host(SendEvent::RetryRelayUnreachable)
                 }
                 flows_live::NoticeWayOut::AddNetwork { chain_id } => {
                     to_host(SendEvent::AddNetworkTapped { chain_id })
