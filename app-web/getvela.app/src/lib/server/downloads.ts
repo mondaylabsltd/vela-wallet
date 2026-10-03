@@ -133,26 +133,26 @@ const assetUrl = (tag: string, name: string) =>
 	`https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(name)}`;
 
 /**
- * The release, read WITHOUT the API (rule 6): the `releases/latest` redirect
- * names the tag, and the tag's own `SHA256SUMS*` name every file on it — which
- * is exactly the set this page is allowed to offer anyway, since a file with no
- * published checksum is never mirrored.
+ * The release, read WITHOUT the API (rule 6): the releases feed names the newest
+ * tag, and that tag's own `SHA256SUMS*` name every file on it — exactly the set
+ * this page may offer anyway, since a file with no published checksum is never
+ * mirrored.
  *
- * `latest` skips pre-releases, and every release so far is one; when it has
- * nothing to point at, the caller's stale list is still better than an empty
- * page, so this throws rather than inventing one.
+ * The feed, and NOT `releases/latest`: that redirect skips pre-releases, and
+ * every Vela release so far is one, so it answers with the releases index and no
+ * tag at all. This was written against it first, which made the fallback
+ * unreachable in the one situation it exists for — 0.9.6 sat published for an
+ * hour while the page went on offering 0.9.5. `releases.atom` lists every
+ * release, newest first, as a plain page: no API, no rate limit.
  */
 async function fetchWithoutApi(deps: Deps): Promise<ReleaseInfo> {
-	// `redirect: 'manual'`, and the tag read from the Location header rather than
-	// from the final URL: the header is the answer itself, and it is there
-	// whether or not anything followed it.
-	const res = await deps.fetch(`https://github.com/${REPO}/releases/latest`, {
-		redirect: 'manual',
+	const res = await deps.fetch(`https://github.com/${REPO}/releases.atom`, {
 		signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
 	});
-	const where = res.headers.get('Location') ?? res.url;
-	const tag = /\/releases\/tag\/(v\d+\.\d+\.\d+)/.exec(where)?.[1];
-	if (!tag) throw new Error(`GitHub releases/latest: no vX.Y.Z tag in "${where}"`);
+	if (!res.ok) throw new Error(`GitHub releases.atom: ${res.status}`);
+	// The feed is newest-first and drafts never appear in it.
+	const tag = /\/releases\/tag\/(v\d+\.\d+\.\d+)/.exec(await res.text())?.[1];
+	if (!tag) throw new Error('GitHub releases.atom: no vX.Y.Z release in the feed');
 
 	const checksums = await fetchChecksums(
 		deps,

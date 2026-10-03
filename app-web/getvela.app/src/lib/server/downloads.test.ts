@@ -56,10 +56,18 @@ function github(
 		}
 		// The no-API route: `releases/latest` redirects to the tag's page, and
 		// every file is reachable at a name-shaped URL under that tag.
+		// Every Vela release is a pre-release, so `releases/latest` has nothing to
+		// point at — the fake answers exactly as GitHub does: the index, no tag.
 		if (url.endsWith('/releases/latest')) {
-			return Response.redirect(
-				`https://github.com/${'mondaylabsltd/vela-wallet'}/releases/tag/v0.9.3`,
-				302
+			return new Response(null, {
+				status: 302,
+				headers: { Location: 'https://github.com/mondaylabsltd/vela-wallet/releases' }
+			});
+		}
+		if (url.endsWith('/releases.atom')) {
+			return new Response(
+				`<feed><entry><link href="https://github.com/mondaylabsltd/vela-wallet/releases/tag/v0.9.3"/></entry>` +
+					`<entry><link href="https://github.com/mondaylabsltd/vela-wallet/releases/tag/v0.9.2"/></entry></feed>`
 			);
 		}
 		if (url.endsWith('/SHA256SUMS')) return new Response(sums);
@@ -198,6 +206,9 @@ describe('loadRelease', () => {
 	it('rate-limited API: the release is read through plain downloads instead (rule 6)', async () => {
 		const gh = github({ apiStatus: 403 });
 		const info = await loadRelease(depsWith({ fetch: gh.fetcher }));
+		// Never through `releases/latest`: it skips pre-releases, which is all we
+		// publish, so it answers with the index and no tag at all.
+		expect(gh.state.calls.some((u) => u.endsWith('/releases.atom'))).toBe(true);
 		expect(info.tag).toBe('v0.9.3');
 		expect(info.files.map((f) => f.name)).toEqual([EXE]);
 		expect(info.files[0].size).toBe(EXE_BYTES.length);
