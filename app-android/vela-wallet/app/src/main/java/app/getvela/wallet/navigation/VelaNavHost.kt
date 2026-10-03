@@ -1083,7 +1083,16 @@ fun VelaNavHost(
                             onRecipientChange = { send.setRecipient(it.trim()) },
                             onMax = { send.tapMax() },
                             onDenom = { send.toggleFiatInput() },
-                            onContinue = { send.continueTapped() },
+                            // While a relay stop is up (spec 098) the button is
+                            // its retry — the core clears the stop and runs the
+                            // pre-check again, which is what Continue means here.
+                            onContinue = {
+                                when {
+                                    sendView.relay_unreachable != null -> send.retryRelayUnreachable()
+                                    sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
+                                    else -> send.continueTapped()
+                                }
+                            },
                             onConfirm = { send.slideConfirm() },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)
@@ -1127,12 +1136,15 @@ fun VelaNavHost(
                             },
                             onNoticeAction = {
                                 when {
+                                    sendView.relay_unreachable != null -> send.retryRelayUnreachable()
                                     sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
                                     sendView.tx_error != null -> send.retryAfterError()
                                     sendView.tx_status == SendTxStatus.Signing -> send.cancelSigning()
                                 }
                             },
-                            onNoticeSecondary = { send.dismissTreasurySheet() },
+                            onNoticeSecondary = {
+                                if (sendView.relay_unreachable != null) send.dismissRelayUnreachable() else send.dismissTreasurySheet()
+                            },
                             onExplorer = {
                                 val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
                                 SendLive.explorerUrl(sendView, ctx)?.let { url ->

@@ -138,6 +138,17 @@ data class SendTreasuryStatus(
     val operator_served: Boolean = false,
 )
 
+/**
+ * The relay said it cannot serve this chain (spec 098 §2) — a 404 from the
+ * treasury probe. Not the funding sheet: gas cannot help a relay that cannot
+ * reach the network. `operator_served` is the core's verdict, as above.
+ */
+@Serializable
+data class SendRelayUnreachable(
+    val chain_id: Int,
+    val operator_served: Boolean = false,
+)
+
 /** What the relay's treasury can front on this chain — `unknown` when it could not be asked. */
 @Serializable
 sealed class SendTreasuryProbe {
@@ -283,6 +294,9 @@ enum class SendTimerTag {
     @SerialName("estimate_timeout") EstimateTimeout,
 
     @SerialName("form_estimate") FormEstimate,
+
+    /** The open treasury sheet asks the relay again (spec 098 §4). */
+    @SerialName("treasury_watch") TreasuryWatch,
 }
 
 @Serializable
@@ -614,6 +628,8 @@ data class SendView(
     val user_op_hash: String? = null,
     val receipt: SendReceiptView? = null,
     val treasury_bootstrap: SendTreasuryStatus? = null,
+    /** Spec 098 §2: the relay cannot serve this chain; the send stops here. */
+    val relay_unreachable: SendRelayUnreachable? = null,
     val recipient_identity: SendRecipientIdentity? = null,
     /**
      * Spec 097 F (S2): who the money goes to, as the form line and the confirm
@@ -1056,6 +1072,15 @@ sealed class SendEvent {
     @Serializable
     @SerialName("dismiss_treasury_sheet")
     data object DismissTreasurySheet : SendEvent()
+
+    /** Spec 098 §2: after the network's RPC or the relay changed — the pre-check again. */
+    @Serializable
+    @SerialName("retry_relay_unreachable")
+    data object RetryRelayUnreachable : SendEvent()
+
+    @Serializable
+    @SerialName("dismiss_relay_unreachable")
+    data object DismissRelayUnreachable : SendEvent()
 
     @Serializable
     @SerialName("retry_after_error")

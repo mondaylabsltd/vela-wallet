@@ -584,6 +584,18 @@ object I18nKeys {
         const val ADD_NOT_FOUND_MESSAGE = "addToken.notFoundMessage"
         const val TREASURY_OPERATOR_LEAD = "componentsUi.treasuryBootstrap.operatorLead"
         const val TREASURY_CUSTOM_LEAD = "componentsUi.treasuryBootstrap.customLead"
+        // Spec 098 §4: what the float has against what it needs, and that the
+        // sheet is watching — it closes by itself once funded.
+        const val TREASURY_BALANCE_LINE = "componentsUi.treasuryBootstrap.balanceLine"
+        const val TREASURY_WATCHING = "componentsUi.treasuryBootstrap.watching"
+        const val TREASURY_DISCLAIMER = "componentsUi.treasuryBootstrap.disclaimer"
+        // Spec 098 §2: the relay cannot serve this chain at all.
+        const val RELAY_UNREACHABLE_TITLE = "componentsUi.relayUnreachable.title"
+        const val RELAY_UNREACHABLE_OPERATOR_LEAD = "componentsUi.relayUnreachable.operatorLead"
+        const val RELAY_UNREACHABLE_CUSTOM_LEAD = "componentsUi.relayUnreachable.customLead"
+        const val RELAY_UNREACHABLE_HINT = "componentsUi.relayUnreachable.settingsHint"
+        const val RELAY_UNREACHABLE_RETRY = "componentsUi.relayUnreachable.retryBtn"
+        const val RELAY_UNREACHABLE_CLOSE = "componentsUi.relayUnreachable.closeBtn"
         const val ADD_NATIVE_ALIAS_TITLE = "addToken.nativeAliasTitle"
         const val ADD_NATIVE_ALIAS_MESSAGE = "addToken.nativeAliasMessage"
         const val ADD_NET_SEARCH_LABEL = "addToken.netSearchLabel"

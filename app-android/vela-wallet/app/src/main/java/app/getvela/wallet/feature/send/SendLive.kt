@@ -484,9 +484,9 @@ object SendLive {
             },
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
-            cta = s.t(I18nKeys.Flows.CONTINUE),
-            ctaEnabled = view.can_continue,
-            warning = formWarning(view, ctx),
+            cta = formCta(view, ctx, s.t(I18nKeys.Flows.CONTINUE)),
+            ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
+            warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
         )
     }
 
@@ -554,8 +554,9 @@ object SendLive {
             summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
-            ctaEnabled = view.can_continue,
-            warning = formWarning(view, ctx),
+            cta = formCta(view, ctx, fallback.cta),
+            ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
+            warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             hint = splitHint(view, ctx),
             fillEmpty = splitFillEmpty(view, symbol, ctx),
         )
@@ -1101,12 +1102,19 @@ object SendLive {
                 }
                 else -> emptyList()
             },
-            ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null && view.tx_error == null,
+            ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null &&
+                view.relay_unreachable == null && view.tx_error == null,
             notice = confirmNotice(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
-            // and "not now" — DismissTreasurySheet, the facts kept.
-            noticeSecondary = if (view.treasury_bootstrap != null) s.t(I18nKeys.Flows.FUNDING_CANCEL) else null,
+            // and "not now" — DismissTreasurySheet, the facts kept. The
+            // can't-reach stop (spec 098 §2) has the same two, its own.
+            noticeSecondary = when {
+                view.relay_unreachable != null -> s.t(I18nKeys.Flows.RELAY_UNREACHABLE_CLOSE)
+                view.treasury_bootstrap != null -> s.t(I18nKeys.Flows.FUNDING_CANCEL)
+                else -> null
+            },
             noticeAction = when {
+                view.relay_unreachable != null -> s.t(I18nKeys.Flows.RELAY_UNREACHABLE_RETRY)
                 view.treasury_bootstrap != null -> s.t(I18nKeys.Flows.TREASURY_RETRY)
                 view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)
                 // The stage stays Confirm while the passkey prompt is up; the
@@ -1145,6 +1153,32 @@ object SendLive {
     /** What stopped the confirm page: the relay's treasury, or a submit the relay refused. */
     internal fun confirmNotice(view: SendView, ctx: Context): String? {
         val s = ctx.strings
+        stopNotice(view, ctx)?.let { return it }
+        return when (view.tx_error) {
+            SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
+            SendTxErrorKey.Generic -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
+        }
+    }
+
+    /**
+     * The relay's two stops, in words — on the form AND on confirm.
+     *
+     * The core opens both at Continue, while the stage is still the form (spec
+     * 098): until 098 this app drew them on the confirm page only, so pressing
+     * Continue into an empty relay did nothing anyone could see.
+     */
+    internal fun stopNotice(view: SendView, ctx: Context): String? {
+        val s = ctx.strings
+        view.relay_unreachable?.let { sheet ->
+            // Whose it is to fix is the core's verdict (spec 098 §2).
+            val lead = if (sheet.operator_served) {
+                s.t(I18nKeys.Flows.RELAY_UNREACHABLE_OPERATOR_LEAD)
+            } else {
+                s.t(I18nKeys.Flows.RELAY_UNREACHABLE_CUSTOM_LEAD) + " " + s.t(I18nKeys.Flows.RELAY_UNREACHABLE_HINT)
+            }
+            return "${s.t(I18nKeys.Flows.RELAY_UNREACHABLE_TITLE)} · $lead"
+        }
         view.treasury_bootstrap?.let { status ->
             val decimals = if (status.asset == SendTreasuryAsset.PathUsd) 6 else 18
             val symbol = if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else nativeSymbol(status.chain_id, ctx)
@@ -1158,13 +1192,26 @@ object SendLive {
             } else {
                 s.t(I18nKeys.Flows.TREASURY_CUSTOM_LEAD)
             }
-            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead $hint"
+            // Spec 098 §4: what it has against what it needs, the line that must
+            // not be missed (non-refundable, not Vela's), and that it watches.
+            val balance = s.t(
+                I18nKeys.Flows.TREASURY_BALANCE_LINE,
+                mapOf(
+                    "balance" to fromBase((status.balance.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString(), decimals),
+                    "floor" to fromBase((status.floor.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString(), decimals),
+                    "symbol" to symbol,
+                ),
+            )
+            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead $hint\n$balance\n${s.t(I18nKeys.Flows.TREASURY_DISCLAIMER)}\n${s.t(I18nKeys.Flows.TREASURY_WATCHING)}"
         }
-        return when (view.tx_error) {
-            SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
-            SendTxErrorKey.Generic -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
-            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
-        }
+        return null
+    }
+
+    /** The form's button while a relay stop is up: its retry, which is Continue again. */
+    private fun formCta(view: SendView, ctx: Context, otherwise: String): String = when {
+        view.relay_unreachable != null -> ctx.strings.t(I18nKeys.Flows.RELAY_UNREACHABLE_RETRY)
+        view.treasury_bootstrap != null -> ctx.strings.t(I18nKeys.Flows.TREASURY_RETRY)
+        else -> otherwise
     }
 
     // -- SD4 ---------------------------------------------------------------------
