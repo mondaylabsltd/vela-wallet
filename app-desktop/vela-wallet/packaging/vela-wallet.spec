@@ -87,6 +87,14 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Sat Oct 03 2026 Monday Labs <hello@getvela.app> - 0.9.6-1
+- Pre-release: signing a dApp request now says what the call actually does — the
+  coin it sends, a token contract by name, an unlimited allowance, an order's
+  unseen terms — and says plainly when something could not be read rather than
+  stating it as certain. Every dApp transaction and signature lands in Activity.
+  The home screen names each network it cannot reach. The fee is never paid in a
+  coin the operation itself may spend.
+
 * Thu Sep 24 2026 Monday Labs <hello@getvela.app> - 0.9.5-1
 - Pre-release: a dApp transaction now lands on a receipt instead of closing on you,
   and the browser extension's side panel is the wallet itself; the Clear Signer

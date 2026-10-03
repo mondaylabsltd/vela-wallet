@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.6" date="2026-10-03" type="development">
+      <description>
+        <p>Pre-release: Signing a dApp request now says what the call actually does — the coin it sends, a token contract by name, an unlimited allowance, an order's unseen terms — and says plainly when something could not be read rather than stating it as certain. Every dApp transaction and signature lands in Activity. The home screen names each network it cannot reach. The fee is never paid in a coin the operation itself may spend.</p>
+      </description>
+    </release>
     <release version="0.9.5" date="2026-09-24" type="development">
       <description>
         <p>Pre-release: A dApp transaction now lands on a receipt instead of closing on you, and the browser extension's side panel is the wallet itself; the Clear Signer shows what you are signing on this device's own browser and answers back over velawallet://; and the Trusted Signer lets a key you trust sign for you.</p>
