@@ -411,6 +411,41 @@ jobs:
         # the next reader from assuming a coverage that does not exist.
         run: cargo test
 
+  # The Windows half of the desktop app — the code `desktop:` above CANNOT see.
+  #
+  # `desktop:` builds on Linux, so everything under `#[cfg(windows)]` (the
+  # webauthn.dll passkey route, the CCID wire, the installer's resources) is
+  # compiled for the first time by the RELEASE, on a push to release/v*. That is
+  # what happened to 0.9.5: spec 075 added `KeyMethod::TrustedSigner`, the
+  # Windows-only `win_attachment` match stopped being exhaustive, every PR was
+  # green, five platforms built, and the sixth failed — so no tag, no Release,
+  # and a second full run to publish.
+  #
+  # `cargo check`, not a build: it type-checks every cfg(windows) line, which is
+  # the whole gap, without linking or packaging. The installer itself stays in
+  # desktop-windows-packages.yml.
+  desktop-windows:
+    runs-on: windows-2025
+    # As desktop-windows-packages.yml: bindgen in the tree needs libclang, and
+    # windows-2025 ships LLVM here rather than on PATH.
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    defaults:
+      run:
+        working-directory: app-desktop/vela-wallet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app-desktop/vela-wallet
+          # Same reason as `desktop:` — gpui is a git dependency on all of Zed.
+          cache-all-crates: true
+      - name: Check (every cfg(windows) line, tests included)
+        run: cargo check --all-targets --locked
+
   android:
     runs-on: ubuntu-24.04
     steps:
@@ -432,11 +467,10 @@ jobs:
       # HOST dylib through `jna.library.path`, which is the same artifact.
       - name: Generate the Kotlin bindings
         working-directory: rust
-        run: |
-          cargo build --release -p vela-core-uniffi
-          cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
-            --library target/release/libvela_core_uniffi.so \
-            --language kotlin --out-dir bindings/kotlin --no-format
+        # One recipe, shared with the laptops: it also stamps WHICH core the
+        # bindings came from, and Gradle refuses to compile when that stamp and
+        # the tree disagree (rust/scripts/check-android-core-fresh.sh).
+        run: bash scripts/build-kotlin-bindings.sh
       # The parallel space's keyset is a SECOND, debug-only library with its own
       # bindings (spec 043, research D2): the debug source set compiles against
       # rust/bindings/kotlin-dev and the JVM tests load the host .so beside

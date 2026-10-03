@@ -97,11 +97,10 @@ jobs:
       # gitignored and consumed in place as a kotlin.srcDir.
       - name: Generate the Kotlin bindings
         working-directory: rust
-        run: |
-          cargo build --release -p vela-core-uniffi
-          cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
-            --library target/release/libvela_core_uniffi.so \
-            --language kotlin --out-dir bindings/kotlin --no-format
+        # One recipe, shared with the laptops: it also stamps WHICH core the
+        # bindings came from, and Gradle refuses to compile when that stamp and
+        # the tree disagree (rust/scripts/check-android-core-fresh.sh).
+        run: bash scripts/build-kotlin-bindings.sh
       - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleRelease :app:bundleRelease -PvelaUnsignedRelease --console=plain

@@ -153,8 +153,9 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Generated uniffi Kotlin bindings are consumed in place (spec 008 FR-009 / research D1):
-            // single committed copy, regenerated only via rust/scripts/smoke-kotlin.sh.
+            // Generated uniffi Kotlin bindings are consumed in place (spec 008 FR-009 / research D1).
+            // Gitignored: each checkout generates them with rust/scripts/build-kotlin-bindings.sh,
+            // which stamps the core they came from — `velaCheckCoreBindings` below refuses a stale one.
             kotlin.srcDir(velaRepoRoot.resolve("rust/bindings/kotlin"))
             // Locale catalogs are synced from the generated assets/i18n at build time (research D3).
             // Static File (not Provider): AGP 9 disallows Providers here; the task
@@ -295,6 +296,20 @@ val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
     }
 }
 
+// AGP compiles against a jlink'd image of the platform's system modules, and
+// it runs `jlink` from the JDK GRADLE ITSELF is running on — not from
+// `JAVA_HOME`, which Gradle only consults when it starts a new daemon. A daemon
+// started by an IDE whose bundled Java is a JRE (VS Code's Java extension ships
+// one, without jlink) therefore fails every build with
+// "jlink executable ... does not exist", and reusing that daemon makes the
+// failure survive `JAVA_HOME=... ./gradlew`, which is what made it look
+// intermittent. A toolchain settles it: the image is built with THIS JDK
+// whatever launched Gradle, and the foojay resolver in settings.gradle.kts
+// fetches one if the machine has none.
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(17) }
+}
+
 val rustHostLib = tasks.register<Exec>("rustHostLib") {
     description = "Builds the host-platform vela-core-uniffi dylib for JVM unit tests (research D14)."
     workingDir = velaRepoRoot.resolve("rust")
@@ -302,8 +317,27 @@ val rustHostLib = tasks.register<Exec>("rustHostLib") {
     enabled = !velaSkipRustBuild
 }
 
+// The Kotlin bindings in rust/bindings/kotlin are gitignored, generated once,
+// and then go on describing whatever core was in the tree that day. Gradle
+// cross-compiles the three .so files itself but has never regenerated the
+// Kotlin beside them, so a core change lands as forty `Unresolved reference`
+// errors about functions that plainly exist — a compiler error that reads like
+// a code bug and is not one. It cost 0.9.5 and 0.9.6 a failed build each.
+//
+// A check, not a regeneration: in a worktree several sessions share, rebuilding
+// to silence this would bake somebody else's unfinished work into the APK. The
+// script says which case it is and what to run.
+val velaCheckCoreBindings = tasks.register<Exec>("velaCheckCoreBindings") {
+    description = "Fails before Kotlin compiles if rust/bindings/kotlin is not this tree's core."
+    workingDir = velaRepoRoot
+    commandLine("bash", velaRepoRoot.resolve("rust/scripts/check-android-core-fresh.sh").absolutePath)
+    // It compares a stamp with a hash of the Rust tree; nothing it reads makes
+    // it skippable, and it costs about a second.
+    outputs.upToDateWhen { false }
+}
+
 tasks.named("preBuild") {
-    dependsOn(cargoNdkBuild, syncVelaI18nAssets, syncVelaAnimationAssets)
+    dependsOn(velaCheckCoreBindings, cargoNdkBuild, syncVelaI18nAssets, syncVelaAnimationAssets)
 }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(syncVelaI18nAssets, syncVelaAnimationAssets)

@@ -29,14 +29,20 @@ cd app-desktop/vela-wallet && cargo run
 open app-ios/VelaWallet/VelaWallet.xcodeproj               # ⌘R
 
 # Android 壳:先生成 Kotlin 绑定(gitignored),再装机
-cd rust && cargo build --release -p vela-core-uniffi && \
-  cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
-    --library target/release/libvela_core_uniffi.dylib --language kotlin \
-    --out-dir bindings/kotlin --no-format
-cd ../app-android/vela-wallet && ./gradlew :app:installDebug
+./rust/scripts/build-kotlin-bindings.sh
+cd app-android/vela-wallet && ./gradlew :app:installDebug
 ```
 
 新 clone 建不出 iOS/Android 的原因与解法都在 `.github/workflows/ci.yml` 的 `ios`/`android` job 注释里(绑定产物不入库)。
+
+**绑定会过期,而且过期的样子不像过期。** 两份绑定都是 gitignored、只生成一次,core 改了它们不会跟着动:iOS 表现为手机跑的是旧 core(测出来的结论是关于旧代码的),Android 表现为 Kotlin 报一屏 `Unresolved reference`,指着明明存在的函数——像代码 bug,其实不是。0.9.5 和 0.9.6 两次发版各被这个绊了一次。所以两边都带一个指纹戳和检查:
+
+| | 重新生成 | 检查 |
+|---|---|---|
+| iOS | `rust/scripts/build-ios-xcframework.sh` | `rust/scripts/check-ios-core-fresh.sh`(真机验证前跑) |
+| Android | `rust/scripts/build-kotlin-bindings.sh` | `rust/scripts/check-android-core-fresh.sh`(Gradle 在编 Kotlin 前自动跑,6 秒内拦下) |
+
+检查**不会**替你重新生成:共享 worktree 里那可能把别人没写完的改动打进包里。退出码 2 专指"绑定等于 HEAD,但工作区跑在 HEAD 前面"这一种情况。
 
 Android 真机安装/验证循环（平行空间、uiautomator 驱动、测试 dApp、深链、门禁）见 `docs/android/install-verify-loop.md`（spec 047）。
 
