@@ -238,7 +238,12 @@ function makeEnv() {
 	}
 
 	/** What content.js does for a sign/connect: own the id, hold the doc port, send. */
-	async function ask(page: FakePage, id: string, method = 'personal_sign') {
+	async function ask(
+		page: FakePage,
+		id: string,
+		method = 'personal_sign',
+		params: unknown[] = ['0x48656c6c6f', `0x${'a1'.repeat(20)}`]
+	) {
 		page.owed.add(id);
 		const docPort = portPair('vela.doc', {
 			documentId: page.documentId,
@@ -248,7 +253,7 @@ function makeEnv() {
 			type: 'rpc',
 			id,
 			method,
-			params: ['0x48656c6c6f', `0x${'a1'.repeat(20)}`],
+			params,
 			sentAt: Date.now()
 		});
 		return { reply, docPort };
@@ -607,6 +612,32 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(panel.received).toContainEqual({ type: 'claimResult', nonce: 2, live: true });
 		return page;
 	}
+
+	// Spec 097 G: a batch is owed its id — in the shape it declared.
+	it('a 2.0.0 batch whose panel closed after the submit claim is told `{ id }`', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'b:1', 'wallet_sendCalls', [
+			{ version: '2.0.0', calls: [{ to: `0x${'a1'.repeat(20)}` }] }
+		]);
+		await settleAll();
+		panel.post({ type: 'claim', rid: '7:b:1', phase: 'sign', nonce: 1 });
+		panel.post({
+			type: 'claim',
+			rid: '7:b:1',
+			phase: 'submit',
+			nonce: 2,
+			opHash: OP,
+			chainId: 100
+		});
+		await settleAll();
+		panel.close();
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'b:1', result: { id: OP }, error: undefined }]);
+		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
+	});
 
 	it('the panel closed after the submit claim: the page is told "not confirmed yet" once, never 4900', async () => {
 		const env = makeEnv();
@@ -1654,6 +1685,47 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 			'relay.example pimlico_getUserOperationStatus',
 			'relay.example eth_getUserOperationReceipt'
 		]);
+	});
+
+	// Spec 097 G: Uniswap declared EIP-5792 2.0.0, read `.id` off the bare
+	// string it was answered, and asked `wallet_getCallsStatus([null])`. The
+	// panel's answer now comes as the core shaped it, `{ id }`; the worker
+	// delivers it as it is and knows the batch by that id.
+	it('delivers a 2.0.0 batch’s `{ id }` as it is, and reads the batch by that id', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init: { body: string }) => {
+				const body = JSON.parse(init.body);
+				const result =
+					body.method === 'eth_getUserOperationReceipt'
+						? { success: true, logs: [], receipt: { transactionHash: TX, status: '0x1' } }
+						: null;
+				return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), { status: 200 });
+			})
+		);
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'b:2', 'wallet_sendCalls', [
+			{ version: '2.0.0', chainId: '0x64', atomicRequired: true, calls: [{ to: ALICE }] }
+		]);
+		await settleAll();
+		panel.post({ type: 'answer', rid: '7:b:2', result: { id: ID }, opHash: { chainId: 100 } });
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'b:2', result: { id: ID }, error: undefined }]);
+
+		const id = page.answers[0].result.id;
+		const landed = await rpc(env, page, 'wallet_getCallsStatus', [id]);
+		expect(landed.result).toMatchObject({ id: ID, chainId: '0x64', status: 200 });
+		// What Uniswap asked with: still refused.
+		expect((await rpc(env, page, 'wallet_getCallsStatus', [null])).error).toMatchObject({
+			code: -32602
+		});
+		// The answer handed back whole is the same batch.
+		const whole = await rpc(env, page, 'wallet_getCallsStatus', [page.answers[0].result]);
+		expect(whole.result).toMatchObject({ id: ID, status: 200 });
 	});
 
 	it('an id it never handed out is an unknown bundle (5730), asking nobody', async () => {

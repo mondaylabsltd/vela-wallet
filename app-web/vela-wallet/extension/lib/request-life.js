@@ -236,7 +236,7 @@ export function maybeSentHash(record) {
 export function surfaceAnswer(record, payload) {
 	const hash = maybeSentHash(record);
 	if (hash && payload?.error && payload.error.code === SETTLE.surface_closed.code) {
-		return { payload: maybeSentPayload(record.method, hash), maybeSent: hash };
+		return { payload: maybeSentPayload(record.method, hash, record.params), maybeSent: hash };
 	}
 	return { payload, maybeSent: null };
 }
@@ -245,7 +245,12 @@ export function surfaceAnswer(record, payload) {
 function ending(record, cause) {
 	const hash = maybeSentHash(record);
 	return hash
-		? { rid: record.rid, cause, answer: maybeSentPayload(record.method, hash), opHash: hash }
+		? {
+				rid: record.rid,
+				cause,
+				answer: maybeSentPayload(record.method, hash, record.params),
+				opHash: hash
+			}
 		: { rid: record.rid, cause };
 }
 

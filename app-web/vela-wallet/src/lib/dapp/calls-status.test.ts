@@ -12,14 +12,18 @@ import { describe, expect, it } from 'vitest';
 import {
 	dappRpcCallsStatus,
 	dappRpcCallsStatusId,
-	dappRpcCapabilities
+	dappRpcCapabilities,
+	dappRpcSendCallsResult,
+	signAnswered
 } from '../../../../../rust/pkg-web/vela_core.js';
 import {
 	UNKNOWN_BUNDLE_ID,
+	batchIdOf,
 	callsStatusId,
 	callsStatusResult,
 	capabilitiesResult,
-	catalogChainIds
+	catalogChainIds,
+	sendCallsResult
 } from '../../../extension/lib/protocol.js';
 
 const ID = `0x${'ab'.repeat(32)}`;
@@ -36,6 +40,10 @@ describe('the batch id', () => {
 		[],
 		['0x12'],
 		[{ id: ID }],
+		[{ id: ID, capabilities: {} }],
+		[{ id: null }],
+		[{ id: '0x12' }],
+		[null],
 		[`${ID}00`],
 		'not a list',
 		null
@@ -44,6 +52,70 @@ describe('the batch id', () => {
 			expect(callsStatusId(params)).toBe(dappRpcCallsStatusId(JSON.stringify(params)) ?? null);
 		});
 	}
+
+	// Spec 097 G: Uniswap asked `[null]` after reading `.id` off a bare
+	// string; the 2.0.0 answer handed back whole is the same batch.
+	it('is no id for `[null]`, and the 2.0.0 answer’s id for `[{ id }]`', () => {
+		expect(callsStatusId([null])).toBeNull();
+		expect(callsStatusId([{ id: ID.toUpperCase().replace('0X', '0x') }])).toBe(ID);
+	});
+});
+
+/**
+ * Spec 097 G: `wallet_sendCalls` is answered in the shape its request
+ * declared — EIP-5792 2.0.0's `{ id }`, 1.0's (or no version's) bare id. The
+ * worker forms that answer itself for a batch that may have been sent, so
+ * its twin is held to the core's rule over the same requests.
+ */
+describe('the answer to a batch', () => {
+	const asking = (version: unknown) => [{ version, calls: [] }];
+	const cases: [string, unknown][] = [
+		['2.0.0 (Uniswap, PancakeSwap)', asking('2.0.0')],
+		['2.0', asking('2.0')],
+		['3.1.0', asking('3.1.0')],
+		['02.0', asking('02.0')],
+		['a very large major', asking('99999999999999999999.0')],
+		['padded', asking(' 2.0.0 ')],
+		['1.0', asking('1.0')],
+		['1.0.0', asking('1.0.0')],
+		['0.9', asking('0.9')],
+		['v2', asking('v2')],
+		['+2.0.0', asking('+2.0.0')],
+		['-2.0.0', asking('-2.0.0')],
+		['empty', asking('')],
+		['a number', asking(2)],
+		['null', asking(null)],
+		['no version', [{ calls: [] }]],
+		['no params', []],
+		['not a list', { version: '2.0.0' }],
+		['nothing', null]
+	];
+	for (const [name, params] of cases) {
+		it(`agrees: ${name}`, () => {
+			const core = JSON.parse(dappRpcSendCallsResult(JSON.stringify(params), ID));
+			const twin = sendCallsResult(params, ID);
+			expect(twin).toEqual(core);
+			// Read back, either shape names the same id — as the core reads it.
+			expect(batchIdOf(twin)).toBe(ID);
+			expect(signAnswered(JSON.stringify({ type: 'ok', result: twin }))).toBe(ID);
+		});
+	}
+
+	it('is `{ id }` with nothing else for 2.0.0, the bare id for 1.0', () => {
+		expect(sendCallsResult(asking('2.0.0'), ID)).toEqual({ id: ID });
+		expect(sendCallsResult(asking('1.0'), ID)).toBe(ID);
+		expect(sendCallsResult([{ calls: [] }], ID)).toBe(ID);
+	});
+
+	it('reads no id out of what carries none', () => {
+		for (const answer of [null, undefined, 7, {}, { id: 7 }, [ID]]) {
+			expect(batchIdOf(answer), JSON.stringify(answer)).toBeNull();
+			expect(
+				signAnswered(JSON.stringify({ type: 'ok', result: answer ?? null })) ?? null,
+				JSON.stringify(answer)
+			).toBeNull();
+		}
+	});
 });
 
 describe('a batch’s status', () => {

@@ -29,6 +29,16 @@ describe('what is remembered when an answer goes out', () => {
 		});
 	});
 
+	// Spec 097 G: a 2.0.0 batch is answered `{ id }` — the same hash.
+	it('a batch answered in EIP-5792 2.0.0’s `{ id }`, by that id', () => {
+		expect(opRecord({ id: OP }, { chainId: 56 }, NOW)).toEqual({
+			key: `${OP_PREFIX}${OP.toLowerCase()}`,
+			value: { chainId: 56, at: NOW }
+		});
+		expect(opRecord({ id: '0x12' }, { chainId: 56 }, NOW)).toBeNull();
+		expect(opRecord({}, { chainId: 56 }, NOW)).toBeNull();
+	});
+
 	it('nothing for a signature, an address, a batch without a chain or a bad chain', () => {
 		expect(opRecord(`0x${'11'.repeat(65)}`, { chainId: 100 }, NOW)).toBeNull();
 		expect(opRecord(`0x${'22'.repeat(20)}`, { chainId: 100 }, NOW)).toBeNull();
