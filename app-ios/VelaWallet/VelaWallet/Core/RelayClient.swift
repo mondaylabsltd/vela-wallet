@@ -280,8 +280,12 @@ final class RelayClient {
         let status: [String: Any] = [
             "chain_id": chainId,
             "address": address,
-            "asset": (data["asset"] as? String) == "pathUSD"
-                ? ["type": "path_usd"] : ["type": "native"],
+            // The core's `SendTreasuryAsset` is a plain string on the wire.
+            // This was `["type": "native"]`, which the core refuses as a
+            // whole result — so an empty relay's answer never reached it, and
+            // Continue ended in the pre-check's 15 s timeout alert instead of
+            // the stop (found with issue #422).
+            "asset": (data["asset"] as? String) == "pathUSD" ? "path_usd" : "native",
             "balance": Self.decimalOfAny(data["balance"]) ?? "0",
             "floor": Self.decimalOfAny(data["floor"]) ?? "0",
             "bootstrap_needed": bootstrapNeeded,

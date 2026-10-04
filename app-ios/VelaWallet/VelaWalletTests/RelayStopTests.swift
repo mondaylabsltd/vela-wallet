@@ -32,6 +32,8 @@ struct RelayStopTests {
         "chain_id": 100, "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c",
         "asset": "native", "balance": "0", "floor": "100000000000000",
         "bootstrap_needed": true, "operator_served": true,
+        // The core's words for the figures, in Gnosis's coin (issue #422).
+        "coin": ["symbol": "xDAI", "balance": "0", "floor": "0.0001", "suggested": "0.0001"],
     ]
 
     @Test func theTreasuryStopSaysWhatItHasAndThatItWatches() throws {
@@ -100,6 +102,33 @@ struct RelayStopTests {
             "relay_unreachable": ["chain_id": 1337, "operator_served": false],
         ])
         #expect(SendLive.fundAddress(unreachable, loc: loc) == nil)
+    }
+
+    /// Issue #422, the Xiaomi's screen: a Polygon confirm under "Suggested
+    /// contribution: 0.0001 ETH". The coin and figures are the core's — the
+    /// stop's own chain's coin, the relay's shortfall for it — and this app
+    /// writes them as given; with no figures from the core, no amount at all.
+    @Test func theTreasuryStopWritesTheCoresCoinAndNothingItDidNotGive() throws {
+        var polygon = emptyFloat
+        polygon["chain_id"] = 137
+        polygon["balance"] = "40000000000000"
+        polygon["coin"] = ["symbol": "POL", "balance": "0.00004", "floor": "0.0001", "suggested": "0.00006"]
+        let view = try sendView(["stage": "confirm", "treasury_bootstrap": polygon])
+        let text = try #require(SendLive.stopNotice(view, loc: loc))
+        #expect(text.contains(loc.t("componentsUi.treasuryBootstrap.amountHint", vars: [
+            "amount": "0.00006", "symbol": "POL",
+        ])))
+        #expect(text.contains(loc.t("componentsUi.treasuryBootstrap.balanceLine", vars: [
+            "balance": "0.00004", "floor": "0.0001", "symbol": "POL",
+        ])))
+        #expect(!text.contains("ETH"))
+
+        polygon["coin"] = NSNull()
+        let unread = try sendView(["stage": "confirm", "treasury_bootstrap": polygon])
+        let bare = try #require(SendLive.stopNotice(unread, loc: loc))
+        #expect(bare.hasPrefix(loc.t("componentsUi.treasuryBootstrap.title")))
+        #expect(!bare.contains("0.0001"), "no amount nobody read")
+        #expect(bare.contains(loc.t("componentsUi.treasuryBootstrap.disclaimer")))
     }
 
     @Test func noStopNoRetry() throws {
