@@ -13186,7 +13186,8 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         let resident = resident::resident::<ExploreSites>(cx);
-        let ids = vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
+        let ids =
+            vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
         if ids.is_empty() {
             return;
         }
@@ -13340,13 +13341,14 @@ impl WalletPage {
                     .iter()
                     .map(|id| {
                         let id = id.clone();
-                        Some(Box::new(cx.listener(
-                            move |page, event: &MouseDownEvent, _, cx| {
+                        Some(
+                            Box::new(cx.listener(move |page, event: &MouseDownEvent, _, cx| {
                                 page.menu_tab = Some(id.clone());
-                                page.menu = Some((ContactsMenu::Tab, event.position, Anchor::TopLeft));
+                                page.menu =
+                                    Some((ContactsMenu::Tab, event.position, Anchor::TopLeft));
                                 cx.notify();
-                            },
-                        )) as explore_components::TabMenuOpen)
+                            })) as explore_components::TabMenuOpen,
+                        )
                     })
                     .collect(),
                 held,
@@ -19029,16 +19031,18 @@ impl WalletPage {
             ContactsMenu::Tab => {
                 use vela_core::app::explore_sites::TabCloseScope;
                 let scoped = |scope: fn(String) -> Option<TabCloseScope>| {
-                    Some(Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        if let Some(id) = this.menu_tab.take() {
-                            match scope(id.clone()) {
-                                Some(scope) => this.close_browser_tabs(&scope, cx),
-                                None => this.close_browser_tab(&id, cx),
+                    Some(
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            if let Some(id) = this.menu_tab.take() {
+                                match scope(id.clone()) {
+                                    Some(scope) => this.close_browser_tabs(&scope, cx),
+                                    None => this.close_browser_tab(&id, cx),
+                                }
                             }
-                        }
-                        cx.notify();
-                    })) as contacts_components::MenuAction)
+                            cx.notify();
+                        })) as contacts_components::MenuAction,
+                    )
                 };
                 vec![
                     scoped(|_| None),

@@ -695,7 +695,10 @@ fn used(model: &mut Model, id: String) {
 /// one lands on that tab, and "close other tabs" lands on the one kept.
 /// Nothing left: nothing selected, the start page.
 fn close_tabs(model: &mut Model, ids: &[String]) -> Command<ExploreEffect, Event> {
-    if !ids.iter().any(|id| model.doc.tabs.iter().any(|tab| &tab.id == id)) {
+    if !ids
+        .iter()
+        .any(|id| model.doc.tabs.iter().any(|tab| &tab.id == id))
+    {
         return Command::done();
     }
     let selected = selected_or_first(&model.doc);

@@ -10,11 +10,11 @@
 mod support;
 
 use support::DomainDriver;
+use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
     Event, ExploreDoc, ExploreGroup, ExploreOperation as Op, ExploreShellResult as Res,
     ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP,
 };
-use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 
 type Sut = DomainDriver<ExploreSites>;
 
@@ -573,8 +573,18 @@ fn each_scope_names_its_tabs() {
     let (sut, ids) = five_tabs();
     let tabs = sut.view().tabs;
     assert_eq!(
-        tabs_closed_by(&tabs, &TabCloseScope::Others { keep: ids[2].clone() }),
-        vec![ids[0].clone(), ids[1].clone(), ids[3].clone(), ids[4].clone()]
+        tabs_closed_by(
+            &tabs,
+            &TabCloseScope::Others {
+                keep: ids[2].clone()
+            }
+        ),
+        vec![
+            ids[0].clone(),
+            ids[1].clone(),
+            ids[3].clone(),
+            ids[4].clone()
+        ]
     );
     assert_eq!(
         tabs_closed_by(&tabs, &TabCloseScope::Right { of: ids[2].clone() }),
@@ -582,7 +592,13 @@ fn each_scope_names_its_tabs() {
     );
     assert!(tabs_closed_by(&tabs, &TabCloseScope::Right { of: ids[4].clone() }).is_empty());
     assert_eq!(tabs_closed_by(&tabs, &TabCloseScope::All), ids);
-    assert!(tabs_closed_by(&tabs, &TabCloseScope::Others { keep: "t-gone".to_owned() }).is_empty());
+    assert!(tabs_closed_by(
+        &tabs,
+        &TabCloseScope::Others {
+            keep: "t-gone".to_owned()
+        }
+    )
+    .is_empty());
 }
 
 /// "Close other tabs" on a tab that is not selected: that tab is the one in
@@ -590,7 +606,12 @@ fn each_scope_names_its_tabs() {
 #[test]
 fn closing_others_selects_the_one_kept() {
     let (mut sut, ids) = five_tabs();
-    let closing = tabs_closed_by(&sut.view().tabs, &TabCloseScope::Others { keep: ids[1].clone() });
+    let closing = tabs_closed_by(
+        &sut.view().tabs,
+        &TabCloseScope::Others {
+            keep: ids[1].clone(),
+        },
+    );
     let doc = written(sut.dispatch(Event::TabsClosed { ids: closing }));
     assert_eq!(doc.tabs.len(), 1);
     assert_eq!(doc.selected_tab.as_deref(), Some(ids[1].as_str()));
@@ -603,9 +624,15 @@ fn closing_others_selects_the_one_kept() {
 fn closing_to_the_right_moves_a_closed_selection_left() {
     let (mut sut, ids) = five_tabs();
     assert_eq!(sut.view().selected_tab.as_deref(), Some(ids[4].as_str()));
-    let closing = tabs_closed_by(&sut.view().tabs, &TabCloseScope::Right { of: ids[1].clone() });
+    let closing = tabs_closed_by(
+        &sut.view().tabs,
+        &TabCloseScope::Right { of: ids[1].clone() },
+    );
     let doc = written(sut.dispatch(Event::TabsClosed { ids: closing }));
-    assert_eq!(doc.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>(), ids[..2].to_vec());
+    assert_eq!(
+        doc.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+        ids[..2].to_vec()
+    );
     assert_eq!(doc.selected_tab.as_deref(), Some(ids[1].as_str()));
 }
 
@@ -620,7 +647,9 @@ fn a_surviving_selection_stays_and_all_leaves_the_start_page() {
     }));
     assert_eq!(doc.selected_tab.as_deref(), Some(ids[0].as_str()));
     assert!(sut
-        .dispatch(Event::TabsClosed { ids: vec!["t-gone".to_owned()] })
+        .dispatch(Event::TabsClosed {
+            ids: vec!["t-gone".to_owned()]
+        })
         .is_empty());
     let all = tabs_closed_by(&sut.view().tabs, &TabCloseScope::All);
     let doc = written(sut.dispatch(Event::TabsClosed { ids: all }));
