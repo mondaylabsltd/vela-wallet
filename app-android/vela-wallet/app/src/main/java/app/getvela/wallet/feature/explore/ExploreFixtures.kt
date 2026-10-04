@@ -128,6 +128,23 @@ object ExploreFixtures {
         ),
     )
 
+    /**
+     * Spec 099: a tab's long-press menu — close it, then Chrome's three batch
+     * closes, in the desktop's order. Which tabs each takes is the core's; a
+     * close that would take none is shown greyed out.
+     */
+    fun tabMenu(copy: TabsScreenCopy, closes: TabCloses) = listOf(
+        SiteMenuItem(TAB_MENU_CLOSE, VelaIcons.Close, copy.close),
+        SiteMenuItem(TAB_MENU_OTHERS, VelaIcons.Close, copy.closeOthers, enabled = closes.others),
+        SiteMenuItem(TAB_MENU_RIGHT, VelaIcons.ChevronRight, copy.closeRight, enabled = closes.right),
+        SiteMenuItem(TAB_MENU_ALL, VelaIcons.Trash2, copy.closeAll),
+    )
+
+    const val TAB_MENU_CLOSE = "close"
+    const val TAB_MENU_OTHERS = "others"
+    const val TAB_MENU_RIGHT = "right"
+    const val TAB_MENU_ALL = "all"
+
     fun connection(s: VelaStrings) = ConnectionModel(
         title = s.t("explore.connectionTitle"),
         site = uniswap,
@@ -225,6 +242,8 @@ object ExploreFixtures {
                 newTab = s.t("explore.newTab"),
                 closeAll = s.t("explore.closeAllTabs"),
                 close = s.t("explore.closeTab"),
+                closeOthers = s.t("explore.closeOtherTabs"),
+                closeRight = s.t("explore.closeTabsToRight"),
             ),
             sheet = when (state) {
                 ExploreScreenState.E3 -> groupManage

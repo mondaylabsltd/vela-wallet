@@ -13608,6 +13608,24 @@ public func entryPointAddress() -> String  {
     )
 })
 }
+/**
+ * Which tabs a batch close takes (spec 099 — "close other tabs", "close tabs
+ * to the right", "close all tabs"): the strip's tabs (`ExploreView.tabs`
+ * JSON) and a `TabCloseScope` JSON (`{"type":"others","keep":…}`,
+ * `{"type":"right","of":…}`, `{"type":"all"}`) in, the ids out (JSON array).
+ * The shell closes each one's engine and tells the browser machine, then
+ * sends `explore_sites`' `tabs_closed` with them. See
+ * `vela_core::app::explore_sites::tabs_closed_by`.
+ */
+public func exploreTabsClosedBy(tabsJson: String, scopeJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_explore_tabs_closed_by(
+        FfiConverterString.lower(tabsJson),
+        FfiConverterString.lower(scopeJson),uniffiCallStatus
+    )
+})
+}
 public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256PublicKey  {
     return try  FfiConverterTypeP256PublicKey_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -15771,6 +15789,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_entry_point_address() != 5546) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_explore_tabs_closed_by() != 32722) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {

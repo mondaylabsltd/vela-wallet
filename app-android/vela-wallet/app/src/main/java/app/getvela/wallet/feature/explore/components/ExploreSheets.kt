@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -36,6 +37,8 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.explore.ConnectionModel
 import app.getvela.wallet.feature.explore.ExploreSheet
+import app.getvela.wallet.feature.explore.SiteMenuItem
+import app.getvela.wallet.feature.explore.TabModel
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
 
 /** The ⋯ sheet over a page (mock E6). */
@@ -93,34 +96,102 @@ fun SiteMenuSheetContent(
             )
         }
 
-        sheet.items.forEachIndexed { index, item ->
-            if (index > 0) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(VelaBorder.hairline)
-                        .background(colors.borderBase),
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onPick(item.id) }
-                    .padding(vertical = VelaSpacing.xl),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
-            ) {
-                val ink = if (item.danger) colors.errorBase else colors.fgBase
-                Icon(item.icon, null, tint = ink)
-                Text(
-                    text = item.label,
-                    color = ink,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.xl,
-                )
-            }
-        }
+        MenuRows(sheet.items, onPick)
         Spacer(Modifier.height(VelaSpacing.xl))
+    }
+}
+
+/**
+ * A tab's long-press menu in the switcher (spec 099): which tab, then close
+ * it, the others, the ones to its right, or all — the ⋯ sheet's rows. A close
+ * that would take no tab is drawn dimmed and does nothing.
+ */
+@Composable
+fun TabMenuSheetContent(
+    tab: TabModel,
+    items: List<SiteMenuItem>,
+    closeLabel: String,
+    onClose: () -> Unit,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(modifier = modifier.padding(horizontal = VelaSizing.screenPaddingX)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = VelaSpacing.xl),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            val site = tab.site
+            if (site != null && !tab.startPage) {
+                SiteAvatar(site)
+            } else {
+                VelaLogo(darkTheme = VelaTheme.isDark, modifier = Modifier.size(ExploreMetrics.rowAvatar))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    text = tab.title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.xl2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                site?.host?.takeIf { it.isNotBlank() && !tab.startPage }?.let { host ->
+                    Text(
+                        text = host,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.base,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Icon(
+                VelaIcons.Close, closeLabel, tint = colors.fgMuted,
+                modifier = Modifier.clickable(onClick = onClose),
+            )
+        }
+        MenuRows(items, onPick)
+        Spacer(Modifier.height(VelaSpacing.xl))
+    }
+}
+
+/** The ⋯ sheet's rows — icon and label, hairlines between; a disabled one dimmed and inert. */
+@Composable
+private fun MenuRows(items: List<SiteMenuItem>, onPick: (String) -> Unit) {
+    val colors = VelaTheme.colors
+    items.forEachIndexed { index, item ->
+        if (index > 0) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(VelaBorder.hairline)
+                    .background(colors.borderBase),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = item.enabled) { onPick(item.id) }
+                .alpha(if (item.enabled) 1f else VelaOpacity.disabled)
+                .padding(vertical = VelaSpacing.xl),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
+        ) {
+            val ink = if (item.danger) colors.errorBase else colors.fgBase
+            Icon(item.icon, null, tint = ink)
+            Text(
+                text = item.label,
+                color = ink,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.xl,
+            )
+        }
     }
 }
 

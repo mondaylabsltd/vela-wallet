@@ -166,6 +166,8 @@ data class SiteMenuItem(
     val icon: ImageVector,
     val label: String,
     val danger: Boolean = false,
+    /** Drawn dimmed and inert when `false` — a tab's "close tabs to the right" on the last tab (spec 099). */
+    val enabled: Boolean = true,
 )
 
 @Immutable
@@ -235,7 +237,18 @@ data class TabsScreenCopy(
     val newTab: String,
     val closeAll: String,
     val close: String,
+    /** Spec 099: a tab's long-press menu — Chrome's batch closes. */
+    val closeOthers: String,
+    val closeRight: String,
 )
+
+/**
+ * Spec 099: which of a tab's batch closes would close anything now — the
+ * core's `explore_tabs_closed_by` asked for that tab, non-empty. The menu
+ * greys out the ones that would not.
+ */
+@Immutable
+data class TabCloses(val others: Boolean = true, val right: Boolean = true)
 
 @Immutable
 data class ExploreEmptyCopy(val title: String, val caption: String, val cta: String)

@@ -30,6 +30,8 @@
     "newTab": "新建标签页",
     "startPage": "起始页",
     "closeAllTabs": "关闭全部标签页",
+    "closeOtherTabs": "关闭其他标签页",
+    "closeTabsToRight": "关闭右侧标签页",
     "closeTab": "关闭标签页",
     "openTabs": "已打开 {{n}} 个标签页",
     "addToFavorites": "添加到收藏",

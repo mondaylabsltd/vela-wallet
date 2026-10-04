@@ -1923,6 +1923,8 @@
   "newTab": "New tab",
   "startPage": "Start page",
   "closeAllTabs": "Close all tabs",
+  "closeOtherTabs": "Close other tabs",
+  "closeTabsToRight": "Close tabs to the right",
   "closeTab": "Close tab",
   "openTabs": "{{n}} tabs open",
   "addToFavorites": "Add to favorites",

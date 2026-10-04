@@ -246,9 +246,10 @@ pub fn menu_card(
 ) -> Div {
     let mut card = div()
         .w(px(CONTACTS_MENU_W))
-        .py(px(6.))
+        .py(px(MENU_PAD_Y))
         .rounded(px(12.))
         .bg(theme.bg_raised)
+        // `MENU_BORDER` all round.
         .border_1()
         .border_color(theme.divider)
         .shadow_lg()
@@ -281,10 +282,47 @@ pub fn menu_card(
             None => row.into_any_element(),
         });
         if menu.divider_after == Some(i) {
-            card = card.child(div().h(px(1.)).my(px(4.)).bg(theme.divider));
+            card = card.child(
+                div()
+                    .h(px(MENU_DIVIDER_H))
+                    .my(px(MENU_DIVIDER_GAP))
+                    .bg(theme.divider),
+            );
         }
     }
     card
+}
+
+/// The card's padding above its first row and below its last.
+const MENU_PAD_Y: f32 = 6.;
+/// Its hairline border, all round (`border_1`).
+const MENU_BORDER: f32 = 1.;
+/// The divider, and the room above and below it.
+const MENU_DIVIDER_H: f32 = 1.;
+const MENU_DIVIDER_GAP: f32 = 4.;
+
+/// How big [`menu_card`] draws `menu`, its shadow aside — for a menu drawn
+/// in a window of its own (spec 099), which is sized before anything is laid
+/// out in it. Built from the same measures the card is.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "sizes the float, which only macOS opens")
+)]
+pub fn menu_card_size(menu: &MenuModel) -> gpui::Size<gpui::Pixels> {
+    #[allow(clippy::cast_precision_loss, reason = "a menu has a handful of rows")]
+    let rows = menu.items.len() as f32 * CONTACTS_MENU_ROW_H;
+    let divider = if menu
+        .divider_after
+        .is_some_and(|after| after < menu.items.len())
+    {
+        MENU_DIVIDER_H + 2. * MENU_DIVIDER_GAP
+    } else {
+        0.
+    };
+    gpui::size(
+        px(CONTACTS_MENU_W),
+        px(rows + divider + 2. * (MENU_PAD_Y + MENU_BORDER)),
+    )
 }
 
 // -- GroupChips ---------------------------------------------------------------

@@ -583,7 +583,12 @@ struct ExploreScreen: View {
                 onCloseAll: {
                     controller?.closeAllTabs()
                     viewOverride = .start
-                }
+                },
+                // Spec 099: the batch closes from a card's long press. The
+                // switcher stays — a tab is always left, and the person is
+                // tidying the strip, not leaving it.
+                onCloseOthers: { id in controller?.closeTabs(.others(keep: id)) },
+                onCloseRight: { id in controller?.closeTabs(.right(of: id)) }
             )
         case .browsing:
             AddressBarView(

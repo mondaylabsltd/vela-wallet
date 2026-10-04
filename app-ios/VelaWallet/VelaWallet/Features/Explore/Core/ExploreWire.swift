@@ -58,6 +58,33 @@ struct ExploreTabWire: Decodable, Equatable, Identifiable {
     let url: String?
     let title: String
     let host: String
+
+    /// The tab as the core reads it back (`ExploreTab`) — what
+    /// `exploreTabsClosedBy` takes the strip as.
+    var wire: [String: Any] {
+        ["id": id, "url": url.map { $0 as Any } ?? NSNull(), "title": title, "host": host]
+    }
+}
+
+/// What a batch close takes (spec 099) — the core's `TabCloseScope`,
+/// Chrome's three. The shell names the one a person picked; WHICH tabs it
+/// takes is the core's (`exploreTabsClosedBy`) and is never decided here.
+enum ExploreTabCloseScope: Equatable {
+    /// Every tab but this one ("close other tabs").
+    case others(keep: String)
+    /// Every tab to the right of this one in the strip ("close tabs to the
+    /// right").
+    case right(of: String)
+    /// Every tab ("close all tabs").
+    case all
+
+    var wire: [String: Any] {
+        switch self {
+        case .others(let keep): ["type": "others", "keep": keep]
+        case .right(let of): ["type": "right", "of": of]
+        case .all: ["type": "all"]
+        }
+    }
 }
 
 struct ExploreViewWire: Decodable, Equatable {

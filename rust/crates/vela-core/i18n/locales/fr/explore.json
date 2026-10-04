@@ -30,6 +30,8 @@
     "newTab": "Nouvel onglet",
     "startPage": "Page de démarrage",
     "closeAllTabs": "Fermer tous les onglets",
+    "closeOtherTabs": "Fermer les autres onglets",
+    "closeTabsToRight": "Fermer les onglets à droite",
     "closeTab": "Fermer l’onglet",
     "openTabs": "{{n}} onglets ouverts",
     "addToFavorites": "Ajouter aux favoris",

@@ -538,8 +538,10 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
 //   branch (why the slide is shut), and `send.txRelaySending` (the landing
 //   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
-if (PATHS.length !== 1876) fail(`expected 1876 paths (1779 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1779) fail(`expected 1779 leaf paths, got ${leafSet.size}`);
+// 1878 (099, same day): + `explore.closeOtherTabs`, `explore.closeTabsToRight`
+//   — the browser's batch close, beside `closeAllTabs`. Same branches.
+if (PATHS.length !== 1878) fail(`expected 1878 paths (1781 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1781) fail(`expected 1781 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -853,7 +855,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 144,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 145,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;
