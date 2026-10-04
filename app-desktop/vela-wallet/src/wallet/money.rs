@@ -1980,6 +1980,116 @@ mod tests {
         assert_eq!(send_form_state(&view, &s, &wallet, &fee), CtaState::Enabled);
     }
 
+    /// Issue #421 on a real machine, keyed exactly as the page keys it: the
+    /// field's text through `amount_edited` into `SetAmount`, and the field
+    /// redrawn from the core's figure (`amount_to_input`). "0" then "8" is 8
+    /// in the field, 8 under it (`token_amount`, which the fiat line and the
+    /// call both read) and 8 at Continue — never an "08" read as 8.
+    #[test]
+    fn a_zero_then_an_eight_is_eight_in_the_field_and_in_the_core() {
+        use crate::flows::live::{amount_edited_with, amount_to_input_with};
+        use vela_core::app::send::{SendChainInfo, SendToken};
+        use vela_core::l10n::number::NumberPreset;
+
+        let token = SendToken {
+            network: "polygon".to_owned(),
+            chain_id: 137,
+            symbol: "POL".to_owned(),
+            balance: "20".to_owned(),
+            decimals: 18,
+            token_address: None,
+            price_usd: Some(0.107),
+            logo_urls: Vec::new(),
+            spam: false,
+        };
+        let pump = |host: &mut CoreHost<Send>, event: SendEvent| {
+            let mut pending = host.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(vec![token.clone()]),
+                        chains: vec![SendChainInfo {
+                            chain_id: 137,
+                            network: "polygon".to_owned(),
+                            native_symbol: "POL".to_owned(),
+                        }],
+                    },
+                    // The 15 s race and the warm quote stay outstanding: this
+                    // is about the figure, not the fee.
+                    SendOperation::StartTimer { .. } | SendOperation::EstimateFee { .. } => {
+                        continue;
+                    }
+                    SendOperation::ResolveIdentity { .. } => {
+                        SendShellResult::IdentityResolved { identity: None }
+                    }
+                    SendOperation::ResolveRisk { .. } => {
+                        SendShellResult::RiskResolved { risk: None }
+                    }
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    other => unreachable!("unexpected on this path: {other:?}"),
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+        };
+
+        for (preset, keys, field_after, held) in [
+            (NumberPreset::CommaDot, "08", "8", "8"),
+            (NumberPreset::CommaDot, "0.8", "0.8", "0.8"),
+            (NumberPreset::CommaDot, ".5", "0.5", "0.5"),
+            (NumberPreset::DotComma, "08", "8", "8"),
+            (NumberPreset::DotComma, "0,8", "0,8", "0.8"),
+        ] {
+            let mut host = CoreHost::<Send>::new();
+            pump(
+                &mut host,
+                SendEvent::Open {
+                    account: Some(SendAccountRef {
+                        id: "cred0".to_owned(),
+                        address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                        name: None,
+                    }),
+                    params: SendOpenParams::default(),
+                    display: SendDisplayContext::default(),
+                },
+            );
+            pump(
+                &mut host,
+                SendEvent::SelectToken {
+                    token_id: token.id(),
+                },
+            );
+            pump(
+                &mut host,
+                SendEvent::SetRecipient {
+                    recipient: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
+                },
+            );
+            // The page: `value` is the core's figure in the person's mark,
+            // `previous` is that same text, and only a cleaned edit is sent.
+            for key in keys.chars() {
+                let field = amount_to_input_with(&host.view().amount, preset);
+                let next = format!("{field}{key}");
+                if let Some(amount) = amount_edited_with(&next, &field, preset) {
+                    pump(&mut host, SendEvent::SetAmount { amount });
+                }
+            }
+            let view = host.view();
+            assert_eq!(
+                amount_to_input_with(&view.amount, preset),
+                field_after,
+                "{keys:?} under {preset:?}: what the field shows"
+            );
+            assert_eq!(view.amount, held, "{keys:?}: what the core holds");
+            assert_eq!(view.token_amount, held, "{keys:?}: what is priced and sent");
+            assert!(view.can_continue, "{keys:?}: a figure that can be sent");
+        }
+    }
+
     /// The form's CTA state, for the assertions above.
     #[cfg(test)]
     fn send_form_state(
