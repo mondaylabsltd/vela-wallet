@@ -32,8 +32,9 @@
   screen or in the log; the core's per-tab view carries no request status
   (`DbrTabView`, `dapp_browser.rs:465-476`); the in-page provider has no deadline of its own.
 - Found on the same device pass (2026-10-04), in the layers this spec names:
-  - after a failed submit the signing sheet's slider stayed locked because the fee had gone stale
-    — nothing said "refresh the fee";
+  - after a failed submit (and its Try again) the signing sheet's slider stayed locked and nothing
+    said why (the cause given at the time, a stale fee, does not match the code — see research
+    R7);
   - the landing screen asked the relay for the op's status only every 12 s, and ran the chain's
     "confirms in ~4 s" countdown before the relay had sent anything, so it read "taking longer
     than usual" within seconds;
@@ -136,14 +137,14 @@ look like hangs.
 
 **Why this priority**: found on the 2026-10-04 device pass; it is the "签名 UI" layer of the ask.
 
-**Independent Test**: let a fee go stale after a failed submit — the sheet says to refresh and
-the refresh unlocks it; submit on a chain whose relay is funding — the landing says so within a
+**Independent Test**: fail a submit (cancel the passkey, refuse at the relay) — the shut slide
+names its gate and the action that opens it, and taking that action opens it; submit on a chain whose relay is funding — the landing says so within a
 few seconds and starts the chain's countdown only once the relay has sent.
 
 **Acceptance Scenarios**:
 
 1. **Given** a sheet whose confirm is disabled, **Then** it states why and offers the unlocking
-   action (e.g. refresh a stale fee).
+   action (e.g. try again after a held failure, retry a failed fee, pick another coin).
 2. **Given** a submitted operation, **Then** the relay's status is first asked within ~3 s, and the
    chain's typical-time countdown starts only when the relay reports the bundle sent.
 3. **Given** an operation the relay accepted and later answers `not_found` for, with no receipt
@@ -206,8 +207,9 @@ few seconds and starts the chain's countdown only once the relay has sent.
 
 **Signing UI**
 
-- **FR-010**: A disabled confirm always shows its reason and its unlocking action (stale fee →
-  refresh; insufficient balance; request still being simulated).
+- **FR-010**: A disabled confirm always shows its reason and its unlocking action (a held
+  failure → try again; a failed fee → retry; a short fee coin → pick another; the request still
+  being read). The gate and its reason are one core function every client calls.
 - **FR-011**: The landing asks the relay's status within ~3 s of acceptance (then at the tracker's
   pace) and starts the chain's typical-time countdown only after the relay reports the bundle sent;
   before that it says what the relay is doing (queued / funding / sending).
