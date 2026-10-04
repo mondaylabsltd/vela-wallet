@@ -105,6 +105,11 @@ the shell's own copy of a rule it replaces. Core tests fail on the old core befo
 - [x] T062 [P] Android: long-press a tab in the switcher → the same four (a sheet like the site
   menu; a scope that closes nothing is greyed); `closeAllTabs` becomes one `TabsClosed`.
 - [x] T063 [P] iOS: the same, as a context menu (a scope that closes nothing is left out).
+- [x] T064 Desktop (owner, on the Mac: the page vanished under ⋯, and the tab menu's rows below
+  the strip were painted under the page): no ⋯ menu — every row already had a door, and open in
+  the system browser becomes a toolbar control (`TRAILING_CONTROLS`); the menus that drop over
+  the page (a tab's, the network picker) float in a window of their own on macOS, cut a hole on
+  Windows, and hide the page only where neither can be had (`wallet/page/menu_float.rs`).
 
 ## Order
 

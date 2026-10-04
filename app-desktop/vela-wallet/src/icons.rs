@@ -85,7 +85,11 @@ pub enum Icon {
     ArrowRight,
     ArrowDown,
     Star,
+    /// Share and disconnect: the phones' site menus. The desktop's ⋯ that
+    /// drew them is gone (spec 099).
+    #[allow(dead_code, reason = "cross-platform icon contract, phone-only glyphs")]
     Share2,
+    #[allow(dead_code, reason = "cross-platform icon contract, phone-only glyphs")]
     Power,
     Lock,
     /// Lucide `lock-open`: a page on plain http (spec 079, owner: a lock, and

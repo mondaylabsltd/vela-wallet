@@ -200,8 +200,7 @@ pub fn site_row(
 ///
 /// One entry per tab in the order they are drawn, plus the new-tab button.
 /// `None` throughout is the gallery's strip: drawn exactly as it always was,
-/// answering nothing (the rule the slide, the allowance chips and the site
-/// menu all follow).
+/// answering nothing (the rule the slide and the allowance chips follow).
 #[derive(Default)]
 pub struct TabActions {
     pub select: Vec<Option<crate::flows::panels::Click>>,
@@ -490,11 +489,6 @@ pub fn tab_strip_with(
     )
 }
 
-/// One toolbar control — a 32 square with a tinted glyph.
-pub fn toolbar_control(theme: &Theme, icons: &mut IconCache, icon: Icon, tint: Hsla) -> Div {
-    toolbar_control_with(theme, icons, icon, tint, false, true)
-}
-
 /// The toolbar's icon button as the web's `.icon` (078 E-04): radius 8, a
 /// sunken hover while it can act; disabled, the subtle colour at 45 % and no
 /// hover. `solid` fills the glyph — the star on a favourite.
@@ -564,14 +558,42 @@ pub fn account_chip(
 /// The browser toolbar (DE1–DE4). On the start page the address field is the
 /// search box; while browsing it collapses to the domain with its padlock —
 /// one control, two states, never two controls. `address` ([`address_field`])
-/// and `trailing` are built by the page, because the field's focus and keys
-/// and the two affordances (⋯ and the account chip) are state the page owns.
+/// and `trailing` ([`TRAILING_CONTROLS`]) are built by the page, because the
+/// field's focus and keys and what the trailing controls act on are state the
+/// page owns.
 /// Back, forward and reload, in that order. `None` leaves them drawn and
 /// inert, which is what the mocks are — a live browser passes three listeners
 /// and the same three buttons start working. `history` is whether back and
 /// forward can act (083 W15): an arrow that cannot is drawn disabled, and its
 /// click asks the engine again.
 pub type NavActions = [crate::flows::panels::Click; 3];
+
+/// One control right of the address bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrailingControl {
+    /// ☆ — pins the page, or unpins a favourite.
+    Favorite,
+    /// ↗ — the page's address in the system browser (spec 099).
+    OpenInSystemBrowser,
+    /// The account, with the connection's dot; opens the Connection panel.
+    Account,
+}
+
+/// The controls right of the address bar, left to right; the page draws
+/// them in this order.
+///
+/// Spec 099 (owner, 2026-10-04): no ⋯ menu. Its menu dropped over the page,
+/// which on the desktop is a native view no in-window menu can paint over,
+/// so the page vanished while it was open — and every row in it already had
+/// a door: reload is ⟳, favourite ☆, close the tab's ✕, disconnect the
+/// Connection panel, copy link the address bar (a click selects the address,
+/// ⌘C copies it; share was a copy here). The one row without a door, open in
+/// the system browser, is a control of its own.
+pub const TRAILING_CONTROLS: [TrailingControl; 3] = [
+    TrailingControl::Favorite,
+    TrailingControl::OpenInSystemBrowser,
+    TrailingControl::Account,
+];
 
 /// Which of the three can act — the engine's word (spec 082 RD6) — and
 /// whether a request holds them (RD1: drawn disabled, still clickable).
@@ -634,13 +656,12 @@ pub struct AddressBar {
     pub draft: Option<SharedString>,
     /// The whole draft is selected: drawn highlighted, with no caret.
     pub selected: bool,
-    /// A word said in the bar for a moment — "Copied" after the site menu
-    /// copied its link. The page is a native view gpui cannot draw over, so
-    /// a toast over it would be under it; the bar is what stays visible.
+    /// A refusal said in the bar for a moment — "finish or cancel the
+    /// request first" (spec 082 RD1, ruling 10), or why a close was held
+    /// (RJ17) — in the warning colour. The page is a native view gpui cannot
+    /// draw over, so a toast over it would be under it; the bar is what stays
+    /// visible.
     pub notice: Option<SharedString>,
-    /// The notice is a refusal — "finish or cancel the request first" (spec
-    /// 082 RD1, ruling 10) — drawn in the warning colour, not as a tick.
-    pub notice_warns: bool,
 }
 
 /// The address field's contents, for the page to wrap in whatever makes it
@@ -700,17 +721,15 @@ pub fn address_field(
             .child(typed);
     }
     if let Some(notice) = &bar.notice {
-        let (glyph, tint) = if bar.notice_warns {
-            (Icon::TriangleAlert, theme.warning_base)
-        } else {
-            (Icon::Check, theme.success)
-        };
-        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(tint)
-                .child(notice.clone()),
-        );
+        let tint = theme.warning_base;
+        return row
+            .child(icon_img(icons, Icon::TriangleAlert, false, tint, 12.))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(tint)
+                    .child(notice.clone()),
+            );
     }
     if bar.browsing {
         // Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): a
@@ -753,7 +772,7 @@ pub fn network_pick_card(
 ) -> Div {
     let mut list = div()
         .id("network-pick-list")
-        .max_h(px(440.))
+        .max_h(px(NETWORK_PICK_LIST_MAX_H))
         .overflow_y_scroll()
         .flex()
         .flex_col();
@@ -766,7 +785,7 @@ pub fn network_pick_card(
             .flex_none()
             .items_center()
             .gap(px(12.))
-            .h(px(44.))
+            .h(px(NETWORK_PICK_ROW_H))
             .px(px(14.))
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_base)
@@ -801,14 +820,42 @@ pub fn network_pick_card(
         });
     }
     div()
-        .w(px(300.))
-        .py(px(6.))
+        .w(px(NETWORK_PICK_W))
+        .py(px(NETWORK_PICK_PAD_Y))
         .rounded(px(12.))
         .bg(theme.bg_raised)
+        // `NETWORK_PICK_BORDER` all round.
         .border_1()
         .border_color(theme.divider)
         .shadow_lg()
         .child(list)
+}
+
+/// The network picker's measures, which [`network_pick_card_size`] counts.
+const NETWORK_PICK_W: f32 = 300.;
+const NETWORK_PICK_PAD_Y: f32 = 6.;
+const NETWORK_PICK_BORDER: f32 = 1.;
+const NETWORK_PICK_ROW_H: f32 = 44.;
+const NETWORK_PICK_LIST_MAX_H: f32 = 440.;
+
+/// How big [`network_pick_card`] draws `rows` networks, its shadow aside —
+/// for the picker in a window of its own (spec 099). Past ten rows the list
+/// scrolls inside the card.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(dead_code, reason = "sizes the float, which only macOS opens")
+)]
+#[must_use]
+pub fn network_pick_card_size(rows: usize) -> gpui::Size<gpui::Pixels> {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a wallet knows dozens of networks"
+    )]
+    let list = (rows as f32 * NETWORK_PICK_ROW_H).min(NETWORK_PICK_LIST_MAX_H);
+    gpui::size(
+        px(NETWORK_PICK_W),
+        px(list + 2. * (NETWORK_PICK_PAD_Y + NETWORK_PICK_BORDER)),
+    )
 }
 
 /// The lock for a page's scheme (spec 079 FR-015): closed and neutral for
@@ -1065,6 +1112,34 @@ mod tests {
                 tab_w: TAB_MIN_W,
                 scrolls: true
             }
+        );
+    }
+
+    /// Spec 099: right of the address bar, the star, open in the system
+    /// browser, the account — and no ⋯, whose menu fell over the page.
+    #[test]
+    fn the_toolbar_has_no_site_menu() {
+        assert_eq!(
+            TRAILING_CONTROLS,
+            [
+                TrailingControl::Favorite,
+                TrailingControl::OpenInSystemBrowser,
+                TrailingControl::Account,
+            ]
+        );
+    }
+
+    /// Spec 099: the picker's window is sized before it is laid out — its
+    /// rows, its padding and its hairline; a long list scrolls in 440.
+    #[test]
+    fn the_network_picker_is_sized_by_its_rows() {
+        assert_eq!(
+            network_pick_card_size(3),
+            gpui::size(px(300.), px(3. * 44. + 14.))
+        );
+        assert_eq!(
+            network_pick_card_size(40),
+            gpui::size(px(300.), px(440. + 14.))
         );
     }
 

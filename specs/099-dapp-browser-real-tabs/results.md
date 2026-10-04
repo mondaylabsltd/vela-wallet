@@ -61,6 +61,25 @@ Chrome's three batch closes, decided by the core (`tabs_closed_by`, `TabsClosed`
   closed, the machine hears `tab_closed` for each).
 - **Web**: no tabs of its own (the person's browser).
 
+### Desktop: no menu under the page (T064)
+
+The page is a native view above gpui's canvas, so a menu gpui paints over it lies under it: the
+⋯ menu answered by hiding the page while it was open, and the tab menu's rows below the strip were
+invisible and unclickable.
+
+- **The ⋯ is gone.** The toolbar right of the address bar is ☆ · ↗ · the account chip. Reload is
+  ⟳, favourite ☆, close page the tab's ✕, disconnect the account chip's Connection panel, copy link
+  (and share, which was a copy) the address bar: a click takes the URL in selected, ⌘C copies it.
+  Open in the system browser is ↗, named `explore.openInSystemBrowser`, the engine's own URL, off
+  over the start page. No new strings.
+- **Menus over the page float (macOS).** gpui's `AnchoredPopup` is refused on macOS at the pinned
+  rev (`PopupNotSupportedError`, "not implemented on macOS yet"), so the menu is drawn in a
+  `WindowKind::PopUp` panel placed in screen points where it would hang, which never takes the
+  keyboard (`becomesKeyOnlyIfNeeded`). A press elsewhere, Esc, the window going to the background
+  or moving closes it; one at a time. Windows keeps spec 083 D2's hole for both menus; a refused
+  float falls back to the in-window menu with the page hidden.
+- `cargo test` 924 passed (9 new). The on-screen pass is the owner's.
+
 ## Corrections made on the way
 
 - The 2026-10-04 explanation of the locked slide ("the fee went stale") was wrong: no client gates on

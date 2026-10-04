@@ -360,12 +360,6 @@ pub struct NetworkPick {
     pub amount: Option<SharedString>,
 }
 
-/// The menu on a row in Recent (spec 032 phase 40).
-///
-/// History rows had no menu on any client, so the core's `DeleteOrigin` — one
-/// site forgotten rather than the whole list cleared — could not be reached at
-/// all. Three items in the order somebody wants them, with the destructive one
-/// behind the divider, exactly as the tile menu arranges its own.
 /// Spec 099: a tab's right-click — close it, then Chrome's batch closes.
 pub fn tab_menu(strings: &ExploreStrings) -> MenuModel {
     let item = |icon, label: &SharedString| MenuItemModel {
@@ -384,6 +378,12 @@ pub fn tab_menu(strings: &ExploreStrings) -> MenuModel {
     }
 }
 
+/// The menu on a row in Recent (spec 032 phase 40).
+///
+/// History rows had no menu on any client, so the core's `DeleteOrigin` — one
+/// site forgotten rather than the whole list cleared — could not be reached at
+/// all. Three items in the order somebody wants them, with the destructive one
+/// behind the divider, exactly as the tile menu arranges its own.
 pub fn recent_menu(strings: &ExploreStrings) -> MenuModel {
     MenuModel {
         items: vec![
@@ -434,34 +434,3 @@ pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
         divider_after: Some(2),
     }
 }
-
-/// The browsing toolbar's ⋯ (M3): what you can do to the page you are on.
-pub fn site_menu(strings: &ExploreStrings, connected: bool) -> MenuModel {
-    // The web's `siteMenuItems`, in its order (078 E-03).
-    let item = |icon, label: &SharedString| MenuItemModel {
-        icon,
-        label: label.clone(),
-        destructive: false,
-    };
-    let mut items = vec![
-        item(Icon::RefreshCw, &strings.refresh),
-        item(Icon::Share2, &strings.share),
-        item(Icon::Copy, &strings.copy_link),
-        item(Icon::Star, &strings.add_to_favorites),
-        item(Icon::ExternalLink, &strings.open_in_system_browser),
-        item(Icon::Power, &strings.disconnect),
-        item(Icon::X, &strings.close_page),
-    ];
-    // Disconnect only for a site the core holds a grant for (spec 097 E), as
-    // the phones' menus do.
-    if !connected {
-        items.remove(SITE_MENU_DISCONNECT);
-    }
-    MenuModel {
-        items,
-        divider_after: Some(4),
-    }
-}
-
-/// Where Disconnect sits in [`site_menu`] — the page arms its action there.
-pub const SITE_MENU_DISCONNECT: usize = 5;
