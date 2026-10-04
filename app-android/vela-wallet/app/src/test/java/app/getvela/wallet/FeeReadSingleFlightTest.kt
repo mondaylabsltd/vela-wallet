@@ -191,10 +191,12 @@ class FeeReadSingleFlightTest {
     @Test
     fun `the auto fee coin flag crosses the wire on the estimate and on the fee session`() {
         val ask = SpeedControl.QuoteAsk(100, SAFE, true, FeeTier.Fast, emptyList(), null, autoFeeToken = true)
-        val event = Wire.json.encodeToString(FeeEvent.serializer(), ask.event(deployed = true))
+        val event = Wire.json.encodeToString(FeeEvent.serializer(), ask.event(deployed = true, number = "dot_comma"))
         assertTrue(event, event.contains("\"auto_fee_token\":true"))
+        // Issue #408: the preset the core writes a coin's shortfall in.
+        assertTrue(event, event.contains("\"number\":\"dot_comma\""))
         // A chip tap's ask is the person's pick: false, and still on the wire.
-        val picked = Wire.json.encodeToString(FeeEvent.serializer(), ask.copy(autoFeeToken = false).event(deployed = true))
+        val picked = Wire.json.encodeToString(FeeEvent.serializer(), ask.copy(autoFeeToken = false).event(deployed = true, number = "comma_dot"))
         assertTrue(picked, picked.contains("\"auto_fee_token\":false"))
         val op = Wire.json.decodeFromString(
             SendOperation.serializer(),

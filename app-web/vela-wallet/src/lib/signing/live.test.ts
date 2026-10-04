@@ -91,7 +91,8 @@ const QUOTED_FEE: FeeView = {
 	stale: false,
 	fee_token: null,
 	options: [],
-	confirm_fee_ready: true
+	confirm_fee_ready: true,
+	no_coin_pays: false
 };
 
 function field(over: Partial<ClearSignField> = {}): ClearSignField {
@@ -173,7 +174,8 @@ describe('the fee the sheet shows', () => {
 					amount: '2100000000000000',
 					insufficient: false,
 					selected: true,
-					spent_by_operation: false
+					spent_by_operation: false,
+					short: null
 				}
 			]
 		};
@@ -214,7 +216,8 @@ describe('the fee the sheet shows', () => {
 					amount: '2100000000000000',
 					insufficient: false,
 					selected: true,
-					spent_by_operation: false
+					spent_by_operation: false,
+					short: null
 				},
 				{
 					symbol: 'USDC',
@@ -227,7 +230,8 @@ describe('the fee the sheet shows', () => {
 					amount: '6300000',
 					insufficient: false,
 					selected: false,
-					spent_by_operation: false
+					spent_by_operation: false,
+					short: null
 				}
 			]
 		};
@@ -254,7 +258,8 @@ describe('the fee the sheet shows', () => {
 					amount: '2100000000000000',
 					insufficient: false,
 					selected: true,
-					spent_by_operation: false
+					spent_by_operation: false,
+					short: null
 				}
 			]
 		};
@@ -276,7 +281,8 @@ describe('the fee the sheet shows', () => {
 			amount: '2100000000000000',
 			insufficient: true,
 			selected: true,
-			spent_by_operation: false
+			spent_by_operation: false,
+			short: null
 		};
 		const usdt = {
 			...eth,
@@ -289,7 +295,8 @@ describe('the fee the sheet shows', () => {
 			amount: '6300000',
 			insufficient: false,
 			selected: false,
-			spent_by_operation: false
+			spent_by_operation: false,
+			short: null
 		};
 		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
 		const model = buildSigningModel(inputs({ fee: short }));
@@ -348,7 +355,8 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		amount: '2100000000000000',
 		insufficient: false,
 		selected: true,
-		spent_by_operation: false
+		spent_by_operation: false,
+		short: null
 	};
 	const failedWith = (failed: FeeView['failed']): FeeView => ({
 		...QUOTED_FEE,
@@ -1317,6 +1325,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		insufficient: false,
 		selected: true,
 		spent_by_operation: false,
+		short: null,
 		...over
 	});
 	const two: FeeView = {
@@ -1338,7 +1347,8 @@ describe('the fee coin can be switched, as it can when sending', () => {
 				amount: '1270000000000000000',
 				insufficient: true,
 				selected: false,
-				spent_by_operation: false
+				spent_by_operation: false,
+				short: null
 			})
 		]
 	};
@@ -1383,7 +1393,8 @@ describe('the fee coin can be switched, as it can when sending', () => {
 					balance: '42000000',
 					amount: '1270000',
 					selected: true,
-					spent_by_operation: true
+					spent_by_operation: true,
+					short: null
 				})
 			]
 		};
@@ -1399,6 +1410,74 @@ describe('the fee coin can be switched, as it can when sending', () => {
 			options: [option({}), { ...spentUsdc.options[1], selected: false }]
 		};
 		expect(feeOf({ fee: inEth })).not.toHaveProperty('warning', expect.anything());
+	});
+
+	// Issue 408, as reported (Android v0.9.6, "Back up public keys" on
+	// Ethereum): 0 ETH and 0.754189 USDT against ~0.001334 ETH or ~3.58361
+	// USDT. Each greyed coin says need and have — the core's words for the
+	// numbers — and the line under the fee says no coin can pay, where it used
+	// to say "Insufficient ETH for gas fees".
+	const issue408: FeeView = {
+		...QUOTED_FEE,
+		confirm_fee_ready: false,
+		no_coin_pays: true,
+		options: [
+			option({
+				balance: '0',
+				amount: '1333800000000000',
+				insufficient: true,
+				short: { need: '0.001334 ETH', have: '0 ETH' }
+			}),
+			option({
+				symbol: 'USDT',
+				contract: '0x' + 'da'.repeat(20),
+				decimals: 6,
+				balance: '754189',
+				amount: '3583610',
+				insufficient: true,
+				selected: false,
+				short: { need: '3.58361 USDT', have: '0.754189 USDT' }
+			})
+		]
+	};
+
+	it('issue 408: every greyed coin says why, and the line says no coin can pay', () => {
+		const closed = feeOf({ fee: issue408 });
+		expect(closed).toMatchObject({ warning: m.feeNoCoinPays });
+		expect(m.feeNoCoinPays).toBe('No token can pay this fee');
+		const open = feeOf({ fee: issue408, feeOpen: true });
+		if (open.kind !== 'onchain' || !open.selector) throw new Error('no selector');
+		expect(open.warning).toBe(m.feeNoCoinPays);
+		expect(open.selector.options.map((o) => [o.insufficient, o.reason])).toEqual([
+			[true, 'Need ~0.001334 ETH, have 0 ETH'],
+			[true, 'Need ~3.58361 USDT, have 0.754189 USDT']
+		]);
+	});
+
+	it('issue 408: a coin that can pay keeps the line about the coin in force', () => {
+		const ethShort: FeeView = {
+			...two,
+			confirm_fee_ready: false,
+			options: [
+				option({
+					balance: '0',
+					insufficient: true,
+					short: { need: '0.0021 ETH', have: '0 ETH' }
+				}),
+				two.options[1]
+			]
+		};
+		const open = feeOf({ fee: ethShort, feeOpen: true });
+		if (open.kind !== 'onchain' || !open.selector) throw new Error('no selector');
+		expect(open.warning).toBe(m.feeShort.replace('{{sym}}', 'ETH'));
+		expect(open.selector.options.map((o) => o.reason)).toEqual([
+			'Need ~0.0021 ETH, have 0 ETH',
+			undefined
+		]);
+	});
+
+	it('issue 408: the shut slide says no coin can pay, in the corpus words the core names', () => {
+		expect(m.confirmBlock['componentsUi.gas.noCoinPays']).toBe(m.feeNoCoinPays);
 	});
 });
 

@@ -172,6 +172,11 @@ data class FeeTokenOption(
     val selected: Boolean,
     /** The core's `insufficient`: shown for context, never pickable (invariant ⑧). */
     val disabled: Boolean = false,
+    /**
+     * Issue #408: why a disabled coin cannot pay, drawn under its row — the
+     * core's shortfall, need and have in the coin's own unit. `null` = none.
+     */
+    val reason: String? = null,
 )
 
 @Immutable
@@ -186,7 +191,10 @@ sealed interface FeeModel {
         val speed: app.getvela.wallet.feature.flows.FeeSpeedModel? = null,
         /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
         val tappable: Boolean = false,
-        /** Issue #262: why the slide is shut — the paying coin is not there. */
+        /**
+         * Issue #262: why the slide is shut — the paying coin is not there;
+         * issue #408: or no coin on offer can pay, said as that.
+         */
         val warning: String? = null,
         /** Spec 079: the send form's refresh control, and whether a measurement is out. */
         val refreshLabel: String? = null,

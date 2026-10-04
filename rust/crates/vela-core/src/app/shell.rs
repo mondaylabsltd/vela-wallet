@@ -207,6 +207,19 @@ pub enum ShellOperation {
         /// platform authenticator, what a shell that never sets it expects.
         #[serde(default)]
         method: KeyMethod,
+        /// Issue 409: answer [`ShellResult::RegistryAccepted`] as soon as the
+        /// registry has ACCEPTED the write — its 202, a task id: the
+        /// registration is signed and queued durably server-side — instead of
+        /// polling that task until the group has landed on-chain.
+        ///
+        /// Set only for a ONE-key wallet's create, whose key stays recoverable
+        /// on-device from two signatures whatever the registry does. A
+        /// multi-key wallet's address can only be rebuilt elsewhere from the
+        /// on-chain group, so its create and every re-publish leave this
+        /// `false` — absent on the wire, which is today's operation byte for
+        /// byte — and are answered only once the group has landed.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        answer_when_accepted: bool,
     },
     /// Is this public key already an entry in the registry? Lets a sign-in
     /// skip a redundant re-publish (and its extra signature).
@@ -310,6 +323,14 @@ pub enum ShellResult {
     /// The registry publish landed on-chain (or the identical group was
     /// already there).
     RegistryPublished,
+    /// Issue 409: the registry ACCEPTED the publish and queued it under
+    /// `task_id`; whether it has landed is not yet known. Only ever the answer
+    /// to a publish that asked for it (`answer_when_accepted`) — and even then
+    /// an identical group already on-chain is answered
+    /// [`Self::RegistryPublished`], because that one HAS landed.
+    RegistryAccepted {
+        task_id: String,
+    },
     /// The registry's answer to `RegistryQueryByPublicKey`.
     RegistryKeyStatus {
         registered: bool,

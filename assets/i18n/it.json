@@ -765,7 +765,6 @@
    "headerCreated": "Wallet creato",
    "headerDefault": "Crea wallet",
    "headerSyncFailed": "Sincronizzazione tra dispositivi",
-   "identiconHint": "Un motivo identificativo generato dall'indirizzo",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Legata al dispositivo",
    "keyHardwareBadge": "Hardware",
@@ -799,7 +798,6 @@
    "pinLabel": "PIN",
    "pinRejected": "Questo PIN non è stato accettato. Esauriti i tentativi la chiave si blocca da sola e solo un ripristino la sblocca, cancellando tutte le passkey che contiene.",
    "pinTitle": "Inserisci il PIN della chiave di sicurezza",
-   "progressMeterLabel": "Derivazione indirizzo",
    "progressSubtitle": "Deriviamo l'indirizzo da {{count}} chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora.",
    "progressTitle": "Creazione del wallet",
    "providerGeneric": "Telefono o tablet",
@@ -827,7 +825,9 @@
    "stepKeysLabel": "Chiavi",
    "stepNamingDetail": "Dai un nome al tuo wallet. Finisce on-chain insieme alla tua chiave pubblica.",
    "stepNamingLabel": "Nome",
-   "successMessage": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
+   "successMessage_one": "La tua chiave accede da sola. Il contratto viene distribuito alla prima transazione.",
+   "successMessage_many": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
+   "successMessage_other": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
    "successTitle": "Wallet creato",
    "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
    "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non riuscirai ad accedere su altri dispositivi finché il problema non viene risolto.",
@@ -841,8 +841,7 @@
    "touchSelectBody": "Sono collegate più chiavi di sicurezza e stanno lampeggiando tutte. Tocca quella che vuoi usare.",
    "touchTitle": "Tocca la tua chiave di sicurezza",
    "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto.",
-   "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla.",
-   "walletAddressLabel": "Indirizzo del wallet"
+   "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla."
   },
   "login": {
    "alertNotSupportedTitle": "Non supportato",
@@ -1245,7 +1244,6 @@
    "batchSubtitle": "{{count}} transazioni, firmate insieme",
    "batchCall": "Chiamata al contratto",
    "balanceUnderfundedNative": "{{symbol}} non sufficienti per coprire questo trasferimento: ci si aspetta che fallisca on-chain.",
-   "gasEstimateFailed": "Impossibile stimare la commissione di gas — l'invio potrebbe fallire o scadere. Tocca la commissione qui sopra per riprovare.",
    "submitted": "Inviato — in attesa di conferma",
    "historicalNote": "Una firma passata — esattamente ciò che hai approvato.",
    "close": "Chiudi",
@@ -1510,7 +1508,9 @@
    "reasonQuote": "Non è stato possibile ottenere un prezzo dal relay. Nuovo tentativo automatico.",
    "reasonFeeToken": "Il relay non riesce a quotare questa moneta per ora. Nuovo tentativo in corso, oppure paga la commissione con un'altra moneta.",
    "reasonSimulation": "Il relay non è ancora riuscito a simulare questa transazione. Nuovo tentativo automatico.",
-   "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico."
+   "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico.",
+   "rowShort": "Servono ~{{need}}, hai {{have}}",
+   "noCoinPays": "Nessun token basta per questa commissione"
   },
   "dock": {
    "receive": "Ricevi",
@@ -1917,6 +1917,8 @@
   "newTab": "Nuova scheda",
   "startPage": "Pagina iniziale",
   "closeAllTabs": "Chiudi tutte le schede",
+  "closeOtherTabs": "Chiudi le altre schede",
+  "closeTabsToRight": "Chiudi le schede a destra",
   "closeTab": "Chiudi scheda",
   "openTabs": "{{n}} schede aperte",
   "addToFavorites": "Aggiungi ai preferiti",

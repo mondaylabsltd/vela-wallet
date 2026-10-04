@@ -88,7 +88,8 @@ class SpeedControl(
     ) {
         fun sameOperation(other: QuoteAsk): Boolean = copy(tier = other.tier) == other
 
-        fun event(deployed: Boolean) = FeeEvent.QuoteRequested(
+        /** `number`: the resolved preset the core writes a shortfall's amounts in (issue #408). */
+        fun event(deployed: Boolean, number: String) = FeeEvent.QuoteRequested(
             chain_id = chainId,
             account = account,
             deployed = deployed,
@@ -97,6 +98,7 @@ class SpeedControl(
             calls = calls,
             fee_token = feeToken,
             auto_fee_token = autoFeeToken,
+            number = number,
         )
     }
 
@@ -362,7 +364,7 @@ class SpeedControl(
         if (session.reading || session.view.busy) return false
         VelaLog.event("$area.fee", "re-quote on stale", "chain" to ask.chainId)
         synchronized(sessionLock) {
-            session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
+            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
             tellMeasured(session)
         }
         return true
@@ -421,7 +423,7 @@ class SpeedControl(
                     session.chainRead.value = null
                     session.deployed = read.deployed
                     val before = session.view.fee
-                    val event = session.host.dispatchNumbered(ask.event(read.deployed), FeeEvent.serializer())
+                    val event = session.host.dispatchNumbered(ask.event(read.deployed, numberPreset()), FeeEvent.serializer())
                     tellMeasured(session)
                     Asked(session, before, event)
                 }
@@ -530,7 +532,7 @@ class SpeedControl(
             session.deployed = deployed
             session.generation = generation
             previews.add(session.start())
-            session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
+            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
             tellMeasured(session)
         }
     }

@@ -55,6 +55,20 @@
    }
   },
   {
+   "name": "en/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Any of your 0 keys can sign in on its own. The contract deploys with your first transaction."
+   }
+  },
+  {
    "name": "en/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -133,6 +147,20 @@
    },
    "expect": {
     "value": "1 send"
+   }
+  },
+  {
+   "name": "en/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Your key can sign in on its own. The contract deploys with your first transaction."
    }
   },
   {
@@ -217,6 +245,20 @@
    }
   },
   {
+   "name": "en/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Any of your 2 keys can sign in on its own. The contract deploys with your first transaction."
+   }
+  },
+  {
    "name": "en/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -295,6 +337,20 @@
    },
    "expect": {
     "value": "3 sends"
+   }
+  },
+  {
+   "name": "en/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Any of your 3 keys can sign in on its own. The contract deploys with your first transaction."
    }
   },
   {
@@ -379,6 +435,20 @@
    }
   },
   {
+   "name": "en/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Any of your 5 keys can sign in on its own. The contract deploys with your first transaction."
+   }
+  },
+  {
    "name": "en/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -457,6 +527,20 @@
    },
    "expect": {
     "value": "11 sends"
+   }
+  },
+  {
+   "name": "en/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Any of your 11 keys can sign in on its own. The contract deploys with your first transaction."
    }
   },
   {
@@ -541,6 +625,20 @@
    }
   },
   {
+   "name": "en/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Any of your 21 keys can sign in on its own. The contract deploys with your first transaction."
+   }
+  },
+  {
    "name": "en/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -622,6 +720,20 @@
    }
   },
   {
+   "name": "en/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Any of your 101 keys can sign in on its own. The contract deploys with your first transaction."
+   }
+  },
+  {
    "name": "en/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -700,6 +812,20 @@
    },
    "expect": {
     "value": "1000000 sends"
+   }
+  },
+  {
+   "name": "en/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Any of your 1000000 keys can sign in on its own. The contract deploys with your first transaction."
    }
   },
   {
@@ -796,6 +922,20 @@
    }
   },
   {
+   "name": "zh/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
+   }
+  },
+  {
    "name": "zh/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -874,6 +1014,20 @@
    },
    "expect": {
     "value": "1 笔转账"
+   }
+  },
+  {
+   "name": "zh/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
    }
   },
   {
@@ -958,6 +1112,20 @@
    }
   },
   {
+   "name": "zh/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
+   }
+  },
+  {
    "name": "zh/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -1036,6 +1204,20 @@
    },
    "expect": {
     "value": "3 笔转账"
+   }
+  },
+  {
+   "name": "zh/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
    }
   },
   {
@@ -1120,6 +1302,20 @@
    }
   },
   {
+   "name": "zh/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
+   }
+  },
+  {
    "name": "zh/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -1198,6 +1394,20 @@
    },
    "expect": {
     "value": "11 笔转账"
+   }
+  },
+  {
+   "name": "zh/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
    }
   },
   {
@@ -1282,6 +1492,20 @@
    }
   },
   {
+   "name": "zh/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
+   }
+  },
+  {
    "name": "zh/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -1363,6 +1587,20 @@
    }
   },
   {
+   "name": "zh/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
+   }
+  },
+  {
    "name": "zh/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -1441,6 +1679,20 @@
    },
    "expect": {
     "value": "1000000 笔转账"
+   }
+  },
+  {
+   "name": "zh/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "单把密钥即可登录。合约在首笔交易时部署。"
    }
   },
   {
@@ -1537,6 +1789,20 @@
    }
   },
   {
+   "name": "zh-TW/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
+   }
+  },
+  {
    "name": "zh-TW/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -1615,6 +1881,20 @@
    },
    "expect": {
     "value": "已發送 1 次"
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
    }
   },
   {
@@ -1699,6 +1979,20 @@
    }
   },
   {
+   "name": "zh-TW/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
+   }
+  },
+  {
    "name": "zh-TW/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -1777,6 +2071,20 @@
    },
    "expect": {
     "value": "已發送 3 次"
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
    }
   },
   {
@@ -1861,6 +2169,20 @@
    }
   },
   {
+   "name": "zh-TW/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
+   }
+  },
+  {
    "name": "zh-TW/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -1939,6 +2261,20 @@
    },
    "expect": {
     "value": "已發送 11 次"
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
    }
   },
   {
@@ -2023,6 +2359,20 @@
    }
   },
   {
+   "name": "zh-TW/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
+   }
+  },
+  {
    "name": "zh-TW/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -2104,6 +2454,20 @@
    }
   },
   {
+   "name": "zh-TW/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
+   }
+  },
+  {
    "name": "zh-TW/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -2182,6 +2546,20 @@
    },
    "expect": {
     "value": "已發送 1000000 次"
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "單把密鑰即可登入。合約在第一筆交易時部署。"
    }
   },
   {
@@ -2278,6 +2656,20 @@
    }
   },
   {
+   "name": "zh-HK/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
+   }
+  },
+  {
    "name": "zh-HK/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -2356,6 +2748,20 @@
    },
    "expect": {
     "value": "1 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
    }
   },
   {
@@ -2440,6 +2846,20 @@
    }
   },
   {
+   "name": "zh-HK/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
+   }
+  },
+  {
    "name": "zh-HK/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -2518,6 +2938,20 @@
    },
    "expect": {
     "value": "3 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
    }
   },
   {
@@ -2602,6 +3036,20 @@
    }
   },
   {
+   "name": "zh-HK/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
+   }
+  },
+  {
    "name": "zh-HK/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -2680,6 +3128,20 @@
    },
    "expect": {
     "value": "11 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
    }
   },
   {
@@ -2764,6 +3226,20 @@
    }
   },
   {
+   "name": "zh-HK/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
+   }
+  },
+  {
    "name": "zh-HK/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -2845,6 +3321,20 @@
    }
   },
   {
+   "name": "zh-HK/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
+   }
+  },
+  {
    "name": "zh-HK/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -2923,6 +3413,20 @@
    },
    "expect": {
     "value": "1000000 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。"
    }
   },
   {
@@ -3019,6 +3523,20 @@
    }
   },
   {
+   "name": "ja/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
+   }
+  },
+  {
    "name": "ja/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -3097,6 +3615,20 @@
    },
    "expect": {
     "value": "1 回送付"
+   }
+  },
+  {
+   "name": "ja/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
    }
   },
   {
@@ -3181,6 +3713,20 @@
    }
   },
   {
+   "name": "ja/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
+   }
+  },
+  {
    "name": "ja/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -3259,6 +3805,20 @@
    },
    "expect": {
     "value": "3 回送付"
+   }
+  },
+  {
+   "name": "ja/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
    }
   },
   {
@@ -3343,6 +3903,20 @@
    }
   },
   {
+   "name": "ja/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
+   }
+  },
+  {
    "name": "ja/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -3421,6 +3995,20 @@
    },
    "expect": {
     "value": "11 回送付"
+   }
+  },
+  {
+   "name": "ja/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
    }
   },
   {
@@ -3505,6 +4093,20 @@
    }
   },
   {
+   "name": "ja/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
+   }
+  },
+  {
    "name": "ja/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -3586,6 +4188,20 @@
    }
   },
   {
+   "name": "ja/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
+   }
+  },
+  {
    "name": "ja/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -3664,6 +4280,20 @@
    },
    "expect": {
     "value": "1000000 回送付"
+   }
+  },
+  {
+   "name": "ja/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。"
    }
   },
   {
@@ -3760,6 +4390,20 @@
    }
   },
   {
+   "name": "ko/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
+   }
+  },
+  {
    "name": "ko/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -3838,6 +4482,20 @@
    },
    "expect": {
     "value": "1회 전송"
+   }
+  },
+  {
+   "name": "ko/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
    }
   },
   {
@@ -3922,6 +4580,20 @@
    }
   },
   {
+   "name": "ko/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
+   }
+  },
+  {
    "name": "ko/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -4000,6 +4672,20 @@
    },
    "expect": {
     "value": "3회 전송"
+   }
+  },
+  {
+   "name": "ko/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
    }
   },
   {
@@ -4084,6 +4770,20 @@
    }
   },
   {
+   "name": "ko/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
+   }
+  },
+  {
    "name": "ko/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -4162,6 +4862,20 @@
    },
    "expect": {
     "value": "11회 전송"
+   }
+  },
+  {
+   "name": "ko/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
    }
   },
   {
@@ -4246,6 +4960,20 @@
    }
   },
   {
+   "name": "ko/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
+   }
+  },
+  {
    "name": "ko/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -4327,6 +5055,20 @@
    }
   },
   {
+   "name": "ko/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
+   }
+  },
+  {
    "name": "ko/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -4405,6 +5147,20 @@
    },
    "expect": {
     "value": "1000000회 전송"
+   }
+  },
+  {
+   "name": "ko/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다."
    }
   },
   {
@@ -4501,6 +5257,20 @@
    }
   },
   {
+   "name": "vi/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
+   }
+  },
+  {
    "name": "vi/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -4579,6 +5349,20 @@
    },
    "expect": {
     "value": "1 lần gửi"
+   }
+  },
+  {
+   "name": "vi/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
    }
   },
   {
@@ -4663,6 +5447,20 @@
    }
   },
   {
+   "name": "vi/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
+   }
+  },
+  {
    "name": "vi/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -4741,6 +5539,20 @@
    },
    "expect": {
     "value": "3 lần gửi"
+   }
+  },
+  {
+   "name": "vi/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
    }
   },
   {
@@ -4825,6 +5637,20 @@
    }
   },
   {
+   "name": "vi/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
+   }
+  },
+  {
    "name": "vi/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -4903,6 +5729,20 @@
    },
    "expect": {
     "value": "11 lần gửi"
+   }
+  },
+  {
+   "name": "vi/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
    }
   },
   {
@@ -4987,6 +5827,20 @@
    }
   },
   {
+   "name": "vi/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
+   }
+  },
+  {
    "name": "vi/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -5068,6 +5922,20 @@
    }
   },
   {
+   "name": "vi/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
+   }
+  },
+  {
    "name": "vi/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -5146,6 +6014,20 @@
    },
    "expect": {
     "value": "1000000 lần gửi"
+   }
+  },
+  {
+   "name": "vi/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên."
    }
   },
   {
@@ -5242,6 +6124,20 @@
    }
   },
   {
+   "name": "id/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
+   }
+  },
+  {
    "name": "id/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -5320,6 +6216,20 @@
    },
    "expect": {
     "value": "1 kiriman"
+   }
+  },
+  {
+   "name": "id/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
    }
   },
   {
@@ -5404,6 +6314,20 @@
    }
   },
   {
+   "name": "id/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
+   }
+  },
+  {
    "name": "id/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -5482,6 +6406,20 @@
    },
    "expect": {
     "value": "3 kiriman"
+   }
+  },
+  {
+   "name": "id/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
    }
   },
   {
@@ -5566,6 +6504,20 @@
    }
   },
   {
+   "name": "id/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
+   }
+  },
+  {
    "name": "id/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -5644,6 +6596,20 @@
    },
    "expect": {
     "value": "11 kiriman"
+   }
+  },
+  {
+   "name": "id/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
    }
   },
   {
@@ -5728,6 +6694,20 @@
    }
   },
   {
+   "name": "id/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
+   }
+  },
+  {
    "name": "id/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -5809,6 +6789,20 @@
    }
   },
   {
+   "name": "id/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
+   }
+  },
+  {
    "name": "id/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -5887,6 +6881,20 @@
    },
    "expect": {
     "value": "1000000 kiriman"
+   }
+  },
+  {
+   "name": "id/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama."
    }
   },
   {
@@ -5984,6 +6992,20 @@
    }
   },
   {
+   "name": "tr/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
+   }
+  },
+  {
    "name": "tr/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -6062,6 +7084,20 @@
    },
    "expect": {
     "value": "1 gönderim"
+   }
+  },
+  {
+   "name": "tr/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
    }
   },
   {
@@ -6146,6 +7182,20 @@
    }
   },
   {
+   "name": "tr/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
+   }
+  },
+  {
    "name": "tr/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -6224,6 +7274,20 @@
    },
    "expect": {
     "value": "3 gönderim"
+   }
+  },
+  {
+   "name": "tr/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
    }
   },
   {
@@ -6308,6 +7372,20 @@
    }
   },
   {
+   "name": "tr/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
+   }
+  },
+  {
    "name": "tr/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -6386,6 +7464,20 @@
    },
    "expect": {
     "value": "11 gönderim"
+   }
+  },
+  {
+   "name": "tr/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
    }
   },
   {
@@ -6470,6 +7562,20 @@
    }
   },
   {
+   "name": "tr/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
+   }
+  },
+  {
    "name": "tr/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -6551,6 +7657,20 @@
    }
   },
   {
+   "name": "tr/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
+   }
+  },
+  {
    "name": "tr/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -6629,6 +7749,20 @@
    },
    "expect": {
     "value": "1000000 gönderim"
+   }
+  },
+  {
+   "name": "tr/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur."
    }
   },
   {
@@ -6727,6 +7861,20 @@
    }
   },
   {
+   "name": "es-MX/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 0 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
+   }
+  },
+  {
    "name": "es-MX/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -6805,6 +7953,20 @@
    },
    "expect": {
     "value": "1 envío"
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Tu llave entra por sí sola. El contrato se despliega con tu primera transacción."
    }
   },
   {
@@ -6889,6 +8051,20 @@
    }
   },
   {
+   "name": "es-MX/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 2 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
+   }
+  },
+  {
    "name": "es-MX/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -6967,6 +8143,20 @@
    },
    "expect": {
     "value": "3 envíos"
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 3 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
    }
   },
   {
@@ -7051,6 +8241,20 @@
    }
   },
   {
+   "name": "es-MX/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 5 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
+   }
+  },
+  {
    "name": "es-MX/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -7129,6 +8333,20 @@
    },
    "expect": {
     "value": "11 envíos"
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 11 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
    }
   },
   {
@@ -7213,6 +8431,20 @@
    }
   },
   {
+   "name": "es-MX/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 21 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
+   }
+  },
+  {
    "name": "es-MX/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -7294,6 +8526,20 @@
    }
   },
   {
+   "name": "es-MX/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 101 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
+   }
+  },
+  {
    "name": "es-MX/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -7372,6 +8618,20 @@
    },
    "expect": {
     "value": "1000000 envíos"
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Cualquiera de tus 1000000 llaves entra por sí sola. El contrato se despliega con tu primera transacción."
    }
   },
   {
@@ -7470,6 +8730,20 @@
    }
   },
   {
+   "name": "pt-BR/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Sua chave entra sozinha. O contrato é implantado na primeira transação."
+   }
+  },
+  {
    "name": "pt-BR/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -7548,6 +8822,20 @@
    },
    "expect": {
     "value": "1 envio"
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Sua chave entra sozinha. O contrato é implantado na primeira transação."
    }
   },
   {
@@ -7632,6 +8920,20 @@
    }
   },
   {
+   "name": "pt-BR/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 2 chaves entra sozinha. O contrato é implantado na primeira transação."
+   }
+  },
+  {
    "name": "pt-BR/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -7710,6 +9012,20 @@
    },
    "expect": {
     "value": "3 envios"
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 3 chaves entra sozinha. O contrato é implantado na primeira transação."
    }
   },
   {
@@ -7794,6 +9110,20 @@
    }
   },
   {
+   "name": "pt-BR/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 5 chaves entra sozinha. O contrato é implantado na primeira transação."
+   }
+  },
+  {
    "name": "pt-BR/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -7872,6 +9202,20 @@
    },
    "expect": {
     "value": "11 envios"
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 11 chaves entra sozinha. O contrato é implantado na primeira transação."
    }
   },
   {
@@ -7956,6 +9300,20 @@
    }
   },
   {
+   "name": "pt-BR/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 21 chaves entra sozinha. O contrato é implantado na primeira transação."
+   }
+  },
+  {
    "name": "pt-BR/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -8037,6 +9395,20 @@
    }
   },
   {
+   "name": "pt-BR/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 101 chaves entra sozinha. O contrato é implantado na primeira transação."
+   }
+  },
+  {
    "name": "pt-BR/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -8115,6 +9487,20 @@
    },
    "expect": {
     "value": "1000000 envios"
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Qualquer uma das suas 1000000 chaves entra sozinha. O contrato é implantado na primeira transação."
    }
   },
   {
@@ -8213,6 +9599,20 @@
    }
   },
   {
+   "name": "fr/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Votre clé suffit pour se connecter. Le contrat se déploie à votre première transaction."
+   }
+  },
+  {
    "name": "fr/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -8291,6 +9691,20 @@
    },
    "expect": {
     "value": "1 envoi"
+   }
+  },
+  {
+   "name": "fr/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Votre clé suffit pour se connecter. Le contrat se déploie à votre première transaction."
    }
   },
   {
@@ -8375,6 +9789,20 @@
    }
   },
   {
+   "name": "fr/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 2 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
+   }
+  },
+  {
    "name": "fr/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -8453,6 +9881,20 @@
    },
    "expect": {
     "value": "3 envois"
+   }
+  },
+  {
+   "name": "fr/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 3 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
    }
   },
   {
@@ -8537,6 +9979,20 @@
    }
   },
   {
+   "name": "fr/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 5 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
+   }
+  },
+  {
    "name": "fr/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -8615,6 +10071,20 @@
    },
    "expect": {
     "value": "11 envois"
+   }
+  },
+  {
+   "name": "fr/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 11 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
    }
   },
   {
@@ -8699,6 +10169,20 @@
    }
   },
   {
+   "name": "fr/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 21 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
+   }
+  },
+  {
    "name": "fr/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -8780,6 +10264,20 @@
    }
   },
   {
+   "name": "fr/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 101 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
+   }
+  },
+  {
    "name": "fr/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -8858,6 +10356,20 @@
    },
    "expect": {
     "value": "1000000 envois"
+   }
+  },
+  {
+   "name": "fr/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "N'importe laquelle de vos 1000000 clés suffit pour se connecter. Le contrat se déploie à votre première transaction."
    }
   },
   {
@@ -8955,6 +10467,20 @@
    }
   },
   {
+   "name": "de/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 0 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
+   }
+  },
+  {
    "name": "de/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -9033,6 +10559,20 @@
    },
    "expect": {
     "value": "1 Überweisung"
+   }
+  },
+  {
+   "name": "de/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
    }
   },
   {
@@ -9117,6 +10657,20 @@
    }
   },
   {
+   "name": "de/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 2 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
+   }
+  },
+  {
    "name": "de/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -9195,6 +10749,20 @@
    },
    "expect": {
     "value": "3 Überweisungen"
+   }
+  },
+  {
+   "name": "de/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 3 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
    }
   },
   {
@@ -9279,6 +10847,20 @@
    }
   },
   {
+   "name": "de/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 5 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
+   }
+  },
+  {
    "name": "de/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -9357,6 +10939,20 @@
    },
    "expect": {
     "value": "11 Überweisungen"
+   }
+  },
+  {
+   "name": "de/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 11 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
    }
   },
   {
@@ -9441,6 +11037,20 @@
    }
   },
   {
+   "name": "de/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 21 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
+   }
+  },
+  {
    "name": "de/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -9522,6 +11132,20 @@
    }
   },
   {
+   "name": "de/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 101 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
+   }
+  },
+  {
    "name": "de/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -9600,6 +11224,20 @@
    },
    "expect": {
     "value": "1000000 Überweisungen"
+   }
+  },
+  {
+   "name": "de/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Jeder deiner 1000000 Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt."
    }
   },
   {
@@ -9699,6 +11337,20 @@
    }
   },
   {
+   "name": "ru/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Любой из 0 ключей входит сам по себе. Контракт развернётся при первой транзакции."
+   }
+  },
+  {
    "name": "ru/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -9777,6 +11429,20 @@
    },
    "expect": {
     "value": "1 отправка"
+   }
+  },
+  {
+   "name": "ru/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Ваш ключ входит сам по себе. Контракт развернётся при первой транзакции."
    }
   },
   {
@@ -9861,6 +11527,20 @@
    }
   },
   {
+   "name": "ru/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Любой из 2 ключей входит сам по себе. Контракт развернётся при первой транзакции."
+   }
+  },
+  {
    "name": "ru/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -9939,6 +11619,20 @@
    },
    "expect": {
     "value": "3 отправки"
+   }
+  },
+  {
+   "name": "ru/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Любой из 3 ключей входит сам по себе. Контракт развернётся при первой транзакции."
    }
   },
   {
@@ -10023,6 +11717,20 @@
    }
   },
   {
+   "name": "ru/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Любой из 5 ключей входит сам по себе. Контракт развернётся при первой транзакции."
+   }
+  },
+  {
    "name": "ru/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -10101,6 +11809,20 @@
    },
    "expect": {
     "value": "11 отправок"
+   }
+  },
+  {
+   "name": "ru/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Любой из 11 ключей входит сам по себе. Контракт развернётся при первой транзакции."
    }
   },
   {
@@ -10185,6 +11907,20 @@
    }
   },
   {
+   "name": "ru/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Ваш ключ входит сам по себе. Контракт развернётся при первой транзакции."
+   }
+  },
+  {
    "name": "ru/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -10266,6 +12002,20 @@
    }
   },
   {
+   "name": "ru/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Ваш ключ входит сам по себе. Контракт развернётся при первой транзакции."
+   }
+  },
+  {
    "name": "ru/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -10344,6 +12094,20 @@
    },
    "expect": {
     "value": "1000000 отправок"
+   }
+  },
+  {
+   "name": "ru/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Любой из 1000000 ключей входит сам по себе. Контракт развернётся при первой транзакции."
    }
   },
   {
@@ -10442,6 +12206,20 @@
    }
   },
   {
+   "name": "it/onboarding.create.successMessage/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 0 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
+   }
+  },
+  {
    "name": "it/send.batchApply/0",
    "fn": "i18n_t",
    "input": {
@@ -10520,6 +12298,20 @@
    },
    "expect": {
     "value": "1 invio"
+   }
+  },
+  {
+   "name": "it/onboarding.create.successMessage/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "La tua chiave accede da sola. Il contratto viene distribuito alla prima transazione."
    }
   },
   {
@@ -10604,6 +12396,20 @@
    }
   },
   {
+   "name": "it/onboarding.create.successMessage/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 2 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
+   }
+  },
+  {
    "name": "it/send.batchApply/2",
    "fn": "i18n_t",
    "input": {
@@ -10682,6 +12488,20 @@
    },
    "expect": {
     "value": "3 invii"
+   }
+  },
+  {
+   "name": "it/onboarding.create.successMessage/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 3 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
    }
   },
   {
@@ -10766,6 +12586,20 @@
    }
   },
   {
+   "name": "it/onboarding.create.successMessage/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 5 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
+   }
+  },
+  {
    "name": "it/send.batchApply/5",
    "fn": "i18n_t",
    "input": {
@@ -10844,6 +12678,20 @@
    },
    "expect": {
     "value": "11 invii"
+   }
+  },
+  {
+   "name": "it/onboarding.create.successMessage/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 11 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
    }
   },
   {
@@ -10928,6 +12776,20 @@
    }
   },
   {
+   "name": "it/onboarding.create.successMessage/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 21 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
+   }
+  },
+  {
    "name": "it/send.batchApply/21",
    "fn": "i18n_t",
    "input": {
@@ -11009,6 +12871,20 @@
    }
   },
   {
+   "name": "it/onboarding.create.successMessage/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 101 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
+   }
+  },
+  {
    "name": "it/send.batchApply/101",
    "fn": "i18n_t",
    "input": {
@@ -11087,6 +12963,20 @@
    },
    "expect": {
     "value": "1000000 invii"
+   }
+  },
+  {
+   "name": "it/onboarding.create.successMessage/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.successMessage",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Ognuna delle tue 1000000 chiavi accede da sola. Il contratto viene distribuito alla prima transazione."
    }
   },
   {

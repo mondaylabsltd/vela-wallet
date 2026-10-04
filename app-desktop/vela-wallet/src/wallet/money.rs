@@ -1398,6 +1398,7 @@ mod tests {
                             calls,
                             fee_token: gas_fee_token.clone(),
                             auto_fee_token: *auto_fee_token,
+                            number: crate::executor::format_prefs::current().number,
                         });
                         self.pump_fee(fee_pending);
                         let view = self.fee.view();
@@ -2029,6 +2030,7 @@ mod tests {
             insufficient,
             selected: symbol == "xDAI",
             spent_by_operation: false,
+            short: None,
         };
         let fee = FeeView {
             options: vec![option("xDAI", false), option("USDC", true)],

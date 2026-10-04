@@ -155,7 +155,6 @@
 			"headerCreated": "Wallet erstellt",
 			"headerDefault": "Wallet erstellen",
 			"headerSyncFailed": "Geräteübergreifende Synchronisierung",
-			"identiconHint": "Ein aus der Adresse erzeugtes Identitätsmuster",
 			"keyCount": "{{current}} / {{max}}",
 			"keyDeviceOnlyBadge": "Gerätegebunden",
 			"keyHardwareBadge": "Hardware",
@@ -189,7 +188,6 @@
 			"pinLabel": "PIN",
 			"pinRejected": "Diese PIN wurde nicht akzeptiert. Sind die Versuche aufgebraucht, sperrt sich der Schlüssel selbst und lässt sich nur durch ein Zurücksetzen entsperren — dabei werden alle Passkeys darauf gelöscht.",
 			"pinTitle": "PIN des Sicherheitsschlüssels eingeben",
-			"progressMeterLabel": "Adresse wird abgeleitet",
 			"progressSubtitle": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
 			"progressTitle": "Wallet wird erstellt",
 			"providerGeneric": "Handy oder Tablet",
@@ -217,7 +215,8 @@
 			"stepKeysLabel": "Schlüssel",
 			"stepNamingDetail": "Benenne deine Wallet. Der Name geht mit deinem Public Key on-chain.",
 			"stepNamingLabel": "Name",
-			"successMessage": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
+			"successMessage_one": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
+			"successMessage_other": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
 			"successTitle": "Wallet erstellt",
 			"syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
 			"syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
@@ -231,8 +230,7 @@
 			"touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
 			"touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
 			"verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
-			"verifyStuckHint": "Die Bestätigung schlägt immer wieder fehl? Ihr Gerät hat diesen Passkey möglicherweise nicht richtig gespeichert. Sie können bedenkenlos neu beginnen — es wurde noch nichts erstellt.",
-			"walletAddressLabel": "Wallet-Adresse"
+			"verifyStuckHint": "Die Bestätigung schlägt immer wieder fehl? Ihr Gerät hat diesen Passkey möglicherweise nicht richtig gespeichert. Sie können bedenkenlos neu beginnen — es wurde noch nichts erstellt."
 		},
 		"login": {
 			"alertNotSupportedTitle": "Nicht unterstützt",

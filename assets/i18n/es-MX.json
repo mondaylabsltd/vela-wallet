@@ -765,7 +765,6 @@
    "headerCreated": "Billetera creada",
    "headerDefault": "Crear billetera",
    "headerSyncFailed": "Sincronización entre dispositivos",
-   "identiconHint": "Un patrón de identidad generado a partir de la dirección",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Vinculada al dispositivo",
    "keyHardwareBadge": "Hardware",
@@ -799,7 +798,6 @@
    "pinLabel": "PIN",
    "pinRejected": "Ese PIN no se aceptó. Cuando se acaban los intentos, la llave se bloquea sola y solo un restablecimiento la libera, lo que borra todas sus llaves de acceso.",
    "pinTitle": "Escribe el PIN de tu llave de seguridad",
-   "progressMeterLabel": "Derivando dirección",
    "progressSubtitle": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
    "progressTitle": "Creando tu billetera",
    "providerGeneric": "Teléfono o tablet",
@@ -827,7 +825,9 @@
    "stepKeysLabel": "Llaves",
    "stepNamingDetail": "Ponle nombre a tu billetera. Se escribe en la cadena junto con tu clave pública.",
    "stepNamingLabel": "Nombre",
-   "successMessage": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
+   "successMessage_one": "Tu llave entra por sí sola. El contrato se despliega con tu primera transacción.",
+   "successMessage_many": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
+   "successMessage_other": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
    "successTitle": "Billetera creada",
    "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
    "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
@@ -841,8 +841,7 @@
    "touchSelectBody": "Hay varias llaves de seguridad conectadas y todas están parpadeando. Toca la que quieras usar.",
    "touchTitle": "Toca tu llave de seguridad",
    "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
-   "verifyStuckHint": "¿La verificación sigue fallando? Puede que tu dispositivo no haya guardado bien esta passkey. Es seguro empezar de nuevo — aún no se creó nada.",
-   "walletAddressLabel": "Dirección de la billetera"
+   "verifyStuckHint": "¿La verificación sigue fallando? Puede que tu dispositivo no haya guardado bien esta passkey. Es seguro empezar de nuevo — aún no se creó nada."
   },
   "login": {
    "alertNotSupportedTitle": "No compatible",
@@ -1245,7 +1244,6 @@
    "batchSubtitle": "{{count}} transacciones, firmadas juntas",
    "batchCall": "Llamada al contrato",
    "balanceUnderfundedNative": "No tienes suficiente {{symbol}} para cubrir esta transferencia; se espera que falle on-chain.",
-   "gasEstimateFailed": "No se pudo estimar la comisión de gas — el envío podría fallar o agotar el tiempo. Toca la comisión de arriba para reintentar.",
    "submitted": "Enviada — esperando confirmación",
    "historicalNote": "Una firma pasada — exactamente lo que aprobaste.",
    "close": "Cerrar",
@@ -1510,7 +1508,9 @@
    "reasonQuote": "No se pudo obtener un precio del relay. Reintentando automáticamente.",
    "reasonFeeToken": "El relay no puede cotizar esta moneda por ahora. Reintentando; también puedes pagar con otra moneda.",
    "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
-   "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente."
+   "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
+   "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
+   "noCoinPays": "Ningún token alcanza para esta comisión"
   },
   "dock": {
    "receive": "Recibir",
@@ -1917,6 +1917,8 @@
   "newTab": "Pestaña nueva",
   "startPage": "Página de inicio",
   "closeAllTabs": "Cerrar todas las pestañas",
+  "closeOtherTabs": "Cerrar las demás pestañas",
+  "closeTabsToRight": "Cerrar las pestañas de la derecha",
   "closeTab": "Cerrar pestaña",
   "openTabs": "{{n}} pestañas abiertas",
   "addToFavorites": "Agregar a favoritos",

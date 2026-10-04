@@ -275,6 +275,12 @@ pub struct SigningStrings {
     /// Spec 096 F2: the coin paying is one the transaction itself may spend
     /// ({{sym}}) — the core's `spent_by_operation`.
     pub warn_fee_coin_spent: SharedString,
+    /// Issue #408: under a greyed coin, why it cannot pay — "Need ~{{need}},
+    /// have {{have}}", both the core's `FeeShortfall` words.
+    pub fee_row_short: SharedString,
+    /// Issue #408: under the fee, when not one coin on offer can pay it (the
+    /// core's `no_coin_pays`) — said instead of naming the coin in force.
+    pub fee_no_coin_pays: SharedString,
     pub tech_function: SharedString,
     pub tech_raw_data: SharedString,
     pub tech_sim_result: SharedString,
@@ -523,6 +529,8 @@ impl SigningStrings {
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
+            fee_row_short: loc.t(vela_core::app::fee_policy::ROW_SHORT_KEY),
+            fee_no_coin_pays: loc.t(vela_core::app::fee_policy::NO_COIN_PAYS_KEY),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
             tech_sim_result: s("simResultLabel"),

@@ -348,6 +348,48 @@ pub struct PendingUpload {
     /// Full founding key set. Empty ⇒ legacy single-key record.
     #[serde(default)]
     pub members: Vec<PendingUploadMember>,
+    /// Issue 409: the registry task a ONE-key wallet's publish was accepted
+    /// under. Present ⇒ the registry holds the registration, signed and
+    /// queued, and this record is waiting only for the landing to be
+    /// confirmed — which the session's landing watch does by reading that
+    /// task: a read, no passkey. Absent on every multi-key record (those are
+    /// entered only after the landing, and the record goes with it) and on any
+    /// record whose publish was never accepted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+}
+
+impl PendingUpload {
+    /// Is this record waiting ONLY for its registry landing to be confirmed —
+    /// a one-key wallet whose publish the registry already accepted? Those are
+    /// the records a read can settle (issue 409). Everything else still owes
+    /// the registry a publish, and a publish takes a passkey.
+    #[must_use]
+    pub fn awaits_landing(&self) -> Option<&str> {
+        if self.members.len() > 1 {
+            return None;
+        }
+        self.task_id.as_deref().filter(|task| !task.is_empty())
+    }
+}
+
+/// One record of the pending-upload outbox as a reader finds it on disk
+/// (issue 409). `None` when this build cannot read it.
+///
+/// The outbox is the shells' JSON, written by every build that ever ran on
+/// the device — and by tests that seed it with whatever shape they need. One
+/// record that will not parse must cost only itself: the landing watch that
+/// reads the outbox would otherwise refuse the whole answer, and with it every
+/// record it could have settled.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct OutboxRecord(pub Option<PendingUpload>);
+
+impl<'de> Deserialize<'de> for OutboxRecord {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = serde_json::Value::deserialize(d)?;
+        Ok(Self(serde_json::from_value(raw).ok()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +545,8 @@ impl<'de> Deserialize<'de> for PendingUpload {
             transports: String,
             #[serde(default)]
             members: Vec<PendingUploadMember>,
+            #[serde(default)]
+            task_id: Option<String>,
         }
         let w = Wire::deserialize(d)?;
         Ok(PendingUpload {
@@ -522,6 +566,7 @@ impl<'de> Deserialize<'de> for PendingUpload {
             },
             transports: w.transports,
             members: w.members,
+            task_id: w.task_id.filter(|task| !task.is_empty()),
         })
     }
 }

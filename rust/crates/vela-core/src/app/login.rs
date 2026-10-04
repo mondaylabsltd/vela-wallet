@@ -944,6 +944,10 @@ fn registry_publish_op(
         // The live possession signature runs on the same route the sign-in and
         // the recovery signature did.
         method,
+        // The re-publish is answered once the group has landed, as it always
+        // was: issue #409 changed when a CREATED one-key wallet is entered,
+        // and a sign-in writes no pending record a landing watch could settle.
+        answer_when_accepted: false,
     })
 }
 

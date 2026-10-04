@@ -762,7 +762,6 @@
    "headerCreated": "Đã tạo ví",
    "headerDefault": "Tạo ví",
    "headerSyncFailed": "Đồng bộ đa thiết bị",
-   "identiconHint": "Hoạ tiết nhận dạng sinh từ địa chỉ",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Gắn với thiết bị",
    "keyHardwareBadge": "Phần cứng",
@@ -796,7 +795,6 @@
    "pinLabel": "Mã PIN",
    "pinRejected": "Mã PIN không đúng. Khi hết lượt thử, khoá sẽ tự khoá lại và chỉ có thể mở bằng cách đặt lại — thao tác đó xoá sạch mọi passkey trên khoá.",
    "pinTitle": "Nhập mã PIN của khoá bảo mật",
-   "progressMeterLabel": "Đang suy ra địa chỉ",
    "progressSubtitle": "Suy ra địa chỉ từ {{count}} khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas.",
    "progressTitle": "Đang tạo ví",
    "providerGeneric": "Điện thoại hoặc máy tính bảng",
@@ -824,7 +822,8 @@
    "stepKeysLabel": "Khoá",
    "stepNamingDetail": "Đặt tên cho ví. Tên sẽ được ghi lên chuỗi cùng khoá công khai.",
    "stepNamingLabel": "Tên",
-   "successMessage": "Bất kỳ khoá nào trong {{count}} khoá đều đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
+   "successMessage_one": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
+   "successMessage_other": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
    "successTitle": "Đã tạo ví",
    "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
    "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
@@ -838,8 +837,7 @@
    "touchSelectBody": "Có nhiều khoá bảo mật đang cắm và tất cả đều nhấp nháy. Hãy chạm vào khoá bạn muốn dùng.",
    "touchTitle": "Chạm vào khoá bảo mật của bạn",
    "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
-   "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả.",
-   "walletAddressLabel": "Địa chỉ ví"
+   "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả."
   },
   "login": {
    "alertNotSupportedTitle": "Không hỗ trợ",
@@ -1242,7 +1240,6 @@
    "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
    "batchCall": "Gọi hợp đồng",
    "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain.",
-   "gasEstimateFailed": "Không ước tính được phí gas — việc gửi có thể thất bại hoặc hết thời gian chờ. Chạm vào mức phí ở trên để thử lại.",
    "submitted": "Đã gửi — đang chờ xác nhận",
    "historicalNote": "Một chữ ký trong quá khứ — đúng những gì bạn đã phê duyệt.",
    "close": "Đóng",
@@ -1507,7 +1504,9 @@
    "reasonQuote": "Không lấy được báo giá từ relay. Đang tự động thử lại.",
    "reasonFeeToken": "Relay hiện chưa định giá được coin này. Đang thử lại — hoặc trả phí bằng coin khác.",
    "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
-   "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại."
+   "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại.",
+   "rowShort": "Cần ~{{need}}, có {{have}}",
+   "noCoinPays": "Không token nào đủ trả phí này"
   },
   "dock": {
    "receive": "Nhận",
@@ -1913,6 +1912,8 @@
   "newTab": "Tab mới",
   "startPage": "Trang bắt đầu",
   "closeAllTabs": "Đóng tất cả tab",
+  "closeOtherTabs": "Đóng các tab khác",
+  "closeTabsToRight": "Đóng các tab bên phải",
   "closeTab": "Đóng tab",
   "openTabs": "Đang mở {{n}} tab",
   "addToFavorites": "Thêm vào yêu thích",

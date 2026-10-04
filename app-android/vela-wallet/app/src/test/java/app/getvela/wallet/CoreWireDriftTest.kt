@@ -219,6 +219,7 @@ import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -842,6 +843,7 @@ class CoreWireDriftTest {
     fun feeViewsMatchTheGeneratedMirrors() {
         assertFieldsExist<FeeView>("FeeView")
         assertFieldsExist<FeeOptionView>("FeeOptionView")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.FeeShortfall>("FeeShortfall")
         assertFieldsExist<FeeEstimateView>("FeeEstimateView")
         assertFieldsExist<FeeBundlerQuote>("FeeBundlerQuote")
         assertFieldsExist<FeeAssetQuote>("FeeAssetQuote")
@@ -1130,6 +1132,27 @@ class CoreWireDriftTest {
         assertEquals(SendShellResult.PostCleared, roundTrip<SendShellResult>("""{"type":"post_cleared"}"""))
         val signed = roundTrip<SendEvent>("""{"type":"op_signed","user_op_hash":"0xop","submit_block":7,"now_ms":1.0}""")
         assertEquals(7L, (signed as SendEvent.OpSigned).submit_block)
+    }
+
+    /**
+     * Issue #408: a coin's shortfall and the sheet's "no coin pays" decode as
+     * the core writes them, and a view from before them still decodes — the
+     * fields are additive, so neither can fail a whole fee view.
+     */
+    @Test
+    fun aFeeCoinsShortfallDecodesAndItsAbsenceIsTolerated() {
+        val option = """{"symbol":"USDT","contract":"0xdac1","decimals":6,"balance":"754189","recipient":"0x3e59","usd_balance":"0.75","usd_price":"1","amount":"3583610","insufficient":true,"selected":false,"spent_by_operation":false"""
+        val view = roundTrip<FeeView>(
+            """{"busy":false,"failed":null,"fee":null,"stale":false,"fee_token":null,"options":[$option,"short":{"need":"3.58361 USDT","have":"0.754189 USDT"}}],"confirm_fee_ready":false,"no_coin_pays":true}""",
+        )
+        assertTrue(view.no_coin_pays)
+        assertEquals(
+            app.getvela.wallet.feature.send.core.FeeShortfall(need = "3.58361 USDT", have = "0.754189 USDT"),
+            view.options.single().short,
+        )
+        val before = roundTrip<FeeView>("""{"busy":false,"options":[$option}],"confirm_fee_ready":false}""")
+        assertFalse(before.no_coin_pays)
+        assertNull(before.options.single().short)
     }
 
     @Test

@@ -769,7 +769,6 @@
    "headerCreated": "Wallet Created",
    "headerDefault": "Create Wallet",
    "headerSyncFailed": "Cross-Device Sync",
-   "identiconHint": "An identity pattern generated from the address",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Device-bound",
    "keyHardwareBadge": "Hardware",
@@ -803,7 +802,6 @@
    "pinLabel": "PIN",
    "pinRejected": "That PIN was not accepted. The key locks itself when the attempts run out, and only a reset clears it — which erases every passkey on it.",
    "pinTitle": "Enter your security key's PIN",
-   "progressMeterLabel": "Deriving address",
    "progressSubtitle": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
    "progressTitle": "Creating your wallet",
    "providerGeneric": "Phone or tablet",
@@ -831,7 +829,8 @@
    "stepKeysLabel": "Keys",
    "stepNamingDetail": "Name your wallet. It goes on-chain with your public key.",
    "stepNamingLabel": "Name",
-   "successMessage": "Any of your {{count}} keys can sign in on its own. The contract deploys with your first transaction.",
+   "successMessage_one": "Your key can sign in on its own. The contract deploys with your first transaction.",
+   "successMessage_other": "Any of your {{count}} keys can sign in on its own. The contract deploys with your first transaction.",
    "successTitle": "Wallet created",
    "syncFailedHint": "Check your network, or configure a custom endpoint below.",
    "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
@@ -845,8 +844,7 @@
    "touchSelectBody": "Several security keys are plugged in and all of them are blinking. Touch the one you want to use.",
    "touchTitle": "Touch your security key",
    "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
-   "verifyStuckHint": "Verification keeps failing? Your device may not have saved this passkey properly. It's safe to start over — nothing has been created yet.",
-   "walletAddressLabel": "Wallet address"
+   "verifyStuckHint": "Verification keeps failing? Your device may not have saved this passkey properly. It's safe to start over — nothing has been created yet."
   },
   "login": {
    "alertNotSupportedTitle": "Not Supported",
@@ -1249,7 +1247,6 @@
   },
   "signing": {
    "loading": "Loading...",
-   "gasEstimateFailed": "Couldn't estimate the gas fee — submitting may fail or time out. Tap the fee above to retry.",
    "submitted": "Submitted — waiting for confirmation",
    "historicalNote": "A past signature — exactly what you approved.",
    "close": "Close",
@@ -1520,7 +1517,9 @@
    "reasonQuote": "Couldn't get a price from the relay. Retrying automatically.",
    "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
    "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
-   "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically."
+   "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
+   "rowShort": "Need ~{{need}}, have {{have}}",
+   "noCoinPays": "No token can pay this fee"
   },
   "dock": {
    "receive": "Receive",
@@ -1923,6 +1922,8 @@
   "newTab": "New tab",
   "startPage": "Start page",
   "closeAllTabs": "Close all tabs",
+  "closeOtherTabs": "Close other tabs",
+  "closeTabsToRight": "Close tabs to the right",
   "closeTab": "Close tab",
   "openTabs": "{{n}} tabs open",
   "addToFavorites": "Add to favorites",

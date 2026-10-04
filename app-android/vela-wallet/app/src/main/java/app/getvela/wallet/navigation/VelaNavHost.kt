@@ -1423,6 +1423,15 @@ fun VelaNavHost(
                                 onTabClose = { id -> browser.closeTab(id) },
                                 onTabNew = { browser.newTab() },
                                 onTabsCloseAll = { browser.closeAllTabs() },
+                                // Spec 099: a tab's long-press menu — which tabs each close takes is the core's.
+                                onTabsCloseOthers = { id -> browser.closeOtherTabs(id) },
+                                onTabsCloseRight = { id -> browser.closeTabsToRight(id) },
+                                tabCloses = { id ->
+                                    app.getvela.wallet.feature.explore.TabCloses(
+                                        others = browser.closedBy(app.getvela.wallet.feature.browser.core.TabCloseScope.Others(id)).isNotEmpty(),
+                                        right = browser.closedBy(app.getvela.wallet.feature.browser.core.TabCloseScope.Right(id)).isNotEmpty(),
+                                    )
+                                },
                                 onGroupToggle = { id, hidden ->
                                     when (id) {
                                         "favorites" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, hidden)

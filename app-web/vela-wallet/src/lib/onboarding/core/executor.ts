@@ -161,8 +161,8 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				Storage.removePendingUpload(operation.credential_id);
 				return { type: 'pending_upload_removed' };
 
-			case 'registry_publish':
-				await publish({
+			case 'registry_publish': {
+				const taskId = await publish({
 					// One relying party for the whole unit (ruling, 2026-09-23):
 					// the contract stores a single `rpId` per unit and every
 					// member proves under its own, so a mixed set is refused
@@ -174,9 +174,15 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 					metadataHex: operation.metadata_hex,
 					members: operation.members,
 					seedHex: operation.group_seed_hex,
-					groupPublicKeyHex: operation.group_public_key_hex
+					groupPublicKeyHex: operation.group_public_key_hex,
+					answerWhenAccepted: operation.answer_when_accepted ?? false
 				});
-				return { type: 'registry_published' };
+				// Issue 409: a one-key create is answered at the 202; its
+				// landing is the session's landing watch's to confirm.
+				return taskId === null
+					? { type: 'registry_published' }
+					: { type: 'registry_accepted', task_id: taskId };
+			}
 
 			case 'registry_query_by_public_key': {
 				const status = await Registry.queryByPublicKey(operation.public_key_hex);

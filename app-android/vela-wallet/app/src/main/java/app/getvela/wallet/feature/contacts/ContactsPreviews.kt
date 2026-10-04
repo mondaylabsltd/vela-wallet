@@ -72,6 +72,9 @@ private object ContactsPreviewStrings : VelaStrings {
 
     override fun t(key: String, vars: Map<String, String>): String =
         vars.entries.fold(t(key)) { acc, (name, value) -> acc.replace("{{$name}}", value) }
+
+    /** Previews carry one sample per key, so a plural key is its own sample. */
+    override fun t(key: String, count: Int): String = t(key, mapOf("count" to count.toString()))
 }
 
 @Composable

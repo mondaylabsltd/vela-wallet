@@ -158,52 +158,71 @@ private fun SigningFeeBody(
                     )
                 }
                 fee.options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(VelaRadius.lg))
-                            .background(
-                                if (option.selected) colors.bgRaised else Color.Transparent,
-                                RoundedCornerShape(VelaRadius.lg),
-                            )
-                            // A coin that cannot pay is shown for context, never picked.
-                            .clickable(enabled = !option.disabled) { onPick(option.id) }
-                            .alpha(if (option.disabled) 0.45f else 1f)
-                            .padding(VelaSpacing.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
-                    ) {
-                        LetterAvatar(
-                            option.mark.letter, option.mark.tint, size = VelaSpacing.xl4,
-                        )
-                        Column(
-                            Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(VelaRadius.lg))
+                                .background(
+                                    if (option.selected) colors.bgRaised else Color.Transparent,
+                                    RoundedCornerShape(VelaRadius.lg),
+                                )
+                                // A coin that cannot pay is shown for context, never picked.
+                                .clickable(enabled = !option.disabled) { onPick(option.id) }
+                                .alpha(if (option.disabled) 0.45f else 1f)
+                                .padding(VelaSpacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
                         ) {
-                            Text(
-                                text = option.name,
-                                color = colors.fgBase,
-                                fontFamily = VelaFontFamily,
-                                fontWeight = VelaFontWeight.semibold,
-                                fontSize = VelaTextSize.xl,
+                            LetterAvatar(
+                                option.mark.letter, option.mark.tint, size = VelaSpacing.xl4,
                             )
+                            Column(
+                                Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+                            ) {
+                                Text(
+                                    text = option.name,
+                                    color = colors.fgBase,
+                                    fontFamily = VelaFontFamily,
+                                    fontWeight = VelaFontWeight.semibold,
+                                    fontSize = VelaTextSize.xl,
+                                )
+                                Text(
+                                    text = option.balance,
+                                    color = colors.fgMuted,
+                                    fontFamily = VelaFontFamily,
+                                    fontSize = VelaTextSize.base,
+                                )
+                            }
                             Text(
-                                text = option.balance,
-                                color = colors.fgMuted,
+                                text = option.fee,
+                                color = colors.fgBase,
                                 fontFamily = VelaFontFamily,
                                 fontSize = VelaTextSize.base,
                             )
+                            if (option.selected) {
+                                Icon(
+                                    VelaIcons.Check, null, tint = colors.accentBase,
+                                    modifier = Modifier.size(VelaIconSize.sm),
+                                )
+                            }
                         }
-                        Text(
-                            text = option.fee,
-                            color = colors.fgBase,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.base,
-                        )
-                        if (option.selected) {
-                            Icon(
-                                VelaIcons.Check, null, tint = colors.accentBase,
-                                modifier = Modifier.size(VelaIconSize.sm),
+                        // Issue #408: why a greyed coin cannot pay, under its row and
+                        // at full strength — the row's dimming is not a reason. Set
+                        // in from the row's edge past the mark, under the name.
+                        option.reason?.let { reason ->
+                            Text(
+                                text = reason,
+                                color = colors.errorBase,
+                                fontFamily = VelaFontFamily,
+                                fontWeight = VelaFontWeight.medium,
+                                fontSize = VelaTextSize.sm,
+                                modifier = Modifier.padding(
+                                    start = VelaSpacing.md + VelaSpacing.xl4 + VelaSpacing.lg,
+                                    end = VelaSpacing.md,
+                                    bottom = VelaSpacing.sm,
+                                ),
                             )
                         }
                     }

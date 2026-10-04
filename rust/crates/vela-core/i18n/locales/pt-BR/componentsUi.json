@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} transações, assinadas juntas",
       "batchCall": "Chamada de contrato",
       "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain.",
-      "gasEstimateFailed": "Não foi possível estimar a taxa de gas — o envio pode falhar ou expirar. Toque na taxa acima para tentar de novo.",
       "submitted": "Enviada — aguardando confirmação",
       "historicalNote": "Uma assinatura anterior — exatamente o que você aprovou.",
       "close": "Fechar",
@@ -318,7 +317,9 @@
       "reasonQuote": "Não foi possível obter um preço do relay. Tentando de novo automaticamente.",
       "reasonFeeToken": "O relay não consegue cotar esta moeda agora. Tentando de novo — ou pague a taxa com outra moeda.",
       "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
-      "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente."
+      "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente.",
+      "rowShort": "Precisa de ~{{need}}, tem {{have}}",
+      "noCoinPays": "Nenhum token cobre esta taxa"
     },
     "dock": {
       "receive": "Receber",

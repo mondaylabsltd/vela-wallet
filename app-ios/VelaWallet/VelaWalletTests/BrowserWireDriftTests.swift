@@ -78,6 +78,36 @@ struct BrowserWireDriftTests {
         }
     }
 
+    /// Spec 099: the batch close's event, as the controller sends it — the ids
+    /// the core named for the strip the view carried — reads in the core, and
+    /// the strip it leaves decodes. A renamed event or field closes nothing.
+    @Test func exploreTabsClosedReads() throws {
+        let core = ExploreSitesCore()
+        let start = try effects(from: core.dispatch(eventJson: CoreJSON.string(["type": "start"])))
+        let read = try #require(start.first { ($0["operation"] as? [String: Any])?["type"] as? String == "read_explore" })
+        let id = try #require((read["id"] as? NSNumber)?.uint64Value)
+        let tab = { (id: String) -> [String: Any] in
+            ["id": id, "url": "https://\(id).example/", "title": id, "host": "\(id).example"]
+        }
+        let loaded = try core.resolveEffect(effectId: id, resultJson: CoreJSON.string([
+            "type": "loaded",
+            "doc": ["tabs": ["a", "b", "c"].map(tab), "selected_tab": "c"],
+        ]))
+        let before = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: loaded))
+        #expect(before.ready)
+        #expect(before.tabs.map(\.id) == ["a", "b", "c"])
+
+        let ids = BrowserController.tabsClosed(
+            by: .right(of: "a"), strip: BrowserController.stripJSON(before.tabs)
+        )
+        #expect(ids == ["b", "c"])
+        let closed = try core.dispatch(eventJson: CoreJSON.string(["type": "tabs_closed", "ids": ids]))
+        let after = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: closed))
+        #expect(after.tabs.map(\.id) == ["a"])
+        #expect(after.selectedTab == "a")
+        #expect(tags(try effects(from: closed)) == ["write_explore"], "one write for the batch")
+    }
+
     // MARK: - browser_history
 
     @Test func historyViewDecodes() throws {

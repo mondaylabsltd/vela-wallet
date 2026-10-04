@@ -20,4 +20,17 @@ stale: boolean, fee_token: string | null, options: Array<FeeOptionView>,
 /**
  * The single gate consumers AND into their confirm button.
  */
-confirm_fee_ready: boolean, };
+confirm_fee_ready: boolean, 
+/**
+ * Not one coin on offer can pay this fee — every option carries a
+ * [`FeeOptionView::short`] (issue 408). The sheet's line under the fee
+ * says that ([`NO_COIN_PAYS_KEY`]) instead of naming the coin in
+ * force as if another could stand in for it: an account holding 0 ETH and
+ * 0.75 USDT against a 3.58 USDT fee read "Insufficient ETH for gas fees".
+ *
+ * Only a PROVEN shortfall counts, as for the gate (issue 262): a coin
+ * the quote cannot price might pay, so its presence keeps this `false`.
+ * Never set while busy, failed or unpriced. `#[serde(default)]`: a reader
+ * that predates it reads `false`.
+ */
+no_coin_pays: boolean, };

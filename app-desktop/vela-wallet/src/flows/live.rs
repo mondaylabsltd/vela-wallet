@@ -4518,6 +4518,7 @@ mod tests {
             insufficient: false,
             selected: true,
             spent_by_operation: false,
+            short: None,
         }];
         assert_eq!(
             fee_line(

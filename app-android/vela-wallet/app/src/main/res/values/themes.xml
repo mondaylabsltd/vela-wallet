@@ -2,17 +2,16 @@
 <resources>
     <!-- Splash background follows appearance (spec 012 FR-022); values/ carries
          the light value, values-night/ the dark one. -->
-    <style name="Theme.VelaWallet" parent="Theme.SplashScreen.IconBackground">
+    <style name="Theme.VelaWallet" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/vela_splash_bg</item>
-        <!-- Spec 088: the app icon. core-splashscreen's default for this item is
-             @android:drawable/sym_def_app_icon — Android's generic robot — on every
-             API level, so every launch opened on a robot until this line. The
-             adaptive icon's foreground layer is the mark alone, sized for the
-             masked circle; its pale sails need the tile behind them, so the circle
-             is filled with the tile colour (ic_launcher_background.xml's fill —
-             keep the two in step, scripts/gen-app-icons.sh owns it). -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
-        <item name="windowSplashScreenIconBackgroundColor">#F46D50</item>
+        <!-- Issue #407: the launch animation's first frame — its mark, centred, on
+             the same colour (splash_mark.xml says how it is matched). The
+             animation then moves it left as the wordmark types in, so launch
+             is one screen. The adaptive icon on its tile (spec 088) read as a
+             second, unrelated screen first, and HyperOS draws the tile as a
+             hard square. Never unset: core-splashscreen's default is Android's
+             robot. -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
         <item name="postSplashScreenTheme">@style/Theme.VelaWallet.Main</item>
     </style>
 

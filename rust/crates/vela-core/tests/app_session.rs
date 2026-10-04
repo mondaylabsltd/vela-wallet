@@ -21,7 +21,56 @@ use vela_core::app::session::{
 use vela_core::app::shell::CompletionMode;
 use vela_core::app::{Account, AccountKey};
 
-type Sut = DomainDriver<Session>;
+/// The session machine, with its landing watch (issue #409) answered out of
+/// the way.
+///
+/// The watch starts on every restore into Active and every establishment, by
+/// reading the pending-upload outbox. The rules in THIS file are about the
+/// session's other duties, so that one read is answered here with an empty
+/// outbox — which asks for nothing further — and kept out of the operation
+/// lists the tests compare. The watch's own rules are pinned in
+/// `app_session_landing_409.rs`, against the bare machine.
+struct Sut {
+    inner: DomainDriver<Session>,
+}
+
+impl Sut {
+    fn new() -> Self {
+        Self {
+            inner: DomainDriver::new(),
+        }
+    }
+
+    fn dispatch(&mut self, event: Event) -> Vec<Op> {
+        let ops = self.inner.dispatch(event);
+        self.without_the_watch(ops)
+    }
+
+    fn resolve(&mut self, result: Res) -> Vec<Op> {
+        let ops = self.inner.resolve(result);
+        self.without_the_watch(ops)
+    }
+
+    fn view(&self) -> vela_core::app::session::SessionView {
+        self.inner.view()
+    }
+
+    fn without_the_watch(&mut self, ops: Vec<Op>) -> Vec<Op> {
+        if ops.contains(&Op::LoadPendingUploads) {
+            let more = self.inner.resolve_matching(
+                |op| *op == Op::LoadPendingUploads,
+                Res::PendingUploadsLoaded { records: vec![] },
+            );
+            assert!(
+                more.is_empty(),
+                "an empty outbox asks for nothing: {more:?}"
+            );
+        }
+        ops.into_iter()
+            .filter(|op| *op != Op::LoadPendingUploads)
+            .collect()
+    }
+}
 
 const ADDR_A: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ADDR_B: &str = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

@@ -123,6 +123,18 @@ fn the_fee_says_which() {
         "priced, not ready"
     );
 
+    // Issue #408: short, and so is every other coin — the line says no coin
+    // can pay, not "pick another".
+    assert_eq!(
+        confirm_state(&input).key.as_deref(),
+        Some("componentsUi.signing.confirmBlock.feeShort")
+    );
+    input.fee.as_mut().unwrap().no_coin_pays = true;
+    let state = confirm_state(&input);
+    assert_eq!(state.block, Some(ConfirmBlock::FeeShort));
+    assert_eq!(state.key.as_deref(), Some("componentsUi.gas.noCoinPays"));
+    input.fee.as_mut().unwrap().no_coin_pays = false;
+
     let fee = input.fee.as_mut().unwrap();
     fee.fee = None;
     assert_eq!(

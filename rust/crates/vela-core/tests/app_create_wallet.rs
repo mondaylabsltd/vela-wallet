@@ -1243,3 +1243,238 @@ fn a_synced_sole_key_finishes_alone() {
     assert!(!view.needs_second_key);
     assert!(view.can_finish);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #409 — a one-key wallet enters once the registry ACCEPTS it
+// ---------------------------------------------------------------------------
+
+const TASK: &str = "task-409";
+
+/// The operation as it crosses the bridge — what "byte for byte" is about.
+fn wire(operation: &ShellOperation) -> serde_json::Value {
+    serde_json::to_value(operation).expect("operations serialize")
+}
+
+/// Owner's decision, 2026-10-04: with ONE key the wallet is entered as soon as
+/// the registry has accepted the publish (its 202: signed, queued durably), and
+/// the landing finishes in the background. On a Xiaomi that wait was 6.9 s of
+/// the 7.75 s after the last tap.
+///
+/// The pending record is NOT removed: it is re-written with the task, so it
+/// still says the landing is unconfirmed — to the sign-out warning, and to the
+/// session's landing watch that confirms it later without a passkey.
+#[test]
+fn a_one_key_wallet_is_created_right_after_the_accepted_ack_and_keeps_its_pending_record() {
+    let mut sut = finished("Ann");
+    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    match next.as_slice() {
+        [publish @ ShellOperation::RegistryPublish {
+            answer_when_accepted,
+            ..
+        }] => {
+            assert!(
+                *answer_when_accepted,
+                "one key: the shell answers on acceptance"
+            );
+            assert_eq!(wire(publish)["answer_when_accepted"], true);
+        }
+        other => panic!("expected the publish, got {other:?}"),
+    }
+
+    let next = sut.resolve(ShellResult::RegistryAccepted {
+        task_id: TASK.to_owned(),
+    });
+    match next.as_slice() {
+        [ShellOperation::SavePendingUpload { record }] => {
+            assert_eq!(record.id, CRED, "the same record, re-written in place");
+            assert_eq!(record.task_id.as_deref(), Some(TASK));
+            assert_eq!(record.members.len(), 1);
+            assert_eq!(
+                record.awaits_landing(),
+                Some(TASK),
+                "exactly the record the landing watch confirms by reading the task"
+            );
+        }
+        other => panic!("accepted → the record learns its task; got {other:?}"),
+    }
+    assert!(
+        sut.view().address.is_none(),
+        "not entered before it is saved"
+    );
+
+    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
+        "then straight to saving the account — no wait for the chain; got {next:?}"
+    );
+    let next = sut.resolve(ShellResult::AccountSaved);
+    assert!(next.is_empty(), "nothing else is asked; got {next:?}");
+
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::Created);
+    assert!(view.address.is_some());
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .any(|op| matches!(op, ShellOperation::RemovePendingUpload { .. })),
+        "the record stays until the landing is CONFIRMED"
+    );
+
+    // And entering is still the plain hand-off — no ceremony, no removal.
+    let requested = sut.dispatch(Event::EnterWallet);
+    assert!(
+        matches!(
+            requested.as_slice(),
+            [ShellOperation::CompleteOnboarding { .. }]
+        ),
+        "got {requested:?}"
+    );
+}
+
+/// The task id is a convenience for the landing watch, not a condition of
+/// entering: a record it could not be written into still exists and still
+/// warns, and the key is exactly as recoverable as it was a moment ago.
+#[test]
+fn a_one_key_wallet_whose_task_could_not_be_recorded_still_enters() {
+    let mut sut = uploading("Ann");
+    sut.resolve(ShellResult::RegistryAccepted {
+        task_id: TASK.to_owned(),
+    });
+    let next = sut.resolve(ShellResult::StorageFailed {
+        message: "disk full".to_owned(),
+    });
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
+        "got {next:?}"
+    );
+    sut.resolve(ShellResult::AccountSaved);
+    assert_eq!(sut.view().stage, CreateStage::Created);
+}
+
+/// The identical group already on-chain is still `RegistryPublished` — landed,
+/// so the record goes exactly as before.
+#[test]
+fn a_one_key_wallet_already_on_chain_still_clears_its_record_first() {
+    let mut sut = uploading("Ann");
+    let next = sut.resolve(ShellResult::RegistryPublished);
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RemovePendingUpload { .. }]
+        ),
+        "got {next:?}"
+    );
+}
+
+/// The first pending record — written before anything is accepted — carries
+/// no task, and so is nothing the landing watch may settle.
+#[test]
+fn the_first_pending_record_carries_no_task() {
+    let mut sut = registered("Ann");
+    let next = sut.dispatch(Event::FinishKeys);
+    match next.as_slice() {
+        [op @ ShellOperation::SavePendingUpload { record }] => {
+            assert_eq!(record.task_id, None);
+            assert_eq!(record.awaits_landing(), None);
+            assert!(wire(op)["record"].get("task_id").is_none());
+        }
+        other => panic!("got {other:?}"),
+    }
+}
+
+/// Several keys keep today's rule, byte for byte: the publish does not ask to
+/// be answered early (the field is not even on the wire), and the wallet is
+/// entered only after the landing — record removed, then saved, then Created.
+/// A sibling device can only rebuild a multi-key wallet's address from the
+/// on-chain group.
+#[test]
+fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
+    let mut sut = two_keys("Ann");
+    let next = sut.dispatch(Event::FinishKeys);
+    match next.as_slice() {
+        [op @ ShellOperation::SavePendingUpload { record }] => {
+            assert_eq!(record.task_id, None);
+            assert!(wire(op)["record"].get("task_id").is_none());
+        }
+        other => panic!("got {other:?}"),
+    }
+    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    match next.as_slice() {
+        [op @ ShellOperation::RegistryPublish {
+            answer_when_accepted,
+            ..
+        }] => {
+            assert!(!answer_when_accepted);
+            let wire = wire(op);
+            assert!(
+                wire.get("answer_when_accepted").is_none(),
+                "the multi-key publish crosses the bridge exactly as before: {wire}"
+            );
+            let mut keys: Vec<&str> = wire
+                .as_object()
+                .expect("an object")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                [
+                    "group_public_key_hex",
+                    "group_seed_hex",
+                    "members",
+                    "metadata_hex",
+                    "method",
+                    "type"
+                ]
+            );
+        }
+        other => panic!("got {other:?}"),
+    }
+
+    // Unchanged order: landed → remove pending → save → Created.
+    let next = sut.resolve(ShellResult::RegistryPublished);
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RemovePendingUpload { .. }]
+        ),
+        "got {next:?}"
+    );
+    assert!(sut.view().address.is_none());
+    let next = sut.resolve(ShellResult::PendingUploadRemoved);
+    assert!(next.iter().any(is_save_account));
+    assert!(sut.view().address.is_none());
+    sut.resolve(ShellResult::AccountSaved);
+    assert_eq!(sut.view().stage, CreateStage::Created);
+}
+
+/// A shell that answered a multi-key publish on acceptance anyway gets the
+/// retry screen, never the wallet: entering it before the landing is exactly
+/// what the owner kept for several keys. Retrying is safe — the registry is
+/// idempotent by content.
+#[test]
+fn a_multi_key_wallet_is_never_entered_on_an_accepted_ack() {
+    let mut sut = two_keys("Ann");
+    sut.dispatch(Event::FinishKeys);
+    sut.resolve(ShellResult::PendingUploadSaved);
+    let next = sut.resolve(ShellResult::RegistryAccepted {
+        task_id: TASK.to_owned(),
+    });
+    assert!(
+        next.iter()
+            .all(|op| !is_save_account(op)
+                && !matches!(op, ShellOperation::SavePendingUpload { .. })),
+        "got {next:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::SyncFailed);
+    assert!(view.address.is_none());
+    assert!(matches!(
+        sut.dispatch(Event::RetryUpload).as_slice(),
+        [ShellOperation::RegistryPublish {
+            answer_when_accepted: false,
+            ..
+        }]
+    ));
+}

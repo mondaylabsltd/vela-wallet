@@ -159,7 +159,6 @@ const FLOW_KEYS_SCREEN_KEYS = [
 const FLOW_OUTCOME_SCREEN_KEYS = [
 	'onboarding.create.progressTitle',
 	'onboarding.create.progressSubtitle',
-	'onboarding.create.progressMeterLabel',
 	'onboarding.create.taskVerifyKey',
 	'onboarding.create.taskDeriveAddress',
 	'onboarding.create.taskWriteIndex',
@@ -168,11 +167,19 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
 	'onboarding.create.syncFailedHint',
 	'onboarding.create.retryUploadBtn',
 	'onboarding.create.successTitle',
-	'onboarding.create.successMessage',
-	'onboarding.create.walletAddressLabel',
-	'onboarding.create.identiconHint',
 	'onboarding.create.enterWalletBtn'
 ] as const;
+
+/**
+ * Flow keys that are PLURAL (issue 409): the corpus holds `key_one`,
+ * `key_other`, … and no bare `key`. `resolveFlowMessages` ships each locale's
+ * forms — the categories the core says that locale has — and the screen picks
+ * one at render time with the core's rule (`$lib/i18n/plural.ts`).
+ *
+ * `onboarding.create.successMessage` is the line under "Wallet created": one
+ * key reads "Your key can sign in on its own", several "Any of your N keys…".
+ */
+export const FLOW_PLURAL_KEYS = ['onboarding.create.successMessage'] as const;
 
 /** Every prompt the two machines can raise (spec 019). */
 const FLOW_PROMPT_KEYS = [
@@ -253,6 +260,7 @@ export const FLOW_KEYS: readonly string[] = [
 /**
  * Serialized flow copy: dotted corpus key → resolved template. Interpolation
  * placeholders (`{{seconds}}`, `{{current}}`…) ship raw and are filled
- * client-side by `fillTemplate` from frozen presentation state (FR-011).
+ * client-side by `fillTemplate` from frozen presentation state (FR-011). A
+ * plural key ships as its suffixed forms (`FLOW_PLURAL_KEYS`).
  */
 export type FlowMessages = Readonly<Record<string, string>>;

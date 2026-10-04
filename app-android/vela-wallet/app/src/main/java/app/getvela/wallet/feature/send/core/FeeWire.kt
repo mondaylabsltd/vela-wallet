@@ -286,6 +286,19 @@ data class FeeOptionView(
      * The sheet warns while it is the coin paying.
      */
     val spent_by_operation: Boolean = false,
+    /**
+     * Issue #408: why this coin cannot be chosen, when the numbers prove it —
+     * the fee in it and what it has to pay from, each written by the core
+     * with its unit. `null` when it can pay, or cannot be weighed (no price).
+     */
+    val short: FeeShortfall? = null,
+)
+
+/** A coin's shortfall against the fee, both sides written by the core (`3.58361 USDT`). */
+@Serializable
+data class FeeShortfall(
+    val need: String,
+    val have: String,
 )
 
 @Serializable
@@ -297,6 +310,12 @@ data class FeeView(
     val fee_token: String? = null,
     val options: List<FeeOptionView> = emptyList(),
     val confirm_fee_ready: Boolean = false,
+    /**
+     * Issue #408: not one coin on offer can pay this fee (every option has a
+     * [FeeOptionView.short]). The sheet says so instead of naming the coin in
+     * force as though another could stand in.
+     */
+    val no_coin_pays: Boolean = false,
 )
 
 // -- what the machine asks for -----------------------------------------------
@@ -418,6 +437,11 @@ sealed class FeeEvent {
          * and `options[].selected` say which coin was taken.
          */
         val auto_fee_token: Boolean = false,
+        /**
+         * The resolved number preset (`comma_dot`, …) the core writes the
+         * amounts it states in — a coin's shortfall (issue #408).
+         */
+        val number: String = "comma_dot",
     ) : FeeEvent()
 
     @Serializable

@@ -177,6 +177,16 @@ export interface SigningMessages {
 	 * ({{sym}}).
 	 */
 	feeCoinSpent: string;
+	/**
+	 * Issue 408: under a greyed coin, why it cannot pay — `{{need}}` and
+	 * `{{have}}` are the core's `FeeShortfall` words, never re-formatted here.
+	 */
+	feeRowShort: string;
+	/**
+	 * Issue 408: under the fee, when not one coin on offer can pay it (the
+	 * core's `no_coin_pays`) — said instead of naming the coin in force.
+	 */
+	feeNoCoinPays: string;
 	/** Spec 079: the send form's refresh control (`send.feeRefresh`). */
 	feeRefresh: string;
 	/** Spec 079: the send form's stale note (`send.feeStale`). */

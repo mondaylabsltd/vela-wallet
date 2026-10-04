@@ -6,7 +6,7 @@
 //! `en` fallback, plus the resolved locale's catalog when that locale isn't `en`.
 
 use gpui::SharedString;
-use vela_core::i18n::{Catalog, I18n, Options, Var};
+use vela_core::i18n::{Catalog, Count, I18n, Options, Var};
 
 pub struct Loc {
     engine: I18n,
@@ -89,6 +89,30 @@ impl Loc {
         let vars: Vec<(&str, Var<'_>)> = vars.iter().map(|(k, v)| (*k, Var::Num(*v))).collect();
         let opts = Options {
             vars: &vars,
+            ..Options::default()
+        };
+        self.engine
+            .t(key, &opts)
+            .unwrap_or_else(|_| key.to_owned())
+            .into()
+    }
+
+    /// `t` for a PLURAL key: `count` chooses the form — `_one`, `_few`,
+    /// `_many` or `_other`, by the language's CLDR rule, in the core — and
+    /// fills `{{count}}`.
+    ///
+    /// [`Self::t_vars`] cannot stand in for this. It fills `{{count}}` as a
+    /// plain variable and never selects a form, so a plural key handed to it
+    /// has no value at all (issue #409: the done screen's "Any of your 1 keys"
+    /// was one sentence for every count; once it became plural, the variable
+    /// route would have echoed the key). Never pick the suffix here either:
+    /// `count == 1` is not Russian's rule, nor Chinese's.
+    pub fn t_count(&self, key: &str, count: usize) -> SharedString {
+        // Founding sets are capped at 7; the clamp only keeps the conversion
+        // lossless without a cast.
+        let count = u32::try_from(count).map_or(f64::from(u32::MAX), f64::from);
+        let opts = Options {
+            count: Some(Count::Num(count)),
             ..Options::default()
         };
         self.engine
@@ -386,7 +410,7 @@ mod tests {
     /// Var-bearing keys (`{{seconds}}` …) resolve with the placeholder left in
     /// place under default options — still a non-echo, non-empty value, which
     /// is all this sweep asserts about them.
-    const FLOW_KEYS: [&str; 122] = [
+    const FLOW_KEYS: [&str; 118] = [
         "common.cancel",
         "onboarding.create.keyUnreadableTitle",
         "onboarding.create.keyUnreadableBody",
@@ -445,7 +469,6 @@ mod tests {
         "onboarding.create.enterWalletBtn",
         "onboarding.create.finishVerifyBtn",
         "onboarding.create.headerDefault",
-        "onboarding.create.identiconHint",
         "onboarding.create.keyCount",
         "onboarding.create.keyDeviceOnlyBadge",
         "onboarding.create.keyLimitReached",
@@ -468,7 +491,6 @@ mod tests {
         "onboarding.create.nameTooLong",
         "onboarding.create.needSecondKeyHint",
         "onboarding.create.nextBtn",
-        "onboarding.create.progressMeterLabel",
         "onboarding.create.progressSubtitle",
         "onboarding.create.progressTitle",
         "onboarding.create.providerGeneric",
@@ -485,7 +507,6 @@ mod tests {
         "onboarding.create.statusSyncingKey",
         "onboarding.create.statusVerifyCancelled",
         "onboarding.create.statusVerifyingIdentity",
-        "onboarding.create.successMessage",
         "onboarding.create.successTitle",
         "onboarding.create.syncFailedHint",
         "onboarding.create.syncFailedMessage",
@@ -495,7 +516,6 @@ mod tests {
         "onboarding.create.taskWriteIndex",
         "onboarding.create.technicalDetails",
         "onboarding.create.verifyHint",
-        "onboarding.create.walletAddressLabel",
         "onboarding.login.alertSignInFailedTitle",
         "onboarding.login.recoverCancel",
         "onboarding.login.recoverConfirm",
@@ -637,6 +657,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Issue #409: the done screen's line takes the plural route, so a one-key
+    /// wallet is not told about "your 1 keys", and every founding-set size
+    /// resolves in the visual-pass languages. Plural keys are not in
+    /// `FLOW_KEYS`: under default options they have no form to resolve to.
+    #[test]
+    fn the_done_line_agrees_with_its_count() {
+        const KEY: &str = "onboarding.create.successMessage";
+        let en = Loc::for_tag("en");
+        assert_eq!(
+            en.t_count(KEY, 1).as_ref(),
+            "Your key can sign in on its own. The contract deploys with your first transaction."
+        );
+        assert!(
+            en.t_count(KEY, 3)
+                .starts_with("Any of your 3 keys can sign in")
+        );
+        for lng in ["en", "zh", "de", "zh-TW", "ru"] {
+            let loc = Loc::for_tag(lng);
+            for keys in 1..=vela_core::safe::MAX_MULTI_KEYS {
+                let line = loc.t_count(KEY, keys);
+                assert_ne!(line.as_ref(), KEY, "{lng}/{keys}: the key echoed");
+                assert!(!line.contains("{{"), "{lng}/{keys}: unfilled: {line}");
+            }
+        }
+        // What the screen used to call: a variable fills `{{count}}` but never
+        // picks a form, so the plural key has nothing to give it.
+        assert_eq!(en.t_vars(KEY, &[("count", 1.0)]).as_ref(), KEY);
     }
 
     /// The mock's zh flow copy is the source of record — pin representative

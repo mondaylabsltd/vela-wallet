@@ -230,6 +230,22 @@ describe('FeeQuote — the fee coin nobody chose (spec 078)', () => {
 		expect(autoOf(seams.start)).toBe(true);
 	});
 
+	// Issue 408: the core writes a coin's shortfall ("3,58361 USDT") in the
+	// person's number preset, so the request carries it — resolved, never `auto`.
+	it('carries the resolved number preset onto `quote_requested`', async () => {
+		const { preferences } = await import('$lib/services/preferences.svelte');
+		const before = preferences.numberFormat;
+		preferences.setNumberFormat('dot_comma');
+		try {
+			const quote = new FeeQuote();
+			void quote.requestQuote(REQUEST);
+			await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
+			expect((seams.start.mock.calls[0]?.[0] as { number?: string }).number).toBe('dot_comma');
+		} finally {
+			preferences.setNumberFormat(before);
+		}
+	});
+
 	it('a request that says nothing asks for exactly the coin it names', async () => {
 		const quote = new FeeQuote();
 		void quote.requestQuote(REQUEST);

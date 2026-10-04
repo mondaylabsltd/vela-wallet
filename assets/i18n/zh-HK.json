@@ -762,7 +762,6 @@
    "headerCreated": "錢包已建立",
    "headerDefault": "建立錢包",
    "headerSyncFailed": "跨裝置同步",
-   "identiconHint": "由地址整出嚟嘅身分圖案",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "裝置綁定",
    "keyHardwareBadge": "硬件",
@@ -796,7 +795,6 @@
    "pinLabel": "PIN 碼",
    "pinRejected": "PIN 碼唔啱。次數用完之後金鑰會自己鎖起，只可以重置解鎖——但重置會清走金鑰上所有通行金鑰。",
    "pinTitle": "輸入安全金鑰嘅 PIN 碼",
-   "progressMeterLabel": "推導緊地址",
    "progressSubtitle": "用 {{count}} 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。",
    "progressTitle": "而家整緊個錢包",
    "providerGeneric": "手機或者平板",
@@ -824,7 +822,8 @@
    "stepKeysLabel": "鑰匙",
    "stepNamingDetail": "幫錢包改個名。佢會同公鑰一齊寫入合約。",
    "stepNamingLabel": "改名",
-   "successMessage": "{{count}} 條密鑰個個都可以自己登入。合約喺第一筆交易先部署。",
+   "successMessage_one": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。",
+   "successMessage_other": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。",
    "successTitle": "錢包整好咗",
    "syncFailedHint": "請檢查你的網絡，或於下方設定自訂端點。",
    "syncFailedMessage": "錢包已建立，但你的公鑰未能同步至伺服器。在此問題解決前，你將無法在其他裝置上登入。",
@@ -838,8 +837,7 @@
    "touchSelectBody": "插咗幾個安全金鑰，全部都喺度閃緊。掂一掂你想用嗰個。",
    "touchTitle": "掂一掂你嘅安全金鑰",
    "verifyHint": "你的通行密鑰已驗證，密鑰已同步——一切就緒。",
-   "verifyStuckHint": "驗證一直失敗？你的裝置可能沒有正確儲存這個通行密鑰。可以放心重新開始——目前尚未建立任何東西。",
-   "walletAddressLabel": "錢包地址"
+   "verifyStuckHint": "驗證一直失敗？你的裝置可能沒有正確儲存這個通行密鑰。可以放心重新開始——目前尚未建立任何東西。"
   },
   "login": {
    "alertNotSupportedTitle": "不支援",
@@ -1197,7 +1195,6 @@
   },
   "signing": {
    "loading": "正在載入⋯",
-   "gasEstimateFailed": "無法估算 gas 費用 — 直接提交可能失敗或逾時。請點按上方費用以重試。",
    "submitted": "已提交 — 等待鏈上確認",
    "signatureRequest": "簽署請求",
    "signing": "正在簽署⋯",
@@ -1468,7 +1465,9 @@
    "reasonQuote": "未能從中繼取得報價，正在自動重試。",
    "reasonFeeToken": "中繼暫時未能為這個幣報價。正在重試——亦可改用其他幣支付手續費。",
    "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
-   "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。"
+   "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。",
+   "rowShort": "需要 ~{{need}}，而家有 {{have}}",
+   "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
   },
   "dock": {
    "receive": "收款",
@@ -1913,6 +1912,8 @@
   "newTab": "新分頁",
   "startPage": "起始頁",
   "closeAllTabs": "閂晒所有分頁",
+  "closeOtherTabs": "閂其他分頁",
+  "closeTabsToRight": "閂右邊分頁",
   "closeTab": "閂分頁",
   "openTabs": "開咗 {{n}} 個分頁",
   "addToFavorites": "加入收藏",
