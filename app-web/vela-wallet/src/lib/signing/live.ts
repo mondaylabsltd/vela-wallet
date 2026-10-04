@@ -787,7 +787,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 								? '—'
 								: `~${feeAmount(option.amount, option.decimals, option.contract)} ${option.symbol}`,
 						selected: option.selected,
-						insufficient: option.insufficient
+						insufficient: option.insufficient,
+						// Issue 408: a refused coin says why — the core's numbers.
+						reason:
+							option.insufficient && option.short !== null && option.short !== undefined
+								? fill(m.feeRowShort, { need: option.short.need, have: option.short.have })
+								: undefined
 					}))
 				}
 			: undefined;
@@ -797,9 +802,14 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// Otherwise, spec 096 F2: the coin in force is one the transaction itself
 	// may spend, so what is left for the fee may be too little — the core's
 	// `spent_by_operation`, said while that coin is the one paying.
+	// Issue 408: and when not one coin on offer can pay, the core says so
+	// (`no_coin_pays`), and so does this line — naming the coin in force read
+	// as if another could stand in ("Insufficient ETH" over a wallet whose
+	// USDT was short too).
 	const selected = fee.options.find((option) => option.selected);
-	const warning =
-		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
+	const warning = fee.no_coin_pays
+		? m.feeNoCoinPays
+		: !fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
 			: !fee.busy && selected?.spent_by_operation === true
 				? fill(m.feeCoinSpent, { sym: selected.symbol })

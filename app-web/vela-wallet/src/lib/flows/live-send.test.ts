@@ -126,7 +126,8 @@ const IDLE_FEE: FeeView = {
 	stale: false,
 	fee_token: null,
 	options: [],
-	confirm_fee_ready: false
+	confirm_fee_ready: false,
+	no_coin_pays: false
 };
 
 const QUOTE = {
@@ -1301,7 +1302,8 @@ describe('the fee row names the coin that is paying', () => {
 							amount: '944000',
 							insufficient: false,
 							selected: true,
-							spent_by_operation: false
+							spent_by_operation: false,
+							short: null
 						}
 					]
 				}
@@ -1346,7 +1348,8 @@ describe('the fee row says what the fee costs', () => {
 							amount: '91000000000000',
 							insufficient: false,
 							selected: true,
-							spent_by_operation: false
+							spent_by_operation: false,
+							short: null
 						}
 					]
 				}
@@ -1444,7 +1447,8 @@ describe('the fee-coin sheet', () => {
 							amount: '2100000000000000',
 							insufficient: false,
 							selected: true,
-							spent_by_operation: false
+							spent_by_operation: false,
+							short: null
 						},
 						{
 							symbol: 'USDC',
@@ -1457,7 +1461,8 @@ describe('the fee-coin sheet', () => {
 							amount: null,
 							insufficient: true,
 							selected: false,
-							spent_by_operation: false
+							spent_by_operation: false,
+							short: null
 						}
 					]
 				}
@@ -1499,7 +1504,8 @@ describe('the fee-coin sheet', () => {
 							amount: '83333333333334',
 							insufficient: false,
 							selected: true,
-							spent_by_operation: false
+							spent_by_operation: false,
+							short: null
 						}
 					]
 				}

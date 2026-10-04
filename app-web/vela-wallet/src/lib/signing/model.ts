@@ -180,6 +180,11 @@ export interface FeeTokenOption {
 	selected: boolean;
 	/** The core's verdict: this coin cannot pay. Drawn, never pickable (issue 211). */
 	insufficient?: boolean;
+	/**
+	 * Issue 408: why a greyed coin cannot pay, drawn under its row — the
+	 * core's shortfall, need and have in the coin's own unit.
+	 */
+	reason?: string;
 }
 
 import type { FeeSpeedModel, ReceiptStage } from '$lib/flows/model';
