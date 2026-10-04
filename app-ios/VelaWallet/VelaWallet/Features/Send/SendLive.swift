@@ -1147,6 +1147,19 @@ enum SendLive {
         }
     }
 
+    /// The form's button gate: the core's `can_continue`, the whole of it.
+    ///
+    /// Issue #424: this used to OR the relay stops on, and the confirm gate
+    /// below AND them (and a signature under way, and a refused submit) — a
+    /// predicate of the shell's own beside the core's, which the desktop and
+    /// the web did not share. The core says all of it now: while a stop is up
+    /// the button is its retry and the core arms it; on confirm the core shuts
+    /// the slide, and refuses a slide, on the same reasons.
+    static func formCtaDisabled(_ view: SendViewWire) -> Bool { !view.canContinue }
+
+    /// The confirm slide's gate: the core's `can_confirm`, the whole of it.
+    static func confirmCtaDisabled(_ view: SendViewWire) -> Bool { !view.canConfirm }
+
     /// The relay's two stops, in words — on the form AND on confirm.
     ///
     /// The core opens both at Continue, while the stage is still the form

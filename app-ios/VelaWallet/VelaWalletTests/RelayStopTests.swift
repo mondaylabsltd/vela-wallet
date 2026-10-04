@@ -102,6 +102,42 @@ struct RelayStopTests {
         #expect(SendLive.fundAddress(unreachable, loc: loc) == nil)
     }
 
+    /// Issue #424: both buttons are the core's gates and nothing else. The
+    /// shell used to OR the stops onto `can_continue` and AND them (with a
+    /// signature under way and a refused submit) onto `can_confirm` — its own
+    /// predicate, which the desktop and the web did not share. Whatever the
+    /// core says is what the button does, stop or no stop.
+    @Test func theButtonsAreTheCoresGatesAndNothingElse() throws {
+        // The device's shape: Unichain, the relay's treasury there empty.
+        var unichainFloat = emptyFloat
+        unichainFloat["chain_id"] = 130
+        let stops: [[String: Any]] = [
+            [:],
+            ["treasury_bootstrap": unichainFloat],
+            ["relay_unreachable": ["chain_id": 130, "operator_served": true]],
+        ]
+        for stop in stops {
+            for gate in [true, false] {
+                var form: [String: Any] = ["stage": "enter_details", "can_continue": gate]
+                var confirm: [String: Any] = ["stage": "confirm", "can_confirm": gate]
+                for (key, value) in stop {
+                    form[key] = value
+                    confirm[key] = value
+                }
+                let formView = try sendView(form)
+                let confirmView = try sendView(confirm)
+                #expect(SendLive.formCtaDisabled(formView) == !gate, "form \(stop.keys.sorted())")
+                #expect(SendLive.confirmCtaDisabled(confirmView) == !gate, "confirm \(stop.keys.sorted())")
+            }
+        }
+        // With the stop up the form's live button says it is the stop's retry.
+        let stopped = try sendView([
+            "stage": "enter_details", "can_continue": true, "treasury_bootstrap": unichainFloat,
+        ])
+        #expect(SendLive.stopRetry(stopped, loc: loc) == loc.t("componentsUi.treasuryBootstrap.retryBtn"))
+        #expect(SendLive.fundAddress(stopped, loc: loc)?.address == "0x3e59292e18417f814112f731e7163534c6d2fe3c")
+    }
+
     @Test func noStopNoRetry() throws {
         let view = try sendView(["stage": "enter_details"])
         #expect(SendLive.stopNotice(view, loc: loc) == nil)
