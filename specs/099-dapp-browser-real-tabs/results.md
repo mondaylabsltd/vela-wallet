@@ -45,6 +45,22 @@ Branch `099-dapp-browser-real-tabs`, PR #413.
   (the deadline is unit-tested on every client), SC-006 (killing one WebContent process), SC-007 on
   a relay-funding chain.
 
+## Closing many tabs (Phase 6)
+
+Chrome's three batch closes, decided by the core (`tabs_closed_by`, `TabsClosed`):
+
+- **Desktop**: right-click a tab → 关闭标签页 / 关闭其他标签页 / 关闭右侧标签页 / 关闭全部标签页.
+  `cargo test` 915 passed.
+- **Android**: long-press a tab card → the same four (greyed when the scope closes nothing).
+  `testDebugUnitTest` 1005/1005 (8 new in `BrowserTabCloseTest`, real core). On the Xiaomi, from
+  ten tabs: to the right of the 4th → 4 left, selection moved left onto it; on the last card
+  "to the right" greyed; others on the 1st → 1 left, selected; all → the start page; one log line
+  per action, no crash.
+- **iOS**: context menu on a tab card. Simulator suite 1232 (1227 passed, 5 skipped, 0 failed);
+  6 new in `TabBatchCloseTests` (real core, real WKWebViews: a live and a suspended tab both
+  closed, the machine hears `tab_closed` for each).
+- **Web**: no tabs of its own (the person's browser).
+
 ## Corrections made on the way
 
 - The 2026-10-04 explanation of the locked slide ("the fee went stale") was wrong: no client gates on
