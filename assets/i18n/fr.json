@@ -1245,7 +1245,6 @@
    "batchSubtitle": "{{count}} transactions, signées ensemble",
    "batchCall": "Appel de contrat",
    "balanceUnderfundedNative": "Solde {{symbol}} insuffisant pour couvrir ce transfert — il devrait échouer on-chain.",
-   "gasEstimateFailed": "Impossible d'estimer les frais de gas — l'envoi pourrait échouer ou expirer. Appuyez sur les frais ci-dessus pour réessayer.",
    "submitted": "Envoyé — en attente de confirmation",
    "historicalNote": "Une signature passée — exactement ce que vous avez approuvé.",
    "close": "Fermer",

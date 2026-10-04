@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} Transaktionen, gemeinsam signiert",
       "batchCall": "Contract-Aufruf",
       "balanceUnderfundedNative": "Nicht genügend {{symbol}}, um diesen Transfer zu decken — er wird voraussichtlich on-chain fehlschlagen.",
-      "gasEstimateFailed": "Die Gas-Gebühr konnte nicht geschätzt werden — das Senden kann fehlschlagen oder eine Zeitüberschreitung verursachen. Tippen Sie oben auf die Gebühr, um es erneut zu versuchen.",
       "submitted": "Gesendet — wartet auf Bestätigung",
       "historicalNote": "Eine frühere Signatur — genau das, was Sie genehmigt haben.",
       "close": "Schließen",

@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} transações, assinadas juntas",
       "batchCall": "Chamada de contrato",
       "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain.",
-      "gasEstimateFailed": "Não foi possível estimar a taxa de gas — o envio pode falhar ou expirar. Toque na taxa acima para tentar de novo.",
       "submitted": "Enviada — aguardando confirmação",
       "historicalNote": "Uma assinatura anterior — exatamente o que você aprovou.",
       "close": "Fechar",

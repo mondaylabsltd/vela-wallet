@@ -1242,7 +1242,6 @@
    "batchSubtitle": "{{count}} transaksi, ditandatangani bersamaan",
    "batchCall": "Panggilan kontrak",
    "balanceUnderfundedNative": "{{symbol}} tidak cukup untuk menutup transfer ini — kemungkinan besar akan gagal on-chain.",
-   "gasEstimateFailed": "Biaya gas tidak dapat diperkirakan — pengiriman bisa gagal atau habis waktu. Ketuk biaya di atas untuk mencoba lagi.",
    "submitted": "Terkirim — menunggu konfirmasi",
    "historicalNote": "Tanda tangan sebelumnya — persis seperti yang Anda setujui.",
    "close": "Tutup",

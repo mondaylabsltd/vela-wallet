@@ -1242,7 +1242,6 @@
    "batchSubtitle": "{{count}} işlem, birlikte imzalanır",
    "batchCall": "Sözleşme çağrısı",
    "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor.",
-   "gasEstimateFailed": "Gas ücreti tahmin edilemedi — gönderim başarısız olabilir veya zaman aşımına uğrayabilir. Yeniden denemek için yukarıdaki ücrete dokunun.",
    "submitted": "Gönderildi — onay bekleniyor",
    "historicalNote": "Geçmiş bir imza — tam olarak onayladığınız şey.",
    "close": "Kapat",

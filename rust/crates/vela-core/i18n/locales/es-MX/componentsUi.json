@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} transacciones, firmadas juntas",
       "batchCall": "Llamada al contrato",
       "balanceUnderfundedNative": "No tienes suficiente {{symbol}} para cubrir esta transferencia; se espera que falle on-chain.",
-      "gasEstimateFailed": "No se pudo estimar la comisión de gas — el envío podría fallar o agotar el tiempo. Toca la comisión de arriba para reintentar.",
       "submitted": "Enviada — esperando confirmación",
       "historicalNote": "Una firma pasada — exactamente lo que aprobaste.",
       "close": "Cerrar",

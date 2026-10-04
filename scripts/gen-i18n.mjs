@@ -544,8 +544,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   one coin on offer can pay it (it used to name the coin in force: "Insufficient
 //   ETH for gas fees" over a wallet whose USDT was short too). Same branches:
 //   1779 + 2 = 1781 leaves.
-if (PATHS.length !== 1878) fail(`expected 1878 paths (1781 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1781) fail(`expected 1781 leaf paths, got ${leafSet.size}`);
+// 1877 (issue #408): − `componentsUi.signing.gasEstimateFailed` — no client
+//   draws it (the fee row's failed state says what failed); its bytes pay for
+//   the two above inside the unchanged SC-005 budget. 1780 leaves.
+if (PATHS.length !== 1877) fail(`expected 1877 paths (1780 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

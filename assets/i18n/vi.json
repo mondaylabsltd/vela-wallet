@@ -1242,7 +1242,6 @@
    "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
    "batchCall": "Gọi hợp đồng",
    "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain.",
-   "gasEstimateFailed": "Không ước tính được phí gas — việc gửi có thể thất bại hoặc hết thời gian chờ. Chạm vào mức phí ở trên để thử lại.",
    "submitted": "Đã gửi — đang chờ xác nhận",
    "historicalNote": "Một chữ ký trong quá khứ — đúng những gì bạn đã phê duyệt.",
    "close": "Đóng",

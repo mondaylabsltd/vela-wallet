@@ -1242,7 +1242,6 @@
    "batchSubtitle": "거래 {{count}}건을 함께 서명",
    "batchCall": "컨트랙트 호출",
    "balanceUnderfundedNative": "이 전송에 필요한 {{symbol}}이(가) 부족합니다 — 온체인에서 실패할 것으로 보입니다.",
-   "gasEstimateFailed": "가스 수수료를 예상하지 못했습니다 — 제출이 실패하거나 시간 초과될 수 있습니다. 위 수수료를 눌러 다시 시도하세요.",
    "submitted": "제출됨 — 확인을 기다리는 중",
    "historicalNote": "지난 서명 — 승인하신 내용 그대로입니다.",
    "close": "닫기",
