@@ -3189,7 +3189,18 @@ fn price_generic(
     // simulation) because the amount is only knowable once the gas is.
     // The native row is NOT gated: quoting it is the caller's only remaining
     // option, and `estimateTransactionFee` does not gate it either.
-    if model.fee_token.is_some() && fee_row_insufficient(selected.balance, Some(fee_amount)) {
+    //
+    // Refused only when NEITHER reading of the coin covers the fee — its
+    // balance, nor what the measured operation leaves of it ([`payable_balance`],
+    // spec 083 fee). Issue #411: a swap of all the pUSD into USDC, with 0.10
+    // USDC held, is paid from the USDC the swap brings in; the machine picks
+    // USDC for exactly that reason, and this gate, reading the balance alone,
+    // refused the machine's own pick — no amount, every coin marked short,
+    // nothing the sheet could explain. The other way round (a coin the person
+    // picked that the swap drains) is still quoted, amount and all, and marked
+    // short by `selected_fee_is_short`, so the sheet can say why.
+    let covering = selected.balance.max(payable_balance(model, &selected));
+    if model.fee_token.is_some() && fee_row_insufficient(covering, Some(fee_amount)) {
         return fail(model, FeeFailure::FeeTokenUnavailable);
     }
     // Every signed UserOp pays maxFeePerGas = 0; the fee rides in the leg.

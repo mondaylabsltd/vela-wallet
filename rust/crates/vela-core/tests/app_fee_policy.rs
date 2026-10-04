@@ -4963,6 +4963,326 @@ fn a_plain_send_still_pays_its_fee_in_the_coin_it_sends_when_that_is_all_there_i
 }
 
 // ---------------------------------------------------------------------------
+// Issue #411 — a Uniswap swap on Polygon preselected POL, which the wallet
+// does not hold
+//
+// Android 0.9.6, the in-app browser: pUSD −128.51 → USDC +128.4946. The
+// fee-coin list read pUSD (257.02, fee ~0.317), USDC (99.99, fee ~0.317) and
+// POL (0, fee ~2.95) — and POL, which cannot pay, was the one selected. The
+// router's swap path names both stablecoins, so until a simulation says how
+// much of each the swap leaves, neither provably pays (spec 096 F2), the
+// contract call puts the chain's coin first, and with no coin that pays the
+// requested one (native) stands. The shell's own simulation is what lets the
+// machine see that both stablecoins can pay; only the desktop told it.
+// ---------------------------------------------------------------------------
+
+const POLYGON: u32 = 137;
+/// Polygon's native USDC, checksummed as the relay writes it — the
+/// simulation's deltas carry it lower-case.
+const POLYGON_USDC: &str = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+/// The swap's input coin (a synthetic address: only its role matters).
+const PUSD: &str = "0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a";
+
+/// POL at $0.1075, none of it held.
+fn pol_row(balance: &str) -> FeeAssetQuote {
+    FeeAssetQuote {
+        symbol: "POL".to_owned(),
+        balance: balance.to_owned(),
+        usd_balance: "0.00".to_owned(),
+        usd_price: Some("0.10750000".to_owned()),
+        ..native_row(balance)
+    }
+}
+
+fn polygon_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
+    FeeAssetQuote {
+        recipient: USDC_RECIPIENT.to_owned(),
+        asset: FeeAssetKind::Erc20,
+        fee_token: Some(token.to_owned()),
+        balance: balance.to_owned(),
+        decimals: 6,
+        symbol: symbol.to_owned(),
+        usd_balance: usd.to_owned(),
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    }
+}
+
+/// The three rows the sheet listed: POL 0, pUSD 257.02, USDC 99.99.
+fn issue_411_rows() -> Vec<FeeAssetQuote> {
+    vec![
+        pol_row("0"),
+        polygon_stable_row(PUSD, "pUSD", "257020000", "257.02"),
+        polygon_stable_row(POLYGON_USDC, "USDC", "99990000", "99.99"),
+    ]
+}
+
+/// A Universal Router `execute` whose V3 path is pUSD → (0.01 %) → USDC:
+/// both coins named as packed 20-byte words, no `transfer` anywhere.
+fn uniswap_pusd_to_usdc() -> FeeCall {
+    let bare = |address: &str| address.trim_start_matches("0x").to_ascii_lowercase();
+    FeeCall {
+        to: ROUTER.to_owned(),
+        value: "0".to_owned(),
+        data: format!(
+            "0x3593564c{}{}000064{}{}",
+            "00".repeat(32 * 9),
+            bare(PUSD),
+            bare(POLYGON_USDC),
+            "00".repeat(32 * 2 + 9),
+        ),
+    }
+}
+
+/// Polygon at 2185 gwei: 450 000 gas × 3 = 2.94975 POL, ≈ $0.317 — the
+/// sheet's figures.
+fn polygon_gather(sut: &mut Sut) -> Vec<Op> {
+    polygon_gather_with(sut, issue_411_rows())
+}
+
+/// [`polygon_gather`] with other rows.
+fn polygon_gather_with(sut: &mut Sut, rows: Vec<FeeAssetQuote>) -> Vec<Op> {
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("2185000000000".to_owned()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "4370000000000".to_owned(),
+            max_priority_fee_per_gas: None,
+            network_fee_per_gas: Some("2185000000000".to_owned()),
+            relayer_fee_per_gas: Some("2185000000000".to_owned()),
+        }),
+    });
+    sut.resolve(Res::InBandQuotes { quotes: Some(rows) })
+}
+
+/// What the Android sheet's simulation drew, as the shell hands it over:
+/// the coins' own `Transfer` logs, lower-case contracts, signed base units.
+fn issue_411_swap() -> Event {
+    Event::BalanceChangesMeasured {
+        changes: vec![
+            change(Some(&PUSD.to_ascii_lowercase()), "-128510000"),
+            change(Some(&POLYGON_USDC.to_ascii_lowercase()), "128494600"),
+        ],
+    }
+}
+
+/// Today's fallback, then the fix: unmeasured, no coin provably pays and the
+/// requested coin (POL, held at 0) stands, short; the simulation answers and
+/// the fee moves — locally, nothing asked of the relay — to pUSD, the larger
+/// balance of the two coins that pay. Never POL.
+#[test]
+fn issue_411_a_swap_the_simulation_measured_pays_in_a_coin_that_can() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    let ops = polygon_gather(&mut sut);
+    assert_eq!(simulated_leg(&ops), None, "unmeasured: the native leg");
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.failed, None);
+    assert_eq!(view.fee_token, None, "today's fallback: {view:?}");
+    let pol = option(&view, None);
+    assert!(pol.selected && pol.insufficient, "{pol:?}");
+    assert_eq!(pol.amount.as_deref(), Some("2949750000000000000"));
+    assert!(!view.confirm_fee_ready, "POL cannot pay, and that shows");
+    for coin in [PUSD, POLYGON_USDC] {
+        let row = option(&view, Some(coin));
+        assert!(row.spent_by_operation && !row.insufficient, "{row:?}");
+    }
+
+    let ops = sut.dispatch(issue_411_swap());
+    assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(PUSD), "{view:?}");
+    assert!(view.confirm_fee_ready, "{view:?}");
+    let fee = view.fee.clone().expect("still quoted");
+    let FeeAssetView::Erc20 {
+        token,
+        amount,
+        symbol,
+        ..
+    } = fee.fee_asset
+    else {
+        panic!("paid in a stablecoin: {fee:?}");
+    };
+    assert_eq!(token, PUSD);
+    assert_eq!(symbol.as_deref(), Some("pUSD"));
+    assert_eq!(
+        Some(amount.as_str()),
+        option(&view, Some(PUSD)).amount.as_deref()
+    );
+    assert_eq!(fee.fee_recipient.as_deref(), Some(USDC_RECIPIENT));
+    assert!(
+        !option(&view, None).selected,
+        "never the POL it does not hold"
+    );
+    for coin in [PUSD, POLYGON_USDC] {
+        let row = option(&view, Some(coin));
+        assert!(!row.spent_by_operation && !row.insufficient, "{row:?}");
+    }
+}
+
+/// The simulation can answer before the quote is priced: then the op the
+/// relay simulates already carries the pUSD leg, and POL is never shown as
+/// the pick at all.
+#[test]
+fn issue_411_measured_before_the_quote_prices_the_pusd_leg_from_the_start() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    sut.dispatch(issue_411_swap());
+    let ops = polygon_gather(&mut sut);
+    assert_eq!(
+        simulated_leg(&ops).as_deref(),
+        Some(PUSD),
+        "the pUSD leg is simulated"
+    );
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(PUSD), "{view:?}");
+    assert!(view.confirm_fee_ready);
+}
+
+/// A swap of ALL the pUSD leaves none of it to pay with: USDC — which the
+/// swap brings in, counted at half — pays. Still never POL.
+#[test]
+fn issue_411_a_swap_of_all_the_pusd_pays_in_the_usdc() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    polygon_gather(&mut sut);
+    settle(&mut sut);
+    sut.dispatch(Event::BalanceChangesMeasured {
+        changes: vec![
+            change(Some(&PUSD.to_ascii_lowercase()), "-257020000"),
+            change(Some(&POLYGON_USDC.to_ascii_lowercase()), "256990000"),
+        ],
+    });
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(POLYGON_USDC), "{view:?}");
+    assert!(view.confirm_fee_ready);
+    assert!(option(&view, Some(PUSD)).insufficient);
+}
+
+/// The measured pick can rest on what the swap brings in. A wallet holding
+/// 0.10 USDC — under the ~0.317 fee — swaps ALL its pUSD into USDC: only the
+/// USDC the swap delivers (counted at half) can pay, and the machine picks
+/// it. The quote it settles must be in that coin, with its amount, ready to
+/// confirm — the machine never refuses the coin it chose itself ("the relay
+/// cannot quote this coin", no amounts, nothing the sheet can explain), and
+/// never falls back to the POL nobody holds. Whether the simulation lands
+/// before the quote or after it.
+#[test]
+fn issue_411_a_coin_the_swap_funds_is_quoted_never_refused() {
+    let usdc = POLYGON_USDC.to_ascii_lowercase();
+    let rows = || {
+        vec![
+            pol_row("0"),
+            polygon_stable_row(PUSD, "pUSD", "257020000", "257.02"),
+            polygon_stable_row(POLYGON_USDC, "USDC", "100000", "0.10"),
+        ]
+    };
+    let all_the_pusd = || Event::BalanceChangesMeasured {
+        changes: vec![
+            change(Some(&PUSD.to_ascii_lowercase()), "-257020000"),
+            change(Some(&usdc), "256990000"),
+        ],
+    };
+    let in_usdc = |view: &vela_core::app::fee_policy::FeeView| {
+        assert_eq!(view.failed, None, "{view:?}");
+        assert_eq!(view.fee_token.as_deref(), Some(POLYGON_USDC), "{view:?}");
+        assert!(view.confirm_fee_ready, "{view:?}");
+        let fee = view.fee.clone().expect("quoted, with its amount");
+        assert!(
+            matches!(&fee.fee_asset, FeeAssetView::Erc20 { token, .. } if token == POLYGON_USDC),
+            "{fee:?}"
+        );
+        assert!(option(view, Some(POLYGON_USDC)).amount.is_some());
+    };
+
+    // Measured first: the USDC leg is what the relay simulates.
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    sut.dispatch(all_the_pusd());
+    let ops = polygon_gather_with(&mut sut, rows());
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(usdc.as_str()));
+    settle(&mut sut);
+    in_usdc(&sut.view());
+
+    // Measured after the quote: the local switch lands on the same coin.
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    polygon_gather_with(&mut sut, rows());
+    settle(&mut sut);
+    assert_eq!(sut.view().fee_token, None, "unmeasured: the fallback");
+    sut.dispatch(all_the_pusd());
+    in_usdc(&sut.view());
+}
+
+/// The other side of that rule, kept as it was: a coin the PERSON picks that
+/// the swap drains is still quoted, amount and all, and marked short — the
+/// sheet says why the slide is shut — rather than refused with nothing to
+/// show.
+#[test]
+fn issue_411_a_picked_coin_the_swap_drains_is_quoted_short_not_refused() {
+    let mut sut = Sut::new();
+    sut.dispatch(request_in(
+        POLYGON,
+        vec![uniswap_pusd_to_usdc()],
+        Some(PUSD),
+    ));
+    sut.dispatch(Event::BalanceChangesMeasured {
+        changes: vec![
+            change(Some(&PUSD.to_ascii_lowercase()), "-257020000"),
+            change(Some(&POLYGON_USDC.to_ascii_lowercase()), "256990000"),
+        ],
+    });
+    polygon_gather(&mut sut);
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.failed, None, "{view:?}");
+    assert_eq!(view.fee_token.as_deref(), Some(PUSD));
+    assert!(
+        view.fee.is_some(),
+        "the amount is there to explain the shortfall"
+    );
+    assert!(!view.confirm_fee_ready);
+    assert!(option(&view, Some(PUSD)).insufficient);
+}
+
+/// The machine forgets a measurement on every new question (a stale quote's
+/// re-ask, the refresh's), so the shell tells it again after each — the
+/// rule every shell's fee sessions keep. Told, the re-ask lands on pUSD.
+#[test]
+fn issue_411_a_re_ask_forgets_the_measurement_until_it_is_told_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    sut.dispatch(issue_411_swap());
+    polygon_gather(&mut sut);
+    settle(&mut sut);
+    assert_eq!(sut.view().fee_token.as_deref(), Some(PUSD));
+
+    // The settled quote's TTL timer is the shell's; a re-ask supersedes it.
+    let is_ttl = |op: &Op| matches!(op, Op::StartTtl { .. });
+    sut.drop_matching(is_ttl);
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    let ops = polygon_gather(&mut sut);
+    assert_eq!(simulated_leg(&ops), None, "the fallback, until told");
+    settle(&mut sut);
+    assert_eq!(sut.view().fee_token, None);
+
+    sut.drop_matching(is_ttl);
+    sut.dispatch(auto_request(POLYGON, vec![uniswap_pusd_to_usdc()]));
+    sut.dispatch(issue_411_swap());
+    let ops = polygon_gather(&mut sut);
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(PUSD));
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(PUSD));
+    assert!(view.confirm_fee_ready);
+}
+
+// ---------------------------------------------------------------------------
 // The bound on a whole run (spec 094 S9, 089 F06)
 // ---------------------------------------------------------------------------
 
