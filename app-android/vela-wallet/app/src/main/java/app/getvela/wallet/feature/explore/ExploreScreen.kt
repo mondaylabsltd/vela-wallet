@@ -93,6 +93,10 @@ class ExploreCallbacks(
     val onStatusSeen: (String) -> Unit = {},
     /** Spec 099 FR-014: the shown tab's status panel opened (`true`) or closed — the core carries its record meanwhile. */
     val onInspector: (Boolean) -> Unit = {},
+    /** Spec 100: the add-network sheet's answers — the core decides what each means. */
+    val onAddNetwork: (AddNetworkAction) -> Unit = {},
+    /** Spec 100: the chain-setup tool, for a chain this wallet refuses. */
+    val onChainSetupTool: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,6 +126,8 @@ fun ExploreScreen(
     live: ExploreCallbacks? = null,
     /** Spec 044: the core is asking whether this origin may connect; drawn as the connection sheet's not-yet-connected form. */
     consent: ConnectionModel? = null,
+    /** Spec 100: a page asks to add a network — drawn after a consent, in the consent's place. */
+    addNetwork: AddNetworkModel? = null,
     /**
      * Issue #273: the live scanner, drawn in place of the tab while open. It
      * hands back a web address to open (`onUrl`) or asks to be closed.
@@ -340,6 +346,24 @@ fun ExploreScreen(
                     closeLabel = strings.t("connect.browser.cancel"),
                     onClose = { live?.onConsent(false) },
                     onDisconnect = { live?.onConsent(true) },
+                )
+            }
+        }
+    }
+    if (consent == null) addNetwork?.let { card ->
+        // Like the consent: it closes only on its ✕ or its buttons, and any
+        // close is `dapp_add_declined` — the core decides what that answers.
+        VelaModalSheet(
+            onDismissRequest = { live?.onAddNetwork?.invoke(AddNetworkAction.Decline) },
+            containerColor = colors.bgBase,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dismissible = false,
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                app.getvela.wallet.feature.explore.components.AddNetworkPanel(
+                    model = card,
+                    onAction = { action -> live?.onAddNetwork?.invoke(action) },
+                    onSetupTool = { live?.onChainSetupTool?.invoke() },
                 )
             }
         }

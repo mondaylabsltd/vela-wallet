@@ -630,6 +630,16 @@ class BrowserController(
     /** Set by the container: the page behind this request is gone — close its sheet. */
     var onCancelSigning: ((tab: String, id: String) -> Unit)? = null
 
+    /**
+     * Spec 100: set by the container — carry a page's add-network request to
+     * `network_admin` (`dapp_add_requested`). Unset, the request is answered
+     * "declined" here: nobody can show the sheet.
+     */
+    var onForwardToAddNetwork: ((DbrOperation.ForwardToAddNetwork) -> Unit)? = null
+
+    /** Spec 100: set by the container — the page behind an add-network request is gone (`dapp_add_cancelled`). */
+    var onCancelAddNetwork: ((tab: String, id: String) -> Unit)? = null
+
     // -- the core ------------------------------------------------------------------
 
     private val executor = BrowserExecutor(
@@ -666,6 +676,19 @@ class BrowserController(
 
             override fun cancelSigning(tab: String, id: String) {
                 onCancelSigning?.invoke(tab, id)
+            }
+
+            override fun forwardToAddNetwork(operation: DbrOperation.ForwardToAddNetwork) {
+                val open = onForwardToAddNetwork
+                if (open == null) {
+                    addNetworkAnswered(operation.tab, operation.id, DappAddOutcome.Declined)
+                } else {
+                    open(operation)
+                }
+            }
+
+            override fun cancelAddNetwork(tab: String, id: String) {
+                onCancelAddNetwork?.invoke(tab, id)
             }
 
             override fun saveConnectionRecord(row: JSONObject) {
@@ -714,6 +737,10 @@ class BrowserController(
     /** The signing sheet's answer for a forwarded request — delivered by the core, exactly once. */
     fun signingAnswered(tab: String, id: String, payload: SignResponsePayload, userOpHash: String?) =
         dispatch(DbrEvent.SigningAnswered(tab = tab, id = id, payload = payload, user_op_hash = userOpHash, now_ms = now()))
+
+    /** Spec 100: the add-network sheet's ending for a forwarded request — the core answers the page, exactly once. */
+    fun addNetworkAnswered(tab: String, id: String, outcome: DappAddOutcome) =
+        dispatch(DbrEvent.AddNetworkAnswered(tab = tab, id = id, outcome = outcome, now_ms = now()))
 
     fun consentApproved() = dispatch(DbrEvent.ConsentApproved(now()))
     fun consentRejected() = dispatch(DbrEvent.ConsentRejected(now()))

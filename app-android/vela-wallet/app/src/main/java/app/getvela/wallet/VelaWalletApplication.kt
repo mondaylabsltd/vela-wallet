@@ -502,6 +502,17 @@ class AppContainer(private val app: Application) {
             controller.onCancelSigning = { tab, id ->
                 signing.value?.takeIf { open -> open.request.value?.let { it.transportId == tab && it.id == id } == true }?.cancel()
             }
+            // Spec 100: a page asks to add a network. The sheet is
+            // `network_admin`'s (the same check and save as Settings'); this
+            // container only carries the request there and its ending back.
+            controller.onForwardToAddNetwork = { operation ->
+                // The core holds the request until the ledger is read; make
+                // sure it is being read.
+                if (!settings.networks.value.loaded) settings.startNetworks()
+                settings.dappAddRequested(operation.tab, operation.id, operation.origin, operation.ask)
+            }
+            controller.onCancelAddNetwork = { tab, id -> settings.dappAddCancelled(tab, id) }
+            settings.onDappAddSettled = { tab, id, outcome -> controller.addNetworkAnswered(tab, id, outcome) }
             val follow = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
             // Every wallet address and the active one: every grant follows it.
             follow.launch {

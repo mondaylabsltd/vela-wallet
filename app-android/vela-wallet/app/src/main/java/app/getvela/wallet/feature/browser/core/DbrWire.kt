@@ -153,6 +153,12 @@ enum class DbrReason(val key: String) {
     @SerialName("signer_not_discoverable") SignerNotDiscoverable(REASON + "signerNotDiscoverable"),
 
     @SerialName("signer_failed") SignerFailed(REASON + "signerFailed"),
+
+    /** Spec 100: the network a page asked to add lacks Vela's contracts (4902) — Settings' own line. */
+    @SerialName("not_compatible") NotCompatible("addToken.errorNotCompatible"),
+
+    /** Spec 100: not in the catalog, and no RPC the page gave answers for it (-32602). */
+    @SerialName("bad_rpc") BadRpc(REASON + "badRpc"),
 }
 
 private const val REASON = "componentsUi.browserStatus.reason."
@@ -260,7 +266,48 @@ data class DbrView(
     val queued_signing: Int = 0,
     /** Spec 099: the inspected tab's whole record, while its status panel is open (`inspector_opened`). */
     val inspector: DbrInspectorView? = null,
+    /** Spec 100: the add-network request on Vela's sheet, by tab and id. */
+    val adding_network: DbrSigningView? = null,
 )
+
+/**
+ * Spec 100: what a page's `wallet_addEthereumChain` asks for, as the core read
+ * it (`dapp_rpc::DappChainAsk`). Carried from the browser machine to
+ * `network_admin` untouched — never interpreted here.
+ */
+@Serializable
+data class DappChainAsk(
+    val chain_id: Int,
+    val chain_name: String? = null,
+    val native_symbol: String? = null,
+    val rpc_urls: List<String> = emptyList(),
+    val refused_rpc_urls: Int = 0,
+    val explorer_url: String? = null,
+)
+
+/** Spec 100: how a page's add-network request ended (`dapp_rpc::DappAddOutcome`) — carried, never read. */
+@Serializable
+sealed class DappAddOutcome {
+    @Serializable
+    @SerialName("added")
+    data class Added(val chain_id: Int) : DappAddOutcome()
+
+    @Serializable
+    @SerialName("declined")
+    data object Declined : DappAddOutcome()
+
+    @Serializable
+    @SerialName("not_compatible")
+    data object NotCompatible : DappAddOutcome()
+
+    @Serializable
+    @SerialName("bad_rpc")
+    data object BadRpc : DappAddOutcome()
+
+    @Serializable
+    @SerialName("busy")
+    data object Busy : DappAddOutcome()
+}
 
 @Serializable
 sealed class DbrOperation {
@@ -316,6 +363,16 @@ sealed class DbrOperation {
     @Serializable
     @SerialName("cancel_signing")
     data class CancelSigning(val tab: String, val id: String) : DbrOperation()
+
+    /** Spec 100: hand this request to `network_admin`'s add-network sheet; answered once with [DbrEvent.AddNetworkAnswered]. */
+    @Serializable
+    @SerialName("forward_to_add_network")
+    data class ForwardToAddNetwork(val tab: String, val id: String, val origin: String, val ask: DappChainAsk) : DbrOperation()
+
+    /** Spec 100: the page that asked is gone — close its add-network sheet, unanswered. */
+    @Serializable
+    @SerialName("cancel_add_network")
+    data class CancelAddNetwork(val tab: String, val id: String) : DbrOperation()
 
     @Serializable
     @SerialName("save_connection_record")
@@ -434,6 +491,16 @@ sealed class DbrEvent {
     @Serializable
     @SerialName("revoke_all")
     data object RevokeAll : DbrEvent()
+
+    /** Spec 100: the add-network sheet's ending for a forwarded request (`network_admin`'s `dapp_add_settled`). */
+    @Serializable
+    @SerialName("add_network_answered")
+    data class AddNetworkAnswered(
+        val tab: String,
+        val id: String,
+        val outcome: DappAddOutcome,
+        val now_ms: Double = 0.0,
+    ) : DbrEvent()
 
     @Serializable
     @SerialName("signing_answered")

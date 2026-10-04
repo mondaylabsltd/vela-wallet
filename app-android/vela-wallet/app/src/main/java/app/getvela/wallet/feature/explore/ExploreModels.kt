@@ -207,6 +207,44 @@ data class ConnectionModel(
     val connected: Boolean = true,
 )
 
+/**
+ * Spec 100: the add-network sheet a page opened (`NetView.dapp_add`), in words.
+ * Every judgement is the core's — which chain, whose name and coin, the
+ * verdict, whether Add acts; [app.getvela.wallet.feature.browser.ExploreLive.addNetwork]
+ * picks Settings' own line for each part.
+ */
+@Immutable
+data class AddNetworkModel(
+    val title: String,
+    /** "{{host}} asks to add a network" — who asks, from the transport. */
+    val lead: String,
+    val site: SiteModel,
+    /** Label and value, in order; a value the core does not know yet is left out. */
+    val rows: List<Pair<String, String>>,
+    /** The name and coin are the site's, not Vela's catalog's. */
+    val fromSite: String?,
+    val pill: app.getvela.wallet.feature.settings.StatusPillModel?,
+    val checksTitle: String?,
+    val checks: List<app.getvela.wallet.feature.settings.CheckItemModel>,
+    /** The sentence under the verdict. */
+    val note: String?,
+    /** "Add Network" — only where the core says it can act. */
+    val add: String?,
+    val retry: String?,
+    /** The chain-setup tool, for a chain this wallet refuses. */
+    val setupTool: String?,
+    /** Cancel while a decision is open, Done after a verdict — either way `dapp_add_declined`. */
+    val dismiss: String,
+) {
+    companion object {
+        /** Where a chain this wallet refuses can be made ready (iOS and the web link the same page). */
+        const val CHAIN_SETUP_URL = "https://getvela.app/chain-setup"
+    }
+}
+
+/** Spec 100: what the add-network sheet's buttons say to the core. */
+enum class AddNetworkAction { Approve, Decline, Retry }
+
 @Immutable
 sealed interface ExploreSheet {
     data class GroupManage(

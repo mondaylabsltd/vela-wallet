@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.settings.core
 
+import app.getvela.wallet.feature.browser.core.DappAddOutcome
+import app.getvela.wallet.feature.browser.core.DappChainAsk
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -122,6 +124,44 @@ data class NetView(
     val endpoints: List<NetEndpointView> = emptyList(),
     val providers: List<NetProviderView> = emptyList(),
     val last_added_chain_id: Long? = null,
+    /** Spec 100: the add-network sheet a page opened. */
+    val dapp_add: NetDappAddView? = null,
+)
+
+/** Spec 100: where a page's add-network request stands (`NetDappAddPhase`). */
+@Serializable
+enum class NetDappAddPhase {
+    @SerialName("checking") Checking,
+
+    @SerialName("ready") Ready,
+
+    @SerialName("not_compatible") NotCompatible,
+
+    @SerialName("check_failed") CheckFailed,
+
+    @SerialName("wrong_rpc") WrongRpc,
+
+    @SerialName("no_rpc") NoRpc,
+}
+
+/** Spec 100: the add-network sheet — who asks, for what, and the check. Every judgement is the core's. */
+@Serializable
+data class NetDappAddView(
+    val tab: String,
+    val id: String,
+    val origin: String,
+    val host: String,
+    val chain_id: Long,
+    /** The catalog's name; the page's when [from_site]; empty until the catalog answered. */
+    val name: String = "",
+    val native_symbol: String = "",
+    val rpc_host: String? = null,
+    val explorer_host: String? = null,
+    val from_site: Boolean = false,
+    val phase: NetDappAddPhase = NetDappAddPhase.Checking,
+    val reported_chain_id: Long? = null,
+    val compat: NetCompatibility? = null,
+    val can_add: Boolean = false,
 )
 
 /**
@@ -429,6 +469,28 @@ sealed class NetEvent {
     @Serializable
     @SerialName("provider_test_requested")
     data class ProviderTestRequested(val provider: NetProviderId) : NetEvent()
+
+    /** Spec 100: the browser machine's `forward_to_add_network`, carried here untouched. */
+    @Serializable
+    @SerialName("dapp_add_requested")
+    data class DappAddRequested(val tab: String, val id: String, val origin: String, val ask: DappChainAsk) : NetEvent()
+
+    @Serializable
+    @SerialName("dapp_add_approved")
+    data class DappAddApproved(val now_iso: String) : NetEvent()
+
+    @Serializable
+    @SerialName("dapp_add_declined")
+    data object DappAddDeclined : NetEvent()
+
+    @Serializable
+    @SerialName("dapp_add_retried")
+    data object DappAddRetried : NetEvent()
+
+    /** Spec 100: the browser machine's `cancel_add_network`. */
+    @Serializable
+    @SerialName("dapp_add_cancelled")
+    data class DappAddCancelled(val tab: String, val id: String) : NetEvent()
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +565,11 @@ sealed class NetOperation {
     @Serializable
     @SerialName("clear_bundler_cache")
     data class ClearBundlerCache(val chain_id: Long) : NetOperation()
+
+    /** Spec 100: a page's add-network request is over — carry [outcome] to the browser machine. Answer `written`. */
+    @Serializable
+    @SerialName("dapp_add_settled")
+    data class DappAddSettled(val tab: String, val id: String, val outcome: DappAddOutcome) : NetOperation()
 }
 
 // ---------------------------------------------------------------------------

@@ -332,6 +332,112 @@ fun ConnectionPanel(
 }
 
 /**
+ * Spec 100: a page asks Vela to add a network — the connection sheet's
+ * header (the site, the question), the rows of what would be added, and
+ * Settings' own check: pill, list, callout, and the buttons the core allows.
+ */
+@Composable
+fun AddNetworkPanel(
+    model: app.getvela.wallet.feature.explore.AddNetworkModel,
+    onAction: (app.getvela.wallet.feature.explore.AddNetworkAction) -> Unit,
+    onSetupTool: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .padding(horizontal = VelaSizing.screenPaddingX)
+            .padding(bottom = VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            SiteAvatar(model.site)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    text = model.title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.xl2,
+                )
+                Text(
+                    text = model.lead,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+            }
+            Icon(
+                VelaIcons.Close, model.dismiss, tint = colors.fgMuted,
+                modifier = Modifier.clickable { onAction(app.getvela.wallet.feature.explore.AddNetworkAction.Decline) },
+            )
+        }
+        Divider()
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            model.rows.forEach { (label, value) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(text = label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+                    Text(
+                        text = value,
+                        color = colors.fgBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.lg,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f).padding(start = VelaSpacing.lg),
+                    )
+                }
+            }
+        }
+        model.fromSite?.let {
+            app.getvela.wallet.feature.settings.components.VelaCallout(
+                app.getvela.wallet.feature.settings.CalloutModel(app.getvela.wallet.feature.settings.CalloutTone.Warning, it),
+            )
+        }
+        model.pill?.let { app.getvela.wallet.feature.settings.components.VelaStatusPill(it) }
+        if (model.checksTitle != null) {
+            app.getvela.wallet.feature.settings.components.VelaCheckList(model.checksTitle, model.checks)
+        }
+        model.note?.let {
+            app.getvela.wallet.feature.settings.components.VelaCallout(
+                app.getvela.wallet.feature.settings.CalloutModel(app.getvela.wallet.feature.settings.CalloutTone.Warning, it),
+            )
+        }
+        model.add?.let {
+            app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+                it,
+                onClick = { onAction(app.getvela.wallet.feature.explore.AddNetworkAction.Approve) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        model.retry?.let {
+            app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+                it,
+                onClick = { onAction(app.getvela.wallet.feature.explore.AddNetworkAction.Retry) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        model.setupTool?.let {
+            app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(it, onClick = onSetupTool, modifier = Modifier.fillMaxWidth())
+        }
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+            model.dismiss,
+            onClick = { onAction(app.getvela.wallet.feature.explore.AddNetworkAction.Decline) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
  * Group management (mock E3), mirroring the contacts vocabulary spec 018 set.
  * System groups (收藏 / 最近的 dApp) can be hidden but never deleted: their
  * trash affordance is ABSENT rather than disabled, because an affordance that

@@ -1460,8 +1460,30 @@ fun VelaNavHost(
                                 onInspector = { open ->
                                     if (open) exploreView.selected_tab?.let(browser::inspectorOpened) else browser.inspectorClosed()
                                 },
+                                // Spec 100: the sheet is `network_admin`'s; these only say what was pressed.
+                                onAddNetwork = { action ->
+                                    val settingsController = application.container.settings
+                                    when (action) {
+                                        app.getvela.wallet.feature.explore.AddNetworkAction.Approve -> settingsController.dappAddApproved()
+                                        app.getvela.wallet.feature.explore.AddNetworkAction.Decline -> settingsController.dappAddDeclined()
+                                        app.getvela.wallet.feature.explore.AddNetworkAction.Retry -> settingsController.dappAddRetried()
+                                    }
+                                },
+                                onChainSetupTool = {
+                                    runCatching {
+                                        context.startActivity(
+                                            android.content.Intent(
+                                                android.content.Intent.ACTION_VIEW,
+                                                android.net.Uri.parse(app.getvela.wallet.feature.explore.AddNetworkModel.CHAIN_SETUP_URL),
+                                            ),
+                                        )
+                                    }
+                                },
                             ),
                             consent = consentCard,
+                            addNetwork = networks.dapp_add?.let { add ->
+                                app.getvela.wallet.feature.browser.ExploreLive.addNetwork(add, strings)
+                            },
                             // Issue #273, D1 option (b): a web address opens here; an
                             // address or `ethereum:` request is a payment and goes to
                             // Send; a WalletConnect code is named, not guessed at.
