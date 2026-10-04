@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The system splash's icon (issue #407): the launch animation's FIRST FRAME —
+    its mark, dark variant, centred, at full opacity, where the animation holds it
+    for 12 frames before it moves left. So launch is one screen: this, then the
+    same mark sliding over as the wordmark types in.
+
+    Path data and fills are verbatim from the "Official SVG / Vela Mark" layer of
+    docs/design/onboarding/launch/vela-wallet-launch-phone-core-dark.json (its canvas units, centred on 0,0).
+    The animation draws 1 unit = screen width / 390 dp; here 1 unit = 1 dp (a
+    390 dp phone exactly — within a few percent on every phone width). The
+    viewport is the 288 dp box Android gives a splash icon with no icon
+    background; the mark sits well inside its 192 dp circle.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <group
+        android:translateX="144"
+        android:translateY="144">
+        <!-- Sail / Sunset -->
+        <path
+            android:fillColor="#FF6A45"
+            android:pathData="M-1.75,-32.5C-14.75,-19.25 -22.75,-3 -27.75,14.25L-1.75,14.25L-1.75,-32.5Z" />
+        <!-- Sail / Peach -->
+        <path
+            android:fillColor="#FFA98E"
+            android:pathData="M3.25,-22C16,-13.75 24,-0.5 27.75,14.25L3.25,14.25L3.25,-22Z" />
+        <!-- Hull -->
+        <path
+            android:fillColor="#DED5CE"
+            android:pathData="M-32.25,19.25L32.25,19.25C28.5,27.5 20.5,32.5 9,32.5L-9.25,32.5C-20,32.5 -28.25,27.5 -32.25,19.25Z" />
+    </group>
+</vector>
