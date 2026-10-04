@@ -152,6 +152,17 @@ with the chain, `eth_chainId` answers it, and Settings lists the network.
   `dapp_add_settled` → `add_network_answered`, `cancel_add_network` → `dapp_add_cancelled`.
 - **FR-011**: Words: Settings' own wherever they fit; new corpus keys in all 15 locales; the
   i18n residency budget is not raised.
+- **FR-012** *(owner, 2026-10-04)*: A page can never add a network directly. Every add goes
+  through Vela's own add flow — the compatibility check with Vela's account (the wallet's
+  contracts and P-256 on that chain) and Settings' own save — and the save happens only on a
+  `ready` verdict whose check says compatible (`network_admin::dapp_add_approved` refuses
+  anything else). Not compatible, unable to verify, a page RPC on another chain, or no usable
+  RPC: nothing is stored, whatever the person taps.
+- **FR-013** *(owner, 2026-10-04)*: A page can only switch among the networks the person has in
+  the wallet — Settings' network list, built in or added through FR-012
+  (`dapp_browser` checks `model.chains`, which each shell sets from that list via
+  `networks_changed`). Any other chain id answers 4902 and changes nothing; a dApp that then
+  asks to add it lands in FR-012.
 
 ## Success Criteria *(mandatory)*
 
