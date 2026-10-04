@@ -1097,16 +1097,11 @@ fun VelaNavHost(
                             onRecipientChange = { send.setRecipient(it.trim()) },
                             onMax = { send.tapMax() },
                             onDenom = { send.toggleFiatInput() },
-                            // While a relay stop is up (spec 098) the button is
-                            // its retry — the core clears the stop and runs the
-                            // pre-check again, which is what Continue means here.
-                            onContinue = {
-                                when {
-                                    sendView.relay_unreachable != null -> send.retryRelayUnreachable()
-                                    sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
-                                    else -> send.continueTapped()
-                                }
-                            },
+                            // One event for the form's one button (issue #424):
+                            // while a relay stop is up the button is its retry,
+                            // and the core lowers the stop and asks again. The
+                            // shell never picks by a view it may hold stale.
+                            onContinue = { send.continueTapped() },
                             onConfirm = { send.slideConfirm() },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)

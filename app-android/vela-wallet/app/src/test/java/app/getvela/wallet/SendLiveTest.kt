@@ -142,7 +142,9 @@ class SendLiveTest {
     @Test
     fun `the form shows the relay's stops, and its button is their retry`() {
         val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
-        val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient, amount = "0.1", fee = fee())
+        // As the core publishes it: the form is complete, so its gate is open
+        // — and stays open while a stop is up, the button being its retry.
+        val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient, amount = "0.1", fee = fee(), can_continue = true)
 
         // The float is empty: the treasury stop, its numbers, and that it watches.
         val empty = base.copy(
@@ -173,12 +175,51 @@ class SendLiveTest {
         assertTrue(words, words.contains(strings.t("componentsUi.relayUnreachable.settingsHint")))
         assertEquals(strings.t("componentsUi.relayUnreachable.retryBtn"), stop.cta)
 
-        // …and on confirm, the same stop with its own way out.
+        // …and on confirm, the same stop with its own way out. The core shuts
+        // the slide while a stop is up (issue #424); this draws its word.
         val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
-        val confirm = SendLive.confirm(confirmDrawn.model, unreachable.copy(stage = SendStage.Confirm), ctx())
+        val confirm = SendLive.confirm(confirmDrawn.model, unreachable.copy(stage = SendStage.Confirm, can_confirm = false), ctx())
         assertFalse(confirm.ctaEnabled)
         assertEquals(strings.t("componentsUi.relayUnreachable.closeBtn"), confirm.noticeSecondary)
         assertEquals(strings.t("componentsUi.relayUnreachable.retryBtn"), confirm.noticeAction)
+    }
+
+    /**
+     * Issue #424: both buttons are the core's gates and nothing else. The
+     * shell used to OR the relay stops onto `can_continue` and AND them (and a
+     * signature under way, and a refused submit) onto `can_confirm` — its own
+     * predicate beside the core's, which the other clients did not share. The
+     * core now says all of it; whatever it says is what the button does.
+     */
+    @Test
+    fun `the form's and the confirm's buttons are exactly the core's gates`() {
+        val formDrawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
+        val confirmDrawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        // The device's shape: ETH on Unichain, the relay's treasury there empty.
+        val unichainEth = xdai.copy(network = "unichain", chain_id = 130, symbol = "ETH", balance = "0.002336")
+        val empty = SendTreasuryStatus(
+            chain_id = 130, address = "0x3e59292e18417f814112f731e7163534c6d2fe3c", asset = SendTreasuryAsset.Native,
+            balance = "0", floor = "100000000000000", bootstrap_needed = true, operator_served = true,
+        )
+        val stops = listOf<(SendView) -> SendView>(
+            { it },
+            { it.copy(treasury_bootstrap = empty) },
+            { it.copy(relay_unreachable = SendRelayUnreachable(chain_id = 130, operator_served = true)) },
+        )
+        val form = SendView(stage = SendStage.EnterDetails, selected_token = unichainEth, recipient = recipient, amount = "0.0001", token_amount = "0.0001", fee = fee())
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = unichainEth, recipient = recipient, confirm_amount = "0.0001", fee = fee())
+        for (stop in stops) for (gate in listOf(true, false)) {
+            val f = stop(form.copy(can_continue = gate))
+            assertEquals("form: stop=${f.treasury_bootstrap != null || f.relay_unreachable != null}", gate, SendLive.form(formDrawn, f, FeeView(), ctx()).ctaEnabled)
+            val c = stop(confirm.copy(can_confirm = gate))
+            assertEquals("confirm: stop=${c.treasury_bootstrap != null || c.relay_unreachable != null}", gate, SendLive.confirm(confirmDrawn, c, ctx()).ctaEnabled)
+        }
+        // The stop on the form is said, with its retry as the button's words.
+        val stopped = SendLive.form(formDrawn, form.copy(can_continue = true, treasury_bootstrap = empty), FeeView(), ctx())
+        assertTrue(stopped.warning.orEmpty(), stopped.warning.orEmpty().startsWith(strings.t("componentsUi.treasuryBootstrap.title")))
+        assertTrue(stopped.warning.orEmpty(), stopped.warning.orEmpty().contains(strings.t("componentsUi.treasuryBootstrap.operatorLead")))
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.retryBtn"), stopped.cta)
+        assertEquals("0x3e59292e18417f814112f731e7163534c6d2fe3c", stopped.fund?.address)
     }
 
     /**
@@ -315,7 +356,7 @@ class SendLiveTest {
         assertTrue(live.facts.any { it.value.contains("0x7687") })
         assertTrue(live.facts.any { it.value.contains("0.0021") })
         assertTrue(live.ctaEnabled)
-        assertFalse(SendLive.confirm(drawn.model, view.copy(sending = true), ctx()).ctaEnabled)
+        assertFalse(SendLive.confirm(drawn.model, view.copy(sending = true, can_confirm = false), ctx()).ctaEnabled)
     }
 
     @Test
@@ -815,14 +856,14 @@ class SendLiveTest {
     @Test
     fun `the confirm page names what stopped it and offers the one action`() {
         val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
-        val refused = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.BundlerFund)
+        val refused = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = false, tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.BundlerFund)
         val confirm = SendLive.confirm(drawn, refused, ctx())
         assertEquals(strings.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND), confirm.notice)
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), confirm.noticeAction)
         assertFalse(confirm.ctaEnabled)
 
         val low = SendView(
-            stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true,
+            stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = false,
             treasury_bootstrap = SendTreasuryStatus(chain_id = 100, address = "0x1111111111111111111111111111111111111111", asset = SendTreasuryAsset.Native, balance = "100000000000000000", floor = "1000000000000000000", bootstrap_needed = true),
         )
         val treasury = SendLive.confirm(drawn, low, ctx())
@@ -840,7 +881,7 @@ class SendLiveTest {
     @Test
     fun `while the prompt is up the confirm page offers Cancel and nothing else`() {
         val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
-        val signing = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, sending = true, tx_status = SendTxStatus.Signing), ctx())
+        val signing = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = false, sending = true, tx_status = SendTxStatus.Signing), ctx())
         assertEquals(strings.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC), signing.notice)
         assertEquals(strings.t(I18nKeys.Flows.CANCEL), signing.noticeAction)
         assertFalse(signing.ctaEnabled)
@@ -1290,7 +1331,7 @@ class SendLiveTest {
         val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
         val paused = SendView(
             stage = SendStage.Confirm, tokens = listOf(xdai), selected_token = xdai, recipient = recipient, confirm_amount = "0.001",
-            fee = fee(), can_confirm = true,
+            fee = fee(), can_confirm = false,
             treasury_bootstrap = SendTreasuryStatus(chain_id = 100, address = me, asset = SendTreasuryAsset.Native, balance = "0", floor = "1000000000000000000", bootstrap_needed = true),
         )
         val live = SendLive.confirm(drawn.model, paused, ctx())
@@ -1298,7 +1339,7 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.FUNDING_CANCEL), live.noticeSecondary)
         assertFalse(live.ctaEnabled)
         assertEquals(4, live.facts.size)
-        val resumed = SendLive.confirm(drawn.model, paused.copy(treasury_bootstrap = null), ctx())
+        val resumed = SendLive.confirm(drawn.model, paused.copy(treasury_bootstrap = null, can_confirm = true), ctx())
         assertNull(resumed.notice)
         assertNull(resumed.noticeSecondary)
         assertTrue(resumed.ctaEnabled)

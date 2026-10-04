@@ -122,7 +122,11 @@ class SendRefusalsTest {
         }
     }
 
-    private fun controller(): SendController {
+    /** Gnosis xDAI — every other test here sends it. */
+    private val gnosisXdai = BalanceToken(chain_id = 100, symbol = "XDAI", name = "xDAI", balance = "0.71697", decimals = 18, token_address = null, price_usd = 1.0)
+    private val gnosisRow = NetNetworkRow(id = "gnosis", chain_id = 100, display_name = "Gnosis", native_symbol = "xDAI", rpc_url = "https://rpc.test", explorer_url = "https://gnosisscan.io", bundler_url = "https://relay.test/100")
+
+    private fun controller(holding: BalanceToken = gnosisXdai, network: NetNetworkRow = gnosisRow): SendController {
         val pool = RpcPool(store = FakeStore(), endpoints = FakeEndpointSource(listOf("https://rpc.test")), scope = scope, transport = FakeRpcTransport { _, _ -> FakeRpcTransport.network() })
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
@@ -132,8 +136,8 @@ class SendRefusalsTest {
             pool = pool,
             feed = feed,
             accountStore = AccountStore(store),
-            balances = { BalanceView(tokens = listOf(BalanceToken(chain_id = 100, symbol = "XDAI", name = "xDAI", balance = "0.71697", decimals = 18, token_address = null, price_usd = 1.0))) },
-            networks = { NetView(loaded = true, networks = listOf(NetNetworkRow(id = "gnosis", chain_id = 100, display_name = "Gnosis", native_symbol = "xDAI", rpc_url = "https://rpc.test", explorer_url = "https://gnosisscan.io", bundler_url = "https://relay.test/100"))) },
+            balances = { BalanceView(tokens = listOf(holding)) },
+            networks = { NetView(loaded = true, networks = listOf(network)) },
             signer = { fixtureSigner },
             haptic = {},
             refreshBalances = {},
@@ -321,5 +325,81 @@ class SendRefusalsTest {
         val notice = SendLive.confirmNotice(failed, ctx())
         assertNotNull(notice)
         assertTrue(notice == strings.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND) || notice == strings.t(I18nKeys.Flows.TX_ERROR_GENERIC))
+    }
+
+    // -- Issue #424: Continue on Unichain, into a relay with no gas there -------
+
+    private val unichainEth = BalanceToken(chain_id = 130, symbol = "ETH", name = "Ether", balance = "0.002336", decimals = 18, token_address = null, price_usd = 2700.0)
+    private val unichainRow = NetNetworkRow(id = "unichain", chain_id = 130, display_name = "Unichain", native_symbol = "ETH", rpc_url = "https://rpc.test", explorer_url = "https://uniscan.xyz", bundler_url = "https://relay.test/130")
+    private val unichainTreasury = "https://relay.test/v1/treasury/130"
+
+    /** The relay and Unichain as the device met them: prices a thousandth of Gnosis's, ETH at $2700. */
+    private fun scriptUnichain() {
+        scriptRelay()
+        port.always("eth_gasPrice") { FakeRelayPort.body("0xf4240") }
+        port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", "0xf4240")) }
+        port.always("eth_maxPriorityFeePerGas") { FakeRelayPort.body("0x186a0") }
+        port.always("pimlico_getUserOperationGasPrice") {
+            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", "0x1e8480").put("networkFeePerGas", "0xf4240").put("relayerFeePerGas", "0xf4240")))
+        }
+        port.always("vela_getInBandGasQuote") {
+            FakeRelayPort.body(JSONArray().put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "native").put("balance", "0x84c9462320000").put("decimals", 18).put("symbol", "ETH").put("usdBalance", "6.31").put("usdPrice", "2700")))
+        }
+        // `GET /v1/treasury/130` on 2026-10-04, verbatim: never funded.
+        port.rest[unichainTreasury] = RestAnswer.Ok(
+            JSONObject("""{"chainId":130,"address":"0x3e59292e18417f814112f731e7163534c6d2fe3c","asset":"native","balance":"0x0","floor":"0x5af3107a4000","bootstrapNeeded":true}"""),
+        )
+        port.rest["https://relay.test/v1/account/130/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
+    }
+
+    /**
+     * Issue #424 end to end, over the real core: 0.0001 ETH on Unichain, and
+     * the relay's treasury there empty. Android 0.9.6 drew this stop on the
+     * confirm page only, so the tap did nothing anyone could see. The form
+     * says why; its one button is the core's gate and sends Continue; and
+     * once the relay is funded that same button reaches confirm with nothing
+     * stale on it — before the fix the old stop rode along and shut the slide.
+     */
+    @Test
+    fun `Continue into Unichain's empty relay says why on the form, and the same button carries on once it is funded`() = runBlocking {
+        seedAccount(); scriptUnichain()
+        val c = controller(holding = unichainEth, network = unichainRow)
+        c.toForm()
+        c.setRecipient(recipient); c.setAmount("0.0001")
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        val stopped = try {
+            withTimeout(30_000) { c.send.first { it.treasury_bootstrap != null } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AssertionError("DIAG no stop: alert=${c.alert.value} || send=${c.send.value}", timeout)
+        }
+        assertNull("not an alert: the form itself says it", c.alert.value)
+        assertEquals("confirm is not entered", SendStage.EnterDetails, stopped.stage)
+        val status = stopped.treasury_bootstrap!!
+        assertEquals(130, status.chain_id)
+        assertEquals("0", status.balance)
+        assertEquals("100000000000000", status.floor)
+        assertTrue("Unichain ships with Vela: the operator's relay", status.operator_served)
+        assertTrue("the core keeps the button live — it is the stop's retry", stopped.can_continue)
+
+        val drawn = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD2, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendForm).model
+        val form = SendLive.form(drawn, stopped, app.getvela.wallet.feature.send.core.FeeView(), ctx())
+        assertTrue(form.warning.orEmpty(), form.warning.orEmpty().startsWith(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
+        assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), form.cta)
+        assertTrue(form.ctaEnabled)
+        assertEquals("0x3e59292e18417f814112f731e7163534c6d2fe3c", form.fund?.address)
+
+        // Somebody funds it; the person presses the same button.
+        port.rest[unichainTreasury] = RestAnswer.Ok(
+            JSONObject("""{"chainId":130,"address":"0x3e59292e18417f814112f731e7163534c6d2fe3c","asset":"native","balance":"0x2386f26fc10000","floor":"0x5af3107a4000","bootstrapNeeded":false}"""),
+        )
+        c.continueTapped()
+        val confirm = try {
+            withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.can_confirm } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AssertionError("DIAG never reached an open confirm: alert=${c.alert.value} || send=${c.send.value}", timeout)
+        }
+        assertNull("nothing stale on the confirm page", confirm.treasury_bootstrap)
+        assertNull(confirm.relay_unreachable)
     }
 }

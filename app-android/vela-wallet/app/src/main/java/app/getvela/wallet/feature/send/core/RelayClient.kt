@@ -89,6 +89,12 @@ class RelayClient(
             floor = bigHex(data.opt("floor")).toString(),
             bootstrap_needed = data.optBoolean("bootstrapNeeded", false),
         )
+        // Issue #424: the verdict, not just the status code — "200" alone
+        // could not tell a funded relay from an empty one.
+        VelaLog.event(
+            "relay.treasury", if (status.bootstrap_needed) "low float" else "covered",
+            "chain" to chainId, "balance" to status.balance, "floor" to status.floor,
+        )
         return if (status.bootstrap_needed) SendTreasuryProbe.LowFloat(status) else SendTreasuryProbe.Covered
     }
 

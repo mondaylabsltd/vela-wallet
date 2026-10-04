@@ -495,7 +495,9 @@ object SendLive {
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, s.t(I18nKeys.Flows.CONTINUE)),
-            ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
+            // The core's gate, the whole of it (issue #424): while a relay
+            // stop is up the button is its retry, and the core arms it.
+            ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
         )
@@ -566,7 +568,9 @@ object SendLive {
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, fallback.cta),
-            ctaEnabled = view.can_continue || view.treasury_bootstrap != null || view.relay_unreachable != null,
+            // The core's gate, the whole of it (issue #424): while a relay
+            // stop is up the button is its retry, and the core arms it.
+            ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
             hint = splitHint(view, ctx),
@@ -1114,8 +1118,10 @@ object SendLive {
                 }
                 else -> emptyList()
             },
-            ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null &&
-                view.relay_unreachable == null && view.tx_error == null,
+            // The core's gate, the whole of it (issue #424): a relay stop, a
+            // signature under way and a refused submit are all in it, and the
+            // slide refuses on the same predicate.
+            ctaEnabled = view.can_confirm,
             notice = confirmNotice(view, ctx),
             noticeFund = fundAddress(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,

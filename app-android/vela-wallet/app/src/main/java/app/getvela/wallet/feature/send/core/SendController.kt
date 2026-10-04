@@ -300,6 +300,26 @@ class SendController(
         scope.launch {
             sendHost.view.collect { view -> speedControl.stage(view.stage == SendStage.EnterDetails) }
         }
+        // Issue #424: when the core stops a send on the relay, and lowers the
+        // stop again, the device log says so — with the stage it happened on.
+        // 0.9.6 drew the funding stop on the confirm page only; a stop opened
+        // on the form left no trace anywhere.
+        scope.launch {
+            var last: String? = null
+            sendHost.view.collect { view ->
+                val stop = stopName(view)
+                if (stop != last) {
+                    last = stop
+                    val status = view.treasury_bootstrap
+                    VelaLog.event(
+                        "send.stop", stop ?: "lowered",
+                        "stage" to view.stage.name,
+                        "chain" to (view.relay_unreachable?.chain_id ?: status?.chain_id),
+                        "balance" to status?.balance, "floor" to status?.floor,
+                    )
+                }
+            }
+        }
         // The fee session's later word flows into the send machine: a
         // re-quote after a fee-token pick or a TTL expiry replaces the
         // estimate the confirm screen shows (desktop `sync_fee_to_send`).
@@ -561,7 +581,25 @@ class SendController(
         dispatch(SendEvent.ConfirmMultiSelection)
     }
 
-    fun continueTapped() = dispatch(SendEvent.Continue)
+    /** Which relay stop the core has up, for the log; `null` = none. */
+    private fun stopName(view: SendView): String? = when {
+        view.relay_unreachable != null -> "unreachable"
+        view.treasury_bootstrap != null -> "funding"
+        else -> null
+    }
+
+    fun continueTapped() {
+        // Issue #424: a "Continue does nothing" report needs to know the tap
+        // reached the core, and what the core's gate said when it did.
+        val view = send.value
+        VelaLog.event(
+            "send.continue", "tapped",
+            "stage" to view.stage.name, "can" to view.can_continue,
+            "chain" to view.selected_token?.chain_id,
+            "stop" to stopName(view),
+        )
+        dispatch(SendEvent.Continue)
+    }
 
     fun back() = dispatch(SendEvent.Back)
 
