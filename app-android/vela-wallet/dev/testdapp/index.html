@@ -29,6 +29,12 @@
   <!-- Spec 070: the answers the core now decides the same way everywhere. -->
   <button id="add" type="button">Add Base</button>
   <button id="add-unknown" type="button">Add chain 1337</button>
+  <!-- Spec 100: a page asks Vela to add a network (specs/100-dapp-add-network/quickstart.md). -->
+  <button id="add-catalog" type="button">(a) Add Sepolia — catalog</button>
+  <button id="add-fork" type="button">(b-ok) Add 987654321 — local fork</button>
+  <button id="add-wrong" type="button">(b-wrong) Add 987654321 — RPC on another chain</button>
+  <button id="add-http" type="button">(b-none) Add 987654321 — http RPC</button>
+  <button id="add-etc" type="button">(c) Add Ethereum Classic — incompatible</button>
   <button id="coinbase" type="button">Coinbase</button>
   <button id="watch" type="button">Watch asset</button>
   <button id="revoke" type="button">Revoke</button>
@@ -101,6 +107,14 @@
     };
     document.getElementById('add').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x2105', chainName: 'Base', rpcUrls: ['https://mainnet.base.org'], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 } }]);
     document.getElementById('add-unknown').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x539', chainName: 'Local 1337' }]);
+    // Spec 100. (a): the page's name, coin and RPC are deliberately wrong — the
+    // sheet must show the catalog's and never probe rpc.invalid.
+    const ETH = { name: 'Ether', symbol: 'ETH', decimals: 18 };
+    document.getElementById('add-catalog').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0xaa36a7', chainName: 'My Sepolia', nativeCurrency: { name: 'Site', symbol: 'SITE', decimals: 18 }, rpcUrls: ['https://rpc.invalid'], blockExplorerUrls: ['https://sepolia.etherscan.io'] }]);
+    document.getElementById('add-fork').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x3ade68b1', chainName: 'Local Sepolia fork', nativeCurrency: ETH, rpcUrls: ['http://127.0.0.1:8545'] }]);
+    document.getElementById('add-wrong').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x3ade68b1', chainName: 'Not Gnosis', nativeCurrency: ETH, rpcUrls: ['https://rpc.gnosischain.com'] }]);
+    document.getElementById('add-http').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x3ade68b1', chainName: 'Plain http', nativeCurrency: ETH, rpcUrls: ['http://rpc.example.com'] }]);
+    document.getElementById('add-etc').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x3d', chainName: 'Ethereum Classic', nativeCurrency: { name: 'Ether Classic', symbol: 'ETC', decimals: 18 }, rpcUrls: ['https://etc.etcdesktop.com'] }]);
     document.getElementById('coinbase').onclick = () => window.__ask('eth_coinbase');
     document.getElementById('watch').onclick = () => window.__ask('wallet_watchAsset', { type: 'ERC20', options: { address: GNOSIS_USDC, symbol: 'USDC', decimals: 6 } });
     document.getElementById('revoke').onclick = () => window.__ask('wallet_revokePermissions', [{ eth_accounts: {} }]);
