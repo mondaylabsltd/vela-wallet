@@ -2727,15 +2727,15 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
         let record = build_custom_network(model, &info, compat.best_rpc_url.as_deref(), now_iso);
         save_custom_network(model, record)
     };
-    Command::all([
-        saved,
-        settle_dapp_add(
-            model.dapp_gen,
-            add.tab,
-            add.id,
-            DappAddOutcome::Added { chain_id },
-        ),
-    ])
+    // The page hears "added" only once the store has it: a shell that answers
+    // the page from what is stored (the extension's worker reads the catalog
+    // the wallet publishes from it) must never find the chain missing.
+    saved.then(settle_dapp_add(
+        model.dapp_gen,
+        add.tab,
+        add.id,
+        DappAddOutcome::Added { chain_id },
+    ))
 }
 
 /// The sheet closed without adding: the verdict it showed, else declined.

@@ -1921,7 +1921,9 @@ pub fn dapp_add_outcome_error(outcome_json: &str, chain_id: u32) -> String {
         .unwrap_or(vela_core::app::dapp_rpc::DappAddOutcome::Declined);
     match vela_core::app::dapp_rpc::add_outcome_error(&outcome, chain_id) {
         None => "null".to_owned(),
-        Some((code, message)) => serde_json::json!({ "code": code, "message": message }).to_string(),
+        Some((code, message)) => {
+            serde_json::json!({ "code": code, "message": message }).to_string()
+        }
     }
 }
 

@@ -258,6 +258,25 @@ fn settled(ops: &[NOp]) -> Option<DappAddOutcome> {
     })
 }
 
+/// "Add Network", and the store's acknowledgement of the write — the page
+/// hears "added" only after it (returns every op, the write's and the settle's).
+fn approve(sut: &mut Admin) -> Vec<NOp> {
+    let mut ops = sut.dispatch(NEvent::DappAddApproved {
+        now_iso: NOW_ISO.to_owned(),
+    });
+    if ops
+        .iter()
+        .any(|op| matches!(op, NOp::WriteCustomNetworks { .. }))
+    {
+        assert!(settled(&ops).is_none(), "not before the store has it");
+        ops.extend(sut.resolve_matching(
+            |op| matches!(op, NOp::WriteCustomNetworks { .. }),
+            NRes::Written,
+        ));
+    }
+    ops
+}
+
 fn writes(ops: &[NOp]) -> Option<Vec<NetCustomNetwork>> {
     ops.iter().find_map(|op| match op {
         NOp::WriteCustomNetworks { networks } => Some(networks.clone()),
@@ -593,9 +612,7 @@ fn a_pages_rpc_that_names_the_chain_is_checked_like_any_other() {
         "the same contracts"
     );
     contracts(&mut sut, SITE_RPC, true);
-    let ops = sut.dispatch(NEvent::DappAddApproved {
-        now_iso: NOW_ISO.to_owned(),
-    });
+    let ops = approve(&mut sut);
     let saved = writes(&ops).expect("saved");
     let network = saved.iter().find(|n| n.chain_id == NEW_CHAIN).unwrap();
     assert_eq!(network.rpc_url, SITE_RPC);
@@ -645,9 +662,7 @@ fn an_incompatible_chain_is_refused_and_nothing_is_added() {
 #[test]
 fn approve_saves_through_the_settings_path_and_settles_added() {
     let mut sut = ready_from_catalog();
-    let ops = sut.dispatch(NEvent::DappAddApproved {
-        now_iso: NOW_ISO.to_owned(),
-    });
+    let ops = approve(&mut sut);
     let saved = writes(&ops).expect("vela.customNetworks written");
     let network = saved.iter().find(|n| n.chain_id == NEW_CHAIN).unwrap();
     assert_eq!(network.id, format!("custom-{NEW_CHAIN}"));
@@ -859,9 +874,7 @@ fn end_to_end_approve_adds_switches_and_answers_null() {
     catalog(&mut sheet, Some(catalog_entry()));
     probed(&mut sheet, CATALOG_RPC, Some(NEW_CHAIN));
     contracts(&mut sheet, CATALOG_RPC, true);
-    let ops = sheet.dispatch(NEvent::DappAddApproved {
-        now_iso: NOW_ISO.to_owned(),
-    });
+    let ops = approve(&mut sheet);
     assert!(writes(&ops).is_some(), "persisted the Settings way");
     let ops = carry_back(&ops, &mut page_side);
     assert_eq!(chain_changed(&ops), vec![json!("0x1e61")]);
