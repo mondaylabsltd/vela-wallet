@@ -5,6 +5,43 @@ New wire fields are `#[serde(default)]` so an older reader keeps decoding; new e
 in every shell's mirror in the same change (Android's typed enums refuse a whole view on an
 unknown name).
 
+## As built (2026-10-04) — where the code differs from the plan below
+
+The code is the contract; these are the places the plan below was changed while building it.
+
+- **Layers** are `browser · provider · wallet · network · relay · sheet · signer` (`sheet`, not
+  `signing`: the person's decision on Vela's sheet, consent included).
+- **Reasons** (`dapp_record::DbrReason`, each with `key()` → `componentsUi.browserStatus.reason.*`):
+  `navigated_away, page_crashed, tab_closed, wallet_withdrawn, insecure_origin, not_connected,
+  account_mismatch, no_account, consent_busy, unsupported_method, unknown_chain, bad_params,
+  too_many_reads, unknown_batch, wallet_refused, no_endpoint, timed_out, rate_limited,
+  endpoint_error, reverted, rejected_by_person, relay_refused, relay_unreachable,
+  not_confirmed_yet, relay_failed, signer_unavailable, signer_not_discoverable, signer_failed`.
+  `tab_closed` has no line of its own (a closed tab has no panel). No `signer_cancelled`: a
+  cancelled prompt is still `PasskeyCancelled` (never an answer).
+- **Provider state** is flat: `pending · offered · insecure_origin · no_hello`. **Page state**:
+  `blank · loading · ready · crashed`. Both have `key()`.
+- **Rows** carry `code` and `outcome: open · answered · failed`; `DbrFailureNote` carries `key`;
+  the inspector carries `connected: bool`, not an address.
+- **Signer** kinds are three `SignErrorKind`s — `signer_unavailable`, `signer_not_discoverable`,
+  `signer_failed` — not one kind plus a notice field; `signer_failed` stays retryable.
+- **Confirm** — `sign_confirm::confirm_state` / `confirm_state_of` (borrowed views); `ConfirmState`
+  carries `key` (`componentsUi.signing.confirmBlock.*`, `answeredRetry` when the failure is
+  retryable); `SignView.confirm_block` names the signing machine's own block. A stale fee stays
+  advisory (research R7).
+- **The relay's send time** lives only on `TrackEntryView.relay_sent_at_ms`. `SendReceiptView` and
+  `SignEndingState::Following` do NOT carry it (their outcome types are `Eq`, and every shell
+  already holds the tracker entry for its op): each landing reads the entry and calls
+  `landing_pace`. `LandingPace` is flat — `{ line: waiting | none | remaining | elapsed | slow,
+  seconds, progress }`.
+- **Corpus**: 51 keys (41 `browserStatus`, 9 `confirmBlock`, `send.txRelaySending`); no layer-name
+  keys. ja+en runtime residency 144,350 of 144,400.
+- **Shell-side leftovers** (presentation, guarded by tests, not exported yet): the status line's
+  priority (reloaded → wallet not offered → latest trouble; "reloaded" is the shell's own fact),
+  and the fee row's `off_chain` / another-tier display test on iOS, Android and web — the gate no
+  longer reads them.
+
+
 ## Tabs and engines
 
 | Item | Where | Shape | Rule |
