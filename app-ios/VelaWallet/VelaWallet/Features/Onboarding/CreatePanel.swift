@@ -736,7 +736,9 @@ struct DoneScreen: View {
                                 .typeRole(Typography.display)
                                 .foregroundStyle(theme.fgBase)
                         }
-                        Text(loc.t(I18nKeys.Create.successMessage, vars: ["count": "\(keys.count)"]))
+                        // Plural (issue #409): "Your key can sign in on its
+                        // own" for one key, "Any of your 2 keys…" for several.
+                        Text(loc.t(I18nKeys.Create.successMessage, count: keys.count))
                             .typeRole(Typography.body)
                             .foregroundStyle(theme.fgMuted)
                     }

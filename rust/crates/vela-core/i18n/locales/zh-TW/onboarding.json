@@ -155,7 +155,6 @@
       "headerCreated": "錢包已建立",
       "headerDefault": "建立錢包",
       "headerSyncFailed": "跨裝置同步",
-      "identiconHint": "由地址產生的身分圖案",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "裝置綁定",
       "keyHardwareBadge": "硬體",
@@ -189,7 +188,6 @@
       "pinLabel": "PIN 碼",
       "pinRejected": "PIN 碼不正確。次數用盡後金鑰會自我鎖定，只能透過重置解鎖——而重置會清除金鑰上的所有通行金鑰。",
       "pinTitle": "輸入安全金鑰的 PIN 碼",
-      "progressMeterLabel": "推導地址",
       "progressSubtitle": "用 {{count}} 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。",
       "progressTitle": "正在建立錢包",
       "providerGeneric": "手機或平板",
@@ -217,7 +215,8 @@
       "stepKeysLabel": "金鑰",
       "stepNamingDetail": "給錢包取個名字。它會和公鑰一起寫進合約。",
       "stepNamingLabel": "命名",
-      "successMessage": "{{count}} 把密鑰都能單獨登入。合約在第一筆交易時部署。",
+      "successMessage_one": "單把密鑰即可登入。合約在第一筆交易時部署。",
+      "successMessage_other": "單把密鑰即可登入。合約在第一筆交易時部署。",
       "successTitle": "錢包已建立",
       "syncFailedHint": "請檢查您的網路，或於下方設定自訂端點。",
       "syncFailedMessage": "錢包已建立，但您的公鑰尚未同步到伺服器。在解決此問題前，您將無法在其他裝置上登入。",
@@ -231,8 +230,7 @@
       "touchSelectBody": "插著多個安全金鑰，它們都在閃爍。觸摸你想使用的那一個。",
       "touchTitle": "觸摸你的安全金鑰",
       "verifyHint": "您的通行密鑰已驗證，金鑰已同步——一切就緒。",
-      "verifyStuckHint": "驗證一直失敗？您的裝置可能沒有正確儲存這枚通行密鑰。可以放心重新開始——目前尚未建立任何內容。",
-      "walletAddressLabel": "錢包地址"
+      "verifyStuckHint": "驗證一直失敗？您的裝置可能沒有正確儲存這枚通行密鑰。可以放心重新開始——目前尚未建立任何內容。"
     },
     "login": {
       "alertNotSupportedTitle": "不支援",

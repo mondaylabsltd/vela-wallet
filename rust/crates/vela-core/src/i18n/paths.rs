@@ -4,7 +4,7 @@
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
 //! 1876 paths = 1779 leaf + 97 branch. Repeated per locale these key bytes
-//! would cost 757110 bytes; interned once they cost 52301.
+//! would cost 757290 bytes; interned once they cost 52313.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
@@ -1177,7 +1177,6 @@ pub(crate) static PATHS: [&str; 1876] = [
     "onboarding.create.headerCreated",
     "onboarding.create.headerDefault",
     "onboarding.create.headerSyncFailed",
-    "onboarding.create.identiconHint",
     "onboarding.create.keyCount",
     "onboarding.create.keyDeviceOnlyBadge",
     "onboarding.create.keyHardwareBadge",
@@ -1211,7 +1210,6 @@ pub(crate) static PATHS: [&str; 1876] = [
     "onboarding.create.pinLabel",
     "onboarding.create.pinRejected",
     "onboarding.create.pinTitle",
-    "onboarding.create.progressMeterLabel",
     "onboarding.create.progressSubtitle",
     "onboarding.create.progressTitle",
     "onboarding.create.providerGeneric",
@@ -1239,7 +1237,10 @@ pub(crate) static PATHS: [&str; 1876] = [
     "onboarding.create.stepKeysLabel",
     "onboarding.create.stepNamingDetail",
     "onboarding.create.stepNamingLabel",
-    "onboarding.create.successMessage",
+    "onboarding.create.successMessage_few",
+    "onboarding.create.successMessage_many",
+    "onboarding.create.successMessage_one",
+    "onboarding.create.successMessage_other",
     "onboarding.create.successTitle",
     "onboarding.create.syncFailedHint",
     "onboarding.create.syncFailedMessage",
@@ -1254,7 +1255,6 @@ pub(crate) static PATHS: [&str; 1876] = [
     "onboarding.create.touchTitle",
     "onboarding.create.verifyHint",
     "onboarding.create.verifyStuckHint",
-    "onboarding.create.walletAddressLabel",
     "onboarding.intro",
     "onboarding.intro.chainsBody",
     "onboarding.intro.chainsTitle",

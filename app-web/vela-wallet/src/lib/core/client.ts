@@ -46,6 +46,7 @@ import init, {
 	FeeSpeedCore,
 	FeeTierPrefCore,
 	groupPublicKeyFromSeed,
+	i18nPluralSuffix,
 	identiconNormalizeSeed,
 	identiconSvgCircular,
 	keccak256,
@@ -128,6 +129,9 @@ export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // Arc discards a transaction without saying so.
 export { minGasPriceWei, peggedNativeUsd };
 export { identiconNormalizeSeed, identiconSvgCircular };
+// Which plural form a count takes in a language (CLDR, issue 409): flow copy
+// ships every form, and the screen asks this rather than `count === 1`.
+export { i18nPluralSuffix };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };

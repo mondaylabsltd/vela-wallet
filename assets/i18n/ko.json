@@ -762,7 +762,6 @@
    "headerCreated": "지갑 생성 완료",
    "headerDefault": "지갑 만들기",
    "headerSyncFailed": "기기 간 동기화",
-   "identiconHint": "주소에서 생성된 식별 패턴",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "기기 전용",
    "keyHardwareBadge": "하드웨어",
@@ -796,7 +795,6 @@
    "pinLabel": "PIN",
    "pinRejected": "PIN이 올바르지 않습니다. 시도 횟수를 모두 사용하면 키가 잠기며 초기화로만 해제할 수 있고, 초기화하면 키의 모든 패스키가 지워집니다.",
    "pinTitle": "보안 키의 PIN 입력",
-   "progressMeterLabel": "주소 도출 중",
    "progressSubtitle": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
    "progressTitle": "지갑을 만드는 중",
    "providerGeneric": "휴대폰 또는 태블릿",
@@ -824,7 +822,8 @@
    "stepKeysLabel": "키",
    "stepNamingDetail": "지갑 이름을 정합니다. 공개 키와 함께 온체인에 기록됩니다.",
    "stepNamingLabel": "이름",
-   "successMessage": "{{count}}개 키 중 어느 것으로도 혼자 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다.",
+   "successMessage_one": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다.",
+   "successMessage_other": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다.",
    "successTitle": "지갑이 생성되었습니다",
    "syncFailedHint": "네트워크를 확인하거나 아래에서 사용자 지정 엔드포인트를 설정하세요.",
    "syncFailedMessage": "지갑은 생성되었지만 공개 키가 서버에 동기화되지 않았습니다. 이 문제가 해결될 때까지 다른 기기에서 로그인할 수 없습니다.",
@@ -838,8 +837,7 @@
    "touchSelectBody": "보안 키가 여러 개 연결되어 모두 깜박이고 있습니다. 사용할 키를 터치하세요.",
    "touchTitle": "보안 키를 터치하세요",
    "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다.",
-   "verifyStuckHint": "확인이 계속 실패하나요? 기기가 이 패스키를 제대로 저장하지 못했을 수 있습니다. 아직 아무것도 생성되지 않았으니 안심하고 처음부터 다시 시작하세요.",
-   "walletAddressLabel": "지갑 주소"
+   "verifyStuckHint": "확인이 계속 실패하나요? 기기가 이 패스키를 제대로 저장하지 못했을 수 있습니다. 아직 아무것도 생성되지 않았으니 안심하고 처음부터 다시 시작하세요."
   },
   "login": {
    "alertNotSupportedTitle": "지원되지 않음",

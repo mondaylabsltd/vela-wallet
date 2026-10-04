@@ -29,6 +29,7 @@
 		submitLabelToI18n
 	} from '$lib/onboarding/core/copy';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { pluralTemplate } from '$lib/i18n/plural';
 	import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
 	import { RAIL_STEPS, type RailSlot } from '$lib/ui/onboarding/v2/rail';
 
@@ -54,14 +55,23 @@
 
 	const catalog = $derived((data.catalogs as Record<string, unknown>)[locale] ?? {});
 
-	function strings(key: string, params?: Record<string, string | number>): string {
-		const parts = key.split('.');
+	function lookup(key: string): string | undefined {
 		let node: unknown = catalog;
-		for (const part of parts) {
-			if (typeof node !== 'object' || node === null) return key;
+		for (const part of key.split('.')) {
+			if (typeof node !== 'object' || node === null) return undefined;
 			node = (node as Record<string, unknown>)[part];
 		}
-		return typeof node === 'string' ? fillTemplate(node, params) : key;
+		return typeof node === 'string' ? node : undefined;
+	}
+
+	function strings(key: string, params?: Record<string, string | number>): string {
+		// A plural key (issue 409) has no bare value; the core picks its form.
+		const template =
+			lookup(key) ??
+			(typeof params?.count === 'number'
+				? pluralTemplate(lookup, locale, key, params.count)
+				: undefined);
+		return template === undefined ? key : fillTemplate(template, params);
 	}
 
 	const fixture = $derived(CREATE_FIXTURES.find((f) => f.code === selected) ?? CREATE_FIXTURES[0]);
