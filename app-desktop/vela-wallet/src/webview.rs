@@ -1,4 +1,17 @@
-//! The dApp browser's engine — one system webview, living in one column.
+//! The dApp browser's engine — one system webview per tab, living in one
+//! column (spec 099).
+//!
+//! ## One view per tab
+//!
+//! Until 099 one webview served every tab, and selecting a tab re-navigated
+//! it: the page reloaded, its inputs and sockets went, and the core settled
+//! what it had asked as "navigated away". Now each tab owns its own view,
+//! created when the tab is first shown and kept across switches; a switch
+//! shows one view and hides the rest, and a hidden page keeps running. Which
+//! tabs keep a view is the core's rule (`browser_tabs::plan_engines`), applied
+//! by the page through [`close`]. Every callback a view installs carries its
+//! tab's id, so a load, a message or a title is filed under the tab whose
+//! page sent it — never "the tab on screen".
 //!
 //! ## Why a native subview is fine here
 //!
@@ -98,7 +111,7 @@ const META_JS: &str = r#"
 
 /// The entries the top document adds or moves through with no load (spec 083
 /// W15, macOS). WKWebView reports none of them, and the back arrow counts the
-/// tab's own entries (`explore::tab_history`).
+/// tab's own entries.
 ///
 /// `popstate` fires for a traversal inside the document and for a fragment
 /// link. The list's length tells them apart: a traversal keeps it, a new
@@ -138,12 +151,12 @@ pub struct PageMessage {
     pub message_json: String,
 }
 
-/// Where a page's strings go.
+/// Where a page's strings go, with the tab whose page sent them.
 ///
 /// Installed by the page, because only the page knows which window and which
 /// column should answer. Not `Send`: it runs on the main thread, where the
 /// webview's callback already is.
-type MessageSink = Box<dyn Fn(PageMessage)>;
+type MessageSink = Box<dyn Fn(String, PageMessage)>;
 
 /// A document load, as the webview reports it.
 pub enum Load {
@@ -186,15 +199,10 @@ pub enum Load {
     /// The top document moved through its own entries with no load (spec
     /// 083 W15, macOS).
     Popped,
-    /// The engine answered [`forget_history_behind`] for the tab change
-    /// numbered here (083 W15, Windows). From now on its history is the
-    /// arrows': the tab's own when it forgot, and as before 083 when it
-    /// refused.
-    #[cfg_attr(not(windows), allow(dead_code))]
-    HistoryFloor(u64),
 }
 
-type LoadSink = Box<dyn Fn(Load)>;
+/// Where a view's loads go, with its tab.
+type LoadSink = Box<dyn Fn(String, Load)>;
 
 /// Something a page asked for that this browser does not do in place (083).
 #[derive(Debug, PartialEq, Eq)]
@@ -289,19 +297,13 @@ pub struct PageMeta {
     pub status: Option<u16>,
 }
 
-type MetaSink = Box<dyn Fn(PageMeta)>;
+/// Where a view's title reports go, with its tab.
+type MetaSink = Box<dyn Fn(String, PageMeta)>;
 
 thread_local! {
     static MESSAGES: RefCell<Option<MessageSink>> = const { RefCell::new(None) };
     static LOADS: RefCell<Option<LoadSink>> = const { RefCell::new(None) };
     static META: RefCell<Option<MetaSink>> = const { RefCell::new(None) };
-    /// The origin of the top document as last COMMITTED — `None` before the
-    /// first commit, `Some(None)` for a top document with no web origin.
-    static COMMITTED: RefCell<Option<Option<String>>> = const { RefCell::new(None) };
-    /// The address of the top document as last committed (spec 079): the
-    /// toolbar's host, which must not move to a site that has not loaded —
-    /// WKWebView's own URL changes the moment a navigation STARTS.
-    static COMMITTED_URL: RefCell<Option<String>> = const { RefCell::new(None) };
     static LEAVES: RefCell<Option<LeaveSink>> = const { RefCell::new(None) };
     /// Windows' LaunchingExternalUriScheme hook is in: mailto:/tel: pass on to
     /// it, where the engine says whether a person tapped and in which frame
@@ -360,11 +362,15 @@ pub fn on_meta_to(sink: MetaSink) {
     META.with(|slot| *slot.borrow_mut() = Some(sink));
 }
 
-/// The one browser. A `WebView` is neither `Send` nor `Sync` and belongs to the
-/// window it was built as a child of, so it lives on the main thread with the
-/// window rather than in a gpui global.
+/// One tab's browser. A `WebView` is neither `Send` nor `Sync` and belongs to
+/// the window it was built as a child of, so it lives on the main thread with
+/// the window rather than in a gpui global.
 struct Browser {
     view: wry::WebView,
+    /// WebView2's browser process exited under it (spec 083): it can never
+    /// load again, and Reload builds a new one.
+    #[cfg(windows)]
+    engine_gone: bool,
     /// The debug mode its provider script was written for (spec 091).
     debug_mode: bool,
     /// What the webview was last told, so a frame that changed nothing does
@@ -385,12 +391,32 @@ struct Browser {
     _gate: Option<objc2::rc::Retained<mac_leaves::NavigationGate>>,
 }
 
+/// A tab's last committed top document.
+#[derive(Clone, Debug, Default)]
+struct Commit {
+    origin: Option<String>,
+    url: String,
+}
+
 thread_local! {
-    static BROWSER: RefCell<Option<Browser>> = const { RefCell::new(None) };
+    /// Every tab's view, by the explore tab id.
+    static BROWSERS: RefCell<std::collections::BTreeMap<String, Browser>> =
+        const { RefCell::new(std::collections::BTreeMap::new()) };
+    /// The tab whose view the column shows (or is about to): what Back,
+    /// Reload, the engine poll and the bar act on.
+    static SHOWN: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// Each tab's top document as last COMMITTED: its origin — `None` inside
+    /// before a first commit's origin is known, `Some(None)` for a top
+    /// document with no web origin — and its address (spec 079: the toolbar's
+    /// host must not move to a site that has not loaded, and WKWebView's own
+    /// URL changes the moment a navigation STARTS).
+    static COMMITS: RefCell<std::collections::BTreeMap<String, Commit>> =
+        const { RefCell::new(std::collections::BTreeMap::new()) };
     /// Settings' debug mode, as the browser's host last stated it (spec 091).
     static DEBUG_MODE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// Where a view retired for a change of debug mode was (spec 091).
-    static REOPEN: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// Where each view retired for a change of debug mode was (spec 091).
+    static REOPEN: RefCell<std::collections::BTreeMap<String, String>> =
+        const { RefCell::new(std::collections::BTreeMap::new()) };
     /// Why the engine did not start (spec 083 W1b). While set, nothing builds
     /// again until the person asks: a refused folder or a missing runtime does
     /// not fix itself between frames, and each attempt on Windows filed a
@@ -409,10 +435,46 @@ pub fn retry_engine() {
     FAILED.set(None);
 }
 
-/// Whether a view exists to show.
+/// Whether the shown tab has a view to show.
 #[must_use]
 pub fn ready() -> bool {
-    BROWSER.with(|slot| slot.borrow().is_some())
+    shown().is_some_and(|tab| is_live(&tab))
+}
+
+/// The column now shows `tab`'s view (built at the next [`place`] if it has
+/// none). The other views are hidden at that place, and keep running.
+pub fn show(tab: Option<&str>) {
+    SHOWN.with(|slot| *slot.borrow_mut() = tab.map(str::to_owned));
+}
+
+/// The tab whose view the column shows.
+#[must_use]
+pub fn shown() -> Option<String> {
+    SHOWN.with(|slot| slot.borrow().clone())
+}
+
+/// Whether `tab` has a view now — its page is running.
+#[must_use]
+pub fn is_live(tab: &str) -> bool {
+    BROWSERS.with(|views| views.borrow().contains_key(tab))
+}
+
+/// Every tab that has a view now.
+#[must_use]
+pub fn live_tabs() -> Vec<String> {
+    BROWSERS.with(|views| views.borrow().keys().cloned().collect())
+}
+
+/// Drop `tab`'s view: its tab was closed, or suspended to save memory
+/// (spec 099 FR-004 — the core's `plan_engines` names which). The page stops
+/// there and then. `true` when there was one.
+pub fn close(tab: &str) -> bool {
+    // Out of the borrow before the view drops: a platform callback fired by
+    // the teardown must find the map free.
+    let gone = BROWSERS.with(|views| views.borrow_mut().remove(tab));
+    REOPEN.with(|slot| slot.borrow_mut().remove(tab));
+    COMMITS.with(|commits| commits.borrow_mut().remove(tab));
+    gone.is_some()
 }
 
 /// Whether a frame may start building one: not after a failure the person
@@ -425,12 +487,12 @@ fn may_build() -> bool {
     FAILED.get().is_none()
 }
 
-/// Keep what a build produced: the view, or why there is none.
-fn settle(built: Result<Browser, EngineFailure>) {
+/// Keep what a build produced for `tab`: the view, or why there is none.
+fn settle(tab: &str, built: Result<Browser, EngineFailure>) {
     match built {
         Ok(browser) => {
-            REOPEN.with(|slot| slot.borrow_mut().take());
-            BROWSER.with(|slot| *slot.borrow_mut() = Some(browser));
+            REOPEN.with(|slot| slot.borrow_mut().remove(tab));
+            BROWSERS.with(|views| views.borrow_mut().insert(tab.to_owned(), browser));
         }
         Err(failure) => FAILED.set(Some(failure)),
     }
@@ -443,20 +505,30 @@ fn settle(built: Result<Browser, EngineFailure>) {
 /// at the page it showed. The core has already stopped answering a page it no
 /// longer offers.
 ///
-/// `true` when a view was retired: its page is gone.
-pub fn set_debug_mode(on: bool) -> bool {
+/// The tabs whose view was retired: their pages are gone.
+pub fn set_debug_mode(on: bool) -> Vec<String> {
     DEBUG_MODE.set(on);
-    let retired = BROWSER.with(|slot| {
-        slot.borrow_mut()
-            .take_if(|browser| stale(browser.debug_mode, on))
+    let retired: Vec<(String, Browser)> = BROWSERS.with(|views| {
+        let mut views = views.borrow_mut();
+        let stale_tabs: Vec<String> = views
+            .iter()
+            .filter(|(_, browser)| stale(browser.debug_mode, on))
+            .map(|(tab, _)| tab.clone())
+            .collect();
+        stale_tabs
+            .into_iter()
+            .filter_map(|tab| views.remove(&tab).map(|browser| (tab, browser)))
+            .collect()
     });
-    let Some(old) = retired else {
-        return false;
-    };
-    let at = view_url(&old.view).filter(|url| scheme_of(url) == Scheme::Web);
-    REOPEN.with(|slot| *slot.borrow_mut() = at);
-    drop(old);
-    true
+    let mut tabs = Vec::new();
+    for (tab, old) in retired {
+        if let Some(at) = view_url(&old.view).filter(|url| scheme_of(url) == Scheme::Web) {
+            REOPEN.with(|slot| slot.borrow_mut().insert(tab.clone(), at));
+        }
+        drop(old);
+        tabs.push(tab);
+    }
+    tabs
 }
 
 /// Whether a view built for `built_with` must be rebuilt for `wanted`.
@@ -469,11 +541,19 @@ fn stale(built_with: bool, wanted: bool) -> bool {
 /// Called from the paint pass of the element that OWNS that rectangle, so the
 /// webview follows the column through window resizes and through a third
 /// column opening beside it — the signing panel included.
+///
+/// The view is the SHOWN tab's ([`show`]), built at `home` when it has none;
+/// every other tab's view is taken off the screen in the same pass and keeps
+/// running.
 pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui::App) {
+    let Some(tab) = shown() else {
+        hide();
+        return;
+    };
     if !ready() {
         // Spec 091: a view retired for the other debug mode opens again where
         // it was (forgotten once a view is built).
-        let reopen = REOPEN.with(|slot| slot.borrow().clone());
+        let reopen = REOPEN.with(|slot| slot.borrow().get(&tab).cloned());
         let home = reopen.as_deref().unwrap_or(home);
         // Once per start, and again only on the person's Retry (spec 083):
         // this runs every frame, and before 083 a refused build was retried
@@ -483,18 +563,24 @@ pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui:
         }
         #[cfg(windows)]
         {
-            build_later(window, home, cx);
+            build_later(window, &tab, home, cx);
             return;
         }
         #[cfg(not(windows))]
         {
             let _ = cx;
-            settle(build(window, home));
+            settle(&tab, build(window, &tab, home));
         }
     }
-    BROWSER.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        let Some(browser) = slot.as_mut() else {
+    BROWSERS.with(|views| {
+        let mut views = views.borrow_mut();
+        for (id, browser) in views.iter_mut() {
+            if *id != tab && browser.visible {
+                let _ = browser.view.set_visible(false);
+                browser.visible = false;
+            }
+        }
+        let Some(browser) = views.get_mut(&tab) else {
             return;
         };
         if browser.bounds != Some(bounds) {
@@ -543,11 +629,14 @@ fn hole_in(page: Bounds<Pixels>, menu: Bounds<Pixels>, scale: f32) -> Option<[i3
 /// the owner's "打开 ⋯ 菜单时整个网页会消失"). `None` mends the window.
 #[cfg(windows)]
 pub fn cut_out(menu: Option<Bounds<Pixels>>, scale: f32) {
-    BROWSER.with(|slot| {
-        let Ok(mut slot) = slot.try_borrow_mut() else {
+    let Some(tab) = shown() else {
+        return;
+    };
+    BROWSERS.with(|views| {
+        let Ok(mut views) = views.try_borrow_mut() else {
             return;
         };
-        let Some(browser) = slot.as_mut() else {
+        let Some(browser) = views.get_mut(&tab) else {
             return;
         };
         let hole = menu
@@ -594,24 +683,28 @@ fn set_region(view: &wry::WebView, hole: Option<[i32; 4]>) {
 /// second and does. Hiding is not closing: the page keeps running, and what
 /// it asked is still answered.
 pub fn hide() {
-    BROWSER.with(|slot| {
-        if let Some(browser) = slot.borrow_mut().as_mut()
-            && browser.visible
-        {
-            let _ = browser.view.set_visible(false);
-            browser.visible = false;
+    BROWSERS.with(|views| {
+        for browser in views.borrow_mut().values_mut() {
+            if browser.visible {
+                let _ = browser.view.set_visible(false);
+                browser.visible = false;
+            }
         }
     });
 }
 
-/// Go to a URL the person typed or a link they picked.
+/// Go to a URL the person typed or a link they picked, in the shown tab. A
+/// tab with no view yet is built at the address by the next [`place`].
 pub fn navigate(url: &str) {
+    let Some(tab) = shown() else {
+        return;
+    };
     let mut asked = false;
     with_view(|view| {
         asked = view.load_url(url).is_ok();
     });
     if asked {
-        report(Load::Requested(url.to_owned()));
+        report(&tab, Load::Requested(url.to_owned()));
     }
 }
 
@@ -663,10 +756,10 @@ pub fn forward() -> bool {
     went
 }
 
-/// Whether the one webview has been built yet — for a log line.
+/// Whether the shown tab's view has been built yet — for a log line.
 #[must_use]
 pub fn built() -> bool {
-    BROWSER.with(|slot| slot.borrow().is_some())
+    ready()
 }
 
 /// What the engine says about itself (spec 082 RD3, RD6).
@@ -682,12 +775,13 @@ pub struct Engine {
     pub back_len: Option<usize>,
 }
 
-/// One poll of the engine. `None` before the webview is built.
+/// One poll of the shown tab's engine. `None` before its view is built.
 #[must_use]
 pub fn engine() -> Option<Engine> {
-    BROWSER.with(|slot| {
-        let slot = slot.borrow();
-        let view = &slot.as_ref()?.view;
+    let tab = shown()?;
+    BROWSERS.with(|views| {
+        let views = views.borrow();
+        let view = &views.get(&tab)?.view;
         Some(Engine {
             sample: engine_sample(view),
             can_back: view.can_go_back().unwrap_or(false),
@@ -697,49 +791,26 @@ pub fn engine() -> Option<Engine> {
     })
 }
 
-/// Forget every entry of the engine's history but the page on screen, which
-/// is the tab's first page, numbered `floor` (083 W15). One view serves every
-/// tab, so the other entries are other tabs' pages. On Windows the engine is
-/// asked, and [`Load::HistoryFloor`] brings its answer. A refusal is only
-/// logged: the arrows then follow the engine as before 083. macOS has no such
-/// call, and the page counts the tab's entries instead.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn forget_history_behind(floor: u64) {
-    #[cfg(windows)]
-    with_view(|view| {
-        use wry::WebViewExtWindows as _;
-        let asked = crate::webview2_events::forget_history_behind(&view.webview(), move |done| {
-            if !done {
-                eprintln!("[vela-wallet] browser: WebView2 kept the history behind a tab");
-            }
-            report(Load::HistoryFloor(floor));
-        });
-        if let Err(error) = asked {
-            eprintln!("[vela-wallet] browser: WebView2 history: {error}");
-            report(Load::HistoryFloor(floor));
-        }
-    });
-    #[cfg(not(windows))]
-    let _ = floor;
-}
-
 /// Whether the engine can go back / forward (083 W15): the arrows' state,
 /// from the engine's own history, never the page's word.
 #[must_use]
-#[cfg_attr(not(windows), allow(dead_code))]
+#[allow(
+    dead_code,
+    reason = "the engine poll reads `engine()`; kept for a check"
+)]
 pub fn history() -> [bool; 2] {
-    BROWSER.with(|slot| {
-        slot.borrow().as_ref().map_or([false, false], |browser| {
-            [
-                browser.view.can_go_back().unwrap_or(false),
-                browser.view.can_go_forward().unwrap_or(false),
-            ]
-        })
-    })
+    let mut arrows = [false, false];
+    with_view(|view| {
+        arrows = [
+            view.can_go_back().unwrap_or(false),
+            view.can_go_forward().unwrap_or(false),
+        ];
+    });
+    arrows
 }
 
-/// WKWebView's `backForwardList.backList.count` — what one webview shared
-/// by every tab has behind the page it shows (spec 082 RJ5). Same pointer
+/// WKWebView's `backForwardList.backList.count` — what the tab's view has
+/// behind the page it shows (spec 082 RJ5). Same pointer
 /// and thread as [`engine_sample`]. Same-document entries (an SPA's
 /// `pushState`) count, which a count of commits would miss.
 #[cfg(target_os = "macos")]
@@ -804,29 +875,42 @@ fn engine_sample(_view: &wry::WebView) -> Option<vela_core::app::browser_load::E
 /// Load the page on screen again. `true` when a load of it is under way, so
 /// its landing is the same page and not a new entry (083 W15).
 pub fn reload() -> bool {
+    let Some(tab) = shown() else {
+        return false;
+    };
     // Spec 083: after WebView2's browser process died this view can never load
     // again; dropping it lets the next frame build a new one at the page's
     // address.
     #[cfg(windows)]
-    if ENGINE_GONE.replace(false) {
-        let dead = BROWSER.with(|slot| slot.borrow_mut().take());
-        drop(dead);
-        return true;
+    {
+        let dead = BROWSERS.with(|views| {
+            let mut views = views.borrow_mut();
+            if views.get(&tab).is_some_and(|browser| browser.engine_gone) {
+                views.remove(&tab)
+            } else {
+                None
+            }
+        });
+        if dead.is_some() {
+            drop(dead);
+            return true;
+        }
     }
     let mut asked = false;
     with_view(|view| {
         asked = view.reload().is_ok();
     });
     if asked && let Some(url) = committed_url().or_else(current_url) {
-        report(Load::Requested(url));
+        report(&tab, Load::Requested(url));
     }
     asked
 }
 
-/// The address of the document that last committed, whole.
+/// The address of the shown tab's document that last committed, whole.
 #[must_use]
 pub fn committed_url() -> Option<String> {
-    COMMITTED_URL.with(|slot| slot.borrow().clone())
+    let tab = shown()?;
+    COMMITS.with(|commits| commits.borrow().get(&tab).map(|commit| commit.url.clone()))
 }
 
 /// Forget every site this window has browsed (spec 081 FR-017).
@@ -848,9 +932,12 @@ pub fn committed_url() -> Option<String> {
 /// contradict, and failing the whole erase over an absent web view would tell
 /// people their wallet records survived when they did not.
 pub fn clear_browsing_data() -> bool {
-    let live = BROWSER.with(|slot| {
-        slot.borrow()
-            .as_ref()
+    // Every view shares the platform's store: one live view clears it.
+    let live = BROWSERS.with(|views| {
+        views
+            .borrow()
+            .values()
+            .next()
             .map(|browser| browser.view.clear_all_browsing_data().is_ok())
     });
     live.unwrap_or_else(clear_profile_on_disk)
@@ -876,10 +963,16 @@ fn clear_profile_on_disk() -> bool {
     false
 }
 
-/// The document the browser is on, whole. `None` before the first page.
+/// The document the shown tab is on, whole. `None` before its first page.
 #[must_use]
 pub fn current_url() -> Option<String> {
-    BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view))
+    let tab = shown()?;
+    tab_url(&tab)
+}
+
+/// The document `tab`'s view is on, whole.
+fn tab_url(tab: &str) -> Option<String> {
+    BROWSERS.with(|views| view_url(&views.borrow().get(tab)?.view))
 }
 
 /// The webview's URL, or `None` while it has none.
@@ -911,15 +1004,12 @@ fn view_url(view: &wry::WebView) -> Option<String> {
 
 /// Hand one message from the core to the page in `tab`.
 ///
-/// There is one webview, so there is one tab; a message for any other is
-/// dropped — there is no "front tab" to fall back to, which is the rule that
-/// keeps an answer out of a page that did not ask. The bridge drops it too
-/// unless it names the document that is loaded now.
+/// A message for a tab with no view is dropped — there is no "front tab" to
+/// fall back to, which is the rule that keeps an answer out of a page that
+/// did not ask. The bridge drops it too unless it names the document that is
+/// loaded now.
 pub fn deliver(tab: &str, message_json: &str) {
-    if tab != crate::wallet::browser_host::BROWSER_TAB {
-        return;
-    }
-    with_view(|view| {
+    with_tab_view(tab, |view| {
         // A JSON string literal is a JavaScript string literal: the message
         // reaches `__velaDeliver` as the exact bytes the core wrote.
         let script = format!(
@@ -930,9 +1020,16 @@ pub fn deliver(tab: &str, message_json: &str) {
     });
 }
 
+/// The shown tab's view, if built.
 fn with_view(act: impl FnOnce(&wry::WebView)) {
-    BROWSER.with(|slot| {
-        if let Some(browser) = slot.borrow().as_ref() {
+    if let Some(tab) = shown() {
+        with_tab_view(&tab, act);
+    }
+}
+
+fn with_tab_view(tab: &str, act: impl FnOnce(&wry::WebView)) {
+    BROWSERS.with(|views| {
+        if let Some(browser) = views.borrow().get(tab) {
             act(&browser.view);
         }
     });
@@ -942,10 +1039,6 @@ thread_local! {
     /// A WebView2 is being created (Windows): do not start a second.
     #[cfg(windows)]
     static BUILDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// WebView2's browser process exited (spec 083): this view can never load
-    /// again, and Reload builds a new one.
-    #[cfg(windows)]
-    static ENGINE_GONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Build the browser OUTSIDE gpui's update (Windows).
@@ -958,7 +1051,7 @@ thread_local! {
 /// with nothing borrowed, so the nested loop is harmless there; the frame after
 /// it lands places the view.
 #[cfg(windows)]
-fn build_later(window: &Window, home: &str, cx: &mut gpui::App) {
+fn build_later(window: &Window, tab: &str, home: &str, cx: &mut gpui::App) {
     if BUILDING.get() {
         return;
     }
@@ -967,9 +1060,9 @@ fn build_later(window: &Window, home: &str, cx: &mut gpui::App) {
         return;
     }
     BUILDING.set(true);
-    let home = home.to_owned();
+    let (tab, home) = (tab.to_owned(), home.to_owned());
     cx.spawn(async move |cx| {
-        settle(build(&ParentHwnd(hwnd), &home));
+        settle(&tab, build(&ParentHwnd(hwnd), &tab, &home));
         BUILDING.set(false);
         // Paint again, so `place` sizes and shows what was just built.
         cx.update(|cx| cx.refresh_windows());
@@ -999,6 +1092,7 @@ impl wry::raw_window_handle::HasWindowHandle for ParentHwnd {
 
 fn build<W: wry::raw_window_handle::HasWindowHandle>(
     window: &W,
+    tab: &str,
     home: &str,
 ) -> Result<Browser, EngineFailure> {
     // Spec 083 W1: WebView2 given no folder made its profile beside the exe —
@@ -1028,10 +1122,12 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     #[cfg(not(windows))]
     let builder = wry::WebViewBuilder::new();
     let debug_mode = DEBUG_MODE.get();
+    // Every callback of this view files what it hears under its own tab.
+    let ipc_tab = tab.to_owned();
     let builder = builder
         .with_initialization_script(provider_script(ProviderHost::Desktop, debug_mode))
         .with_initialization_script(META_JS)
-        .with_ipc_handler(on_ipc)
+        .with_ipc_handler(move |request| on_ipc(&ipc_tab, request))
         // 083: see `allow_navigation`.
         .with_navigation_handler(allow_navigation)
         // 083: no download on a desktop, as on the phones — wry's default
@@ -1041,17 +1137,26 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     // Windows hears its loads from WebView2 directly (spec 083): wry's handler
     // turns the engine's error page into a commit.
     #[cfg(not(windows))]
-    let builder = builder.with_on_page_load_handler(|event, url| {
-        report(match event {
-            wry::PageLoadEvent::Started => Load::Started(url),
-            wry::PageLoadEvent::Finished => Load::Finished(url),
-        });
-    });
+    let builder = {
+        let tab = tab.to_owned();
+        builder.with_on_page_load_handler(move |event, url| {
+            report(
+                &tab,
+                match event {
+                    wry::PageLoadEvent::Started => Load::Started(url),
+                    wry::PageLoadEvent::Finished => Load::Finished(url),
+                },
+            );
+        })
+    };
     #[cfg(target_os = "macos")]
     let builder = {
         use wry::WebViewBuilderExtDarwin as _;
+        let crashed = tab.to_owned();
         builder
-            .with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
+            .with_on_web_content_process_terminate_handler(move || {
+                report(&crashed, Load::Crashed);
+            })
             // 083 W15: WKWebView has no word on a page's own entries.
             .with_initialization_script(HISTORY_JS)
             // Spec 095: `window.open` / `target=_blank` — a tab, as on Windows.
@@ -1072,7 +1177,7 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     match builder.build_as_child(window) {
         Ok(view) => {
             #[cfg(windows)]
-            if let Err(error) = listen_to_webview2(&view) {
+            if let Err(error) = listen_to_webview2(&view, tab) {
                 eprintln!("[vela-wallet] browser: WebView2 events: {error}");
             }
             #[cfg(windows)]
@@ -1092,9 +1197,11 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             // would be visible for exactly one frame in the wrong place.
             let _ = view.set_visible(false);
             // The first page is a load the wallet asked for, like any other.
-            report(Load::Requested(home.to_owned()));
+            report(tab, Load::Requested(home.to_owned()));
             Ok(Browser {
                 view,
+                #[cfg(windows)]
+                engine_gone: false,
                 debug_mode,
                 bounds: None,
                 visible: false,
@@ -1118,16 +1225,17 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
 /// WebView2's load, crash and certificate events, into the wallet's `Load`
 /// (spec 083).
 #[cfg(windows)]
-fn listen_to_webview2(view: &wry::WebView) -> windows_core::Result<()> {
+fn listen_to_webview2(view: &wry::WebView, tab: &str) -> windows_core::Result<()> {
     use crate::webview2_events::EngineLoad;
     use wry::WebViewExtWindows as _;
-    crate::webview2_events::subscribe(&view.webview(), |event| {
-        report(match event {
+    let tab = tab.to_owned();
+    crate::webview2_events::subscribe(&view.webview(), move |event| {
+        let load = match event {
             EngineLoad::Committed(url) => Load::Started(url),
             EngineLoad::ErrorPage(url) => {
                 // Off the screen this turn, before Edge's page paints a frame;
                 // the render that follows keeps it there (083 W3).
-                hide_if_free();
+                hide_if_free(&tab);
                 Load::ErrorPage(url)
             }
             EngineLoad::Finished(url) => Load::Finished(url),
@@ -1148,11 +1256,18 @@ fn listen_to_webview2(view: &wry::WebView) -> windows_core::Result<()> {
             }
             EngineLoad::RendererGone => Load::Crashed,
             EngineLoad::BrowserGone => {
-                ENGINE_GONE.set(true);
+                BROWSERS.with(|views| {
+                    if let Ok(mut views) = views.try_borrow_mut()
+                        && let Some(browser) = views.get_mut(&tab)
+                    {
+                        browser.engine_gone = true;
+                    }
+                });
                 Load::Crashed
             }
             EngineLoad::HistoryChanged => Load::HistoryChanged,
-        });
+        };
+        report(&tab, load);
     })
 }
 
@@ -1375,10 +1490,10 @@ mod mac_leaves {
 /// [`hide`], unless the view is borrowed right now (an engine event arriving
 /// inside a call on it): the next render hides it then.
 #[cfg(windows)]
-fn hide_if_free() {
-    BROWSER.with(|slot| {
-        if let Ok(mut slot) = slot.try_borrow_mut()
-            && let Some(browser) = slot.as_mut()
+fn hide_if_free(tab: &str) {
+    BROWSERS.with(|views| {
+        if let Ok(mut views) = views.try_borrow_mut()
+            && let Some(browser) = views.get_mut(tab)
             && browser.visible
         {
             let _ = browser.view.set_visible(false);
@@ -1402,15 +1517,17 @@ fn hresult_of(_: &wry::Error) -> Option<i32> {
     None
 }
 
-fn report(load: Load) {
+fn report(tab: &str, load: Load) {
     if let Load::Started(url) = &load {
-        let origin = vela_core::app::dapp_permissions::origin_of(url);
-        COMMITTED.with(|slot| *slot.borrow_mut() = Some(origin));
-        COMMITTED_URL.with(|slot| *slot.borrow_mut() = Some(url.clone()));
+        let commit = Commit {
+            origin: vela_core::app::dapp_permissions::origin_of(url),
+            url: url.clone(),
+        };
+        COMMITS.with(|commits| commits.borrow_mut().insert(tab.to_owned(), commit));
     }
     LOADS.with(|slot| {
         if let Some(sink) = slot.borrow().as_ref() {
-            sink(load);
+            sink(tab.to_owned(), load);
         }
     });
 }
@@ -1420,8 +1537,9 @@ fn report(load: Load) {
 /// The URL comes from the PLATFORM's record of the sender, never from the
 /// string; the core reads everything else. The sink is always there first:
 /// the page installs it in the same frame that builds this webview.
-fn on_ipc(request: wry::http::Request<String>) {
+fn on_ipc(tab: &str, request: wry::http::Request<String>) {
     let body = request.body();
+    let webview = || tab_url(tab);
     let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
     let vela = parsed
         .as_ref()
@@ -1437,9 +1555,9 @@ fn on_ipc(request: wry::http::Request<String>) {
         _ => None,
     };
     if let Some(history) = history {
-        let sender = sender_url(&request.uri().to_string(), current_url);
-        if top_frame_sent(&sender, current_url) {
-            report(history);
+        let sender = sender_url(&request.uri().to_string(), webview);
+        if top_frame_sent(tab, &sender, webview) {
+            report(tab, history);
         }
         return;
     }
@@ -1453,7 +1571,7 @@ fn on_ipc(request: wry::http::Request<String>) {
                 .unwrap_or_default()
                 .to_owned()
         };
-        let sender = sender_url(&request.uri().to_string(), current_url);
+        let sender = sender_url(&request.uri().to_string(), webview);
         let meta = PageMeta {
             url: meta_url(&text("href"), &sender),
             title: text("title"),
@@ -1466,20 +1584,23 @@ fn on_ipc(request: wry::http::Request<String>) {
         };
         META.with(|slot| {
             if let Some(sink) = slot.borrow().as_ref() {
-                sink(meta);
+                sink(tab.to_owned(), meta);
             }
         });
         return;
     }
-    let sender = sender_url(&request.uri().to_string(), current_url);
-    let is_main_frame = top_frame_sent(&sender, current_url);
+    let sender = sender_url(&request.uri().to_string(), webview);
+    let is_main_frame = top_frame_sent(tab, &sender, webview);
     MESSAGES.with(|slot| {
         if let Some(sink) = slot.borrow().as_ref() {
-            sink(PageMessage {
-                sender,
-                is_main_frame,
-                message_json: body.clone(),
-            });
+            sink(
+                tab.to_owned(),
+                PageMessage {
+                    sender,
+                    is_main_frame,
+                    message_json: body.clone(),
+                },
+            );
         }
     });
 }
@@ -1515,16 +1636,17 @@ fn meta_url(href: &str, sender: &str) -> String {
 /// document's messages to this handler, and its load-start event fires
 /// before the commit, so the same comparison there would drop the old page's
 /// last requests.
-fn top_frame_sent(sender: &str, webview: impl FnOnce() -> Option<String>) -> bool {
+fn top_frame_sent(tab: &str, sender: &str, webview: impl FnOnce() -> Option<String>) -> bool {
     if !cfg!(target_os = "macos") {
         return true;
     }
     let origin_of = vela_core::app::dapp_permissions::origin_of;
     let sent_from = origin_of(sender);
-    COMMITTED.with(|slot| match slot.borrow().as_ref() {
+    let committed = COMMITS.with(|commits| commits.borrow().get(tab).map(|c| c.origin.clone()));
+    match committed {
         None => true,
-        Some(top) => sent_from == *top || sent_from == webview().as_deref().and_then(origin_of),
-    })
+        Some(top) => sent_from == top || sent_from == webview().as_deref().and_then(origin_of),
+    }
 }
 
 /// The URL of the document that posted, as the platform reported it.
@@ -1579,19 +1701,37 @@ mod tests {
     #[test]
     fn a_frame_of_another_origin_is_not_the_top_document() {
         // Before the first commit nothing is known, and nothing is refused.
-        assert!(top_frame_sent("https://ads.example/frame", || None));
-        report(Load::Started("https://dapp.example/app".to_owned()));
-        assert!(top_frame_sent("https://dapp.example/other", || None));
+        assert!(top_frame_sent(
+            "t-frame",
+            "https://ads.example/frame",
+            || None
+        ));
+        report(
+            "t-frame",
+            Load::Started("https://dapp.example/app".to_owned()),
+        );
+        assert!(top_frame_sent(
+            "t-frame",
+            "https://dapp.example/other",
+            || None
+        ));
         assert_eq!(
-            top_frame_sent("https://ads.example/frame", || None),
+            top_frame_sent("t-frame", "https://ads.example/frame", || None),
             !cfg!(target_os = "macos"),
             "a cross-origin frame is not the page it sits in"
         );
         // A page restored from the back-forward cache is the top document
         // with no new commit: the webview's own URL names it.
-        assert!(top_frame_sent("https://back.example/", || Some(
+        assert!(top_frame_sent("t-frame", "https://back.example/", || Some(
             "https://back.example/#top".to_owned()
         )));
+        // Spec 099: each tab's top document is its own — another tab's
+        // commit says nothing about this one.
+        assert!(top_frame_sent(
+            "t-other",
+            "https://ads.example/frame",
+            || None
+        ));
     }
 
     /// Spec 079 R3: the visit's address is the document's own, read in the
@@ -1797,14 +1937,16 @@ mod tests {
         );
         assert!(stale(true, false), "turned off: a new view without it");
         assert!(!built());
-        assert!(!set_debug_mode(true), "no view yet: nothing retired");
+        assert!(
+            set_debug_mode(true).is_empty(),
+            "no view yet: nothing retired"
+        );
         assert!(DEBUG_MODE.get());
-        assert_eq!(
-            REOPEN.with(|slot| slot.borrow().clone()),
-            None,
+        assert!(
+            REOPEN.with(|slot| slot.borrow().is_empty()),
             "no view yet: nothing retired, nothing to reopen"
         );
-        assert!(!set_debug_mode(false));
+        assert!(set_debug_mode(false).is_empty());
         assert!(!DEBUG_MODE.get());
     }
 
@@ -1816,17 +1958,24 @@ mod tests {
         use std::rc::Rc;
         let heard = Rc::new(RefCell::new(Vec::new()));
         let loads = heard.clone();
-        on_load_to(Box::new(move |load| match load {
-            Load::Pushed => loads.borrow_mut().push("pushed"),
-            Load::Popped => loads.borrow_mut().push("popped"),
-            _ => {}
+        on_load_to(Box::new(move |tab, load| {
+            assert_eq!(tab, "t-history", "filed under the tab that sent it");
+            match load {
+                Load::Pushed => loads.borrow_mut().push("pushed"),
+                Load::Popped => loads.borrow_mut().push("popped"),
+                _ => {}
+            }
         }));
         let messages = Rc::new(std::cell::Cell::new(0));
         let count = messages.clone();
-        on_message_to(Box::new(move |_| count.set(count.get() + 1)));
-        report(Load::Started("https://dapp.example/app".to_owned()));
+        on_message_to(Box::new(move |_, _| count.set(count.get() + 1)));
+        report(
+            "t-history",
+            Load::Started("https://dapp.example/app".to_owned()),
+        );
         let ipc = |uri: &str, body: &str| {
             on_ipc(
+                "t-history",
                 wry::http::Request::builder()
                     .uri(uri)
                     .body(body.to_owned())

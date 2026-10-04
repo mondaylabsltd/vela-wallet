@@ -23,8 +23,8 @@ pub fn deliver(_tab: &str, _message_json: &str) {}
 
 /// Settings' debug mode (spec 091). No page here to offer the wallet to, and
 /// no view to retire.
-pub fn set_debug_mode(_on: bool) -> bool {
-    false
+pub fn set_debug_mode(_on: bool) -> Vec<String> {
+    Vec::new()
 }
 
 /// Erase's sweep of the browser's own store (spec 081 FR-017).
@@ -39,7 +39,7 @@ pub fn clear_browsing_data() -> bool {
     true
 }
 
-/// Whether the one webview has been built — never, here (spec 082's
+/// Whether the shown tab's webview has been built — never, here (spec 082's
 /// `browser: navigate asked … view=` line reads it on every desktop).
 #[must_use]
 pub fn built() -> bool {

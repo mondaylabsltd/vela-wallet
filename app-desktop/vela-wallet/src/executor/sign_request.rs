@@ -465,6 +465,7 @@ fn sign_and_submit(
         return SignSubmitOutcome::Failed {
             message: format!("{method} carried no transaction this wallet could read"),
             refused: false,
+            signer: None,
         };
     };
 
@@ -595,6 +596,7 @@ fn sign_message(
         return SignSubmitOutcome::Failed {
             message: format!("{method} carried nothing this wallet could sign"),
             refused: false,
+            signer: None,
         };
     };
     let mut sign = |challenge: &[u8]| {
@@ -714,6 +716,7 @@ pub fn after_landing(user_op_hash: String, landing: Option<Landing>) -> SignSubm
                 .to_owned(),
             // The relay's refusal (spec 082 RJ3): no "try again".
             refused: true,
+            signer: None,
         },
         None => SignSubmitOutcome::NotConfirmed { user_op_hash },
     }
@@ -778,22 +781,32 @@ fn submit_failure(
         user_op::SubmitFailure::RelayerUnavailable => SignSubmitOutcome::Failed {
             message: "the relay could not be reached".to_owned(),
             refused: false,
+            signer: None,
         },
         // Nothing left the device (spec 082 RA10): the dApp's -32603 carries
         // the core's fixed sentence, never the pool's "all endpoints failed".
         user_op::SubmitFailure::NotSent => SignSubmitOutcome::Failed {
             message: NOT_SENT_DAPP_DETAIL.to_owned(),
             refused: false,
+            signer: None,
         },
         user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed {
             message,
             refused: false,
+            signer: None,
+        },
+        // Spec 099 R8: the passkey failed, and the core is told how.
+        user_op::SubmitFailure::Signer { kind, message } => SignSubmitOutcome::Failed {
+            message,
+            refused: false,
+            signer: Some(kind),
         },
         // The relay refused it (spec 082 RJ3): the page is answered the
         // core's "refused" sentence, and the sheet never says "try again".
         user_op::SubmitFailure::Refused(message) => SignSubmitOutcome::Failed {
             message,
             refused: true,
+            signer: None,
         },
         // Nothing signed or sent for a page that has gone (RB2).
         user_op::SubmitFailure::AskerGone => SignSubmitOutcome::AskerGone,
@@ -1522,7 +1535,7 @@ mod tests {
         );
         assert!(matches!(
             after_landing(op(), Some(Landing::Refused)),
-            SignSubmitOutcome::Failed { message, refused: true } if !message.contains("0xop")
+            SignSubmitOutcome::Failed { message, refused: true, .. } if !message.contains("0xop")
         ));
         for landing in [
             None,

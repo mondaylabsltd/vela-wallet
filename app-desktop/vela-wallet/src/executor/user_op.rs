@@ -96,6 +96,14 @@ pub enum SubmitFailure {
     /// ceremony, after it, or right before the relay POST stopped the
     /// submit. Nothing was signed or sent.
     AskerGone,
+    /// The passkey ceremony failed, as the passkey classifier read the
+    /// platform's error (spec 099 R8): no passkey can be used here, one that
+    /// sign-in would never offer, or another failure. Never `Cancelled`,
+    /// which is [`Self::PasskeyCancelled`]. Nothing was signed.
+    Signer {
+        kind: FailureKind,
+        message: String,
+    },
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -114,11 +122,11 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::AskerGone => SendSubmitFailure::Other {
                 message: Some("the request was withdrawn; nothing was sent".to_owned()),
             },
-            SubmitFailure::Other(message) | SubmitFailure::Refused(message) => {
-                SendSubmitFailure::Other {
-                    message: (!message.is_empty()).then_some(message),
-                }
-            }
+            SubmitFailure::Other(message)
+            | SubmitFailure::Refused(message)
+            | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
+                message: (!message.is_empty()).then_some(message),
+            },
         }
     }
 }
@@ -370,11 +378,14 @@ impl Signer<'_> {
         }
         .map_err(|failure| match failure.kind {
             FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
-            _ => other(
-                failure
+            // Spec 099 R8: how it failed travels on, so the sheet and the
+            // page's record name the passkey, not "couldn't submit".
+            kind => SubmitFailure::Signer {
+                kind,
+                message: failure
                     .message
                     .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
-            ),
+            },
         })
     }
 }

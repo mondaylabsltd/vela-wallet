@@ -129,7 +129,25 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
 /// The one gate (module doc).
 #[must_use]
 pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
-    let sign = &input.sign;
+    confirm_state_of(
+        &input.sign,
+        &input.guard,
+        &input.clear,
+        input.fee.as_ref(),
+        input.speed_tier,
+    )
+}
+
+/// [`confirm_state`] over borrowed views — for a shell that links the core
+/// and holds them already.
+#[must_use]
+pub fn confirm_state_of(
+    sign: &SignView,
+    guard: &GuardView,
+    clear: &ClearSigningView,
+    fee: Option<&FeeView>,
+    speed_tier: Option<FeeTier>,
+) -> ConfirmState {
     let shut = |block: ConfirmBlock| ConfirmState {
         enabled: false,
         block: Some(block),
@@ -143,21 +161,21 @@ pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
     }
     // Spec 096 F7: a slide that armed under "Loading…" signed what nobody had
     // been shown yet.
-    if input.clear.resolving || input.clear.surface == ClearSurface::Loading {
+    if clear.resolving || clear.surface == ClearSurface::Loading {
         return shut(ConfirmBlock::Reading);
     }
-    if !input.guard.confirm_allowed {
-        return shut(if input.guard.surface == GuardSurface::Batch {
+    if !guard.confirm_allowed {
+        return shut(if guard.surface == GuardSurface::Batch {
             ConfirmBlock::BatchUnsettled
         } else {
             ConfirmBlock::ApprovalChoice
         });
     }
-    if !off_chain(&input.clear) {
-        let Some(fee) = &input.fee else {
+    if !off_chain(clear) {
+        let Some(fee) = fee else {
             return shut(ConfirmBlock::FeeMeasuring);
         };
-        if fee.busy || fee_of_another_tier(fee, input.speed_tier) {
+        if fee.busy || fee_of_another_tier(fee, speed_tier) {
             return shut(ConfirmBlock::FeeMeasuring);
         }
         if fee.failed.is_some() {

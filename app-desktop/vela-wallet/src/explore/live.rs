@@ -417,6 +417,7 @@ mod tests {
             recent_hidden: false,
             favorites_full: false,
             tabs_full: false,
+            recent_tabs: Vec::new(),
             ready: true,
         };
         let tabs = tab_models(

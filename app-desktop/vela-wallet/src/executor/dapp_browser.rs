@@ -27,6 +27,7 @@ use serde_json::{Value, json};
 
 use vela_core::app::dapp_browser::{DbrOperation, DbrShellResult, DbrStoredSite};
 use vela_core::app::dapp_permissions::DpermGrant;
+use vela_core::app::dapp_record::DbrReadFailure;
 
 use crate::executor::{now_ms, pool, relay, storage};
 
@@ -80,6 +81,27 @@ pub enum Performed {
     Signing(SigningOrder),
 }
 
+/// How long the core gives `operation` before its answer is owed (spec 099
+/// FR-008): a read's deadline, none for anything else.
+#[must_use]
+pub fn deadline_ms(operation: &DbrOperation) -> Option<f64> {
+    match operation {
+        DbrOperation::Read { deadline_ms, .. } if *deadline_ms > 0.0 => Some(*deadline_ms),
+        _ => None,
+    }
+}
+
+/// The answer a read owes when its deadline passed first (spec 099 FR-008):
+/// the core names it the network's, "did not answer in time".
+#[must_use]
+pub fn timed_out() -> DbrShellResult {
+    DbrShellResult::ReadAnswered {
+        body_json: None,
+        now_ms: now_ms(),
+        failure: Some(DbrReadFailure::TimedOut),
+    }
+}
+
 /// Perform one operation. Never fails outward (`executor::mod`'s contract).
 pub fn perform(operation: &DbrOperation) -> Performed {
     match operation {
@@ -122,10 +144,14 @@ pub fn perform(operation: &DbrOperation) -> Performed {
             user_op_hash,
         } => {
             let (chain_id, hash) = (*chain_id, user_op_hash.clone());
-            Performed::Blocking(Box::new(move || DbrShellResult::UserOpResolved {
-                tx_hash: relay::user_op_receipt(&hash, chain_id)
+            Performed::Blocking(Box::new(move || {
+                let tx_hash = relay::user_op_receipt(&hash, chain_id)
                     .resolution
-                    .map(|landed| landed.tx_hash),
+                    .map(|landed| landed.tx_hash);
+                DbrShellResult::UserOpResolved {
+                    tx_hash,
+                    now_ms: now_ms(),
+                }
             }))
         }
         DbrOperation::ForwardToSigning {
@@ -157,6 +183,11 @@ pub fn perform(operation: &DbrOperation) -> Performed {
             save_connection_record(address, *chain_id, origin);
             Performed::Now(DbrShellResult::Ack)
         }
+        // Spec 099 FR-015: the core's own line — every client logs the same.
+        DbrOperation::Log { line } => {
+            crate::diag::vlog!("dapp", "{line}");
+            Performed::Now(DbrShellResult::Ack)
+        }
     }
 }
 
@@ -165,8 +196,15 @@ pub fn perform(operation: &DbrOperation) -> Performed {
 #[must_use]
 pub fn neutral(operation: &DbrOperation) -> DbrShellResult {
     match operation {
-        DbrOperation::Read { .. } => DbrShellResult::ReadAnswered { body_json: None },
-        DbrOperation::ResolveUserOp { .. } => DbrShellResult::UserOpResolved { tx_hash: None },
+        DbrOperation::Read { .. } => DbrShellResult::ReadAnswered {
+            body_json: None,
+            now_ms: now_ms(),
+            failure: None,
+        },
+        DbrOperation::ResolveUserOp { .. } => DbrShellResult::UserOpResolved {
+            tx_hash: None,
+            now_ms: now_ms(),
+        },
         DbrOperation::ListSites => DbrShellResult::SitesListed { sites: Vec::new() },
         _ => DbrShellResult::Ack,
     }
@@ -241,15 +279,24 @@ fn params_of(params_json: &str) -> Value {
 
 /// One read, through the pool every other read in this app uses. The body
 /// goes back whole — `{"result":…}` or `{"error":{…}}` — and the core unpacks
-/// it; `None` is "no endpoint answered", which the core says as -32603.
+/// it; `None` is "no endpoint answered", which the core says as -32603, with
+/// the pool's word on why: every endpoint rate-limiting is said as such
+/// (spec 099 FR-009).
 fn read(chain_id: u32, method: &str, params: Value, bundler: bool) -> DbrShellResult {
     let body = if bundler {
         pool::bundler_call(chain_id, method, params)
     } else {
         pool::call(chain_id, method, params)
     };
+    let failure = match &body {
+        Ok(_) => None,
+        Err(pool::PoolError::Failed { rate_limited: true }) => Some(DbrReadFailure::RateLimited),
+        Err(_) => Some(DbrReadFailure::NoEndpoint),
+    };
     DbrShellResult::ReadAnswered {
         body_json: body.ok().map(|body| body.to_string()),
+        now_ms: now_ms(),
+        failure,
     }
 }
 
@@ -465,6 +512,7 @@ mod tests {
             method: "eth_blockNumber".to_owned(),
             params_json: "[]".to_owned(),
             bundler: false,
+            deadline_ms: 30_000.0,
         });
         assert!(matches!(read, Performed::Blocking(_)), "never on a frame");
     }

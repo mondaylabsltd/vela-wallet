@@ -542,20 +542,32 @@ fn following(
         // Past the window: handed to the network, not landed, still watched.
         TrackOutcome::StillConfirming => captions.push(s.still_confirming.clone()),
         TrackOutcome::Landing | TrackOutcome::Final | TrackOutcome::MaybeSent => {
+            use vela_core::app::tx_tracker::LandingLine;
+            // Count, don't spin (spec 038 #D3) — from when the relay put it
+            // on the network, the core's one countdown (spec 099 R6): before
+            // that, the relay is sending it, and no chain's clock runs.
+            let sent_at = track
+                .filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
+                .and_then(|entry| entry.relay_sent_at_ms);
+            let pace = vela_core::app::tx_tracker::landing_pace(
+                sent_at,
+                clock.typical_s.and_then(|s| u16::try_from(s).ok()),
+                clock.now_ms,
+            );
             captions.push(if wait.held {
                 s.tx_held_fees.clone()
+            } else if pace.line == LandingLine::Waiting {
+                s.tx_relay_sending.clone()
             } else {
                 s.tx_waiting_confirm.clone()
             });
-            // Count, don't spin (spec 038 #D3): the chain's usual time, then
-            // what is left of it, then "almost there", then "taking longer".
-            let since = track
-                .filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
-                .and_then(|entry| entry.submitted_at_ms)
-                .or(clock.seen_submitted_ms);
-            if let (Some(since), Some(typical)) = (since, clock.typical_s) {
-                let elapsed = ((clock.now_ms - since) / 1000.).max(0.) as u64;
-                let typical = u64::from(typical);
+            if let (Some(typical), true) = (
+                clock.typical_s,
+                matches!(
+                    pace.line,
+                    LandingLine::Remaining | LandingLine::Elapsed | LandingLine::Slow
+                ),
+            ) {
                 captions.push(SharedString::from(crate::signing::fill(
                     &s.tx_typical_time,
                     &[
@@ -563,20 +575,19 @@ fn following(
                         ("estSecs", &typical.to_string()),
                     ],
                 )));
-                captions.push(if elapsed < typical {
-                    SharedString::from(crate::signing::fill(
+                let seconds = pace.seconds.to_string();
+                captions.push(match pace.line {
+                    LandingLine::Remaining => SharedString::from(crate::signing::fill(
                         &s.tx_remaining,
-                        &[("remaining", &(typical - elapsed).to_string())],
-                    ))
-                } else if elapsed < typical * 2 {
-                    SharedString::from(crate::signing::fill(
+                        &[("remaining", &seconds)],
+                    )),
+                    LandingLine::Elapsed => SharedString::from(crate::signing::fill(
                         &s.tx_elapsed,
-                        &[("elapsed", &elapsed.to_string())],
-                    ))
-                } else {
-                    s.tx_slow_confirm.clone()
+                        &[("elapsed", &seconds)],
+                    )),
+                    _ => s.tx_slow_confirm.clone(),
                 });
-                out.progress = crate::flows::live::ring_progress(elapsed, typical);
+                out.progress = pace.progress;
             }
         }
     }
@@ -684,6 +695,8 @@ mod tests {
             submitted_at_ms: Some(1_000.),
             outcome,
             relay_tx_hash: None,
+            // The relay sent it as it took it — the countdown's start.
+            relay_sent_at_ms: Some(1_000.),
         }
     }
 
@@ -1511,11 +1524,13 @@ mod tests {
             !maybe.cta_accent,
             "no retry, no accent: nothing to do again"
         );
-        assert!(
-            following(TrackOutcome::Landing, false)
-                .captions
-                .contains(&s.tx_waiting_confirm)
-        );
+        // Spec 099 R6: with no word yet that the relay sent it, the landing
+        // says the relay is sending it — no chain's clock runs over the
+        // relay's own queue.
+        let not_sent = following(TrackOutcome::Landing, false);
+        assert!(not_sent.captions.contains(&s.tx_relay_sending));
+        assert!(!not_sent.captions.contains(&s.tx_waiting_confirm));
+        assert_eq!(not_sent.progress, None, "the ring roams");
         assert!(
             following(TrackOutcome::Landing, true)
                 .captions

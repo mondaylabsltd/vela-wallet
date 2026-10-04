@@ -2340,6 +2340,7 @@ mod tests {
             submitted_at_ms: Some(1_000.0),
             outcome: TrackOutcome::Landing,
             relay_tx_hash: None,
+            relay_sent_at_ms: None,
         };
         let pending = [entry(TrackStatus::Pending)];
         let (fed, event) = tracked_event(OP, &pending, None, 1.0)
@@ -3217,6 +3218,7 @@ mod approve_tests {
                 outcome: SignSubmitOutcome::Failed {
                     message: "the relay said no".to_owned(),
                     refused: false,
+                    signer: None,
                 },
                 now_ms: 1.0,
             },

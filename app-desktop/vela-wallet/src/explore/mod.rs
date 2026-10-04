@@ -10,10 +10,6 @@ pub mod engine;
 pub mod fixtures;
 pub mod live;
 pub mod probe;
-// WebView2's per-tab history floor (083 W15); macOS reads the back list
-// (082 RJ5) and Linux has no in-app browser.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub mod tab_history;
 
 use gpui::SharedString;
 
