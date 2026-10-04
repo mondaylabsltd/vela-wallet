@@ -355,24 +355,30 @@ fun ExploreScreen(
                     // Live: the rows are the core's and change under an open
                     // sheet (a new group appeared only after reopening —
                     // device-found); the drawn snapshot serves the gallery.
-                    is ExploreSheet.GroupManage -> GroupManageSheetContent(
-                        sheet = if (live != null) model.groupManageSheet else current,
-                        hidden = hidden,
-                        closeLabel = strings.t("explore.close"),
-                        hideLabel = strings.t("explore.hide"),
-                        showLabel = strings.t("explore.show"),
-                        deleteLabel = strings.t("explore.delete"),
-                        onClose = { sheet = null },
-                        onToggle = { id ->
-                            val row = current.rows.firstOrNull { it.id == id }
-                            if (live != null && row != null) {
-                                live.onGroupToggle(id, !row.hidden)
-                            } else {
-                                hidden = if (hidden.contains(id)) hidden - id else hidden + id
-                            }
-                        },
-                        onNew = { live?.onGroupNew() },
-                    )
+                    is ExploreSheet.GroupManage -> {
+                        val shown = if (live != null) model.groupManageSheet else current
+                        GroupManageSheetContent(
+                            sheet = shown,
+                            hidden = hidden,
+                            closeLabel = strings.t("explore.close"),
+                            hideLabel = strings.t("explore.hide"),
+                            showLabel = strings.t("explore.show"),
+                            deleteLabel = strings.t("explore.delete"),
+                            onClose = { sheet = null },
+                            onToggle = { id ->
+                                // The row as drawn, not as the sheet opened: the
+                                // snapshot still said "shown" after a hide, so a
+                                // second tap hid it again (#410).
+                                val row = shown.rows.firstOrNull { it.id == id }
+                                if (live != null && row != null) {
+                                    live.onGroupToggle(id, !row.hidden)
+                                } else {
+                                    hidden = if (hidden.contains(id)) hidden - id else hidden + id
+                                }
+                            },
+                            onNew = { live?.onGroupNew() },
+                        )
+                    }
 
                     is ExploreSheet.SiteMenu -> SiteMenuSheetContent(
                         sheet = current,
