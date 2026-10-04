@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.AnnotatedString
 import app.getvela.wallet.core.designsystem.tokens.VelaAmountHero
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -88,7 +89,8 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
-import app.getvela.wallet.core.format.cleanAmountEdit
+import app.getvela.wallet.core.format.amountFieldOf
+import app.getvela.wallet.core.format.cleanAmountFieldEdit
 import app.getvela.wallet.core.identicon.IdenticonImage
 import app.getvela.wallet.feature.flows.AddressCardModel
 import app.getvela.wallet.feature.flows.AmountFieldModel
@@ -330,34 +332,39 @@ fun AmountInput(
             // OWN value changes for another reason (Max, ⇄). Driving the field
             // straight from the round trip dropped characters under fast
             // typing — "0.001" arrived as ".01".
-            var typed by remember { mutableStateOf(amount.raw) }
+            var typed by remember { mutableStateOf(amountFieldOf(amount.raw)) }
             // Every value this field SENT, so a machine view that lags behind
             // the typing (device-found: a 42-character paste lost six
             // characters to stale intermediate views) is recognised as an echo
             // and ignored; only a value the field never sent — Max, ⇄, a
             // picked contact, the core's own normalisation — resyncs it.
             val sent = remember { ArrayDeque<String>().apply { addLast(amount.raw) } }
-            LaunchedEffect(amount.raw) { if (amount.raw !in sent) typed = amount.raw }
+            LaunchedEffect(amount.raw) { if (amount.raw !in sent) typed = amountFieldOf(amount.raw) }
             AmountFigure(
-                shown = typed,
+                shown = typed.text,
+                field = typed,
                 prefix = amount.unitPrefix,
                 suffix = amount.unitSuffix,
                 onEdit = { next ->
                     // Spec 073: cleaned by the core's rule here, before the
                     // machine sees it — a decimal-comma pad's "4,5" is 4.5,
-                    // never 4 — and the field holds what was sent on. A paste
-                    // with no reading as one figure keeps what it had.
-                    val clean = cleanAmountEdit(next, typed)
-                    if (clean != null) {
-                        typed = clean
-                        sent.addLast(clean)
-                        if (sent.size > 256) sent.removeFirst()
-                        onValueChange(clean)
+                    // never 4, and (issue #421) "08" is 8 — and the field
+                    // holds what was sent on, caret where the core puts it. A
+                    // paste with no reading as one figure keeps what it had.
+                    val edit = cleanAmountFieldEdit(next, typed)
+                    if (edit != null) {
+                        val changed = edit.text != typed.text
+                        typed = edit
+                        if (changed) {
+                            sent.addLast(edit.text)
+                            if (sent.size > 256) sent.removeFirst()
+                            onValueChange(edit.text)
+                        }
                     }
                 },
             )
         } else {
-            AmountFigure(shown = amount.value, prefix = amount.unitPrefix, suffix = amount.unitSuffix, onEdit = null)
+            AmountFigure(shown = amount.value, field = null, prefix = amount.unitPrefix, suffix = amount.unitSuffix, onEdit = null)
         }
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         if (amount.denomShown) {
@@ -412,9 +419,11 @@ fun AmountInput(
 @Composable
 private fun AmountFigure(
     shown: String,
+    /** The typed field's text and caret; `null` with [onEdit] for a drawn figure. */
+    field: TextFieldValue?,
     prefix: String?,
     suffix: String?,
-    onEdit: ((String) -> Unit)?,
+    onEdit: ((TextFieldValue) -> Unit)?,
 ) {
     val colors = VelaTheme.colors
     val placeholder = "0"
@@ -480,7 +489,7 @@ private fun AmountFigure(
             if (!prefix.isNullOrEmpty()) {
                 Text(text = prefix, style = unitStyle, maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline())
             }
-            if (onEdit != null) {
+            if (onEdit != null && field != null) {
                 var focused by remember { mutableStateOf(false) }
                 // Focused: as wide as the whole text plus the caret's room, up
                 // to the room there is — past it the text scrolls to the caret.
@@ -488,7 +497,7 @@ private fun AmountFigure(
                 // the unit keeps one distance from the digits in both states).
                 val widthPx = ((if (focused) wholePx else drawnPx) + slackPx).coerceAtMost(roomPx.coerceAtLeast(slackPx))
                 BasicTextField(
-                    value = shown,
+                    value = field,
                     onValueChange = onEdit,
                     singleLine = true,
                     // At rest the field's own glyphs step aside for the drawn

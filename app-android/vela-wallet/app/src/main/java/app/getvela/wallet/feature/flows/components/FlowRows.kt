@@ -37,7 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
-import app.getvela.wallet.core.format.cleanAmountEdit
+import app.getvela.wallet.core.format.amountFieldOf
+import app.getvela.wallet.core.format.cleanAmountFieldEdit
 import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -412,9 +413,9 @@ fun RecipientCard(
             textAlign = TextAlign.End,
         )
         if (onAmountChange != null && recipient.amountValue != null) {
-            var typed by remember(recipient.id) { mutableStateOf(recipient.amountValue) }
+            var typed by remember(recipient.id) { mutableStateOf(amountFieldOf(recipient.amountValue)) }
             val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
-            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = recipient.amountValue }
+            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = amountFieldOf(recipient.amountValue) }
             // Issue #331: the field is a WELL (the web's `.amount-well`), a full
             // control's height, and the whole box is the target. It was the
             // bare figure: a line ~20dp tall whose "0" sat 8dp from the ✕, and
@@ -423,17 +424,21 @@ fun RecipientCard(
             // keyboard opening. The well is seen while it is wanted (empty, or
             // in hand), as on the web, so a filled row at rest reads as drawn.
             var focused by remember(recipient.id) { mutableStateOf(false) }
-            val well = typed.isEmpty() || focused
+            val well = typed.text.isEmpty() || focused
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    // Spec 073: the core's amount rule, as the send figure.
-                    val clean = cleanAmountEdit(next, typed)
-                    if (clean != null) {
-                        typed = clean
-                        sent.addLast(clean)
-                        if (sent.size > 256) sent.removeFirst()
-                        onAmountChange(clean)
+                    // Spec 073: the core's amount rule, as the send figure —
+                    // its caret too (issue #421: "." is "0.", "08" is "8").
+                    val edit = cleanAmountFieldEdit(next, typed)
+                    if (edit != null) {
+                        val changed = edit.text != typed.text
+                        typed = edit
+                        if (changed) {
+                            sent.addLast(edit.text)
+                            if (sent.size > 256) sent.removeFirst()
+                            onAmountChange(edit.text)
+                        }
                     }
                 },
                 singleLine = true,
@@ -452,7 +457,7 @@ fun RecipientCard(
                             .padding(horizontal = VelaSpacing.md),
                         contentAlignment = Alignment.CenterEnd,
                     ) {
-                        if (typed.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
+                        if (typed.text.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
                         inner()
                     }
                 },
