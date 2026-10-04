@@ -14622,6 +14622,17 @@ impl WalletPage {
                                 },
                                 cx,
                             );
+                            // Issue #425: the site's good load titles a
+                            // favourite its host stands in for — one pinned
+                            // while it had failed, or one whose stored name
+                            // (an error page's) the core reset on hydration.
+                            resident.dispatch(
+                                vela_core::app::explore_sites::Event::PageLoaded {
+                                    url: visit.url.clone(),
+                                    title: visit.title.clone(),
+                                },
+                                cx,
+                            );
                         });
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(

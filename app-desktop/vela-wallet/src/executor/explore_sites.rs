@@ -123,6 +123,37 @@ mod tests {
         });
     }
 
+    /// Issue #425: the document a build before the name rule wrote — a
+    /// favourite named after an engine's error page, no `name_rule` — reads
+    /// whole (the core, not this store, replaces the name with the host), and
+    /// the rule's marker survives the round trip, or every launch would read
+    /// the document as one from before the rule again.
+    #[test]
+    fn a_document_from_before_the_name_rule_reads_and_the_rule_survives_the_store() {
+        storage::tests::with_temp_state("explore-name-rule", || {
+            let before = serde_json::json!({
+                "favorites": [{
+                    "origin": "https://app.uniswap.org", "url": "https://app.uniswap.org/",
+                    "host": "app.uniswap.org", "name": "网页无法打开", "renamed": false,
+                    "added_ms": 1_759_051_383_000.0_f64
+                }],
+                "groups": [], "tabs": [], "selected_tab": null, "hidden_system": []
+            });
+            if storage::write_value(EXPLORE_KEY, before).is_err() {
+                unreachable!("could not seed");
+            }
+            let mut doc =
+                read_doc().unwrap_or_else(|| unreachable!("the old document was refused"));
+            assert_eq!(doc.name_rule, 0);
+            assert_eq!(doc.favorites[0].name, "网页无法打开");
+
+            doc.name_rule = vela_core::app::explore_sites::NAME_RULE;
+            doc.favorites[0].name = "app.uniswap.org".to_owned();
+            write_doc(&doc);
+            assert_eq!(read_doc(), Some(doc));
+        });
+    }
+
     /// Missing lists are empty lists: an older document that predates tabs
     /// still opens, because every field carries `serde(default)`.
     #[test]
