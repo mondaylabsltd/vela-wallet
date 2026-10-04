@@ -33,9 +33,23 @@ struct AmountTextTests {
     }
 
     @Test func aCleanFigureIsLeftAsTyped() {
-        for text in ["", "0", "4", "4.", ".5", "0.50", "53.4836"] {
+        for text in ["", "0", "0.", "0.0", "0.08", "4", "4.", "0.50", "53.4836"] {
             #expect(AmountText.clean(text, previous: String(text.dropLast())) == text)
         }
+    }
+
+    /// Issue #421: "08" stayed in the field, read as 8 — ten times what
+    /// somebody who missed the point meant — and Continue stayed lit. A zero
+    /// leading a digit is not kept; only a decimal mark may follow it.
+    @Test func aZeroLeadingADigitIsNotKept() {
+        #expect(AmountText.clean("08", previous: "0") == "8")
+        #expect(AmountText.clean("00", previous: "0") == "0")
+        #expect(AmountText.clean("0.08", previous: "0.0") == "0.08")
+        #expect(AmountText.clean("0.0", previous: "0.") == "0.0")
+        #expect(AmountText.clean(".", previous: "") == "0.")
+        #expect(AmountText.clean("008.5", previous: "") == "8.5")
+        // One typed comma is the decimal mark under every preset: "0,8" is 0.8.
+        #expect(AmountText.clean("0,", previous: "0") == "0.")
     }
 }
 
@@ -93,6 +107,38 @@ struct AmountEditTests {
     @Test func deletingIsAnEditToo() {
         #expect(AmountEdit.apply("", in: NSRange(location: 2, length: 1), of: "0.5")
                 == AmountEdit.Result(text: "0.", caret: 2))
+    }
+
+    /// Issue #421 key by key: the field shows what the core holds after
+    /// every key — "0" then "8" is "8", never "08".
+    @Test func aZeroThenADigitIsTheDigit() {
+        #expect(type("08") == "8")
+        #expect(type("00") == "0")
+        #expect(type("012") == "12")
+        #expect(type("0.08") == "0.08")
+        #expect(type("0.0") == "0.0")
+        #expect(type("0,8") == "0.8")
+    }
+
+    /// "." becomes "0." — a character nobody typed — and the caret goes after
+    /// the mark: left between the "0" and the ".", the next "5" would read
+    /// "05." and clean to 5, where 0.5 was being typed.
+    @Test func aMarkOnAnEmptyFieldReadsWithItsZero() {
+        let point = AmountEdit.apply(".", in: NSRange(location: 0, length: 0), of: "")
+        #expect(point == AmountEdit.Result(text: "0.", caret: 2))
+        let comma = AmountEdit.apply(",", in: NSRange(location: 0, length: 0), of: "")
+        #expect(comma == AmountEdit.Result(text: "0.", caret: 2))
+        #expect(type(".5") == "0.5")
+        #expect(type(",5") == "0.5")
+    }
+
+    /// A zero typed in front of "8" is refused where it was typed.
+    @Test func aZeroInFrontOfAFigureChangesNothing() {
+        #expect(AmountEdit.apply("0", in: NSRange(location: 0, length: 0), of: "8")
+                == AmountEdit.Result(text: "8", caret: 0))
+        // A paste: the zeros go, the figure stays, the caret after it.
+        #expect(AmountEdit.apply("008.5", in: NSRange(location: 0, length: 0), of: "")
+                == AmountEdit.Result(text: "8.5", caret: 3))
     }
 
     @Test func anEditOutsideTheTextIsRefused() {

@@ -61,7 +61,9 @@
 		<ChainMark mark={panel.mark} />
 		<span class="text">
 			<span class="name">{panel.name}</span>
-			<span class="hint">{panel.amountHint}</span>
+			{#if panel.amountHint}
+				<span class="hint">{panel.amountHint}</span>
+			{/if}
 			{#if panel.balanceLine}
 				<!-- Spec 098 §4: what it has against what it needs, in its coin. -->
 				<span class="hint balance">{panel.balanceLine}</span>

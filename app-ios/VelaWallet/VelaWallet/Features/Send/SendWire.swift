@@ -255,9 +255,14 @@ struct SendTreasuryStatusWire: Decodable, Equatable {
     /// fund the relayer, which is the safe assumption when nobody said Vela
     /// serves it.
     let operatorServed: Bool
+    /// `balance` and `floor` in the coin they are counted in, and what the
+    /// stop asks for — the core's, for the stop's own chain (issue #422).
+    /// `nil` when the core could not read the relay's figures: then no
+    /// amount is drawn at all.
+    let coin: SendTreasuryCoinWire?
 
     private enum CodingKeys: String, CodingKey {
-        case chainId, address, asset, balance, floor, bootstrapNeeded, operatorServed
+        case chainId, address, asset, balance, floor, bootstrapNeeded, operatorServed, coin
     }
 
     init(from decoder: Decoder) throws {
@@ -269,7 +274,22 @@ struct SendTreasuryStatusWire: Decodable, Equatable {
         floor = try c.decode(String.self, forKey: .floor)
         bootstrapNeeded = try c.decode(Bool.self, forKey: .bootstrapNeeded)
         operatorServed = try c.decodeIfPresent(Bool.self, forKey: .operatorServed) ?? false
+        coin = try c.decodeIfPresent(SendTreasuryCoinWire.self, forKey: .coin)
     }
+}
+
+/// The relay's treasury figures in the coin they are counted in (issue
+/// #422): plain whole-coin decimals, the stop's own chain's coin. This app
+/// used to name the coin from its chain catalog and work the figures out in
+/// 18 decimals itself; the core says both now.
+struct SendTreasuryCoinWire: Decodable, Equatable {
+    /// pathUSD on Tempo, else the chain's own coin; `nil` = the core does
+    /// not know it (never a guess).
+    let symbol: String?
+    let balance: String
+    let floor: String
+    /// The suggested contribution: the relay's shortfall for this chain.
+    let suggested: String
 }
 
 /// The relay said it cannot serve this chain (spec 098 §2) — a 404 from the

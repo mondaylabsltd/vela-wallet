@@ -297,6 +297,48 @@ struct RelayClientTests {
         }
     }
 
+    /// An empty relay's answer is one the core can READ. The asset used to
+    /// go out as `["type": "native"]`; the core's `SendTreasuryAsset` is a
+    /// plain string, so it refused the whole result and the send never
+    /// showed the stop — Continue ended in the pre-check's timeout instead
+    /// (found with issue #422). Checked against the real core, which throws
+    /// on a result it cannot deserialise before it looks for the effect.
+    @Test func anEmptyRelaysAnswerIsOneTheCoreReads() async throws {
+        let port = ScriptedRelayPort()
+        port.rest["/v1/treasury/137"] = .ok([
+            "chainId": 137, "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c",
+            "asset": "native", "balance": "0x0", "floor": "0x5af3107a4000",
+            "bootstrapNeeded": true,
+        ])
+        guard case .lowFloat(let status) = await client(port).probeTreasury(chainId: 137) else {
+            Issue.record("bootstrapNeeded must read as a low float")
+            return
+        }
+        #expect(status["asset"] as? String == "native")
+        #expect(status["floor"] as? String == "100000000000000")
+        let wire = CoreJSON.string([
+            "type": "treasury_probed", "probe": ["type": "low_float", "status": status],
+        ])
+        // No such effect: answered with nothing — but only once it has read.
+        _ = try SendCore().resolveEffect(effectId: 999, resultJson: wire)
+
+        port.rest["/v1/treasury/4217"] = .ok([
+            "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c", "asset": "pathUSD",
+            "balance": "0x0", "floor": "0x86470", "bootstrapNeeded": true,
+        ])
+        guard case .lowFloat(let tempo) = await client(port).probeTreasury(chainId: 4217) else {
+            Issue.record("bootstrapNeeded must read as a low float")
+            return
+        }
+        #expect(tempo["asset"] as? String == "path_usd")
+        _ = try SendCore().resolveEffect(
+            effectId: 999,
+            resultJson: CoreJSON.string([
+                "type": "treasury_probed", "probe": ["type": "low_float", "status": tempo],
+            ])
+        )
+    }
+
     /// The relay reads the chain through the endpoint THIS wallet picked.
     @Test func everyRestCallCarriesThePoolsChosenRpcUrl() async {
         let port = ScriptedRelayPort()
@@ -513,9 +555,9 @@ struct TxRecordWriteTests {
 /// the wallet's own — nothing at all. A screen with no rows cannot say whether
 /// the shell answered badly or the core refused the answer, so this drives the
 /// real machine with a scripted holding and asks it.
-/// `timeLimit`: the fee quotes here run with no settle deadline (a scripted
-/// relay answers by design), so a quote that never settles is a hang, and this
-/// is what reports it (`Waits.swift`).
+/// `timeLimit`: the fee quotes here run with no settle deadline and the core's
+/// timers stopped (a scripted relay answers by design), so a quote that never
+/// settles is a hang, and this is what reports it (`Waits.swift`).
 @MainActor
 @Suite(.timeLimit(.minutes(10)))
 struct SendMachineTests {
@@ -573,7 +615,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let held = try balance()
         let nets = try networks()
 
@@ -617,7 +659,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let held = try balance()
         let nets = try networks()
         let pool = RpcPool(store: store, accounts: accounts)
@@ -667,7 +709,7 @@ struct SendMachineTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
         let signer = CountingSigner()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let pool = RpcPool(store: store, accounts: accounts)
 
         let executor = SendExecutor(
@@ -721,7 +763,7 @@ struct SendMachineTests {
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
-            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil),
+            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
             metadata: TokenMetadata(store: store, pool: pool),
             accountStore: accounts,
@@ -795,7 +837,7 @@ struct SendMachineTests {
         ])
 
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let settled = await fees.quote(
             chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
             calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],

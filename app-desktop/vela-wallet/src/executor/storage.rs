@@ -838,9 +838,12 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn state_dir(name: &str) -> StateDir {
-        let Ok(_guard) = SERIAL.lock() else {
-            unreachable!("the test lock is poisoned");
-        };
+        // A test that panicked inside the lock poisons it; the next test
+        // still gets a fresh directory below, so it runs rather than failing
+        // too — one failure stays one failure, not a hundred that hide it.
+        let _guard = SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("vela-storage-test-{name}"));
         let _ = fs::remove_dir_all(&dir);
         if fs::create_dir_all(&dir).is_err() {
@@ -952,9 +955,12 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
-        let Ok(_guard) = SERIAL.lock() else {
-            unreachable!("the test lock is poisoned");
-        };
+        // A test that panicked inside the lock poisons it; the next test
+        // still gets a fresh directory below, so it runs rather than failing
+        // too — one failure stays one failure, not a hundred that hide it.
+        let _guard = SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("vela-storage-test-{name}"));
         let _ = fs::remove_dir_all(&dir);
         if fs::create_dir_all(&dir).is_err() {

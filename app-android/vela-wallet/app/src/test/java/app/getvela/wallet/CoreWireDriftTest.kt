@@ -90,6 +90,7 @@ import app.getvela.wallet.feature.send.core.SendTimerTag
 import app.getvela.wallet.feature.send.core.SendToken
 import app.getvela.wallet.feature.send.core.SendTokenMeta
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTreasuryCoin
 import app.getvela.wallet.feature.send.core.SendTreasuryProbe
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
@@ -750,6 +751,8 @@ class CoreWireDriftTest {
         assertFieldsExist<SendChainInfo>("SendChainInfo")
         assertFieldsExist<SendTokenMeta>("SendTokenMeta")
         assertFieldsExist<SendTreasuryStatus>("SendTreasuryStatus")
+        // Issue #422: the stop's coin and figures are the core's, field for field.
+        assertFieldsExhaustive<SendTreasuryCoin>("SendTreasuryCoin")
         assertFieldsExist<SendQuotedFee>("SendQuotedFee")
         assertFieldsExist<SendTxRecord>("SendTxRecord")
         assertFieldsExist<SendRecipientIdentity>("SendRecipientIdentity")

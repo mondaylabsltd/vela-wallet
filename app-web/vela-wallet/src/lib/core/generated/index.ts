@@ -331,6 +331,7 @@ export * from './SendTimerTag';
 export * from './SendToken';
 export * from './SendTokenMeta';
 export * from './SendTreasuryAsset';
+export * from './SendTreasuryCoin';
 export * from './SendTreasuryProbe';
 export * from './SendTreasuryStatus';
 export * from './SendTxErrorKey';

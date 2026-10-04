@@ -1162,11 +1162,6 @@ enum SendLive {
             return loc.t("componentsUi.relayUnreachable.title") + " · " + lead
         }
         if let status = view.treasuryBootstrap {
-            let decimals = status.asset == "path_usd" ? 6 : 18
-            let symbol = status.asset == "path_usd"
-                ? "pathUSD"
-                : (ChainCatalog.meta(status.chainId)?.nativeSymbol ?? "")
-            let short = shortfall(floor: status.floor, balance: status.balance)
             // Two situations, one symptom: on a network Vela ships the
             // operator owns that relayer and telling them is the fix; on one
             // the person added, there may be nobody else who can hold gas
@@ -1174,20 +1169,26 @@ enum SendLive {
             let lead = status.operatorServed
                 ? loc.t("componentsUi.treasuryBootstrap.operatorLead")
                 : loc.t("componentsUi.treasuryBootstrap.customLead")
-            // Spec 098 §4: what it has against what it needs, the line that
-            // must not be missed (non-refundable, not Vela's), and that the
-            // sheet watches — the core closes it once funded.
-            let balance = loc.t("componentsUi.treasuryBootstrap.balanceLine", vars: [
-                "balance": fromBase(status.balance, decimals: decimals),
-                "floor": fromBase(status.floor, decimals: decimals),
-                "symbol": symbol,
-            ])
-            return loc.t("componentsUi.treasuryBootstrap.title") + " · "
-                + lead + " "
-                + loc.t("componentsUi.treasuryBootstrap.amountHint", vars: [
-                    "amount": fromBase(short, decimals: decimals), "symbol": symbol,
+            // Issue #422: the coin and every figure in it are the core's —
+            // the stop's own chain's coin, the relay's shortfall for that
+            // chain. No figures the core could read: no amount, rather than
+            // one nobody measured.
+            var figures = ""
+            if let coin = status.coin {
+                let symbol = coin.symbol ?? ""
+                let hint = loc.t("componentsUi.treasuryBootstrap.amountHint", vars: [
+                    "amount": coin.suggested, "symbol": symbol,
+                ]).trimmingCharacters(in: .whitespaces)
+                // Spec 098 §4: what it has against what it needs.
+                let balance = loc.t("componentsUi.treasuryBootstrap.balanceLine", vars: [
+                    "balance": coin.balance, "floor": coin.floor, "symbol": symbol,
                 ])
-                + "\n" + balance
+                figures = " " + hint + "\n" + balance
+            }
+            // …the line that must not be missed (non-refundable, not Vela's),
+            // and that the sheet watches — the core closes it once funded.
+            return loc.t("componentsUi.treasuryBootstrap.title") + " · "
+                + lead + figures
                 + "\n" + loc.t("componentsUi.treasuryBootstrap.disclaimer")
                 + "\n" + loc.t("componentsUi.treasuryBootstrap.watching")
         }
@@ -1760,11 +1761,5 @@ enum SendLive {
         while out.hasSuffix("0") { out.removeLast() }
         if out.hasSuffix(".") { out.removeLast() }
         return out.isEmpty ? "0" : out
-    }
-
-    /// `floor - balance`, floored at zero, in base units and string arithmetic.
-    private static func shortfall(floor: String, balance: String) -> String {
-        guard let a = Double(floor), let b = Double(balance), a > b else { return "0" }
-        return String(format: "%.0f", a - b)
     }
 }

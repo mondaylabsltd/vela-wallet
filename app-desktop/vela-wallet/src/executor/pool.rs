@@ -1983,11 +1983,18 @@ mod tests {
         const ANSWERING: u32 = 23;
 
         storage::tests::with_temp_state("pool-one-dead-chain", || {
-            // A port nothing listens on: the connect is refused.
-            let dead_port = std::net::TcpListener::bind("127.0.0.1:0")
-                .and_then(|listener| listener.local_addr())
-                .map(|addr| addr.port())
+            // A port nothing listens on: the connect is refused. It is HELD
+            // while the answering chains take their ports, and let go only
+            // then — freed first, the next `bind(0)` could be handed the same
+            // port, and the "dead" chain answered as one of the live ones
+            // (CI, PR #426: one such run poisoned the storage lock under 105
+            // other tests).
+            let dead = std::net::TcpListener::bind("127.0.0.1:0")
                 .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+            let dead_port = dead
+                .local_addr()
+                .map(|addr| addr.port())
+                .unwrap_or_else(|error| unreachable!("no port: {error}"));
             let mut networks =
                 vec![json!({ "chainId": DEAD, "rpcURL": format!("http://127.0.0.1:{dead_port}") })];
             for chain in FIRST..FIRST + ANSWERING {
@@ -1996,6 +2003,7 @@ mod tests {
                     json!({ "chainId": chain, "rpcURL": format!("http://127.0.0.1:{port}") }),
                 );
             }
+            drop(dead);
             if storage::write_value(storage::KEY_CUSTOM_NETWORKS, Value::Array(networks)).is_err() {
                 unreachable!("could not seed the networks");
             }

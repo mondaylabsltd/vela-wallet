@@ -184,5 +184,14 @@ test('the funding sheet shows the balance against the floor, and says it closes 
 				.replace('{{symbol}}', 'ETH')
 		)
 	).toBeVisible();
+	// Issue 422: the contribution is the core's — this chain's shortfall, in
+	// this chain's coin — the same figure every app shows.
+	await expect(
+		page.getByText(
+			en('componentsUi.treasuryBootstrap.amountHint')
+				.replace('{{amount}}', '0.0001')
+				.replace('{{symbol}}', 'ETH')
+		)
+	).toBeVisible();
 	await expect(page.getByText(en('componentsUi.treasuryBootstrap.watching'))).toBeVisible();
 });

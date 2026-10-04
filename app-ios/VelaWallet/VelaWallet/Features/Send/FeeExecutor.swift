@@ -35,6 +35,10 @@ final class FeeExecutor {
         "start_deadline",
     ]
 
+    /// The operations that are timers rather than reads: a quote's staleness
+    /// and the bound on a whole run. What they wait on is the clock.
+    static let timers: Set<String> = ["start_ttl", "start_deadline"]
+
     /// `eth_estimateGas({from, to, value, data})` for one call on one chain —
     /// the gas hex, or `nil` when nobody answered. The same read the spine's
     /// `measureCall` makes at submit.

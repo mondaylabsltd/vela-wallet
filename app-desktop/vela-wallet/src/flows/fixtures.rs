@@ -156,10 +156,11 @@ pub struct FactRow {
     /// The value in the danger tone — an unlimited spending cap (spec 093),
     /// the one figure on a record that is a standing risk.
     pub danger: bool,
-    /// A second line under the value, in mono and muted: the short address
-    /// under a payee's NAME (spec 097 F, S2). On the page that signs, a name
-    /// is a claim and the address is what is paid, so the name may be cut
-    /// short but this line never is.
+    /// A second line under the value, muted, in the body face: whose word a
+    /// payee's NAME is and the short address it stands for (spec 097 F, S2).
+    /// On the page that signs, a name is a claim and the address is what is
+    /// paid, so the name may be cut short but this line never is. The lead
+    /// sits beside the name on the first line, as the From row's (#423).
     pub detail: Option<SharedString>,
 }
 
@@ -1628,15 +1629,18 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 danger: false,
                 detail: None,
             },
+            // Issue #423: a payee the public registry names — the name beside
+            // the identicon, as From, over whose word it is and the short
+            // address, in the body face.
             FactRow {
                 label: s.to_label.clone(),
-                value: ALICE_DISPLAY.into(),
+                value: "Alice".into(),
                 lead: FactLead::Identicon(ALICE_FULL.into()),
-                mono: true,
+                mono: false,
                 copy: None,
                 note: None,
                 danger: false,
-                detail: None,
+                detail: Some(format!("{} · {ALICE_DISPLAY}", s.vela_user).into()),
             },
             FactRow {
                 label: s.detail_chain.clone(),
@@ -1762,6 +1766,30 @@ mod tests {
             }
             assert!(!panel_title(panel, &s).is_empty(), "{label} has no title");
         }
+    }
+
+    /// Issue #423: the gallery's confirm draws a named payee the way the
+    /// live one does — the name first (beside the identicon, as From), whose
+    /// word it is and the short address under it, nothing in mono.
+    #[test]
+    fn dsd3_names_its_payee_over_the_kind_and_the_short_address() {
+        let s = strings();
+        let FlowBody::SendConfirm(confirm) = body(FlowPanel::Dsd3, &s) else {
+            panic!("expected the confirm");
+        };
+        let to = confirm
+            .facts
+            .iter()
+            .find(|fact| fact.label == s.to_label)
+            .unwrap_or_else(|| panic!("no To row"));
+        assert_eq!(to.value.as_ref(), "Alice");
+        assert_ne!(to.value, s.vela_user);
+        assert_eq!(
+            to.detail.as_ref().map(ToString::to_string),
+            Some(format!("{} · {ALICE_DISPLAY}", s.vela_user))
+        );
+        assert!(matches!(to.lead, FactLead::Identicon(_)));
+        assert!(!to.mono);
     }
 
     #[test]

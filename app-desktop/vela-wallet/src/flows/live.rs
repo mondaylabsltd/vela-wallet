@@ -39,8 +39,8 @@ use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::send::{
     SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendNameSource, SendPayee,
-    SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken,
-    SendTreasuryAsset, SendTxStatus, SendUnitIssue, SendView,
+    SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken, SendTxStatus,
+    SendUnitIssue, SendView,
 };
 
 use crate::flows::fixtures::{
@@ -2273,7 +2273,7 @@ mod treasury_tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::send::{
-        Send as SendMachine, SendTreasuryAsset, SendTreasuryStatus, SendView,
+        Send as SendMachine, SendTreasuryAsset, SendTreasuryCoin, SendTreasuryStatus, SendView,
     };
 
     /// The relay cannot pay on this chain — and there is now a way out of
@@ -2304,6 +2304,13 @@ mod treasury_tests {
                     // Gnosis ships with Vela, so its relayer is the operator's
                     // to refill — the core says so when it publishes the sheet.
                     operator_served: true,
+                    // …and words the figures in Gnosis's own coin (#422).
+                    coin: Some(SendTreasuryCoin {
+                        symbol: Some("xDAI".to_owned()),
+                        balance: "0".to_owned(),
+                        floor: "0.02".to_owned(),
+                        suggested: "0.02".to_owned(),
+                    }),
                 }),
                 ..host.view()
             };
@@ -2332,7 +2339,7 @@ mod treasury_tests {
             // cost the facts would be a worse screen, not a kinder one.
             let detail = notice.detail.unwrap_or_default();
             assert!(detail.contains("0xTreasury"), "{detail}");
-            assert!(detail.contains("0.02"), "{detail}");
+            assert!(detail.contains("0.02 xDAI"), "{detail}");
             // ...and copies it: read off the screen it is 42 characters to retype.
             assert_eq!(
                 notice.copy,
@@ -2395,6 +2402,71 @@ mod treasury_tests {
                 // Only a network the person added is theirs to point elsewhere.
                 assert_eq!(notice.detail.is_some(), !operator_served);
             }
+        });
+    }
+
+    /// Issue #422: the stop's coin and figures are the core's. On a Xiaomi
+    /// a Polygon send was asked for "0.0001 ETH" — another chain's stop, in
+    /// a coin a name lookup guessed. This card writes what the core gives
+    /// and nothing it does not: no figures, no amount.
+    #[test]
+    fn the_treasury_stop_writes_the_cores_coin_and_nothing_it_did_not_give() {
+        crate::executor::storage::tests::with_temp_state("treasury-coin-422", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let host = CoreHost::<SendMachine>::new();
+            let polygon = |coin: Option<SendTreasuryCoin>| SendView {
+                treasury_bootstrap: Some(SendTreasuryStatus {
+                    chain_id: 137,
+                    address: "0xTreasury".to_owned(),
+                    asset: SendTreasuryAsset::Native,
+                    balance: "40000000000000".to_owned(),
+                    floor: "100000000000000".to_owned(),
+                    bootstrap_needed: true,
+                    operator_served: true,
+                    coin,
+                }),
+                ..host.view()
+            };
+            let detail_of = |view: &SendView| {
+                let inputs = SendInputs {
+                    send: view,
+                    fee: &fee,
+                    s: &s,
+                    wallet: &wallet,
+                    locale: "en-US",
+                    money: crate::wallet::live::Money::usd(),
+                    identity_name: "MultiTest",
+                    identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    speed: None,
+                    relay_sent_at_ms: None,
+                };
+                let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
+                notice.detail.unwrap_or_default().to_string()
+            };
+
+            let detail = detail_of(&polygon(Some(SendTreasuryCoin {
+                symbol: Some("POL".to_owned()),
+                balance: "0.00004".to_owned(),
+                floor: "0.0001".to_owned(),
+                suggested: "0.00006".to_owned(),
+            })));
+            assert!(
+                detail.contains(&format!("{} 0.00006 POL", s.funding_amount_label)),
+                "{detail}"
+            );
+            assert!(!detail.contains("ETH"), "{detail}");
+
+            let detail = detail_of(&polygon(None));
+            assert!(
+                detail.contains("0xTreasury"),
+                "still where to send: {detail}"
+            );
+            assert!(
+                !detail.contains(s.funding_amount_label.as_ref()),
+                "no amount nobody read: {detail}"
+            );
         });
     }
 }
@@ -2470,13 +2542,23 @@ pub fn amount_to_input_with(
 /// it had.
 #[must_use]
 pub fn amount_edited(next: &str, previous: &str) -> Option<String> {
-    use vela_core::l10n::amount_text;
-    amount_text::clean(
+    amount_edited_with(
         next,
+        previous,
         crate::executor::format_prefs::current().number,
-        amount_text::Entry::Unknown,
-        Some(previous),
     )
+}
+
+/// [`amount_edited`] under a named preset — the seam a test types through
+/// without touching the person's global choice.
+#[must_use]
+pub fn amount_edited_with(
+    next: &str,
+    previous: &str,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(next, preset, amount_text::Entry::Unknown, Some(previous))
 }
 
 #[must_use]
@@ -2593,6 +2675,59 @@ mod split_tests {
         assert_eq!(amount_edited("4,", "4").as_deref(), Some("4."));
         assert_eq!(amount_edited("4.5", "4.").as_deref(), Some("4.5"));
         assert_eq!(amount_edited("0x10", ""), None);
+    }
+
+    /// Issue #421 through the page's own round trip: the field's text goes
+    /// through `amount_edited` to the core, and the field shows the core's
+    /// figure back through `amount_to_input` — so what each key leaves on
+    /// screen is exactly what the core holds. "0" then "8" is "8"; only a
+    /// decimal mark may follow a leading zero, in the person's own mark.
+    #[test]
+    fn a_zero_leading_a_digit_is_not_kept_in_any_amount_field() {
+        use vela_core::l10n::number::NumberPreset;
+
+        /// Keys typed at the end of the field, one at a time: the field text
+        /// after each, and the figure the core was handed last.
+        fn type_keys(keys: &str, preset: NumberPreset) -> (String, String) {
+            let (mut field, mut core) = (String::new(), String::new());
+            for key in keys.chars() {
+                let next = format!("{field}{key}");
+                if let Some(clean) = amount_edited_with(&next, &field, preset) {
+                    core = clean;
+                    field = amount_to_input_with(&core, preset);
+                }
+            }
+            (field, core)
+        }
+
+        for preset in [NumberPreset::CommaDot, NumberPreset::Indian] {
+            assert_eq!(type_keys("08", preset), ("8".into(), "8".into()));
+            assert_eq!(type_keys("00", preset), ("0".into(), "0".into()));
+            assert_eq!(type_keys("0.08", preset), ("0.08".into(), "0.08".into()));
+            assert_eq!(type_keys("0.0", preset), ("0.0".into(), "0.0".into()));
+            assert_eq!(type_keys(".", preset), ("0.".into(), "0.".into()));
+            assert_eq!(type_keys(".5", preset), ("0.5".into(), "0.5".into()));
+        }
+        for preset in [NumberPreset::DotComma, NumberPreset::SpaceComma] {
+            // The person's mark on screen, the core's dot underneath.
+            assert_eq!(type_keys("0,8", preset), ("0,8".into(), "0.8".into()));
+            assert_eq!(type_keys("08", preset), ("8".into(), "8".into()));
+            assert_eq!(type_keys(",", preset), ("0,".into(), "0.".into()));
+            assert_eq!(type_keys("0,0", preset), ("0,0".into(), "0.0".into()));
+        }
+        // A paste: the zeros go, the figure stays.
+        assert_eq!(
+            amount_edited_with("008.5", "", NumberPreset::CommaDot).as_deref(),
+            Some("8.5")
+        );
+        // A split row's share and the custom allowance call the same rule.
+        let rows = vec![row("rcpt_1", "0xAAA", "0", None)];
+        assert_eq!(
+            split_amount_edited(&rows, 0, "08".to_owned())[0].amount,
+            "8"
+        );
+        assert_eq!(amount_edited("08", "0").as_deref(), Some("8"));
+        assert_eq!(amount_edited("00", "0").as_deref(), Some("0"));
     }
 
     #[test]
@@ -2788,31 +2923,29 @@ fn build_notice(
     // The relay cannot carry anything on this chain until its float is topped
     // up. A stop, and the only one that names an address to send to.
     if let Some(treasury) = &send.treasury_bootstrap {
-        let native = treasury.asset == SendTreasuryAsset::Native;
-        let decimals = if native { 18 } else { 6 };
-        let symbol = if native {
-            native_symbol(treasury.chain_id)
-        } else {
-            "pathUSD".to_owned()
-        };
-        let units = |value: &str| value.parse::<u128>().unwrap_or(0);
-        #[allow(clippy::cast_precision_loss, reason = "displayed figures")]
-        let coin = |value: u128| trimmed(value as f64 / 10f64.powi(decimals));
-        let short = units(&treasury.floor).saturating_sub(units(&treasury.balance));
-        // Spec 098 §4: what it has against what it needs, in its own coin.
-        let balance_line = fill(
-            &fill(
+        // Every figure, and the coin it is in, is the core's (issue #422): the
+        // stop's own chain's coin, the relay's shortfall for that chain. This
+        // shell used to name the coin from the built-in list and do the
+        // arithmetic in `f64`; it now writes only the decimal mark.
+        let amount_line = treasury.coin.as_ref().map(|coin| {
+            let symbol = coin.symbol.as_deref().unwrap_or_default();
+            let mark = |figure: &str| crate::wallet::live::with_decimal_mark(figure.to_owned());
+            // Spec 098 §4: what it has against what it needs, in its own coin.
+            let balance_line = fill(
                 &fill(
-                    &s.funding_balance_line,
-                    "balance",
-                    &coin(units(&treasury.balance)),
+                    &fill(&s.funding_balance_line, "balance", &mark(&coin.balance)),
+                    "floor",
+                    &mark(&coin.floor),
                 ),
-                "floor",
-                &coin(units(&treasury.floor)),
-            ),
-            "symbol",
-            &symbol,
-        );
+                "symbol",
+                symbol,
+            );
+            format!(
+                "  ·  {} {} {symbol}\n{balance_line}",
+                s.funding_amount_label,
+                mark(&coin.suggested),
+            )
+        });
         let notice = SendNotice {
             // The way out of the stop itself. Without it the only exit from a
             // treasury that cannot pay is closing the whole journey — the core
@@ -2828,11 +2961,12 @@ fn build_notice(
             }),
             detail: Some(
                 format!(
-                    "{} {}  ·  {} {} {symbol}\n{balance_line}\n{}\n{}",
+                    "{} {}{}\n{}\n{}",
                     s.funding_address_label,
                     treasury.address,
-                    s.funding_amount_label,
-                    coin(short),
+                    // No figures the core could read: no amount, rather than
+                    // a zero nobody measured.
+                    amount_line.unwrap_or_default(),
                     s.funding_disclaimer,
                     // The core asks the relay again every 10 s and closes this
                     // once funded (spec 098 §4); "Retry" is for the impatient.
@@ -7841,7 +7975,10 @@ mod payee_tests {
                 // line that never is.
                 assert_eq!(to.value.as_ref(), "Wallet");
                 assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
-                assert!(!to.mono, "the name is words; the address line is mono");
+                // Issue #423: the first line is the NAME — "Vela User" is
+                // whose word it is, on the line under it, never the name.
+                assert_ne!(to.value.as_ref(), s.vela_user.as_ref());
+                assert!(!to.mono, "a name is words, not an address");
                 assert!(
                     matches!(to.lead, FactLead::Identicon(ref seed) if seed.as_ref() == DEV_WALLET),
                     "the identicon opens the address in full"

@@ -458,4 +458,39 @@ class SendMachineTest {
         assertNotNull("not sent: ${failed.receipt}", failed.tx_error)
         assertEquals("zero POSTs", 0, events.count { it == "relay.send" })
     }
+
+    /**
+     * Issue #422, end to end through the real `send` machine: the relay's
+     * treasury answer (hex, as it writes it) reaches the screen as the core's
+     * words — this chain's coin, the relay's shortfall for this chain — and
+     * once the relay reports the float funded, confirm opens with no stop.
+     */
+    @Test
+    fun `an empty relayer is asked for in its own chain's coin, and a funded one stops nothing`() = runBlocking {
+        seedAccount(); scriptRelay()
+        // 0.00005 of the relay's 0.0001 floor (0x5af3107a4000), as the relay writes it.
+        port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(
+            JSONObject().put("chainId", 100).put("address", "0x3e59292e18417f814112f731e7163534c6d2fe3c").put("asset", "native")
+                .put("balance", "0x2d79883d2000").put("floor", "0x5af3107a4000").put("bootstrapNeeded", true),
+        )
+        val c = controller()
+        c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
+        val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }
+        c.selectToken(SendLive.tokenId(picked.tokens.single()))
+        withTimeout(10_000) { c.send.first { it.stage == SendStage.EnterDetails } }
+        c.setRecipient(recipient); c.setAmount("0.001")
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        val stopped = withTimeout(30_000) { c.send.first { it.treasury_bootstrap != null } }
+        assertEquals(SendStage.EnterDetails, stopped.stage)
+        val coin = stopped.treasury_bootstrap!!.coin
+        assertEquals(app.getvela.wallet.feature.send.core.SendTreasuryCoin(symbol = "xDAI", balance = "0.00005", floor = "0.0001", suggested = "0.00005"), coin)
+
+        // Funded: the retry runs the pre-check again and confirm opens under no stop.
+        port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x3e59292e18417f814112f731e7163534c6d2fe3c").put("bootstrapNeeded", false))
+        c.retryAfterBootstrap()
+        val confirm = withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null } }
+        assertEquals(null, confirm.treasury_bootstrap)
+        assertEquals(null, confirm.relay_unreachable)
+    }
 }
