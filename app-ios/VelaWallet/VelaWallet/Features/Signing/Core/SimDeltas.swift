@@ -41,6 +41,35 @@ enum SimDeltas {
         )
     }
 
+    /// A clean run's deltas (the core's `TrustAssetDelta` JSON) as the fee
+    /// machine reads them (spec 083 fee, issue #411; the desktop's
+    /// `fee_balance_changes`): what the operation moves of each asset, native
+    /// or by contract. The core derived each from the coin's OWN `Transfer`
+    /// logs (the contract that emitted them) or the node's trace of native
+    /// value — nothing a site's contract can emit on a coin's behalf. A token
+    /// move with no contract names no coin and is dropped: never read as the
+    /// native one.
+    ///
+    /// `nil` when a delta cannot be read (a kind this build has no name for,
+    /// a missing amount): moves nobody could read are no measurement, and the
+    /// machine is told nothing rather than "this coin does not move".
+    static func feeBalanceChanges(_ deltas: [[String: Any]]) -> [[String: Any]]? {
+        var changes: [[String: Any]] = []
+        for delta in deltas {
+            guard let amount = delta["delta"] as? String else { return nil }
+            switch delta["kind"] as? String {
+            case "native":
+                changes.append(["token": NSNull(), "delta": amount])
+            case "erc20":
+                guard let token = delta["token"] as? String, !token.isEmpty else { continue }
+                changes.append(["token": token, "delta": amount])
+            default:
+                return nil
+            }
+        }
+        return changes
+    }
+
     /// One leg of the operation being simulated.
     struct Call {
         let to: String
