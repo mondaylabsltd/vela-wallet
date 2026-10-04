@@ -311,6 +311,7 @@
   "txSubmitted": "Transaction submitted to the network",
   "txSlowConfirm": "Taking longer than usual, please wait...",
   "txRelayFunding": "The relay is topping up its gas on this network. It sends your transaction as soon as that lands.",
+  "txRelaySending": "Vela's relay is sending it to the network…",
   "txWaitingConfirm": "Waiting for blockchain confirmation...",
   "txElapsed": "{{elapsed}}s elapsed — almost there",
   "txRemaining": "~{{remaining}}s remaining",
@@ -1459,7 +1460,18 @@
    "refused": "The network refused it — nothing was sent.",
    "unknownOutcome": "Still unconfirmed after 24 hours.",
    "openSigner": "Continue to signing page",
-   "signerDown": "Couldn't open the signing page. Check your connection."
+   "signerDown": "Couldn't open the signing page. Check your connection.",
+   "confirmBlock": {
+    "accountSwitching": "Switching to the site's account…",
+    "answered": "This request has ended",
+    "answeredRetry": "It didn't go through. Tap Try again",
+    "reading": "Reading the request…",
+    "approvalChoice": "Choose an approval amount first",
+    "batchUnsettled": "Checking each call in this batch…",
+    "feeMeasuring": "Working out the network fee…",
+    "feeFailed": "Couldn't work out the fee. Tap it to retry",
+    "feeShort": "Not enough of this coin for the fee"
+   }
   },
   "currency": {
    "title": "Display currency",
@@ -1633,6 +1645,55 @@
    "window": "Window",
    "minimize": "Minimize",
    "closeWindow": "Close Window"
+  },
+  "browserStatus": {
+   "title": "Tab status",
+   "page": {
+    "blank": "No page yet",
+    "loading": "Loading",
+    "ready": "Page loaded",
+    "crashed": "Page stopped"
+   },
+   "provider": {
+    "pending": "Wallet: checking",
+    "offered": "Wallet available to this page",
+    "insecureOrigin": "Wallet not offered: the page isn't secure",
+    "noHello": "Wallet not offered: Vela's script didn't run"
+   },
+   "reason": {
+    "navigatedAway": "The page moved on before the answer",
+    "pageCrashed": "The page stopped working",
+    "walletWithdrawn": "Debug mode is off",
+    "insecureOrigin": "Signing needs a secure page",
+    "notConnected": "This site isn't connected",
+    "accountMismatch": "The site asked for another account",
+    "noAccount": "No wallet account to connect",
+    "consentBusy": "Another site's request is open",
+    "unsupportedMethod": "Vela doesn't support this request",
+    "unknownChain": "This network isn't in Vela",
+    "badParams": "The request was malformed",
+    "tooManyReads": "Too many requests at once",
+    "unknownBatch": "Vela didn't send this batch",
+    "walletRefused": "Vela refused this request",
+    "noEndpoint": "The network's RPC didn't answer",
+    "timedOut": "The network's RPC timed out",
+    "rateLimited": "The network's RPC is limiting requests",
+    "endpointError": "The network's RPC returned an error",
+    "reverted": "It reverted on chain",
+    "rejectedByPerson": "You declined",
+    "relayRefused": "Vela's relay refused it; nothing was sent",
+    "relayUnreachable": "Vela's relay unreachable; nothing was sent",
+    "notConfirmedYet": "Sent, not confirmed yet",
+    "relayFailed": "Vela's relay couldn't take it",
+    "signerUnavailable": "Passkeys can't be used here",
+    "signerNotDiscoverable": "This passkey can't sign here",
+    "signerFailed": "The passkey prompt failed"
+   },
+   "requests": "Recent requests",
+   "noRequests": "No requests yet",
+   "copy": "Copy details",
+   "copied": "Copied",
+   "reloaded": "Reloaded to save memory"
   }
  },
  "settingsModals": {

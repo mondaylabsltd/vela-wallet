@@ -826,12 +826,18 @@ class PasskeyExecutor(
     }
 }
 
-/** The core's `FailureKind` vocabulary. */
+/**
+ * The core's `FailureKind` vocabulary. Serializable since spec 099 R8: the
+ * signing executor hands the same kind to the signing machine
+ * (`SignSubmitOutcome.Failed.signer`), so a passkey that failed at signing is
+ * named by the one classifier create and login use.
+ */
+@kotlinx.serialization.Serializable
 enum class FailureKind(val wire: String) {
-    Cancelled("cancelled"),
-    NotSupported("not_supported"),
-    NotDiscoverable("not_discoverable"),
-    Other("other"),
+    @kotlinx.serialization.SerialName("cancelled") Cancelled("cancelled"),
+    @kotlinx.serialization.SerialName("not_supported") NotSupported("not_supported"),
+    @kotlinx.serialization.SerialName("not_discoverable") NotDiscoverable("not_discoverable"),
+    @kotlinx.serialization.SerialName("other") Other("other"),
 }
 
 /**

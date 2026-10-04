@@ -189,6 +189,9 @@ pub struct SigningModel {
     /// vocabulary: closing the column is the rejection.
     pub confirm_label: SharedString,
     pub confirm_enabled: bool,
+    /// Why the slide is shut, in the core's words (spec 099 R7) — under it,
+    /// so a dead control is never without its reason.
+    pub confirm_note: Option<SharedString>,
     /// The third column's heading. The panel scaffold takes it from the page,
     /// which reads it from the same strings — kept here so a phone shell can
     /// use the model alone.
@@ -309,6 +312,7 @@ fn base(
         signer_seed: ADDRESS_FULL.into(),
         confirm_label: format!("{} · {}", s.slide_to_confirm, confirm_action).into(),
         confirm_enabled: true,
+        confirm_note: None,
         panel_title: s.panel_title.clone(),
     }
 }

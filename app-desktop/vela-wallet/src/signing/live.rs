@@ -53,6 +53,22 @@ fn tone_of(risk: ClearRisk) -> Tone {
 /// **A signature has no fee to wait for** (the phones' rule, `SigningLive`):
 /// nothing is quoted for a message, so a fee gate over one is a slide that
 /// never opens.
+///
+/// Spec 099 R7: every one of those rules is the core's now
+/// (`sign_confirm::confirm_state`), the same on every client, and it says
+/// which part of the gate is shut.
+#[must_use]
+pub fn confirm_state(
+    sign: &SignView,
+    guard: &GuardView,
+    clear: &ClearSigningView,
+    fee: &FeeView,
+    speed_tier: Option<FeeTier>,
+) -> vela_core::app::sign_confirm::ConfirmState {
+    vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
+}
+
+/// Whether the slide may arm ([`confirm_state`]).
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
@@ -61,21 +77,14 @@ pub fn confirm_enabled(
     fee: &FeeView,
     speed_tier: Option<FeeTier>,
 ) -> bool {
-    let fee_ready =
-        off_chain(clear) || (fee.confirm_fee_ready && !fee_of_another_tier(fee, speed_tier));
-    // Spec 096 F7: and the request has been read — a slide that armed under
-    // "Loading…" signed what nobody had been shown yet.
-    let read = !clear.resolving && clear.surface != ClearSurface::Loading;
-    sign.confirm_gate_open && guard.confirm_allowed && fee_ready && read
+    confirm_state(sign, guard, clear, fee, speed_tier).enabled
 }
 
-/// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
+/// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681) — the
+/// core's rule.
 #[must_use]
 pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
-    let (Some(estimate), Some(tier)) = (&fee.fee, speed_tier) else {
-        return false;
-    };
-    vela_core::app::fee_speed::offered(estimate.tier) != vela_core::app::fee_speed::offered(tier)
+    vela_core::app::sign_confirm::fee_of_another_tier(fee, speed_tier)
 }
 
 /// What the shell knows about the request that the core does not hand back.
@@ -1680,15 +1689,7 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
 /// by the surface they are drawn on, decoded or not (the phones' `offChain`).
 #[must_use]
 pub fn off_chain(clear: &ClearSigningView) -> bool {
-    use vela_core::app::clear_signing::{ClearSignType, ClearSurface};
-    clear
-        .result
-        .as_ref()
-        .is_some_and(|result| result.sign_type != ClearSignType::Transaction)
-        || matches!(
-            clear.surface,
-            ClearSurface::MessageSign | ClearSurface::EthSign | ClearSurface::BlindTypedData
-        )
+    vela_core::app::sign_confirm::off_chain(clear)
 }
 
 /// The fee row, or the line that says there is no fee.

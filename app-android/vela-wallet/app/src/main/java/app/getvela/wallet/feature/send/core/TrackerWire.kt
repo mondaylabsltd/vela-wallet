@@ -147,10 +147,61 @@ data class TrackEntryView(
     val outcome: TrackOutcome = TrackOutcome.Landing,
     /** The relay's bundle tx for an op still pending, when it names one (079 D2). */
     val relay_tx_hash: String? = null,
+    /**
+     * Spec 099 R6: when the tracker learned the relay had put the bundle on
+     * the network. `null` while the relay still holds it — the landing's
+     * countdown starts here, never at acceptance.
+     */
+    val relay_sent_at_ms: Double? = null,
 )
 
 @Serializable
 data class TrackView(val entries: List<TrackEntryView> = emptyList())
+
+// -- spec 099 R6: the landing's one countdown --------------------------------
+
+/** What the landing's countdown line says — the core's `LandingLine`. */
+@Serializable
+enum class LandingLine {
+    /** The relay has not put it on the network yet: no countdown; the landing says what the relay is doing. */
+    @SerialName("waiting") Waiting,
+
+    /** No usual time is known for this chain: no countdown line. */
+    @SerialName("none") None,
+
+    /** "~`seconds` s remaining" — inside the chain's usual time. */
+    @SerialName("remaining") Remaining,
+
+    /** "`seconds` s so far" — past it, inside twice it. */
+    @SerialName("elapsed") Elapsed,
+
+    /** "Taking longer than usual". */
+    @SerialName("slow") Slow,
+}
+
+/** The landing's pace: its countdown line, what it counts, and the ring ([progress] `null` — the ring roams). */
+@Serializable
+data class LandingPace(
+    val line: LandingLine = LandingLine.Waiting,
+    val seconds: Int = 0,
+    val progress: Float? = null,
+)
+
+object Landing {
+    /**
+     * The core's `landing_pace` (through `landingPace`): counted from when
+     * the relay sent the bundle ([sentAtMs], `TrackEntryView.relay_sent_at_ms`)
+     * against the chain's usual time, at [nowMs] — the screen's own clock.
+     * The ladder and the ring's curve are the core's; nothing here re-decides
+     * either. A reply this build cannot read roams and counts nothing.
+     */
+    fun pace(sentAtMs: Double?, typicalS: Int?, nowMs: Double): LandingPace {
+        val typical = typicalS?.takeIf { it in 0..UShort.MAX_VALUE.toInt() }?.toUShort()
+        val json = uniffi.vela_core_uniffi.landingPace(sentAtMs, typical, nowMs)
+        return runCatching { app.getvela.wallet.core.crux.Wire.json.decodeFromString(LandingPace.serializer(), json) }
+            .getOrDefault(LandingPace(line = LandingLine.None))
+    }
+}
 
 // -- what the machine asks for -----------------------------------------------
 

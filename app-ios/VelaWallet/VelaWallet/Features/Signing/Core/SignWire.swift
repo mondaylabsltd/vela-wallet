@@ -9,20 +9,23 @@
 //  answered exactly once. Which of those may happen next is entirely the
 //  core's — this file only gives the answer a Swift shape.
 //
-//  ## The three gates are ANDed, and this machine holds only one
+//  ## The slide's gate is one core function (spec 099 R7)
 //
 //  `confirmGateOpen` is `sign_request`'s own opinion: the request is
 //  reviewable, the granted account is reconciled, no pipeline is in flight.
-//  The slide may only arm when it is ANDed with `approval_guard`'s
-//  `confirmAllowed` and `fee_policy`'s `confirmFeeReady`. Arming on one of the
-//  three is how an unlimited approval gets past a guard that had not finished
-//  reading the token.
+//  Whether the slide may arm is the core's `signConfirmState` over this view,
+//  `approval_guard`'s, `clear_signing`'s and `fee_policy`'s — with the rules
+//  every client used to add on top (a message has no fee, another speed's
+//  figure is not this speed's, a request still being read is not signable)
+//  and the line that says which part is shut. This app had two copies of the
+//  gate that disagreed; there are none now.
 //
 //  Views are `Decodable` through `CoreJSON.decoder`; operations and results
 //  stay dictionaries.
 //
 
 import Foundation
+import VelaCore
 
 /// Which surface the request is on right now.
 enum SignSurface: String, Decodable {
@@ -78,6 +81,62 @@ enum SignErrorKind: String, Decodable {
     /// stale before submit; the sheet re-quotes rather than silently
     /// re-pricing what somebody already read.
     case staleFeeQuote = "stale_fee_quote"
+    /// -32603 — no passkey can be used here (an unsigned build, a device
+    /// without one; spec 099 R8, the passkey classifier's `not_supported`).
+    case signerUnavailable = "signer_unavailable"
+    /// -32603 — a passkey sign-in would never offer (`not_discoverable`).
+    case signerNotDiscoverable = "signer_not_discoverable"
+    /// -32603 — the passkey prompt failed for another reason (`other`).
+    case signerFailed = "signer_failed"
+
+    /// A kind this build has never heard of reads as a failed submission —
+    /// the generic failure, never a view that cannot be drawn.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SignErrorKind(rawValue: raw) ?? .submitFailed
+    }
+
+    /// The passkey is what failed (spec 099 R8): the sheet says so in the
+    /// signer layer's words, the request record's own line.
+    var signerReasonKey: String? {
+        switch self {
+        case .signerUnavailable: "componentsUi.browserStatus.reason.signerUnavailable"
+        case .signerNotDiscoverable: "componentsUi.browserStatus.reason.signerNotDiscoverable"
+        case .signerFailed: "componentsUi.browserStatus.reason.signerFailed"
+        default: nil
+        }
+    }
+}
+
+/// May the signing slide arm, and if not, why not — the core's
+/// `sign_confirm::ConfirmState`, from `signConfirmState` over the four views
+/// as the core last wrote them (spec 099 R7).
+struct SignConfirmStateWire: Decodable, Equatable {
+    let enabled: Bool
+    /// `ConfirmBlock` wire name: which part of the gate is shut.
+    let block: String?
+    /// The line under the shut slide (`componentsUi.signing.confirmBlock.*`),
+    /// or `nil` where the sheet already says it its own way.
+    let key: String?
+
+    /// Shut, with nothing to say — what a view that does not read gets.
+    static let shut = SignConfirmStateWire(enabled: false, block: nil, key: nil)
+
+    /// The core's verdict. `fee` is `nil` with no fee session (a message);
+    /// `speedTier` the speed in force, `nil` with no speed control. Any view
+    /// missing or unreadable keeps the slide shut.
+    static func of(
+        sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?
+    ) -> SignConfirmStateWire {
+        guard let sign, let guardJson, let clear,
+              let json = signConfirmState(
+                  signJson: sign, guardJson: guardJson, clearJson: clear,
+                  feeJson: fee, speedTier: speedTier
+              ),
+              let state = try? CoreJSON.decoder.decode(SignConfirmStateWire.self, from: Data(json.utf8))
+        else { return .shut }
+        return state
+    }
 }
 
 /// How a request was classified for view routing.
@@ -230,7 +289,8 @@ struct SignViewWire: Decodable, Equatable {
     let pendingOpHash: String?
     let error: SignErrorNoticeWire?
     let funding: SignFundingViewWire?
-    /// **One of three gates.** See the file header.
+    /// This machine's own part of the gate. See the file header: the slide
+    /// reads `SignConfirmStateWire`, never this alone.
     let confirmGateOpen: Bool
     /// The granted-account switch has not acknowledged yet.
     let reconcilePending: Bool

@@ -409,20 +409,24 @@ struct RootView: View {
         let browserController = BrowserController(store: shelf)
         browserController.ports = BrowserController.Ports(
             poolCall: { [weak pool] chainId, method, params, bundler in
-                guard let pool else { return nil }
+                guard let pool else { return .unanswered(rateLimited: false) }
                 switch await pool.call(
                     chainId: chainId, method: method, params: params,
                     kind: bundler ? "bundler" : "rpc"
                 ) {
                 case .ok(let body):
-                    return ["result": body ?? NSNull()]
+                    return .answered(["result": body ?? NSNull()])
                 case .rpcError(let code, let message):
                     // The node's own sentence, verbatim. A page that shows its
                     // user "execution reverted: insufficient allowance" is a
                     // page that can be debugged; one that shows "-32603" is not.
-                    return ["error": ["code": code ?? -32603, "message": message]]
-                default:
-                    return nil
+                    return .answered(["error": ["code": code ?? -32603, "message": message]])
+                // Spec 099 FR-009: the pool's word on why nobody answered —
+                // every endpoint throttling is not the network being down.
+                case .failed(let rateLimited):
+                    return .unanswered(rateLimited: rateLimited)
+                case .rangeCap:
+                    return .unanswered(rateLimited: false)
                 }
             },
             // A page answered with a user-operation hash polls for its receipt
@@ -2447,7 +2451,9 @@ struct RootView: View {
             }
             if case .sendReceipt(let receipt) = model.base {
                 model.base = .sendReceipt(SendLive.receipt(
-                    view, display: display, on: receipt, loc: loc
+                    view, display: display, on: receipt, loc: loc,
+                    // Spec 099 R6: the countdown starts when the relay sent it.
+                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
@@ -2831,7 +2837,9 @@ struct RootView: View {
             guard: live.guardView,
             fee: live.fee,
             context: context,
-            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) }
+            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) },
+            // Spec 099 R7: the core's one gate, and why it is shut.
+            gate: live.confirmState
         )
     }
 

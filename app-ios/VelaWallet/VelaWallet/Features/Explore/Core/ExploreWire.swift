@@ -79,6 +79,9 @@ struct ExploreViewWire: Decodable, Equatable {
     /// sharply, **every mutation dispatched before this is dropped**, so an
     /// intent arriving from a deep link has to wait for it.
     let ready: Bool
+    /// The tabs most recently used first (spec 099 R2) — what the core's
+    /// `browserEnginePlan` keeps live, in that order.
+    var recentTabs: [String] = []
 
     static let empty = ExploreViewWire(
         favorites: [], groups: [], tabs: [], selectedTab: nil,

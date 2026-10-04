@@ -18,7 +18,9 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import StatusHero from '../ui/StatusHero.svelte';
-	import { ringProgress } from '../ui/ring';
+	import { landingPace } from '$lib/core/kernels';
+	import { trackEntryFor } from '$lib/signing/dapp-receipt';
+	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { SendReceiptModel } from '../model';
 
 	interface Props {
@@ -58,31 +60,42 @@
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
 	});
-	const elapsedS = $derived(
-		model.eta ? Math.max(0, Math.floor((now - model.eta.submittedAtMs) / 1000)) : 0
-	);
-	// Inside the typical time the line counts DOWN — "~9s remaining" is a
-	// promise with an end, "6s elapsed" is a stopwatch. "Almost there" waits
-	// until the typical time has passed, which is when it is true.
+	// Spec 099 R6: when the relay put it on the network, as the tracker
+	// learned it — the countdown starts there, never at acceptance.
+	let sentAtMs = $state<number | null>(null);
+	$effect(() => {
+		const hash = model.eta?.opHash;
+		if (!hash) {
+			sentAtMs = null;
+			return;
+		}
+		const read = () => {
+			sentAtMs = trackEntryFor(txTrackerView().entries, hash)?.relay_sent_at_ms ?? null;
+		};
+		read();
+		return subscribeTxTracker(read);
+	});
+	// The core's one ladder (`landing_pace`): down inside the usual time,
+	// up past it, "taking longer" past twice it — and the ring's curve.
+	const pace = $derived(model.eta ? landingPace(sentAtMs, model.eta.typicalS, now) : null);
 	const etaLines = $derived.by(() => {
-		if (!model.eta) return [] as string[];
-		const { typicalS, typicalLine, remainingTemplate, elapsedTemplate, slowLine } = model.eta;
+		if (!model.eta || !pace) return [] as string[];
+		const eta = model.eta;
+		if (pace.line === 'waiting') return [eta.sendingLine];
+		if (pace.line === 'none') return [eta.waitingLine];
 		const second =
-			elapsedS < typicalS
-				? remainingTemplate.replace('{{remaining}}', String(typicalS - elapsedS))
-				: elapsedS < typicalS * 2
-					? elapsedTemplate.replace('{{elapsed}}', String(elapsedS))
-					: slowLine;
-		return [typicalLine, second];
+			pace.line === 'remaining'
+				? eta.remainingTemplate.replace('{{remaining}}', String(pace.seconds))
+				: pace.line === 'elapsed'
+					? eta.elapsedTemplate.replace('{{elapsed}}', String(pace.seconds))
+					: eta.slowLine;
+		return [eta.waitingLine, eta.typicalLine, second];
 	});
 
-	// The ring round the disc — `ringProgress`, which the dApp receipt draws
-	// from too (spec 077). The curve moved out of this file so the two cannot
-	// disagree about the same moment; the rule it encodes is unchanged.
 	const progress = $derived.by(() => {
 		if (model.stage === 'confirmed') return 1;
-		if (model.stage !== 'submitted' || !model.eta) return undefined;
-		return ringProgress(elapsedS, model.eta.typicalS);
+		if (model.stage !== 'submitted' || !pace) return undefined;
+		return pace.progress ?? undefined;
 	});
 </script>
 

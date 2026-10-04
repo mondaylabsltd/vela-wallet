@@ -189,6 +189,17 @@ export interface SigningMessages {
 	 */
 	feeReasons: Record<string, string>;
 	/**
+	 * Spec 099 R7: the line under a shut slide, by the corpus key the core's
+	 * `confirm_state` names (`componentsUi.signing.confirmBlock.*`).
+	 */
+	confirmBlock: Record<string, string>;
+	/**
+	 * Spec 099 R8: how the passkey failed, by the core's reason key
+	 * (`componentsUi.browserStatus.reason.signer*`) — the failed status says
+	 * it in place of the generic hint.
+	 */
+	signerReasons: Record<string, string>;
+	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.
 	 */
@@ -245,6 +256,8 @@ export interface SigningMessages {
 		unknownOutcome: string;
 		/** `send.txRelayFunding`: the relay is topping up its gas before it sends. */
 		relayFunding: string;
+		/** `send.txRelaySending`: the relay has it and has not sent it yet (099 R6). */
+		relaySending: string;
 		signed: string;
 		/**
 		 * Spec 082 RA10: the relay's reply was lost — `componentsUi.signing.

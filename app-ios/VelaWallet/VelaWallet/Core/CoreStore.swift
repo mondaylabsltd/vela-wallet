@@ -48,8 +48,15 @@ final class CoreStore<View: Decodable> {
     /// not been booted yet — a real state, and the one FR-009's neutral surface
     /// renders from. It is never a stand-in for fixture data.
     private(set) var view: View?
+    /// The same view as the core wrote it — kept only by a store built with
+    /// `keepsJson`, for a core function that reads views whole (spec 099:
+    /// `signConfirmState` over the four signing views). Set with `view`,
+    /// after it decoded, so the two never describe different moments; before
+    /// the first commit it is the machine's own idle view.
+    private(set) var json: String?
 
     private let driver: CoreDriver
+    private let keepsJson: Bool
     private let onView: (View) -> Void
     private let onFault: (Error) -> Void
     private var booted = false
@@ -68,13 +75,16 @@ final class CoreStore<View: Decodable> {
     ///   - neutralAnswer: the machine's own answer for an operation whose
     ///     result the core refused — see `CoreDriver.neutralAnswer`. `nil`
     ///     leaves the fault reported and nothing else.
+    ///   - keepsJson: also keep each committed view as JSON text (`json`).
     init(
         bridge: CoreBridge,
         perform: @escaping @MainActor ([String: Any]) async -> String,
         onView: @escaping (View) -> Void = { _ in },
         onFault: @escaping (Error) -> Void = { _ in },
-        neutralAnswer: (([String: Any]) -> String?)? = nil
+        neutralAnswer: (([String: Any]) -> String?)? = nil,
+        keepsJson: Bool = false
     ) {
+        self.keepsJson = keepsJson
         self.onView = onView
         self.onFault = onFault
         // `self` is captured after full initialisation, so the closures cannot
@@ -88,6 +98,9 @@ final class CoreStore<View: Decodable> {
             onFault: { error in fault(error) }
         )
         driver.neutralAnswer = neutralAnswer
+        // Before its first event a machine's view is its own idle one — what
+        // a core function reading the views whole is handed until then.
+        if keepsJson { json = try? bridge.view() }
         commit = { [weak self] json in self?.commit(json) }
         fault = { [weak self] error in self?.onFault(error) }
     }
@@ -134,6 +147,7 @@ final class CoreStore<View: Decodable> {
         do {
             let decoded = try CoreJSON.decode(View.self, from: json)
             view = decoded
+            if keepsJson { self.json = CoreJSON.string(json) }
             onView(decoded)
         } catch {
             // A view this app cannot read means the core and this client

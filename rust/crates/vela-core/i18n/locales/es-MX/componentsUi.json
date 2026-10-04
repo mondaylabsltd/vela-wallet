@@ -219,7 +219,18 @@
       "refused": "La red la rechazó; no se envió nada.",
       "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
       "openSigner": "Confirmar en la página de firma",
-      "signerDown": "No se abrió la página de firma. Revisa tu conexión."
+      "signerDown": "No se abrió la página de firma. Revisa tu conexión.",
+      "confirmBlock": {
+        "accountSwitching": "Cambiando a la cuenta del sitio…",
+        "answered": "Esta solicitud terminó: ciérrala",
+        "answeredRetry": "No se completó: toca Intentar de nuevo",
+        "reading": "Leyendo la solicitud…",
+        "approvalChoice": "Primero elige un monto de aprobación",
+        "batchUnsettled": "Revisando cada llamada del lote…",
+        "feeMeasuring": "Calculando la comisión de red…",
+        "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
+        "feeShort": "Esta moneda no alcanza para la comisión: elige otra"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Nuevo límite total",
@@ -435,6 +446,55 @@
       "window": "Ventana",
       "minimize": "Minimizar",
       "closeWindow": "Cerrar ventana"
+    },
+    "browserStatus": {
+      "title": "Estado de la pestaña",
+      "page": {
+        "blank": "Aún no hay página",
+        "loading": "Cargando",
+        "ready": "Página cargada",
+        "crashed": "Página detenida"
+      },
+      "provider": {
+        "pending": "Billetera: comprobando",
+        "offered": "Billetera disponible en esta página",
+        "insecureOrigin": "Billetera no ofrecida: la página no es segura",
+        "noHello": "Billetera no ofrecida: el script de Vela no se ejecutó"
+      },
+      "reason": {
+        "navigatedAway": "La página cambió antes de la respuesta",
+        "pageCrashed": "La página dejó de funcionar",
+        "walletWithdrawn": "El modo de depuración está apagado: la billetera salió de esta página",
+        "insecureOrigin": "Firmar requiere una página segura",
+        "notConnected": "Este sitio no está conectado",
+        "accountMismatch": "El sitio pidió una cuenta que no se le dio",
+        "noAccount": "No hay una cuenta para conectar",
+        "consentBusy": "Hay una solicitud de otro sitio abierta",
+        "unsupportedMethod": "Vela no admite esta solicitud",
+        "unknownChain": "Esta red no está en Vela",
+        "badParams": "La solicitud está mal formada",
+        "tooManyReads": "Demasiadas solicitudes a la vez",
+        "unknownBatch": "Vela no envió este lote",
+        "walletRefused": "Vela rechazó esta solicitud",
+        "noEndpoint": "El RPC de la red no respondió",
+        "timedOut": "El RPC de la red agotó el tiempo",
+        "rateLimited": "El RPC de la red está limitando solicitudes",
+        "endpointError": "El RPC de la red devolvió un error",
+        "reverted": "Se revirtió en la cadena",
+        "rejectedByPerson": "La rechazaste",
+        "relayRefused": "El relay de Vela la rechazó; no se envió nada",
+        "relayUnreachable": "No se pudo contactar al relay de Vela; no se envió nada",
+        "notConfirmedYet": "Enviada, aún sin confirmar",
+        "relayFailed": "El relay de Vela no pudo recibirla",
+        "signerUnavailable": "Aquí no se pueden usar passkeys",
+        "signerNotDiscoverable": "Esta passkey no puede firmar aquí",
+        "signerFailed": "Falló la passkey"
+      },
+      "requests": "Solicitudes recientes",
+      "noRequests": "Aún no hay solicitudes",
+      "copy": "Copiar detalles",
+      "copied": "Copiado",
+      "reloaded": "Se recargó para ahorrar memoria"
     }
   }
 }

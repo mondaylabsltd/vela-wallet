@@ -18,4 +18,10 @@ polling: boolean, submitted_at_ms: number | null, outcome: TrackOutcome,
  * RA7, the 079 D2 explorer link). A link only — `tx_hash` above is the
  * verdict's.
  */
-relay_tx_hash: string | null, };
+relay_tx_hash: string | null, 
+/**
+ * When the tracker learned the relay had put the bundle on the network
+ * (spec 099 R6). `None` while the relay still holds it: the landing
+ * says what the relay is doing, and counts nothing down.
+ */
+relay_sent_at_ms: number | null, };

@@ -281,19 +281,7 @@ class SignExecutor(
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             VelaLog.event("sign.submit", "refused", "why" to refused.failure.toString().take(120))
-            when (val failure = refused.failure) {
-                UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
-                UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
-                UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
-                // Nothing left the device (RA10, and RJ1's write-ahead that was
-                // not cleared in time): the core's fixed sentence, never the
-                // pool's text.
-                UserOpSpine.Failure.NotSent, UserOpSpine.Failure.NotCleared -> SignSubmitOutcome.Failed(userOpNotSentDetail())
-                // RJ3: the relay refused it — the page is told the core's
-                // "refused" sentence, the sheet never says "try again".
-                is UserOpSpine.Failure.Rejected -> SignSubmitOutcome.Failed(failure.message ?: userOpRefusedDappDetail(), refused = true)
-                is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
-            }
+            outcomeOf(refused.failure)
         }
     }
 
@@ -314,8 +302,7 @@ class SignExecutor(
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
-                UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
-                is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
+                UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
@@ -381,6 +368,28 @@ class SignExecutor(
     companion object {
         /** The write-ahead gate's key on the dApp path: the request and its op. */
         private fun clearanceKey(id: String, userOpHash: String) = "$id|${userOpHash.lowercase()}"
+
+        /**
+         * A refused submit or signature, as the signing machine hears it. A
+         * passkey that failed carries its kind (spec 099 R8) — the one the
+         * app's passkey classifier gave create and login — so the core answers
+         * `signer_unavailable` / `signer_not_discoverable` / `signer_failed`;
+         * a dismissed prompt stays `passkey_cancelled`.
+         */
+        fun outcomeOf(failure: UserOpSpine.Failure): SignSubmitOutcome = when (failure) {
+            UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
+            is UserOpSpine.Failure.Signer -> SignSubmitOutcome.Failed(failure.message, signer = failure.kind)
+            UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
+            UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
+            // Nothing left the device (RA10, and RJ1's write-ahead that was
+            // not cleared in time): the core's fixed sentence, never the
+            // pool's text.
+            UserOpSpine.Failure.NotSent, UserOpSpine.Failure.NotCleared -> SignSubmitOutcome.Failed(userOpNotSentDetail())
+            // RJ3: the relay refused it — the page is told the core's
+            // "refused" sentence, the sheet never says "try again".
+            is UserOpSpine.Failure.Rejected -> SignSubmitOutcome.Failed(failure.message ?: userOpRefusedDappDetail(), refused = true)
+            is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
+        }
 
         /**
          * What the receipt wait means for the core: in time, `Succeeded` with

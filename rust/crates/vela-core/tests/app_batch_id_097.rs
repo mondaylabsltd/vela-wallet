@@ -249,6 +249,7 @@ fn page_from(browser: &mut Browser, origin: &str, message: Value) -> Vec<DbrOper
         frame_origin: origin.to_owned(),
         is_main_frame: true,
         message_json: message.to_string(),
+        now_ms: 0.0,
     })
 }
 
@@ -447,6 +448,7 @@ fn the_answered_id_reads_200_with_its_receipt_after_landing() {
         id: "1".to_owned(),
         payload: answer,
         user_op_hash: None,
+        now_ms: 0.0,
     });
     assert_eq!(
         only_answer(&ops)["result"],
@@ -472,12 +474,16 @@ fn the_answered_id_reads_200_with_its_receipt_after_landing() {
         |o| matches!(o, DbrOperation::Read { id, .. } if id == "2"),
         DbrShellResult::ReadAnswered {
             body_json: Some(json!({"result": null}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let ops = browser.resolve_matching(
         |o| matches!(o, DbrOperation::Read { id, chain_id: 56, .. } if id == "2"),
         DbrShellResult::ReadAnswered {
             body_json: Some(json!({"result": {"status": "submitted"}}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let pending = only_answer(&ops);
@@ -490,6 +496,8 @@ fn the_answered_id_reads_200_with_its_receipt_after_landing() {
         |o| matches!(o, DbrOperation::Read { id, chain_id: 56, .. } if id == "3"),
         DbrShellResult::ReadAnswered {
             body_json: Some(json!({"result": user_op_receipt(&receipt, &op)}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let status = only_answer(&ops)["result"].clone();
@@ -516,6 +524,7 @@ fn only_the_batch_id_is_a_known_bundle() {
         id: "1".to_owned(),
         payload: ok(&op),
         user_op_hash: None,
+        now_ms: 0.0,
     });
     let ops = ask(&mut browser, "2", "wallet_getCallsStatus", json!([tx]));
     assert_eq!(
@@ -703,6 +712,7 @@ fn uniswap_reads_the_id_off_the_answer_and_its_status_is_200() {
         id: "1".to_owned(),
         payload: answer,
         user_op_hash: None,
+        now_ms: 0.0,
     });
     let id = only_answer(&ops)["result"]["id"].clone();
     assert_eq!(id, json!(op), "the page reads `.id`");
@@ -733,6 +743,8 @@ fn uniswap_reads_the_id_off_the_answer_and_its_status_is_200() {
         },
         DbrShellResult::ReadAnswered {
             body_json: Some(json!({"result": user_op_receipt(&receipt, &op)}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let status = only_answer(&ops)["result"].clone();

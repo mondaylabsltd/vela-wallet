@@ -50,6 +50,7 @@
     "txSubmitted": "Transaktion an das Netzwerk übermittelt",
     "txSlowConfirm": "Dauert länger als gewöhnlich, bitte warten ...",
     "txRelayFunding": "Das Relay füllt gerade sein Gas in diesem Netzwerk auf. Es sendet deine Transaktion, sobald das angekommen ist.",
+    "txRelaySending": "Velas Relay sendet es ins Netzwerk…",
     "txWaitingConfirm": "Warten auf Blockchain-Bestätigung ...",
     "txElapsed": "{{elapsed}} s vergangen — fast geschafft",
     "txRemaining": "~{{remaining}} s verbleibend",

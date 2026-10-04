@@ -76,7 +76,9 @@ struct SigningReceiptTests {
     private func entry(_ status: String, _ outcome: String, txHash: String? = nil) -> TrackEntryWire {
         TrackEntryWire(
             userOpHash: op, chainId: 100, recordIds: ["rec-1"], status: status, txHash: txHash,
-            polling: outcome != "final" && outcome != "unknown", submittedAtMs: 1, outcome: outcome
+            polling: outcome != "final" && outcome != "unknown", submittedAtMs: 1, outcome: outcome,
+            // The relay put it on the network at once (spec 099 R6).
+            relaySentAtMs: 1
         )
     }
 
@@ -107,7 +109,7 @@ struct SigningReceiptTests {
         #expect(waiting?.title == loc.t("send.txSubmittedTitle"))
         #expect(waiting?.captions.first == "Send · −0.001 XDAI")
         #expect(waiting?.eta?.typicalS == 5, "the chain's clock drives the ring")
-        #expect(waiting?.eta?.submittedAtMs == 1, "counted from the tracker's own hand-over time")
+        #expect(waiting?.eta?.sentAtMs == 1, "counted from when the relay sent it (spec 099 R6)")
     }
 
     @Test func pastTheWaitWindowTheWordsSayItIsStillOnItsWayNeverFailed() {

@@ -68,6 +68,7 @@ use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, S
 use vela_core::app::session::{
     Event as SessionEvent, SessionOperation, SessionShellResult, SessionView,
 };
+use vela_core::app::sign_confirm::ConfirmState;
 use vela_core::app::sign_pref::{
     Event as SignPrefEvent, SignPrefOperation, SignPrefShellResult, SignPrefView,
 };
@@ -77,6 +78,7 @@ use vela_core::app::sign_request::{
 use vela_core::app::token_trust::{
     Event as TrustEvent, TrustOperation, TrustShellResult, TrustView,
 };
+use vela_core::app::tx_tracker::LandingPace;
 use vela_core::app::tx_tracker::{
     Event as TrackEvent, TrackOperation, TrackShellResult, TrackStatusAnswer, TrackView,
 };
@@ -211,6 +213,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     StableRef::export_all(&config)?; // balanceReadPlan's inputs
     TokenRef::export_all(&config)?;
     ReadSlot::export_all(&config)?; // balanceReadPlan
+    ConfirmState::export_all(&config)?; // signConfirmState (spec 099 R7)
+    LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
 
     println!("wallet-state bindings written to {}", out_dir.display());
     Ok(())

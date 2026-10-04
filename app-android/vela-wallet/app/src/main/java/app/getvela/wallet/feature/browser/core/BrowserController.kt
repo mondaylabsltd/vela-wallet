@@ -634,15 +634,22 @@ class BrowserController(
 
     private val executor = BrowserExecutor(
         store = store,
+        now = now,
         ports = object : BrowserExecutor.Ports {
             override fun deliver(tab: String, messageJson: String) {
                 engines[tab]?.deliver(messageJson)
             }
 
-            override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? {
-                val pool = pool ?: return null
+            override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): BrowserExecutor.ReadAnswer {
+                val pool = pool ?: return BrowserExecutor.ReadAnswer.NoAnswer()
                 val list = (0 until params.length()).map { params.opt(it) }
-                return (pool.call(chainId, method, list, if (bundler) RpcKind.Bundler else RpcKind.Rpc) as? RpcResult.Body)?.json
+                // The pool's own word on why nothing answered (spec 099 FR-009):
+                // every endpoint rate-limiting is said as such, never as "down".
+                return when (val result = pool.call(chainId, method, list, if (bundler) RpcKind.Bundler else RpcKind.Rpc)) {
+                    is RpcResult.Body -> BrowserExecutor.ReadAnswer.Body(result.json)
+                    is RpcResult.Failed -> BrowserExecutor.ReadAnswer.NoAnswer(rateLimited = result.rateLimited)
+                    is RpcResult.RangeCapped -> BrowserExecutor.ReadAnswer.NoAnswer()
+                }
             }
 
             override suspend fun userOpTxHash(chainId: Int, userOpHash: String): String? =
@@ -706,10 +713,26 @@ class BrowserController(
 
     /** The signing sheet's answer for a forwarded request — delivered by the core, exactly once. */
     fun signingAnswered(tab: String, id: String, payload: SignResponsePayload, userOpHash: String?) =
-        dispatch(DbrEvent.SigningAnswered(tab = tab, id = id, payload = payload, user_op_hash = userOpHash))
+        dispatch(DbrEvent.SigningAnswered(tab = tab, id = id, payload = payload, user_op_hash = userOpHash, now_ms = now()))
 
     fun consentApproved() = dispatch(DbrEvent.ConsentApproved(now()))
-    fun consentRejected() = dispatch(DbrEvent.ConsentRejected)
+    fun consentRejected() = dispatch(DbrEvent.ConsentRejected(now()))
+
+    // -- spec 099 FR-014: the tab's status entry and its panel ----------------------
+
+    /** The status panel of [tab] opened: the core's view carries that tab's whole record until it closes. */
+    fun inspectorOpened(tab: String) = dispatch(DbrEvent.InspectorOpened(tab))
+
+    fun inspectorClosed() = dispatch(DbrEvent.InspectorClosed)
+
+    private val _statusSeen = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** Per tab, the status line last put away (its ✕, or its Details) — gone until it says something else. */
+    val statusSeen: StateFlow<Map<String, String>> = _statusSeen
+
+    fun putStatusAway(tab: String, seen: String) {
+        _statusSeen.value = _statusSeen.value + (tab to seen)
+    }
 
     /** Disconnect a site — the page in front's when `origin` is null. */
     fun revoke(origin: String? = null) {
@@ -795,6 +818,18 @@ class BrowserController(
     /** Set when something outside 探索 (a deep link, a dev seam) opened a page: the tab should show. */
     val openRequested = MutableStateFlow(false)
 
+    /**
+     * Tabs whose engine the core's plan let go of (spec 099 FR-004): their URL
+     * and title stay in the strip, their page does not. Shown again, such a
+     * tab loads again and says so.
+     */
+    private val suspended = HashSet<String>()
+
+    private val _reloadedTab = MutableStateFlow<String?>(null)
+
+    /** The tab that came back from a suspension and is still the one shown — its chrome says "reloaded to save memory". */
+    val reloadedTab: StateFlow<String?> = _reloadedTab
+
     private var started = false
 
     /** Loads the documents once; every entry into 探索 calls it. */
@@ -806,7 +841,40 @@ class BrowserController(
         scope.launch(Dispatchers.Main.immediate) {
             exploreHost.view.collect { view -> reconcile(view) }
         }
+        // A request opened or settled changes which tabs are busy: the plan is asked again.
+        scope.launch(Dispatchers.Main.immediate) {
+            dbrHost.view.collect { planEngines() }
+        }
     }
+
+    /**
+     * Let go of the engines the core's rule says to (spec 099 FR-004,
+     * `browser_tabs::plan_engines`): never the selected tab, never one with
+     * anything open. Each one goes the way a closed page goes — its WebView
+     * destroyed — but the tab stays, and the browser machine hears that its
+     * page is gone (the desktop's `page_gone_events`). [pressure]: the system
+     * asked the app to free memory.
+     */
+    private fun planEngines(pressure: Boolean = false) {
+        if (!started) return
+        val explore = exploreHost.view.value
+        if (!explore.ready || engines.isEmpty()) return
+        val plan = BrowserTabs.plan(BrowserTabs.input(explore, dapp.value, engines.keys, pressure))
+        for (tab in plan.suspend) {
+            val engine = engines.remove(tab) ?: continue
+            VelaLog.event("browser.tabs", "suspended", "tab" to tab, "pressure" to pressure, "live" to engines.size)
+            engine.destroy()
+            if (_current.value === engine) _current.value = null
+            suspended += tab
+            BrowserTabs.pageGone(tab, now()).forEach(::dispatch)
+        }
+    }
+
+    /**
+     * The system asked for memory back (`onTrimMemory`, `onLowMemory`): the
+     * core's plan under pressure keeps the selected tab and the busy ones only.
+     */
+    fun memoryPressure() = planEngines(pressure = true)
 
     /**
      * The selected tab gets an engine when it has a URL; closed tabs lose theirs
@@ -817,18 +885,36 @@ class BrowserController(
         val alive = view.tabs.map { it.id }.toSet()
         engines.keys.filter { it !in alive }.forEach { id ->
             engines.remove(id)?.destroy()
-            dispatch(DbrEvent.TabClosed(id))
+            dispatch(DbrEvent.TabClosed(id, now()))
+        }
+        // A suspended tab that was closed has no page to tell the core about —
+        // only its id goes, and the core settles whatever it still had.
+        suspended.filter { it !in alive }.forEach { id ->
+            suspended -= id
+            dispatch(DbrEvent.TabClosed(id, now()))
         }
         if (_snapshots.value.keys.any { it !in alive }) _snapshots.value = _snapshots.value.filterKeys { it in alive }
         crashed.retainAll(alive)
         lastVisits.keys.retainAll(alive)
+        _statusSeen.value.keys.filter { it !in alive }.takeIf { it.isNotEmpty() }?.let { gone -> _statusSeen.value = _statusSeen.value - gone.toSet() }
         val selected = view.tabs.firstOrNull { it.id == view.selected_tab } ?: view.tabs.firstOrNull()
+        // "Reloaded to save memory" lasts until the person leaves that tab.
+        if (_reloadedTab.value != null && _reloadedTab.value != selected?.id) _reloadedTab.value = null
         val engine = selected?.url?.takeIf { selected.id !in crashed }?.let { url ->
-            engines.getOrPut(selected.id) { newEngine(selected.id).also { it.load(url) } }
+            engines.getOrPut(selected.id) {
+                // Woken: a tab the plan let go of loads its page again, and says so.
+                if (suspended.remove(selected.id)) {
+                    VelaLog.event("browser.tabs", "woken: reloading", "tab" to selected.id)
+                    _reloadedTab.value = selected.id
+                }
+                newEngine(selected.id).also { it.load(url) }
+            }
         }
         // A tab not in front keeps its page but runs no animations or media.
         engines.values.filter { it !== engine }.forEach { it.webView.onPause() }
         if (_current.value !== engine) _current.value = engine
+        // A tab selected, opened or closed: the core says which engines may go.
+        planEngines()
     }
 
     private fun newEngine(tabId: String) = BrowserEngine(
@@ -837,16 +923,16 @@ class BrowserController(
         debugMode = debug.on,
         listener = object : BrowserEngine.Listener {
             override fun pageMessage(tab: String, json: String, sourceOrigin: String, isMainFrame: Boolean) =
-                dispatch(DbrEvent.PageMessage(tab = tab, frame_origin = sourceOrigin, is_main_frame = isMainFrame, message_json = json))
+                dispatch(DbrEvent.PageMessage(tab = tab, frame_origin = sourceOrigin, is_main_frame = isMainFrame, message_json = json, now_ms = now()))
 
             override fun navigationStarted(tab: String, url: String) {
                 VelaLog.event("browser.nav", "document load", "url" to url.take(96))
-                dispatch(DbrEvent.NavigationStarted(tab, url))
+                dispatch(DbrEvent.NavigationStarted(tab, url, now()))
                 exploreHost.dispatch(ExploreEvent.TabNavigated(id = tab, url = url, title = null), ExploreEvent.serializer())
             }
 
             override fun loadFinished(tab: String, url: String, title: String, failed: Boolean, httpStatus: Int?) {
-                dispatch(DbrEvent.LoadFinished(tab, url))
+                dispatch(DbrEvent.LoadFinished(tab, url, now()))
                 // A failed load leaves the tab's own title alone — the engine's
                 // error page ("网页无法打开") is not the site (spec 079).
                 exploreHost.dispatch(ExploreEvent.TabNavigated(id = tab, url = url, title = title.ifBlank { null }.takeUnless { failed }), ExploreEvent.serializer())
@@ -884,7 +970,7 @@ class BrowserController(
                 _snapshots.value = _snapshots.value - tab
                 engines.remove(tab)?.destroy()
                 if (_current.value?.id == tab) _current.value = null
-                dispatch(DbrEvent.RendererGone(tab))
+                dispatch(DbrEvent.RendererGone(tab, now()))
             }
 
             override fun snapshot(tab: String, image: androidx.compose.ui.graphics.ImageBitmap?) {

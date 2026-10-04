@@ -149,6 +149,12 @@ final class UserOpSpine {
 
     enum Failure: Equatable {
         case passkeyCancelled
+        /// The passkey ceremony failed, as the passkey classifier read the
+        /// platform's error — the same `FailureKind` create and login are
+        /// told (spec 099 R8): no passkey can be used here, one sign-in would
+        /// never offer, or another failure. Never `cancelled`, which is
+        /// `passkeyCancelled`. Nothing was signed.
+        case signer(kind: FailureKind, message: String)
         /// The Trusted Signer ended without an answer the wallet accepts.
         /// Nothing was signed; the sheet says which of its sentences applies.
         case trustedSigner(TrustedSignerNotice)
@@ -681,7 +687,12 @@ final class UserOpSpine {
             )
         } catch let failure as PasskeyFailure {
             if failure.kind == .cancelled { throw Refused(failure: .passkeyCancelled) }
-            throw other(failure.message.isEmpty ? "the passkey ceremony failed" : failure.message)
+            // Spec 099 R8: how it failed travels on, so the sheet and the
+            // page's record name the passkey, not "couldn't submit".
+            throw Refused(failure: .signer(
+                kind: failure.kind,
+                message: failure.message.isEmpty ? "the passkey ceremony failed" : failure.message
+            ))
         } catch is CancellationError {
             throw Refused(failure: .passkeyCancelled)
         }

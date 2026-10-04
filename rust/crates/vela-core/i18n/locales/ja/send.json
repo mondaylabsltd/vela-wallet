@@ -50,6 +50,7 @@
     "txSubmitted": "トランザクションをネットワークに送信しました",
     "txSlowConfirm": "通常より時間がかかっています。しばらくお待ちください...",
     "txRelayFunding": "リレーがこのネットワークのガスを補充しています。補充が届きしだい、取引を送信します。",
+    "txRelaySending": "Vela のリレーがネットワークへ送信中…",
     "txWaitingConfirm": "ブロックチェーンの承認を待っています...",
     "txElapsed": "{{elapsed}} 秒経過 — もうすぐ完了します",
     "txRemaining": "残り約 {{remaining}} 秒",

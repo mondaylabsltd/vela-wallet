@@ -183,6 +183,17 @@ class SpeedControl(
         .flatMapLatest { session -> combine(session.host.view, session.chainRead, ::withChainRead) }
         .stateIn(scope, SharingStarted.Eagerly, FeeView())
 
+    /**
+     * [fee] exactly as the session in force wrote it, with the shell's own
+     * chain-read failure over it the way [fee] has it ([withChainReadJson]) —
+     * for a core function that reads the whole view back (spec 099:
+     * `signConfirmState`). `null` before the session first commits.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val feeJson: StateFlow<String?> = inForce
+        .flatMapLatest { session -> combine(session.host.viewJson, session.chainRead, ::withChainReadJson) }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = synchronized(sessionLock) {
         inForce.value.takeIf { it.ask?.tier == tier }?.shown
@@ -588,5 +599,20 @@ class SpeedControl(
          */
         fun withChainRead(view: FeeView, failure: FeeFailure.ChainRead?): FeeView =
             if (failure == null) view else view.copy(busy = false, failed = failure, fee = null, stale = false, confirm_fee_ready = false)
+
+        /** [withChainRead] over the session's raw view JSON — the same five fields, nothing else touched. */
+        fun withChainReadJson(json: String?, failure: FeeFailure.ChainRead?): String? {
+            if (json == null || failure == null) return json
+            val failed = org.json.JSONObject(app.getvela.wallet.core.crux.Wire.json.encodeToString(FeeFailure.WireSerializer, failure))
+            return runCatching {
+                org.json.JSONObject(json)
+                    .put("busy", false)
+                    .put("failed", failed)
+                    .put("fee", org.json.JSONObject.NULL)
+                    .put("stale", false)
+                    .put("confirm_fee_ready", false)
+                    .toString()
+            }.getOrNull()
+        }
     }
 }

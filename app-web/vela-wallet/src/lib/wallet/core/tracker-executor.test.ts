@@ -265,6 +265,7 @@ describe('tracker log lines (spec 082 G61)', () => {
 		submitted_at_ms: 1,
 		outcome: 'landing',
 		relay_tx_hash: null,
+		relay_sent_at_ms: null,
 		...over
 	});
 

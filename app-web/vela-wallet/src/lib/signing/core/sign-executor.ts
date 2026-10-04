@@ -577,11 +577,17 @@ export function createSignExecutor(ports: SignShellPorts) {
 		// The record was not written in time, so nothing was POSTed (RJ1): not
 		// sent, in the core's fixed words — never a refusal.
 		if (error instanceof WriteAheadTimeoutError) {
-			return { type: 'failed', message: userOpNotSentDetail(), refused: false };
+			return { type: 'failed', message: userOpNotSentDetail(), refused: false, signer: null };
 		}
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			// Never an error, never a response, never a durable 'rejected' (⑧).
 			return { type: 'passkey_cancelled' };
+		}
+		if (error instanceof PasskeyError) {
+			// Spec 099 R8: the passkey is what failed, and how — the core names
+			// the signer on the sheet and in the page's record, never
+			// "couldn't submit". Nothing was signed or sent.
+			return { type: 'failed', message: error.message, refused: false, signer: error.kind };
 		}
 		const message = (error as { message?: string } | null)?.message ?? 'Signing failed';
 		// The relay's underfunded refusal (the core's reading), or a pre-submit
@@ -630,7 +636,7 @@ export function createSignExecutor(ports: SignShellPorts) {
 		// refusal by the relay (anything but "relayer unavailable") is said as
 		// one (spec 082 RJ3): the page is told the network refused it, and the
 		// sheet offers no Retry — trying again sends the same refused op.
-		return { type: 'failed', message, refused: isRelayRefusal(error) };
+		return { type: 'failed', message, refused: isRelayRefusal(error), signer: null };
 	}
 
 	function toFailure(effect: SignEffect, error: unknown): SignShellResult {
@@ -660,7 +666,8 @@ export function createSignExecutor(ports: SignShellPorts) {
 					outcome: {
 						type: 'failed',
 						message: (error as { message?: string } | null)?.message ?? 'Signing failed',
-						refused: isRelayRefusal(error)
+						refused: isRelayRefusal(error),
+						signer: null
 					},
 					now_ms: Date.now()
 				};

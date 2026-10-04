@@ -23,6 +23,7 @@ import app.getvela.wallet.feature.signing.core.SignView
 import java.io.File
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,8 +45,8 @@ class SigningReceiptTest {
         SigningBlock.Amount(AmountLine(sign = "−", value = "0.001", symbol = "XDAI")),
     )
 
-    private fun entry(status: TrackStatus, outcome: TrackOutcome, txHash: String? = null) =
-        TrackEntryView(user_op_hash = op, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0, outcome = outcome)
+    private fun entry(status: TrackStatus, outcome: TrackOutcome, txHash: String? = null, relaySentAtMs: Double? = 1.0) =
+        TrackEntryView(user_op_hash = op, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0, outcome = outcome, relay_sent_at_ms = relaySentAtMs)
 
     @Test
     fun `an account that signs on the Trusted Signer's page gets a button, not a second slide`() {
@@ -138,6 +139,18 @@ class SigningReceiptTest {
         assertEquals(strings.t(I18nKeys.Flows.TX_SUBMITTED_TITLE), waiting?.title)
         assertEquals("Send · −0.001 XDAI", waiting?.captions?.first())
         assertEquals("the chain's clock drives the ring", 5, waiting?.eta?.typicalS)
+        assertEquals("counted from the relay's send", 1.0, waiting?.eta?.sentAtMs ?: -1.0, 0.0)
+
+        // Spec 099 R6: accepted and not yet sent — the relay's line, no clock, the ring roams.
+        val sending = SigningLive.receipt(
+            SignView(surface = SignSurface.Sheet, pending_op_hash = op),
+            blocks,
+            ctx.copy(track = entry(TrackStatus.Pending, TrackOutcome.Landing, relaySentAtMs = null)),
+        )
+        assertEquals(ReceiptStage.Submitted, sending?.stage)
+        assertTrue(sending!!.captions.contains(strings.t(I18nKeys.Flows.TX_RELAY_SENDING)))
+        assertFalse(sending.captions.contains(strings.t(I18nKeys.Flows.TX_WAITING_CONFIRM)))
+        assertNull("no chain clock before the relay sends", sending.eta)
     }
 
     @Test

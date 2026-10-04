@@ -128,6 +128,8 @@ struct ExploreScreen: View {
     @State private var searchFocus = 0
     /// A one-line confirmation over the page ("Link copied").
     @State private var toast: String?
+    /// The tab's status panel is up (spec 099 FR-014).
+    @State private var statusOpen = false
 
     /// Which of the three views is on screen.
     ///
@@ -200,6 +202,37 @@ struct ExploreScreen: View {
         guard let engine else { return BrowserEngine.requestedProgress }
         _ = controller.engineTick
         return engine.loading ? engine.progress : nil
+    }
+
+    /// Spec 099 FR-014: what the tab in front has to say about its layers —
+    /// reloaded to save memory, the wallet not offered, the latest trouble —
+    /// unless the person dismissed exactly that.
+    private var statusLine: BrowserStatusLine? {
+        guard engine != nil, let controller, let tabId = controller.explore.selectedTab,
+              let line = BrowserStatusLive.line(
+                  tabId: tabId, tab: currentTab, reloadedTab: controller.reloadedTab, loc: loc
+              ),
+              controller.statusSeen[tabId] != line.seen
+        else { return nil }
+        return line
+    }
+
+    private func statusLineView(_ line: BrowserStatusLine) -> some View {
+        BrowserStatusLineView(
+            line: line,
+            detailsLabel: loc.t("componentsUi.browserStatus.title"),
+            dismissLabel: loc.t("explore.close"),
+            onDetails: {
+                guard let controller, let tab = controller.explore.selectedTab else { return }
+                controller.dismissStatus(tab: tab, seen: line.seen)
+                controller.inspectorOpened(tab: tab)
+                statusOpen = true
+            },
+            onDismiss: {
+                guard let controller, let tab = controller.explore.selectedTab else { return }
+                controller.dismissStatus(tab: tab, seen: line.seen)
+            }
+        )
     }
 
     /// Spec 079 US4: one quiet line under the address bar — the connection
@@ -371,6 +404,25 @@ struct ExploreScreen: View {
                 // person was reading.
                 .interactiveDismissDisabled(consentOpen)
         }
+        // Spec 099 FR-014: the tab's record. The browser machine carries the
+        // whole record only while this is up.
+        .sheet(isPresented: $statusOpen, onDismiss: {
+            controller?.inspectorClosed()
+            signingHeld = false
+            // A site that asked while the panel was up gets its sheet now
+            // that this one is really gone.
+            if controller?.dbr.consent != nil { presentConsent() }
+        }) {
+            BrowserInspectorView(
+                inspector: controller?.dbr.inspector,
+                loc: loc,
+                onClose: { statusOpen = false }
+            )
+            .presentationDragIndicator(.visible)
+            .presentationDetents([.medium, .large])
+            .presentationCornerRadius(Tokens.Radius.r20)
+            .presentationBackground(theme.bgBase)
+        }
         .sheet(isPresented: $signingUp) {
             if let signing {
                 SigningSheet(model: signing, onConfirm: { signingUp = false })
@@ -418,7 +470,12 @@ struct ExploreScreen: View {
         // account switch (spec 079). A site still ASKING to connect keeps its
         // consent: that answer is the person's to give.
         .onChange(of: signingLive != nil) { _, up in
-            guard up, sheet != nil, !consentOpen else { return }
+            guard up else { return }
+            if statusOpen {
+                signingHeld = true
+                statusOpen = false
+            }
+            guard sheet != nil, !consentOpen else { return }
             signingHeld = true
             sheet = nil
         }
@@ -476,6 +533,11 @@ struct ExploreScreen: View {
     /// The consent sheet, over the page that asked.
     private func presentConsent() {
         guard let controller, let consent = controller.dbr.consent, !accountSwitcherOpen else { return }
+        // The status panel gives way first; its dismissal asks again.
+        if statusOpen {
+            statusOpen = false
+            return
+        }
         // A background tab asked: bring it to the front, so the page behind
         // the sheet is the one the sheet names.
         if controller.explore.tabs.contains(where: { $0.id == consent.tab }) {
@@ -543,6 +605,9 @@ struct ExploreScreen: View {
             )
             if engine != nil, let chainNotice {
                 chainNoticeView(chainNotice)
+            }
+            if let statusLine {
+                statusLineView(statusLine)
             }
             if let engine {
                 ZStack {

@@ -89,10 +89,20 @@
 			enabled={model.confirm.enabled}
 			{onconfirm}
 		/>
+		{#if !model.confirm.enabled && model.confirm.note}
+			<!-- Spec 099 R7: a shut slide says why, in the core's words. -->
+			<p class="confirm-note">{model.confirm.note}</p>
+		{/if}
 	{/if}
 </div>
 
 <style>
+	.confirm-note {
+		margin: var(--space-sm) 0 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+		text-align: center;
+	}
 	.dismiss {
 		display: flex;
 	}

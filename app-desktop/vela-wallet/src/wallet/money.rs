@@ -165,6 +165,9 @@ pub struct SendHost {
     /// relay then acknowledges changes its outcome while its status stays
     /// `pending` (spec 082 RA10).
     last_receipt: Option<SendReceiptOutcome>,
+    /// When the tracker learned the relay put this send on the network
+    /// (spec 099 R6): what the landing's countdown counts from.
+    pub relay_sent_at_ms: Option<f64>,
     /// The submit running on a worker (spec 082 RA4, ruling 1): the page
     /// keeps a column closed under it running, unseen, until it is in.
     submits: Submits,
@@ -272,6 +275,7 @@ impl SendHost {
             watching: false,
             last_counted_second: None,
             signing_reported: false,
+            relay_sent_at_ms: None,
             tracked_hash: None,
             last_receipt: None,
             submits: Submits::default(),
@@ -1021,6 +1025,10 @@ impl SendHost {
         else {
             return;
         };
+        if entry.relay_sent_at_ms != self.relay_sent_at_ms {
+            self.relay_sent_at_ms = entry.relay_sent_at_ms;
+            cx.notify();
+        }
         // The core's one mapping (spec 082): a slow or unreachable poll sends
         // nothing (invariant ⑤); "not sent" is never the fee-rejected words.
         let Some(outcome) = vela_core::app::send::receipt_outcome_of(entry) else {
@@ -1803,6 +1811,7 @@ mod tests {
                 identity_name: "Golden",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
+                relay_sent_at_ms: None,
             };
             let notice = if confirming {
                 send_confirm(&inputs).notice
@@ -1988,6 +1997,7 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x0",
             speed: None,
+            relay_sent_at_ms: None,
         })
         .cta_state
     }
@@ -2035,6 +2045,7 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x0",
             speed: None,
+            relay_sent_at_ms: None,
         })
         .rows;
         assert_eq!(rows.len(), 2, "both are shown — for context");

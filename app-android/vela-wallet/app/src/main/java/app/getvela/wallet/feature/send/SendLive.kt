@@ -103,6 +103,14 @@ object SendLive {
         val money: WalletLive.Money,
         val fromName: String,
         val fromAddress: String,
+        /**
+         * Spec 099 R6: when the relay put this send's operation on the network
+         * (its tracker entry's `relay_sent_at_ms`) — the receipt's countdown
+         * starts there. `null` while the relay still holds it.
+         */
+        val relaySentAtMs: Double? = null,
+        /** The screen's clock, ms since the epoch: the core's landing pace is read at it. */
+        val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
     )
 
     /** Which drawn state the live view is in — the flow host renders by this. */
@@ -1352,20 +1360,23 @@ object SendLive {
                 ctaAccent = true,
             )
             else -> {
-                val typicalLine = receipt.typical_inclusion_s?.let {
-                    s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to it.toString()))
-                }
-                // Issue 199 (web cf2a9e17): with the relay's clock and the chain's
-                // usual time the screen counts the wait down and fills its ring.
-                // Without the clock the typical time is still worth saying, once.
-                // The relay topping up its gas (098 follow-up): nothing is on the
-                // network yet, so no confirmation clock to count.
+                // Issue 199 (web cf2a9e17), spec 099 R6: the screen counts the
+                // wait down and fills its ring — the core's one countdown,
+                // counted from when the relay put the operation on the
+                // network. Before that the relay is sending it: its words, no
+                // chain clock, the ring roams. The relay topping up its gas
+                // (098 follow-up) is said in its own words and counts nothing
+                // either.
+                val pace = app.getvela.wallet.feature.send.core.Landing.pace(ctx.relaySentAtMs, receipt.typical_inclusion_s, ctx.nowMs())
+                val waiting = pace.line == app.getvela.wallet.feature.send.core.LandingLine.Waiting
                 val funding = receipt.hold_reason == SendHoldReason.RelayFunding
-                val eta = if (!funding && receipt.submitted_at_ms != null && receipt.typical_inclusion_s != null && typicalLine != null) {
+                val counting = pace.line != app.getvela.wallet.feature.send.core.LandingLine.Waiting &&
+                    pace.line != app.getvela.wallet.feature.send.core.LandingLine.None
+                val eta = if (!funding && counting && ctx.relaySentAtMs != null && receipt.typical_inclusion_s != null) {
                     ReceiptEtaModel(
-                        submittedAtMs = receipt.submitted_at_ms,
+                        sentAtMs = ctx.relaySentAtMs,
                         typicalS = receipt.typical_inclusion_s,
-                        typicalLine = typicalLine,
+                        typicalLine = s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to receipt.typical_inclusion_s.toString())),
                         remainingTemplate = s.t(I18nKeys.Flows.TX_REMAINING),
                         elapsedTemplate = s.t(I18nKeys.Flows.TX_ELAPSED),
                         slowLine = s.t(I18nKeys.Flows.TX_SLOW_CONFIRM),
@@ -1380,12 +1391,12 @@ object SendLive {
                     // A sweep's coins first (spec 097 F), so the wait's own
                     // lines — and the clock under them — stay together.
                     captions = coinLines + listOfNotNull(
-                        when (receipt.hold_reason) {
-                            SendHoldReason.FeeHold -> s.t(I18nKeys.Flows.TX_HELD_FEES)
-                            SendHoldReason.RelayFunding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
+                        when {
+                            receipt.hold_reason == SendHoldReason.FeeHold -> s.t(I18nKeys.Flows.TX_HELD_FEES)
+                            funding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
+                            waiting -> s.t(I18nKeys.Flows.TX_RELAY_SENDING)
                             else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
                         },
-                        typicalLine.takeIf { eta == null && !funding },
                     ),
                     hash = null,
                     viewOnExplorer = null,

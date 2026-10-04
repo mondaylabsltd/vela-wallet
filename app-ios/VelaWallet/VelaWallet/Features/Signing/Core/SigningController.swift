@@ -14,12 +14,16 @@
 //  Ported from `app-android/.../feature/signing/core/SigningController.kt`
 //  (spec 044 T032), which is the desktop's `wallet/signing_host.rs`.
 //
-//  ## The confirm gate is three machines ANDed
+//  ## The confirm gate is the core's (spec 099 R7)
 //
-//  `sign_request.confirmGateOpen` AND `approval_guard.confirmAllowed` AND
-//  `fee_policy.confirmFeeReady`. Arming on one of the three is how an
-//  unlimited approval gets past a guard that had not finished reading the
-//  token, or how a person signs a transaction whose fee nobody could quote.
+//  `sign_request`, `approval_guard`, `clear_signing` and `fee_policy` each
+//  have a say, and the core's `signConfirmState` joins them over their views
+//  as the core wrote them — with which part is shut and the line that says
+//  so. Arming on fewer is how an unlimited approval gets past a guard that
+//  had not finished reading the token, or how a person signs a transaction
+//  whose fee nobody could quote. This file used to AND three of them itself,
+//  without the off-chain and still-reading rules the sheet's own copy had;
+//  both copies are gone (`confirmState`).
 //
 //  ## The order the machine is told things
 //
@@ -88,6 +92,10 @@ final class SigningController {
     private(set) var sign: SignViewWire = .empty
     private(set) var clear: ClearSigningViewWire = .empty
     private(set) var guardView: GuardViewWire = .empty
+    /// The three views as the core wrote them, for `signConfirmState`.
+    private(set) var signJson: String?
+    private(set) var clearJson: String?
+    private(set) var guardJson: String?
     /// The fee in force — whichever session prices the tier in force now.
     var fee: FeeViewWire? { fees.view }
     /// The speed control, as the `fee_speed` core decided it (spec 069).
@@ -266,20 +274,36 @@ final class SigningController {
             bridge: SignRequestCore(),
             perform: { await signExecutor.perform($0) },
             onView: { [weak self] view in self?.commitSign(view) },
-            onFault: { VelaLog.failure(.sign, kind: "sign_request_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.sign, kind: "sign_request_fault", VelaLog.error($0)) },
+            keepsJson: true
         )
         clearCore = CoreStore(
             bridge: ClearSigningCore(),
             perform: { await clearExecutor.perform($0) },
-            onView: { [weak self] view in self?.clear = view },
-            onFault: { VelaLog.failure(.sign, kind: "clear_signing_fault", VelaLog.error($0)) }
+            onView: { [weak self] view in
+                guard let self else { return }
+                clear = view
+                clearJson = clearCore.json
+            },
+            onFault: { VelaLog.failure(.sign, kind: "clear_signing_fault", VelaLog.error($0)) },
+            keepsJson: true
         )
         guardCore = CoreStore(
             bridge: ApprovalGuardCore(),
             perform: { await guardExecutor.perform($0) },
-            onView: { [weak self] view in self?.guardView = view },
-            onFault: { VelaLog.failure(.sign, kind: "approval_guard_fault", VelaLog.error($0)) }
+            onView: { [weak self] view in
+                guard let self else { return }
+                guardView = view
+                guardJson = guardCore.json
+            },
+            onFault: { VelaLog.failure(.sign, kind: "approval_guard_fault", VelaLog.error($0)) },
+            keepsJson: true
         )
+        // Each machine's idle view until it speaks: the gate is asked over
+        // views, never over nothing.
+        signJson = signCore.json
+        clearJson = clearCore.json
+        guardJson = guardCore.json
         fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
@@ -624,8 +648,9 @@ final class SigningController {
         dispatchSign(["type": "swipe_dismissed"])
     }
 
-    /// The last view the core showed a sheet for.
+    /// The last view the core showed a sheet for, and its JSON.
     private var lastShown: SignViewWire?
+    private var lastShownJson: String?
 
     /// What the sheet draws: the core's view, or — in the one turn between
     /// the core clearing the sheet to answer the page and that answer being
@@ -636,6 +661,12 @@ final class SigningController {
     var shownSign: SignViewWire {
         if sign.isVisible || answered || closedByPerson { return sign }
         return lastShown ?? sign
+    }
+
+    /// `shownSign` as the core wrote it.
+    var shownSignJson: String? {
+        if sign.isVisible || answered || closedByPerson { return signJson }
+        return lastShown == nil ? signJson : lastShownJson
     }
 
     /// The person closed this request's sheet themselves. After the approval
@@ -690,14 +721,13 @@ final class SigningController {
     func guardRevoke() { dispatch(guardCore, ["type": "revoke_chosen"]) }
     func guardGrant() { dispatch(guardCore, ["type": "grant_deliberately_chosen"]) }
 
-    /// The one gate the sheet reads. See the file header.
-    var confirmEnabled: Bool {
-        sign.confirmGateOpen
-            && guardView.confirmAllowed
-            && (fee?.confirmFeeReady ?? false)
-            && !SigningLive.feeOfAnotherTier(fee, speedTier: speed?.tier)
-            && !sign.isSigning
-            && !sign.isSubmitting
+    /// The one gate the sheet reads — the core's, over the views the sheet
+    /// draws (`shownSign`) and the speed in force. See the file header.
+    var confirmState: SignConfirmStateWire {
+        SignConfirmStateWire.of(
+            sign: shownSignJson, guard: guardJson, clear: clearJson,
+            fee: fees.viewJson, speedTier: speed?.tier
+        )
     }
 
     // MARK: - Plumbing
@@ -711,7 +741,11 @@ final class SigningController {
 
     private func commitSign(_ view: SignViewWire) {
         sign = view
-        if view.isVisible { lastShown = view }
+        signJson = signCore.json
+        if view.isVisible {
+            lastShown = view
+            lastShownJson = signJson
+        }
         // A free upgrade is decided only while the person can still choose —
         // never under a slide that has already gone.
         let onForm = view.surface == .sheet && !view.isSigning && !view.isSubmitting

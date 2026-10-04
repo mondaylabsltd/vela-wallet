@@ -81,7 +81,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-ko")]
         "ko" => Some((
             ko::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&ko::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&ko::OFFSETS),
             &ko::PRESENT,
         )),
         #[cfg(feature = "i18n-vi")]

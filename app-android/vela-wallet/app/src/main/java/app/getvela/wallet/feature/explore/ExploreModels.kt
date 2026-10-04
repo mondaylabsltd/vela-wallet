@@ -118,7 +118,47 @@ data class BrowserModel(
      * panel, a load still pending in an empty tab, or an empty tab.
      */
     val lockShown: Boolean = true,
+    /** Spec 099 FR-014: the shown tab's status line; `null` when it has nothing to say (or it was put away). */
+    val status: BrowserStatusModel? = null,
 )
+
+/**
+ * Spec 099 FR-014: one quiet line under the address bar about the shown tab —
+ * it was reloaded to save memory, the wallet was not offered to its page, or
+ * the latest request that ended in trouble, in the core's words for its
+ * layer. [seen] is what its ✕ puts away: the line stays gone until it would
+ * say something else.
+ */
+@Immutable
+data class BrowserStatusModel(
+    val seen: String,
+    val text: String,
+    /** A warning (the wallet not offered, a failure) rather than a note (reloaded). */
+    val warning: Boolean,
+    /** The Details action's label — it opens the tab's status panel. */
+    val details: String,
+)
+
+/** Spec 099 FR-014: the shown tab's status panel — its page, the wallet on it, every request (newest first), and the record to copy. */
+@Immutable
+data class BrowserInspectorModel(
+    val title: String,
+    val origin: String,
+    val page: String,
+    val provider: String,
+    val requestsTitle: String,
+    val rows: List<Row>,
+    /** "No requests yet", when there are none. */
+    val empty: String?,
+    val copyLabel: String,
+    val copiedLabel: String,
+    /** The core's copyable record — the same text on every client and in a bug report. */
+    val report: String,
+) {
+    /** One request: its method (monospace) and how it ended — "✓ 120 ms", the reason's words, or "…" while open. */
+    @Immutable
+    data class Row(val method: String, val outcome: String)
+}
 
 @Immutable
 data class SiteMenuItem(

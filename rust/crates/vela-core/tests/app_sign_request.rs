@@ -821,6 +821,7 @@ fn a_failure_after_the_hand_off_leaves_the_record_to_the_tracker() {
         outcome: SignSubmitOutcome::Failed {
             message: "dropped from the network".to_owned(),
             refused: false,
+            signer: None,
         },
         now_ms: 7_000.0,
     });
@@ -1795,6 +1796,7 @@ fn no_second_response_after_a_terminal_error() {
         outcome: SignSubmitOutcome::Failed {
             message: "boom".to_owned(),
             refused: false,
+            signer: None,
         },
         now_ms: 11_000.0,
     });
@@ -2505,6 +2507,7 @@ fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> T
         submitted_at_ms: Some(5_000.0),
         outcome,
         relay_tx_hash: None,
+        relay_sent_at_ms: None,
     }
 }
 
@@ -2957,6 +2960,7 @@ fn after_the_hand_off_a_failure_is_answered_not_confirmed() {
         SignSubmitOutcome::Failed {
             message: "All bundler endpoints failed".to_owned(),
             refused: false,
+            signer: None,
         },
         SignSubmitOutcome::Underfunded {
             message: "bundler underfunded".to_owned(),
@@ -3251,6 +3255,7 @@ fn not_sent_withdraws_the_record_and_answers_once() {
             outcome: SignSubmitOutcome::Failed {
                 message: NOT_SENT_DAPP_DETAIL.to_owned(),
                 refused: false,
+                signer: None,
             },
             now_ms: 9_000.0,
         },
@@ -3300,6 +3305,7 @@ fn a_refused_submit_answers_the_refused_sentence() {
             outcome: SignSubmitOutcome::Failed {
                 message: "AA23 reverted".to_owned(),
                 refused: true,
+                signer: None,
             },
             now_ms: 9_000.0,
         },
@@ -3331,6 +3337,7 @@ fn a_refused_submit_answers_the_refused_sentence() {
             outcome: SignSubmitOutcome::Failed {
                 message: "x".to_owned(),
                 refused: true,
+                signer: None,
             },
             now_ms: 9_000.0,
         },
@@ -3605,7 +3612,8 @@ fn the_round_2_sign_wire() {
         failed,
         Some(SignSubmitOutcome::Failed {
             message: "x".to_owned(),
-            refused: false
+            refused: false,
+            signer: None,
         })
     );
     let handoff: Option<SignTrackerHandoff> =
@@ -3777,6 +3785,7 @@ fn a_withdrawn_write_ahead_s_late_ack_never_clears_a_newer_post() {
             outcome: SignSubmitOutcome::Failed {
                 message: NOT_SENT_DAPP_DETAIL.to_owned(),
                 refused: false,
+                signer: None,
             },
             now_ms: 9_500.0,
         },
@@ -4256,6 +4265,7 @@ fn a_previous_pending_operation_is_never_this_requests_answer() {
         outcome: SignSubmitOutcome::Failed {
             message: "Another transaction from this account was still pending, so this one was not sent. Try again.".to_owned(),
             refused: false,
+            signer: None,
         },
         now_ms: NOW,
     });
@@ -4688,6 +4698,7 @@ fn failed_before_sending(sut: &mut Sut, id: &str, message: &str) -> Vec<Op> {
         outcome: SignSubmitOutcome::Failed {
             message: message.to_owned(),
             refused: false,
+            signer: None,
         },
         now_ms: NOW,
     })
@@ -4769,6 +4780,7 @@ fn a_refusal_is_not_retried() {
         outcome: SignSubmitOutcome::Failed {
             message: "AA23".to_owned(),
             refused: true,
+            signer: None,
         },
         now_ms: NOW,
     });
@@ -4810,6 +4822,7 @@ fn a_failure_nobody_watches_is_answered_at_once() {
         outcome: SignSubmitOutcome::Failed {
             message: "boom".to_owned(),
             refused: false,
+            signer: None,
         },
         now_ms: NOW,
     });
@@ -4949,6 +4962,7 @@ fn n4_a_refusal_after_submitted_stays_on_the_sheet_and_the_close_answers_it_once
             outcome: SignSubmitOutcome::Failed {
                 message: "UserOperation reverted".to_owned(),
                 refused: true,
+                signer: None,
             },
             now_ms: 120_000.0,
         }
@@ -5046,6 +5060,7 @@ fn n4_a_failure_before_the_submit_still_offers_try_again() {
             outcome: SignSubmitOutcome::Failed {
                 message: NOT_SENT_DAPP_DETAIL.to_owned(),
                 refused: false,
+                signer: None,
             },
             now_ms: 9_000.0,
         },
@@ -5088,4 +5103,65 @@ fn n4_a_chain_switch_under_a_held_refusal_answers_the_refusal() {
     );
     assert_eq!(sut.view().surface, SignSurface::Hidden);
     assert!(sut.dispatch(Event::SwipeDismissed).is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Spec 099 R8 — the signer says how it failed
+// ---------------------------------------------------------------------------
+
+fn passkey_failed(signer: vela_core::app::FailureKind) -> Sut {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-99", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Failed {
+            message: "The operation couldn't be completed".to_owned(),
+            refused: false,
+            signer: Some(signer),
+        },
+        now_ms: 11_000.0,
+    });
+    assert_eq!(response_count(&ops), 0, "held while the failure shows");
+    sut
+}
+
+/// No passkey can be used here (an unsigned build): the sheet names the
+/// signer, Try again is not offered (it cannot work), and the page's answer
+/// carries the signer's kind.
+#[test]
+fn an_unavailable_passkey_is_named_and_not_retried() {
+    let mut sut = passkey_failed(vela_core::app::FailureKind::NotSupported);
+    let view = sut.view();
+    assert_eq!(
+        view.error.as_ref().map(|e| e.kind),
+        Some(SignErrorKind::SignerUnavailable)
+    );
+    assert!(!view.failure_retryable);
+    assert!(!view.confirm_gate_open);
+    let ops = sut.dispatch(Event::RejectTapped);
+    assert_eq!(
+        ops.iter()
+            .find_map(err_detail)
+            .map(|(code, kind, _)| (code, kind)),
+        Some((CODE_INTERNAL, SignErrorKind::SignerUnavailable))
+    );
+}
+
+/// A prompt that failed for another reason may work next time: Try again.
+#[test]
+fn a_failed_passkey_prompt_can_be_tried_again() {
+    let sut = passkey_failed(vela_core::app::FailureKind::Other);
+    let view = sut.view();
+    assert_eq!(
+        view.error.as_ref().map(|e| e.kind),
+        Some(SignErrorKind::SignerFailed)
+    );
+    assert!(view.failure_retryable);
+}
+
+/// A cancelled prompt is a cancel, whichever way the shell says it.
+#[test]
+fn a_cancel_reported_as_a_failure_is_a_cancel() {
+    let sut = passkey_failed(vela_core::app::FailureKind::Cancelled);
+    assert!(sut.view().error.is_none(), "a cancel is never an error");
 }

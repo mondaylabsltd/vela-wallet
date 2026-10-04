@@ -2,6 +2,14 @@ package app.getvela.wallet.feature.browser.core
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.diagnostics.VelaLog
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,13 +31,24 @@ import org.json.JSONObject
 class BrowserExecutor(
     private val store: KeyValueStore,
     private val ports: Ports,
+    /** The shell's clock, ms since the epoch: the core owns none, and times each request's row with this (spec 099). */
+    private val now: () -> Double = { System.currentTimeMillis().toDouble() },
 ) {
+    /** What a read through the pool came back with (spec 099 FR-009). */
+    sealed class ReadAnswer {
+        /** The JSON-RPC body — `{"result":…}` or the endpoint's own `{"error":…}`, which the core passes on. */
+        data class Body(val json: JSONObject) : ReadAnswer()
+
+        /** Nothing answered; [rateLimited] when the pool gave up because every endpoint said to slow down. */
+        data class NoAnswer(val rateLimited: Boolean = false) : ReadAnswer()
+    }
+
     interface Ports {
         /** Post [messageJson] into [tab]'s page. No such tab: drop it — never another tab. */
         fun deliver(tab: String, messageJson: String)
 
-        /** A node (or bundler) read through the pool: the JSON-RPC body, or `null` when nothing answered. */
-        suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject?
+        /** A node (or bundler) read through the pool: its body, or why there is none. */
+        suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): ReadAnswer
 
         /** The transaction hash a user operation landed in; `null` while it has not (or nobody answered). */
         suspend fun userOpTxHash(chainId: Int, userOpHash: String): String?
@@ -62,11 +81,11 @@ class BrowserExecutor(
             ports.deliver(operation.tab, operation.message_json)
             DbrShellResult.Ack
         }
-        is DbrOperation.Read -> {
-            val params = runCatching { JSONArray(operation.params_json) }.getOrElse { JSONArray() }
-            DbrShellResult.ReadAnswered(ports.read(operation.chain_id, operation.method, params, operation.bundler)?.toString())
+        is DbrOperation.Read -> read(operation)
+        is DbrOperation.ResolveUserOp -> {
+            val txHash = ports.userOpTxHash(operation.chain_id, operation.user_op_hash)
+            DbrShellResult.UserOpResolved(txHash, now_ms = now())
         }
-        is DbrOperation.ResolveUserOp -> DbrShellResult.UserOpResolved(ports.userOpTxHash(operation.chain_id, operation.user_op_hash))
         is DbrOperation.ForwardToSigning -> {
             ports.forwardToSigning(operation)
             DbrShellResult.Ack
@@ -79,14 +98,65 @@ class BrowserExecutor(
             ports.saveConnectionRecord(connectionRow(operation.address, operation.chain_id, operation.origin, System.currentTimeMillis()))
             DbrShellResult.Ack
         }
+        is DbrOperation.Log -> {
+            VelaLog.event("browser", operation.line)
+            DbrShellResult.Ack
+        }
     }
 
     /** What an operation answers when performing it threw: the page is still settled, by the core. */
     fun neutralAnswer(operation: DbrOperation): DbrShellResult = when (operation) {
         DbrOperation.ListSites -> DbrShellResult.SitesListed(emptyList())
-        is DbrOperation.Read -> DbrShellResult.ReadAnswered(null)
-        is DbrOperation.ResolveUserOp -> DbrShellResult.UserOpResolved(null)
+        is DbrOperation.Read -> DbrShellResult.ReadAnswered(null, now_ms = now())
+        is DbrOperation.ResolveUserOp -> DbrShellResult.UserOpResolved(null, now_ms = now())
         else -> DbrShellResult.Ack
+    }
+
+    /**
+     * One read, answered by the core's deadline (spec 099 FR-008) whatever
+     * the endpoints are doing: the pool's answer races the deadline, and a
+     * read that loses is answered `timed_out` at once — its late body, if one
+     * ever comes, is dropped. The race does not wait for the I/O to notice it
+     * was cancelled: a port that never checks for cancellation still costs
+     * the page nothing past the deadline.
+     */
+    private suspend fun read(operation: DbrOperation.Read): DbrShellResult.ReadAnswered {
+        val params = runCatching { JSONArray(operation.params_json) }.getOrElse { JSONArray() }
+        val answer = CompletableDeferred<ReadAnswer>()
+        // Not a child of this coroutine: its end is not waited for when the deadline wins.
+        val work = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob()).launch {
+            answer.complete(
+                runCatching { ports.read(operation.chain_id, operation.method, params, operation.bundler) }
+                    .getOrElse { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        VelaLog.failure("browser.read", "read failed", error, "method" to operation.method)
+                        ReadAnswer.NoAnswer()
+                    },
+            )
+        }
+        val answered = try {
+            if (operation.deadline_ms > 0) {
+                withTimeoutOrNull(operation.deadline_ms.toLong().coerceAtLeast(1L)) { answer.await() }
+            } else {
+                answer.await()
+            }
+        } finally {
+            // The deadline won (or the caller went): the pool's call is stopped
+            // where it can be, and whatever it brings back later goes nowhere.
+            if (!answer.isCompleted) work.cancel()
+        }
+        return when (answered) {
+            null -> {
+                VelaLog.event("browser.read", "deadline passed: answered timed out", "method" to operation.method, "chain" to operation.chain_id)
+                DbrShellResult.ReadAnswered(null, now_ms = now(), failure = DbrReadFailure.TimedOut)
+            }
+            is ReadAnswer.Body -> DbrShellResult.ReadAnswered(answered.json.toString(), now_ms = now())
+            is ReadAnswer.NoAnswer -> DbrShellResult.ReadAnswered(
+                null,
+                now_ms = now(),
+                failure = if (answered.rateLimited) DbrReadFailure.RateLimited else DbrReadFailure.NoEndpoint,
+            )
+        }
     }
 
     /**

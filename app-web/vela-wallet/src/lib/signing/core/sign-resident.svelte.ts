@@ -71,6 +71,7 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	error: null,
 	funding: null,
 	confirm_gate_open: false,
+	confirm_block: null,
 	reconcile_pending: false,
 	swipe_action: 'none',
 	tracker_handoff: null,

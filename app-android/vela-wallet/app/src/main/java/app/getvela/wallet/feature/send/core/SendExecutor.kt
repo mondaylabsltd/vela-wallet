@@ -526,6 +526,8 @@ class SendExecutor(
                 UserOpSpine.Failure.NotCleared -> SendSubmitFailure.Other("the records were not written ahead in time; nothing was sent")
                 is UserOpSpine.Failure.Rejected -> SendSubmitFailure.Other(failure.message)
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
+                // The send's words for a passkey that failed are unchanged (the desktop's rule).
+                is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
             },
         )
     }

@@ -215,6 +215,10 @@ struct SigningModel {
     /// `nil` under a refusal: a dead slide reads as an option somebody merely
     /// failed to use, rather than one the wallet never offered.
     let confirm: (hint: String, action: String, enabled: Bool)?
+    /// Spec 099 R7: why the slide is shut, in the core's words for the part
+    /// of the gate that is (`componentsUi.signing.confirmBlock.*`) — one line
+    /// under it. `nil` while it may arm, or where the sheet says it its own way.
+    var confirmBlockLine: String?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
     /// Spec 079: the ✕'s label — the sheet's one explicit close. Empty in the

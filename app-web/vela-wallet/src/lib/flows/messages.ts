@@ -356,6 +356,7 @@ export const WALLET_FLOW_KEYS = [
 	'componentsTx.detail.sent',
 	'send.txWaitingConfirm',
 	'send.txTypicalTime',
+	'send.txRelaySending',
 	'send.txRemaining',
 	'send.txElapsed',
 	'send.txSlowConfirm',

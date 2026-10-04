@@ -789,13 +789,15 @@ data class SendReceiptModel(
 
 /**
  * The submitted receipt's wait (issue 199, the web's `SendReceiptModel.eta`):
- * the sentences arrive resolved; only the number of seconds is the screen's,
- * from its own clock against the relay's `submitted_at_ms` (the core is
- * clockless).
+ * the sentences arrive resolved; only the clock is the screen's. What the
+ * count says at a given moment — remaining, elapsed, slow — and how full the
+ * ring is are the core's (`landing_pace`, spec 099 R6), counted from when the
+ * relay put the operation on the network, never from acceptance.
  */
 @Immutable
 data class ReceiptEtaModel(
-    val submittedAtMs: Double,
+    /** When the relay sent it (`TrackEntryView.relay_sent_at_ms`). */
+    val sentAtMs: Double,
     val typicalS: Int,
     /** "Gnosis typically confirms in ~15s" — already filled. */
     val typicalLine: String,
@@ -806,31 +808,20 @@ data class ReceiptEtaModel(
     /** Past twice the typical time. */
     val slowLine: String,
 ) {
-    /** Whole seconds since the relay took the op, never negative. */
-    fun elapsedS(nowMs: Long): Int = maxOf(0, ((nowMs - submittedAtMs) / 1000.0).toInt())
+    /** The core's pace at the screen's [nowMs]. */
+    fun pace(nowMs: Long): app.getvela.wallet.feature.send.core.LandingPace =
+        app.getvela.wallet.feature.send.core.Landing.pace(sentAtMs, typicalS, nowMs.toDouble())
 
-    /**
-     * The two lines under the title. Inside the typical time the second counts
-     * DOWN — "~9s remaining" is a promise with an end, "6s elapsed" is a
-     * stopwatch; "almost there" waits until it is true.
-     */
-    fun lines(elapsedS: Int): List<String> = listOf(
-        typicalLine,
-        when {
-            elapsedS < typicalS -> remainingTemplate.replace("{{remaining}}", (typicalS - elapsedS).toString())
-            elapsedS < typicalS * 2 -> elapsedTemplate.replace("{{elapsed}}", elapsedS.toString())
-            else -> slowLine
-        },
-    )
-
-    /**
-     * How much of the ring is drawn, 0–1. It eases toward full and never gets
-     * there: about 70% at the typical time, 86% at twice it, a ceiling of 92%
-     * after — so a three-minute wait is still visibly moving and a ten-second
-     * one does not sit at 100%. Only the confirmation closes it.
-     */
-    fun progress(elapsedS: Int): Float =
-        (0.92 * (1 - kotlin.math.exp(-1.4 * elapsedS / maxOf(1, typicalS).toDouble()))).toFloat()
+    /** The two lines under the title for [pace]: the chain's usual time, then the core's count. */
+    fun lines(pace: app.getvela.wallet.feature.send.core.LandingPace): List<String> = when (pace.line) {
+        app.getvela.wallet.feature.send.core.LandingLine.Remaining ->
+            listOf(typicalLine, remainingTemplate.replace("{{remaining}}", pace.seconds.toString()))
+        app.getvela.wallet.feature.send.core.LandingLine.Elapsed ->
+            listOf(typicalLine, elapsedTemplate.replace("{{elapsed}}", pace.seconds.toString()))
+        app.getvela.wallet.feature.send.core.LandingLine.Slow -> listOf(typicalLine, slowLine)
+        // Nothing sent yet, or no usual time: the receipt never builds a clock for these.
+        app.getvela.wallet.feature.send.core.LandingLine.Waiting, app.getvela.wallet.feature.send.core.LandingLine.None -> emptyList()
+    }
 }
 
 /* ------------------------------------------------------------- the screens */

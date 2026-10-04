@@ -18,6 +18,11 @@ favorites_full: boolean,
  */
 tabs_full: boolean, 
 /**
+ * Every tab id, most recently used first (spec 099 R2): the order
+ * [`super::browser_tabs::plan_engines`] keeps engines alive in.
+ */
+recent_tabs: Array<string>, 
+/**
  * The mirror is live. Before this, a screen shows nothing rather than an
  * empty start page it would have to correct a frame later.
  */

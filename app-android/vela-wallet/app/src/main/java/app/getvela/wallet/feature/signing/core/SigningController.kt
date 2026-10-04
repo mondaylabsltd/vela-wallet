@@ -383,6 +383,17 @@ class SigningController(
     /** The speed control, as the core decided it — the sheet's fee card draws this. */
     val speed: StateFlow<FeeSpeedView> = speedControl.speed
 
+    /**
+     * Spec 099 R7: the four views exactly as the machines wrote them — what
+     * the core's one confirm gate (`SigningLive.confirmState`) reads. The
+     * decoded views above are what the sheet draws; the gate never reads a
+     * re-encoded mirror.
+     */
+    val signJson: StateFlow<String?> = signHost.viewJson
+    val clearJson: StateFlow<String?> = clearHost.viewJson
+    val guardJson: StateFlow<String?> = guardHost.viewJson
+    val feeJson: StateFlow<String?> = speedControl.feeJson
+
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 

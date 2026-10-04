@@ -18,7 +18,7 @@
  * surface.
  */
 import { flushSync, tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 
@@ -65,6 +65,10 @@ vi.mock('$lib/session/core/session.svelte', () => ({
 		}
 	}
 }));
+import { loadCore } from '$lib/core/client';
+
+beforeAll(() => loadCore());
+
 vi.mock('$lib/settings/core/currency.svelte', () => ({ currency: { view: {} } }));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', () => ({ explorerBaseURL: () => null }));
@@ -220,6 +224,7 @@ const RECEIPT = {
 	stillConfirming: 'Still confirming',
 	unknownOutcome: 'Unknown',
 	relayFunding: 'The relay is topping up its gas',
+	relaySending: 'relay sending',
 	signed: 'Signed!',
 	maybeSent: 'May have been sent',
 	closeBackground: 'Close · keep running',

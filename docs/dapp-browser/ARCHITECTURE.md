@@ -93,15 +93,53 @@ new window loads in the same tab on the phones and opens a new tab on the
 desktop (Windows from the request's own gesture flag; macOS behind WebKit's
 popup blocker, `javaScriptCanOpenWindowsAutomatically = NO`), only on a
 person's gesture; no shell builds a second engine, so
-`window.opener` is gone and popup sign-in does not complete. The desktop's one
-engine serves every tab, so Back stops at a tab's first page. Windows asks the
-engine to forget the other tabs' entries (`Page.resetNavigationHistory`), and
-macOS counts the tab's own. Downloads are refused everywhere.
+`window.opener` is gone and popup sign-in does not complete. Since spec 099
+every client keeps one engine per tab — a switch shows a live page, it never
+reloads it — so each tab's Back is its own history. Downloads are refused
+everywhere.
+
+## The layers, and where each is seen (spec 099)
+
+A dApp tab is six layers deep. When something does not work, the first
+question is which one stopped; the answer is decided in the core, and every
+client says and logs it the same way.
+
+| Layer | What it is | Decided in | Seen as |
+|---|---|---|---|
+| browser | the tab and its page: loading, loaded, crashed, gone | `browser_load` (the load watch), `dapp_browser` (page state) | the hairline, the load-failure and crash panels, the tab status |
+| provider | the wallet offered to the page (EIP-1193 + 6963) | `dapp_permissions::offers_wallet`, `dapp_browser` (provider state) | the tab status: offered, not offered (insecure page, script did not run) |
+| wallet | Vela's own rules over a request | `dapp_rpc::classify`, `dapp_browser` | the request's row: not connected, unsupported, unknown chain… |
+| network | the chain's RPC, through the person's endpoints | the shell's pool, bounded by `READ_DEADLINE_MS`; `dapp_record` names the failure | the chain notice; the row: no endpoint, timed out, rate-limited, the endpoint's error |
+| relay | Vela's relay: quote, simulate, send | `fee_policy`, `sign_request`, `tx_tracker` | the fee row's reason, the landing (relay sending / funding / on the network), the row |
+| sheet · signer | the person on Vela's sheet; the passkey | `sign_confirm::confirm_state`, `sign_request` (signer kinds) | the line under a shut slide; the signer's failure on the sheet and in the row |
+
+- **The request record.** Every request a page sends gets a row in
+  `dapp_browser` (`dapp_record::DbrRequestRow`): method, class, start and end
+  (the shell's clock), outcome and code, and the layer and reason that ended it
+  — never params, results, signatures or addresses. The last 200 per tab. The
+  view carries counts for every tab (`busy`, `open_requests`, `failed_recent`,
+  `last_failure`) and the whole record only for the tab whose status panel is
+  open (`inspector`), with a copyable `report`.
+- **The log.** One line per request end and per change of a tab's page or
+  provider state, written by the core (`DbrOperation::Log`) and put in the
+  app's log as it is: `dapp tab=… req=… method=… class=… outcome=… code=…
+  layer=… reason=… ms=…`.
+- **Live engines.** `browser_tabs::plan_engines` keeps the shown tab and every
+  busy tab, then the most recently used up to six (one under memory pressure);
+  the rest are suspended and say "reloaded to save memory" when shown again.
+- **Every read settles** by `READ_DEADLINE_MS` (30 s), whatever the endpoints
+  are doing.
+- **The landing** counts the chain's usual time from when the relay put the
+  bundle on the network (`tx_tracker::landing_pace`, `relay_sent_at_ms`),
+  never from acceptance; an op the relay acknowledged and later forgot ends
+  "not sent" once the chain has been read to its head with no event for it.
 
 ## Testing
 
-- Core: `rust/crates/vela-core/tests/app_dapp_browser.rs` (every rule) and the
-  unit tests in `dapp_rpc.rs`.
+- Core: `rust/crates/vela-core/tests/app_dapp_browser.rs` (every rule),
+  `app_dapp_browser_099.rs` (the record, the layers, the deadline),
+  `app_browser_tabs_099.rs` (live engines), `app_sign_landing_099.rs` (the
+  gate, the forgotten op, the countdown), and the unit tests in `dapp_rpc.rs`.
 - Extension: `src/lib/dapp/core-table.test.ts` (table + provider constants vs
   the core over wasm), `protocol.test.ts`, the extension e2e.
 - Android: `BrowserMachineTest` (the real core through the executor).

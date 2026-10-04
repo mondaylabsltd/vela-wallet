@@ -767,6 +767,12 @@ object I18nKeys {
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
         const val TX_RELAY_FUNDING = "send.txRelayFunding"
+        /**
+         * Spec 099 R6: the relay has the operation but has not put it on the
+         * network yet (the core's `landing_pace` says `waiting`) — said in
+         * place of "waiting for confirmation", with no chain countdown.
+         */
+        const val TX_RELAY_SENDING = "send.txRelaySending"
         const val TX_REJECTED_FEES = "send.txRejectedFees"
         const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
         const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
@@ -1148,6 +1154,28 @@ object I18nKeys {
         const val NAV_EXPLORE = "componentsUi.mainNav.explore"
         const val NAV_SETTINGS = "componentsUi.mainNav.settings"
         const val ACTION_SEND = "componentsUi.dock.send"
+    }
+
+    /**
+     * Spec 099 FR-014: a tab's status entry and its panel. The page, wallet
+     * and reason lines arrive as the core's keys (`DbrFailureNote.key`, and
+     * the vocabulary's own on `DbrPageState` / `DbrProviderState` /
+     * `DbrReason`); these are the words code names itself.
+     */
+    object BrowserStatus {
+        /** The status line's Details, and the panel's title. */
+        const val TITLE = "componentsUi.browserStatus.title"
+        const val REQUESTS = "componentsUi.browserStatus.requests"
+        const val NO_REQUESTS = "componentsUi.browserStatus.noRequests"
+        const val COPY = "componentsUi.browserStatus.copy"
+        const val COPIED = "componentsUi.browserStatus.copied"
+        /** A suspended tab shown again (FR-004), until the person leaves it. */
+        const val RELOADED = "componentsUi.browserStatus.reloaded"
+
+        /** Spec 099 R8: the signing sheet's words for a passkey that failed, by the core's signer kind. */
+        const val REASON_SIGNER_UNAVAILABLE = "componentsUi.browserStatus.reason.signerUnavailable"
+        const val REASON_SIGNER_NOT_DISCOVERABLE = "componentsUi.browserStatus.reason.signerNotDiscoverable"
+        const val REASON_SIGNER_FAILED = "componentsUi.browserStatus.reason.signerFailed"
     }
 
     /** The in-app browser's words that code names (the rest arrive as the core's `reason_key`). */

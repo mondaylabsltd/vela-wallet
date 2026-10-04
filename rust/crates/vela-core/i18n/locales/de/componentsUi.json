@@ -219,7 +219,18 @@
       "refused": "Das Netzwerk hat sie abgelehnt – es wurde nichts gesendet.",
       "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
       "openSigner": "Auf der Signaturseite bestätigen",
-      "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung."
+      "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung.",
+      "confirmBlock": {
+        "accountSwitching": "Wechsel zum Konto der Website…",
+        "answered": "Diese Anfrage ist beendet — zum Abschließen schließen",
+        "answeredRetry": "Nicht geklappt — tippe auf Erneut versuchen",
+        "reading": "Anfrage wird gelesen…",
+        "approvalChoice": "Wähle zuerst einen Freigabebetrag",
+        "batchUnsettled": "Jeder Aufruf im Batch wird geprüft…",
+        "feeMeasuring": "Netzwerkgebühr wird berechnet…",
+        "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
+        "feeShort": "Dieser Coin reicht nicht für die Gebühr — wähle einen anderen"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",
@@ -435,6 +446,55 @@
       "window": "Fenster",
       "minimize": "Im Dock ablegen",
       "closeWindow": "Fenster schließen"
+    },
+    "browserStatus": {
+      "title": "Tab-Status",
+      "page": {
+        "blank": "Noch keine Seite",
+        "loading": "Lädt",
+        "ready": "Seite geladen",
+        "crashed": "Seite angehalten"
+      },
+      "provider": {
+        "pending": "Wallet: wird geprüft",
+        "offered": "Wallet auf dieser Seite verfügbar",
+        "insecureOrigin": "Wallet nicht angeboten: Seite nicht sicher",
+        "noHello": "Wallet nicht angeboten: Velas Skript lief nicht"
+      },
+      "reason": {
+        "navigatedAway": "Die Seite hat vor der Antwort gewechselt",
+        "pageCrashed": "Die Seite funktioniert nicht mehr",
+        "walletWithdrawn": "Debug-Modus aus — die Wallet hat diese Seite verlassen",
+        "insecureOrigin": "Signieren braucht eine sichere Seite",
+        "notConnected": "Diese Website ist nicht verbunden",
+        "accountMismatch": "Die Website wollte ein Konto, das sie nicht erhalten hat",
+        "noAccount": "Kein Wallet-Konto zum Verbinden",
+        "consentBusy": "Eine Anfrage einer anderen Website ist offen",
+        "unsupportedMethod": "Vela unterstützt diese Anfrage nicht",
+        "unknownChain": "Dieses Netzwerk ist nicht in Vela",
+        "badParams": "Die Anfrage ist fehlerhaft",
+        "tooManyReads": "Zu viele Anfragen auf einmal",
+        "unknownBatch": "Vela hat diesen Batch nicht gesendet",
+        "walletRefused": "Vela hat diese Anfrage abgelehnt",
+        "noEndpoint": "Der RPC des Netzwerks hat nicht geantwortet",
+        "timedOut": "Zeitüberschreitung beim RPC des Netzwerks",
+        "rateLimited": "Der RPC des Netzwerks drosselt Anfragen",
+        "endpointError": "Der RPC des Netzwerks meldet einen Fehler",
+        "reverted": "On-Chain zurückgesetzt (revert)",
+        "rejectedByPerson": "Du hast abgelehnt",
+        "relayRefused": "Velas Relay hat abgelehnt — nichts wurde gesendet",
+        "relayUnreachable": "Velas Relay nicht erreichbar — nichts wurde gesendet",
+        "notConfirmedYet": "Gesendet, noch nicht bestätigt",
+        "relayFailed": "Velas Relay konnte es nicht annehmen",
+        "signerUnavailable": "Passkeys sind hier nicht nutzbar",
+        "signerNotDiscoverable": "Dieser Passkey kann hier nicht signieren",
+        "signerFailed": "Der Passkey ist fehlgeschlagen"
+      },
+      "requests": "Letzte Anfragen",
+      "noRequests": "Noch keine Anfragen",
+      "copy": "Details kopieren",
+      "copied": "Kopiert",
+      "reloaded": "Neu geladen, um Speicher zu sparen"
     }
   }
 }

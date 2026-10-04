@@ -304,6 +304,7 @@
   "txSubmitted": "Giao dịch đã được gửi lên mạng",
   "txSlowConfirm": "Lâu hơn bình thường, vui lòng đợi...",
   "txRelayFunding": "Relay đang nạp thêm gas trên mạng này. Giao dịch của bạn sẽ được gửi ngay khi gas về.",
+  "txRelaySending": "Relay của Vela đang gửi lên mạng…",
   "txWaitingConfirm": "Đang chờ blockchain xác nhận...",
   "txElapsed": "Đã trôi qua {{elapsed}}s — sắp xong",
   "txRemaining": "Còn ~{{remaining}}s",
@@ -1407,7 +1408,18 @@
    "refused": "Mạng đã từ chối — chưa có gì được gửi đi.",
    "unknownOutcome": "Sau 24 giờ vẫn chưa xác nhận.",
    "openSigner": "Xác nhận ở trang ký",
-   "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối."
+   "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối.",
+   "confirmBlock": {
+    "accountSwitching": "Đang chuyển sang tài khoản của trang…",
+    "answered": "Yêu cầu này đã kết thúc — hãy đóng lại",
+    "answeredRetry": "Chưa thành công — chạm Thử lại",
+    "reading": "Đang đọc yêu cầu…",
+    "approvalChoice": "Hãy chọn hạn mức phê duyệt trước",
+    "batchUnsettled": "Đang kiểm tra từng lệnh gọi trong lô…",
+    "feeMeasuring": "Đang tính phí mạng…",
+    "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
+    "feeShort": "Coin này không đủ trả phí — hãy chọn coin khác"
+   }
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",
@@ -1623,6 +1635,55 @@
    "window": "Cửa sổ",
    "minimize": "Thu nhỏ",
    "closeWindow": "Đóng cửa sổ"
+  },
+  "browserStatus": {
+   "title": "Trạng thái tab",
+   "page": {
+    "blank": "Chưa có trang",
+    "loading": "Đang tải",
+    "ready": "Đã tải trang",
+    "crashed": "Trang đã dừng"
+   },
+   "provider": {
+    "pending": "Ví: đang kiểm tra",
+    "offered": "Trang này dùng được ví",
+    "insecureOrigin": "Không cung cấp ví: trang không an toàn",
+    "noHello": "Không cung cấp ví: script của Vela không chạy"
+   },
+   "reason": {
+    "navigatedAway": "Trang đã chuyển đi trước khi có trả lời",
+    "pageCrashed": "Trang đã ngừng hoạt động",
+    "walletWithdrawn": "Chế độ gỡ lỗi đã tắt — ví đã rời trang này",
+    "insecureOrigin": "Ký cần một trang an toàn",
+    "notConnected": "Trang này chưa kết nối",
+    "accountMismatch": "Trang yêu cầu tài khoản chưa được cấp",
+    "noAccount": "Không có tài khoản ví để kết nối",
+    "consentBusy": "Đang có yêu cầu của trang khác",
+    "unsupportedMethod": "Vela không hỗ trợ yêu cầu này",
+    "unknownChain": "Mạng này không có trong Vela",
+    "badParams": "Yêu cầu sai định dạng",
+    "tooManyReads": "Quá nhiều yêu cầu cùng lúc",
+    "unknownBatch": "Vela không gửi lô này",
+    "walletRefused": "Vela đã từ chối yêu cầu này",
+    "noEndpoint": "RPC của mạng không trả lời",
+    "timedOut": "RPC của mạng quá thời gian",
+    "rateLimited": "RPC của mạng đang giới hạn yêu cầu",
+    "endpointError": "RPC của mạng trả về lỗi",
+    "reverted": "Giao dịch bị hoàn tác trên chuỗi",
+    "rejectedByPerson": "Bạn đã từ chối",
+    "relayRefused": "Relay của Vela đã từ chối — chưa gửi gì",
+    "relayUnreachable": "Không kết nối được relay của Vela — chưa gửi gì",
+    "notConfirmedYet": "Đã gửi, chưa xác nhận",
+    "relayFailed": "Relay của Vela không nhận được",
+    "signerUnavailable": "Không dùng được passkey ở đây",
+    "signerNotDiscoverable": "Passkey này không ký được ở đây",
+    "signerFailed": "Xác thực passkey thất bại"
+   },
+   "requests": "Yêu cầu gần đây",
+   "noRequests": "Chưa có yêu cầu",
+   "copy": "Sao chép chi tiết",
+   "copied": "Đã sao chép",
+   "reloaded": "Đã tải lại để tiết kiệm bộ nhớ"
   }
  },
  "settingsModals": {

@@ -1405,6 +1405,9 @@ pub struct SendInputs<'a> {
     /// The speed control (spec 068), as the `fee_speed` core decided it.
     /// `None` draws none.
     pub speed: Option<&'a SpeedInputs>,
+    /// When the relay put the send on the network, as the tracker learned it
+    /// (spec 099 R6) — the landing's countdown starts there, never before.
+    pub relay_sent_at_ms: Option<f64>,
 }
 
 /// The speed core's view, and the fee session pricing each tier — whose
@@ -2025,6 +2028,7 @@ mod sweep_tests {
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
+            relay_sent_at_ms: None,
         }
     }
 
@@ -2313,6 +2317,7 @@ mod treasury_tests {
                 identity_name: "MultiTest",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
+                relay_sent_at_ms: None,
             };
 
             let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
@@ -2376,6 +2381,7 @@ mod treasury_tests {
                     identity_name: "MultiTest",
                     identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                     speed: None,
+                    relay_sent_at_ms: None,
                 };
                 let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
                 assert_eq!(notice.title.as_ref(), Some(&s.unreachable_title));
@@ -3772,14 +3778,19 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         };
     }
     if status == Some(SendReceiptStatus::Submitted) {
-        let eta = send.receipt.as_ref().and_then(|receipt| {
-            let (at, typical) = (receipt.submitted_at_ms?, receipt.typical_inclusion_s?);
-            let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
-            Some((elapsed, u64::from(typical)))
-        });
+        // Spec 099 R6: the core's one countdown, from the relay's send.
+        let typical = send
+            .receipt
+            .as_ref()
+            .and_then(|receipt| receipt.typical_inclusion_s);
+        let pace = vela_core::app::tx_tracker::landing_pace(
+            i.relay_sent_at_ms,
+            typical,
+            crate::executor::now_ms(),
+        );
         return SendReceipt {
             stage: ReceiptStage::Submitted,
-            progress: eta.and_then(|(elapsed, typical)| ring_progress(elapsed, typical)),
+            progress: pace.progress,
             explorer: None,
             cta_accent: false,
             breakdown_title: breakdown_title.clone(),
@@ -3792,18 +3803,25 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 // Spec 038 #D3: count, don't spin. The core hands over when the
                 // relay accepted the op and this chain's usual time; the shell
                 // owns the clock and the sentences are the corpus's.
-                let mut lines = vec![
-                    held.or_else(|| funding.clone())
-                        .unwrap_or_else(|| s.tx_waiting_confirm.clone()),
-                ];
+                use vela_core::app::tx_tracker::LandingLine;
+                // Before the relay has sent it, the landing says the relay is
+                // sending it — never a chain's countdown over the relay's own
+                // queue (spec 099 R6).
+                let waiting = pace.line == LandingLine::Waiting;
+                let mut lines = vec![held.or_else(|| funding.clone()).unwrap_or_else(|| {
+                    if waiting {
+                        s.tx_relay_sending.clone()
+                    } else {
+                        s.tx_waiting_confirm.clone()
+                    }
+                })];
                 // Nothing is on the network while the relay funds itself, so
                 // there is no confirmation time to count down.
                 if funding.is_none()
-                    && let Some(receipt) = send.receipt.as_ref()
-                    && let (Some(at), Some(typical)) =
-                        (receipt.submitted_at_ms, receipt.typical_inclusion_s)
+                    && !waiting
+                    && pace.line != LandingLine::None
+                    && let Some(typical) = typical
                 {
-                    let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
                     lines.push(
                         fill(
                             &fill(&s.tx_typical_time, "chainName", &chain_name(chain_id)),
@@ -3812,22 +3830,13 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                         )
                         .into(),
                     );
-                    // Inside the usual time the line counts DOWN — "~9s
-                    // remaining" is a promise with an end; "almost there"
-                    // waits until the usual time has passed, which is when it
-                    // is true (the web's `etaLines`).
-                    let typical = u64::from(typical);
-                    lines.push(if elapsed < typical {
-                        fill(
-                            &s.tx_remaining,
-                            "remaining",
-                            &(typical - elapsed).to_string(),
-                        )
-                        .into()
-                    } else if elapsed < typical * 2 {
-                        fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
-                    } else {
-                        s.tx_slow_confirm.clone()
+                    let seconds = pace.seconds.to_string();
+                    lines.push(match pace.line {
+                        LandingLine::Remaining => {
+                            fill(&s.tx_remaining, "remaining", &seconds).into()
+                        }
+                        LandingLine::Elapsed => fill(&s.tx_elapsed, "elapsed", &seconds).into(),
+                        _ => s.tx_slow_confirm.clone(),
                     });
                 }
                 lines
@@ -3860,13 +3869,14 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 /// never gets there (about 70% at the chain's typical time, 86% at twice it, a
 /// 92% ceiling), so only the confirmation closes the ring. `None` without a
 /// typical time, and the ring roams instead of filling.
+///
+/// The core's curve (`tx_tracker::landing_pace`, spec 099 R6).
 #[must_use]
 pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
-    if typical_s == 0 {
-        return None;
-    }
-    let elapsed = elapsed_s as f32;
-    Some(0.92 * (1. - (-1.4 * elapsed / typical_s.max(1) as f32).exp()))
+    let typical = u16::try_from(typical_s).ok()?;
+    #[allow(clippy::cast_precision_loss, reason = "seconds as ms")]
+    let now = elapsed_s as f64 * 1000.0;
+    vela_core::app::tx_tracker::landing_pace(Some(0.0), Some(typical), now).progress
 }
 
 /// The coins a sweep's receipt lists (spec 097 F, S3): every coin the
@@ -4558,6 +4568,7 @@ mod tests {
                 identity_name: "Golden",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
+                relay_sent_at_ms: None,
             })
             .recipient_tag
         };
@@ -4623,6 +4634,7 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
+            relay_sent_at_ms: None,
         })
     }
 
@@ -4736,6 +4748,7 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
+            relay_sent_at_ms: None,
         });
         let title = s.recipients(2);
         assert_eq!(receipt.breakdown_title.as_deref(), Some(title.as_str()));
@@ -4795,9 +4808,11 @@ mod tests {
             "the ordinary wait must not stand in for the hold"
         );
 
-        // No hold: the ordinary wait, unchanged.
+        // No hold, and no word yet that the relay sent it (spec 099 R6): the
+        // relay is sending it, and nothing counts down.
         let plain = receipt_with(SendReceiptStatus::Submitted, None);
-        assert_eq!(plain.captions, vec![s.tx_waiting_confirm]);
+        assert_eq!(plain.captions, vec![s.tx_relay_sending.clone()]);
+        assert_eq!(plain.progress, None);
     }
 
     /// A fee rejection is not a generic failure: nothing was sent, and the
@@ -6936,6 +6951,7 @@ mod speed_tests {
             identity_name: "Speed",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed,
+            relay_sent_at_ms: None,
         }
     }
 
@@ -7150,6 +7166,7 @@ mod parity_tests {
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
+            relay_sent_at_ms: None,
         })
     }
 
@@ -7708,6 +7725,7 @@ mod payee_tests {
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
+            relay_sent_at_ms: None,
         };
         f(&inputs, &s)
     }

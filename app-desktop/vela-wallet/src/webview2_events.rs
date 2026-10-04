@@ -22,8 +22,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2, ICoreWebView2_14, ICoreWebView2_18, ICoreWebView2NewWindowRequestedEventArgs3,
 };
 use webview2_com::{
-    CallDevToolsProtocolMethodCompletedHandler, ContentLoadingEventHandler,
-    HistoryChangedEventHandler, LaunchingExternalUriSchemeEventHandler,
+    ContentLoadingEventHandler, HistoryChangedEventHandler, LaunchingExternalUriSchemeEventHandler,
     NavigationCompletedEventHandler, NavigationStartingEventHandler,
     NewWindowRequestedEventHandler, ProcessFailedEventHandler,
     ServerCertificateErrorDetectedEventHandler, take_pwstr,
@@ -349,39 +348,6 @@ pub fn subscribe_new_windows(
     Ok(())
 }
 
-/// Forget every entry of the view's history but the one on screen (083 W15):
-/// one view serves every tab, so the entries behind a tab's first page were
-/// other tabs' pages, and Back went there. DevTools'
-/// `Page.resetNavigationHistory`: wry has no call for it. `done` hears whether
-/// the engine did it.
-pub fn forget_history_behind(
-    webview: &ICoreWebView2,
-    done: impl FnOnce(bool) + 'static,
-) -> windows_core::Result<()> {
-    let handler =
-        CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, reply| {
-            done(devtools_succeeded(result.is_ok(), &reply));
-            Ok(())
-        }));
-    // SAFETY: a COM call on the view, on its UI thread; the handler runs later,
-    // on the same thread.
-    unsafe {
-        webview.CallDevToolsProtocolMethod(
-            windows_core::w!("Page.resetNavigationHistory"),
-            windows_core::w!("{}"),
-            &handler,
-        )
-    }
-}
-
-/// A DevTools method's answer: the call went through, and the protocol did
-/// not answer with its error object (`{"code":…,"message":…}`).
-fn devtools_succeeded(call_ok: bool, reply: &str) -> bool {
-    call_ok
-        && serde_json::from_str::<serde_json::Value>(reply)
-            .is_ok_and(|reply| reply.is_object() && reply.get("code").is_none())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,19 +407,5 @@ mod tests {
         );
         assert_eq!(navigations.certificate("https://cdn.example/x.js"), None);
         assert_eq!(Navigations::default().certificate(SITE), None);
-    }
-
-    /// 083 W15: the history counts as forgotten only when the protocol says
-    /// it was. A runtime that has no such method answers with its error
-    /// object, and the log says the engine kept it.
-    #[test]
-    fn a_history_reset_counts_only_when_the_engine_did_it() {
-        assert!(devtools_succeeded(true, "{}"));
-        assert!(!devtools_succeeded(
-            true,
-            r#"{"code":-32601,"message":"'Page.resetNavigationHistory' wasn't found"}"#
-        ));
-        assert!(!devtools_succeeded(false, "{}"));
-        assert!(!devtools_succeeded(true, ""));
     }
 }

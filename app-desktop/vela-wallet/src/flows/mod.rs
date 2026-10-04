@@ -454,6 +454,8 @@ pub struct FlowStrings {
     pub tx_held_fees: SharedString,
     /// The relay is topping up its gas before it sends (098 follow-up).
     pub tx_relay_funding: SharedString,
+    /// The landing before the relay has sent (spec 099 R6).
+    pub tx_relay_sending: SharedString,
     pub tx_rejected_fees: SharedString,
     pub tx_typical_time: String,
     /// Spec 038 #D3: the two lines beside the usual-time sentence.
@@ -826,6 +828,7 @@ impl FlowStrings {
             tx_waiting_confirm: s("send.txWaitingConfirm"),
             tx_held_fees: s("send.txHeldFees"),
             tx_relay_funding: s("send.txRelayFunding"),
+            tx_relay_sending: s("send.txRelaySending"),
             tx_rejected_fees: s("send.txRejectedFees"),
             tx_typical_time: raw("send.txTypicalTime"),
             tx_slow_confirm: s("send.txSlowConfirm"),

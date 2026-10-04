@@ -44,7 +44,7 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { browserSiteLabel, feeFailureReasonKey } from '$lib/core/kernels';
+import { browserSiteLabel, feeFailureReasonKey, signConfirmState } from '$lib/core/kernels';
 import { estimateRevertsFor } from '$lib/services/estimate-verdict';
 import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
@@ -1071,17 +1071,23 @@ export function signingStatus(
 	const lines = (...parts: (string | undefined)[]) =>
 		parts.filter((part): part is string => part !== undefined && part !== '');
 	const error = sign.error;
+	// Spec 099 R8: a passkey that failed is a failure of the request too,
+	// said as the signer's.
+	const signerReason = error === null ? undefined : m.signerReasons[error.kind];
 	if (
 		error !== null &&
 		error.kind !== 'user_rejected' &&
-		(sign.pending_op_hash !== null || error.kind === 'submit_failed')
+		(sign.pending_op_hash !== null || error.kind === 'submit_failed' || signerReason !== undefined)
 	) {
 		return {
 			stage: 'failed',
 			title: m.receipt.failed,
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
 			// again": the same op is refused the same way.
-			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
+			captions: lines(
+				summary,
+				sign.failure_refused ? m.receipt.refused : (signerReason ?? m.status.failedHint)
+			),
 			closable: true,
 			// Spec 096 F8: the page waits for this close to hear the failure;
 			// "Try again" only when the core says nothing was sent and it was
@@ -1190,19 +1196,13 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const name = label.name;
 	const own = ownRequest;
 
-	// Rule 1: the gate is an AND. The core may allow the request; the guard may
-	// still be waiting for a cap; the fee may still be in flight.
-	const feeReady =
-		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
-	// Spec 096 F7: and the core has finished reading the request — a slide
-	// that armed under "Loading…" signed what nobody had been shown yet.
-	const enabled =
-		sign.confirm_gate_open &&
-		guard.confirm_allowed &&
-		feeReady &&
-		!clear.resolving &&
-		clear.surface !== 'loading' &&
-		!sign.is_signing;
+	// Rule 1: the gate is an AND — the request, the guard, the reading and the
+	// fee at the speed in force. Spec 099 R7: the AND is the core's
+	// (`sign_confirm::confirm_state`), the same on every client, and it says
+	// which part is shut; the line under a shut slide is its corpus key.
+	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
+	const enabled = confirmState?.enabled === true;
+	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
 	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
@@ -1257,7 +1257,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 					: clear.confirm.type === 'confirm_intent'
 						? clear.confirm.intent
 						: m.confirmPlain,
-			enabled
+			enabled,
+			...(note ? { note } : {})
 		},
 		closeLabel: m.close,
 		...(status ? { status } : {}),

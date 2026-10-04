@@ -73,8 +73,133 @@ struct DbrTabViewWire: Decodable, Equatable, Identifiable {
     let secure: Bool
     /// The renderer died. Cleared by the next document's hello.
     let crashed: Bool
+    /// Something of this tab's is open — a request, a read, a consent, a
+    /// signature (spec 099 R2): its engine is never suspended.
+    var busy: Bool = false
+    /// The browser layer (`DbrPageState` wire name: `blank`, `loading`,
+    /// `ready`, `crashed`). A string, so a state this build has never heard of
+    /// cannot fail the whole view.
+    var page: String = "blank"
+    /// The provider layer (`DbrProviderState` wire name: `pending`,
+    /// `offered`, `insecure_origin`, `no_hello`).
+    var provider: String = "pending"
+    var openRequests: Int = 0
+    /// Failures worth attention among the tab's last requests.
+    var failedRecent: Int = 0
+    /// The latest of them — the status entry's line.
+    var lastFailure: DbrFailureNoteWire? = nil
 
     var id: String { tab }
+}
+
+/// The status entry's one line about a tab's latest trouble
+/// (`dapp_record::DbrFailureNote`). `layer` and `reason` are wire names;
+/// `key` is the corpus line the core chose for the reason.
+struct DbrFailureNoteWire: Decodable, Equatable {
+    let layer: String
+    let reason: String
+    let method: String
+    let key: String
+}
+
+/// One request a page sent (`dapp_record::DbrRequestRow`). Every enum is its
+/// wire name, for the reason `DbrTabViewWire.page` is.
+struct DbrRequestRowWire: Decodable, Equatable, Identifiable {
+    /// The page's JSON-RPC id.
+    let id: String
+    let method: String
+    /// `local` · `consent` · `read` · `relay_read` · `signing`.
+    let `class`: String
+    /// The shell's clock; `0` = unknown.
+    let startedMs: Double
+    let endedMs: Double?
+    /// `open` · `answered` · `failed`.
+    let outcome: String
+    let code: Int?
+    let layer: String?
+    let reason: String?
+
+    /// Milliseconds it took, when both ends are known (the core's
+    /// `DbrRequestRow::duration_ms`).
+    var durationMs: Double? {
+        guard let endedMs, startedMs > 0, endedMs >= startedMs else { return nil }
+        return endedMs - startedMs
+    }
+}
+
+/// The inspected tab, whole (`dapp_record::DbrInspectorView`): the status
+/// panel draws it, and `report` is what Copy copies.
+struct DbrInspectorViewWire: Decodable, Equatable {
+    let tab: String
+    let origin: String?
+    let page: String
+    let provider: String
+    let connected: Bool
+    let chainId: Int
+    /// Oldest first.
+    let rows: [DbrRequestRowWire]
+    /// The record as plain text, the same on every client.
+    let report: String
+}
+
+/// The corpus lines of the record's vocabulary — `dapp_record`'s
+/// `DbrReason::key`, `DbrPageState::key` and `DbrProviderState::key`,
+/// mirrored name for name (the core hands the key over only for a tab's
+/// `last_failure`; the inspector's rows carry the reason's wire name).
+/// `BrowserStatusTests` checks every line exists and that the core's own
+/// key agrees for the reasons it can be driven to.
+enum DbrRecordWords {
+    static let reasons: [String: String] = [
+        "navigated_away": "componentsUi.browserStatus.reason.navigatedAway",
+        "page_crashed": "componentsUi.browserStatus.reason.pageCrashed",
+        // Never shown — a closed tab has no panel — so it has no line of its own.
+        "tab_closed": "componentsUi.browserStatus.reason.navigatedAway",
+        "wallet_withdrawn": "componentsUi.browserStatus.reason.walletWithdrawn",
+        "insecure_origin": "componentsUi.browserStatus.reason.insecureOrigin",
+        "not_connected": "componentsUi.browserStatus.reason.notConnected",
+        "account_mismatch": "componentsUi.browserStatus.reason.accountMismatch",
+        "no_account": "componentsUi.browserStatus.reason.noAccount",
+        "consent_busy": "componentsUi.browserStatus.reason.consentBusy",
+        "unsupported_method": "componentsUi.browserStatus.reason.unsupportedMethod",
+        "unknown_chain": "componentsUi.browserStatus.reason.unknownChain",
+        "bad_params": "componentsUi.browserStatus.reason.badParams",
+        "too_many_reads": "componentsUi.browserStatus.reason.tooManyReads",
+        "unknown_batch": "componentsUi.browserStatus.reason.unknownBatch",
+        "wallet_refused": "componentsUi.browserStatus.reason.walletRefused",
+        "no_endpoint": "componentsUi.browserStatus.reason.noEndpoint",
+        "timed_out": "componentsUi.browserStatus.reason.timedOut",
+        "rate_limited": "componentsUi.browserStatus.reason.rateLimited",
+        "endpoint_error": "componentsUi.browserStatus.reason.endpointError",
+        "reverted": "componentsUi.browserStatus.reason.reverted",
+        "rejected_by_person": "componentsUi.browserStatus.reason.rejectedByPerson",
+        "relay_refused": "componentsUi.browserStatus.reason.relayRefused",
+        "relay_unreachable": "componentsUi.browserStatus.reason.relayUnreachable",
+        "not_confirmed_yet": "componentsUi.browserStatus.reason.notConfirmedYet",
+        "relay_failed": "componentsUi.browserStatus.reason.relayFailed",
+        "signer_unavailable": "componentsUi.browserStatus.reason.signerUnavailable",
+        "signer_not_discoverable": "componentsUi.browserStatus.reason.signerNotDiscoverable",
+        "signer_failed": "componentsUi.browserStatus.reason.signerFailed",
+    ]
+
+    static let pages: [String: String] = [
+        "blank": "componentsUi.browserStatus.page.blank",
+        "loading": "componentsUi.browserStatus.page.loading",
+        "ready": "componentsUi.browserStatus.page.ready",
+        "crashed": "componentsUi.browserStatus.page.crashed",
+    ]
+
+    static let providers: [String: String] = [
+        "pending": "componentsUi.browserStatus.provider.pending",
+        "offered": "componentsUi.browserStatus.provider.offered",
+        "insecure_origin": "componentsUi.browserStatus.provider.insecureOrigin",
+        "no_hello": "componentsUi.browserStatus.provider.noHello",
+    ]
+
+    /// `nil` for a name this build has never heard of — the panel then shows
+    /// the code rather than a guess.
+    static func reason(_ name: String?) -> String? { name.flatMap { reasons[$0] } }
+    static func page(_ name: String) -> String? { pages[name] }
+    static func provider(_ name: String) -> String? { providers[name] }
 }
 
 /// One connected site — Settings' list.
@@ -102,6 +227,8 @@ struct DbrViewWire: Decodable, Equatable {
     let sites: [DbrSiteViewWire]
     let signing: DbrSigningViewWire?
     let queuedSigning: Int
+    /// The inspected tab's whole record (`inspector_opened`), else `nil`.
+    var inspector: DbrInspectorViewWire? = nil
 
     static let empty = DbrViewWire(
         ready: false, consent: nil, tabs: [], sites: [], signing: nil, queuedSigning: 0

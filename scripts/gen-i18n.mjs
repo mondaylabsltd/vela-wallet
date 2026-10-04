@@ -533,9 +533,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the five lines above needed under SC-005, instead of a budget move. The
 //   four still read (cancel, showQr, autoCheckNote, checking) stay. Same
 //   branches: 1846 - 26 = 1820.
-if (PATHS.length !== 1820) fail(`expected 1820 paths (1728 leaf + 92 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1728) fail(`expected 1728 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 92) fail(`expected 92 branch paths, got ${branchSet.size}`);
+// 1876 (099, 2026-10-04): the dApp browser's layers in words — 41 leaves under
+//   a new `componentsUi.browserStatus` branch (with its `page`, `provider` and
+//   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
+//   branch (why the slide is shut), and `send.txRelaySending` (the landing
+//   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
+if (PATHS.length !== 1876) fail(`expected 1876 paths (1779 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1779) fail(`expected 1779 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
