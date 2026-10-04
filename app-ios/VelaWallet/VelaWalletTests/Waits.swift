@@ -25,6 +25,12 @@
 //  `Task.sleep` throws at once — holding the main actor, and the whole run
 //  would hang instead of failing one test.
 //
+//  A clock can also sit inside the code under test. The fee machine bounds a
+//  whole quote at 15 s (spec 094 S9) and the shell ran that timer on the wall
+//  clock, so a starved runner failed scripted quotes (2026-10-04, twice). A
+//  `FeeStore` under a scripted relay is built with `timers: .stopped`: no
+//  time passes, and `isIdle` does not count the timers it holds.
+//
 
 import Foundation
 

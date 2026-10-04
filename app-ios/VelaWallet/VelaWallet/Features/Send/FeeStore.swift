@@ -110,18 +110,50 @@ final class FeeStore {
         }
     }
 
+    /// How the timers the fee machine asks for run out: `start_ttl` (a
+    /// quote's staleness) and `start_deadline` (the bound on a whole run,
+    /// spec 094 S9 — 15 s).
+    enum Timers {
+        /// The app's: each runs out on the wall clock, after its `ms`.
+        case wallClock
+        /// A test's, under a scripted relay: none runs out — no time passes.
+        /// A starved CI runner took longer than 15 s to hand a scripted quote
+        /// its answers, and the deadline failed it (`chain_read`,
+        /// `quote_unavailable`): a failure the code never had, measured on a
+        /// clock (`Waits.swift`). A timer held here is not in flight for
+        /// `isIdle` — nothing but time could answer it.
+        case stopped
+    }
+
+    /// A session's timers under `.stopped`: held until the machine abandons
+    /// them, never answered, and counted so `isIdle` tells them from a read.
+    @MainActor
+    private final class HeldTimers {
+        private(set) var count = 0
+
+        func hold() async {
+            count += 1
+            defer { count -= 1 }
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3_600)) }
+        }
+
+        nonisolated deinit {}
+    }
+
     /// One `fee_policy` session: in force, or a preview of another tier.
     @MainActor
     private final class Session {
         let key: Int
         let core: CoreStore<FeeViewWire>
+        let held: HeldTimers
         var view: FeeViewWire?
         var ask: Ask?
         var generation = 0
 
-        init(key: Int, core: CoreStore<FeeViewWire>) {
+        init(key: Int, core: CoreStore<FeeViewWire>, held: HeldTimers) {
             self.key = key
             self.core = core
+            self.held = held
         }
 
         /// The machine has no boot event of its own: its first event IS a
@@ -152,10 +184,10 @@ final class FeeStore {
     private var measured: (calls: String, changes: [[String: Any]])?
 
     /// No session has an effect in flight — the one in force, every speed
-    /// preview, the speed core (`CoreDriver.isIdle`). What a test waits on
-    /// instead of a clock.
+    /// preview, the speed core (`CoreDriver.isIdle`) — but timers a stopped
+    /// clock holds. What a test waits on instead of a clock.
     var isIdle: Bool {
-        inForce.core.isIdle && previews.allSatisfy { $0.core.isIdle } && speedCore.isIdle
+        ([inForce!] + previews).allSatisfy { $0.core.inFlight == $0.held.count } && speedCore.isIdle
     }
 
     /// Who is waiting for the quote in flight, and for which attempt.
@@ -169,18 +201,22 @@ final class FeeStore {
     /// The deadline in force. `nil` — a test's, whose relay is scripted and
     /// answers or does not by design — sets no clock under the quote: on a
     /// starved CI runner a scripted quote could otherwise outlast 45 s and be
-    /// reported as a failure the code never had (`Waits.swift`).
+    /// reported as a failure the code never had (`Waits.swift`). The core's
+    /// own timers are the other clock under it (`timers`).
     private let deadline: Duration?
+    private let timers: Timers
 
     init(
         relay: RelayClient,
         accounts: UserOpSpine.AccountPort,
         measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil },
-        settleDeadline: Duration? = FeeStore.settleDeadline
+        settleDeadline: Duration? = FeeStore.settleDeadline,
+        timers: Timers = .wallClock
     ) {
         self.executor = FeeExecutor(relay: relay, accounts: accounts, measureCall: measureCall)
         self.relay = relay
         self.deadline = settleDeadline
+        self.timers = timers
         self.inForce = newSession()
         self.speedCore = CoreStore(
             bridge: FeeSpeedCore(),
@@ -199,14 +235,22 @@ final class FeeStore {
         let key = nextKey
         nextKey += 1
         let executor = self.executor
+        let held = HeldTimers()
+        let stopped = timers == .stopped
         let core = CoreStore<FeeViewWire>(
             bridge: FeePolicyCore(),
-            perform: { operation in await executor.perform(operation) },
+            perform: { operation in
+                if stopped, FeeExecutor.timers.contains(operation["type"] as? String ?? "") {
+                    await held.hold()
+                    return FeeExecutor.neutralAnswer(operation)
+                }
+                return await executor.perform(operation)
+            },
             onView: { [weak self] view in self?.commit(key: key, view) },
             onFault: { print("[vela-wallet] fee_policy fault: \($0)") },
             keepsJson: true
         )
-        return Session(key: key, core: core)
+        return Session(key: key, core: core, held: held)
     }
 
     private func session(_ key: Int) -> Session? {

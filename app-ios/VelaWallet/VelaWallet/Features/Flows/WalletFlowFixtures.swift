@@ -696,6 +696,26 @@ enum WalletFlowFixtures {
         )
     }
 
+    /// The confirm's To row. A split names its count; a single send a payee
+    /// the public registry names — the name beside the face, as From, over
+    /// whose word it is and the short address, in the body face (issue #423);
+    /// a sweep a payee nobody named — the short address alone, in mono.
+    static func toFact(_ mode: SendFormMode, loc: Loc) -> FactRowModel {
+        switch mode {
+        case .split:
+            FactRowModel(label: loc.t("send.toLabel"), value: loc.t("send.recipientCount_other", vars: ["count": "3"]))
+        case .single:
+            FactRowModel(
+                label: loc.t("send.toLabel"),
+                value: "Alice",
+                lead: .identicon(aliceFull),
+                detail: "\(loc.t("send.velaUser")) · \(aliceDisplay)"
+            )
+        case .sweep:
+            FactRowModel(label: loc.t("send.toLabel"), value: aliceDisplay, lead: .identicon(aliceFull), mono: true)
+        }
+    }
+
     private static func sendConfirm(_ loc: Loc, mode: SendFormMode) -> SendConfirmModel {
         let estFee: String = switch mode {
         case .single: "~0.0021 ETH · ≈$0.55"
@@ -708,14 +728,7 @@ enum WalletFlowFixtures {
                 value: WalletFixtures.identity.name,
                 lead: .identicon(WalletFixtures.identity.addressFull)
             ),
-            FactRowModel(
-                label: loc.t("send.toLabel"),
-                value: mode == .split
-                    ? loc.t("send.recipientCount_other", vars: ["count": "3"])
-                    : aliceDisplay,
-                lead: mode == .split ? nil : .identicon(aliceFull),
-                mono: mode != .split
-            ),
+            toFact(mode, loc: loc),
             FactRowModel(
                 label: loc.t("componentsTx.detail.labelChain"),
                 value: networks[0].name,

@@ -49,6 +49,15 @@ class CoreHost<V : Any>(
     /** The machine's own failure variant, for an exception that escaped [perform]. */
     escapedFailure: (operation: JSONObject, error: Throwable) -> String,
     private val onFault: (Throwable) -> Unit = {},
+    /**
+     * Every committed view, in the core's order, on the driver's loop and
+     * before the effects that came with it start — for a view field that is
+     * an instruction rather than a state (the sign machine's tracker
+     * hand-off). [view] cannot carry one: a collector not scheduled between
+     * two commits sees only the second, and whatever rode the first is gone.
+     * Must not block.
+     */
+    private val onCommit: (V) -> Unit = {},
 ) {
     private val _view = MutableStateFlow(initial)
 
@@ -153,6 +162,8 @@ class CoreHost<V : Any>(
                 _view.value = it
                 viewEvents = driver.eventsApplied
                 _commits.value += 1
+                // A throw here would end the driver's loop: reported instead.
+                runCatching { onCommit(it) }.onFailure(onFault)
             }
             .onFailure(onFault)
     }

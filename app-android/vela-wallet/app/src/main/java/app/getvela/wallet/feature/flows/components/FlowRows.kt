@@ -37,7 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
-import app.getvela.wallet.core.format.cleanAmountEdit
+import app.getvela.wallet.core.format.amountFieldOf
+import app.getvela.wallet.core.format.cleanAmountFieldEdit
 import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -193,50 +194,27 @@ fun FactRow(
             maxLines = 1,
         )
         Spacer(modifier = Modifier.weight(1f))
-        when (val lead = fact.lead) {
-            is FactLead.Dot -> {
-                Box(
-                    modifier = Modifier
-                        .size(VelaIconSize.base)
-                        .background(lead.color, CircleShape),
-                )
-                Spacer(modifier = Modifier.width(VelaSpacing.sm))
-            }
-            is FactLead.Token -> {
-                TokenIcon(mark = lead.mark,
-                    inline = true,
-                )
-                Spacer(modifier = Modifier.width(VelaSpacing.sm))
-            }
-            is FactLead.Identicon -> {
-                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
-                Spacer(modifier = Modifier.width(VelaSpacing.sm))
-            }
-            null -> Unit
-        }
-        // Spec 093: further lines sit under the value, on its edge (a dApp's
-        // balance changes, one per coin); a spending cap with no limit is the
-        // risk to see.
-        Column(horizontalAlignment = Alignment.End) {
-            (listOf(fact.value) + fact.lines).forEach { line ->
-                Text(
-                    text = line,
-                    color = if (fact.danger) colors.errorBase else colors.fgBase,
-                    fontFamily = if (fact.mono) VelaMonoFontFamily else VelaFontFamily,
-                    fontWeight = VelaFontWeight.medium,
-                    fontSize = VelaTextSize.base,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End,
-                )
-            }
-            // Spec 097 F: the short address under a payee's name — its own
-            // line, so however long the name, the address stays on the row.
-            fact.detail?.let { detail ->
+        val detail = fact.detail
+        if (detail == null) {
+            FactLeadArt(fact.lead)
+            FactValues(fact)
+        } else {
+            // Spec 097 F / issue #423: a payee's avatar sits beside its NAME,
+            // on one line, as the From row's does; the line under it — whose
+            // word the name is and the short address ("Vela User ·
+            // 0x14fB…eA5c") — is the row's quiet second line, in the body
+            // face. Beside a two-line column the avatar floated between the
+            // lines, a long way from a short name, and the mono second line
+            // read like code. However long the name, this line stays whole.
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FactLeadArt(fact.lead)
+                    FactValues(fact)
+                }
                 Text(
                     text = detail,
                     color = colors.fgSubtle,
-                    fontFamily = VelaMonoFontFamily,
+                    fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                     maxLines = 1,
                     softWrap = false,
@@ -267,6 +245,56 @@ fun FactRow(
             modifier = Modifier.padding(bottom = VelaSpacing.lg),
         )
     }
+    }
+}
+
+/** A fact row's leading art — a chain dot, a token mark, an identicon — and the gap after it. */
+@Composable
+private fun FactLeadArt(lead: FactLead?) {
+    when (lead) {
+        is FactLead.Dot -> {
+            Box(
+                modifier = Modifier
+                    .size(VelaIconSize.base)
+                    .background(lead.color, CircleShape),
+            )
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+        }
+        is FactLead.Token -> {
+            TokenIcon(mark = lead.mark,
+                inline = true,
+            )
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+        }
+        is FactLead.Identicon -> {
+            IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+        }
+        null -> Unit
+    }
+}
+
+/**
+ * A fact row's value. Spec 093: further lines sit under it, on its edge (a
+ * dApp's balance changes, one per coin); a spending cap with no limit is the
+ * risk to see.
+ */
+@Composable
+private fun FactValues(fact: FactRowModel) {
+    val colors = VelaTheme.colors
+    Column(horizontalAlignment = Alignment.End) {
+        (listOf(fact.value) + fact.lines).forEach { line ->
+            Text(
+                text = line,
+                color = if (fact.danger) colors.errorBase else colors.fgBase,
+                fontFamily = if (fact.mono) VelaMonoFontFamily else VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.base,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+            )
+        }
     }
 }
 
@@ -412,9 +440,9 @@ fun RecipientCard(
             textAlign = TextAlign.End,
         )
         if (onAmountChange != null && recipient.amountValue != null) {
-            var typed by remember(recipient.id) { mutableStateOf(recipient.amountValue) }
+            var typed by remember(recipient.id) { mutableStateOf(amountFieldOf(recipient.amountValue)) }
             val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
-            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = recipient.amountValue }
+            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = amountFieldOf(recipient.amountValue) }
             // Issue #331: the field is a WELL (the web's `.amount-well`), a full
             // control's height, and the whole box is the target. It was the
             // bare figure: a line ~20dp tall whose "0" sat 8dp from the ✕, and
@@ -423,17 +451,21 @@ fun RecipientCard(
             // keyboard opening. The well is seen while it is wanted (empty, or
             // in hand), as on the web, so a filled row at rest reads as drawn.
             var focused by remember(recipient.id) { mutableStateOf(false) }
-            val well = typed.isEmpty() || focused
+            val well = typed.text.isEmpty() || focused
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    // Spec 073: the core's amount rule, as the send figure.
-                    val clean = cleanAmountEdit(next, typed)
-                    if (clean != null) {
-                        typed = clean
-                        sent.addLast(clean)
-                        if (sent.size > 256) sent.removeFirst()
-                        onAmountChange(clean)
+                    // Spec 073: the core's amount rule, as the send figure —
+                    // its caret too (issue #421: "." is "0.", "08" is "8").
+                    val edit = cleanAmountFieldEdit(next, typed)
+                    if (edit != null) {
+                        val changed = edit.text != typed.text
+                        typed = edit
+                        if (changed) {
+                            sent.addLast(edit.text)
+                            if (sent.size > 256) sent.removeFirst()
+                            onAmountChange(edit.text)
+                        }
                     }
                 },
                 singleLine = true,
@@ -452,7 +484,7 @@ fun RecipientCard(
                             .padding(horizontal = VelaSpacing.md),
                         contentAlignment = Alignment.CenterEnd,
                     ) {
-                        if (typed.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
+                        if (typed.text.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
                         inner()
                     }
                 },
