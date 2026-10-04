@@ -50,6 +50,7 @@
     "txSubmitted": "交易已送出至網路",
     "txSlowConfirm": "比平常久一些，請稍候…",
     "txRelayFunding": "中繼正在補充它在這條網路上的 gas，到帳後會馬上送出你的交易。",
+    "txRelaySending": "Vela 中繼正在把它送到網路…",
     "txWaitingConfirm": "等待區塊鏈確認中…",
     "txElapsed": "已過 {{elapsed}} 秒 — 快好了",
     "txRemaining": "約剩 {{remaining}} 秒",

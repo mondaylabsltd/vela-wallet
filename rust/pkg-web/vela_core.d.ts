@@ -843,10 +843,6 @@ export function feeRequoteDelayMs(failure: string, attempt: number): number | un
  */
 export function feeRequoteTimeoutMs(): number;
 
-/**
- * Issue 212: how long a chain's fee signals may be held, in ms — the one
- * number every shell's cache used to carry its own copy of.
- */
 export function feeSignalsCacheTtlMs(): number;
 
 /**
@@ -926,6 +922,13 @@ export function keccak256(data: Uint8Array): Uint8Array;
  * `vela_core::app::method_words`.
  */
 export function keyMethodWords(method: string, chooser: string, unlock: string): string | undefined;
+
+/**
+ * The landing's countdown (spec 099 R6), from the relay's send time: a
+ * `LandingPace` JSON. `typical_s` 0 = unknown, as `typicalInclusionSeconds`
+ * answers it.
+ */
+export function landingPace(sent_at_ms: number | null | undefined, typical_s: number, now_ms: number): string;
 
 /**
  * How long a logo that did not load stays failed, ms — `undefined` for the
@@ -1122,6 +1125,15 @@ export function sha256(data: Uint8Array): Uint8Array;
  * `undefined` for an error, a `null` answer or unreadable JSON.
  */
 export function signAnswered(payload_json: string): string | undefined;
+
+/**
+ * Issue 212: how long a chain's fee signals may be held, in ms — the one
+ * number every shell's cache used to carry its own copy of.
+ * May the signing slide arm, and if not why (spec 099 R7) — the one gate
+ * every client reads: the four views' JSON, the speed in force, a
+ * `ConfirmState` JSON back (`undefined` when a view does not read).
+ */
+export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null): string | undefined;
 
 /**
  * The ending of a request whose answer to the page was `payload_json` (the
@@ -1539,6 +1551,7 @@ export interface InitOutput {
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
     readonly logincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly logincore_new: () => number;
     readonly logincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1598,6 +1611,7 @@ export interface InitOutput {
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
     readonly signAnswered: (a: number, b: number) => [number, number];
+    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signInRoute: (a: number, b: number) => [number, number];

@@ -691,6 +691,9 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::FundingCancelled => "Gas account funding cancelled",
         SignErrorKind::SubmitFailed => "The transaction could not be submitted",
         SignErrorKind::StaleFeeQuote => "The fee quote expired",
+        SignErrorKind::SignerUnavailable => "No passkey can be used on this device",
+        SignErrorKind::SignerNotDiscoverable => "The passkey is not available for signing",
+        SignErrorKind::SignerFailed => "The passkey prompt failed",
     }
 }
 

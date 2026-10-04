@@ -219,7 +219,18 @@
       "refused": "네트워크가 거부했습니다 — 아무것도 전송되지 않았습니다.",
       "unknownOutcome": "24시간이 지나도 확인되지 않았습니다.",
       "openSigner": "서명 페이지에서 확인",
-      "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요."
+      "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요.",
+      "confirmBlock": {
+        "accountSwitching": "사이트 계정으로 전환 중…",
+        "answered": "이 요청은 끝났습니다 — 닫으세요",
+        "answeredRetry": "처리되지 않았습니다 — 다시 시도를 누르세요",
+        "reading": "요청을 읽는 중…",
+        "approvalChoice": "먼저 승인 금액을 고르세요",
+        "batchUnsettled": "배치의 각 호출을 확인 중…",
+        "feeMeasuring": "네트워크 수수료 계산 중…",
+        "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도",
+        "feeShort": "이 코인으로는 수수료가 부족합니다 — 다른 코인을 고르세요"
+      }
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",
@@ -435,6 +446,55 @@
       "window": "윈도우",
       "minimize": "최소화",
       "closeWindow": "윈도우 닫기"
+    },
+    "browserStatus": {
+      "title": "탭 상태",
+      "page": {
+        "blank": "페이지 없음",
+        "loading": "로드 중",
+        "ready": "페이지 로드됨",
+        "crashed": "페이지 멈춤"
+      },
+      "provider": {
+        "pending": "지갑: 확인 중",
+        "offered": "이 페이지에서 지갑 사용 가능",
+        "insecureOrigin": "지갑 미제공: 안전하지 않은 페이지",
+        "noHello": "지갑 미제공: Vela 스크립트가 실행되지 않음"
+      },
+      "reason": {
+        "navigatedAway": "응답 전에 페이지가 이동했습니다",
+        "pageCrashed": "페이지가 멈췄습니다",
+        "walletWithdrawn": "디버그 모드가 꺼져 지갑이 이 페이지에서 빠졌습니다",
+        "insecureOrigin": "서명하려면 안전한 페이지가 필요합니다",
+        "notConnected": "이 사이트는 연결되지 않았습니다",
+        "accountMismatch": "허용하지 않은 계정을 요청했습니다",
+        "noAccount": "연결할 지갑 계정이 없습니다",
+        "consentBusy": "다른 사이트의 요청이 열려 있습니다",
+        "unsupportedMethod": "Vela가 지원하지 않는 요청입니다",
+        "unknownChain": "Vela에 없는 네트워크입니다",
+        "badParams": "요청 형식이 잘못되었습니다",
+        "tooManyReads": "동시 요청이 너무 많습니다",
+        "unknownBatch": "Vela가 보낸 배치가 아닙니다",
+        "walletRefused": "Vela가 이 요청을 거부했습니다",
+        "noEndpoint": "네트워크 RPC가 응답하지 않습니다",
+        "timedOut": "네트워크 RPC 시간 초과",
+        "rateLimited": "네트워크 RPC가 요청을 제한 중입니다",
+        "endpointError": "네트워크 RPC가 오류를 반환했습니다",
+        "reverted": "온체인에서 되돌려졌습니다",
+        "rejectedByPerson": "거절했습니다",
+        "relayRefused": "Vela 릴레이가 거부 — 아무것도 보내지 않음",
+        "relayUnreachable": "Vela 릴레이에 연결 실패 — 아무것도 보내지 않음",
+        "notConfirmedYet": "보냄, 아직 미확정",
+        "relayFailed": "Vela 릴레이가 받지 못했습니다",
+        "signerUnavailable": "여기서는 패스키를 쓸 수 없습니다",
+        "signerNotDiscoverable": "이 패스키로는 여기서 서명할 수 없습니다",
+        "signerFailed": "패스키 인증에 실패했습니다"
+      },
+      "requests": "최근 요청",
+      "noRequests": "아직 요청 없음",
+      "copy": "세부 정보 복사",
+      "copied": "복사됨",
+      "reloaded": "메모리 절약을 위해 다시 로드함"
     }
   }
 }

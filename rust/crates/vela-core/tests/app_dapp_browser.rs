@@ -72,6 +72,7 @@ fn page(tab: &str, origin: &str, message: Value) -> Event {
         frame_origin: origin.to_owned(),
         is_main_frame: true,
         message_json: message.to_string(),
+        now_ms: 0.0,
     }
 }
 
@@ -545,7 +546,7 @@ fn rejecting_the_sheet_is_4001() {
         "eth_requestAccounts",
         json!([]),
     );
-    let answer = only_answer(&sut.dispatch(Event::ConsentRejected));
+    let answer = only_answer(&sut.dispatch(Event::ConsentRejected { now_ms: 0.0 }));
     assert_eq!(error_code(&answer), 4001);
     assert!(sut.view().sites.is_empty());
 }
@@ -1162,6 +1163,7 @@ fn without_debug_mode_a_lan_page_is_not_answered() {
     sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
         url: format!("{LAN}/"),
+        now_ms: 0.0,
     });
     let view = sut.view();
     let tab = view.tabs.iter().find(|t| t.tab == "t1").unwrap();
@@ -1317,6 +1319,7 @@ fn a_signature_is_forwarded_with_the_sites_chain_and_granted_address() {
             result: Some("0xabc".into()),
         },
         user_op_hash: None,
+        now_ms: 0.0,
     });
     assert_eq!(only_answer(&ops)["result"], json!("0xabc"));
     assert!(sut.view().signing.is_none());
@@ -1344,6 +1347,7 @@ fn a_signing_refusal_carries_the_cores_words() {
             message: None,
         },
         user_op_hash: None,
+        now_ms: 0.0,
     });
     let answer = only_answer(&ops);
     assert_eq!(error_code(&answer), 4001);
@@ -1386,6 +1390,7 @@ fn a_second_signature_waits_in_line_and_opens_when_the_first_is_answered() {
             result: Some("0x11".into()),
         },
         user_op_hash: None,
+        now_ms: 0.0,
     });
     assert_eq!(only_answer(&ops)["id"], json!("1"));
     match forwarded(&ops) {
@@ -1415,12 +1420,14 @@ fn an_answer_is_delivered_exactly_once() {
         id: "1".to_owned(),
         payload: answered.clone(),
         user_op_hash: None,
+        now_ms: 0.0,
     });
     let again = sut.dispatch(Event::SigningAnswered {
         tab: "t1".to_owned(),
         id: "1".to_owned(),
         payload: answered,
         user_op_hash: None,
+        now_ms: 0.0,
     });
     assert!(delivered(&again).is_empty());
 }
@@ -1450,6 +1457,7 @@ fn a_navigation_mid_signature_settles_4900_and_closes_the_sheet() {
     sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
         url: "https://dapp.example/next".to_owned(),
+        now_ms: 0.0,
     });
     let ops = hello(&mut sut, "t1", "d2", DAPP);
     let settled: Vec<i64> = delivered(&ops).iter().map(|(_, m)| error_code(m)).collect();
@@ -1472,6 +1480,7 @@ fn a_navigation_mid_signature_settles_4900_and_closes_the_sheet() {
             result: Some("0x11".into()),
         },
         user_op_hash: None,
+        now_ms: 0.0,
     });
     assert!(delivered(&late).is_empty());
 }
@@ -1501,6 +1510,7 @@ fn closing_another_tab_moves_the_signing_line_on() {
     );
     let ops = sut.dispatch(Event::TabClosed {
         tab: "t1".to_owned(),
+        now_ms: 0.0,
     });
     assert!(ops.contains(&Op::CancelSigning {
         tab: "t1".to_owned(),
@@ -1550,6 +1560,7 @@ fn a_revoke_while_queued_refuses_the_waiting_signature() {
             message: None,
         },
         user_op_hash: None,
+        now_ms: 0.0,
     });
     let answers: Vec<i64> = delivered(&ops)
         .iter()
@@ -1572,6 +1583,7 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
     sut.dispatch(Event::LoadFinished {
         tab: "t1".to_owned(),
         url: "https://dapp.example/a".to_owned(),
+        now_ms: 0.0,
     });
     // Android: the new document's hello and first request beat onPageStarted
     // — and the bridge says hello exactly once.
@@ -1590,6 +1602,7 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
     let nav = sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
         url: "https://dapp.example/b".to_owned(),
+        now_ms: 0.0,
     });
     assert!(
         delivered(&nav).is_empty(),
@@ -1598,6 +1611,7 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
     let done = sut.dispatch(Event::LoadFinished {
         tab: "t1".to_owned(),
         url: "https://dapp.example/b".to_owned(),
+        now_ms: 0.0,
     });
     assert!(
         delivered(&done).is_empty(),
@@ -1607,6 +1621,8 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
         |op| matches!(op, Op::Read { .. }),
         Res::ReadAnswered {
             body_json: Some(r#"{"result":"0x10"}"#.to_owned()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert_eq!(only_answer(&answer)["result"], json!("0x10"));
@@ -1640,10 +1656,12 @@ fn a_navigation_away_before_the_first_page_finished_still_settles_it() {
     sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
         url: "https://elsewhere.example/".to_owned(),
+        now_ms: 0.0,
     });
     let ops = sut.dispatch(Event::LoadFinished {
         tab: "t1".to_owned(),
         url: "https://elsewhere.example/".to_owned(),
+        now_ms: 0.0,
     });
     assert_eq!(error_code(&only_answer(&ops)), 4900);
     assert!(ops.contains(&Op::CancelSigning {
@@ -1658,6 +1676,7 @@ fn a_closed_tabs_straggler_is_never_a_new_page() {
     hello(&mut sut, "t1", "d1", DAPP);
     sut.dispatch(Event::TabClosed {
         tab: "t1".to_owned(),
+        now_ms: 0.0,
     });
     assert!(hello(&mut sut, "t1", "d9", DAPP).is_empty());
     assert!(ask(&mut sut, "t1", "d1", DAPP, "1", "eth_accounts", json!([])).is_empty());
@@ -1727,10 +1746,12 @@ fn a_load_that_ends_without_a_hello_settles_the_old_document() {
     sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
         url: "https://broken.example/".to_owned(),
+        now_ms: 0.0,
     });
     let ops = sut.dispatch(Event::LoadFinished {
         tab: "t1".to_owned(),
         url: "https://broken.example/".to_owned(),
+        now_ms: 0.0,
     });
     assert_eq!(error_code(&only_answer(&ops)), 4900);
     assert!(ops.contains(&Op::CancelSigning {
@@ -1758,6 +1779,7 @@ fn a_renderer_crash_settles_and_marks_the_tab() {
     );
     let ops = sut.dispatch(Event::RendererGone {
         tab: "t1".to_owned(),
+        now_ms: 0.0,
     });
     assert!(ops.contains(&Op::CancelSigning {
         tab: "t1".to_owned(),
@@ -1883,6 +1905,8 @@ fn a_navigation_in_one_tab_leaves_another_tabs_requests_alone() {
         |op| matches!(op, Op::Read { .. }),
         Res::ReadAnswered {
             body_json: Some(r#"{"result":"0x1"}"#.to_owned()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert_eq!(delivered(&answer)[0].0, "t2");
@@ -1897,6 +1921,7 @@ fn tab_views_tell_the_truth_about_the_lock_and_the_connection() {
     sut.dispatch(Event::NavigationStarted {
         tab: "t2".to_owned(),
         url: "http://insecure.example/".to_owned(),
+        now_ms: 0.0,
     });
     let view = sut.view();
     let t1 = view.tabs.iter().find(|t| t.tab == "t1").unwrap();
@@ -1914,6 +1939,7 @@ fn a_closed_tab_is_forgotten() {
     hello(&mut sut, "t1", "d1", DAPP);
     sut.dispatch(Event::TabClosed {
         tab: "t1".to_owned(),
+        now_ms: 0.0,
     });
     assert!(sut.view().tabs.is_empty());
 }
@@ -1931,6 +1957,7 @@ fn a_subframe_can_never_speak_as_the_top_page() {
         frame_origin: "https://ads.example".to_owned(),
         is_main_frame: false,
         message_json: json!({"t":"req","doc":"d1","id":"x","method":"eth_sendTransaction","params":[{"to":A2}]}).to_string(),
+        now_ms: 0.0,
     });
     assert!(ops.is_empty());
     assert!(sut.view().signing.is_none());
@@ -1952,6 +1979,7 @@ fn non_web_origins_are_ignored() {
         frame_origin: "file:///etc/passwd".to_owned(),
         is_main_frame: true,
         message_json: json!({"t":"hello","doc":"d1"}).to_string(),
+        now_ms: 0.0,
     });
     assert!(ops.is_empty());
     assert!(sut.view().tabs.is_empty());
@@ -2039,11 +2067,14 @@ fn a_read_goes_to_the_sites_chain_and_comes_back() {
         method: "eth_getBalance".to_owned(),
         params_json: json!([A1, "latest"]).to_string(),
         bundler: false,
+        deadline_ms: 30_000.0,
     }));
     let answer = sut.resolve_matching(
         |op| matches!(op, Op::Read { .. }),
         Res::ReadAnswered {
             body_json: Some(r#"{"jsonrpc":"2.0","id":1,"result":"0xde0b6b3a7640000"}"#.to_owned()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert_eq!(only_answer(&answer)["result"], json!("0xde0b6b3a7640000"));
@@ -2062,6 +2093,8 @@ fn a_node_error_is_passed_through_and_silence_is_32603() {
                 r#"{"error":{"code":3,"message":"execution reverted","data":"0x08c379a0"}}"#
                     .to_owned(),
             ),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let revert = only_answer(&revert);
@@ -2071,7 +2104,11 @@ fn a_node_error_is_passed_through_and_silence_is_32603() {
     );
     let silent = sut.resolve_matching(
         |op| matches!(op, Op::Read { .. }),
-        Res::ReadAnswered { body_json: None },
+        Res::ReadAnswered {
+            body_json: None,
+            failure: None,
+            now_ms: 0.0,
+        },
     );
     assert_eq!(error_code(&only_answer(&silent)), -32603);
 }
@@ -2127,6 +2164,8 @@ fn reads_are_bounded_per_tab() {
         |op| matches!(op, Op::Read { id, .. } if id == "r0"),
         Res::ReadAnswered {
             body_json: Some(r#"{"result":"0x1"}"#.to_owned()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert!(
@@ -2158,6 +2197,7 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
             result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
+        now_ms: 0.0,
     });
     let ops = ask(
         &mut sut,
@@ -2175,7 +2215,10 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
     // Pending: `null`, as a node says of a pending transaction.
     let pending = sut.resolve_matching(
         |op| matches!(op, Op::ResolveUserOp { .. }),
-        Res::UserOpResolved { tx_hash: None },
+        Res::UserOpResolved {
+            tx_hash: None,
+            now_ms: 0.0,
+        },
     );
     assert_eq!(only_answer(&pending)["result"], Value::Null);
     // Landed: the node is asked for the real transaction's receipt.
@@ -2192,6 +2235,7 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
         |op| matches!(op, Op::ResolveUserOp { .. }),
         Res::UserOpResolved {
             tx_hash: Some(tx_hash.clone()),
+            now_ms: 0.0,
         },
     );
     assert!(landed.contains(&Op::Read {
@@ -2201,6 +2245,7 @@ fn a_page_can_look_up_the_receipt_of_the_user_operation_it_was_answered_with() {
         method: "eth_getTransactionReceipt".to_owned(),
         params_json: json!([tx_hash]).to_string(),
         bundler: false,
+        deadline_ms: 30_000.0,
     }));
     // An ordinary hash is an ordinary read.
     let plain = ask(
@@ -2242,6 +2287,7 @@ fn a_batch_the_relay_refused_reads_400() {
             result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
+        now_ms: 0.0,
     });
     for (id, relay, status) in [
         ("2", json!({"status": "rejected"}), 400),
@@ -2264,12 +2310,16 @@ fn a_batch_the_relay_refused_reads_400() {
             |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "eth_getUserOperationReceipt"),
             Res::ReadAnswered {
                 body_json: Some(json!({"result": null}).to_string()),
+                failure: None,
+                now_ms: 0.0,
             },
         );
         let ops = sut.resolve_matching(
             |op| matches!(op, Op::Read { id: read, method, .. } if read == id && method == "pimlico_getUserOperationStatus"),
             Res::ReadAnswered {
                 body_json: Some(json!({ "result": relay }).to_string()),
+                failure: None,
+                now_ms: 0.0,
             },
         );
         let answer = only_answer(&ops);
@@ -2299,6 +2349,7 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
             result: Some(op_hash.clone().into()),
         },
         user_op_hash: Some(op_hash.clone()),
+        now_ms: 0.0,
     });
 
     let ops = ask(
@@ -2317,6 +2368,7 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         method: "eth_getUserOperationReceipt".to_owned(),
         params_json: json!([op_hash]).to_string(),
         bundler: true,
+        deadline_ms: 30_000.0,
     }));
     // Not landed: the relay is asked whether it refused it (spec 096 F3);
     // it holds it — pending.
@@ -2324,6 +2376,8 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         |op| matches!(op, Op::Read { id, .. } if id == "2"),
         Res::ReadAnswered {
             body_json: Some(json!({"result": null}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert_eq!(
@@ -2335,6 +2389,7 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
             method: "pimlico_getUserOperationStatus".to_owned(),
             params_json: json!([op_hash]).to_string(),
             bundler: true,
+            deadline_ms: 30_000.0,
         }],
         "no answer yet, one relay read"
     );
@@ -2342,6 +2397,8 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
         |op| matches!(op, Op::Read { id, method, .. } if id == "2" && method == "pimlico_getUserOperationStatus"),
         Res::ReadAnswered {
             body_json: Some(json!({"result": {"status": "submitted"}}).to_string()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     let answer = only_answer(&pending);
@@ -2370,6 +2427,8 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
                 }})
                 .to_string(),
             ),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert_eq!(only_answer(&landed)["result"]["status"], 200);
@@ -2386,11 +2445,15 @@ fn a_batch_s_status_is_read_from_its_operation_s_receipt() {
     );
     sut.resolve_matching(
         |op| matches!(op, Op::Read { id, .. } if id == "4"),
-        Res::ReadAnswered { body_json: None },
+        Res::ReadAnswered {
+            body_json: None,
+            failure: None,
+            now_ms: 0.0,
+        },
     );
     let silent = sut.resolve_matching(
         |op| matches!(op, Op::Read { id, method, .. } if id == "4" && method == "pimlico_getUserOperationStatus"),
-        Res::ReadAnswered { body_json: None },
+        Res::ReadAnswered { body_json: None, failure: None, now_ms: 0.0 },
     );
     assert_eq!(only_answer(&silent)["result"]["status"], 100);
 }
@@ -2486,6 +2549,8 @@ fn a_read_answered_after_its_page_left_is_dropped() {
         |op| matches!(op, Op::Read { .. }),
         Res::ReadAnswered {
             body_json: Some(r#"{"result":"0x1"}"#.to_owned()),
+            failure: None,
+            now_ms: 0.0,
         },
     );
     assert!(delivered(&late).is_empty());

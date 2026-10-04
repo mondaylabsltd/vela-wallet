@@ -304,6 +304,7 @@
   "txSubmitted": "トランザクションをネットワークに送信しました",
   "txSlowConfirm": "通常より時間がかかっています。しばらくお待ちください...",
   "txRelayFunding": "リレーがこのネットワークのガスを補充しています。補充が届きしだい、取引を送信します。",
+  "txRelaySending": "Vela のリレーがネットワークへ送信中…",
   "txWaitingConfirm": "ブロックチェーンの承認を待っています...",
   "txElapsed": "{{elapsed}} 秒経過 — もうすぐ完了します",
   "txRemaining": "残り約 {{remaining}} 秒",
@@ -1407,7 +1408,18 @@
    "refused": "ネットワークに拒否されました。何も送信されていません。",
    "unknownOutcome": "24 時間経っても未確認です。",
    "openSigner": "署名ページで確認",
-   "signerDown": "署名ページを開けません。接続を確認してください。"
+   "signerDown": "署名ページを開けません。接続を確認してください。",
+   "confirmBlock": {
+    "accountSwitching": "サイトのアカウントに切り替え中…",
+    "answered": "この要求は終了しました",
+    "answeredRetry": "完了しませんでした。「再試行」をタップ",
+    "reading": "要求を読み込み中…",
+    "approvalChoice": "先に承認額を選んでください",
+    "batchUnsettled": "バッチの各呼び出しを確認中…",
+    "feeMeasuring": "ネットワーク手数料を計算中…",
+    "feeFailed": "手数料を計算できません。タップで再試行",
+    "feeShort": "このコインでは手数料が不足します"
+   }
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",
@@ -1623,6 +1635,55 @@
    "window": "ウインドウ",
    "minimize": "しまう",
    "closeWindow": "ウインドウを閉じる"
+  },
+  "browserStatus": {
+   "title": "タブの状態",
+   "page": {
+    "blank": "ページなし",
+    "loading": "読み込み中",
+    "ready": "ページ読み込み済み",
+    "crashed": "ページ停止"
+   },
+   "provider": {
+    "pending": "ウォレット：確認中",
+    "offered": "このページでウォレットを利用可",
+    "insecureOrigin": "ウォレット未提供：安全でないページ",
+    "noHello": "ウォレット未提供：スクリプト未実行"
+   },
+   "reason": {
+    "navigatedAway": "応答前にページが移動しました",
+    "pageCrashed": "ページが停止しました",
+    "walletWithdrawn": "デバッグモードがオフです",
+    "insecureOrigin": "署名には安全なページが必要です",
+    "notConnected": "このサイトは未接続です",
+    "accountMismatch": "別のアカウントを要求されました",
+    "noAccount": "接続できるアカウントがありません",
+    "consentBusy": "別のサイトの要求が開いています",
+    "unsupportedMethod": "Vela はこの要求に未対応です",
+    "unknownChain": "このネットワークは Vela にありません",
+    "badParams": "要求の形式が不正です",
+    "tooManyReads": "同時の要求が多すぎます",
+    "unknownBatch": "Vela が送ったバッチではありません",
+    "walletRefused": "Vela がこの要求を拒否しました",
+    "noEndpoint": "ネットワークの RPC が応答しません",
+    "timedOut": "ネットワークの RPC がタイムアウト",
+    "rateLimited": "ネットワークの RPC が制限中です",
+    "endpointError": "ネットワークの RPC がエラーを返しました",
+    "reverted": "オンチェーンでリバートしました",
+    "rejectedByPerson": "拒否しました",
+    "relayRefused": "リレーが拒否、未送信です",
+    "relayUnreachable": "リレーに接続できず、未送信です",
+    "notConfirmedYet": "送信済み、未確定",
+    "relayFailed": "リレーが受け付けませんでした",
+    "signerUnavailable": "ここではパスキーを使えません",
+    "signerNotDiscoverable": "このパスキーはここで署名できません",
+    "signerFailed": "パスキーの認証に失敗しました"
+   },
+   "requests": "最近の要求",
+   "noRequests": "要求はまだありません",
+   "copy": "詳細をコピー",
+   "copied": "コピーしました",
+   "reloaded": "メモリ節約のため再読み込みしました"
   }
  },
  "settingsModals": {

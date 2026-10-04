@@ -304,6 +304,7 @@
   "txSubmitted": "Transaction envoyée au réseau",
   "txSlowConfirm": "Cela prend plus de temps que d'habitude, veuillez patienter...",
   "txRelayFunding": "Le relais réapprovisionne son gas sur ce réseau. Il envoie votre transaction dès que c'est arrivé.",
+  "txRelaySending": "Le relais de Vela l'envoie sur le réseau…",
   "txWaitingConfirm": "En attente de la confirmation de la blockchain...",
   "txElapsed": "{{elapsed}} s écoulées — bientôt terminé",
   "txRemaining": "~{{remaining}} s restantes",
@@ -1410,7 +1411,18 @@
    "refused": "Le réseau l’a refusée — rien n’a été envoyé.",
    "unknownOutcome": "Toujours non confirmée après 24 heures.",
    "openSigner": "Confirmer sur la page de signature",
-   "signerDown": "Impossible d’ouvrir la page de signature. Vérifiez votre connexion."
+   "signerDown": "Impossible d’ouvrir la page de signature. Vérifiez votre connexion.",
+   "confirmBlock": {
+    "accountSwitching": "Passage au compte du site…",
+    "answered": "Cette demande est terminée — fermez pour finir",
+    "answeredRetry": "Ça n'a pas abouti — touchez Réessayer",
+    "reading": "Lecture de la demande…",
+    "approvalChoice": "Choisissez d'abord un montant d'approbation",
+    "batchUnsettled": "Vérification de chaque appel du lot…",
+    "feeMeasuring": "Calcul des frais de réseau…",
+    "feeFailed": "Frais incalculables — touchez-les pour réessayer",
+    "feeShort": "Pas assez de cette monnaie pour les frais — choisissez-en une autre"
+   }
   },
   "signingApprove": {
    "resultingTotal": "Nouvelle autorisation totale",
@@ -1626,6 +1638,55 @@
    "window": "Fenêtre",
    "minimize": "Placer dans le Dock",
    "closeWindow": "Fermer la fenêtre"
+  },
+  "browserStatus": {
+   "title": "État de l'onglet",
+   "page": {
+    "blank": "Pas encore de page",
+    "loading": "Chargement",
+    "ready": "Page chargée",
+    "crashed": "Page arrêtée"
+   },
+   "provider": {
+    "pending": "Portefeuille : vérification",
+    "offered": "Portefeuille disponible sur cette page",
+    "insecureOrigin": "Portefeuille non proposé : page non sécurisée",
+    "noHello": "Portefeuille non proposé : le script de Vela n'a pas tourné"
+   },
+   "reason": {
+    "navigatedAway": "La page a changé avant la réponse",
+    "pageCrashed": "La page a cessé de fonctionner",
+    "walletWithdrawn": "Mode débogage désactivé — le portefeuille a quitté cette page",
+    "insecureOrigin": "Signer exige une page sécurisée",
+    "notConnected": "Ce site n'est pas connecté",
+    "accountMismatch": "Le site a demandé un compte qui ne lui a pas été donné",
+    "noAccount": "Aucun compte à connecter",
+    "consentBusy": "Une demande d'un autre site est ouverte",
+    "unsupportedMethod": "Vela ne prend pas en charge cette demande",
+    "unknownChain": "Ce réseau n'est pas dans Vela",
+    "badParams": "La demande est mal formée",
+    "tooManyReads": "Trop de demandes à la fois",
+    "unknownBatch": "Vela n'a pas envoyé ce lot",
+    "walletRefused": "Vela a refusé cette demande",
+    "noEndpoint": "Le RPC du réseau n'a pas répondu",
+    "timedOut": "Le RPC du réseau a expiré",
+    "rateLimited": "Le RPC du réseau limite les demandes",
+    "endpointError": "Le RPC du réseau a renvoyé une erreur",
+    "reverted": "Annulée (revert) sur la chaîne",
+    "rejectedByPerson": "Vous avez refusé",
+    "relayRefused": "Le relais de Vela l'a refusée — rien n'a été envoyé",
+    "relayUnreachable": "Relais de Vela injoignable — rien n'a été envoyé",
+    "notConfirmedYet": "Envoyée, pas encore confirmée",
+    "relayFailed": "Le relais de Vela n'a pas pu la prendre",
+    "signerUnavailable": "Les passkeys ne sont pas utilisables ici",
+    "signerNotDiscoverable": "Cette passkey ne peut pas signer ici",
+    "signerFailed": "La passkey a échoué"
+   },
+   "requests": "Demandes récentes",
+   "noRequests": "Aucune demande pour le moment",
+   "copy": "Copier les détails",
+   "copied": "Copié",
+   "reloaded": "Rechargée pour économiser la mémoire"
   }
  },
  "settingsModals": {

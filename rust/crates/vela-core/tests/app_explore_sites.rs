@@ -491,3 +491,57 @@ fn a_stale_selection_falls_back_to_the_first_tab() {
     let sut = ready(Some(doc));
     assert_eq!(sut.view().selected_tab.as_deref(), Some("t-1"));
 }
+
+// ---------------------------------------------------------------------------
+// Recency (spec 099 R2) — the order browser_tabs keeps engines alive in
+// ---------------------------------------------------------------------------
+
+/// Opening and selecting a tab put it first; closing one forgets it, and the
+/// tab that takes over from a closed selected one is the one in use now.
+#[test]
+fn recency_follows_the_person() {
+    let mut sut = ready(None);
+    for (i, host) in ["a", "b", "c"].iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "three test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: Some(format!("https://{host}.example/")),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let ids: Vec<String> = sut.view().tabs.iter().map(|t| t.id.clone()).collect();
+    assert_eq!(
+        sut.view().recent_tabs,
+        vec![ids[2].clone(), ids[1].clone(), ids[0].clone()]
+    );
+
+    written(sut.dispatch(Event::TabSelected { id: ids[0].clone() }));
+    assert_eq!(
+        sut.view().recent_tabs,
+        vec![ids[0].clone(), ids[2].clone(), ids[1].clone()]
+    );
+
+    // Closing the selected tab selects its right-hand neighbour, which is
+    // the tab in use now.
+    written(sut.dispatch(Event::TabClosed { id: ids[0].clone() }));
+    assert_eq!(sut.view().selected_tab.as_deref(), Some(ids[1].as_str()));
+    assert_eq!(sut.view().recent_tabs, vec![ids[1].clone(), ids[2].clone()]);
+}
+
+/// At launch only the selected tab has had a page this session.
+#[test]
+fn recency_starts_at_the_selected_tab() {
+    let tab = |id: &str| ExploreTab {
+        id: id.to_owned(),
+        url: Some(format!("https://{id}.example/")),
+        title: id.to_owned(),
+        host: format!("{id}.example"),
+    };
+    let sut = ready(Some(ExploreDoc {
+        tabs: vec![tab("t-1"), tab("t-2"), tab("t-3")],
+        selected_tab: Some("t-2".to_owned()),
+        ..ExploreDoc::default()
+    }));
+    assert_eq!(sut.view().recent_tabs, vec!["t-2".to_owned()]);
+}

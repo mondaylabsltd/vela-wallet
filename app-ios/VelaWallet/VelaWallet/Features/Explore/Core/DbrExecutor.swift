@@ -147,6 +147,12 @@ final class DbrExecutor {
             ))
             return Self.ack
 
+        // Spec 099 FR-015: the core's line, one per request end and tab
+        // state change, written as it is.
+        case "log":
+            VelaLog.notice(.browser, operation["line"] as? String ?? "")
+            return Self.ack
+
         default:
             VelaLog.failure(.browser, kind: "unhandled_operation", "dapp_browser \(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)

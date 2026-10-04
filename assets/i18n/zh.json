@@ -311,6 +311,7 @@
   "txSubmitted": "交易已提交至网络",
   "txSlowConfirm": "确认时间较长，请稍候...",
   "txRelayFunding": "中继正在给它在这条网络上的 gas 补充资金，到账后会立刻发出你的交易。",
+  "txRelaySending": "Vela 中继正在把它发送到网络…",
   "txWaitingConfirm": "等待区块链确认...",
   "txElapsed": "已等待 {{elapsed}} 秒，即将完成",
   "txRemaining": "剩余约 {{remaining}} 秒",
@@ -1417,7 +1418,18 @@
    "refused": "网络拒绝了这笔交易，什么都没有发出。",
    "unknownOutcome": "超过 24 小时仍未确认。",
    "openSigner": "去签名页确认",
-   "signerDown": "签名页没能打开，请检查网络。"
+   "signerDown": "签名页没能打开，请检查网络。",
+   "confirmBlock": {
+    "accountSwitching": "正在切换到该网站的账户…",
+    "answered": "此请求已结束——关闭即可",
+    "answeredRetry": "没有成功——点「重试」",
+    "reading": "正在读取请求…",
+    "approvalChoice": "请先选择授权额度",
+    "batchUnsettled": "正在逐一检查这批调用…",
+    "feeMeasuring": "正在计算网络费用…",
+    "feeFailed": "没能算出费用——点费用重试",
+    "feeShort": "这个币不够付手续费——换一个"
+   }
   },
   "currency": {
    "title": "显示货币",
@@ -1633,6 +1645,55 @@
    "window": "窗口",
    "minimize": "最小化",
    "closeWindow": "关闭窗口"
+  },
+  "browserStatus": {
+   "title": "标签页状态",
+   "page": {
+    "blank": "尚无页面",
+    "loading": "加载中",
+    "ready": "页面已加载",
+    "crashed": "页面已停止"
+   },
+   "provider": {
+    "pending": "钱包：检查中",
+    "offered": "此页面可使用钱包",
+    "insecureOrigin": "未提供钱包：页面不安全",
+    "noHello": "未提供钱包：Vela 脚本未运行"
+   },
+   "reason": {
+    "navigatedAway": "页面在答复前已跳转",
+    "pageCrashed": "页面停止工作了",
+    "walletWithdrawn": "调试模式已关闭，钱包已离开此页面",
+    "insecureOrigin": "签名需要安全的页面",
+    "notConnected": "此网站尚未连接",
+    "accountMismatch": "网站请求了未授权给它的账户",
+    "noAccount": "没有可连接的钱包账户",
+    "consentBusy": "另一个网站的请求尚未处理",
+    "unsupportedMethod": "Vela 不支持此请求",
+    "unknownChain": "Vela 中没有这个网络",
+    "badParams": "请求格式有误",
+    "tooManyReads": "同时请求过多",
+    "unknownBatch": "这批交易不是 Vela 发出的",
+    "walletRefused": "Vela 拒绝了此请求",
+    "noEndpoint": "该网络的 RPC 没有响应",
+    "timedOut": "该网络的 RPC 超时",
+    "rateLimited": "该网络的 RPC 正在限流",
+    "endpointError": "该网络的 RPC 返回了错误",
+    "reverted": "交易在链上回滚了",
+    "rejectedByPerson": "你已拒绝",
+    "relayRefused": "Vela 中继拒绝了它——什么都没发送",
+    "relayUnreachable": "连不上 Vela 中继——什么都没发送",
+    "notConfirmedYet": "已发送，尚未确认",
+    "relayFailed": "Vela 中继没能接收",
+    "signerUnavailable": "这里无法使用通行密钥",
+    "signerNotDiscoverable": "这个通行密钥无法在这里签名",
+    "signerFailed": "通行密钥验证失败"
+   },
+   "requests": "最近的请求",
+   "noRequests": "暂无请求",
+   "copy": "复制详情",
+   "copied": "已复制",
+   "reloaded": "为节省内存已重新加载"
   }
  },
  "settingsModals": {

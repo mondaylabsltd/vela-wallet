@@ -144,7 +144,11 @@ fn receipt_confirms_patches_records_and_notifies() {
     submitted(&mut sut);
 
     let ops = tick(&mut sut, T0 + 3_400.0);
-    assert_eq!(ops, vec![poll_receipt()], "3s cooldown elapsed");
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "3s cooldown elapsed"
+    );
 
     let ops = sut.resolve(receipt_confirmed(T0 + 3_700.0));
     assert_eq!(
@@ -180,12 +184,15 @@ fn timeout_never_marks_records_failed() {
     let ops = tick(&mut sut, T0 + WAIT_WINDOW_MS + 500.0);
     // Window classified; polling continues at the reconcile cadence. The only
     // outstanding work is the next receipt poll — no UpdateTxRecords, ever.
-    assert_eq!(ops, vec![poll_receipt()]);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
     assert_eq!(entry_status(&sut), TrackStatus::AcceptedNotLanded);
     assert!(sut.view().entries[0].polling, "still reconciling");
 
     assert!(sut
         .resolve(receipt_pending(T0 + WAIT_WINDOW_MS + 800.0))
+        .is_empty());
+    assert!(sut
+        .resolve(status(TrackLifecycle::Queued, T0 + WAIT_WINDOW_MS + 900.0))
         .is_empty());
     assert_eq!(sut.outstanding(), vec![], "no patch was issued anywhere");
 }
@@ -266,7 +273,11 @@ fn fee_hold_stays_pending_and_later_confirms() {
     );
 
     let ops = tick(&mut sut, T0 + WAIT_WINDOW_MS + 100.0);
-    assert_eq!(ops, vec![poll_receipt()], "keeps polling at reconcile pace");
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "keeps polling at reconcile pace"
+    );
     assert_eq!(entry_status(&sut), TrackStatus::FeeHeld);
     assert!(sut.view().entries[0].polling);
 
@@ -316,7 +327,7 @@ fn dropped_receipt_marks_failed_immediately() {
     submitted(&mut sut);
 
     let ops = tick(&mut sut, T0 + 3_500.0);
-    assert_eq!(ops, vec![poll_receipt()]);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
     let ops = sut.resolve(Res::ReceiptFailed {
         user_op_hash: HASH.to_owned(),
         tx_hash: TX.to_owned(),
@@ -453,7 +464,10 @@ fn same_hash_shares_one_throttled_receipt_request() {
     // The request completes; the cooldown counts from completion.
     assert!(sut.resolve(receipt_pending(T0 + 1_200.0)).is_empty());
     assert_eq!(tick(&mut sut, T0 + 2_500.0), vec![], "1.3s < 3s: throttled");
-    assert_eq!(tick(&mut sut, T0 + 4_300.0), vec![poll_receipt()]);
+    assert_eq!(
+        tick(&mut sut, T0 + 4_300.0),
+        vec![poll_receipt(), poll_status()]
+    );
 }
 
 /// The reconcile sweep itself is single-flight and 12s-throttled — Home focus
@@ -527,7 +541,11 @@ fn pending_records_survive_restart_and_resolve() {
         }],
         now_ms: T0 + 100.0,
     });
-    assert_eq!(ops, vec![poll_receipt()], "recovered and re-polled");
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "recovered and re-polled"
+    );
     assert_eq!(
         entry_status(&sut),
         TrackStatus::AcceptedNotLanded,
@@ -596,7 +614,7 @@ fn sweep_never_resurrects_a_confirmed_entry() {
     let mut sut = Sut::new();
     submitted(&mut sut);
     let ops = tick(&mut sut, T0 + 3_400.0);
-    assert_eq!(ops, vec![poll_receipt()]);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
     let ops = sut.resolve(receipt_confirmed(T0 + 3_700.0));
     assert_eq!(
         ops,
@@ -655,7 +673,11 @@ fn all_unreachable_window_is_reported_as_unknown_not_pending() {
         .is_empty());
 
     let ops = tick(&mut sut, T0 + WAIT_WINDOW_MS + 200.0);
-    assert_eq!(ops, vec![poll_receipt()], "still reconciled later");
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "still reconciled later"
+    );
     assert_eq!(entry_status(&sut), TrackStatus::Unreachable);
     assert!(sut.view().entries[0].polling);
     // And crucially: no failed patch anywhere (①).
@@ -665,6 +687,13 @@ fn all_unreachable_window_is_reported_as_unknown_not_pending() {
             now_ms: T0 + WAIT_WINDOW_MS + 500.0,
         })
         .is_empty());
+    assert!(sut
+        .resolve(status(
+            TrackLifecycle::NotFound,
+            T0 + WAIT_WINDOW_MS + 600.0
+        ))
+        .is_empty());
+    assert_eq!(entry_status(&sut), TrackStatus::Unreachable);
     assert_eq!(sut.outstanding(), vec![]);
 }
 
@@ -672,19 +701,38 @@ fn all_unreachable_window_is_reported_as_unknown_not_pending() {
 // Cadence
 // ---------------------------------------------------------------------------
 
-/// The relay gets one full receipt interval of peace before the status
-/// endpoint is asked at all, then every 12s — never on the 3s receipt beat.
+/// The relay is first asked 3 s after acceptance (spec 099 R6: its queue,
+/// its funding, its send are what the landing says in its first seconds),
+/// then every 12 s — never on the 3 s receipt beat.
 #[test]
-fn status_polls_wait_a_full_interval_then_run_every_12s() {
+fn status_is_first_asked_at_3s_then_every_12s() {
     let mut sut = Sut::new();
     submitted(&mut sut);
 
+    let ops = tick(&mut sut, T0 + 1_000.0);
+    assert_eq!(ops, vec![], "1s: nothing due yet");
+
     let ops = tick(&mut sut, T0 + 3_400.0);
-    assert_eq!(ops, vec![poll_receipt()], "3.4s: receipt only, no status");
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "3.4s: the first status ask"
+    );
     assert!(sut.resolve(receipt_pending(T0 + 3_700.0)).is_empty());
+    assert!(sut
+        .resolve(status(TrackLifecycle::Queued, T0 + 3_800.0))
+        .is_empty());
 
     let ops = tick(&mut sut, T0 + 12_100.0);
-    assert_eq!(ops, vec![poll_receipt(), poll_status()], "12s: both due");
+    assert_eq!(ops, vec![poll_receipt()], "12.1s: receipt only");
+    assert!(sut.resolve(receipt_pending(T0 + 12_300.0)).is_empty());
+
+    let ops = tick(&mut sut, T0 + 15_500.0);
+    assert_eq!(
+        ops,
+        vec![poll_receipt(), poll_status()],
+        "12s after the first ask"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +775,7 @@ fn results_for_unknown_hashes_are_dropped() {
     let mut sut = Sut::new();
     submitted(&mut sut);
     let ops = tick(&mut sut, T0 + 3_400.0);
-    assert_eq!(ops, vec![poll_receipt()]);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
     let ops = sut.resolve(Res::Receipt {
         user_op_hash: "0xdeadbeef".to_owned(),
         tx_hash: TX.to_owned(),
@@ -757,8 +805,12 @@ fn abort_keeps_tracking_and_a_late_receipt_still_confirms() {
 
     // 3s cadence no longer applies…
     assert_eq!(tick(&mut sut, T0 + 4_000.0), vec![]);
-    // …the reconcile cadence does, and no status poll rides along.
-    assert_eq!(tick(&mut sut, T0 + 12_500.0), vec![poll_receipt()]);
+    // …the reconcile cadence does, and the relay is asked at it too (spec
+    // 099 R6: only its `not_found` tells a forgotten op from a slow one).
+    assert_eq!(
+        tick(&mut sut, T0 + 12_500.0),
+        vec![poll_receipt(), poll_status()]
+    );
     assert!(sut.resolve(receipt_pending(T0 + 12_800.0)).is_empty());
 
     // Past the would-be window end: no fee-hold/unreachable verdict — the
@@ -808,15 +860,24 @@ fn a_half_hour_old_op_is_asked_once_a_minute() {
     submitted(&mut sut);
 
     let at = T0 + 30.0 * MINUTE;
-    assert_eq!(tick(&mut sut, at), vec![poll_receipt()]);
+    assert_eq!(tick(&mut sut, at), vec![poll_receipt(), poll_status()]);
     assert!(sut.resolve(receipt_pending(at + 200.0)).is_empty());
+    assert!(sut
+        .resolve(status(TrackLifecycle::Queued, at + 300.0))
+        .is_empty());
     assert_eq!(
         tick(&mut sut, at + 20_000.0),
         vec![],
         "not due at a 12 s pace any more"
     );
-    assert_eq!(tick(&mut sut, at + 61_000.0), vec![poll_receipt()]);
+    assert_eq!(
+        tick(&mut sut, at + 61_000.0),
+        vec![poll_receipt(), poll_status()]
+    );
     assert!(sut.resolve(receipt_pending(at + 61_300.0)).is_empty());
+    assert!(sut
+        .resolve(status(TrackLifecycle::Queued, at + 61_400.0))
+        .is_empty());
     assert_eq!(
         entry_status(&sut),
         TrackStatus::AcceptedNotLanded,
@@ -832,7 +893,7 @@ fn a_three_hour_old_op_is_asked_every_five_minutes() {
     submitted(&mut sut);
 
     let at = T0 + 180.0 * MINUTE;
-    assert_eq!(tick(&mut sut, at), vec![poll_receipt()]);
+    assert_eq!(tick(&mut sut, at), vec![poll_receipt(), poll_status()]);
     assert!(sut.resolve(receipt_pending(at + 200.0)).is_empty());
     assert_eq!(tick(&mut sut, at + 2.0 * MINUTE), vec![]);
     assert_eq!(
@@ -871,7 +932,10 @@ fn the_outcome_follows_the_lifecycle_never_the_clock_alone() {
 fn a_landed_op_is_final() {
     let mut sut = Sut::new();
     submitted(&mut sut);
-    assert_eq!(tick(&mut sut, T0 + 3_400.0), vec![poll_receipt()]);
+    assert_eq!(
+        tick(&mut sut, T0 + 3_400.0),
+        vec![poll_receipt(), poll_status()]
+    );
     sut.resolve(receipt_confirmed(T0 + 3_700.0));
     assert_eq!(outcome(&sut), TrackOutcome::Final);
 }

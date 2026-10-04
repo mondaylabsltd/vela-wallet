@@ -89,6 +89,12 @@ use super::dapp_permissions::{
     dapp_spelling, is_insecure_public_origin, offers_wallet, origin_of, resolve_granted,
     should_drop_grant, DpermGrant,
 };
+use super::dapp_record::{
+    endpoint_error_why, read_failure_why, report, row_log_line, sign_error_why, tab_log_line,
+    DbrFailureNote, DbrInspectorView, DbrLayer, DbrOutcome, DbrPageState, DbrProviderState,
+    DbrReadFailure, DbrReason, DbrRequestClass, DbrRequestRow, Why, READ_DEADLINE_MS, RECENT_ROWS,
+    REQUEST_RECORD_CAP,
+};
 use super::dapp_rpc::{
     self, chain_param, classify, error_body_json, error_json, event_json, hex_chain_id,
     parse_page_message, result_json, PageMessage, PageRequest, Route,
@@ -159,6 +165,10 @@ pub enum DbrOperation {
         method: String,
         params_json: String,
         bundler: bool,
+        /// Answer by then, whatever the endpoints are doing (spec 099
+        /// FR-008): `ReadAnswered { body_json: None, failure: timed_out }`.
+        #[serde(default)]
+        deadline_ms: f64,
     },
     /// The transaction hash a user operation landed in, if it has.
     ResolveUserOp {
@@ -189,6 +199,11 @@ pub enum DbrOperation {
         chain_id: u32,
         origin: String,
     },
+    /// Write `line` to the app's log as it is (spec 099 FR-015): one per
+    /// request that ends and per change of a tab's page or provider state.
+    Log {
+        line: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,12 +214,19 @@ pub enum DbrShellResult {
         sites: Vec<DbrStoredSite>,
     },
     /// The JSON-RPC response body — `{"result":…}` or `{"error":{…}}` — or
-    /// `None` when no endpoint answered.
+    /// `None` when no endpoint answered; `failure` says why not, when the
+    /// executor knows (`None` reads as no endpoint).
     ReadAnswered {
         body_json: Option<String>,
+        #[serde(default)]
+        now_ms: f64,
+        #[serde(default)]
+        failure: Option<DbrReadFailure>,
     },
     UserOpResolved {
         tx_hash: Option<String>,
+        #[serde(default)]
+        now_ms: f64,
     },
     Ack,
 }
@@ -259,30 +281,51 @@ pub enum Event {
         frame_origin: String,
         is_main_frame: bool,
         message_json: String,
+        /// The shell's clock (this core owns none): when the request arrived,
+        /// for its row in the record (spec 099). `0` = unknown.
+        #[serde(default)]
+        now_ms: f64,
     },
     /// A load began in `tab`. Settles nothing by itself (see the module doc).
     NavigationStarted {
         tab: String,
         url: String,
+        #[serde(default)]
+        now_ms: f64,
     },
     /// A load in `tab` finished or failed. If no document said hello since it
     /// began, the old document is gone and its requests are settled.
     LoadFinished {
         tab: String,
         url: String,
+        #[serde(default)]
+        now_ms: f64,
     },
     TabClosed {
         tab: String,
+        #[serde(default)]
+        now_ms: f64,
     },
     /// The tab's renderer died. Its requests are settled; the tab shows as
     /// crashed until its next document says hello.
     RendererGone {
         tab: String,
+        #[serde(default)]
+        now_ms: f64,
     },
     ConsentApproved {
         now_ms: f64,
     },
-    ConsentRejected,
+    ConsentRejected {
+        #[serde(default)]
+        now_ms: f64,
+    },
+    /// The person opened a tab's status panel: the view carries that tab's
+    /// whole record ([`DbrView::inspector`]) until it is closed.
+    InspectorOpened {
+        tab: String,
+    },
+    InspectorClosed,
     /// The person picked a network for a site (the connection panel).
     SiteChainPicked {
         origin: String,
@@ -304,6 +347,8 @@ pub enum Event {
         id: String,
         payload: SignResponsePayload,
         user_op_hash: Option<String>,
+        #[serde(default)]
+        now_ms: f64,
     },
     #[serde(skip)]
     SitesListed {
@@ -314,6 +359,8 @@ pub enum Event {
         tab: String,
         id: String,
         body_json: Option<String>,
+        now_ms: f64,
+        failure: Option<DbrReadFailure>,
     },
     #[serde(skip)]
     UserOpDone {
@@ -322,6 +369,7 @@ pub enum Event {
         chain_id: u32,
         method: String,
         tx_hash: Option<String>,
+        now_ms: f64,
     },
     #[serde(skip)]
     Acked,
@@ -388,6 +436,20 @@ struct Tab {
     /// the batch and its chain, so the bundler's receipt is answered in
     /// EIP-5792's shape ([`dapp_rpc::calls_status`]), never verbatim.
     calls_status: BTreeMap<String, CallsStatusRead>,
+    /// The last [`REQUEST_RECORD_CAP`] requests of this tab, across its
+    /// documents (spec 099 R3) — a navigation is when one wants them most.
+    rows: VecDeque<Row>,
+    /// A load finished since the last one began.
+    load_ended: bool,
+    /// The page and provider state last logged.
+    logged: Option<(DbrPageState, DbrProviderState, Option<String>)>,
+}
+
+/// A row and the document that sent it: page ids repeat across documents.
+#[derive(Clone, Debug)]
+struct Row {
+    doc: String,
+    row: DbrRequestRow,
 }
 
 #[derive(Clone, Debug)]
@@ -445,6 +507,11 @@ pub struct Model {
     /// Tabs the shell closed. A straggler from one of them is ignored, never
     /// adopted as a new page.
     closed_tabs: VecDeque<String>,
+    /// The latest shell clock any event carried (spec 099): rows are timed
+    /// with it. `0` until the shell says.
+    clock_ms: f64,
+    /// The tab whose whole record the view carries.
+    inspected: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +540,22 @@ pub struct DbrTabView {
     /// truth from this.
     pub secure: bool,
     pub crashed: bool,
+    /// Something of this tab's is open — a request, a read, a consent, a
+    /// signature: its engine is never suspended (spec 099 R2).
+    #[serde(default)]
+    pub busy: bool,
+    #[serde(default)]
+    pub page: DbrPageState,
+    #[serde(default)]
+    pub provider: DbrProviderState,
+    #[serde(default)]
+    pub open_requests: u32,
+    /// Failures worth attention among the last few requests.
+    #[serde(default)]
+    pub failed_recent: u32,
+    /// The latest of them — the status entry's line.
+    #[serde(default)]
+    pub last_failure: Option<DbrFailureNote>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -502,6 +585,9 @@ pub struct DbrView {
     pub sites: Vec<DbrSiteView>,
     pub signing: Option<DbrSigningView>,
     pub queued_signing: u32,
+    /// The inspected tab's whole record ([`Event::InspectorOpened`]).
+    #[serde(default)]
+    pub inspector: Option<DbrInspectorView>,
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +607,9 @@ impl App for DappBrowser {
 
     fn update(&self, event: Event, model: &mut Model) -> Cmd {
         let mut out = Out::default();
+        if let Some(now_ms) = event.now_ms().filter(|now| *now > model.clock_ms) {
+            model.clock_ms = now_ms;
+        }
         match event {
             Event::Start => {
                 if !model.started {
@@ -550,6 +639,7 @@ impl App for DappBrowser {
                 frame_origin,
                 is_main_frame,
                 message_json,
+                now_ms: _,
             } => {
                 let held = HeldMessage {
                     tab,
@@ -563,12 +653,17 @@ impl App for DappBrowser {
                     model.held.push(held);
                 }
             }
-            Event::NavigationStarted { tab, url } => {
+            Event::NavigationStarted {
+                tab,
+                url,
+                now_ms: _,
+            } => {
                 if model.closed_tabs.contains(&tab) {
                     return render();
                 }
                 let entry = model.tabs.entry(tab).or_default();
                 entry.crashed = false;
+                entry.load_ended = false;
                 entry.shown_origin = origin_of(&url);
                 // On Android the new document's hello can come BEFORE the
                 // platform says the load started. A current document that has
@@ -581,10 +676,15 @@ impl App for DappBrowser {
                         == Some(without_fragment(&url));
                 entry.loading = !already_here;
             }
-            Event::LoadFinished { tab, url } => {
+            Event::LoadFinished {
+                tab,
+                url,
+                now_ms: _,
+            } => {
                 let Some(entry) = model.tabs.get_mut(&tab) else {
                     return render();
                 };
+                entry.load_ended = true;
                 if let Some(origin) = origin_of(&url) {
                     entry.shown_origin = Some(origin);
                 }
@@ -595,15 +695,26 @@ impl App for DappBrowser {
                     entry.doc_loaded = entry.doc.is_some();
                 }
                 if orphaned {
-                    retire_document(model, &tab, true, &mut out);
+                    retire_document(model, &tab, true, NAVIGATED_AWAY, &mut out);
                     if let Some(entry) = model.tabs.get_mut(&tab) {
                         entry.doc_origin = None;
                     }
                 }
             }
-            Event::TabClosed { tab } => {
-                retire_document(model, &tab, false, &mut out);
+            Event::TabClosed { tab, now_ms: _ } => {
+                retire_document(
+                    model,
+                    &tab,
+                    false,
+                    (DbrLayer::Browser, DbrReason::TabClosed),
+                    &mut out,
+                );
+                // Its rows go with it: log their ends first.
+                record_settled(model, &mut out);
                 model.tabs.remove(&tab);
+                if model.inspected.as_deref() == Some(tab.as_str()) {
+                    model.inspected = None;
+                }
                 if !model.closed_tabs.contains(&tab) {
                     model.closed_tabs.push_back(tab);
                     while model.closed_tabs.len() > CLOSED_TABS {
@@ -611,8 +722,14 @@ impl App for DappBrowser {
                     }
                 }
             }
-            Event::RendererGone { tab } => {
-                retire_document(model, &tab, false, &mut out);
+            Event::RendererGone { tab, now_ms: _ } => {
+                retire_document(
+                    model,
+                    &tab,
+                    false,
+                    (DbrLayer::Browser, DbrReason::PageCrashed),
+                    &mut out,
+                );
                 if let Some(entry) = model.tabs.get_mut(&tab) {
                     entry.crashed = true;
                     entry.loading = false;
@@ -620,7 +737,7 @@ impl App for DappBrowser {
                 }
             }
             Event::ConsentApproved { now_ms } => consent_approved(model, now_ms, &mut out),
-            Event::ConsentRejected => {
+            Event::ConsentRejected { now_ms: _ } => {
                 if let Some(consent) = model.consent.take() {
                     for entry in consent.entries {
                         answer_error(
@@ -630,11 +747,14 @@ impl App for DappBrowser {
                             &entry.id,
                             4001,
                             "User rejected the request",
+                            (DbrLayer::Sheet, DbrReason::RejectedByPerson),
                             &mut out,
                         );
                     }
                 }
             }
+            Event::InspectorOpened { tab } => model.inspected = Some(tab),
+            Event::InspectorClosed => model.inspected = None,
             Event::SiteChainPicked { origin, chain_id } => {
                 if model.chains.contains(&chain_id) {
                     set_site_chain(model, &origin, chain_id, &mut out);
@@ -657,19 +777,27 @@ impl App for DappBrowser {
                 id,
                 payload,
                 user_op_hash,
+                now_ms: _,
             } => signing_answered(model, &tab, &id, payload, user_op_hash, &mut out),
-            Event::ReadDone { tab, id, body_json } => {
-                read_done(model, &tab, &id, body_json, &mut out)
-            }
+            Event::ReadDone {
+                tab,
+                id,
+                body_json,
+                now_ms: _,
+                failure,
+            } => read_done(model, &tab, &id, body_json, failure, &mut out),
             Event::UserOpDone {
                 tab,
                 id,
                 chain_id,
                 method,
                 tx_hash,
+                now_ms: _,
             } => user_op_done(model, &tab, &id, chain_id, &method, tx_hash, &mut out),
             Event::Acked => return Command::done(),
         }
+        record_settled(model, &mut out);
+        log_tab_states(model, &mut out);
         out.into_command()
     }
 
@@ -728,6 +856,34 @@ impl App for DappBrowser {
                             .as_deref()
                             .is_some_and(|origin| !is_insecure_public_origin(origin)),
                         crashed: tab.crashed,
+                        busy: !tab.open.is_empty(),
+                        page: page_state(tab),
+                        provider: provider_state(model, tab),
+                        open_requests: u32::try_from(tab.open.len()).unwrap_or(u32::MAX),
+                        failed_recent: u32::try_from(
+                            tab.rows
+                                .iter()
+                                .rev()
+                                .take(RECENT_ROWS)
+                                .filter(|row| row.row.is_issue())
+                                .count(),
+                        )
+                        .unwrap_or(u32::MAX),
+                        last_failure: tab
+                            .rows
+                            .iter()
+                            .rev()
+                            .take(RECENT_ROWS)
+                            .find(|row| row.row.is_issue())
+                            .and_then(|row| {
+                                let reason = row.row.reason?;
+                                Some(DbrFailureNote {
+                                    layer: row.row.layer?,
+                                    reason,
+                                    method: row.row.method.clone(),
+                                    key: reason.key().to_owned(),
+                                })
+                            }),
                         origin,
                     }
                 })
@@ -738,6 +894,30 @@ impl App for DappBrowser {
                 id: job.id.clone(),
             }),
             queued_signing: model.sign_queue.len() as u32,
+            inspector: model.inspected.as_ref().and_then(|id| {
+                let tab = model.tabs.get(id)?;
+                Some(inspector_view(model, id, tab))
+            }),
+        }
+    }
+}
+
+impl Event {
+    /// The shell clock this event carries, if any.
+    fn now_ms(&self) -> Option<f64> {
+        match self {
+            Event::AccountSwitched { now_ms, .. }
+            | Event::PageMessage { now_ms, .. }
+            | Event::NavigationStarted { now_ms, .. }
+            | Event::LoadFinished { now_ms, .. }
+            | Event::TabClosed { now_ms, .. }
+            | Event::RendererGone { now_ms, .. }
+            | Event::ConsentApproved { now_ms }
+            | Event::ConsentRejected { now_ms }
+            | Event::SigningAnswered { now_ms, .. }
+            | Event::ReadDone { now_ms, .. }
+            | Event::UserOpDone { now_ms, .. } => Some(*now_ms),
+            _ => None,
         }
     }
 }
@@ -749,6 +929,19 @@ impl App for DappBrowser {
 #[derive(Default)]
 struct Out {
     commands: Vec<Cmd>,
+    /// Answers made this update, for the record ([`record_settled`]).
+    settled: Vec<Settled>,
+}
+
+/// One answer, as the record sees it: `code` for an error, with the layer and
+/// reason the code path that made it named.
+#[derive(Clone, Debug)]
+struct Settled {
+    tab: String,
+    doc: String,
+    id: String,
+    code: Option<i64>,
+    why: Option<Why>,
 }
 
 impl Out {
@@ -778,13 +971,26 @@ impl Out {
                 method: request.method.clone(),
                 params_json: request.params.to_string(),
                 bundler: request.bundler,
+                deadline_ms: READ_DEADLINE_MS,
             })
-            .then_send(move |result| Event::ReadDone {
-                tab: tab_id,
-                id,
-                body_json: match result {
-                    DbrShellResult::ReadAnswered { body_json } => body_json,
-                    _ => None,
+            .then_send(move |result| match result {
+                DbrShellResult::ReadAnswered {
+                    body_json,
+                    now_ms,
+                    failure,
+                } => Event::ReadDone {
+                    tab: tab_id,
+                    id,
+                    body_json,
+                    now_ms,
+                    failure,
+                },
+                _ => Event::ReadDone {
+                    tab: tab_id,
+                    id,
+                    body_json: None,
+                    now_ms: 0.0,
+                    failure: None,
                 },
             }),
         );
@@ -802,15 +1008,19 @@ impl Out {
                 chain_id: request.chain_id,
                 user_op_hash: hash,
             })
-            .then_send(move |result| Event::UserOpDone {
-                tab: tab_id,
-                id,
-                chain_id,
-                method,
-                tx_hash: match result {
-                    DbrShellResult::UserOpResolved { tx_hash } => tx_hash,
-                    _ => None,
-                },
+            .then_send(move |result| {
+                let (tx_hash, now_ms) = match result {
+                    DbrShellResult::UserOpResolved { tx_hash, now_ms } => (tx_hash, now_ms),
+                    _ => (None, 0.0),
+                };
+                Event::UserOpDone {
+                    tab: tab_id,
+                    id,
+                    chain_id,
+                    method,
+                    tx_hash,
+                    now_ms,
+                }
             }),
         );
     }
@@ -981,7 +1191,7 @@ fn emit_to_origin(model: &Model, origin: &str, event: &str, data: Option<Value>,
 /// its entries out of the consent sheet and the signing line, and cancel a
 /// sheet showing one of its requests. `deliver` = the tab still exists, so
 /// the (stale) answers are posted — the bridge of a newer document drops them.
-fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, out: &mut Out) {
+fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, why: Why, out: &mut Out) {
     let Some(tab) = model.tabs.get_mut(tab_id) else {
         return;
     };
@@ -995,14 +1205,22 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, out: &mut Out
     let open = std::mem::take(&mut tab.open);
     tab.read_queue.clear();
 
-    if deliver {
-        for id in open.keys() {
+    for id in open.keys() {
+        if deliver {
             out.op(DbrOperation::Deliver {
                 tab: tab_id.to_owned(),
                 doc: doc.clone(),
                 message_json: error_json(&doc, id, 4900, "The page navigated away"),
             });
         }
+        // Answered or not, the page that asked is gone: 4900 for the record.
+        out.settled.push(Settled {
+            tab: tab_id.to_owned(),
+            doc: doc.clone(),
+            id: id.clone(),
+            code: Some(4900),
+            why: Some(why),
+        });
     }
 
     if let Some(consent) = &mut model.consent {
@@ -1053,7 +1271,13 @@ fn debug_mode_changed(model: &mut Model, on: bool, out: &mut Out) {
         .map(|(id, _)| id.clone())
         .collect();
     for tab in withdrawn {
-        retire_document(model, &tab, true, out);
+        retire_document(
+            model,
+            &tab,
+            true,
+            (DbrLayer::Provider, DbrReason::WalletWithdrawn),
+            out,
+        );
         if let Some(entry) = model.tabs.get_mut(&tab) {
             entry.doc_origin = None;
         }
@@ -1093,12 +1317,9 @@ fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
             let (Some(doc), Some(id)) = (doc, id) else {
                 return;
             };
+            // No row: a message that is not a request names no method.
             if current_document(model, &message.tab, &doc, &frame_origin, out) {
-                out.op(DbrOperation::Deliver {
-                    tab: message.tab.clone(),
-                    doc: doc.clone(),
-                    message_json: error_json(&doc, &id, code, words),
-                });
+                deliver_unrecorded_error(&message.tab, &doc, &id, code, words, out);
             }
         }
         PageMessage::Request(request) => {
@@ -1116,7 +1337,7 @@ fn hello(model: &mut Model, tab_id: &str, doc: String, origin: String, out: &mut
     if tab.doc.as_deref() == Some(doc.as_str()) {
         return;
     }
-    retire_document(model, tab_id, true, out);
+    retire_document(model, tab_id, true, NAVIGATED_AWAY, out);
     let tab = model.tabs.entry(tab_id.to_owned()).or_default();
     tab.retired.retain(|retired| retired != &doc);
     tab.doc = Some(doc);
@@ -1170,9 +1391,12 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
         .get(tab_id)
         .is_some_and(|tab| tab.open.contains_key(&id))
     {
-        deliver_error(tab_id, &doc, &id, -32602, "Duplicate request id", out);
+        // The open request keeps its row: this answer is not its end.
+        deliver_unrecorded_error(tab_id, &doc, &id, -32602, "Duplicate request id", out);
         return;
     }
+    let route = classify(&request.method);
+    open_row(model, tab_id, &doc, &id, &request.method, class_of(route));
 
     let grant_addresses = granted(model, &origin);
     // A grant whose account left a KNOWN wallet is physically dropped the
@@ -1187,7 +1411,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
     }
 
     let chain_id = site_chain(model, &origin);
-    match classify(&request.method) {
+    match route {
         Route::Accounts => deliver_result(tab_id, &doc, &id, json!(grant_addresses), out),
         Route::Coinbase => deliver_result(
             tab_id,
@@ -1232,7 +1456,15 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 return;
             }
             if model.active_address.is_none() {
-                deliver_error(tab_id, &doc, &id, 4001, "No wallet account available", out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    4001,
+                    "No wallet account available",
+                    (DbrLayer::Wallet, DbrReason::NoAccount),
+                    out,
+                );
                 return;
             }
             // One sheet: the same origin joins it, another origin is told
@@ -1248,6 +1480,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                     &id,
                     4001,
                     "Another connection request is open",
+                    (DbrLayer::Wallet, DbrReason::ConsentBusy),
                     out,
                 );
                 return;
@@ -1270,7 +1503,15 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
         }
         route @ (Route::SwitchChain | Route::AddChain) => {
             let Some(wanted) = chain_param(&request.params) else {
-                deliver_error(tab_id, &doc, &id, -32602, "Expected [{ chainId }]", out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    -32602,
+                    "Expected [{ chainId }]",
+                    (DbrLayer::Wallet, DbrReason::BadParams),
+                    out,
+                );
                 return;
             };
             if !model.chains.contains(&wanted) {
@@ -1279,7 +1520,15 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 } else {
                     format!("Chain {wanted} is not in Vela's networks")
                 };
-                deliver_error(tab_id, &doc, &id, 4902, &words, out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    4902,
+                    &words,
+                    (DbrLayer::Wallet, DbrReason::UnknownChain),
+                    out,
+                );
                 return;
             }
             set_site_chain(model, &origin, wanted, out);
@@ -1293,12 +1542,21 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                     &id,
                     4100,
                     "Signing requires a secure origin",
+                    (DbrLayer::Wallet, DbrReason::InsecureOrigin),
                     out,
                 );
                 return;
             }
             if grant_addresses.is_empty() {
-                deliver_error(tab_id, &doc, &id, 4100, "This site is not connected", out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    4100,
+                    "This site is not connected",
+                    (DbrLayer::Wallet, DbrReason::NotConnected),
+                    out,
+                );
                 return;
             }
             // A request naming an account must name the one this site was
@@ -1315,6 +1573,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                         &id,
                         4100,
                         "The requested account is not connected to this site",
+                        (DbrLayer::Wallet, DbrReason::AccountMismatch),
                         out,
                     );
                     return;
@@ -1350,19 +1609,37 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
         Route::Capabilities => {
             match dapp_rpc::capabilities(&request.params, &grant_addresses, &model.chains) {
                 Ok(answer) => deliver_result(tab_id, &doc, &id, answer, out),
-                Err((code, words)) => deliver_error(tab_id, &doc, &id, code, words, out),
+                Err((code, words)) => {
+                    deliver_error(tab_id, &doc, &id, code, words, wallet_why(code), out);
+                }
             }
         }
         Route::CallsStatus => {
             let Some(batch) = dapp_rpc::calls_status_id(&request.params) else {
-                deliver_error(tab_id, &doc, &id, -32602, "Expected [id]", out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    -32602,
+                    "Expected [id]",
+                    (DbrLayer::Wallet, DbrReason::BadParams),
+                    out,
+                );
                 return;
             };
             // Only a batch this wallet sent: a page answered with its id —
             // read on the chain it went to, wherever the site is now.
             let Some(&chain) = model.user_ops.get(&batch) else {
                 let code = dapp_rpc::UNKNOWN_BUNDLE_ID;
-                deliver_error(tab_id, &doc, &id, code, "Unknown bundle id", out);
+                deliver_error(
+                    tab_id,
+                    &doc,
+                    &id,
+                    code,
+                    "Unknown bundle id",
+                    (DbrLayer::Wallet, DbrReason::UnknownBatch),
+                    out,
+                );
                 return;
             };
             if let Some(tab) = model.tabs.get_mut(tab_id) {
@@ -1386,7 +1663,15 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
         }
         Route::Unsupported => {
             let words = format!("Vela does not support {}", request.method);
-            deliver_error(tab_id, &doc, &id, 4200, &words, out);
+            deliver_error(
+                tab_id,
+                &doc,
+                &id,
+                4200,
+                &words,
+                (DbrLayer::Wallet, DbrReason::UnsupportedMethod),
+                out,
+            );
         }
     }
 }
@@ -1406,7 +1691,15 @@ fn queue_read(model: &mut Model, tab_id: &str, doc: &str, read: QueuedRead, out:
         tab.read_queue.push_back(read);
     } else {
         tab.calls_status.remove(&id);
-        deliver_error(tab_id, doc, &id, -32005, "Limit exceeded", out);
+        deliver_error(
+            tab_id,
+            doc,
+            &id,
+            -32005,
+            "Limit exceeded",
+            (DbrLayer::Wallet, DbrReason::TooManyReads),
+            out,
+        );
     }
 }
 
@@ -1430,9 +1723,18 @@ fn deliver_result(tab: &str, doc: &str, id: &str, result: Value, out: &mut Out) 
         doc: doc.to_owned(),
         message_json: result_json(doc, id, &result),
     });
+    out.settle(tab, doc, id, None, None);
 }
 
-fn deliver_error(tab: &str, doc: &str, id: &str, code: i64, words: &str, out: &mut Out) {
+/// An error answer, and how the request ended for the record.
+fn deliver_error(tab: &str, doc: &str, id: &str, code: i64, words: &str, why: Why, out: &mut Out) {
+    deliver_unrecorded_error(tab, doc, id, code, words, out);
+    out.settle(tab, doc, id, Some(code), Some(why));
+}
+
+/// An error answer that ends no row: a message that was not a request, or a
+/// duplicate id whose first request is still open.
+fn deliver_unrecorded_error(tab: &str, doc: &str, id: &str, code: i64, words: &str, out: &mut Out) {
     out.op(DbrOperation::Deliver {
         tab: tab.to_owned(),
         doc: doc.to_owned(),
@@ -1452,6 +1754,10 @@ fn close_open(model: &mut Model, tab_id: &str, doc: &str, id: &str) -> bool {
     tab.open.remove(id).is_some()
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "an answer and its record, together"
+)]
 fn answer_error(
     model: &mut Model,
     tab: &str,
@@ -1459,10 +1765,11 @@ fn answer_error(
     id: &str,
     code: i64,
     words: &str,
+    why: Why,
     out: &mut Out,
 ) {
     if close_open(model, tab, doc, id) {
-        deliver_error(tab, doc, id, code, words, out);
+        deliver_error(tab, doc, id, code, words, why, out);
     }
 }
 
@@ -1530,6 +1837,7 @@ fn forward(model: &mut Model, mut job: SignJob, out: &mut Out) {
             &job.id,
             4100,
             "This site is not connected",
+            (DbrLayer::Wallet, DbrReason::NotConnected),
             out,
         );
         forward_next(model, out);
@@ -1606,6 +1914,20 @@ fn signing_answered(
     }
     if let Some(job) = job {
         if close_open(model, tab_id, &job.doc, id) {
+            match &payload {
+                SignResponsePayload::Ok { .. } => out.settle(tab_id, &job.doc, id, None, None),
+                SignResponsePayload::Err {
+                    code,
+                    kind,
+                    message,
+                } => out.settle(
+                    tab_id,
+                    &job.doc,
+                    id,
+                    Some(i64::from(*code)),
+                    Some(sign_error_why(*kind, message.as_deref())),
+                ),
+            }
             let message = match payload {
                 // The signing machine's answer, as it formed it.
                 SignResponsePayload::Ok { result } => {
@@ -1674,7 +1996,14 @@ fn answer_result(body: Option<&Value>) -> Option<&Value> {
         .and_then(|body| body.get("result"))
 }
 
-fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String>, out: &mut Out) {
+fn read_done(
+    model: &mut Model,
+    tab_id: &str,
+    id: &str,
+    body_json: Option<String>,
+    failure: Option<DbrReadFailure>,
+    out: &mut Out,
+) {
     let Some(tab) = model.tabs.get_mut(tab_id) else {
         return;
     };
@@ -1717,6 +2046,19 @@ fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String
     }
     if let Some(doc) = doc {
         if close_open(model, tab_id, &doc, id) {
+            let class = row_class(model, tab_id, &doc, id);
+            let (code, why) = match (&calls_status, &body) {
+                (Some(_), _) => (None, None),
+                (None, None) => (Some(-32603), Some(read_failure_why(class, failure))),
+                (None, Some(body)) => match body.get("error").filter(|e| !e.is_null()) {
+                    Some(error) => {
+                        let code = error.get("code").and_then(Value::as_i64);
+                        (code.or(Some(-32603)), Some(endpoint_error_why(class, code)))
+                    }
+                    None => (None, None),
+                },
+            };
+            out.settle(tab_id, &doc, id, code, why);
             let message = match (calls_status, body) {
                 // A batch's status: the receipt — and, with none, the relay's
                 // status — read through EIP-5792's shape. A bundler that could
@@ -1779,6 +2121,7 @@ fn user_op_done(
             tab_id,
             id,
             Some(json!({ "result": null }).to_string()),
+            None,
             out,
         ),
     }
@@ -1796,6 +2139,222 @@ fn pump_reads(model: &mut Model, tab_id: &str, out: &mut Out) {
             return;
         };
         start_read(model, tab_id, next, out);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The record (spec 099 R3, R5)
+// ---------------------------------------------------------------------------
+
+/// A 4900 because the page went to another document.
+const NAVIGATED_AWAY: Why = (DbrLayer::Browser, DbrReason::NavigatedAway);
+
+impl Out {
+    fn settle(&mut self, tab: &str, doc: &str, id: &str, code: Option<i64>, why: Option<Why>) {
+        self.settled.push(Settled {
+            tab: tab.to_owned(),
+            doc: doc.to_owned(),
+            id: id.to_owned(),
+            code,
+            why,
+        });
+    }
+}
+
+fn class_of(route: Route) -> DbrRequestClass {
+    match route {
+        Route::Connect => DbrRequestClass::Consent,
+        Route::Sign => DbrRequestClass::Signing,
+        Route::Read { bundler: false } => DbrRequestClass::Read,
+        Route::Read { bundler: true } | Route::CallsStatus => DbrRequestClass::RelayRead,
+        Route::Accounts
+        | Route::Coinbase
+        | Route::Permissions
+        | Route::RevokePermissions
+        | Route::ChainId
+        | Route::NetVersion
+        | Route::SwitchChain
+        | Route::AddChain
+        | Route::WatchAsset
+        | Route::Capabilities
+        | Route::Unsupported => DbrRequestClass::Local,
+    }
+}
+
+/// A refusal of the wallet's own, by its code.
+fn wallet_why(code: i64) -> Why {
+    let reason = match code {
+        4100 => DbrReason::NotConnected,
+        4200 => DbrReason::UnsupportedMethod,
+        4902 => DbrReason::UnknownChain,
+        -32602 => DbrReason::BadParams,
+        _ => DbrReason::WalletRefused,
+    };
+    (DbrLayer::Wallet, reason)
+}
+
+/// A new row for a request the tab's document just sent.
+fn open_row(
+    model: &mut Model,
+    tab_id: &str,
+    doc: &str,
+    id: &str,
+    method: &str,
+    class: DbrRequestClass,
+) {
+    let started_ms = model.clock_ms;
+    let Some(tab) = model.tabs.get_mut(tab_id) else {
+        return;
+    };
+    tab.rows.push_back(Row {
+        doc: doc.to_owned(),
+        row: DbrRequestRow {
+            id: id.to_owned(),
+            method: method.to_owned(),
+            class,
+            started_ms,
+            ended_ms: None,
+            outcome: DbrOutcome::Open,
+            code: None,
+            layer: None,
+            reason: None,
+        },
+    });
+    while tab.rows.len() > REQUEST_RECORD_CAP {
+        tab.rows.pop_front();
+    }
+}
+
+/// The open row of `id` from `doc`, newest first.
+fn open_row_mut<'a>(tab: &'a mut Tab, doc: &str, id: &str) -> Option<&'a mut DbrRequestRow> {
+    tab.rows
+        .iter_mut()
+        .rev()
+        .find(|row| row.doc == doc && row.row.id == id && row.row.outcome == DbrOutcome::Open)
+        .map(|row| &mut row.row)
+}
+
+/// The class a request was routed as — a read's, by default.
+fn row_class(model: &mut Model, tab_id: &str, doc: &str, id: &str) -> DbrRequestClass {
+    model
+        .tabs
+        .get_mut(tab_id)
+        .and_then(|tab| open_row_mut(tab, doc, id).map(|row| row.class))
+        .unwrap_or(DbrRequestClass::Read)
+}
+
+/// Close the rows this update answered, each with one log line.
+fn record_settled(model: &mut Model, out: &mut Out) {
+    let now = model.clock_ms;
+    for settled in std::mem::take(&mut out.settled) {
+        let Some(tab) = model.tabs.get_mut(&settled.tab) else {
+            continue;
+        };
+        let Some(row) = open_row_mut(tab, &settled.doc, &settled.id) else {
+            continue;
+        };
+        row.ended_ms = Some(now);
+        row.outcome = if settled.code.is_some() {
+            DbrOutcome::Failed
+        } else {
+            DbrOutcome::Answered
+        };
+        row.code = settled.code;
+        if let Some((layer, reason)) = settled.why {
+            row.layer = Some(layer);
+            row.reason = Some(reason);
+        }
+        let line = row_log_line(&settled.tab, row);
+        out.op(DbrOperation::Log { line });
+    }
+}
+
+fn page_state(tab: &Tab) -> DbrPageState {
+    if tab.crashed {
+        DbrPageState::Crashed
+    } else if tab.loading {
+        DbrPageState::Loading
+    } else if tab.doc.is_some() || tab.load_ended {
+        DbrPageState::Ready
+    } else {
+        DbrPageState::Blank
+    }
+}
+
+fn provider_state(model: &Model, tab: &Tab) -> DbrProviderState {
+    if tab.doc.is_some() {
+        return DbrProviderState::Offered;
+    }
+    let origin = tab.doc_origin.as_deref().or(tab.shown_origin.as_deref());
+    if origin.is_some_and(|origin| !offers_wallet(origin, model.debug_mode)) {
+        DbrProviderState::InsecureOrigin
+    } else if tab.load_ended && !tab.loading && !tab.crashed && origin.is_some() {
+        DbrProviderState::NoHello
+    } else {
+        DbrProviderState::Pending
+    }
+}
+
+/// One log line per tab whose page or provider state changed.
+fn log_tab_states(model: &mut Model, out: &mut Out) {
+    let states: Vec<(String, DbrPageState, DbrProviderState, Option<String>)> = model
+        .tabs
+        .iter()
+        .map(|(id, tab)| {
+            let origin = tab.doc_origin.clone().or(tab.shown_origin.clone());
+            (
+                id.clone(),
+                page_state(tab),
+                provider_state(model, tab),
+                origin,
+            )
+        })
+        .collect();
+    for (id, page, provider, origin) in states {
+        let Some(tab) = model.tabs.get_mut(&id) else {
+            continue;
+        };
+        let now = (page, provider, origin);
+        if tab.logged.as_ref() == Some(&now) {
+            continue;
+        }
+        out.op(DbrOperation::Log {
+            line: tab_log_line(&id, now.2.as_deref(), page, provider),
+        });
+        tab.logged = Some(now);
+    }
+}
+
+fn inspector_view(model: &Model, id: &str, tab: &Tab) -> DbrInspectorView {
+    let origin = tab.doc_origin.clone().or(tab.shown_origin.clone());
+    let page = page_state(tab);
+    let provider = provider_state(model, tab);
+    let connected = origin
+        .as_deref()
+        .filter(|origin| offers_wallet(origin, model.debug_mode))
+        .is_some_and(|origin| !granted(model, origin).is_empty());
+    let chain_id = origin
+        .as_deref()
+        .map_or(DEFAULT_CHAIN_ID, |origin| site_chain(model, origin));
+    let rows: Vec<DbrRequestRow> = tab.rows.iter().map(|row| row.row.clone()).collect();
+    let report = report(
+        id,
+        origin.as_deref(),
+        page,
+        provider,
+        connected,
+        chain_id,
+        &rows,
+    );
+    DbrInspectorView {
+        tab: id.to_owned(),
+        origin,
+        page,
+        provider,
+        connected,
+        chain_id,
+        rows,
+        report,
     }
 }
 

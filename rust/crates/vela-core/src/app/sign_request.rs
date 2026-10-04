@@ -117,6 +117,7 @@ use serde_json::{json, Value};
 use super::approval_guard::enforce_no_unlimited;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
+use super::sign_confirm::ConfirmBlock;
 use super::token_trust::TrustSimJudgment;
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
@@ -387,6 +388,16 @@ pub enum SignErrorKind {
     /// stale pre-submit (`fee_policy::tempo_quote_is_stale`) — the sheet must
     /// re-quote, never silently re-price.
     StaleFeeQuote,
+    /// -32603 — no passkey can be used here: the platform authenticator is
+    /// not available to this app (an unsigned build, a device without one)
+    /// (spec 099 R8, `FailureKind::NotSupported`). Nothing was signed.
+    SignerUnavailable,
+    /// -32603 — the passkey is one sign-in would never offer
+    /// (`FailureKind::NotDiscoverable`). Nothing was signed.
+    SignerNotDiscoverable,
+    /// -32603 — the passkey prompt failed for another reason
+    /// (`FailureKind::Other`). Nothing was signed.
+    SignerFailed,
 }
 
 /// What goes back to the dApp. `Ok { result: None }` serialises the `null`
@@ -742,6 +753,11 @@ pub enum SignSubmitOutcome {
         /// and the sheet's failure is a refusal ([`SignView::failure_refused`]).
         #[serde(default)]
         refused: bool,
+        /// The passkey ceremony is what failed, as the shell's own passkey
+        /// classifier read the platform's error — the one create and login
+        /// use (spec 099 R8). `Cancelled` is [`Self::PasskeyCancelled`].
+        #[serde(default)]
+        signer: Option<super::FailureKind>,
     },
     /// The shell proved, before the passkey or between the passkey and the
     /// relay POST, that the asking page no longer exists (spec 082 RB2):
@@ -1538,7 +1554,14 @@ impl Model {
             && self
                 .sign_error
                 .as_ref()
-                .is_some_and(|e| e.kind == SignErrorKind::SubmitFailed)
+                // A passkey prompt that failed may work the next time; one
+                // that cannot be used here (099 R8) will not, and says so.
+                .is_some_and(|e| {
+                    matches!(
+                        e.kind,
+                        SignErrorKind::SubmitFailed | SignErrorKind::SignerFailed
+                    )
+                })
     }
 
     /// The held failure answer, sent now (spec 096 F8): the request counts
@@ -1681,9 +1704,14 @@ pub struct SignView {
     pub error: Option<SignErrorNotice>,
     pub funding: Option<SignFundingView>,
     /// This machine's own approval gate: a reviewable request with the
-    /// granted account reconciled and no pipeline in flight. The shell must
-    /// AND it with `GuardView.confirm_allowed` and `FeeView.confirm_fee_ready`.
+    /// granted account reconciled and no pipeline in flight. Shells read
+    /// [`super::sign_confirm::confirm_state`], which joins it with the guard,
+    /// the reading and the fee and says which one is shut.
     pub confirm_gate_open: bool,
+    /// Why `confirm_gate_open` is false — the first of this machine's gates
+    /// that is shut (spec 099 R7).
+    #[serde(default)]
+    pub confirm_block: Option<ConfirmBlock>,
     /// §12.1.6: the granted-account switch has not acked yet.
     pub reconcile_pending: bool,
     pub swipe_action: SignSwipeAction,
@@ -1924,16 +1952,34 @@ impl App for SignRequest {
             SignSurface::Sheet
         };
 
+        // This machine's own gate, and which part of it is shut (spec 099
+        // R7) — the first that applies.
+        let confirm_block = if model.pending.is_none() {
+            Some(ConfirmBlock::NoRequest)
+        } else if model.blocked.is_some() {
+            // Spec 081: a refused request is never signable, however the
+            // shell asks.
+            Some(ConfirmBlock::Refused)
+        } else if model.inflight.is_some() {
+            Some(ConfirmBlock::InFlight)
+        } else if model.funding.is_some() {
+            Some(ConfirmBlock::Funding)
+        } else if !model.reconciled {
+            Some(ConfirmBlock::AccountSwitching)
+        } else if model
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.responded || p.held.is_some())
+        {
+            Some(ConfirmBlock::Answered)
+        } else {
+            None
+        };
+
         SignView {
             surface,
-            confirm_gate_open: model.pending.is_some()
-                // Spec 081: a refused request is never signable, however the
-                // shell asks.
-                && model.blocked.is_none()
-                && model.inflight.is_none()
-                && model.funding.is_none()
-                && model.reconciled
-                && !model.pending.as_ref().is_some_and(|p| p.responded || p.held.is_some()),
+            confirm_gate_open: confirm_block.is_none(),
+            confirm_block,
             request,
             is_signing,
             is_submitting,
@@ -3597,6 +3643,15 @@ fn on_submit_outcome(
         (_, _, SignSubmitOutcome::ReceiptPending { user_op_hash }) if is_tx => {
             SignSubmitOutcome::NotConfirmed { user_op_hash }
         }
+        // A dismissed prompt is a cancel, whichever way the shell said it.
+        (
+            _,
+            _,
+            SignSubmitOutcome::Failed {
+                signer: Some(super::FailureKind::Cancelled),
+                ..
+            },
+        ) => SignSubmitOutcome::PasskeyCancelled,
         (_, _, outcome) => outcome,
     };
     match outcome {
@@ -3787,7 +3842,11 @@ fn on_submit_outcome(
                 Some(message),
             ),
         },
-        SignSubmitOutcome::Failed { message, refused } => {
+        SignSubmitOutcome::Failed {
+            message,
+            refused,
+            signer,
+        } => {
             // RJ3: the relay refused it — the page is told so in the fixed
             // sentence (the relay's words are diagnostics), and the sheet's
             // failure is a refusal, never "try again".
@@ -3796,12 +3855,15 @@ fn on_submit_outcome(
             } else {
                 message
             };
-            let command = fail_inflight(
-                model,
-                CODE_INTERNAL,
-                SignErrorKind::SubmitFailed,
-                Some(detail),
-            );
+            // Spec 099 R8: the passkey failed — the sheet and the page's
+            // record name the signer and how, rather than "couldn't submit".
+            let kind = match signer {
+                Some(super::FailureKind::NotSupported) => SignErrorKind::SignerUnavailable,
+                Some(super::FailureKind::NotDiscoverable) => SignErrorKind::SignerNotDiscoverable,
+                Some(super::FailureKind::Other) => SignErrorKind::SignerFailed,
+                Some(super::FailureKind::Cancelled) | None => SignErrorKind::SubmitFailed,
+            };
+            let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
             model.sign_error_refused = refused && model.sign_error.is_some();
             command
         }

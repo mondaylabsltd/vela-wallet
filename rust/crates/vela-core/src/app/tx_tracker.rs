@@ -105,6 +105,14 @@ pub const RECEIPT_POLL_INTERVAL_MS: f64 = 3_000.0;
 /// `USER_OP_STATUS_POLL_INTERVAL_MS` (`safe-transaction.ts`). The first status
 /// poll waits one full interval: "not ready yet" is by far the common case.
 pub const STATUS_POLL_INTERVAL_MS: f64 = 12_000.0;
+/// …except the first, 3 s after acceptance (spec 099 R6): the relay's queue,
+/// its funding, its send are what the landing has to say in its first
+/// seconds, and twelve of silence read as a hang.
+pub const FIRST_STATUS_POLL_MS: f64 = 3_000.0;
+/// An op the relay acknowledged and later answers `not_found` for — its
+/// record expired (spec 099 R6): ended "not sent" this long after the first
+/// such answer, with the chain read to its head and no event for it.
+pub const FORGOTTEN_NOT_SENT_MS: f64 = 10.0 * 60.0 * 1000.0;
 /// Reconcile sweep throttle — `MIN_INTERVAL_MS` (`tx-reconciler.ts:32`). Home
 /// focus + interval call it a lot; also the receipt cadence once the wait
 /// window has closed.
@@ -141,6 +149,87 @@ pub fn receipt_interval_ms(in_window: bool, age_ms: f64) -> f64 {
         SLOWEST_RECEIPT_INTERVAL_MS
     }
 }
+/// What the landing's countdown line says (spec 099 R6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum LandingLine {
+    /// The relay has not put it on the network yet: no countdown — the
+    /// landing says what the relay is doing instead.
+    Waiting,
+    /// No usual time is known for this chain: no countdown line.
+    None,
+    /// "~`seconds` s remaining" — inside the chain's usual time.
+    Remaining,
+    /// "`seconds` s so far" — past it, inside twice it.
+    Elapsed,
+    /// "Taking longer than usual".
+    Slow,
+}
+
+/// The landing's pace: its countdown line and the ring round its disc.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct LandingPace {
+    pub line: LandingLine,
+    /// What `Remaining` / `Elapsed` count.
+    pub seconds: u32,
+    /// How full the ring is, 0..0.92; `None` — the ring roams.
+    pub progress: Option<f32>,
+}
+
+/// The one countdown every landing draws (spec 099 R6), counted from when the
+/// relay put the bundle on the network — never from acceptance, which counted
+/// the relay's own queue and funding as the chain being slow.
+///
+/// Inside the usual time the line counts DOWN ("~9 s remaining" is a promise
+/// with an end); past it, it counts what has passed; past twice it, it says
+/// it is taking longer. The ring eases toward full and never gets there
+/// (about 70% at the usual time, 86% at twice it, a 92% ceiling): only the
+/// confirmation closes it.
+#[must_use]
+pub fn landing_pace(sent_at_ms: Option<f64>, typical_s: Option<u16>, now_ms: f64) -> LandingPace {
+    let roaming = |line| LandingPace {
+        line,
+        seconds: 0,
+        progress: None,
+    };
+    let Some(sent_at_ms) = sent_at_ms else {
+        return roaming(LandingLine::Waiting);
+    };
+    let Some(typical) = typical_s.filter(|typical| *typical > 0).map(u32::from) else {
+        return roaming(LandingLine::None);
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "whole seconds since a send, clamped at zero"
+    )]
+    let elapsed = ((now_ms - sent_at_ms) / 1000.0)
+        .max(0.0)
+        .min(f64::from(u32::MAX)) as u32;
+    #[allow(clippy::cast_precision_loss, reason = "seconds, far below 2^24")]
+    let progress = 0.92 * (1.0 - (-1.4 * elapsed as f32 / typical as f32).exp());
+    let (line, seconds) = if elapsed < typical {
+        (LandingLine::Remaining, typical - elapsed)
+    } else if elapsed < typical.saturating_mul(2) {
+        (LandingLine::Elapsed, elapsed)
+    } else {
+        (LandingLine::Slow, elapsed)
+    };
+    LandingPace {
+        line,
+        seconds,
+        progress: Some(progress),
+    }
+}
+
+/// [`landing_pace`] as JSON — the shape the UniFFI and wasm shells read.
+#[must_use]
+pub fn landing_pace_json(sent_at_ms: Option<f64>, typical_s: Option<u16>, now_ms: f64) -> String {
+    serde_json::to_string(&landing_pace(sent_at_ms, typical_s, now_ms)).unwrap_or_default()
+}
+
 /// The executor stage that parks an op until network fees fit its signed
 /// reimbursement — `FEE_HOLD_STAGE` (`tx-reconciler.ts:84`).
 pub const FEE_HOLD_STAGE: &str = "in_band_settlement_hold";
@@ -727,6 +816,16 @@ struct Entry {
     /// What the confirmed op moved, read from its own receipt logs
     /// ([`proven_moves`]) — kept for records named after it landed.
     moved: Option<Vec<TrackMove>>,
+    /// A status poll has been issued (the first comes sooner, 099 R6).
+    status_asked: bool,
+    /// When the tracker first learned the bundle is on the network — the
+    /// relay's `submitted`/`included`, a bundle tx it named, or a receipt.
+    /// The landing counts the chain's usual time from here (099 R6).
+    relay_sent_at_ms: Option<f64>,
+    /// Acknowledged, then `not_found` past the grace: the relay's record
+    /// expired. Since when, and how many such answers in a row (099 R6).
+    forgotten_since_ms: Option<f64>,
+    forgotten_streak: u32,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -817,7 +916,22 @@ impl Entry {
             grace_from_ms: None,
             relay_rejected: false,
             moved: None,
+            status_asked: false,
+            relay_sent_at_ms: None,
+            forgotten_since_ms: None,
+            forgotten_streak: 0,
         }
+    }
+
+    /// The relay forgot an op it had acknowledged (099 R6).
+    fn forgotten(&self) -> bool {
+        self.forgotten_since_ms.is_some() && !self.status.is_terminal() && !self.abandoned
+    }
+
+    /// The chain is read for the op's own event: an op the relay may never
+    /// have had, or one it has forgotten.
+    fn scanning(&self) -> bool {
+        self.in_doubt() || self.forgotten()
     }
 
     /// How long the relay has had to write the op down, for its `not_found`
@@ -975,6 +1089,11 @@ pub struct TrackEntryView {
     /// verdict's.
     #[serde(default)]
     pub relay_tx_hash: Option<String>,
+    /// When the tracker learned the relay had put the bundle on the network
+    /// (spec 099 R6). `None` while the relay still holds it: the landing
+    /// says what the relay is doing, and counts nothing down.
+    #[serde(default)]
+    pub relay_sent_at_ms: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1114,6 +1233,7 @@ impl App for TxTracker {
                     submitted_at_ms: entry.submitted_at_ms,
                     outcome,
                     relay_tx_hash: entry.relay_tx_hash.clone(),
+                    relay_sent_at_ms: entry.relay_sent_at_ms,
                 }
             })
             .collect();
@@ -1374,6 +1494,15 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 if let Some(tx_hash) = tx_hash.filter(|hash| !hash.is_empty()) {
                     entry.relay_tx_hash = Some(tx_hash);
                 }
+                let sent = entry.relay_tx_hash.is_some()
+                    || matches!(status, TrackLifecycle::Submitted | TrackLifecycle::Included);
+                if sent && entry.relay_sent_at_ms.is_none() {
+                    entry.relay_sent_at_ms = Some(now_ms);
+                }
+                if status != TrackLifecycle::NotFound {
+                    entry.forgotten_since_ms = None;
+                    entry.forgotten_streak = 0;
+                }
                 entry.last_status = Some((status, stage));
                 if status == TrackLifecycle::Rejected && entry.relay_tx_hash.is_some() {
                     // The relay marks every op of a MINED bundle `rejected`
@@ -1413,10 +1542,31 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // must have been read up to its head with no event for this
                     // op, or a relay that lost track of a landed op would say
                     // "not sent" over money that moved.
-                    if entry.in_doubt()
+                    // Spec 099 R6: an op the relay acknowledged and has since
+                    // forgotten (its record expired) is not "on its way" for a
+                    // day. The same proof ends it — repeated `not_found`, the
+                    // chain read to its head with no event — after a longer
+                    // wait. Never one whose bundle tx the relay named: that
+                    // tx's receipt decides (RJ4).
+                    let forgotten = !entry.in_doubt()
+                        && entry.acknowledged
+                        && entry.relay_tx_hash.is_none()
+                        && !entry.posting
+                        && past_grace;
+                    if forgotten {
+                        entry.forgotten_since_ms.get_or_insert(now_ms);
+                        entry.forgotten_streak = entry.forgotten_streak.saturating_add(1);
+                    }
+                    let forgotten_long_enough = forgotten
+                        && entry.forgotten_streak >= NOT_FOUND_CONFIRMATIONS
+                        && entry
+                            .forgotten_since_ms
+                            .is_some_and(|since| now_ms - since >= FORGOTTEN_NOT_SENT_MS);
+                    if (entry.in_doubt()
                         && !entry.posting
                         && entry.not_found_streak >= NOT_FOUND_CONFIRMATIONS
-                        && entry.find.caught_up()
+                        && entry.find.caught_up())
+                        || (forgotten_long_enough && entry.find.caught_up())
                     {
                         entry.status = EntryStatus::NotSent;
                         Some((entry.record_ids.clone(), TrackFailure::NotSent))
@@ -1585,12 +1735,17 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         // may-have-been-sent op the relay has not acknowledged is asked past
         // the window too, at the receipt pace (spec 082 RA4): in exactly this
         // fault the relay was silent during the window.
-        let status_interval = if in_window {
+        //
+        // Spec 099 R6: the first ask comes 3 s after acceptance, and past the
+        // window every pending op is asked at the receipt pace — an op the
+        // relay acknowledged can still be forgotten by it, and only its
+        // `not_found` says so.
+        let status_interval = if in_window && !entry.status_asked {
+            Some(FIRST_STATUS_POLL_MS)
+        } else if in_window {
             Some(STATUS_POLL_INTERVAL_MS)
-        } else if entry.in_doubt() {
-            Some(receipt_interval)
         } else {
-            None
+            Some(receipt_interval)
         };
         let status_due = status_interval.is_some_and(|interval| {
             !entry.status_in_flight
@@ -1600,6 +1755,7 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         });
         if status_due {
             entry.status_in_flight = true;
+            entry.status_asked = true;
             entry.last_status_poll_ms = Some(now_ms);
             commands.push(shell_request(
                 attempt,
@@ -1638,7 +1794,7 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         } else {
             receipt_interval
         };
-        if entry.in_doubt()
+        if entry.scanning()
             && entry.find.in_flight.is_none()
             && entry
                 .find
@@ -1809,6 +1965,7 @@ fn on_receipt(
         // Already resolved by another path — never double-resolve.
         return Command::done();
     }
+    entry.relay_sent_at_ms.get_or_insert(now_ms);
     entry.status = EntryStatus::Confirmed {
         tx_hash: tx_hash.clone(),
     };
@@ -2016,7 +2173,7 @@ fn continue_scan(
     entry: &mut Entry,
     now_ms: f64,
 ) -> Command<TrackEffect, Event> {
-    if !entry.in_doubt() || entry.find.next_window().is_none() {
+    if !entry.scanning() || entry.find.next_window().is_none() {
         return render();
     }
     entry.find.last_ms = Some(now_ms);

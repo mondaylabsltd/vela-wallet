@@ -5524,6 +5524,7 @@ fn track_entry(
         submitted_at_ms: Some(1_754_000_000_500.0),
         outcome,
         relay_tx_hash: None,
+        relay_sent_at_ms: None,
     }
 }
 

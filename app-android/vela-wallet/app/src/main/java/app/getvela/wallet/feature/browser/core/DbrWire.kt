@@ -124,6 +124,11 @@ sealed class DbrOperation {
     @Serializable
     @SerialName("save_connection_record")
     data class SaveConnectionRecord(val address: String, val chain_id: Int, val origin: String) : DbrOperation()
+
+    /** Spec 099 FR-015: one line per request end and tab state change, written as is. */
+    @Serializable
+    @SerialName("log")
+    data class Log(val line: String) : DbrOperation()
 }
 
 @Serializable

@@ -278,6 +278,10 @@ pub struct Model {
     doc: ExploreDoc,
     phase: Phase,
     attempt: u64,
+    /// Tab ids, most recently used first (spec 099 R2) — what
+    /// [`super::browser_tabs::plan_engines`] keeps alive. Not stored: at
+    /// launch only the selected tab has a page, so it starts as that one.
+    recent: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +315,10 @@ pub struct ExploreView {
     pub favorites_full: bool,
     /// The strip is full, for the same reason.
     pub tabs_full: bool,
+    /// Every tab id, most recently used first (spec 099 R2): the order
+    /// [`super::browser_tabs::plan_engines`] keeps engines alive in.
+    #[serde(default)]
+    pub recent_tabs: Vec<String>,
     /// The mirror is live. Before this, a screen shows nothing rather than an
     /// empty start page it would have to correct a frame later.
     pub ready: bool,
@@ -506,7 +514,8 @@ impl App for ExploreSites {
                     host,
                 });
                 // Opening a tab selects it. That is what opening one is.
-                model.doc.selected_tab = Some(id);
+                model.doc.selected_tab = Some(id.clone());
+                used(model, id);
                 persist(model)
             }
 
@@ -529,7 +538,8 @@ impl App for ExploreSites {
                 if !model.doc.tabs.iter().any(|t| t.id == id) {
                     return Command::done();
                 }
-                model.doc.selected_tab = Some(id);
+                model.doc.selected_tab = Some(id.clone());
+                used(model, id);
                 persist(model)
             }
 
@@ -573,6 +583,12 @@ impl App for ExploreSites {
             recent_hidden: doc.hidden_system.contains(&ExploreSystemGroup::Recent),
             favorites_full: doc.favorites.len() >= FAVORITES_CAP,
             tabs_full: doc.tabs.len() >= TABS_CAP,
+            recent_tabs: model
+                .recent
+                .iter()
+                .filter(|id| doc.tabs.iter().any(|tab| &tab.id == *id))
+                .cloned()
+                .collect(),
             ready: model.phase == Phase::Ready,
         }
     }
@@ -598,6 +614,7 @@ fn accept(model: &mut Model, result: ExploreShellResult) -> Command<ExploreEffec
             for group in &mut model.doc.groups {
                 group.members.retain(|member| known.contains(member));
             }
+            model.recent = selected_or_first(&model.doc).into_iter().collect();
             model.phase = Phase::Ready;
             render()
         }
@@ -622,6 +639,7 @@ fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
     };
     let was_selected = selected_or_first(&model.doc).as_deref() == Some(id);
     model.doc.tabs.remove(index);
+    model.recent.retain(|recent| recent != id);
     if was_selected {
         model.doc.selected_tab = model
             .doc
@@ -633,8 +651,18 @@ fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
                     .and_then(|left| model.doc.tabs.get(left))
             })
             .map(|tab| tab.id.clone());
+        // The tab that takes over is the one in use now.
+        if let Some(next) = model.doc.selected_tab.clone() {
+            used(model, next);
+        }
     }
     persist(model)
+}
+
+/// `id` is the tab in use now: first in the recency order.
+fn used(model: &mut Model, id: String) {
+    model.recent.retain(|recent| recent != &id);
+    model.recent.insert(0, id);
 }
 
 /// The selected tab, or the first — an id nothing carries selects nothing,

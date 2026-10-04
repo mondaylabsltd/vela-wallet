@@ -304,6 +304,7 @@
   "txSubmitted": "Transaksi dikirim ke jaringan",
   "txSlowConfirm": "Lebih lama dari biasanya, mohon tunggu...",
   "txRelayFunding": "Relay sedang mengisi gas-nya di jaringan ini. Transaksi Anda dikirim begitu gas itu masuk.",
+  "txRelaySending": "Relay Vela sedang mengirimnya ke jaringan…",
   "txWaitingConfirm": "Menunggu konfirmasi blockchain...",
   "txElapsed": "{{elapsed}} dtk berlalu — hampir selesai",
   "txRemaining": "~{{remaining}}s tersisa",
@@ -1407,7 +1408,18 @@
    "refused": "Jaringan menolaknya — tidak ada yang terkirim.",
    "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
    "openSigner": "Konfirmasi di halaman tanda tangan",
-   "signerDown": "Halaman tanda tangan tidak terbuka. Periksa koneksi Anda."
+   "signerDown": "Halaman tanda tangan tidak terbuka. Periksa koneksi Anda.",
+   "confirmBlock": {
+    "accountSwitching": "Beralih ke akun situs…",
+    "answered": "Permintaan ini sudah selesai — tutup saja",
+    "answeredRetry": "Belum berhasil — ketuk Coba Lagi",
+    "reading": "Membaca permintaan…",
+    "approvalChoice": "Pilih jumlah persetujuan dulu",
+    "batchUnsettled": "Memeriksa setiap panggilan dalam batch…",
+    "feeMeasuring": "Menghitung biaya jaringan…",
+    "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi",
+    "feeShort": "Koin ini tidak cukup untuk biaya — pilih yang lain"
+   }
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",
@@ -1623,6 +1635,55 @@
    "window": "Jendela",
    "minimize": "Minimalkan",
    "closeWindow": "Tutup Jendela"
+  },
+  "browserStatus": {
+   "title": "Status tab",
+   "page": {
+    "blank": "Belum ada halaman",
+    "loading": "Memuat",
+    "ready": "Halaman dimuat",
+    "crashed": "Halaman berhenti"
+   },
+   "provider": {
+    "pending": "Dompet: memeriksa",
+    "offered": "Dompet tersedia untuk halaman ini",
+    "insecureOrigin": "Dompet tidak ditawarkan: halaman tidak aman",
+    "noHello": "Dompet tidak ditawarkan: skrip Vela tidak berjalan"
+   },
+   "reason": {
+    "navigatedAway": "Halaman berpindah sebelum dijawab",
+    "pageCrashed": "Halaman berhenti bekerja",
+    "walletWithdrawn": "Mode debug mati — dompet keluar dari halaman ini",
+    "insecureOrigin": "Menandatangani butuh halaman yang aman",
+    "notConnected": "Situs ini belum terhubung",
+    "accountMismatch": "Situs meminta akun yang tidak diberikan",
+    "noAccount": "Tidak ada akun dompet untuk dihubungkan",
+    "consentBusy": "Permintaan situs lain sedang terbuka",
+    "unsupportedMethod": "Vela tidak mendukung permintaan ini",
+    "unknownChain": "Jaringan ini tidak ada di Vela",
+    "badParams": "Format permintaan salah",
+    "tooManyReads": "Terlalu banyak permintaan sekaligus",
+    "unknownBatch": "Batch ini bukan dikirim Vela",
+    "walletRefused": "Vela menolak permintaan ini",
+    "noEndpoint": "RPC jaringan tidak menjawab",
+    "timedOut": "RPC jaringan kehabisan waktu",
+    "rateLimited": "RPC jaringan sedang membatasi permintaan",
+    "endpointError": "RPC jaringan mengembalikan galat",
+    "reverted": "Transaksi di-revert on-chain",
+    "rejectedByPerson": "Anda menolak",
+    "relayRefused": "Relay Vela menolaknya — tidak ada yang terkirim",
+    "relayUnreachable": "Relay Vela tak terjangkau — tidak ada yang terkirim",
+    "notConfirmedYet": "Terkirim, belum terkonfirmasi",
+    "relayFailed": "Relay Vela tidak bisa menerimanya",
+    "signerUnavailable": "Passkey tidak bisa dipakai di sini",
+    "signerNotDiscoverable": "Passkey ini tidak bisa menandatangani di sini",
+    "signerFailed": "Prompt passkey gagal"
+   },
+   "requests": "Permintaan terbaru",
+   "noRequests": "Belum ada permintaan",
+   "copy": "Salin detail",
+   "copied": "Disalin",
+   "reloaded": "Dimuat ulang untuk menghemat memori"
   }
  },
  "settingsModals": {

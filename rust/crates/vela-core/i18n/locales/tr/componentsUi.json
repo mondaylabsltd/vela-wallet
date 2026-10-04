@@ -219,7 +219,18 @@
       "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
       "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
       "openSigner": "İmza sayfasında onayla",
-      "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."
+      "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin.",
+      "confirmBlock": {
+        "accountSwitching": "Sitenin hesabına geçiliyor…",
+        "answered": "Bu istek sona erdi — kapatın",
+        "answeredRetry": "Tamamlanmadı — Tekrar Dene’ye dokunun",
+        "reading": "İstek okunuyor…",
+        "approvalChoice": "Önce bir onay miktarı seçin",
+        "batchUnsettled": "Toplu işlemdeki her çağrı kontrol ediliyor…",
+        "feeMeasuring": "Ağ ücreti hesaplanıyor…",
+        "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
+        "feeShort": "Bu coin ücret için yetmiyor — başka birini seçin"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",
@@ -435,6 +446,55 @@
       "window": "Pencere",
       "minimize": "Küçült",
       "closeWindow": "Pencereyi Kapat"
+    },
+    "browserStatus": {
+      "title": "Sekme durumu",
+      "page": {
+        "blank": "Henüz sayfa yok",
+        "loading": "Yükleniyor",
+        "ready": "Sayfa yüklendi",
+        "crashed": "Sayfa durdu"
+      },
+      "provider": {
+        "pending": "Cüzdan: kontrol ediliyor",
+        "offered": "Cüzdan bu sayfada kullanılabilir",
+        "insecureOrigin": "Cüzdan sunulmadı: sayfa güvenli değil",
+        "noHello": "Cüzdan sunulmadı: Vela'nın betiği çalışmadı"
+      },
+      "reason": {
+        "navigatedAway": "Sayfa yanıttan önce başka yere geçti",
+        "pageCrashed": "Sayfa çalışmayı durdurdu",
+        "walletWithdrawn": "Hata ayıklama modu kapalı — cüzdan bu sayfadan çıktı",
+        "insecureOrigin": "İmza için güvenli bir sayfa gerekir",
+        "notConnected": "Bu site bağlı değil",
+        "accountMismatch": "Site, verilmemiş bir hesap istedi",
+        "noAccount": "Bağlanacak cüzdan hesabı yok",
+        "consentBusy": "Başka bir sitenin isteği açık",
+        "unsupportedMethod": "Vela bu isteği desteklemiyor",
+        "unknownChain": "Bu ağ Vela'da yok",
+        "badParams": "İstek hatalı biçimde",
+        "tooManyReads": "Aynı anda çok fazla istek",
+        "unknownBatch": "Bu toplu işlemi Vela göndermedi",
+        "walletRefused": "Vela bu isteği reddetti",
+        "noEndpoint": "Ağın RPC'si yanıt vermedi",
+        "timedOut": "Ağın RPC'si zaman aşımına uğradı",
+        "rateLimited": "Ağın RPC'si istekleri sınırlıyor",
+        "endpointError": "Ağın RPC'si hata döndürdü",
+        "reverted": "Zincirde geri alındı",
+        "rejectedByPerson": "Reddettiniz",
+        "relayRefused": "Vela'nın relay'i reddetti — hiçbir şey gönderilmedi",
+        "relayUnreachable": "Vela'nın relay'ine ulaşılamadı — hiçbir şey gönderilmedi",
+        "notConfirmedYet": "Gönderildi, henüz onaylanmadı",
+        "relayFailed": "Vela'nın relay'i alamadı",
+        "signerUnavailable": "Burada passkey kullanılamaz",
+        "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
+        "signerFailed": "Passkey istemi başarısız oldu"
+      },
+      "requests": "Son istekler",
+      "noRequests": "Henüz istek yok",
+      "copy": "Ayrıntıları kopyala",
+      "copied": "Kopyalandı",
+      "reloaded": "Bellek için yeniden yüklendi"
     }
   }
 }

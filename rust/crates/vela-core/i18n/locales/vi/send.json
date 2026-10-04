@@ -50,6 +50,7 @@
     "txSubmitted": "Giao dịch đã được gửi lên mạng",
     "txSlowConfirm": "Lâu hơn bình thường, vui lòng đợi...",
     "txRelayFunding": "Relay đang nạp thêm gas trên mạng này. Giao dịch của bạn sẽ được gửi ngay khi gas về.",
+    "txRelaySending": "Relay của Vela đang gửi lên mạng…",
     "txWaitingConfirm": "Đang chờ blockchain xác nhận...",
     "txElapsed": "Đã trôi qua {{elapsed}}s — sắp xong",
     "txRemaining": "Còn ~{{remaining}}s",

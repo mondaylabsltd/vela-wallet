@@ -57,6 +57,7 @@
     "txSubmitted": "Transaction submitted to the network",
     "txSlowConfirm": "Taking longer than usual, please wait...",
     "txRelayFunding": "The relay is topping up its gas on this network. It sends your transaction as soon as that lands.",
+    "txRelaySending": "Vela's relay is sending it to the network…",
     "txWaitingConfirm": "Waiting for blockchain confirmation...",
     "txElapsed": "{{elapsed}}s elapsed — almost there",
     "txRemaining": "~{{remaining}}s remaining",

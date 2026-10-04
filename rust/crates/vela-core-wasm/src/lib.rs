@@ -891,6 +891,37 @@ pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
 
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
+/// May the signing slide arm, and if not why (spec 099 R7) — the one gate
+/// every client reads: the four views' JSON, the speed in force, a
+/// `ConfirmState` JSON back (`undefined` when a view does not read).
+#[wasm_bindgen(js_name = signConfirmState)]
+#[must_use]
+pub fn sign_confirm_state(
+    sign_json: &str,
+    guard_json: &str,
+    clear_json: &str,
+    fee_json: Option<String>,
+    speed_tier: Option<String>,
+) -> Option<String> {
+    vela_core::app::sign_confirm::confirm_state_json(
+        sign_json,
+        guard_json,
+        clear_json,
+        fee_json.as_deref(),
+        speed_tier.as_deref(),
+    )
+}
+
+/// The landing's countdown (spec 099 R6), from the relay's send time: a
+/// `LandingPace` JSON. `typical_s` 0 = unknown, as `typicalInclusionSeconds`
+/// answers it.
+#[wasm_bindgen(js_name = landingPace)]
+#[must_use]
+pub fn landing_pace(sent_at_ms: Option<f64>, typical_s: u32, now_ms: f64) -> String {
+    let typical = u16::try_from(typical_s).ok().filter(|s| *s > 0);
+    vela_core::app::tx_tracker::landing_pace_json(sent_at_ms, typical, now_ms)
+}
+
 #[wasm_bindgen(js_name = feeSignalsCacheTtlMs)]
 #[must_use]
 pub fn fee_signals_cache_ttl_ms() -> u32 {

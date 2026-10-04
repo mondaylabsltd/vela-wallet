@@ -219,7 +219,18 @@
       "refused": "網絡拒絕咗呢筆交易，乜都冇發出。",
       "unknownOutcome": "過咗 24 小時仍然未確認。",
       "openSigner": "去簽名頁確認",
-      "signerDown": "簽名頁開唔到，請檢查網絡。"
+      "signerDown": "簽名頁開唔到，請檢查網絡。",
+      "confirmBlock": {
+        "accountSwitching": "正在切換到網站嘅帳戶…",
+        "answered": "呢個請求已完結——關閉就得",
+        "answeredRetry": "未成功——撳「重試」",
+        "reading": "正在讀取請求…",
+        "approvalChoice": "請先揀授權額度",
+        "batchUnsettled": "正在逐一檢查呢批調用…",
+        "feeMeasuring": "正在計算網絡費用…",
+        "feeFailed": "計唔到費用——撳費用重試",
+        "feeShort": "呢個幣唔夠畀手續費——換一個"
+      }
     },
     "currency": {
       "title": "顯示貨幣",
@@ -435,6 +446,55 @@
       "window": "視窗",
       "minimize": "縮到最細",
       "closeWindow": "關閉視窗"
+    },
+    "browserStatus": {
+      "title": "分頁狀態",
+      "page": {
+        "blank": "未有頁面",
+        "loading": "載入中",
+        "ready": "頁面已載入",
+        "crashed": "頁面已停止"
+      },
+      "provider": {
+        "pending": "錢包：檢查中",
+        "offered": "呢個頁面可以用錢包",
+        "insecureOrigin": "未提供錢包：頁面唔安全",
+        "noHello": "未提供錢包：Vela 腳本冇執行"
+      },
+      "reason": {
+        "navigatedAway": "頁面喺回覆前已跳轉",
+        "pageCrashed": "頁面停止運作",
+        "walletWithdrawn": "除錯模式已關閉，錢包已離開呢個頁面",
+        "insecureOrigin": "簽名需要安全嘅頁面",
+        "notConnected": "呢個網站未連接",
+        "accountMismatch": "網站要求咗未授權畀佢嘅帳戶",
+        "noAccount": "冇可以連接嘅錢包帳戶",
+        "consentBusy": "另一個網站嘅請求未處理",
+        "unsupportedMethod": "Vela 唔支援呢個請求",
+        "unknownChain": "Vela 冇呢個網絡",
+        "badParams": "請求格式有誤",
+        "tooManyReads": "同一時間請求太多",
+        "unknownBatch": "呢批交易唔係 Vela 發出",
+        "walletRefused": "Vela 拒絕咗呢個請求",
+        "noEndpoint": "呢個網絡嘅 RPC 冇回應",
+        "timedOut": "呢個網絡嘅 RPC 逾時",
+        "rateLimited": "呢個網絡嘅 RPC 正在限流",
+        "endpointError": "呢個網絡嘅 RPC 傳回錯誤",
+        "reverted": "交易喺鏈上回滾咗",
+        "rejectedByPerson": "你已拒絕",
+        "relayRefused": "Vela 中繼拒絕咗——乜都冇發出",
+        "relayUnreachable": "連唔到 Vela 中繼——乜都冇發出",
+        "notConfirmedYet": "已發出，未確認",
+        "relayFailed": "Vela 中繼接收唔到",
+        "signerUnavailable": "呢度用唔到通行密鑰",
+        "signerNotDiscoverable": "呢個通行密鑰喺度簽唔到名",
+        "signerFailed": "通行密鑰驗證失敗"
+      },
+      "requests": "最近嘅請求",
+      "noRequests": "未有請求",
+      "copy": "複製詳情",
+      "copied": "已複製",
+      "reloaded": "為慳記憶體已重新載入"
     }
   }
 }

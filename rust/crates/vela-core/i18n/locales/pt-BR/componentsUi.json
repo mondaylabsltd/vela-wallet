@@ -219,7 +219,18 @@
       "refused": "A rede recusou — nada foi enviado.",
       "unknownOutcome": "Ainda sem confirmação após 24 horas.",
       "openSigner": "Confirmar na página de assinatura",
-      "signerDown": "A página de assinatura não abriu. Verifique sua conexão."
+      "signerDown": "A página de assinatura não abriu. Verifique sua conexão.",
+      "confirmBlock": {
+        "accountSwitching": "Trocando para a conta do site…",
+        "answered": "Esta solicitação terminou — feche para concluir",
+        "answeredRetry": "Não deu certo — toque em Tentar de novo",
+        "reading": "Lendo a solicitação…",
+        "approvalChoice": "Escolha primeiro um valor de aprovação",
+        "batchUnsettled": "Verificando cada chamada do lote…",
+        "feeMeasuring": "Calculando a taxa de rede…",
+        "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
+        "feeShort": "Esta moeda não cobre a taxa — escolha outra"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",
@@ -435,6 +446,55 @@
       "window": "Janela",
       "minimize": "Minimizar",
       "closeWindow": "Fechar Janela"
+    },
+    "browserStatus": {
+      "title": "Status da aba",
+      "page": {
+        "blank": "Nenhuma página ainda",
+        "loading": "Carregando",
+        "ready": "Página carregada",
+        "crashed": "Página parou"
+      },
+      "provider": {
+        "pending": "Carteira: verificando",
+        "offered": "Carteira disponível nesta página",
+        "insecureOrigin": "Carteira não oferecida: a página não é segura",
+        "noHello": "Carteira não oferecida: o script da Vela não rodou"
+      },
+      "reason": {
+        "navigatedAway": "A página mudou antes da resposta",
+        "pageCrashed": "A página parou de funcionar",
+        "walletWithdrawn": "O modo de depuração está desligado — a carteira saiu desta página",
+        "insecureOrigin": "Assinar exige uma página segura",
+        "notConnected": "Este site não está conectado",
+        "accountMismatch": "O site pediu uma conta que não lhe foi dada",
+        "noAccount": "Nenhuma conta da carteira para conectar",
+        "consentBusy": "Há uma solicitação de outro site aberta",
+        "unsupportedMethod": "A Vela não aceita esta solicitação",
+        "unknownChain": "Esta rede não está na Vela",
+        "badParams": "A solicitação está malformada",
+        "tooManyReads": "Solicitações demais ao mesmo tempo",
+        "unknownBatch": "A Vela não enviou este lote",
+        "walletRefused": "A Vela recusou esta solicitação",
+        "noEndpoint": "O RPC da rede não respondeu",
+        "timedOut": "O RPC da rede esgotou o tempo",
+        "rateLimited": "O RPC da rede está limitando solicitações",
+        "endpointError": "O RPC da rede retornou um erro",
+        "reverted": "Foi revertida na chain",
+        "rejectedByPerson": "Você recusou",
+        "relayRefused": "O relay da Vela recusou — nada foi enviado",
+        "relayUnreachable": "Não foi possível falar com o relay da Vela — nada foi enviado",
+        "notConfirmedYet": "Enviada, ainda não confirmada",
+        "relayFailed": "O relay da Vela não conseguiu receber",
+        "signerUnavailable": "Passkeys não podem ser usadas aqui",
+        "signerNotDiscoverable": "Esta passkey não pode assinar aqui",
+        "signerFailed": "A passkey falhou"
+      },
+      "requests": "Solicitações recentes",
+      "noRequests": "Nenhuma solicitação ainda",
+      "copy": "Copiar detalhes",
+      "copied": "Copiado",
+      "reloaded": "Recarregada para economizar memória"
     }
   }
 }

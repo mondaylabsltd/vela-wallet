@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.browser.core
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.diagnostics.VelaLog
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -77,6 +78,10 @@ class BrowserExecutor(
         }
         is DbrOperation.SaveConnectionRecord -> {
             ports.saveConnectionRecord(connectionRow(operation.address, operation.chain_id, operation.origin, System.currentTimeMillis()))
+            DbrShellResult.Ack
+        }
+        is DbrOperation.Log -> {
+            VelaLog.event("browser", operation.line)
             DbrShellResult.Ack
         }
     }

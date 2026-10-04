@@ -553,6 +553,49 @@ pub fn sign_route(device_keys_json: String, method: String) -> Option<String> {
     vela_core::wallet_keys::sign_route_json(&device_keys_json, &method)
 }
 
+/// Which browser tabs to let go of now (spec 099 R2): an `EngineInput` JSON in
+/// (tabs, selected, recent, busy, live, pressure), an `EnginePlan` JSON out
+/// (`{"suspend":[…]}`). `None` for input that does not read. See
+/// `vela_core::app::browser_tabs`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_engine_plan(input_json: String) -> Option<String> {
+    vela_core::app::browser_tabs::plan_engines_json(&input_json)
+}
+
+/// May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+/// clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
+/// no fee session) and the speed in force (`"fast"`…, `None` with no speed
+/// control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
+/// a view does not read, and the slide stays shut. See
+/// `vela_core::app::sign_confirm`.
+#[uniffi::export]
+#[must_use]
+pub fn sign_confirm_state(
+    sign_json: String,
+    guard_json: String,
+    clear_json: String,
+    fee_json: Option<String>,
+    speed_tier: Option<String>,
+) -> Option<String> {
+    vela_core::app::sign_confirm::confirm_state_json(
+        &sign_json,
+        &guard_json,
+        &clear_json,
+        fee_json.as_deref(),
+        speed_tier.as_deref(),
+    )
+}
+
+/// The landing's countdown (spec 099 R6), counted from when the relay put the
+/// bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
+/// JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.
+#[uniffi::export]
+#[must_use]
+pub fn landing_pace(sent_at_ms: Option<f64>, typical_s: Option<u16>, now_ms: f64) -> String {
+    vela_core::app::tx_tracker::landing_pace_json(sent_at_ms, typical_s, now_ms)
+}
+
 /// A key-method row's words (087 F01, F02): the title's corpus key and the
 /// line under it — `line_key` a corpus key to translate, or `line_name` a
 /// product name ("Face ID") drawn as it is; exactly one of the two is set.
