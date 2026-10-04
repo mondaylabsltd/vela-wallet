@@ -182,7 +182,7 @@ struct SigningFeeCoinTests {
     }
 
     @Test func aMeasurementBeforeTheQuestionIsToldAfterItAndAfterEveryReAsk() async throws {
-        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         fees.balanceChanges(calls: swapCalls, changes: swapChanges)
         let first = await fees.quote(
             chainId: 137, account: safe, deployed: true, publicKeyAvailable: true,
@@ -201,7 +201,7 @@ struct SigningFeeCoinTests {
     }
 
     @Test func aMeasurementOfOtherCallsIsToldToNoSession() async {
-        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         fees.balanceChanges(calls: [["to": router, "value": "0", "data": swapData + "00"]], changes: swapChanges)
         let view = await fees.quote(
             chainId: 137, account: safe, deployed: true, publicKeyAvailable: true,
@@ -211,7 +211,7 @@ struct SigningFeeCoinTests {
     }
 
     @Test func theOtherSpeedsAreToldToo() async throws {
-        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: scriptedRelay(), accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         _ = await fees.quote(
             chainId: 137, account: safe, deployed: true, publicKeyAvailable: true,
             calls: swapCalls, feeToken: nil, autoFeeToken: true

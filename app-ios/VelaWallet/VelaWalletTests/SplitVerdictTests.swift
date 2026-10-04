@@ -377,7 +377,7 @@ struct SplitWriteAheadTests {
         let seen = Seen()
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
-            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil),
+            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil, timers: .stopped),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
             metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
             balances: { nil }, networks: { nil }, ports: SendExecutor.Ports(),
