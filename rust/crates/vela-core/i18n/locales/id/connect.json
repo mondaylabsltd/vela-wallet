@@ -87,6 +87,8 @@
       "cancel": "Batal",
       "connect": "Hubungkan",
       "a11yClose": "Tutup browser",
+      "addLead": "{{host}} meminta menambahkan jaringan",
+      "addFromSite": "Tidak ada di daftar jaringan Vela — nama dan koinnya dari situs.",
       "a11yBack": "Kembali",
       "a11yReload": "Muat ulang halaman",
       "a11yOpenSystem": "Buka di browser sistem",

@@ -469,7 +469,7 @@
         "notConnected": "Trang này chưa kết nối",
         "accountMismatch": "Trang yêu cầu tài khoản chưa được cấp",
         "noAccount": "Không có tài khoản ví để kết nối",
-        "consentBusy": "Đang có yêu cầu của trang khác",
+        "consentBusy": "Đang có yêu cầu khác",
         "unsupportedMethod": "Vela không hỗ trợ yêu cầu này",
         "unknownChain": "Mạng này không có trong Vela",
         "badParams": "Yêu cầu sai định dạng",
@@ -488,7 +488,8 @@
         "relayFailed": "Relay của Vela không nhận được",
         "signerUnavailable": "Không dùng được passkey ở đây",
         "signerNotDiscoverable": "Passkey này không ký được ở đây",
-        "signerFailed": "Xác thực passkey thất bại"
+        "signerFailed": "Xác thực passkey thất bại",
+        "badRpc": "Trang web không đưa RPC dùng được cho mạng này"
       },
       "requests": "Yêu cầu gần đây",
       "noRequests": "Chưa có yêu cầu",

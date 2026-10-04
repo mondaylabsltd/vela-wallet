@@ -239,8 +239,6 @@
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
       "alertIncompatibleTitle": "Cihaz Uyumlu Değil",
       "alertIncompatibleBody": "Cihazınızın kimlik sağlayıcısı Vela Wallet ile uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin.",
-      "alertNotFoundTitle": "Hesap Bulunamadı",
-      "alertNotFoundBody": "Bu kimlik için cüzdan bulunamadı.\n\nOlası nedenler:\n• Henüz bir cüzdan oluşturmadınız\n• Kimliğiniz bu cihazla eşitlenmedi (iCloud / Google ayarlarını kontrol edin)\n• Açık anahtar sunucusuna ulaşılamıyor\n\nYeni bir cüzdan oluşturmayı deneyin veya kimlik sağlayıcınızın (Face ID / parmak izi) cihazlar arasında eşitlendiğinden emin olun.",
       "alertSignInFailedTitle": "Giriş Başarısız",
       "alertSelectorUnresponsive": "Sistemin passkey seçicisi yanıt vermiyor. Bu cihazda bu cüzdan için çok fazla passkey kayıtlı olduğunda bu durum oluşabilir. Tekrar deneyin veya başka bir cihazla ya da güvenlik anahtarıyla giriş yapın.",
       "alertSignInFailedBody": "{{message}}\n\nCihazınızda Face ID, Touch ID veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",

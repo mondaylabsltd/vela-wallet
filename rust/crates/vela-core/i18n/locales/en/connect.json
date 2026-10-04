@@ -87,6 +87,8 @@
       "cancel": "Cancel",
       "connect": "Connect",
       "a11yClose": "Close browser",
+      "addLead": "{{host}} asks to add a network",
+      "addFromSite": "Not in Vela’s network list — the name and coin are the site’s.",
       "a11yBack": "Go back",
       "a11yReload": "Reload page",
       "a11yOpenSystem": "Open in system browser",

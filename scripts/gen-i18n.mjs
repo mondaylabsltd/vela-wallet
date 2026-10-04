@@ -538,8 +538,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
 //   branch (why the slide is shut), and `send.txRelaySending` (the landing
 //   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
-if (PATHS.length !== 1876) fail(`expected 1876 paths (1779 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1779) fail(`expected 1779 leaf paths, got ${leafSet.size}`);
+// 1877 (100, 2026-10-04): a page may ask Vela to add a network — + `connect.
+//   browser.{addLead,addFromSite}` (who asks; "the name and coin are the
+//   site's") and `componentsUi.browserStatus.reason.badRpc`; the sheet's other
+//   words are Settings' own (`settingsModals.addNetwork.*`, `addToken.label*`,
+//   `addToken.errorNotCompatible`, `assets.rpcFixWrongChain`). Minus `onboarding.
+//   login.alertNotFound{Title,Body}`, read by no client (git grep: neither
+//   the full path nor the leaf name appears outside the corpus and the
+//   generated tables) — the room the three need under SC-005, instead of a
+//   budget move. Same branches: 1779 + 3 - 2 = 1780 leaves.
+if (PATHS.length !== 1877) fail(`expected 1877 paths (1780 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

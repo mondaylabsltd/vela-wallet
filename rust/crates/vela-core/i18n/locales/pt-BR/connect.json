@@ -87,6 +87,8 @@
       "cancel": "Cancelar",
       "connect": "Conectar",
       "a11yClose": "Fechar o navegador",
+      "addLead": "{{host}} pede para adicionar uma rede",
+      "addFromSite": "Não está na lista de redes da Vela — o nome e a moeda são do site.",
       "a11yBack": "Voltar",
       "a11yReload": "Recarregar a página",
       "a11yOpenSystem": "Abrir no navegador do sistema",

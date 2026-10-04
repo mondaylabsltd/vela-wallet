@@ -469,7 +469,7 @@
         "notConnected": "此网站尚未连接",
         "accountMismatch": "网站请求了未授权给它的账户",
         "noAccount": "没有可连接的钱包账户",
-        "consentBusy": "另一个网站的请求尚未处理",
+        "consentBusy": "另一个请求尚未处理",
         "unsupportedMethod": "Vela 不支持此请求",
         "unknownChain": "Vela 中没有这个网络",
         "badParams": "请求格式有误",
@@ -488,7 +488,8 @@
         "relayFailed": "Vela 中继没能接收",
         "signerUnavailable": "这里无法使用通行密钥",
         "signerNotDiscoverable": "这个通行密钥无法在这里签名",
-        "signerFailed": "通行密钥验证失败"
+        "signerFailed": "通行密钥验证失败",
+        "badRpc": "网站未提供此网络可用的 RPC"
       },
       "requests": "最近的请求",
       "noRequests": "暂无请求",

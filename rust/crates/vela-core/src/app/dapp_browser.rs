@@ -8,6 +8,7 @@
 //!                          ├─ accounts / chain / permissions ─► deliver now
 //!                          ├─ connect ─► grant? deliver : consent sheet
 //!                          ├─ switch / add ─► per-origin chain ─► chainChanged to that origin's tabs
+//!                          ├─ add, unknown chain ─► `forward_to_add_network` ─► add_network_answered ─► deliver
 //!                          ├─ read ─► bounded queue ─► `read` op ─► deliver
 //!                          └─ sign ─► granted? ─► FIFO ─► `forward_to_signing` ─► signing_answered ─► deliver
 //! ```
@@ -47,7 +48,14 @@
 //!
 //! - The chain is per ORIGIN and persisted (`vela.chain.<origin>`); a new
 //!   origin starts on its grant's chain, else [`DEFAULT_CHAIN_ID`].
-//! - `wallet_addEthereumChain` for a chain the wallet has IS a switch.
+//! - `wallet_addEthereumChain` for a chain the wallet has IS a switch. For one
+//!   it lacks (spec 100), the request goes to Vela's add-network sheet
+//!   ([`DbrOperation::ForwardToAddNetwork`] — `network_admin` checks the chain
+//!   the way Settings does and adds it the way Settings does) and is answered
+//!   from the sheet's outcome ([`Event::AddNetworkAnswered`]): added → the
+//!   site moves to the chain, `chainChanged`, `null`; otherwise the code
+//!   [`dapp_rpc::add_outcome_error`] names. One such sheet at a time: a second
+//!   request is -32002 while it is open.
 //! - Every grant follows the wallet's active account (`followActiveAccount`).
 //! - Every address a page is given is spelled EIP-55
 //!   ([`dapp_spelling`], spec 082 RG10): the active account as it arrives, and
@@ -96,8 +104,9 @@ use super::dapp_record::{
     REQUEST_RECORD_CAP,
 };
 use super::dapp_rpc::{
-    self, chain_param, classify, error_body_json, error_json, event_json, hex_chain_id,
-    parse_page_message, result_json, PageMessage, PageRequest, Route,
+    self, add_chain_ask, add_outcome_error, chain_param, classify, error_body_json, error_json,
+    event_json, hex_chain_id, parse_page_message, result_json, DappAddOutcome, DappChainAsk,
+    PageMessage, PageRequest, Route,
 };
 use super::sign_request::SignResponsePayload;
 
@@ -190,6 +199,22 @@ pub enum DbrOperation {
     /// The page that asked is gone (it already has its 4900): close the
     /// sheet for this request without answering it.
     CancelSigning {
+        tab: String,
+        id: String,
+    },
+    /// Open Vela's add-network sheet for this request (spec 100): the shell
+    /// hands it to `network_admin` (`dapp_add_requested`), which checks the
+    /// chain and adds it the way Settings does. Answer with
+    /// [`Event::AddNetworkAnswered`] — exactly once, whatever happens.
+    ForwardToAddNetwork {
+        tab: String,
+        id: String,
+        origin: String,
+        ask: DappChainAsk,
+    },
+    /// The page that asked is gone (it already has its 4900): close the
+    /// add-network sheet for this request without answering it.
+    CancelAddNetwork {
         tab: String,
         id: String,
     },
@@ -326,6 +351,14 @@ pub enum Event {
         tab: String,
     },
     InspectorClosed,
+    /// The add-network sheet's answer to a forwarded request (spec 100).
+    AddNetworkAnswered {
+        tab: String,
+        id: String,
+        outcome: DappAddOutcome,
+        #[serde(default)]
+        now_ms: f64,
+    },
     /// The person picked a network for a site (the connection panel).
     SiteChainPicked {
         origin: String,
@@ -391,6 +424,7 @@ enum OpenKind {
     Read,
     Signing,
     QueuedSigning,
+    AddNetwork,
 }
 
 /// A `wallet_getCallsStatus` in flight: the batch, its chain, and the
@@ -478,6 +512,17 @@ struct SignJob {
     chain_id: u32,
 }
 
+/// The add-network request whose sheet is open (spec 100).
+#[derive(Clone, Debug)]
+struct AddJob {
+    tab: String,
+    doc: String,
+    id: String,
+    origin: String,
+    /// The chain the page asked for.
+    chain_id: u32,
+}
+
 #[derive(Clone, Debug)]
 struct HeldMessage {
     tab: String,
@@ -501,6 +546,8 @@ pub struct Model {
     consent: Option<Consent>,
     signing: Option<SignJob>,
     sign_queue: VecDeque<SignJob>,
+    /// The one add-network request on Vela's sheet (spec 100).
+    adding: Option<AddJob>,
     /// Lower-cased user-operation hashes pages were answered with, and the
     /// chain each went to — where its receipt and its batch status are read.
     user_ops: BTreeMap<String, u32>,
@@ -585,6 +632,9 @@ pub struct DbrView {
     pub sites: Vec<DbrSiteView>,
     pub signing: Option<DbrSigningView>,
     pub queued_signing: u32,
+    /// The add-network request on Vela's sheet, by tab and id (spec 100).
+    #[serde(default)]
+    pub adding_network: Option<DbrSigningView>,
     /// The inspected tab's whole record ([`Event::InspectorOpened`]).
     #[serde(default)]
     pub inspector: Option<DbrInspectorView>,
@@ -755,6 +805,12 @@ impl App for DappBrowser {
             }
             Event::InspectorOpened { tab } => model.inspected = Some(tab),
             Event::InspectorClosed => model.inspected = None,
+            Event::AddNetworkAnswered {
+                tab,
+                id,
+                outcome,
+                now_ms: _,
+            } => add_network_answered(model, &tab, &id, &outcome, &mut out),
             Event::SiteChainPicked { origin, chain_id } => {
                 if model.chains.contains(&chain_id) {
                     set_site_chain(model, &origin, chain_id, &mut out);
@@ -894,6 +950,10 @@ impl App for DappBrowser {
                 id: job.id.clone(),
             }),
             queued_signing: model.sign_queue.len() as u32,
+            adding_network: model.adding.as_ref().map(|job| DbrSigningView {
+                tab: job.tab.clone(),
+                id: job.id.clone(),
+            }),
             inspector: model.inspected.as_ref().and_then(|id| {
                 let tab = model.tabs.get(id)?;
                 Some(inspector_view(model, id, tab))
@@ -915,6 +975,7 @@ impl Event {
             | Event::ConsentApproved { now_ms }
             | Event::ConsentRejected { now_ms }
             | Event::SigningAnswered { now_ms, .. }
+            | Event::AddNetworkAnswered { now_ms, .. }
             | Event::ReadDone { now_ms, .. }
             | Event::UserOpDone { now_ms, .. } => Some(*now_ms),
             _ => None,
@@ -1235,6 +1296,15 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, why: Why, out
         .sign_queue
         .retain(|job| !(job.tab == tab_id && job.doc == doc));
     if let Some(job) = model
+        .adding
+        .take_if(|job| job.tab == tab_id && job.doc == doc)
+    {
+        out.op(DbrOperation::CancelAddNetwork {
+            tab: job.tab,
+            id: job.id,
+        });
+    }
+    if let Some(job) = model
         .signing
         .take_if(|job| job.tab == tab_id && job.doc == doc)
     {
@@ -1514,25 +1584,22 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 );
                 return;
             };
-            if !model.chains.contains(&wanted) {
-                let words = if route == Route::AddChain {
-                    format!("Add chain {wanted} in Vela's network settings first")
-                } else {
-                    format!("Chain {wanted} is not in Vela's networks")
-                };
+            if model.chains.contains(&wanted) {
+                set_site_chain(model, &origin, wanted, out);
+                deliver_result(tab_id, &doc, &id, Value::Null, out);
+            } else if route == Route::AddChain {
+                ask_to_add(model, tab_id, &doc, &id, origin, &request.params, out);
+            } else {
                 deliver_error(
                     tab_id,
                     &doc,
                     &id,
                     4902,
-                    &words,
+                    &format!("Chain {wanted} is not in Vela's networks"),
                     (DbrLayer::Wallet, DbrReason::UnknownChain),
                     out,
                 );
-                return;
             }
-            set_site_chain(model, &origin, wanted, out);
-            deliver_result(tab_id, &doc, &id, Value::Null, out);
         }
         Route::Sign => {
             if is_insecure_public_origin(&origin) {
@@ -1820,6 +1887,112 @@ fn consent_approved(model: &mut Model, now_ms: f64, out: &mut Out) {
         Some(Value::String(hex_chain_id(chain_id))),
         out,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Adding a network (spec 100)
+// ---------------------------------------------------------------------------
+
+/// `wallet_addEthereumChain` for a chain the wallet lacks: read the ask, and
+/// unless another add sheet is open, forward it to Vela's sheet.
+fn ask_to_add(
+    model: &mut Model,
+    tab_id: &str,
+    doc: &str,
+    id: &str,
+    origin: String,
+    params: &Value,
+    out: &mut Out,
+) {
+    let ask = match add_chain_ask(params, model.debug_mode) {
+        Ok(ask) => ask,
+        Err(words) => {
+            deliver_error(
+                tab_id,
+                doc,
+                id,
+                -32602,
+                words,
+                (DbrLayer::Wallet, DbrReason::BadParams),
+                out,
+            );
+            return;
+        }
+    };
+    if model.adding.is_some() {
+        let outcome = DappAddOutcome::Busy;
+        if let Some((code, words)) = add_outcome_error(&outcome, ask.chain_id) {
+            deliver_error(
+                tab_id,
+                doc,
+                id,
+                code,
+                &words,
+                (DbrLayer::Wallet, DbrReason::ConsentBusy),
+                out,
+            );
+        }
+        return;
+    }
+    set_row_class(model, tab_id, doc, id, DbrRequestClass::Consent);
+    open(model, tab_id, id, OpenKind::AddNetwork);
+    model.adding = Some(AddJob {
+        tab: tab_id.to_owned(),
+        doc: doc.to_owned(),
+        id: id.to_owned(),
+        origin: origin.clone(),
+        chain_id: ask.chain_id,
+    });
+    out.op(DbrOperation::ForwardToAddNetwork {
+        tab: tab_id.to_owned(),
+        id: id.to_owned(),
+        origin,
+        ask,
+    });
+}
+
+/// The sheet's outcome: added → the network joins the wallet's list here at
+/// once (the shell's `networks_changed` follows and agrees), the site moves
+/// to it (`chainChanged` to its tabs) and the page is answered `null`;
+/// anything else is the error [`add_outcome_error`] names.
+fn add_network_answered(
+    model: &mut Model,
+    tab_id: &str,
+    id: &str,
+    outcome: &DappAddOutcome,
+    out: &mut Out,
+) {
+    let Some(job) = model
+        .adding
+        .take_if(|job| job.tab == tab_id && job.id == id)
+    else {
+        return;
+    };
+    if !close_open(model, tab_id, &job.doc, id) {
+        return;
+    }
+    match outcome {
+        DappAddOutcome::Added { chain_id } => {
+            if !model.chains.contains(chain_id) {
+                model.chains.push(*chain_id);
+            }
+            set_site_chain(model, &job.origin, *chain_id, out);
+            deliver_result(tab_id, &job.doc, id, Value::Null, out);
+        }
+        other => {
+            let why = match other {
+                DappAddOutcome::Declined => (DbrLayer::Sheet, DbrReason::RejectedByPerson),
+                DappAddOutcome::NotCompatible => (DbrLayer::Wallet, DbrReason::NotCompatible),
+                DappAddOutcome::BadRpc => (DbrLayer::Wallet, DbrReason::BadRpc),
+                DappAddOutcome::Busy | DappAddOutcome::Added { .. } => {
+                    (DbrLayer::Wallet, DbrReason::ConsentBusy)
+                }
+            };
+            if let Some((code, words)) = add_outcome_error(other, job.chain_id) {
+                deliver_error(tab_id, &job.doc, id, code, &words, why, out);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2241,6 +2414,17 @@ fn row_class(model: &mut Model, tab_id: &str, doc: &str, id: &str) -> DbrRequest
         .get_mut(tab_id)
         .and_then(|tab| open_row_mut(tab, doc, id).map(|row| row.class))
         .unwrap_or(DbrRequestClass::Read)
+}
+
+/// Re-class an open row once its route has decided what it is.
+fn set_row_class(model: &mut Model, tab_id: &str, doc: &str, id: &str, class: DbrRequestClass) {
+    if let Some(row) = model
+        .tabs
+        .get_mut(tab_id)
+        .and_then(|tab| open_row_mut(tab, doc, id))
+    {
+        row.class = class;
+    }
 }
 
 /// Close the rows this update answered, each with one log line.

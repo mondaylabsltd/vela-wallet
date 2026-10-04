@@ -87,6 +87,8 @@
       "cancel": "취소",
       "connect": "연결",
       "a11yClose": "브라우저 닫기",
+      "addLead": "{{host}}에서 네트워크 추가를 요청합니다",
+      "addFromSite": "Vela 네트워크 목록에 없습니다. 이름과 코인은 사이트가 알려 준 것입니다.",
       "a11yBack": "뒤로",
       "a11yReload": "페이지 새로고침",
       "a11yOpenSystem": "시스템 브라우저에서 열기",

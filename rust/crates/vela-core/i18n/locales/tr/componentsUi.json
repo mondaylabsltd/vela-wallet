@@ -469,7 +469,7 @@
         "notConnected": "Bu site bağlı değil",
         "accountMismatch": "Site, verilmemiş bir hesap istedi",
         "noAccount": "Bağlanacak cüzdan hesabı yok",
-        "consentBusy": "Başka bir sitenin isteği açık",
+        "consentBusy": "Başka bir istek açık",
         "unsupportedMethod": "Vela bu isteği desteklemiyor",
         "unknownChain": "Bu ağ Vela'da yok",
         "badParams": "İstek hatalı biçimde",
@@ -488,7 +488,8 @@
         "relayFailed": "Vela'nın relay'i alamadı",
         "signerUnavailable": "Burada passkey kullanılamaz",
         "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
-        "signerFailed": "Passkey istemi başarısız oldu"
+        "signerFailed": "Passkey istemi başarısız oldu",
+        "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi"
       },
       "requests": "Son istekler",
       "noRequests": "Henüz istek yok",

@@ -469,7 +469,7 @@
         "notConnected": "Situs ini belum terhubung",
         "accountMismatch": "Situs meminta akun yang tidak diberikan",
         "noAccount": "Tidak ada akun dompet untuk dihubungkan",
-        "consentBusy": "Permintaan situs lain sedang terbuka",
+        "consentBusy": "Permintaan lain sedang terbuka",
         "unsupportedMethod": "Vela tidak mendukung permintaan ini",
         "unknownChain": "Jaringan ini tidak ada di Vela",
         "badParams": "Format permintaan salah",
@@ -488,7 +488,8 @@
         "relayFailed": "Relay Vela tidak bisa menerimanya",
         "signerUnavailable": "Passkey tidak bisa dipakai di sini",
         "signerNotDiscoverable": "Passkey ini tidak bisa menandatangani di sini",
-        "signerFailed": "Prompt passkey gagal"
+        "signerFailed": "Prompt passkey gagal",
+        "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini"
       },
       "requests": "Permintaan terbaru",
       "noRequests": "Belum ada permintaan",
