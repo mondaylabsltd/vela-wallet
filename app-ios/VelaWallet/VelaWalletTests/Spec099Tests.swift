@@ -789,52 +789,59 @@ struct TabBatchCloseTests {
         await Wait.until { h.browser.explore.tabs.count == n }
     }
 
-    /// The event leaves the core's selection: a selection that survives
-    /// stays; a closed one moves to the nearest surviving tab on its right,
-    /// else its left; none left is the start page.
-    @Test(.timeLimit(.minutes(1)))
-    func theSelectionFollowsTheCoresRule() async throws {
-        do {
-            // Survives: stays.
-            let h = BrowserHarness()
-            let ids = try await fourTabs(h, selected: 1)
-            #expect(h.browser.closeTabs(.right(of: ids[1])) == [ids[2], ids[3]])
-            await Wait.until { h.browser.explore.tabs.count == 2 }
-            #expect(h.browser.explore.tabs.map(\.id) == [ids[0], ids[1]])
-            #expect(h.browser.explore.selectedTab == ids[1])
-        }
-        do {
-            // Closed, nothing on its right survives: the nearest on its left.
-            let h = BrowserHarness()
-            let ids = try await fourTabs(h, selected: 3)
-            await close(h, .right(of: ids[0]), leaving: 1)
-            #expect(h.browser.explore.tabs.map(\.id) == [ids[0]])
-            #expect(h.browser.explore.selectedTab == ids[0])
-        }
-        do {
-            // Closed, a survivor on its right: that one — "close other tabs"
-            // lands on the tab kept.
-            let h = BrowserHarness()
-            let ids = try await fourTabs(h, selected: 0)
-            await close(h, .others(keep: ids[2]), leaving: 1)
-            #expect(h.browser.explore.tabs.map(\.id) == [ids[2]])
-            #expect(h.browser.explore.selectedTab == ids[2])
-        }
-        do {
-            // All: nothing selected — the start page — and the write landed:
-            // a browser over the same store reads the empty strip back.
-            let h = BrowserHarness()
-            _ = try await fourTabs(h, selected: 2)
-            h.browser.closeAllTabs()
-            await Wait.until { h.browser.explore.tabs.isEmpty }
-            #expect(h.browser.explore.selectedTab == nil)
-            #expect(h.browser.closeTabs(.all).isEmpty, "nothing left: nothing sent")
+    // The event leaves the core's selection: a selection that survives stays;
+    // a closed one moves to the nearest surviving tab on its right, else its
+    // left; none left is the start page. One browser per test, each with its
+    // own budget: Swift Testing runs suites side by side, and four browsers
+    // under one minute timed out on a loaded CI runner.
 
-            let again = BrowserController(store: h.store)
-            again.start()
-            await Wait.until { again.explore.ready }
-            #expect(again.explore.tabs.isEmpty)
-        }
+    /// A selection that survives stays.
+    @Test(.timeLimit(.minutes(2)))
+    func aSurvivingSelectionStays() async throws {
+        let h = BrowserHarness()
+        let ids = try await fourTabs(h, selected: 1)
+        #expect(h.browser.closeTabs(.right(of: ids[1])) == [ids[2], ids[3]])
+        await Wait.until { h.browser.explore.tabs.count == 2 }
+        #expect(h.browser.explore.tabs.map(\.id) == [ids[0], ids[1]])
+        #expect(h.browser.explore.selectedTab == ids[1])
+    }
+
+    /// Closed, nothing on its right survives: the nearest on its left.
+    @Test(.timeLimit(.minutes(2)))
+    func aClosedSelectionMovesLeftWhenNothingSurvivesOnItsRight() async throws {
+        let h = BrowserHarness()
+        let ids = try await fourTabs(h, selected: 3)
+        await close(h, .right(of: ids[0]), leaving: 1)
+        #expect(h.browser.explore.tabs.map(\.id) == [ids[0]])
+        #expect(h.browser.explore.selectedTab == ids[0])
+    }
+
+    /// Closed, a survivor on its right: that one — "close other tabs" lands on
+    /// the tab kept.
+    @Test(.timeLimit(.minutes(2)))
+    func closingOthersSelectsTheTabKept() async throws {
+        let h = BrowserHarness()
+        let ids = try await fourTabs(h, selected: 0)
+        await close(h, .others(keep: ids[2]), leaving: 1)
+        #expect(h.browser.explore.tabs.map(\.id) == [ids[2]])
+        #expect(h.browser.explore.selectedTab == ids[2])
+    }
+
+    /// All: nothing selected — the start page — and the write landed: a
+    /// browser over the same store reads the empty strip back.
+    @Test(.timeLimit(.minutes(2)))
+    func closingAllLeavesTheStartPageAndPersists() async throws {
+        let h = BrowserHarness()
+        _ = try await fourTabs(h, selected: 2)
+        h.browser.closeAllTabs()
+        await Wait.until { h.browser.explore.tabs.isEmpty }
+        #expect(h.browser.explore.selectedTab == nil)
+        #expect(h.browser.closeTabs(.all).isEmpty, "nothing left: nothing sent")
+
+        let again = BrowserController(store: h.store)
+        again.start()
+        await Wait.until { again.explore.ready }
+        #expect(again.explore.tabs.isEmpty)
     }
 
     /// End to end on real engines: the tabs a batch close takes lose their
