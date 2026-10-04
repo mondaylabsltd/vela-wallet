@@ -108,6 +108,41 @@ struct BrowserWireDriftTests {
         #expect(tags(try effects(from: closed)) == ["write_explore"], "one write for the batch")
     }
 
+    /// Issue #425: a favourite pinned under v0.9.5 while its site had failed
+    /// kept the engine's error page as its name ("网页无法打开") — #329's fix
+    /// named new favourites, not stored ones. A document from before the rule
+    /// reads with that name replaced by the host, and is written back; the
+    /// controller's `page_loaded` for the site's next good load (the core's
+    /// visit) names the tile. A renamed event or field would leave it a host.
+    @Test func aStoredErrorPageNameIsTheHostUntilTheSitesNextGoodLoad() throws {
+        let core = ExploreSitesCore()
+        let start = try effects(from: core.dispatch(eventJson: CoreJSON.string(["type": "start"])))
+        let read = try #require(start.first { ($0["operation"] as? [String: Any])?["type"] as? String == "read_explore" })
+        let id = try #require((read["id"] as? NSNumber)?.uint64Value)
+        let loaded = try core.resolveEffect(effectId: id, resultJson: CoreJSON.string([
+            "type": "loaded",
+            "doc": ["favorites": [[
+                "origin": "https://app.uniswap.org", "url": "https://app.uniswap.org/",
+                "host": "app.uniswap.org", "name": "网页无法打开", "renamed": false,
+                "added_ms": 1_759_051_383_000,
+            ]]],
+        ]))
+        let repaired = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: loaded))
+        #expect(repaired.favorites.map(\.name) == ["app.uniswap.org"])
+        #expect(tags(try effects(from: loaded)) == ["write_explore"], "written back once, under the rule")
+
+        // The error page is no visit; the site's good load is.
+        #expect(browserLoadVisit(url: "https://app.uniswap.org/", title: "网页无法打开", icon: nil, mainFrameFailed: true, httpStatus: nil) == nil)
+        let visit = try #require(browserLoadVisit(
+            url: "https://app.uniswap.org/swap", title: "Uniswap Interface", icon: nil,
+            mainFrameFailed: false, httpStatus: nil
+        ))
+        let named = try core.dispatch(eventJson: BrowserController.pageLoaded(url: visit.url, title: visit.title ?? ""))
+        let after = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: named))
+        #expect(after.favorites.map(\.name) == ["Uniswap Interface"])
+        #expect(tags(try effects(from: named)) == ["write_explore"])
+    }
+
     // MARK: - browser_history
 
     @Test func historyViewDecodes() throws {
