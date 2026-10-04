@@ -3213,6 +3213,53 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * EIP-3085 `wallet_addEthereumChain` (spec 100): the page's ask as Vela reads
+ * it, as JSON — `{"ok": DappChainAsk}` or `{"error": "<the -32602 words>"}`.
+ * `debug_mode` is Settings' debug mode: which http RPC URLs a page may give.
+ * @param {string} params_json
+ * @param {boolean} debug_mode
+ * @returns {string}
+ */
+export function dappAddChainAsk(params_json, debug_mode) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.dappAddChainAsk(ptr0, len0, debug_mode);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * How a page's add-network request is answered for `outcome_json` (a
+ * `DappAddOutcome`), as JSON: `null` for `added`, else
+ * `{"code": …, "message": …}` — the table the in-app browsers answer from
+ * (spec 100). Unreadable input reads as a decline.
+ * @param {string} outcome_json
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function dappAddOutcomeError(outcome_json, chain_id) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(outcome_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.dappAddOutcomeError(ptr0, len0, chain_id);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Whether a page at `origin` is offered the wallet (spec 091) — the rule
  * the in-app browsers' gate follows, exported so the web suite can hold the
  * injected script's host test to it.

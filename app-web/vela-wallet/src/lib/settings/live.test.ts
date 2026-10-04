@@ -89,7 +89,8 @@ const VIEW: NetView = {
 		{ provider: 'alchemy', key: 'alch-key', has_key: true, test: null },
 		{ provider: 'drpc', key: '', has_key: false, test: null }
 	],
-	last_added_chain_id: null
+	last_added_chain_id: null,
+	dapp_add: null
 };
 
 describe('liveNetworkRows', () => {

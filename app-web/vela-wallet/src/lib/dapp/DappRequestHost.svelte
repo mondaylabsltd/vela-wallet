@@ -51,6 +51,11 @@
 		rejectRequest,
 		type ExtensionRequest
 	} from '$lib/dapp/transport';
+	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
+	import { addNetworkCard, CHAIN_SETUP_URL } from '$lib/dapp/add-network';
+	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
+	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
+	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
 
 	interface Props {
 		/**
@@ -91,6 +96,12 @@
 	 * leave. The receipt's own Done is what releases it.
 	 */
 	let landing = $state(false);
+	/**
+	 * Spec 100: the request in hand is a page asking to add a network; its
+	 * sheet is `network_admin`'s (`networkAdmin.view.dapp_add`), and the
+	 * chain it asked for names the answer's words.
+	 */
+	let addingChain = $state<number | null>(null);
 
 	const facts = $derived({
 		activeAddress: session.view.address,
@@ -192,6 +203,13 @@
 			// Withdrawn while the snapshot was being published.
 			if (owing !== incoming.rid) return;
 
+			// Spec 100: not a connect and not a signature — the core's
+			// add-network sheet, before the connect logic sees it.
+			if (incoming.method === 'wallet_addEthereumChain') {
+				await takeAddNetwork(incoming);
+				return;
+			}
+
 			stage = await evaluate(incoming, facts);
 			if (stage.kind === 'done' || stage.kind === 'refused') {
 				owing = null;
@@ -213,6 +231,11 @@
 	 */
 	function withdraw(rid: string): void {
 		if (owing !== rid && request?.rid !== rid) return;
+		if (addingChain !== null && request) {
+			// The sheet is the settings machine's: close it, settling nothing.
+			networkAdmin.dispatch({ type: 'dapp_add_cancelled', tab: String(request.tabId), id: rid });
+			addingChain = null;
+		}
 		if (signingTransport) {
 			signRequest.dispatch({ type: 'transport_dropped', transport_id: signingTransport });
 			signingTransport = null;
@@ -227,6 +250,7 @@
 	onMount(() => {
 		if (mode === 'window' && windowRid) void panelSurface.start({ kind: 'window', rid: windowRid });
 		const stopWithdrawn = panelSurface.onWithdrawn((rid) => withdraw(rid));
+		const stopAdding = onDappAddSettled((_tab, id, outcome) => void addSettled(id, outcome));
 		if (mode === 'window') void take();
 
 		// The surface is going away with an answer still owed. The code is NOT
@@ -241,6 +265,7 @@
 		return () => {
 			disposed = true;
 			stopWithdrawn();
+			stopAdding();
 			window.removeEventListener('pagehide', settle);
 			settle();
 		};
@@ -309,6 +334,94 @@
 			now_ms: Date.now()
 		});
 	}
+
+	/**
+	 * Spec 100: a page asks to add a network. The core reads its params (a
+	 * malformed ask is -32602 here, before any sheet) and `network_admin`
+	 * checks and adds the chain the way Settings does; this surface only
+	 * carries the request there and the ending back.
+	 */
+	async function takeAddNetwork(incoming: ExtensionRequest): Promise<void> {
+		const read = dappAddChainAsk(incoming.params);
+		if ('error' in read) {
+			owing = null;
+			request = null;
+			await answerRequest(incoming.rid, { error: { code: -32602, message: read.error } });
+			leave();
+			return;
+		}
+		await networkAdmin.boot();
+		if (owing !== incoming.rid) return;
+		addingChain = read.ok.chain_id;
+		networkAdmin.dispatch({
+			type: 'dapp_add_requested',
+			tab: String(incoming.tabId),
+			id: incoming.rid,
+			origin: incoming.origin,
+			ask: read.ok
+		});
+	}
+
+	/**
+	 * The add-network sheet ended (`dapp_add_settled`). Added: the catalog the
+	 * worker reads is published FIRST — the worker moves the site to the
+	 * chain when it delivers this `null` — then the page is answered. Anything
+	 * else: the core's one table names the error.
+	 */
+	async function addSettled(id: string, outcome: DappAddOutcome): Promise<void> {
+		if (owing !== id || addingChain === null) return;
+		const chain = addingChain;
+		owing = null;
+		addingChain = null;
+		busy = false;
+		if (outcome.type === 'added') {
+			await publishExtChains();
+			await answerRequest(id, { result: null });
+		} else {
+			const error = dappAddOutcomeError(outcome, chain) ?? {
+				code: 4001,
+				message: 'User rejected the request'
+			};
+			await answerRequest(id, { error });
+		}
+		request = null;
+		stage = { kind: 'loading' };
+		leave();
+	}
+
+	/** The sheet's Add Network: the request must still be live (RB5), then the core saves. */
+	async function onAddNetwork(): Promise<void> {
+		if (!request || busy || addingChain === null) return;
+		busy = true;
+		const rid = request.rid;
+		if (!(await claimFor(rid, 'approve'))) {
+			busy = false;
+			withdraw(rid);
+			return;
+		}
+		networkAdmin.dispatch({ type: 'dapp_add_approved', now_iso: new Date().toISOString() });
+	}
+
+	/** Any way out of the sheet — the core decides what it answers. */
+	function onAddNetworkClosed(): void {
+		if (busy) return;
+		networkAdmin.dispatch({ type: 'dapp_add_declined' });
+	}
+
+	function onAddNetworkRetry(): void {
+		networkAdmin.dispatch({ type: 'dapp_add_retried' });
+	}
+
+	function openChainSetup(): void {
+		window.open(CHAIN_SETUP_URL, '_blank', 'noopener');
+	}
+
+	/** The add-network sheet for the request in hand, in words. */
+	const addCard = $derived.by(() => {
+		const view = networkAdmin.view.dapp_add;
+		if (addingChain === null || !request || !view || view.id !== request.rid) return null;
+		return addNetworkCard(view, m.addNetwork);
+	});
 
 	async function settleOnClose(rid: string): Promise<void> {
 		try {
@@ -489,7 +602,25 @@
 		same answer as Cancel — the core's 4001 — so the × goes through
 		`onCancel`. Spec 079: the × and Cancel are the ONLY ways out.
 	-->
-	{#if stage.kind === 'consent' && request}
+	{#if addCard}
+		<div class="layer">
+			<BottomSheet
+				title={addCard.title}
+				closeLabel={addCard.dismiss}
+				dismissible={busy ? false : 'explicit'}
+				onclose={onAddNetworkClosed}
+			>
+				<AddNetworkCard
+					card={addCard}
+					{busy}
+					onadd={onAddNetwork}
+					onretry={onAddNetworkRetry}
+					ondismiss={onAddNetworkClosed}
+					onsetup={openChainSetup}
+				/>
+			</BottomSheet>
+		</div>
+	{:else if stage.kind === 'consent' && request}
 		<div class="layer">
 			<BottomSheet
 				title={cardTitle}
@@ -507,7 +638,17 @@
 	{/if}
 {:else if showWindowChrome}
 	<main>
-		{#if stage.kind === 'consent' && request && needsWallet}
+		{#if addCard}
+			<AddNetworkCard
+				card={addCard}
+				{busy}
+				heading
+				onadd={onAddNetwork}
+				onretry={onAddNetworkRetry}
+				ondismiss={onAddNetworkClosed}
+				onsetup={openChainSetup}
+			/>
+		{:else if stage.kind === 'consent' && request && needsWallet}
 			<h1>{cardTitle}</h1>
 			<p class="body">{m.noWallet}</p>
 			<div class="stack">

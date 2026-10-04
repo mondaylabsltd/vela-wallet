@@ -105,20 +105,28 @@ export const READ_DROPPED_MESSAGE = 'Vela could not finish this read — try aga
 export const SENDING_READS = new Set(['eth_sendRawTransaction', 'eth_sendUserOperation']);
 
 /**
+ * The buckets a PERSON answers: accepted now, answered by message later, held
+ * by the page meanwhile (spec 082) — sign, connect, and (spec 100) an add
+ * network the wallet lacks. An add for a chain the wallet has is answered at
+ * once all the same: the page takes whichever reply comes.
+ */
+export const HELD_BUCKETS = new Set(['sign', 'connect', 'addChain']);
+
+/**
  * What content.js does when its channel to the worker dropped under a request
  * (data-model §4) — never echoing Chrome's `error.message`:
  *
  *   - a read: retried once, then `-32603 "Vela could not finish this read"`;
  *   - a read that sends (`eth_sendRawTransaction` / `eth_sendUserOperation`):
  *     never retried — `4900 restarted`, it may have gone out;
- *   - a sign/connect: retried once (the reconnect wakes a new worker, which
- *     still holds the record), then `4900 restarted`.
+ *   - a sign/connect/add-network: retried once (the reconnect wakes a new
+ *     worker, which still holds the record), then `4900 restarted`.
  *
  * `attempt` counts the drops already seen for this request (0 = the first).
  * Returns `{ retry: true }` or `{ error }`.
  */
 export function droppedChannelAnswer(bucket, method, attempt) {
-	if (bucket === 'sign' || bucket === 'connect') {
+	if (HELD_BUCKETS.has(bucket)) {
 		return attempt < 1 ? { retry: true } : { error: settleError('restarted') };
 	}
 	if (SENDING_READS.has(method)) return { error: settleError('restarted') };
@@ -385,7 +393,8 @@ export const READ_PROXY_METHODS = new Set([
  *   'state'       → the wallet's own answer about accounts/chain/permissions
  *   'revoke'      → wallet_revokePermissions (the site disconnects itself)
  *   'switch'      → wallet_switchEthereumChain
- *   'addChain'    → wallet_addEthereumChain (a switch, for a chain the wallet has)
+ *   'addChain'    → wallet_addEthereumChain (a switch for a chain the wallet has;
+ *                   Vela's add-network sheet for one it lacks — spec 100)
  *   'watchAsset'  → wallet_watchAsset (`false`: not added)
  *   'capabilities'→ wallet_getCapabilities (EIP-5792, spec 094)
  *   'callsStatus' → wallet_getCallsStatus (EIP-5792, spec 094)

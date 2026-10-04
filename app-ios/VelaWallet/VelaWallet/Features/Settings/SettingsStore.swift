@@ -131,6 +131,11 @@ final class SettingsStore {
             onView: { [weak self] view in self?.signPref = view },
             onFault: { print("[vela-wallet] sign_pref fault: \($0)") }
         )
+        // Spec 100: the add-network sheet's endings, read when they happen so
+        // the app can wire the browser after both exist.
+        executor.onDappAddSettled = { [weak self] tab, id, outcome in
+            self?.onDappAddSettled(tab, id, outcome)
+        }
     }
 
     /// Boot the default-speed machine. App-wide and idempotent, like the
@@ -237,6 +242,42 @@ final class SettingsStore {
 
     func resetWizard() {
         core.dispatch(CoreJSON.string(["type": "wizard_reset"]))
+    }
+
+    // MARK: - A page asks to add a network (spec 100)
+
+    /// Set by the app: a page's add-network request is over — carry the ending
+    /// to the browser machine (`add_network_answered`).
+    var onDappAddSettled: (_ tab: String, _ id: String, _ outcome: [String: Any]) -> Void = { _, _, _ in }
+
+    /// The browser machine's `forward_to_add_network`, carried here as it came.
+    func dappAddRequested(_ forward: [String: Any]) {
+        core.dispatch(CoreJSON.string([
+            "type": "dapp_add_requested",
+            "tab": forward["tab"] as? String ?? "",
+            "id": forward["id"] as? String ?? "",
+            "origin": forward["origin"] as? String ?? "",
+            "ask": forward["ask"] ?? [String: Any](),
+        ]))
+    }
+
+    /// The sheet's Add Network — the core saves only from `ready`.
+    func dappAddApproved() {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_approved", "now_iso": Self.nowISO]))
+    }
+
+    /// The sheet closed, by any button — the core decides what that answers.
+    func dappAddDeclined() {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_declined"]))
+    }
+
+    func dappAddRetried() {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_retried"]))
+    }
+
+    /// The page that asked is gone (`cancel_add_network`).
+    func dappAddCancelled(tab: String, id: String) {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_cancelled", "tab": tab, "id": id]))
     }
 
     /// Opening a network's detail page.

@@ -1898,6 +1898,35 @@ pub fn dapp_rpc_classify(method: &str) -> String {
         .unwrap_or_else(|_| "{\"type\":\"unsupported\"}".to_owned())
 }
 
+/// EIP-3085 `wallet_addEthereumChain` (spec 100): the page's ask as Vela reads
+/// it, as JSON — `{"ok": DappChainAsk}` or `{"error": "<the -32602 words>"}`.
+/// `debug_mode` is Settings' debug mode: which http RPC URLs a page may give.
+#[wasm_bindgen(js_name = dappAddChainAsk)]
+pub fn dapp_add_chain_ask(params_json: &str, debug_mode: bool) -> String {
+    let params: serde_json::Value =
+        serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
+    match vela_core::app::dapp_rpc::add_chain_ask(&params, debug_mode) {
+        Ok(ask) => serde_json::json!({ "ok": ask }).to_string(),
+        Err(words) => serde_json::json!({ "error": words }).to_string(),
+    }
+}
+
+/// How a page's add-network request is answered for `outcome_json` (a
+/// `DappAddOutcome`), as JSON: `null` for `added`, else
+/// `{"code": …, "message": …}` — the table the in-app browsers answer from
+/// (spec 100). Unreadable input reads as a decline.
+#[wasm_bindgen(js_name = dappAddOutcomeError)]
+pub fn dapp_add_outcome_error(outcome_json: &str, chain_id: u32) -> String {
+    let outcome = serde_json::from_str(outcome_json)
+        .unwrap_or(vela_core::app::dapp_rpc::DappAddOutcome::Declined);
+    match vela_core::app::dapp_rpc::add_outcome_error(&outcome, chain_id) {
+        None => "null".to_owned(),
+        Some((code, message)) => {
+            serde_json::json!({ "code": code, "message": message }).to_string()
+        }
+    }
+}
+
 /// EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
 /// asks about, lower-cased — `undefined` when it is not one 32-byte hash.
 #[wasm_bindgen(js_name = dappRpcCallsStatusId)]

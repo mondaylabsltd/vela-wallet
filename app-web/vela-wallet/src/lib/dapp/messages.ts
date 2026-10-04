@@ -33,4 +33,41 @@ export interface RequestMessages {
 	 */
 	accountLabel: string;
 	networkLabel: string;
+	/** Spec 100: a page asks to add a network — Settings' words wherever they fit. */
+	addNetwork: AddNetworkMessages;
+}
+
+/**
+ * Spec 100: the add-network sheet's words. Three are new to the corpus
+ * (`connect.browser.addLead` / `addFromSite`, `componentsUi.browserStatus.
+ * reason.badRpc`); every other one is Settings' add-network wizard's own.
+ */
+export interface AddNetworkMessages {
+	title: string;
+	/** Template — '{{host}} asks to add a network'. */
+	lead: string;
+	fromSite: string;
+	name: string;
+	chainIdLabel: string;
+	nativeToken: string;
+	rpcUrl: string;
+	explorer: string;
+	/** Template — 'Chain {{chainId}}', while the name is not known yet. */
+	chainName: string;
+	checking: string;
+	compatible: string;
+	incompatible: string;
+	incompatibleHint: string;
+	singleKeyOnly: string;
+	unableToVerify: string;
+	/** Template — '… (chain {{actual}}, expected {{expected}}).' */
+	wrongRpc: string;
+	noRpc: string;
+	checksTitle: string;
+	checkSigner: string;
+	add: string;
+	retry: string;
+	setupTool: string;
+	cancel: string;
+	done: string;
 }

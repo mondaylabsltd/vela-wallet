@@ -86,6 +86,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::dapp_rpc::{url_host, DappAddOutcome, DappChainAsk};
+
 // ---------------------------------------------------------------------------
 // Constants — every value mirrors the TS source it is named after
 // ---------------------------------------------------------------------------
@@ -1016,6 +1018,14 @@ pub enum NetOperation {
     ClearBundlerCache {
         chain_id: u32,
     },
+    /// A page's add-network request is over (spec 100): hand `outcome` to
+    /// the in-app browser as `dapp_browser`'s `add_network_answered` for
+    /// `tab` / `id` (the extension: answer request `id`). Answer `Written`.
+    DappAddSettled {
+        tab: String,
+        id: String,
+        outcome: DappAddOutcome,
+    },
 }
 
 /// What one `/api/health` (or fiat) fetch came back as.
@@ -1147,6 +1157,35 @@ pub enum Event {
     /// The delete affordance on a custom network's card (the confirm dialog
     /// is the shell's).
     DeleteConfirmed {
+        id: String,
+    },
+
+    // -- a page asks to add a network (spec 100) ------------------------------
+    /// `dapp_browser`'s `forward_to_add_network` (or the extension's request
+    /// window): check the chain the way the wizard does and show the sheet
+    /// ([`NetView::dapp_add`]). Its own state — a wizard open in Settings is
+    /// not touched. Ends with exactly one [`NetOperation::DappAddSettled`],
+    /// unless the page goes first ([`Event::DappAddCancelled`]).
+    DappAddRequested {
+        tab: String,
+        id: String,
+        origin: String,
+        ask: DappChainAsk,
+    },
+    /// The sheet's "Add Network": only from `ready` — saved exactly as
+    /// [`Event::AddConfirmed`] saves, then settled `added`.
+    DappAddApproved {
+        now_iso: String,
+    },
+    /// The sheet closed without adding: settled `declined`, or the verdict
+    /// it showed (`not_compatible`, `bad_rpc`).
+    DappAddDeclined,
+    /// The sheet's Retry after "unable to verify": the check runs again.
+    DappAddRetried,
+    /// The page that asked is gone (`dapp_browser`'s `cancel_add_network`):
+    /// close the sheet, settle nothing.
+    DappAddCancelled {
+        tab: String,
         id: String,
     },
 
@@ -1316,6 +1355,28 @@ struct Wizard {
     auto_now_iso: String,
 }
 
+/// A page's add-network request (spec 100) — beside the wizard, never in it:
+/// a person half way through Settings' wizard keeps it.
+struct DappAdd {
+    tab: String,
+    id: String,
+    origin: String,
+    ask: DappChainAsk,
+    /// What the network would be saved as: the catalog's entry, or — for a
+    /// chain the catalog does not know — one made of the page's words.
+    info: Option<NetChainInfo>,
+    /// `info` is the page's, not the catalog's.
+    from_site: bool,
+    /// The RPC the sheet names: the check's winner, else the first candidate.
+    rpc_url: Option<String>,
+    /// The shared check's own progress.
+    check: WizardPhase,
+    phase: NetDappAddPhase,
+    compat: Option<NetCompatibility>,
+    /// The last chain id an RPC answered that was not the one asked for.
+    reported_other: Option<u32>,
+}
+
 /// One expanded network card's editing + health state.
 #[derive(Clone, Debug, PartialEq)]
 struct OverrideCard {
@@ -1381,6 +1442,8 @@ pub struct Model {
     override_cards: BTreeMap<u32, OverrideCard>,
     wizard: Wizard,
     last_added_chain_id: Option<u32>,
+    /// A page's add-network request on Vela's sheet (spec 100).
+    dapp_add: Option<DappAdd>,
 
     /// One machine-wide wave counter — every subsystem's current generation
     /// is drawn from it, so an `attempt` value identifies exactly one wave.
@@ -1388,6 +1451,7 @@ pub struct Model {
     load_gen: u64,
     search_gen: u64,
     wizard_gen: u64,
+    dapp_gen: u64,
     endpoint_gen: u64,
     override_gens: BTreeMap<u32, u64>,
     provider_gens: BTreeMap<NetProviderId, u64>,
@@ -1544,6 +1608,57 @@ pub struct NetView {
     pub endpoints: Vec<NetEndpointView>,
     pub providers: Vec<NetProviderView>,
     pub last_added_chain_id: Option<u32>,
+    /// The add-network sheet a page opened (spec 100).
+    #[serde(default)]
+    pub dapp_add: Option<NetDappAddView>,
+}
+
+/// Where a page's add-network request stands — what the sheet shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NetDappAddPhase {
+    /// The catalog, the RPC race and the contracts are being read.
+    Checking,
+    /// Compatible: the person may add it.
+    Ready,
+    /// A verdict: Vela's contracts are not all on the chain.
+    NotCompatible,
+    /// No verdict — no RPC answered (Retry).
+    CheckFailed,
+    /// The catalog does not know the chain and the page's RPC answered for
+    /// another one ([`NetDappAddView::reported_chain_id`]).
+    WrongRpc,
+    /// The catalog does not know the chain and the page gave no RPC Vela may
+    /// use (none, or none https).
+    NoRpc,
+}
+
+/// The add-network sheet (spec 100): who asks, for what, and the check.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct NetDappAddView {
+    pub tab: String,
+    pub id: String,
+    pub origin: String,
+    /// The asking page's host — the sheet names it.
+    pub host: String,
+    pub chain_id: u32,
+    /// The catalog's name for the chain; the page's when the catalog does not
+    /// know it (`from_site`); empty until the catalog has answered.
+    pub name: String,
+    pub native_symbol: String,
+    pub rpc_host: Option<String>,
+    pub explorer_host: Option<String>,
+    /// Name, coin, RPC and explorer are the page's, not Vela's catalog's.
+    pub from_site: bool,
+    pub phase: NetDappAddPhase,
+    /// `wrong_rpc`: the chain id the page's RPC answered.
+    pub reported_chain_id: Option<u32>,
+    /// The check's result, as the wizard's (`ready` / `not_compatible`).
+    pub compat: Option<NetCompatibility>,
+    /// "Add Network" acts.
+    pub can_add: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1587,6 +1702,40 @@ impl App for NetworkAdmin {
                 select_chain(model, chain_id, false, true, now_iso)
             }
             Event::DeleteConfirmed { id } => delete_custom(model, &id),
+
+            // -- a page's add-network request ----------------------------------
+            Event::DappAddRequested {
+                tab,
+                id,
+                origin,
+                ask,
+            } => dapp_add_requested(model, tab, id, origin, ask),
+            Event::DappAddApproved { now_iso } => dapp_add_approved(model, now_iso),
+            Event::DappAddDeclined => dapp_add_declined(model),
+            Event::DappAddRetried => {
+                if model
+                    .dapp_add
+                    .as_ref()
+                    .is_some_and(|add| add.phase == NetDappAddPhase::CheckFailed)
+                {
+                    dapp_add_begin(model)
+                } else {
+                    Command::done()
+                }
+            }
+            Event::DappAddCancelled { tab, id } => {
+                if model
+                    .dapp_add
+                    .as_ref()
+                    .is_some_and(|add| add.tab == tab && add.id == id)
+                {
+                    model.dapp_add = None;
+                    model.dapp_gen = next_gen(model);
+                    render()
+                } else {
+                    Command::done()
+                }
+            }
 
             // -- overrides ---------------------------------------------------
             Event::OverrideExpanded { chain_id } => override_expanded(model, chain_id),
@@ -1655,6 +1804,7 @@ impl App for NetworkAdmin {
                 .map(|&provider| provider_view(model, provider))
                 .collect(),
             last_added_chain_id: model.last_added_chain_id,
+            dapp_add: model.dapp_add.as_ref().map(dapp_add_view),
         }
     }
 }
@@ -1892,6 +2042,48 @@ fn chain_info_fetched(
     // `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
     // filter + Set dedup, then the registry's single URL appended. (The TS
     // re-fetches chain info for that append; folded here — module doc.)
+    let candidates = probe_candidates(rpcs, &info);
+
+    model.wizard.chain_info = Some(info);
+
+    let step = begin_probes(&mut model.wizard.phase, chain_id, candidates);
+    wizard_step(model, step)
+}
+
+/// The wizard's next move after one step of the check: wait, ask, or the
+/// verdict.
+fn wizard_step(model: &mut Model, step: Step) -> Command<NetEffect, Event> {
+    match step {
+        Step::Wait => Command::done(),
+        Step::Ops(ops) => requests_with(model.wizard_gen, ops),
+        Step::Done(compat) => finish_check(model, compat),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The compatibility check — one implementation, two callers
+// ---------------------------------------------------------------------------
+//
+// Settings' wizard (and its scan path) and a page's add-network request
+// (spec 100) run the SAME check: the candidate race, `eth_getCode` of every
+// [`REQUIRED_CONTRACTS`] entry and the P256 probe against the winner, and the
+// same verdict ([`contracts_verdict`]). Each step advances a `WizardPhase`
+// the caller owns and says what to do next; the caller supplies the
+// generation its answers must carry.
+
+/// What one step of the check needs next.
+enum Step {
+    /// Answers already asked for are still out (or this one was stale).
+    Wait,
+    /// Ask these.
+    Ops(Vec<NetOperation>),
+    /// The verdict.
+    Done(NetCompatibility),
+}
+
+/// `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
+/// filter + Set dedup of `rpcs`, then the registry's single URL appended.
+fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo) -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
     for url in rpcs {
         if url.starts_with("https://") && !candidates.contains(&url) {
@@ -1901,35 +2093,33 @@ fn chain_info_fetched(
     if !info.rpc_url.is_empty() && !candidates.contains(&info.rpc_url) {
         candidates.push(info.rpc_url.clone());
     }
+    candidates
+}
 
-    model.wizard.chain_info = Some(info);
-
+/// Race `candidates` for the fastest responsive RPC — or, with none, the
+/// "unable to verify" verdict.
+fn begin_probes(phase: &mut WizardPhase, chain_id: u32, candidates: Vec<String>) -> Step {
     if candidates.is_empty() {
-        return conclude_rpc_failure(model, chain_id, NetRpcFailureKind::NoHttpsCandidates);
+        return Step::Done(unverified(chain_id, NetRpcFailureKind::NoHttpsCandidates));
     }
-
     let ops: Vec<NetOperation> = candidates
         .iter()
         .map(|url| NetOperation::ProbeRpc { url: url.clone() })
         .collect();
-    model.wizard.phase = WizardPhase::Probing {
+    *phase = WizardPhase::Probing {
         chain_id,
         candidates: candidates
             .into_iter()
             .map(|url| Candidate { url, outcome: None })
             .collect(),
     };
-    requests_with(model.wizard_gen, ops)
+    Step::Ops(ops)
 }
 
 /// All-contracts-undeployed + the failure kind — 'unable to verify', never
 /// 'not compatible' (invariant ③).
-fn conclude_rpc_failure(
-    model: &mut Model,
-    chain_id: u32,
-    kind: NetRpcFailureKind,
-) -> Command<NetEffect, Event> {
-    let compat = NetCompatibility {
+fn unverified(chain_id: u32, kind: NetRpcFailureKind) -> NetCompatibility {
+    NetCompatibility {
         chain_id,
         compatible: false,
         multi_key_ready: false,
@@ -1946,36 +2136,43 @@ fn conclude_rpc_failure(
         best_rpc_url: None,
         best_rpc_latency_ms: None,
         rpc_failure: Some(kind),
-    };
-    finish_check(model, compat)
+    }
 }
 
-fn wizard_probed(
-    model: &mut Model,
+/// One candidate's `eth_chainId` answer. `must_report`: a candidate counts as
+/// responsive only when it names that chain (the dApp path, spec 100); `None`
+/// keeps the wizard's verbatim rule — any parsed answer counts.
+fn probed_step(
+    phase: &mut WizardPhase,
     url: &str,
     reported: Option<u32>,
     latency_ms: f64,
-) -> Command<NetEffect, Event> {
+    must_report: Option<u32>,
+) -> Step {
     let WizardPhase::Probing {
         chain_id,
         ref mut candidates,
-    } = model.wizard.phase
+    } = *phase
     else {
-        return Command::done();
+        return Step::Wait;
     };
     let Some(candidate) = candidates
         .iter_mut()
         .find(|c| c.url == url && c.outcome.is_none())
     else {
-        return Command::done();
+        return Step::Wait;
     };
     // `testRpcLatency`: any parsed JSON-RPC answer counts as responsive —
     // the reported id is NOT matched here (verbatim; only the provider probe
-    // matches, invariant ⑦ / module doc).
-    candidate.outcome = Some(reported.map(|_| latency_ms));
+    // matches, invariant ⑦ / module doc). A page's RPC must name its chain.
+    let responsive = match must_report {
+        None => reported.is_some(),
+        Some(wanted) => reported == Some(wanted),
+    };
+    candidate.outcome = Some(responsive.then_some(latency_ms));
 
     if candidates.iter().any(|c| c.outcome.is_none()) {
-        return Command::done();
+        return Step::Wait;
     }
 
     // `pickFastestRpc`: fastest responsive candidate; ties keep list order
@@ -1994,7 +2191,7 @@ fn wizard_probed(
     }
 
     let Some((best_url, best_latency_ms)) = best else {
-        return conclude_rpc_failure(model, chain_id, NetRpcFailureKind::AllProbesFailed);
+        return Step::Done(unverified(chain_id, NetRpcFailureKind::AllProbesFailed));
     };
 
     let mut ops: Vec<NetOperation> = REQUIRED_CONTRACTS
@@ -2007,14 +2204,14 @@ fn wizard_probed(
     ops.push(NetOperation::RpcCallP256 {
         url: best_url.clone(),
     });
-    model.wizard.phase = WizardPhase::CheckingContracts {
+    *phase = WizardPhase::CheckingContracts {
         chain_id,
         best_url,
         best_latency_ms,
         deployed: vec![None; REQUIRED_CONTRACTS.len()],
         p256: P256Probe::AwaitingCall,
     };
-    requests_with(model.wizard_gen, ops)
+    Step::Ops(ops)
 }
 
 /// `checkCode` (network-checker.ts:244-250): empty / `0x` / `0x0` /
@@ -2059,23 +2256,18 @@ fn big_int_is_one(s: &str) -> bool {
     digits.trim_start_matches('0') == "1"
 }
 
-fn wizard_code(
-    model: &mut Model,
-    url: &str,
-    address: &str,
-    code: Option<String>,
-) -> Command<NetEffect, Event> {
+fn code_step(phase: &mut WizardPhase, url: &str, address: &str, code: Option<String>) -> Step {
     let WizardPhase::CheckingContracts {
         ref best_url,
         ref mut deployed,
         ref mut p256,
         ..
-    } = model.wizard.phase
+    } = *phase
     else {
-        return Command::done();
+        return Step::Wait;
     };
     if url != best_url {
-        return Command::done();
+        return Step::Wait;
     }
     if address == P256_PRECOMPILE {
         // Strategy 2: code at the precompile address == RIP-7212 present
@@ -2093,56 +2285,51 @@ fn wizard_code(
             }
         }
     } else {
-        return Command::done();
+        return Step::Wait;
     }
-    maybe_finish_contracts(model)
+    contracts_verdict(phase)
 }
 
-fn wizard_p256_call(
-    model: &mut Model,
-    url: &str,
-    result: Option<String>,
-) -> Command<NetEffect, Event> {
+fn p256_step(phase: &mut WizardPhase, url: &str, result: Option<String>) -> Step {
     let WizardPhase::CheckingContracts {
         ref best_url,
         ref mut p256,
         ..
-    } = model.wizard.phase
+    } = *phase
     else {
-        return Command::done();
+        return Step::Wait;
     };
     if url != best_url || *p256 != P256Probe::AwaitingCall {
-        return Command::done();
+        return Step::Wait;
     }
     if p256_call_indicates_support(result.as_deref()) {
         *p256 = P256Probe::Done(true);
-        return maybe_finish_contracts(model);
+        return contracts_verdict(phase);
     }
     *p256 = P256Probe::AwaitingCode;
-    let op = NetOperation::RpcGetCode {
+    Step::Ops(vec![NetOperation::RpcGetCode {
         url: best_url.clone(),
         address: P256_PRECOMPILE.to_owned(),
-    };
-    requests_with(model.wizard_gen, vec![op])
+    }])
 }
 
-fn maybe_finish_contracts(model: &mut Model) -> Command<NetEffect, Event> {
+fn contracts_verdict(phase: &WizardPhase) -> Step {
     let WizardPhase::CheckingContracts {
         chain_id,
         ref best_url,
         best_latency_ms,
         ref deployed,
         p256,
-    } = model.wizard.phase
+    } = *phase
     else {
-        return Command::done();
+        return Step::Wait;
     };
     let all_answered = deployed.iter().all(Option::is_some);
     let P256Probe::Done(p256_available) = p256 else {
-        return Command::done();
+        return Step::Wait;
     };
     if !all_answered {
-        return Command::done();
+        return Step::Wait;
     }
 
     let contracts: Vec<NetContractStatus> = REQUIRED_CONTRACTS
@@ -2168,7 +2355,7 @@ fn maybe_finish_contracts(model: &mut Model) -> Command<NetEffect, Event> {
     let compatible = single_key_deployed && p256_available;
     let multi_key_ready = compatible && contracts.iter().all(|c| c.deployed);
 
-    let compat = NetCompatibility {
+    Step::Done(NetCompatibility {
         chain_id,
         compatible,
         multi_key_ready,
@@ -2177,8 +2364,7 @@ fn maybe_finish_contracts(model: &mut Model) -> Command<NetEffect, Event> {
         best_rpc_url: Some(best_url.clone()),
         best_rpc_latency_ms: Some(best_latency_ms),
         rpc_failure: None,
-    };
-    finish_check(model, compat)
+    })
 }
 
 fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffect, Event> {
@@ -2304,6 +2490,295 @@ fn delete_custom(model: &mut Model, id: &str) -> Command<NetEffect, Event> {
             NetOperation::InvalidatePools { chain_id: None },
         ],
     )
+}
+
+// ---------------------------------------------------------------------------
+// A page asks to add a network (spec 100)
+// ---------------------------------------------------------------------------
+
+/// A network the wallet has already: built in, or added before.
+fn has_network(model: &Model, chain_id: u32) -> bool {
+    builtin(chain_id).is_some() || model.custom_networks.iter().any(|n| n.chain_id == chain_id)
+}
+
+/// The one way a page's request ends: the shell hands it to the browser.
+fn settle_dapp_add(
+    gen: u64,
+    tab: String,
+    id: String,
+    outcome: DappAddOutcome,
+) -> Command<NetEffect, Event> {
+    requests_with(gen, vec![NetOperation::DappAddSettled { tab, id, outcome }])
+}
+
+fn dapp_add_requested(
+    model: &mut Model,
+    tab: String,
+    id: String,
+    origin: String,
+    ask: DappChainAsk,
+) -> Command<NetEffect, Event> {
+    if let Some(open) = &model.dapp_add {
+        if open.tab == tab && open.id == id {
+            return Command::done();
+        }
+        // One sheet: the browser never forwards a second, so this is a
+        // second client's — it is told no, not queued.
+        return settle_dapp_add(model.dapp_gen, tab, id, DappAddOutcome::Busy);
+    }
+    model.dapp_add = Some(DappAdd {
+        tab,
+        id,
+        origin,
+        ask,
+        info: None,
+        from_site: false,
+        rpc_url: None,
+        check: WizardPhase::Idle,
+        phase: NetDappAddPhase::Checking,
+        compat: None,
+        reported_other: None,
+    });
+    if !model.loaded {
+        // The dedup gate reads the custom-network ledger: begin when it lands.
+        return render();
+    }
+    dapp_add_begin(model)
+}
+
+/// (Re)start the check: dedup, then the catalog.
+fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
+    let Some(chain_id) = model.dapp_add.as_ref().map(|add| add.ask.chain_id) else {
+        return Command::done();
+    };
+    model.dapp_gen = next_gen(model);
+    if has_network(model, chain_id) {
+        // The wallet has it already (the browser's list was behind): the
+        // site moves to it, as a switch would.
+        let Some(add) = model.dapp_add.take() else {
+            return Command::done();
+        };
+        return settle_dapp_add(
+            model.dapp_gen,
+            add.tab,
+            add.id,
+            DappAddOutcome::Added { chain_id },
+        );
+    }
+    if let Some(add) = model.dapp_add.as_mut() {
+        add.info = None;
+        add.from_site = false;
+        add.rpc_url = None;
+        add.compat = None;
+        add.reported_other = None;
+        add.phase = NetDappAddPhase::Checking;
+        add.check = WizardPhase::Resolving { chain_id };
+    }
+    requests_with(
+        model.dapp_gen,
+        vec![NetOperation::FetchChainInfo { chain_id }],
+    )
+}
+
+/// The catalog's answer. Known: its name, coin, explorer and RPCs — the
+/// page's are not used. Unknown: the page's words and the page's RPCs (each
+/// must answer `eth_chainId` with the chain asked for).
+fn dapp_chain_info(
+    model: &mut Model,
+    chain_id: u32,
+    data: Option<NetRawChainData>,
+) -> Command<NetEffect, Event> {
+    let data_url = effective_ethereum_data_url(model).to_owned();
+    let Some(add) = model.dapp_add.as_mut() else {
+        return Command::done();
+    };
+    if add.check != (WizardPhase::Resolving { chain_id }) {
+        return Command::done();
+    }
+    let (info, candidates, from_site) = match data {
+        Some(raw) => {
+            let info = parse_chain_data(&raw, chain_id, &data_url);
+            let rpcs = if info.rpc_urls.is_empty() && !info.rpc_url.is_empty() {
+                vec![info.rpc_url.clone()]
+            } else {
+                info.rpc_urls.clone()
+            };
+            let candidates = probe_candidates(rpcs, &info);
+            (info, candidates, false)
+        }
+        None => (
+            site_chain_info(&add.ask, &data_url),
+            add.ask.rpc_urls.clone(),
+            true,
+        ),
+    };
+    add.rpc_url = candidates.first().cloned();
+    add.info = Some(info);
+    add.from_site = from_site;
+    if from_site && candidates.is_empty() {
+        add.check = WizardPhase::Checked;
+        add.phase = NetDappAddPhase::NoRpc;
+        return render();
+    }
+    let step = begin_probes(&mut add.check, chain_id, candidates);
+    dapp_step(model, step)
+}
+
+/// A network made of a page's words, for a chain the catalog does not know —
+/// `parse_chain_data`'s defaults where the page said nothing.
+fn site_chain_info(ask: &DappChainAsk, ethereum_data_url: &str) -> NetChainInfo {
+    let chain_id = ask.chain_id;
+    let symbol = ask
+        .native_symbol
+        .clone()
+        .unwrap_or_else(|| "ETH".to_owned());
+    NetChainInfo {
+        chain_id,
+        name: ask
+            .chain_name
+            .clone()
+            .unwrap_or_else(|| format!("Chain {chain_id}")),
+        short_name: String::new(),
+        native_name: symbol.clone(),
+        native_symbol: symbol,
+        native_decimals: 18,
+        rpc_url: ask.rpc_urls.first().cloned().unwrap_or_default(),
+        rpc_urls: ask.rpc_urls.clone(),
+        explorer_url: ask.explorer_url.clone().unwrap_or_default(),
+        logo_url: format!("{ethereum_data_url}/chainlogos/eip155-{chain_id}.png"),
+        is_testnet: false,
+    }
+}
+
+fn dapp_probed(
+    model: &mut Model,
+    url: &str,
+    reported: Option<u32>,
+    latency_ms: f64,
+) -> Command<NetEffect, Event> {
+    let Some(add) = model.dapp_add.as_mut() else {
+        return Command::done();
+    };
+    let chain_id = add.ask.chain_id;
+    if let Some(other) = reported.filter(|reported| *reported != chain_id) {
+        add.reported_other = Some(other);
+    }
+    // A page's add counts an RPC only when it names the chain asked for
+    // (EIP-3085: "MUST reject … if the chainId does not match").
+    let step = probed_step(&mut add.check, url, reported, latency_ms, Some(chain_id));
+    dapp_step(model, step)
+}
+
+fn dapp_step(model: &mut Model, step: Step) -> Command<NetEffect, Event> {
+    match step {
+        Step::Wait => Command::done(),
+        Step::Ops(ops) => requests_with(model.dapp_gen, ops),
+        Step::Done(compat) => {
+            let Some(add) = model.dapp_add.as_mut() else {
+                return Command::done();
+            };
+            add.check = WizardPhase::Checked;
+            if let Some(best) = &compat.best_rpc_url {
+                add.rpc_url = Some(best.clone());
+            }
+            add.phase = if compat.rpc_failure.is_none() {
+                if compat.compatible {
+                    NetDappAddPhase::Ready
+                } else {
+                    NetDappAddPhase::NotCompatible
+                }
+            } else if add.from_site && add.reported_other.is_some() {
+                // Proof, not silence: the page's RPC serves another chain.
+                NetDappAddPhase::WrongRpc
+            } else {
+                // Invariant ③: no answer is "unable to verify", never a
+                // verdict about the chain.
+                NetDappAddPhase::CheckFailed
+            };
+            add.compat = Some(compat);
+            render()
+        }
+    }
+}
+
+/// "Add Network": the record the wizard's `AddConfirmed` builds, saved the
+/// way it saves it, then the request settled `added`.
+fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, Event> {
+    if !model.loaded {
+        return Command::done();
+    }
+    let ready = model.dapp_add.as_ref().is_some_and(|add| {
+        add.phase == NetDappAddPhase::Ready && add.compat.as_ref().is_some_and(|c| c.compatible)
+    });
+    if !ready {
+        return Command::done();
+    }
+    let Some(add) = model.dapp_add.take() else {
+        return Command::done();
+    };
+    let (Some(info), Some(compat)) = (add.info, add.compat) else {
+        return Command::done();
+    };
+    model.dapp_gen = next_gen(model);
+    let chain_id = info.chain_id;
+    let saved = if has_network(model, chain_id) {
+        Command::done()
+    } else {
+        let record = build_custom_network(model, &info, compat.best_rpc_url.as_deref(), now_iso);
+        save_custom_network(model, record)
+    };
+    // The page hears "added" only once the store has it: a shell that answers
+    // the page from what is stored (the extension's worker reads the catalog
+    // the wallet publishes from it) must never find the chain missing.
+    saved.then(settle_dapp_add(
+        model.dapp_gen,
+        add.tab,
+        add.id,
+        DappAddOutcome::Added { chain_id },
+    ))
+}
+
+/// The sheet closed without adding: the verdict it showed, else declined.
+fn dapp_add_declined(model: &mut Model) -> Command<NetEffect, Event> {
+    let Some(add) = model.dapp_add.take() else {
+        return Command::done();
+    };
+    model.dapp_gen = next_gen(model);
+    let outcome = match add.phase {
+        NetDappAddPhase::NotCompatible => DappAddOutcome::NotCompatible,
+        NetDappAddPhase::WrongRpc | NetDappAddPhase::NoRpc => DappAddOutcome::BadRpc,
+        NetDappAddPhase::Checking | NetDappAddPhase::Ready | NetDappAddPhase::CheckFailed => {
+            DappAddOutcome::Declined
+        }
+    };
+    settle_dapp_add(model.dapp_gen, add.tab, add.id, outcome)
+}
+
+fn dapp_add_view(add: &DappAdd) -> NetDappAddView {
+    let info = add.info.as_ref();
+    NetDappAddView {
+        tab: add.tab.clone(),
+        id: add.id.clone(),
+        origin: add.origin.clone(),
+        host: url_host(&add.origin).unwrap_or_else(|| add.origin.clone()),
+        chain_id: add.ask.chain_id,
+        name: info.map(|info| info.name.clone()).unwrap_or_default(),
+        native_symbol: info
+            .map(|info| info.native_symbol.clone())
+            .unwrap_or_default(),
+        rpc_host: add.rpc_url.as_deref().and_then(url_host),
+        explorer_host: info
+            .map(|info| info.explorer_url.as_str())
+            .filter(|url| !url.is_empty())
+            .and_then(url_host),
+        from_site: add.from_site,
+        phase: add.phase,
+        reported_chain_id: (add.phase == NetDappAddPhase::WrongRpc)
+            .then_some(add.reported_other)
+            .flatten(),
+        compat: add.compat.clone(),
+        can_add: add.phase == NetDappAddPhase::Ready,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2950,12 +3425,22 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
+            // A page asked before the ledger was read: its check begins now.
+            let owed_add = model
+                .dapp_add
+                .as_ref()
+                .is_some_and(|add| add.check == WizardPhase::Idle);
+            let add = if owed_add {
+                dapp_add_begin(model)
+            } else {
+                Command::done()
+            };
             if model.probe_when_loaded {
                 // The page is already on screen, waiting. Now we know what to
                 // ask about, so ask.
-                return endpoint_probe_wave(model);
+                return Command::all([endpoint_probe_wave(model), add]);
             }
-            render()
+            Command::all([render(), add])
         }
 
         NetShellResult::DebounceElapsed => {
@@ -2976,22 +3461,41 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
         }
 
         NetShellResult::ChainInfo { chain_id, data } => {
+            if model.dapp_add.is_some() && attempt == model.dapp_gen {
+                return dapp_chain_info(model, chain_id, data);
+            }
             if attempt != model.wizard_gen {
                 return Command::done();
             }
             chain_info_fetched(model, chain_id, data)
         }
         NetShellResult::Code { url, address, code } => {
+            if model.dapp_add.is_some() && attempt == model.dapp_gen {
+                let step = match model.dapp_add.as_mut() {
+                    Some(add) => code_step(&mut add.check, &url, &address, code),
+                    None => Step::Wait,
+                };
+                return dapp_step(model, step);
+            }
             if attempt != model.wizard_gen {
                 return Command::done();
             }
-            wizard_code(model, &url, &address, code)
+            let step = code_step(&mut model.wizard.phase, &url, &address, code);
+            wizard_step(model, step)
         }
         NetShellResult::P256Call { url, result } => {
+            if model.dapp_add.is_some() && attempt == model.dapp_gen {
+                let step = match model.dapp_add.as_mut() {
+                    Some(add) => p256_step(&mut add.check, &url, result),
+                    None => Step::Wait,
+                };
+                return dapp_step(model, step);
+            }
             if attempt != model.wizard_gen {
                 return Command::done();
             }
-            wizard_p256_call(model, &url, result)
+            let step = p256_step(&mut model.wizard.phase, &url, result);
+            wizard_step(model, step)
         }
 
         NetShellResult::Probed {
@@ -3002,7 +3506,17 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             // The unified probe serves three consumers; the wave generation
             // (globally unique) says exactly which one asked.
             if attempt == model.wizard_gen {
-                return wizard_probed(model, &url, reported_chain_id, latency_ms);
+                let step = probed_step(
+                    &mut model.wizard.phase,
+                    &url,
+                    reported_chain_id,
+                    latency_ms,
+                    None,
+                );
+                return wizard_step(model, step);
+            }
+            if model.dapp_add.is_some() && attempt == model.dapp_gen {
+                return dapp_probed(model, &url, reported_chain_id, latency_ms);
             }
             if let Some((&chain_id, _)) =
                 model.override_gens.iter().find(|(_, &gen)| gen == attempt)

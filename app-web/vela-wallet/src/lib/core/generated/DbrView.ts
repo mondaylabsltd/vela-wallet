@@ -15,6 +15,10 @@ ready: boolean, consent: DbrConsentView | null, tabs: Array<DbrTabView>,
  */
 sites: Array<DbrSiteView>, signing: DbrSigningView | null, queued_signing: number, 
 /**
+ * The add-network request on Vela's sheet, by tab and id (spec 100).
+ */
+adding_network: DbrSigningView | null, 
+/**
  * The inspected tab's whole record ([`Event::InspectorOpened`]).
  */
 inspector: DbrInspectorView | null, };

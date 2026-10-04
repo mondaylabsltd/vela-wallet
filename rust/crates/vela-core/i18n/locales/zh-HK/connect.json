@@ -87,6 +87,8 @@
       "cancel": "取消",
       "connect": "連接",
       "a11yClose": "關閉瀏覽器",
+      "addLead": "{{host}} 要求加入網絡",
+      "addFromSite": "唔喺 Vela 嘅網絡列表——名稱同幣種由網站提供。",
       "a11yBack": "返回",
       "a11yReload": "重新載入頁面",
       "a11yOpenSystem": "在系統瀏覽器中開啟",

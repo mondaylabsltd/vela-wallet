@@ -43,7 +43,7 @@ final class DbrExecutor {
     static let operations = [
         "list_sites", "write_grant", "remove_grant", "write_site_chain", "deliver",
         "read", "resolve_user_op", "forward_to_signing", "cancel_signing",
-        "save_connection_record", "log",
+        "save_connection_record", "log", "forward_to_add_network", "cancel_add_network",
     ]
 
     /// What one read through the pool came back as.
@@ -72,6 +72,13 @@ final class DbrExecutor {
         var cancelSigning: (_ tab: String, _ id: String) -> Void = { _, _ in }
         /// Write the "connected to" row.
         var saveConnectionRecord: (_ row: [String: Any]) -> Void = { _ in }
+        /// Spec 100: hand a page's add-network request to `network_admin`
+        /// (`dapp_add_requested`) — the operation as the core sent it, `ask`
+        /// untouched. Answered later, exactly once, through
+        /// `add_network_answered`.
+        var forwardToAddNetwork: (_ operation: [String: Any]) -> Void = { _ in }
+        /// Spec 100: the page that asked to add a network is gone.
+        var cancelAddNetwork: (_ tab: String, _ id: String) -> Void = { _, _ in }
     }
 
     private let store: VelaStore
@@ -172,6 +179,17 @@ final class DbrExecutor {
                 origin: operation["origin"] as? String ?? "",
                 nowMs: now()
             ))
+            return Self.ack
+
+        case "forward_to_add_network":
+            ports.forwardToAddNetwork(operation)
+            return Self.ack
+
+        case "cancel_add_network":
+            ports.cancelAddNetwork(
+                operation["tab"] as? String ?? "",
+                operation["id"] as? String ?? ""
+            )
             return Self.ack
 
         // Spec 099 FR-015: the core's line, one per request end and tab

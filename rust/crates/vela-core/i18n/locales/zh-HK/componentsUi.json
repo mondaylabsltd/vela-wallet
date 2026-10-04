@@ -470,7 +470,7 @@
         "notConnected": "呢個網站未連接",
         "accountMismatch": "網站要求咗未授權畀佢嘅帳戶",
         "noAccount": "冇可以連接嘅錢包帳戶",
-        "consentBusy": "另一個網站嘅請求未處理",
+        "consentBusy": "另一個請求未處理",
         "unsupportedMethod": "Vela 唔支援呢個請求",
         "unknownChain": "Vela 冇呢個網絡",
         "badParams": "請求格式有誤",
@@ -489,7 +489,8 @@
         "relayFailed": "Vela 中繼接收唔到",
         "signerUnavailable": "呢度用唔到通行密鑰",
         "signerNotDiscoverable": "呢個通行密鑰喺度簽唔到名",
-        "signerFailed": "通行密鑰驗證失敗"
+        "signerFailed": "通行密鑰驗證失敗",
+        "badRpc": "網站冇提供呢個網絡用得到嘅 RPC"
       },
       "requests": "最近嘅請求",
       "noRequests": "未有請求",

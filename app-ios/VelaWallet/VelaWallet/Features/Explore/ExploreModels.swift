@@ -171,7 +171,39 @@ struct NetworkChoiceModel: Identifiable, Equatable {
     var amount: String?
 }
 
-/// Which of the three sheets is open.
+/// Spec 100: the add-network sheet a page opened (`NetView.dapp_add`), in
+/// words — `ExploreLive.addNetwork` picks Settings' own line for each part.
+struct AddNetworkSheetModel {
+    struct Row: Identifiable {
+        var id: String { label }
+        let label: String
+        let value: String
+    }
+
+    /// `tab/id` — a new request is a new sheet.
+    let id: String
+    let title: String
+    /// "{{host}} asks to add a network" — who asks, from the transport.
+    let lead: String
+    let site: SiteModel
+    let rows: [Row]
+    /// The name and coin are the site's, not Vela's catalog's.
+    let fromSite: String?
+    let pill: StatusPillModel?
+    let checksTitle: String?
+    let checks: [CheckItemModel]
+    /// The sentence under the verdict.
+    let note: String?
+    /// "Add Network" — only where the core says it can act.
+    let add: String?
+    let retry: String?
+    let setupTool: String?
+    /// Cancel while a decision is open, Done after a verdict — either way
+    /// `dapp_add_declined`.
+    let dismiss: String
+}
+
+/// Which of the sheets is open.
 ///
 /// Separate from `ExploreSheet` — its *contents* — because a screen must store
 /// the identity and resolve the contents at render time. Storing the contents
@@ -182,6 +214,9 @@ enum ExploreSheetKind: String, Identifiable {
     case groupManage = "group-manage"
     case siteMenu = "site-menu"
     case connection = "connection"
+    /// Spec 100: a page asks to add a network. Its contents are the settings
+    /// machine's, drawn from `ExploreScreen.addNetwork`.
+    case addNetwork = "add-network"
 
     var id: String { rawValue }
 
@@ -190,6 +225,7 @@ enum ExploreSheetKind: String, Identifiable {
         case .groupManage: model.menus.groupManage
         case .siteMenu: model.menus.siteMenu
         case .connection: .connection(model.menus.connection)
+        case .addNetwork: .addNetwork
         }
     }
 }
@@ -198,6 +234,7 @@ enum ExploreSheet: Identifiable {
     case groupManage(title: String, rows: [GroupManageRow], newGroup: String)
     case siteMenu(site: SiteModel, statusLine: String, items: [SiteMenuItem])
     case connection(ConnectionModel)
+    case addNetwork
 
     var id: String { kind.rawValue }
 
@@ -206,6 +243,7 @@ enum ExploreSheet: Identifiable {
         case .groupManage: .groupManage
         case .siteMenu: .siteMenu
         case .connection: .connection
+        case .addNetwork: .addNetwork
         }
     }
 }

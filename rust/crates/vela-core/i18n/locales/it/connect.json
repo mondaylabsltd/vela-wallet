@@ -87,6 +87,8 @@
       "cancel": "Annulla",
       "connect": "Connetti",
       "a11yClose": "Chiudi il browser",
+      "addLead": "{{host}} chiede di aggiungere una rete",
+      "addFromSite": "Non è nell'elenco delle reti di Vela: nome e moneta sono quelli del sito.",
       "a11yBack": "Indietro",
       "a11yReload": "Ricarica la pagina",
       "a11yOpenSystem": "Apri nel browser di sistema",

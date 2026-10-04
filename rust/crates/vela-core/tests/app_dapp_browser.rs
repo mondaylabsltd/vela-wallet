@@ -745,7 +745,7 @@ fn add_chain_for_a_known_chain_is_a_switch() {
 }
 
 #[test]
-fn unknown_chains_are_4902_and_bad_params_are_32602() {
+fn unknown_switches_are_4902_and_bad_params_are_32602() {
     let mut sut = connected(DAPP);
     hello(&mut sut, "t1", "d1", DAPP);
     let switch = only_answer(&ask(
@@ -758,7 +758,9 @@ fn unknown_chains_are_4902_and_bad_params_are_32602() {
         json!([{"chainId":"0x89"}]),
     ));
     assert_eq!(error_code(&switch), 4902);
-    let add = only_answer(&ask(
+    // An add for a chain Vela lacks no longer answers 4902 here: it opens
+    // Vela's add-network sheet (spec 100, `app_dapp_add_network_100.rs`).
+    let add = ask(
         &mut sut,
         "t1",
         "d1",
@@ -766,12 +768,10 @@ fn unknown_chains_are_4902_and_bad_params_are_32602() {
         "2",
         "wallet_addEthereumChain",
         json!([{"chainId":"0x89"}]),
-    ));
-    assert_eq!(error_code(&add), 4902);
-    assert_eq!(
-        add["error"]["message"],
-        json!("Add chain 137 in Vela's network settings first")
     );
+    assert!(add
+        .iter()
+        .any(|op| matches!(op, Op::ForwardToAddNetwork { ask, .. } if ask.chain_id == 137)));
     let bad = only_answer(&ask(
         &mut sut,
         "t1",

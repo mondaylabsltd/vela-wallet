@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 use vela_core::app::dapp_browser::{DbrOperation, DbrShellResult, DbrStoredSite};
 use vela_core::app::dapp_permissions::DpermGrant;
 use vela_core::app::dapp_record::DbrReadFailure;
+use vela_core::app::dapp_rpc::DappChainAsk;
 
 use crate::executor::{now_ms, pool, relay, storage};
 
@@ -55,8 +56,9 @@ pub struct Forwarded {
     pub granted_address: String,
 }
 
-/// What the signing column must do. The column is the page's, so the order
-/// travels out rather than being carried out here.
+/// What one of the page's sheets must do — the signing column, or the
+/// add-network sheet in the Connection column (spec 100). Both are the page's,
+/// so the order travels out rather than being carried out here.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SigningOrder {
     /// Open the sheet for this request. Answered later, exactly once, with
@@ -65,6 +67,17 @@ pub enum SigningOrder {
     /// The page that asked is gone and already has its 4900: close the sheet
     /// for this request without answering it.
     Cancel { tab: String, id: String },
+    /// A page asks to add a network (spec 100): hand it to `network_admin`
+    /// (`dapp_add_requested`). Answered later, exactly once, with
+    /// `add_network_answered`.
+    AddNetwork {
+        tab: String,
+        id: String,
+        origin: String,
+        ask: DappChainAsk,
+    },
+    /// The page that asked to add a network is gone: `dapp_add_cancelled`.
+    CancelAddNetwork { tab: String, id: String },
 }
 
 /// How one operation is performed, and therefore where.
@@ -175,6 +188,23 @@ pub fn perform(operation: &DbrOperation) -> Performed {
             tab: tab.clone(),
             id: id.clone(),
         }),
+        DbrOperation::ForwardToAddNetwork {
+            tab,
+            id,
+            origin,
+            ask,
+        } => Performed::Signing(SigningOrder::AddNetwork {
+            tab: tab.clone(),
+            id: id.clone(),
+            origin: origin.clone(),
+            ask: ask.clone(),
+        }),
+        DbrOperation::CancelAddNetwork { tab, id } => {
+            Performed::Signing(SigningOrder::CancelAddNetwork {
+                tab: tab.clone(),
+                id: id.clone(),
+            })
+        }
         DbrOperation::SaveConnectionRecord {
             address,
             chain_id,

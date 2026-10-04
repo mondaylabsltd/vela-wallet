@@ -156,6 +156,13 @@ final class BrowserController {
         var onCancelSigning: (_ tab: String, _ id: String) -> Void = { _, _ in }
         /// The feed's store, for the "connected to" row.
         var writeRecords: ([[String: Any]]) -> Void = { _ in }
+        /// Spec 100: carry a page's add-network request to `network_admin`
+        /// (`dapp_add_requested`) — the operation as the core sent it. `nil`
+        /// = nobody can show the sheet, and the request is declined rather
+        /// than left waiting.
+        var onForwardToAddNetwork: (([String: Any]) -> Void)?
+        /// Spec 100: the page behind an add-network sheet is gone.
+        var onCancelAddNetwork: (_ tab: String, _ id: String) -> Void = { _, _ in }
     }
 
     var ports: Ports
@@ -217,7 +224,9 @@ final class BrowserController {
             },
             forwardToSigning: { [weak self] forward in self?.forwardToSigning(forward) },
             cancelSigning: { [weak self] tab, id in self?.ports.onCancelSigning(tab, id) },
-            saveConnectionRecord: { [weak self] row in self?.ports.writeRecords([row]) }
+            saveConnectionRecord: { [weak self] row in self?.ports.writeRecords([row]) },
+            forwardToAddNetwork: { [weak self] operation in self?.forwardToAddNetwork(operation) },
+            cancelAddNetwork: { [weak self] tab, id in self?.ports.onCancelAddNetwork(tab, id) }
         )
     }
 
@@ -616,6 +625,33 @@ final class BrowserController {
             "user_op_hash": userOpHash.map { $0 as Any } ?? NSNull(),
             "now_ms": now(),
         ]))
+    }
+
+    // MARK: - Adding a network (spec 100)
+
+    /// The add-network sheet's ending for a forwarded request — `outcome` is
+    /// `network_admin`'s `DappAddOutcome`, carried as it came; the core answers
+    /// the page, exactly once.
+    func addNetworkAnswered(tab: String, id: String, outcome: [String: Any]) {
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "add_network_answered",
+            "tab": tab,
+            "id": id,
+            "outcome": outcome,
+            "now_ms": now(),
+        ]))
+    }
+
+    private func forwardToAddNetwork(_ operation: [String: Any]) {
+        let tab = operation["tab"] as? String ?? ""
+        let id = operation["id"] as? String ?? ""
+        // The sheet names the site; the page behind it should be the one that asked.
+        if explore.tabs.contains(where: { $0.id == tab }) { selectTab(tab) }
+        guard let open = ports.onForwardToAddNetwork else {
+            addNetworkAnswered(tab: tab, id: id, outcome: ["type": "declined"])
+            return
+        }
+        open(operation)
     }
 
     /// The error a request gets when there is no sheet to show it on. -32002,

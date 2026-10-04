@@ -61,6 +61,17 @@ class BrowserExecutor(
 
         /** The feed's "connected to <site>" row (`type: "connect"`). */
         fun saveConnectionRecord(row: JSONObject)
+
+        /**
+         * Spec 100: hand this request to `network_admin`'s add-network sheet;
+         * its ending comes back as `add_network_answered`. The browser
+         * controller carries it — a port with no sheet keeps the default, and
+         * the request then waits for the page to leave.
+         */
+        fun forwardToAddNetwork(operation: DbrOperation.ForwardToAddNetwork) {}
+
+        /** Spec 100: the page that asked is gone — close its add-network sheet, unanswered. */
+        fun cancelAddNetwork(tab: String, id: String) {}
     }
 
     suspend fun perform(operation: DbrOperation): DbrShellResult = when (operation) {
@@ -92,6 +103,14 @@ class BrowserExecutor(
         }
         is DbrOperation.CancelSigning -> {
             ports.cancelSigning(operation.tab, operation.id)
+            DbrShellResult.Ack
+        }
+        is DbrOperation.ForwardToAddNetwork -> {
+            ports.forwardToAddNetwork(operation)
+            DbrShellResult.Ack
+        }
+        is DbrOperation.CancelAddNetwork -> {
+            ports.cancelAddNetwork(operation.tab, operation.id)
             DbrShellResult.Ack
         }
         is DbrOperation.SaveConnectionRecord -> {

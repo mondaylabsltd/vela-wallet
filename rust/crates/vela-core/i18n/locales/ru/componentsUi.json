@@ -470,7 +470,7 @@
         "notConnected": "Этот сайт не подключён",
         "accountMismatch": "Сайт запросил аккаунт, которого ему не давали",
         "noAccount": "Нет аккаунта для подключения",
-        "consentBusy": "Открыт запрос другого сайта",
+        "consentBusy": "Открыт другой запрос",
         "unsupportedMethod": "Vela не поддерживает этот запрос",
         "unknownChain": "Этой сети нет в Vela",
         "badParams": "Запрос составлен неверно",
@@ -489,7 +489,8 @@
         "relayFailed": "Релей Vela не смог принять",
         "signerUnavailable": "Здесь нельзя использовать passkey",
         "signerNotDiscoverable": "Этот passkey не может подписывать здесь",
-        "signerFailed": "Не удалось подтвердить passkey"
+        "signerFailed": "Не удалось подтвердить passkey",
+        "badRpc": "Сайт не дал пригодного RPC для этой сети"
       },
       "requests": "Недавние запросы",
       "noRequests": "Запросов пока нет",

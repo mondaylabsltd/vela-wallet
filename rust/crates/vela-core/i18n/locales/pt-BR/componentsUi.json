@@ -470,7 +470,7 @@
         "notConnected": "Este site não está conectado",
         "accountMismatch": "O site pediu uma conta que não lhe foi dada",
         "noAccount": "Nenhuma conta da carteira para conectar",
-        "consentBusy": "Há uma solicitação de outro site aberta",
+        "consentBusy": "Há outra solicitação aberta",
         "unsupportedMethod": "A Vela não aceita esta solicitação",
         "unknownChain": "Esta rede não está na Vela",
         "badParams": "A solicitação está malformada",
@@ -489,7 +489,8 @@
         "relayFailed": "O relay da Vela não conseguiu receber",
         "signerUnavailable": "Passkeys não podem ser usadas aqui",
         "signerNotDiscoverable": "Esta passkey não pode assinar aqui",
-        "signerFailed": "A passkey falhou"
+        "signerFailed": "A passkey falhou",
+        "badRpc": "O site não deu um RPC utilizável para esta rede"
       },
       "requests": "Solicitações recentes",
       "noRequests": "Nenhuma solicitação ainda",

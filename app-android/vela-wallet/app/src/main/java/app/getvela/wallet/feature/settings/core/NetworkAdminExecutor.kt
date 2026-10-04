@@ -41,6 +41,12 @@ class NetworkAdminExecutor(
     private val invalidatePools: (Long?) -> Unit = {},
     /** Spec 043: forget what the relay client learned (`RelayClient.clearCaches`). */
     private val clearBundlerCache: () -> Unit = {},
+    /**
+     * Spec 100: a page's add-network request is over — carry the ending to the
+     * browser machine (`add_network_answered`). Read when it happens, so the
+     * container can wire it after this executor exists.
+     */
+    private val dappAddSettled: () -> ((tab: String, id: String, outcome: app.getvela.wallet.feature.browser.core.DappAddOutcome) -> Unit)? = { null },
 ) {
 
     @Suppress("LongMethod")
@@ -213,6 +219,11 @@ class NetworkAdminExecutor(
             clearBundlerCache()
             NetShellResult.BundlerCacheCleared
         }
+
+        is NetOperation.DappAddSettled -> {
+            dappAddSettled()?.invoke(operation.tab, operation.id, operation.outcome)
+            NetShellResult.Written
+        }
     }
 
     /**
@@ -257,6 +268,7 @@ class NetworkAdminExecutor(
         is NetOperation.FetchFiatRates -> NetShellResult.FiatRates(NetHealthBody.Failed, 0)
         is NetOperation.InvalidatePools -> NetShellResult.Invalidated
         is NetOperation.ClearBundlerCache -> NetShellResult.BundlerCacheCleared
+        is NetOperation.DappAddSettled -> NetShellResult.Written
     }
 
     // -- codecs: wire (snake_case) ↔ stored (camelCase) ----------------------

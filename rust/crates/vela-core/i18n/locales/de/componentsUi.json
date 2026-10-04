@@ -470,7 +470,7 @@
         "notConnected": "Diese Website ist nicht verbunden",
         "accountMismatch": "Die Website wollte ein Konto, das sie nicht erhalten hat",
         "noAccount": "Kein Wallet-Konto zum Verbinden",
-        "consentBusy": "Eine Anfrage einer anderen Website ist offen",
+        "consentBusy": "Eine andere Anfrage ist offen",
         "unsupportedMethod": "Vela unterstützt diese Anfrage nicht",
         "unknownChain": "Dieses Netzwerk ist nicht in Vela",
         "badParams": "Die Anfrage ist fehlerhaft",
@@ -489,7 +489,8 @@
         "relayFailed": "Velas Relay konnte es nicht annehmen",
         "signerUnavailable": "Passkeys sind hier nicht nutzbar",
         "signerNotDiscoverable": "Dieser Passkey kann hier nicht signieren",
-        "signerFailed": "Der Passkey ist fehlgeschlagen"
+        "signerFailed": "Der Passkey ist fehlgeschlagen",
+        "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk"
       },
       "requests": "Letzte Anfragen",
       "noRequests": "Noch keine Anfragen",

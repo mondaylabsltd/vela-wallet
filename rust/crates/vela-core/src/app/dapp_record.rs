@@ -6,7 +6,7 @@
 //! ```text
 //! browser   the tab and its page          loading · ready · crashed · navigated away
 //! provider  the wallet offered to it      offered · insecure origin · script did not run
-//! wallet    the wallet's own rules        not connected · unsupported · unknown chain · …
+//! wallet    the wallet's own rules        not connected · unsupported · unknown chain · not compatible · …
 //! network   the chain's RPC               no endpoint · timed out · rate limited · its error
 //! relay     Vela's relay                  refused · unreachable · not confirmed yet
 //! sheet     the person, on Vela's sheet   rejected
@@ -45,9 +45,10 @@ pub const RECENT_ROWS: usize = 20;
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum DbrRequestClass {
     /// Answered by the wallet at once: accounts, chain id, permissions,
-    /// switch/add chain, capabilities.
+    /// switch chain, an add for a chain the wallet has, capabilities.
     Local,
-    /// A connect: granted already, or the consent sheet.
+    /// A connect (granted already, or the consent sheet), or an add-network
+    /// request that opened its sheet (spec 100).
     Consent,
     /// A node read through the person's own endpoints.
     Read,
@@ -91,7 +92,8 @@ pub enum DbrReason {
     AccountMismatch,
     /// A connect with no wallet account (4001).
     NoAccount,
-    /// Another site's connect sheet is open (4001).
+    /// Another request's sheet is open: another site's connect (4001), or
+    /// any other add-network request (-32002, spec 100).
     ConsentBusy,
     UnsupportedMethod,
     UnknownChain,
@@ -126,6 +128,12 @@ pub enum DbrReason {
     /// A passkey that would never be offered at sign-in.
     SignerNotDiscoverable,
     SignerFailed,
+    /// A network a page asked Vela to add lacks Vela's contracts (4902,
+    /// spec 100).
+    NotCompatible,
+    /// A network a page asked Vela to add is not in Vela's catalog, and no
+    /// RPC the page gave answers for it (-32602, spec 100).
+    BadRpc,
 }
 
 impl DbrReason {
@@ -166,6 +174,9 @@ impl DbrReason {
                 "componentsUi.browserStatus.reason.signerNotDiscoverable"
             }
             Self::SignerFailed => "componentsUi.browserStatus.reason.signerFailed",
+            // Settings' own verdict line, word for word.
+            Self::NotCompatible => "addToken.errorNotCompatible",
+            Self::BadRpc => "componentsUi.browserStatus.reason.badRpc",
         }
     }
 

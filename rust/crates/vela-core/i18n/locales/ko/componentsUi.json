@@ -470,7 +470,7 @@
         "notConnected": "이 사이트는 연결되지 않았습니다",
         "accountMismatch": "허용하지 않은 계정을 요청했습니다",
         "noAccount": "연결할 지갑 계정이 없습니다",
-        "consentBusy": "다른 사이트의 요청이 열려 있습니다",
+        "consentBusy": "다른 요청이 열려 있습니다",
         "unsupportedMethod": "Vela가 지원하지 않는 요청입니다",
         "unknownChain": "Vela에 없는 네트워크입니다",
         "badParams": "요청 형식이 잘못되었습니다",
@@ -489,7 +489,8 @@
         "relayFailed": "Vela 릴레이가 받지 못했습니다",
         "signerUnavailable": "여기서는 패스키를 쓸 수 없습니다",
         "signerNotDiscoverable": "이 패스키로는 여기서 서명할 수 없습니다",
-        "signerFailed": "패스키 인증에 실패했습니다"
+        "signerFailed": "패스키 인증에 실패했습니다",
+        "badRpc": "사이트가 이 네트워크에 쓸 수 있는 RPC를 주지 않았습니다"
       },
       "requests": "최근 요청",
       "noRequests": "아직 요청 없음",

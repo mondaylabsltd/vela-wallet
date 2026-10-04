@@ -40,7 +40,8 @@ const EMPTY_VIEW: NetView = {
 	},
 	endpoints: [],
 	providers: [],
-	last_added_chain_id: null
+	last_added_chain_id: null,
+	dapp_add: null
 };
 
 class NetworkAdmin {
@@ -107,3 +108,6 @@ class NetworkAdmin {
  * not do, so callers guard on mount rather than at import.
  */
 export const networkAdmin = new NetworkAdmin();
+
+/** Spec 100: who answers a page's add-network request (`dapp-add-settled.ts`). */
+export { onDappAddSettled } from './dapp-add-settled';

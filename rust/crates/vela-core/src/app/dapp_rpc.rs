@@ -122,7 +122,8 @@ pub enum Route {
     NetVersion,
     SwitchChain,
     /// `wallet_addEthereumChain` — a switch when the wallet has the chain;
-    /// networks are added in Settings, by a person, never by a page.
+    /// otherwise the person is asked, on Vela's sheet, whether to add it
+    /// (spec 100; until then networks were added only in Settings).
     AddChain,
     /// `wallet_watchAsset` — `false`: tokens join through Vela's own trust
     /// rules, not because a page asked.
@@ -229,6 +230,213 @@ pub fn requested_address(method: &str, params: &Value) -> Option<String> {
 /// `1` → `"0x1"`.
 pub fn hex_chain_id(chain_id: u32) -> String {
     format!("0x{chain_id:x}")
+}
+
+// ---------------------------------------------------------------------------
+// EIP-3085 — a page asks Vela to add a network (spec 100)
+// ---------------------------------------------------------------------------
+
+/// The longest `chainName` / `nativeCurrency.symbol` kept for the sheet;
+/// longer is cut, not refused.
+pub const ASK_TEXT_CHARS: usize = 64;
+/// The page's RPC URLs Vela will try, at most — the first usable ones.
+pub const ASK_RPC_URLS: usize = 4;
+/// A URL longer than this is not one Vela will probe or store.
+pub const ASK_URL_CHARS: usize = 512;
+
+/// What a page's `wallet_addEthereumChain` asks for, as Vela reads it
+/// (EIP-3085 `AddEthereumChainParameter`). Only what the sheet shows and a
+/// network is saved with; `iconUrls` and `nativeCurrency.name` are not read.
+///
+/// The page's words are trusted for nothing: when Vela's own chain catalog
+/// knows `chain_id`, its name, coin, RPCs and explorer are used instead
+/// (`network_admin`'s dApp add), and these only fill in for a chain the
+/// catalog does not know.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct DappChainAsk {
+    pub chain_id: u32,
+    /// `chainName`: trimmed, control and direction-override characters
+    /// removed, at most [`ASK_TEXT_CHARS`].
+    pub chain_name: Option<String>,
+    /// `nativeCurrency.symbol`, cleaned the same way.
+    pub native_symbol: Option<String>,
+    /// `rpcUrls` Vela may try ([`usable_rpc_url`]), in the page's order, at
+    /// most [`ASK_RPC_URLS`].
+    pub rpc_urls: Vec<String>,
+    /// How many of the page's `rpcUrls` were refused (not https, and not an
+    /// http address the debug-mode rule allows).
+    #[serde(default)]
+    pub refused_rpc_urls: u32,
+    /// The first https `blockExplorerUrls` entry.
+    pub explorer_url: Option<String>,
+}
+
+/// An RPC URL a page may hand Vela: `https://`, or `http://` exactly where an
+/// http page is offered the wallet ([`super::dapp_permissions::offers_wallet`]
+/// — loopback, and with debug mode on, this device's own network). No
+/// whitespace, no `user:pass@`, at most [`ASK_URL_CHARS`].
+pub fn usable_rpc_url(url: &str, debug_mode: bool) -> bool {
+    if url.is_empty() || url.chars().count() > ASK_URL_CHARS || url.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+    let Some((_, rest)) = url.split_once("://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return false;
+    }
+    super::dapp_permissions::origin_of(url)
+        .is_some_and(|origin| super::dapp_permissions::offers_wallet(&origin, debug_mode))
+}
+
+/// The host (and port) a URL names, for a sheet line — `None` for anything
+/// that is not an http(s) URL.
+pub fn url_host(url: &str) -> Option<String> {
+    let origin = super::dapp_permissions::origin_of(url)?;
+    origin.split_once("://").map(|(_, host)| host.to_owned())
+}
+
+/// Text a page wrote, made safe to draw: trimmed, control and bidi-override
+/// characters dropped, at most [`ASK_TEXT_CHARS`]. Empty is none.
+fn page_text(value: Option<&Value>) -> Option<String> {
+    let text: String = value?
+        .as_str()?
+        .chars()
+        .filter(|c| {
+            !c.is_control() && !matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+        })
+        .collect();
+    let text: String = text.trim().chars().take(ASK_TEXT_CHARS).collect();
+    let text = text.trim_end().to_owned();
+    (!text.is_empty()).then_some(text)
+}
+
+/// `wallet_addEthereumChain`'s `[AddEthereumChainParameter]`, read
+/// (EIP-3085). `Err` = the words of a -32602:
+///
+/// - `chainId` as [`chain_param`] reads it (hex string, decimal, number);
+/// - `nativeCurrency`, when present, must be an object; a `decimals` other
+///   than 18 is refused — Vela counts every network's own coin in 18
+///   decimals, so another figure would misstate every balance on it;
+/// - `rpcUrls` / `blockExplorerUrls`, when present, must be lists of strings.
+///
+/// Lenient where EIP-3085 is strict and the leniency costs nothing: an
+/// absent or empty `rpcUrls` is not refused here — a chain Vela's catalog
+/// knows needs none of the page's, and one it does not know ends on the
+/// sheet as "no usable RPC".
+pub fn add_chain_ask(params: &Value, debug_mode: bool) -> Result<DappChainAsk, &'static str> {
+    const SHAPE: &str = "Expected [{ chainId, chainName?, nativeCurrency?, rpcUrls? }]";
+    let chain_id = chain_param(params).ok_or(SHAPE)?;
+    let ask = params
+        .as_array()
+        .and_then(|list| list.first())
+        .and_then(Value::as_object)
+        .ok_or(SHAPE)?;
+    let native = match ask.get("nativeCurrency") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(native)) => Some(native),
+        Some(_) => return Err("nativeCurrency must be { name, symbol, decimals }"),
+    };
+    if let Some(decimals) = native
+        .and_then(|native| native.get("decimals"))
+        .filter(|decimals| !decimals.is_null())
+    {
+        if decimals.as_u64() != Some(18) {
+            return Err("Vela supports native currencies with 18 decimals only");
+        }
+    }
+    let list = |key: &str| -> Result<Vec<String>, &'static str> {
+        match ask.get(key) {
+            None | Some(Value::Null) => Ok(Vec::new()),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(|url| url.trim().to_owned())
+                        .ok_or("rpcUrls and blockExplorerUrls must be lists of URLs")
+                })
+                .collect(),
+            Some(_) => Err("rpcUrls and blockExplorerUrls must be lists of URLs"),
+        }
+    };
+    let rpc_given = list("rpcUrls")?;
+    let explorers = list("blockExplorerUrls")?;
+    let mut rpc_urls: Vec<String> = Vec::new();
+    let mut refused_rpc_urls = 0u32;
+    for url in rpc_given {
+        if !usable_rpc_url(&url, debug_mode) {
+            refused_rpc_urls = refused_rpc_urls.saturating_add(1);
+        } else if !rpc_urls.contains(&url) && rpc_urls.len() < ASK_RPC_URLS {
+            rpc_urls.push(url);
+        }
+    }
+    let explorer_url = explorers
+        .into_iter()
+        .find(|url| external_page_host(url).is_some() && url.chars().count() <= ASK_URL_CHARS);
+    Ok(DappChainAsk {
+        chain_id,
+        chain_name: page_text(ask.get("chainName")),
+        native_symbol: page_text(native.and_then(|native| native.get("symbol"))),
+        rpc_urls,
+        refused_rpc_urls,
+        explorer_url,
+    })
+}
+
+/// How a page's add-network request ended on Vela's side — what the sheet
+/// (`network_admin`) hands back to whatever answers the page.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum DappAddOutcome {
+    /// The network is in Vela now (just added, or it already was): the site
+    /// moves to it and the page is answered `null`.
+    Added { chain_id: u32 },
+    /// The person declined, or closed the sheet before a verdict (4001).
+    Declined,
+    /// Vela's contracts are not all on the chain ([`ADD_NOT_COMPATIBLE`]).
+    NotCompatible,
+    /// The catalog does not know the chain and the page gave no RPC that
+    /// answers for it (-32602).
+    BadRpc,
+    /// Another add-network request is open (-32002).
+    Busy,
+}
+
+/// The code a page is answered when the chain it asked Vela to add cannot
+/// hold a Vela wallet: 4902, "Unrecognized chain ID" (EIP-3326, MetaMask) —
+/// after the refusal the chain is still not one Vela has, which is what the
+/// page needs to know (research R4).
+pub const ADD_NOT_COMPATIBLE: i64 = 4902;
+/// -32002 "Resource unavailable": another add-network request is open — the
+/// code wallets answer a request of a kind already pending.
+pub const ADD_BUSY: i64 = -32002;
+
+/// The error a page is answered for `outcome` (`None` = answered `null`):
+/// one table for every client — the in-app browsers (`dapp_browser`) and the
+/// extension's request window.
+pub fn add_outcome_error(outcome: &DappAddOutcome, chain_id: u32) -> Option<(i64, String)> {
+    match outcome {
+        DappAddOutcome::Added { .. } => None,
+        DappAddOutcome::Declined => Some((4001, "User rejected the request".to_owned())),
+        DappAddOutcome::NotCompatible => Some((
+            ADD_NOT_COMPATIBLE,
+            format!(
+                "Chain {chain_id} is not compatible with Vela Wallet: its Safe and ERC-4337 contracts are not all deployed"
+            ),
+        )),
+        DappAddOutcome::BadRpc => Some((
+            -32602,
+            format!("No RPC in rpcUrls answers eth_chainId with {chain_id}"),
+        )),
+        DappAddOutcome::Busy => Some((
+            ADD_BUSY,
+            "A request to add a network is already open".to_owned(),
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------

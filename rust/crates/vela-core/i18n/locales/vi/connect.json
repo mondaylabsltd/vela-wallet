@@ -87,6 +87,8 @@
       "cancel": "Hủy",
       "connect": "Kết nối",
       "a11yClose": "Đóng trình duyệt",
+      "addLead": "{{host}} muốn thêm một mạng",
+      "addFromSite": "Không có trong danh sách mạng của Vela — tên và coin do trang web đưa ra.",
       "a11yBack": "Quay lại",
       "a11yReload": "Tải lại trang",
       "a11yOpenSystem": "Mở trong trình duyệt hệ thống",

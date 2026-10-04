@@ -561,8 +561,20 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the two above inside the unchanged SC-005 budget. 1780 leaves.
 // 1879 (merge of #417 into #408, 2026-10-04): #417's 1781 leaves + #408's net
 //   one (+ rowShort, noCoinPays, − gasEstimateFailed) = 1782 leaves, 97 branches.
-if (PATHS.length !== 1879) fail(`expected 1879 paths (1782 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1782) fail(`expected 1782 leaf paths, got ${leafSet.size}`);
+// 1877 (100, 2026-10-04): a page may ask Vela to add a network — + `connect.
+//   browser.{addLead,addFromSite}` (who asks; "the name and coin are the
+//   site's") and `componentsUi.browserStatus.reason.badRpc`; the sheet's other
+//   words are Settings' own (`settingsModals.addNetwork.*`, `addToken.label*`,
+//   `addToken.errorNotCompatible`, `assets.rpcFixWrongChain`). Minus `onboarding.
+//   login.alertNotFound{Title,Body}`, read by no client (git grep: neither
+//   the full path nor the leaf name appears outside the corpus and the
+//   generated tables) — the room the three need under SC-005, instead of a
+//   budget move. Same branches: 1779 + 3 - 2 = 1780 leaves.
+// 1880 (merge of #419 into 100, 2026-10-04): #419's 1782 leaves (main + #409,
+//   #408; #411 moved no key) + 100's net one (+ addLead, addFromSite, badRpc,
+//   − alertNotFound{Title,Body}) = 1783 leaves, 97 branches.
+if (PATHS.length !== 1880) fail(`expected 1880 paths (1783 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1783) fail(`expected 1783 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

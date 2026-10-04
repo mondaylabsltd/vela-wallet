@@ -5,6 +5,7 @@
 //! the page entity in `wallet/page.rs` owns the state and the interaction, the
 //! same division spec 015 set and spec 018 kept.
 
+pub mod add_network;
 pub mod components;
 pub mod engine;
 pub mod fixtures;

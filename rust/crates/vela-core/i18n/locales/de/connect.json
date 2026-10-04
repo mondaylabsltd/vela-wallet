@@ -87,6 +87,8 @@
       "cancel": "Abbrechen",
       "connect": "Verbinden",
       "a11yClose": "Browser schließen",
+      "addLead": "{{host}} möchte ein Netzwerk hinzufügen",
+      "addFromSite": "Nicht in Velas Netzwerkliste – Name und Coin stammen von der Website.",
       "a11yBack": "Zurück",
       "a11yReload": "Seite neu laden",
       "a11yOpenSystem": "Im System-Browser öffnen",

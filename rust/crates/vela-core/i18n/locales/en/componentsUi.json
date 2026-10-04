@@ -470,7 +470,7 @@
         "notConnected": "This site isn't connected",
         "accountMismatch": "The site asked for another account",
         "noAccount": "No wallet account to connect",
-        "consentBusy": "Another site's request is open",
+        "consentBusy": "Another request is open",
         "unsupportedMethod": "Vela doesn't support this request",
         "unknownChain": "This network isn't in Vela",
         "badParams": "The request was malformed",
@@ -489,7 +489,8 @@
         "relayFailed": "Vela's relay couldn't take it",
         "signerUnavailable": "Passkeys can't be used here",
         "signerNotDiscoverable": "This passkey can't sign here",
-        "signerFailed": "The passkey prompt failed"
+        "signerFailed": "The passkey prompt failed",
+        "badRpc": "The site gave no usable RPC for this network"
       },
       "requests": "Recent requests",
       "noRequests": "No requests yet",

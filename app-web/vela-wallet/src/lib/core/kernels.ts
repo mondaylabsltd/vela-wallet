@@ -27,6 +27,8 @@ import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import type { TrackStatusAnswer } from '$lib/core/generated/TrackStatusAnswer';
 import type { ConfirmState } from '$lib/core/generated/ConfirmState';
 import type { LandingPace } from '$lib/core/generated/LandingPace';
+import type { DappChainAsk } from '$lib/core/generated/DappChainAsk';
+import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
 import type { SignView } from '$lib/core/generated/SignView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
@@ -1196,4 +1198,33 @@ export function balanceReadPlan(
 				)
 			) as ReadSlot[]
 	);
+}
+
+/**
+ * Spec 100: a page's `wallet_addEthereumChain` params, as the core reads them
+ * (`dapp_rpc::add_chain_ask`) — the ask, or the words of a -32602. The
+ * extension has no debug mode (spec 091 is the in-app browsers'), so a page's
+ * http RPC is usable only on loopback.
+ */
+export function dappAddChainAsk(
+	params: unknown,
+	debugMode = false
+): { ok: DappChainAsk } | { error: string } {
+	return JSON.parse(wasm.dappAddChainAsk(JSON.stringify(params ?? null), debugMode)) as
+		{ ok: DappChainAsk } | { error: string };
+}
+
+/**
+ * Spec 100: how a page's add-network request is answered for `outcome` — the
+ * core's one table (`dapp_rpc::add_outcome_error`): `null` when added, else
+ * the error. The in-app browsers answer from the same table.
+ */
+export function dappAddOutcomeError(
+	outcome: DappAddOutcome,
+	chainId: number
+): { code: number; message: string } | null {
+	return JSON.parse(wasm.dappAddOutcomeError(JSON.stringify(outcome), chainId)) as {
+		code: number;
+		message: string;
+	} | null;
 }

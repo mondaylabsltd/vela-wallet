@@ -652,7 +652,10 @@ struct DappBrowserTests {
     @Test func everyOperationIsAnswered() async throws {
         let suite = "vela.tests.dbr.ops.\(UUID().uuidString)"
         let executor = DbrExecutor(store: VelaStore(defaults: UserDefaults(suiteName: suite)!))
-        #expect(DbrExecutor.operations.count == 11, "spec 099 added `log`")
+        #expect(
+            DbrExecutor.operations.count == 13,
+            "spec 099 added `log`; spec 100 `forward_to_add_network` and `cancel_add_network`"
+        )
         for name in DbrExecutor.operations {
             let reply = try CoreJSON.object(await executor.perform(["type": name]))
             #expect(!(reply["type"] as? String ?? "").isEmpty, "no answer for `\(name)`")

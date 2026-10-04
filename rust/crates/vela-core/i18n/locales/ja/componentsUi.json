@@ -470,7 +470,7 @@
         "notConnected": "このサイトは未接続です",
         "accountMismatch": "別のアカウントを要求されました",
         "noAccount": "接続できるアカウントがありません",
-        "consentBusy": "別のサイトの要求が開いています",
+        "consentBusy": "別の要求が開いています",
         "unsupportedMethod": "Vela はこの要求に未対応です",
         "unknownChain": "このネットワークは Vela にありません",
         "badParams": "要求の形式が不正です",
@@ -489,7 +489,8 @@
         "relayFailed": "リレーが受け付けませんでした",
         "signerUnavailable": "ここではパスキーを使えません",
         "signerNotDiscoverable": "このパスキーはここで署名できません",
-        "signerFailed": "パスキーの認証に失敗しました"
+        "signerFailed": "パスキーの認証に失敗しました",
+        "badRpc": "サイトが使える RPC を示しませんでした"
       },
       "requests": "最近の要求",
       "noRequests": "要求はまだありません",

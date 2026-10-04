@@ -34,6 +34,7 @@ use gpui::App;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use vela_core::app::dapp_rpc::DappAddOutcome;
 use vela_core::app::network_admin::{
     DEFAULT_ETHEREUM_DATA_URL, Event, NetChainIndexEntry, NetCustomNetwork, NetHealthBody,
     NetNetworkConfig, NetOperation, NetProviderKeys, NetRawChainData, NetServiceEndpoints,
@@ -684,8 +685,41 @@ impl Machine for NetworkAdmin {
                 crate::executor::relay::clear_cache(*chain_id, None);
                 Answer::Now(NetShellResult::BundlerCacheCleared)
             }
+            // Spec 100: a page's add-network request is over. The browser
+            // machine is the page's, so the outcome waits here until the page
+            // carries it there (`take_dapp_add_settled`) — on the notify this
+            // very answer causes.
+            NetOperation::DappAddSettled { tab, id, outcome } => {
+                if let Ok(mut settled) = DAPP_ADD_SETTLED.lock() {
+                    settled.push(DappAddSettle {
+                        tab: tab.clone(),
+                        id: id.clone(),
+                        outcome: outcome.clone(),
+                    });
+                }
+                Answer::Now(NetShellResult::Written)
+            }
         }
     }
+}
+
+/// One page's add-network request, ended by the sheet (spec 100) — for the
+/// browser machine's `add_network_answered`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DappAddSettle {
+    pub tab: String,
+    pub id: String,
+    pub outcome: DappAddOutcome,
+}
+
+static DAPP_ADD_SETTLED: std::sync::Mutex<Vec<DappAddSettle>> = std::sync::Mutex::new(Vec::new());
+
+/// Every ending not yet carried to the browser, oldest first.
+pub fn take_dapp_add_settled() -> Vec<DappAddSettle> {
+    DAPP_ADD_SETTLED
+        .lock()
+        .map(|mut settled| std::mem::take(&mut *settled))
+        .unwrap_or_default()
 }
 
 /// Write the four service endpoints, MERGING rather than replacing.

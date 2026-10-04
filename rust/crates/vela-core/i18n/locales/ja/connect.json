@@ -87,6 +87,8 @@
       "cancel": "キャンセル",
       "connect": "接続",
       "a11yClose": "ブラウザを閉じる",
+      "addLead": "{{host}} がネットワークの追加を求めています",
+      "addFromSite": "Vela のネットワーク一覧にありません。名前と通貨はサイトの申告です。",
       "a11yBack": "戻る",
       "a11yReload": "ページを再読み込み",
       "a11yOpenSystem": "システムブラウザで開く",

@@ -714,6 +714,21 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
 /**
+ * EIP-3085 `wallet_addEthereumChain` (spec 100): the page's ask as Vela reads
+ * it, as JSON — `{"ok": DappChainAsk}` or `{"error": "<the -32602 words>"}`.
+ * `debug_mode` is Settings' debug mode: which http RPC URLs a page may give.
+ */
+export function dappAddChainAsk(params_json: string, debug_mode: boolean): string;
+
+/**
+ * How a page's add-network request is answered for `outcome_json` (a
+ * `DappAddOutcome`), as JSON: `null` for `added`, else
+ * `{"code": …, "message": …}` — the table the in-app browsers answer from
+ * (spec 100). Unreadable input reads as a decline.
+ */
+export function dappAddOutcomeError(outcome_json: string, chain_id: number): string;
+
+/**
  * Whether a page at `origin` is offered the wallet (spec 091) — the rule
  * the in-app browsers' gate follows, exported so the web suite can hold the
  * injected script's host test to it.
@@ -1469,6 +1484,8 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly dappAddChainAsk: (a: number, b: number, c: number) => [number, number];
+    readonly dappAddOutcomeError: (a: number, b: number, c: number) => [number, number];
     readonly dappOffersWallet: (a: number, b: number, c: number) => number;
     readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;

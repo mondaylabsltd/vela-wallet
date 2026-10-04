@@ -129,7 +129,14 @@ class SettingsController(
             if (chainId == null) pool?.invalidateAll() else pool?.refreshChain(chainId.toInt())
         },
         clearBundlerCache = clearBundlerCache,
+        dappAddSettled = { onDappAddSettled },
     )
+
+    /**
+     * Spec 100: set by the container — a page's add-network request is over;
+     * carry the ending to the browser machine (`add_network_answered`).
+     */
+    var onDappAddSettled: ((tab: String, id: String, outcome: app.getvela.wallet.feature.browser.core.DappAddOutcome) -> Unit)? = null
 
     private val networkHost = CoreHost(
         bridge = NetworkAdminCore().asBridge(),
@@ -277,6 +284,22 @@ class SettingsController(
         net(NetEvent.AddByChainIdRequested(chainId, nowIso()))
 
     fun resetWizard() = net(NetEvent.WizardReset)
+
+    // -- spec 100: a page asks to add a network ------------------------------
+    //
+    // The browser machine forwards the request here; the sheet's answers come
+    // back as events. Every judgement is the core's.
+
+    fun dappAddRequested(tab: String, id: String, origin: String, ask: app.getvela.wallet.feature.browser.core.DappChainAsk) =
+        net(NetEvent.DappAddRequested(tab, id, origin, ask))
+
+    fun dappAddApproved() = net(NetEvent.DappAddApproved(nowIso()))
+
+    fun dappAddDeclined() = net(NetEvent.DappAddDeclined)
+
+    fun dappAddRetried() = net(NetEvent.DappAddRetried)
+
+    fun dappAddCancelled(tab: String, id: String) = net(NetEvent.DappAddCancelled(tab, id))
 
     fun deleteNetwork(id: String) = net(NetEvent.DeleteConfirmed(id))
 

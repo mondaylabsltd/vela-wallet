@@ -390,6 +390,68 @@ object ExploreLive {
         )
     }
 
+    /**
+     * Spec 100: the add-network sheet, in Settings' words wherever they fit.
+     * The core decided everything drawn here; this picks the line.
+     */
+    fun addNetwork(view: app.getvela.wallet.feature.settings.core.NetDappAddView, strings: VelaStrings): app.getvela.wallet.feature.explore.AddNetworkModel {
+        val chain = view.chain_id.toString()
+        val rows = buildList {
+            add(strings.t("addToken.labelName") to view.name.ifEmpty { strings.t("addToken.chainId", mapOf("chainId" to chain)) })
+            add(strings.t("addToken.labelChainId") to chain)
+            if (view.native_symbol.isNotEmpty()) add(strings.t("addToken.labelNativeToken") to view.native_symbol)
+            view.rpc_host?.let { add(strings.t("addToken.labelRpcUrl") to it) }
+            view.explorer_host?.let { add(strings.t("addToken.labelExplorer") to it) }
+        }
+        val phase = view.phase
+        val verdict = phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.Ready ||
+            phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible
+        val checks = view.compat?.takeIf { verdict && it.rpc_failure == null }?.let { result ->
+            result.contracts.map { app.getvela.wallet.feature.settings.CheckItemModel(label = it.name, ok = it.deployed) } +
+                app.getvela.wallet.feature.settings.CheckItemModel(label = strings.t("settingsModals.addNetwork.checkSigner"), ok = result.p256_available == true)
+        }.orEmpty()
+        val pill = when (phase) {
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.Checking ->
+                app.getvela.wallet.feature.settings.StatusPillModel(app.getvela.wallet.feature.settings.SettingsTone.Neutral, strings.t("settingsModals.addNetwork.checkingCompatibility"))
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.Ready ->
+                app.getvela.wallet.feature.settings.StatusPillModel(app.getvela.wallet.feature.settings.SettingsTone.Ok, strings.t("settingsModals.addNetwork.compatible"))
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible ->
+                app.getvela.wallet.feature.settings.StatusPillModel(app.getvela.wallet.feature.settings.SettingsTone.Error, strings.t("settingsModals.addNetwork.incompatible"))
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.CheckFailed ->
+                app.getvela.wallet.feature.settings.StatusPillModel(app.getvela.wallet.feature.settings.SettingsTone.Warn, strings.t("settingsModals.addNetwork.unableToVerify"))
+            else -> null
+        }
+        val note = when (phase) {
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.Ready ->
+                view.compat?.takeIf { !it.multi_key_ready }?.let { strings.t("settingsModals.addNetwork.singleKeyOnly") }
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible -> strings.t("settingsModals.addNetwork.incompatibleHint")
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.WrongRpc -> strings.t(
+                "assets.rpcFixWrongChain",
+                mapOf("actual" to (view.reported_chain_id?.toString() ?: ""), "expected" to chain),
+            )
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.NoRpc -> strings.t("componentsUi.browserStatus.reason.badRpc")
+            else -> null
+        }
+        val decided = phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible ||
+            phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.WrongRpc ||
+            phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NoRpc
+        return app.getvela.wallet.feature.explore.AddNetworkModel(
+            title = strings.t("settingsModals.addNetwork.modalTitle"),
+            lead = strings.t("connect.browser.addLead", mapOf("host" to view.host)),
+            site = SiteModel(id = view.origin, name = view.host, host = view.host, letter = letterOf(view.host), tint = tintOf(view.host), iconUrls = iconsOf(view.origin)),
+            rows = rows,
+            fromSite = if (view.from_site) strings.t("connect.browser.addFromSite") else null,
+            pill = pill,
+            checksTitle = if (checks.isNotEmpty()) strings.t("settingsModals.addNetwork.compatibilityCheck") else null,
+            checks = checks,
+            note = note,
+            add = if (view.can_add) strings.t("settingsModals.addNetwork.addNetworkBtn") else null,
+            retry = if (phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.CheckFailed) strings.t("settingsModals.addNetwork.retry") else null,
+            setupTool = if (phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible) strings.t("settingsModals.addNetwork.openChainSetupTool") else null,
+            dismiss = if (decided) strings.t("common.done") else strings.t("connect.browser.cancel"),
+        )
+    }
+
     fun shortAddress(address: String): String =
         if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
 

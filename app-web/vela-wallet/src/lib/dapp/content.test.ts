@@ -178,6 +178,26 @@ describe('a dropped channel never reaches the page as Chrome’s words (G19)', (
 		expect(env.responses()).toEqual([{ ch: CHANNEL, dir: 'res', id: 'p1', result: '0xsig' }]);
 	});
 
+	it('an add-network the sheet answers later is held like a connect (spec 100)', async () => {
+		const env = makeEnv();
+		env.setReply(async () => ({ accepted: true }));
+		await load(env);
+		env.ask('n1', 'wallet_addEthereumChain', [{ chainId: '0xaa36a7' }]);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(env.responses()).toEqual([]);
+		expect(env.fromWorker({ type: 'answer', id: 'n1', result: null })).toEqual({ ok: true });
+		expect(env.responses()).toEqual([{ ch: CHANNEL, dir: 'res', id: 'n1', result: null }]);
+	});
+
+	it('an add-network for a chain the wallet has is answered by the worker at once', async () => {
+		const env = makeEnv();
+		env.setReply(async () => ({ result: null }));
+		await load(env);
+		env.ask('n2', 'wallet_addEthereumChain', [{ chainId: '0x64' }]);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(env.responses()).toEqual([{ ch: CHANNEL, dir: 'res', id: 'n2', result: null }]);
+	});
+
 	it('an extension that was reloaded or updated answers `updated`', async () => {
 		const env = makeEnv();
 		await load(env);

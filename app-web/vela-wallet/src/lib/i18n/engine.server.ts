@@ -743,7 +743,33 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		networkLabel: k('explore.network'),
 		noWallet: k('connect.list.noWallet'),
 		createWallet: k('onboarding.welcome.createWallet'),
-		haveWallet: k('onboarding.welcome.alreadyHaveWallet')
+		haveWallet: k('onboarding.welcome.alreadyHaveWallet'),
+		addNetwork: {
+			title: k('settingsModals.addNetwork.modalTitle'),
+			lead: k('connect.browser.addLead'),
+			fromSite: k('connect.browser.addFromSite'),
+			name: k('addToken.labelName'),
+			chainIdLabel: k('addToken.labelChainId'),
+			nativeToken: k('addToken.labelNativeToken'),
+			rpcUrl: k('addToken.labelRpcUrl'),
+			explorer: k('addToken.labelExplorer'),
+			chainName: k('addToken.chainId'),
+			checking: k('settingsModals.addNetwork.checkingCompatibility'),
+			compatible: k('settingsModals.addNetwork.compatible'),
+			incompatible: k('settingsModals.addNetwork.incompatible'),
+			incompatibleHint: k('settingsModals.addNetwork.incompatibleHint'),
+			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
+			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
+			wrongRpc: k('assets.rpcFixWrongChain'),
+			noRpc: k('componentsUi.browserStatus.reason.badRpc'),
+			checksTitle: k('settingsModals.addNetwork.compatibilityCheck'),
+			checkSigner: k('settingsModals.addNetwork.checkSigner'),
+			add: k('settingsModals.addNetwork.addNetworkBtn'),
+			retry: k('settingsModals.addNetwork.retry'),
+			setupTool: k('settingsModals.addNetwork.openChainSetupTool'),
+			cancel: k('connect.browser.cancel'),
+			done: k('common.done')
+		}
 	};
 }
 

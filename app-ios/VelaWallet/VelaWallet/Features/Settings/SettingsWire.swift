@@ -299,6 +299,39 @@ struct NetViewWire: Decodable, Equatable {
     let endpoints: [NetEndpointViewWire]
     let providers: [NetProviderViewWire]
     let lastAddedChainId: Int?
+    /// Spec 100: the add-network sheet a page opened.
+    var dappAdd: NetDappAddViewWire? = nil
+}
+
+// MARK: - A page asks to add a network (spec 100)
+
+/// Where a page's add-network request stands (`NetDappAddPhase`).
+enum NetDappAddPhaseWire: String, Decodable {
+    case checking, ready
+    case notCompatible = "not_compatible"
+    case checkFailed = "check_failed"
+    case wrongRpc = "wrong_rpc"
+    case noRpc = "no_rpc"
+}
+
+/// The add-network sheet — who asks, for what, and the check. Every judgement
+/// is the core's (`NetDappAddView`).
+struct NetDappAddViewWire: Decodable, Equatable {
+    let tab: String
+    let id: String
+    let origin: String
+    let host: String
+    let chainId: Int
+    /// The catalog's name; the page's when `fromSite`; empty until the catalog answered.
+    let name: String
+    let nativeSymbol: String
+    let rpcHost: String?
+    let explorerHost: String?
+    let fromSite: Bool
+    let phase: NetDappAddPhaseWire
+    let reportedChainId: Int?
+    let compat: NetCompatibilityWire?
+    let canAdd: Bool
 }
 
 // MARK: - fee_tier_pref (spec 069)

@@ -87,6 +87,8 @@
       "cancel": "İptal",
       "connect": "Bağlan",
       "a11yClose": "Tarayıcıyı kapat",
+      "addLead": "{{host}} bir ağ eklemek istiyor",
+      "addFromSite": "Vela'nın ağ listesinde yok — ad ve coin sitenin bildirdiği.",
       "a11yBack": "Geri",
       "a11yReload": "Sayfayı yeniden yükle",
       "a11yOpenSystem": "Sistem tarayıcısında aç",
