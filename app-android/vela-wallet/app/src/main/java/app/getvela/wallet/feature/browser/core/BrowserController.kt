@@ -1089,7 +1089,25 @@ class BrowserController(
     fun newTab() = whenReady { exploreHost.dispatch(ExploreEvent.TabOpened(url = null, title = null, now_ms = now()), ExploreEvent.serializer()) }
     fun selectTab(id: String) = exploreHost.dispatch(ExploreEvent.TabSelected(id), ExploreEvent.serializer())
     fun closeTab(id: String) = exploreHost.dispatch(ExploreEvent.TabClosed(id), ExploreEvent.serializer())
-    fun closeAllTabs() = exploreHost.view.value.tabs.forEach { closeTab(it.id) }
+
+    /**
+     * Spec 099: Chrome's batch closes. Which tabs a scope takes is the core's
+     * ([BrowserTabs.closedBy]); they go in one event, and [reconcile] lets go
+     * of their engines and tells the browser machine, as for a single close.
+     */
+    fun closeTabs(scope: TabCloseScope) {
+        val ids = closedBy(scope)
+        if (ids.isEmpty()) return
+        VelaLog.event("browser.tabs", "closed", "scope" to scope::class.simpleName, "n" to ids.size)
+        exploreHost.dispatch(ExploreEvent.TabsClosed(ids), ExploreEvent.serializer())
+    }
+
+    /** The tabs [scope] would close now — the core's answer; a tab's menu greys out a close that takes none. */
+    fun closedBy(scope: TabCloseScope): List<String> = BrowserTabs.closedBy(exploreHost.view.value.tabs, scope)
+
+    fun closeOtherTabs(keep: String) = closeTabs(TabCloseScope.Others(keep))
+    fun closeTabsToRight(of: String) = closeTabs(TabCloseScope.Right(of))
+    fun closeAllTabs() = closeTabs(TabCloseScope.All)
 
     /** The page's close button: the tab goes, its engine with it. */
     fun close() {

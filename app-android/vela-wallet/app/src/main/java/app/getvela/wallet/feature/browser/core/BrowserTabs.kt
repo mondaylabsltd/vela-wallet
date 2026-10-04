@@ -2,7 +2,10 @@ package app.getvela.wallet.feature.browser.core
 
 import app.getvela.wallet.core.crux.Wire
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import uniffi.vela_core_uniffi.browserEnginePlan
+import uniffi.vela_core_uniffi.exploreTabsClosedBy
 
 /*
  * Which tabs keep a live engine (spec 099 R2, FR-004) — the core's
@@ -61,6 +64,20 @@ object BrowserTabs {
         DbrEvent.NavigationStarted(tab = tab, url = BLANK, now_ms = nowMs),
         DbrEvent.LoadFinished(tab = tab, url = BLANK, now_ms = nowMs),
     )
+
+    /**
+     * Which tabs a batch close takes (spec 099) — the core's
+     * `explore_sites::tabs_closed_by` over the strip as the explore view has
+     * it: every tab but `keep`, every tab right of `of`, or every tab. This
+     * shell never decides it; empty when the core cannot read the input.
+     */
+    fun closedBy(tabs: List<ExploreTab>, scope: TabCloseScope): List<String> {
+        val json = exploreTabsClosedBy(
+            Wire.json.encodeToString(ListSerializer(ExploreTab.serializer()), tabs),
+            Wire.json.encodeToString(TabCloseScope.serializer(), scope),
+        ) ?: return emptyList()
+        return runCatching { Wire.json.decodeFromString(ListSerializer(String.serializer()), json) }.getOrDefault(emptyList())
+    }
 
     private const val BLANK = "about:blank"
 }
