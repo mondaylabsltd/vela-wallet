@@ -37,7 +37,7 @@ struct NetworkAdminExecutorTests {
     /// than reaching anything real.
     @Test func everyOperationIsAnswered() async {
         let (_, _, _, executor) = fresh()
-        #expect(NetworkAdminExecutor.operations.count == 16)
+        #expect(NetworkAdminExecutor.operations.count == 17, "spec 100 added `dapp_add_settled`")
         for name in NetworkAdminExecutor.operations {
             let reply = await answer(executor, [
                 "type": name,

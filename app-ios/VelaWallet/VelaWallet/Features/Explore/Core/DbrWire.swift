@@ -179,6 +179,9 @@ enum DbrRecordWords {
         "signer_unavailable": "componentsUi.browserStatus.reason.signerUnavailable",
         "signer_not_discoverable": "componentsUi.browserStatus.reason.signerNotDiscoverable",
         "signer_failed": "componentsUi.browserStatus.reason.signerFailed",
+        // Spec 100: Settings' own verdict line, and the page's unusable RPC.
+        "not_compatible": "addToken.errorNotCompatible",
+        "bad_rpc": "componentsUi.browserStatus.reason.badRpc",
     ]
 
     static let pages: [String: String] = [
@@ -229,6 +232,8 @@ struct DbrViewWire: Decodable, Equatable {
     let queuedSigning: Int
     /// The inspected tab's whole record (`inspector_opened`), else `nil`.
     var inspector: DbrInspectorViewWire? = nil
+    /// Spec 100: the add-network request on Vela's sheet, by tab and id.
+    var addingNetwork: DbrSigningViewWire? = nil
 
     static let empty = DbrViewWire(
         ready: false, consent: nil, tabs: [], sites: [], signing: nil, queuedSigning: 0

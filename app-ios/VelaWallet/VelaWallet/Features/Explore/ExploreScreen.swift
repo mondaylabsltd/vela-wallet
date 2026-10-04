@@ -82,6 +82,13 @@ struct ExploreScreen: View {
     /// Whether that switcher is up. Watched so a site still ASKING gets its
     /// sheet back when the switcher closes.
     var accountSwitcherOpen = false
+    /// Spec 100: a page asks to add a network — the settings machine's sheet,
+    /// shown in the consent's place (after a consent, never over one).
+    var addNetwork: AddNetworkSheetModel?
+    var onAddNetworkApprove: () -> Void = {}
+    var onAddNetworkRetry: () -> Void = {}
+    /// Any way out of that sheet; the core decides what it answers.
+    var onAddNetworkDismiss: () -> Void = {}
 
     @State private var viewOverride: ExploreView?
     /// **Which** sheet is open — never a snapshot of what it said when it
@@ -112,6 +119,8 @@ struct ExploreScreen: View {
     /// The open sheet is a site ASKING to connect, not a review of one that
     /// already is. Kept so a swipe can be read as the refusal it is.
     @State private var consentOpen = false
+    /// Spec 100: the add-network sheet is the one up.
+    @State private var addNetworkOpen = false
     /// The panel is closing to make way for the account switcher — which is
     /// not the person declining a site that is asking.
     @State private var switchingAccount = false
@@ -388,6 +397,12 @@ struct ExploreScreen: View {
                 consentOpen = false
                 controller?.consentRejected()
             }
+            // The same for a page's add-network sheet: closing it is the
+            // person's answer, and the core says what that means.
+            if addNetworkOpen {
+                addNetworkOpen = false
+                onAddNetworkDismiss()
+            }
             if switchAfterDismiss {
                 switchAfterDismiss = false
                 onSwitchAccount()
@@ -395,14 +410,14 @@ struct ExploreScreen: View {
             signingHeld = false
         }) { sheet in
             sheetContent(sheet)
-                .presentationDragIndicator(consentOpen ? .hidden : .visible)
+                .presentationDragIndicator(consentOpen || addNetworkOpen ? .hidden : .visible)
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Tokens.Radius.r20)
                 .presentationBackground(theme.bgBase)
                 // Spec 079: like the signing sheet, the consent closes only on
                 // its ✕ or 拒绝 — a stray swipe must not refuse a connection the
                 // person was reading.
-                .interactiveDismissDisabled(consentOpen)
+                .interactiveDismissDisabled(consentOpen || addNetworkOpen)
         }
         // Spec 099 FR-014: the tab's record. The browser machine carries the
         // whole record only while this is up.
@@ -411,7 +426,7 @@ struct ExploreScreen: View {
             signingHeld = false
             // A site that asked while the panel was up gets its sheet now
             // that this one is really gone.
-            if controller?.dbr.consent != nil { presentConsent() }
+            if controller?.dbr.consent != nil { presentConsent() } else { presentAddNetwork() }
         }) {
             BrowserInspectorView(
                 inspector: controller?.dbr.inspector,
@@ -475,7 +490,7 @@ struct ExploreScreen: View {
                 signingHeld = true
                 statusOpen = false
             }
-            guard sheet != nil, !consentOpen else { return }
+            guard sheet != nil, !consentOpen, !addNetworkOpen else { return }
             signingHeld = true
             sheet = nil
         }
@@ -500,18 +515,31 @@ struct ExploreScreen: View {
         .onChange(of: controller?.dbr.consent?.origin) { _, asking in
             guard asking != nil else {
                 if consentOpen { consentOpen = false; sheet = nil }
+                // A page's add-network request waited behind the consent.
+                presentAddNetwork()
                 return
             }
             presentConsent()
         }
+        // Spec 100: a page asks to add a network — and the core closes the
+        // sheet itself when the request ends (added, cancelled).
+        .onChange(of: addNetwork?.id) { _, asking in
+            guard asking != nil else {
+                if addNetworkOpen { addNetworkOpen = false; sheet = nil }
+                // A site that asked to connect meanwhile gets its sheet now.
+                if controller?.dbr.consent != nil { presentConsent() }
+                return
+            }
+            presentAddNetwork()
+        }
         // The switcher closed and the site is still asking: its question is
         // put back, with the account now chosen.
         .onChange(of: accountSwitcherOpen) { _, open in
-            if !open, controller?.dbr.consent != nil { presentConsent() }
+            if !open, controller?.dbr.consent != nil { presentConsent() } else if !open { presentAddNetwork() }
         }
         .onAppear {
             sheet = model.sheet?.kind
-            if controller?.dbr.consent != nil { presentConsent() }
+            if controller?.dbr.consent != nil { presentConsent() } else { presentAddNetwork() }
         }
         // The viewfinder runs only while it is on screen, as in 发送. A camera
         // left running behind the start page is a light nobody asked for.
@@ -530,9 +558,27 @@ struct ExploreScreen: View {
         }
     }
 
+    /// Spec 100: the add-network sheet, over the page that asked — never over
+    /// a consent, which is the question the page usually needs answered first.
+    private func presentAddNetwork() {
+        guard addNetwork != nil, !consentOpen, !accountSwitcherOpen else { return }
+        if statusOpen {
+            statusOpen = false
+            return
+        }
+        if let controller, let tab = controller.dbr.addingNetwork?.tab,
+           controller.explore.tabs.contains(where: { $0.id == tab }) {
+            controller.selectTab(tab)
+            viewOverride = nil
+        }
+        addNetworkOpen = true
+        sheet = .addNetwork
+    }
+
     /// The consent sheet, over the page that asked.
     private func presentConsent() {
-        guard let controller, let consent = controller.dbr.consent, !accountSwitcherOpen else { return }
+        // An add-network sheet up keeps its place; the consent follows it.
+        guard let controller, let consent = controller.dbr.consent, !accountSwitcherOpen, !addNetworkOpen else { return }
         // The status panel gives way first; its dismissal asks again.
         if statusOpen {
             statusOpen = false
@@ -899,6 +945,26 @@ struct ExploreScreen: View {
                         pick(menuItem: id, site: site)
                     }
                 )
+            }
+        case .addNetwork:
+            ScrollView {
+                if let addNetwork {
+                    AddNetworkPanelView(
+                        model: addNetwork,
+                        onApprove: onAddNetworkApprove,
+                        onRetry: onAddNetworkRetry,
+                        onDismiss: {
+                            addNetworkOpen = false
+                            self.sheet = nil
+                            onAddNetworkDismiss()
+                        },
+                        onSetupTool: {
+                            if let url = URL(string: ExternalLinks.chainSetup) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    )
+                }
             }
         case .connection(let connection):
             ScrollView {

@@ -443,6 +443,68 @@ enum ExploreLive {
              origin: pinned.origin)
     }
 
+    /// Spec 100: the add-network sheet a page opened, in Settings' own words
+    /// wherever they fit. The core decided everything drawn here — which
+    /// chain, whose name and coin, the verdict, whether Add acts; this picks
+    /// the line.
+    static func addNetwork(_ view: NetDappAddViewWire, loc: Loc) -> AddNetworkSheetModel {
+        let chain = String(view.chainId)
+        var rows: [(String, String)] = [
+            (loc.t("addToken.labelName"), view.name.isEmpty ? loc.t("addToken.chainId", vars: ["chainId": chain]) : view.name),
+            (loc.t("addToken.labelChainId"), chain),
+        ]
+        if !view.nativeSymbol.isEmpty { rows.append((loc.t("addToken.labelNativeToken"), view.nativeSymbol)) }
+        if let host = view.rpcHost { rows.append((loc.t("addToken.labelRpcUrl"), host)) }
+        if let host = view.explorerHost { rows.append((loc.t("addToken.labelExplorer"), host)) }
+        let verdict = view.phase == .ready || view.phase == .notCompatible
+        var checks: [CheckItemModel] = []
+        if verdict, let compat = view.compat, compat.rpcFailure == nil {
+            checks = compat.contracts.map { CheckItemModel(label: $0.name, ok: $0.deployed) }
+                + [CheckItemModel(label: loc.t("settingsModals.addNetwork.checkSigner"), ok: compat.p256Available == true)]
+        }
+        let pill: StatusPillModel?
+        let note: String?
+        switch view.phase {
+        case .checking:
+            pill = StatusPillModel(tone: .neutral, label: loc.t("settingsModals.addNetwork.checkingCompatibility"))
+            note = nil
+        case .ready:
+            pill = StatusPillModel(tone: .ok, label: loc.t("settingsModals.addNetwork.compatible"))
+            note = (view.compat?.multiKeyReady == false) ? loc.t("settingsModals.addNetwork.singleKeyOnly") : nil
+        case .notCompatible:
+            pill = StatusPillModel(tone: .error, label: loc.t("settingsModals.addNetwork.incompatible"))
+            note = loc.t("settingsModals.addNetwork.incompatibleHint")
+        case .checkFailed:
+            pill = StatusPillModel(tone: .warn, label: loc.t("settingsModals.addNetwork.unableToVerify"))
+            note = nil
+        case .wrongRpc:
+            pill = nil
+            note = loc.t("assets.rpcFixWrongChain", vars: [
+                "actual": view.reportedChainId.map(String.init) ?? "", "expected": chain,
+            ])
+        case .noRpc:
+            pill = nil
+            note = loc.t("componentsUi.browserStatus.reason.badRpc")
+        }
+        let decided = view.phase == .notCompatible || view.phase == .wrongRpc || view.phase == .noRpc
+        return AddNetworkSheetModel(
+            id: "\(view.tab)/\(view.id)",
+            title: loc.t("settingsModals.addNetwork.modalTitle"),
+            lead: loc.t("connect.browser.addLead", vars: ["host": view.host]),
+            site: site(host: view.host, name: view.host, origin: view.origin),
+            rows: rows.map { AddNetworkSheetModel.Row(label: $0.0, value: $0.1) },
+            fromSite: view.fromSite ? loc.t("connect.browser.addFromSite") : nil,
+            pill: pill,
+            checksTitle: checks.isEmpty ? nil : loc.t("settingsModals.addNetwork.compatibilityCheck"),
+            checks: checks,
+            note: note,
+            add: view.canAdd ? loc.t("settingsModals.addNetwork.addNetworkBtn") : nil,
+            retry: view.phase == .checkFailed ? loc.t("settingsModals.addNetwork.retry") : nil,
+            setupTool: view.phase == .notCompatible ? loc.t("settingsModals.addNetwork.openChainSetupTool") : nil,
+            dismiss: decided ? loc.t("common.done") : loc.t("connect.browser.cancel")
+        )
+    }
+
     /// One site's mark: its own icon (spec 079), and its letter until then.
     ///
     /// The letter is the core's rule (`browserSiteLetter`): the first letter

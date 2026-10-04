@@ -1381,7 +1381,13 @@ struct RootView: View {
                             openAccountSwitcher()
                             exploreSwitcherOpen = true
                         },
-                        accountSwitcherOpen: exploreSwitcherOpen
+                        accountSwitcherOpen: exploreSwitcherOpen,
+                        // Spec 100: the add-network sheet is the settings
+                        // machine's; these only say what was pressed.
+                        addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
+                        onAddNetworkApprove: { settings.dappAddApproved() },
+                        onAddNetworkRetry: { settings.dappAddRetried() },
+                        onAddNetworkDismiss: { settings.dappAddDeclined() }
                     )
                     .onChange(of: signing?.closed) { _, closed in
                         // The page has its answer and the core cleared the
@@ -1433,6 +1439,19 @@ struct RootView: View {
                         }
                         browser.ports.onCancelSigning = { tab, id in
                             cancelBrowserSigning(tab: tab, id: id)
+                        }
+                        // Spec 100: a page asks to add a network. The sheet is
+                        // `network_admin`'s — Settings' own check and save —
+                        // and this only carries the request there and the
+                        // ending back.
+                        browser.ports.onForwardToAddNetwork = { [settings] forward in
+                            settings.dappAddRequested(forward)
+                        }
+                        browser.ports.onCancelAddNetwork = { [settings] tab, id in
+                            settings.dappAddCancelled(tab: tab, id: id)
+                        }
+                        settings.onDappAddSettled = { [browser] tab, id, outcome in
+                            browser.addNetworkAnswered(tab: tab, id: id, outcome: outcome)
                         }
                         browser.start()
                         // Idempotent: the network list must be read before a

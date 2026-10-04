@@ -55,6 +55,7 @@ final class NetworkAdminExecutor {
         "fetch_fiat_rates",
         "invalidate_pools",
         "clear_bundler_cache",
+        "dapp_add_settled",
     ]
 
     /// RIP-7212's P256 precompile.
@@ -83,6 +84,11 @@ final class NetworkAdminExecutor {
     /// whenever a cached winner happens to expire. `nil` keeps the
     /// acknowledged no-op the hermetic tests drive.
     private let pool: RpcPool?
+
+    /// Spec 100: a page's add-network request is over — carry `outcome` (the
+    /// core's `DappAddOutcome`, as it came) to the browser machine
+    /// (`add_network_answered`). Set by the app once both exist.
+    var onDappAddSettled: (_ tab: String, _ id: String, _ outcome: [String: Any]) -> Void = { _, _, _ in }
 
     init(store: VelaStore, accounts: AccountStore, pool: RpcPool? = nil) {
         self.store = store
@@ -265,6 +271,15 @@ final class NetworkAdminExecutor {
         // cache, and this answered truthfully that there was nothing to clear.
         case "clear_bundler_cache":
             return CoreJSON.string(["type": "bundler_cache_cleared"])
+
+        // Spec 100: the add-network sheet's ending, for the page that asked.
+        case "dapp_add_settled":
+            onDappAddSettled(
+                operation["tab"] as? String ?? "",
+                operation["id"] as? String ?? "",
+                operation["outcome"] as? [String: Any] ?? ["type": "declined"]
+            )
+            return Self.written
 
         default:
             // See `ContactsExecutor`: logged rather than trapped, because a
