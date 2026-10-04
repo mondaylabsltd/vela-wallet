@@ -49,13 +49,48 @@ export type PublishArgs = {
 	 *  together; empty on the login re-publish, which mints a fresh one. */
 	seedHex: string;
 	groupPublicKeyHex: string;
+	/** Issue 409: the core's `answer_when_accepted` — a one-key create is
+	 *  answered at the registry's 202 and its landing confirmed later by the
+	 *  session's landing watch. Absent ⇒ wait for the landing, as always. */
+	answerWhenAccepted?: boolean;
 };
+
+/** What the register's answer leaves to do. */
+export type AfterRegister =
+	/** The group has a receipt on-chain (or the identical one already had). */
+	| { kind: 'landed' }
+	/** Answer the core now with this task (issue 409). */
+	| { kind: 'accepted'; taskId: string }
+	/** Poll this task until the group has landed, then answer. */
+	| { kind: 'await_landing'; taskId: string };
+
+/**
+ * The one new rule of issue 409, apart from the HTTP so it can be tested:
+ * when the core asked to be answered on acceptance, the 202's task id IS the
+ * answer; otherwise the landing is waited for, as it always was. `done` up
+ * front means the identical group was already on-chain — idempotent by
+ * content hash, and just as landed as a fresh one.
+ */
+export function afterRegister(
+	accepted: { id?: string; status: string },
+	answerWhenAccepted: boolean
+): AfterRegister {
+	if (accepted.status === 'done') return { kind: 'landed' };
+	if (!accepted.id) throw new Error('register was accepted without a task id');
+	return answerWhenAccepted
+		? { kind: 'accepted', taskId: accepted.id }
+		: { kind: 'await_landing', taskId: accepted.id };
+}
 
 function stripHex(value: string): string {
 	return value.startsWith('0x') ? value.slice(2) : value;
 }
 
-export async function publish(args: PublishArgs): Promise<void> {
+/**
+ * Resolves with the registry task when the core asked to be answered on
+ * acceptance and the group has not landed yet; `null` once it has landed.
+ */
+export async function publish(args: PublishArgs): Promise<string | null> {
 	if (args.members.length === 0) throw new Error('registry publish needs at least one member');
 
 	let seedHex = args.seedHex;
@@ -128,9 +163,14 @@ export async function publish(args: PublishArgs): Promise<void> {
 		members: proven
 	});
 
-	// `done` up front means the identical group was already on-chain —
-	// idempotent by content hash, and just as landed as a fresh one.
-	if (accepted.status === 'done') return;
-	if (!accepted.id) throw new Error('register was accepted without a task id');
-	await Registry.awaitTask(accepted.id);
+	const next = afterRegister(accepted, args.answerWhenAccepted ?? false);
+	switch (next.kind) {
+		case 'landed':
+			return null;
+		case 'accepted':
+			return next.taskId;
+		case 'await_landing':
+			await Registry.awaitTask(next.taskId);
+			return null;
+	}
 }
