@@ -133,7 +133,11 @@ class DappSignMachineTest {
     /** The tracker's view, as the app's tracker would publish it (spec 082 RJ4: the answer follows it). */
     private val tracker = kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.send.core.TrackView())
 
-    private fun controller(receiptWaitMs: Long = 10_000L, signer: UserOpSigner = fixtureSigner): SigningController {
+    private fun controller(
+        receiptWaitMs: Long = 10_000L,
+        signer: UserOpSigner = fixtureSigner,
+        now: () -> Double = { System.currentTimeMillis().toDouble() },
+    ): SigningController {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
         val accounts = StoreAccountPort(AccountStore(store))
@@ -142,6 +146,7 @@ class DappSignMachineTest {
             scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { signer },
             knownChains = { listOf(1, 100) },
             wallet = SignAccountRef(address = safe, credential_id = credential),
+            now = now,
             receiptWaitMs = receiptWaitMs, receiptPollMs = 100L,
             ports = object : SigningController.Ports {
                 override fun respond(transportId: String, id: String, payload: app.getvela.wallet.feature.signing.core.SignResponsePayload) {
@@ -254,6 +259,32 @@ class DappSignMachineTest {
         assertTrue("the ceremony's two edges reached the core: $events", events.indexOf("signing") in 0 until events.indexOf("signed"))
         assertEquals(origin, row.getString("dappOrigin"))
         assertTrue(row.getString("to").equals(founder, ignoreCase = true))
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * The relay answered another hash within the write-ahead's millisecond (a
+     * fast relay; here a clock that stands still), so the relay's row takes
+     * the withdrawn row's id (`dapp-<ms>-tx`). That deleted row is not the
+     * relay's on disk: its op reaches the tracker only once its own row is
+     * written (043's ordering) — the transfer test's other flake, where it
+     * arrived first ("track:NOT-PERSISTED") — and after the write-ahead's.
+     */
+    @Test
+    fun `a relay hash in the write-ahead's millisecond waits for its own row`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller(now = { 1_791_000_000_000.0 })
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        withTimeout(10_000) { while (handed.size < 2) delay(20) }
+        val record = "dapp-1791000000000-tx"
+        assertEquals("both rows took the one id: $events", 2, events.count { it == "record:$record" })
+        assertEquals("the write-ahead's, then the relay's", listOf(emptyList(), listOf(record)), handed.map { it.recordIds })
+        assertEquals("track:persisted", events.filter { it.startsWith("track:") }.last())
+        assertTrue("the relay's row was on disk first: $events", events.indexOf("persisted:with-hash") < events.lastIndexOf("track:persisted"))
         withTimeout(10_000) { c.closed.first { it } }
     }
 
