@@ -46,6 +46,13 @@ The code is the contract; these are the places the plan below was changed while 
 - Model gains `recent: Vec<String>`. `TabOpened`, `TabSelected` → front; `TabClosed` → removed;
   hydration → `[selected]`.
 - `ExploreView.recent_tabs: Vec<String>` (`#[serde(default)]`).
+- Closing many (Phase 6): `TabCloseScope` = `{"type":"others","keep":id}` ·
+  `{"type":"right","of":id}` · `{"type":"all"}`; `tabs_closed_by(tabs, scope) -> Vec<id>` (UniFFI
+  `explore_tabs_closed_by(tabs_json, scope_json) -> Option<String>`); `Event::TabsClosed { ids }`
+  closes them in one step: a surviving selection stays; a closed one moves to the nearest
+  surviving tab on its right in the old strip, else its left; none left → no selection (the start
+  page); `recent` pruned; one persist. Shells close each closed tab's engine and tell
+  `dapp_browser` `TabClosed` per tab, as for one.
 
 ## `browser_tabs` (new, pure)
 

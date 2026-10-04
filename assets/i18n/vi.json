@@ -1911,6 +1911,8 @@
   "newTab": "Tab mới",
   "startPage": "Trang bắt đầu",
   "closeAllTabs": "Đóng tất cả tab",
+  "closeOtherTabs": "Đóng các tab khác",
+  "closeTabsToRight": "Đóng các tab bên phải",
   "closeTab": "Đóng tab",
   "openTabs": "Đang mở {{n}} tab",
   "addToFavorites": "Thêm vào yêu thích",

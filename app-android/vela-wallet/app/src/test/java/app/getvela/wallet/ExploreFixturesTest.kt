@@ -40,6 +40,7 @@ class ExploreFixturesTest {
             m.title, m.searchPlaceholder, m.scanLabel,
             m.tabsScreen.title, m.tabsScreen.done, m.tabsScreen.newTab,
             m.tabsScreen.closeAll, m.tabsScreen.close,
+            m.tabsScreen.closeOthers, m.tabsScreen.closeRight,
             m.nav.wallet, m.nav.contacts, m.nav.explore, m.nav.settings,
             m.connection.title, m.connection.statusLine, m.connection.switchLabel,
             m.connection.networkLabel, m.connection.explainer, m.connection.disconnect,

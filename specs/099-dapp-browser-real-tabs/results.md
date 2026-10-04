@@ -45,6 +45,41 @@ Branch `099-dapp-browser-real-tabs`, PR #413.
   (the deadline is unit-tested on every client), SC-006 (killing one WebContent process), SC-007 on
   a relay-funding chain.
 
+## Closing many tabs (Phase 6)
+
+Chrome's three batch closes, decided by the core (`tabs_closed_by`, `TabsClosed`):
+
+- **Desktop**: right-click a tab → 关闭标签页 / 关闭其他标签页 / 关闭右侧标签页 / 关闭全部标签页.
+  `cargo test` 915 passed.
+- **Android**: long-press a tab card → the same four (greyed when the scope closes nothing).
+  `testDebugUnitTest` 1005/1005 (8 new in `BrowserTabCloseTest`, real core). On the Xiaomi, from
+  ten tabs: to the right of the 4th → 4 left, selection moved left onto it; on the last card
+  "to the right" greyed; others on the 1st → 1 left, selected; all → the start page; one log line
+  per action, no crash.
+- **iOS**: context menu on a tab card. Simulator suite 1232 (1227 passed, 5 skipped, 0 failed);
+  6 new in `TabBatchCloseTests` (real core, real WKWebViews: a live and a suspended tab both
+  closed, the machine hears `tab_closed` for each).
+- **Web**: no tabs of its own (the person's browser).
+
+### Desktop: no menu under the page (T064)
+
+The page is a native view above gpui's canvas, so a menu gpui paints over it lies under it: the
+⋯ menu answered by hiding the page while it was open, and the tab menu's rows below the strip were
+invisible and unclickable.
+
+- **The ⋯ is gone.** The toolbar right of the address bar is ☆ · ↗ · the account chip. Reload is
+  ⟳, favourite ☆, close page the tab's ✕, disconnect the account chip's Connection panel, copy link
+  (and share, which was a copy) the address bar: a click takes the URL in selected, ⌘C copies it.
+  Open in the system browser is ↗, named `explore.openInSystemBrowser`, the engine's own URL, off
+  over the start page. No new strings.
+- **Menus over the page float (macOS).** gpui's `AnchoredPopup` is refused on macOS at the pinned
+  rev (`PopupNotSupportedError`, "not implemented on macOS yet"), so the menu is drawn in a
+  `WindowKind::PopUp` panel placed in screen points where it would hang, which never takes the
+  keyboard (`becomesKeyOnlyIfNeeded`). A press elsewhere, Esc, the window going to the background
+  or moving closes it; one at a time. Windows keeps spec 083 D2's hole for both menus; a refused
+  float falls back to the in-window menu with the page hidden.
+- `cargo test` 924 passed (9 new). The on-screen pass is the owner's.
+
 ## Corrections made on the way
 
 - The 2026-10-04 explanation of the locked slide ("the fee went stale") was wrong: no client gates on

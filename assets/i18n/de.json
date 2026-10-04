@@ -1911,6 +1911,8 @@
   "newTab": "Neuer Tab",
   "startPage": "Startseite",
   "closeAllTabs": "Alle Tabs schließen",
+  "closeOtherTabs": "Andere Tabs schließen",
+  "closeTabsToRight": "Tabs rechts schließen",
   "closeTab": "Tab schließen",
   "openTabs": "{{n}} Tabs geöffnet",
   "addToFavorites": "Zu Favoriten hinzufügen",

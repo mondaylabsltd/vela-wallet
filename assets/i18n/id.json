@@ -1911,6 +1911,8 @@
   "newTab": "Tab baru",
   "startPage": "Halaman awal",
   "closeAllTabs": "Tutup semua tab",
+  "closeOtherTabs": "Tutup tab lain",
+  "closeTabsToRight": "Tutup tab di kanan",
   "closeTab": "Tutup tab",
   "openTabs": "{{n}} tab terbuka",
   "addToFavorites": "Tambahkan ke favorit",

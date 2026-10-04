@@ -10,6 +10,7 @@
 mod support;
 
 use support::DomainDriver;
+use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
     Event, ExploreDoc, ExploreGroup, ExploreOperation as Op, ExploreShellResult as Res,
     ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP,
@@ -544,4 +545,114 @@ fn recency_starts_at_the_selected_tab() {
         ..ExploreDoc::default()
     }));
     assert_eq!(sut.view().recent_tabs, vec!["t-2".to_owned()]);
+}
+
+// ---------------------------------------------------------------------------
+// Batch close (spec 099) — Chrome's three
+// ---------------------------------------------------------------------------
+
+fn five_tabs() -> (Sut, Vec<String>) {
+    let mut sut = ready(None);
+    for (i, host) in ["a", "b", "c", "d", "e"].iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "five test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: Some(format!("https://{host}.example/")),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let ids = sut.view().tabs.iter().map(|t| t.id.clone()).collect();
+    (sut, ids)
+}
+
+/// The three scopes name exactly the tabs they say; an id the strip does not
+/// carry closes nothing.
+#[test]
+fn each_scope_names_its_tabs() {
+    let (sut, ids) = five_tabs();
+    let tabs = sut.view().tabs;
+    assert_eq!(
+        tabs_closed_by(
+            &tabs,
+            &TabCloseScope::Others {
+                keep: ids[2].clone()
+            }
+        ),
+        vec![
+            ids[0].clone(),
+            ids[1].clone(),
+            ids[3].clone(),
+            ids[4].clone()
+        ]
+    );
+    assert_eq!(
+        tabs_closed_by(&tabs, &TabCloseScope::Right { of: ids[2].clone() }),
+        vec![ids[3].clone(), ids[4].clone()]
+    );
+    assert!(tabs_closed_by(&tabs, &TabCloseScope::Right { of: ids[4].clone() }).is_empty());
+    assert_eq!(tabs_closed_by(&tabs, &TabCloseScope::All), ids);
+    assert!(tabs_closed_by(
+        &tabs,
+        &TabCloseScope::Others {
+            keep: "t-gone".to_owned()
+        }
+    )
+    .is_empty());
+}
+
+/// "Close other tabs" on a tab that is not selected: that tab is the one in
+/// use after, in one write.
+#[test]
+fn closing_others_selects_the_one_kept() {
+    let (mut sut, ids) = five_tabs();
+    let closing = tabs_closed_by(
+        &sut.view().tabs,
+        &TabCloseScope::Others {
+            keep: ids[1].clone(),
+        },
+    );
+    let doc = written(sut.dispatch(Event::TabsClosed { ids: closing }));
+    assert_eq!(doc.tabs.len(), 1);
+    assert_eq!(doc.selected_tab.as_deref(), Some(ids[1].as_str()));
+    assert_eq!(sut.view().recent_tabs, vec![ids[1].clone()]);
+}
+
+/// "Close tabs to the right" of a tab left of the selected one: the
+/// selection moves left, to the nearest tab that survives — that tab.
+#[test]
+fn closing_to_the_right_moves_a_closed_selection_left() {
+    let (mut sut, ids) = five_tabs();
+    assert_eq!(sut.view().selected_tab.as_deref(), Some(ids[4].as_str()));
+    let closing = tabs_closed_by(
+        &sut.view().tabs,
+        &TabCloseScope::Right { of: ids[1].clone() },
+    );
+    let doc = written(sut.dispatch(Event::TabsClosed { ids: closing }));
+    assert_eq!(
+        doc.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+        ids[..2].to_vec()
+    );
+    assert_eq!(doc.selected_tab.as_deref(), Some(ids[1].as_str()));
+}
+
+/// A selection that survives stays where it is; closing all leaves the start
+/// page; closing nothing writes nothing.
+#[test]
+fn a_surviving_selection_stays_and_all_leaves_the_start_page() {
+    let (mut sut, ids) = five_tabs();
+    written(sut.dispatch(Event::TabSelected { id: ids[0].clone() }));
+    let doc = written(sut.dispatch(Event::TabsClosed {
+        ids: vec![ids[2].clone(), ids[3].clone()],
+    }));
+    assert_eq!(doc.selected_tab.as_deref(), Some(ids[0].as_str()));
+    assert!(sut
+        .dispatch(Event::TabsClosed {
+            ids: vec!["t-gone".to_owned()]
+        })
+        .is_empty());
+    let all = tabs_closed_by(&sut.view().tabs, &TabCloseScope::All);
+    let doc = written(sut.dispatch(Event::TabsClosed { ids: all }));
+    assert!(doc.tabs.is_empty());
+    assert_eq!(sut.view().selected_tab, None);
 }

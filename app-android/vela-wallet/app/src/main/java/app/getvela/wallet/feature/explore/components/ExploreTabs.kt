@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +47,8 @@ private const val TAB_CARD_ASPECT = 3f / 4f
 /**
  * The tab switcher (mock E5): a two-column grid of cards, a "+" that opens the
  * start page, and the one destructive affordance — 关闭全部标签页 — kept quiet
- * at the bottom rather than beside every card.
+ * at the bottom rather than beside every card. A long press on a card asks for
+ * that tab's menu (spec 099: close it, the others, the ones to its right, all).
  */
 @Composable
 fun ExploreTabsScreen(
@@ -58,6 +60,7 @@ fun ExploreTabsScreen(
     onNew: () -> Unit,
     onCloseAll: () -> Unit,
     modifier: Modifier = Modifier,
+    onMenu: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -97,7 +100,7 @@ fun ExploreTabsScreen(
             modifier = Modifier.weight(1f),
         ) {
             items(tabs, key = { it.id }) { tab ->
-                TabCard(tab, copy.close, onOpen, onClose)
+                TabCard(tab, copy.close, onOpen, onClose, onMenu)
             }
             item {
                 NewTabCard(copy.newTab, onNew)
@@ -129,14 +132,19 @@ private fun TabCard(
     closeLabel: String,
     onOpen: (String) -> Unit,
     onClose: (String) -> Unit,
+    onMenu: (String) -> Unit,
 ) {
     val colors = VelaTheme.colors
-    CardFrame(selected = tab.selected) {
+    // The whole card opens the tab, and a long press anywhere on it asks for
+    // its menu; the caption's ✕ keeps its own tap.
+    CardFrame(
+        selected = tab.selected,
+        modifier = Modifier.combinedClickable(onClick = { onOpen(tab.id) }, onLongClick = { onMenu(tab.id) }),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(TAB_CARD_ASPECT)
-                .clickable { onOpen(tab.id) },
+                .aspectRatio(TAB_CARD_ASPECT),
             contentAlignment = Alignment.Center,
         ) {
             val snapshot = tab.snapshot

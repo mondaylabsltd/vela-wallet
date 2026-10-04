@@ -1916,6 +1916,8 @@
   "newTab": "Pestaña nueva",
   "startPage": "Página de inicio",
   "closeAllTabs": "Cerrar todas las pestañas",
+  "closeOtherTabs": "Cerrar las demás pestañas",
+  "closeTabsToRight": "Cerrar las pestañas de la derecha",
   "closeTab": "Cerrar pestaña",
   "openTabs": "{{n}} pestañas abiertas",
   "addToFavorites": "Agregar a favoritos",

@@ -29,6 +29,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import app.getvela.wallet.core.data.ThemePreference
+import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
 import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.theme.isDarkEffective
@@ -340,6 +341,31 @@ class MainActivity : ComponentActivity() {
 
         splash.setKeepOnScreenCondition {
             !container.i18nRuntime.state.value.ready || themePreferenceState.value == null
+        }
+        // Issue #407: the splash's mark IS the launch animation's first frame, in
+        // the same place, so when the app paints in the splash's appearance it
+        // goes at once. The platform's own exit animation faded it while the
+        // app's first frame slid in under it — the mark dipped and settled
+        // (measured on a Xiaomi, 30 fps). An in-app theme opposite to the OS's
+        // (the splash can only follow the OS) still fades, over the launch's
+        // crossfade, never cuts (spec 012 FR-023).
+        splash.setOnExitAnimationListener { view ->
+            val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            val appDark = debugDark ?: when (themePreferenceState.value) {
+                ThemePreference.Light -> false
+                ThemePreference.Dark -> true
+                ThemePreference.Auto, null -> systemDark
+            }
+            if (appDark == systemDark) {
+                view.remove()
+            } else {
+                view.view.animate()
+                    .alpha(0f)
+                    .setDuration(VelaLaunch.exitCrossfadeMs.toLong())
+                    .withEndAction { view.remove() }
+                    .start()
+            }
         }
 
         setContent {

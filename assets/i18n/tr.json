@@ -1911,6 +1911,8 @@
   "newTab": "Yeni sekme",
   "startPage": "Başlangıç sayfası",
   "closeAllTabs": "Tüm sekmeleri kapat",
+  "closeOtherTabs": "Diğer sekmeleri kapat",
+  "closeTabsToRight": "Sağdaki sekmeleri kapat",
   "closeTab": "Sekmeyi kapat",
   "openTabs": "{{n}} sekme açık",
   "addToFavorites": "Favorilere ekle",

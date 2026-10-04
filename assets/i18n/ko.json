@@ -1911,6 +1911,8 @@
   "newTab": "새 탭",
   "startPage": "시작 페이지",
   "closeAllTabs": "모든 탭 닫기",
+  "closeOtherTabs": "다른 탭 닫기",
+  "closeTabsToRight": "오른쪽 탭 닫기",
   "closeTab": "탭 닫기",
   "openTabs": "탭 {{n}}개 열림",
   "addToFavorites": "즐겨찾기에 추가",

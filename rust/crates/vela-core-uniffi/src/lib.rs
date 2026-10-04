@@ -563,6 +563,19 @@ pub fn browser_engine_plan(input_json: String) -> Option<String> {
     vela_core::app::browser_tabs::plan_engines_json(&input_json)
 }
 
+/// Which tabs a batch close takes (spec 099 — "close other tabs", "close tabs
+/// to the right", "close all tabs"): the strip's tabs (`ExploreView.tabs`
+/// JSON) and a `TabCloseScope` JSON (`{"type":"others","keep":…}`,
+/// `{"type":"right","of":…}`, `{"type":"all"}`) in, the ids out (JSON array).
+/// The shell closes each one's engine and tells the browser machine, then
+/// sends `explore_sites`' `tabs_closed` with them. See
+/// `vela_core::app::explore_sites::tabs_closed_by`.
+#[uniffi::export]
+#[must_use]
+pub fn explore_tabs_closed_by(tabs_json: String, scope_json: String) -> Option<String> {
+    vela_core::app::explore_sites::tabs_closed_by_json(&tabs_json, &scope_json)
+}
+
 /// May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
 /// clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
 /// no fee session) and the speed in force (`"fast"`…, `None` with no speed
