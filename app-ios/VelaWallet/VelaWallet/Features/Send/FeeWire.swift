@@ -182,6 +182,17 @@ struct FeeOptionWire: Decodable, Equatable {
     /// `spent_by_operation`. The sheet warns while it is the coin paying.
     /// Optional on the wire so a hand-written row without it reads `false`.
     var spentByOperation: Bool?
+    /// Issue #408: why this coin cannot be chosen, when the numbers prove it —
+    /// the fee in it and what it has to pay from, each written by the core
+    /// with its unit. `nil` when it can pay, or cannot be weighed (no price).
+    var short: FeeShortfallWire?
+}
+
+/// A coin's shortfall against the fee — both sides the core's words for the
+/// numbers (`3.58361 USDT`), never re-formatted here.
+struct FeeShortfallWire: Decodable, Equatable {
+    let need: String
+    let have: String
 }
 
 struct FeeViewWire: Decodable, Equatable {
@@ -206,11 +217,15 @@ struct FeeViewWire: Decodable, Equatable {
     /// The single gate. Consumers AND this into their confirm button rather
     /// than assembling their own conjunction of `busy`, `failed` and `fee`.
     let confirmFeeReady: Bool
+    /// Issue #408: not one coin on offer can pay this fee (every option has a
+    /// `short`). The sheet says so instead of naming the coin in force as
+    /// though another could stand in. Absent on the wire reads `false`.
+    var noCoinPays = false
 }
 
 extension FeeViewWire {
     private enum CodingKeys: String, CodingKey {
-        case busy, failed, fee, stale, feeToken, options, confirmFeeReady
+        case busy, failed, fee, stale, feeToken, options, confirmFeeReady, noCoinPays
     }
 
     /// Written out for `failed` alone: a `FeeFailure` is a string for every
@@ -225,6 +240,7 @@ extension FeeViewWire {
         feeToken = try c.decodeIfPresent(String.self, forKey: .feeToken)
         options = try c.decode([FeeOptionWire].self, forKey: .options)
         confirmFeeReady = try c.decode(Bool.self, forKey: .confirmFeeReady)
+        noCoinPays = try c.decodeIfPresent(Bool.self, forKey: .noCoinPays) ?? false
     }
 }
 

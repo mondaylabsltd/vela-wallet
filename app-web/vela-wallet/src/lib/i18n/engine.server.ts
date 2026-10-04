@@ -852,7 +852,10 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.batchUnsettled',
 	'componentsUi.signing.confirmBlock.feeMeasuring',
 	'componentsUi.signing.confirmBlock.feeFailed',
-	'componentsUi.signing.confirmBlock.feeShort'
+	'componentsUi.signing.confirmBlock.feeShort',
+	// Issue 408: `FeeShort` when not one coin on offer can pay — there is no
+	// other coin to pick, so the line says that instead.
+	'componentsUi.gas.noCoinPays'
 ] as const;
 
 /** Spec 099 R8: the signer's three failures, by `SignErrorKind`. */
@@ -994,6 +997,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
+		feeRowShort: k('componentsUi.gas.rowShort'),
+		feeNoCoinPays: k('componentsUi.gas.noCoinPays'),
 		feeRefresh: k('send.feeRefresh'),
 		feeStale: k('send.feeStale'),
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.

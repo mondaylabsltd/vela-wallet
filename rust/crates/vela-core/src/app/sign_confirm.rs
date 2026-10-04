@@ -22,7 +22,7 @@ use ts_rs::TS;
 
 use super::approval_guard::{GuardSurface, GuardView};
 use super::clear_signing::{ClearSignType, ClearSigningView, ClearSurface};
-use super::fee_policy::{FeeTier, FeeView};
+use super::fee_policy::{FeeTier, FeeView, NO_COIN_PAYS_KEY};
 use super::sign_request::SignView;
 
 /// Which part of the gate is shut.
@@ -53,7 +53,9 @@ pub enum ConfirmBlock {
     FeeMeasuring,
     /// The fee could not be worked out: retry.
     FeeFailed,
-    /// The coin chosen for the fee is short: pick another.
+    /// The coin chosen for the fee is short: pick another — or, when no coin
+    /// on offer can pay ([`FeeView::no_coin_pays`], issue #408), the line says
+    /// that instead, since there is no other to pick.
     FeeShort,
 }
 
@@ -185,11 +187,16 @@ pub fn confirm_state_of(
             // Priced, not busy, not failed, and still not ready: the coin
             // that pays is short (fee_policy's only other refusal). Not
             // priced yet: still being worked out.
-            return shut(if fee.fee.is_some() {
-                ConfirmBlock::FeeShort
-            } else {
-                ConfirmBlock::FeeMeasuring
-            });
+            if fee.fee.is_none() {
+                return shut(ConfirmBlock::FeeMeasuring);
+            }
+            let mut state = shut(ConfirmBlock::FeeShort);
+            // Issue #408: "not enough of this coin — pick another" (as most
+            // locales say it) sends a person to a picker where nothing pays.
+            if fee.no_coin_pays {
+                state.key = Some(NO_COIN_PAYS_KEY.to_owned());
+            }
+            return state;
         }
     }
     ConfirmState {

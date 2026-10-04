@@ -550,8 +550,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   — the browser's batch close, beside `closeAllTabs`. Same branches.
 // 1878 (merge of #409 into main after 099, 2026-10-04): #409's set (1779 leaves)
 //   + 099's two batch-close keys = 1781 leaves, 97 branches.
-if (PATHS.length !== 1878) fail(`expected 1878 paths (1781 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1781) fail(`expected 1781 leaf paths, got ${leafSet.size}`);
+// 1878 (issue #408, 2026-10-04): + `componentsUi.gas.rowShort` — a fee coin
+//   that cannot pay says why under its greyed row, need and have in its own
+//   unit — and `componentsUi.gas.noCoinPays`, the line under the fee when not
+//   one coin on offer can pay it (it used to name the coin in force: "Insufficient
+//   ETH for gas fees" over a wallet whose USDT was short too). Same branches:
+//   1779 + 2 = 1781 leaves.
+// 1877 (issue #408): − `componentsUi.signing.gasEstimateFailed` — no client
+//   draws it (the fee row's failed state says what failed); its bytes pay for
+//   the two above inside the unchanged SC-005 budget. 1780 leaves.
+// 1879 (merge of #417 into #408, 2026-10-04): #417's 1781 leaves + #408's net
+//   one (+ rowShort, noCoinPays, − gasEstimateFailed) = 1782 leaves, 97 branches.
+if (PATHS.length !== 1879) fail(`expected 1879 paths (1782 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1782) fail(`expected 1782 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

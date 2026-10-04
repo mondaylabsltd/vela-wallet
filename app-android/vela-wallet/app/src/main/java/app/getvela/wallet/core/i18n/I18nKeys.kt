@@ -733,6 +733,11 @@ object I18nKeys {
         // you can choose. `send.gasTier.rapid` is deliberately absent — the
         // tier is dead, the relay refuses it, and nothing here may name it.
         const val FEE_REFRESH = "send.feeRefresh"
+
+        // Issue #408: a fee coin that cannot pay says why (need, have — the
+        // core's numbers), and a fee no coin can pay is said as that.
+        const val FEE_ROW_SHORT = "componentsUi.gas.rowShort"
+        const val FEE_NO_COIN_PAYS = "componentsUi.gas.noCoinPays"
         const val FEE_STALE = "send.feeStale"
         const val FEE_SPEED_LABEL = "send.feeSpeedLabel"
         const val FEE_SPEED_ONCE = "send.feeSpeedOnce"

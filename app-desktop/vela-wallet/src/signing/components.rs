@@ -1084,6 +1084,20 @@ pub fn fee(
                     action,
                     row,
                 ));
+                // Issue #408: why a greyed coin cannot pay, under its row and
+                // at full strength — the dimming is not a reason. Set in past
+                // the mark (8 + 32 + 12), under the name.
+                if let Some(reason) = option.reason.clone() {
+                    col = col.child(
+                        div()
+                            .pl(px(52.))
+                            .pr(px(8.))
+                            .pb(px(4.))
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.error_base)
+                            .child(reason),
+                    );
+                }
             }
             Some(
                 div()

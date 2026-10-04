@@ -58,7 +58,14 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	invalidateFeeSignals: seams.invalidate,
 	accountIsDeployed: seams.deployed
 }));
-vi.mock('$lib/core/client', () => ({ loadCore: vi.fn(async () => {}) }));
+// `prefs*`: the fee request reads the person's number preset (issue 408), and
+// the preferences store names the core's two readers at import. Never called
+// here — nothing boots the store.
+vi.mock('$lib/core/client', () => ({
+	loadCore: vi.fn(async () => {}),
+	prefsMigrations: () => '[]',
+	prefsRead: () => '{}'
+}));
 // The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
 vi.mock('$lib/core/kernels', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/core/kernels')>()),

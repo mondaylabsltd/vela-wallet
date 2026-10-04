@@ -8,6 +8,7 @@ import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeOptionView
+import app.getvela.wallet.feature.send.core.FeeShortfall
 import app.getvela.wallet.feature.send.core.FeeSpeedOptionView
 import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeTier
@@ -772,6 +773,75 @@ class SigningLiveTest {
         assertEquals(listOf("native", usdt.contract), open.options.map { it.id })
         assertTrue("ETH cannot pay: shown, not pickable", open.options[0].disabled)
         assertFalse(open.options[1].disabled)
+    }
+
+    // -- Issue #408: a coin that cannot pay says why ---------------------------
+
+    /**
+     * The report itself (v0.9.6, "Back up public keys" on Ethereum): 0 ETH
+     * and 0.754189 USDT against ~0.001334 ETH or ~3.58361 USDT. The USDT row
+     * was greyed with nothing saying why, and the only line was "Insufficient
+     * ETH for gas fees". Now each greyed coin says need and have in its own
+     * unit (the core's words for the numbers), and the line under the fee
+     * says no coin can pay.
+     */
+    @Test
+    fun `issue 408 - every greyed coin says why and the line says no coin can pay`() {
+        val ethShort = eth.copy(
+            amount = "1333800000000000",
+            short = FeeShortfall(need = "0.001334 ETH", have = "0 ETH"),
+        )
+        val usdtShort = usdt.copy(
+            balance = "754189", amount = "3583610", insufficient = true,
+            short = FeeShortfall(need = "3.58361 USDT", have = "0.754189 USDT"),
+        )
+        val fee = FeeView(
+            fee = estimate(FeeAssetView.Native, "1333800000000000"),
+            options = listOf(ethShort, usdtShort),
+            confirm_fee_ready = false,
+            no_coin_pays = true,
+        )
+
+        val closed = SigningLive.feeModel(ClearSigningView(), fee, ctx) as FeeModel.OnChain
+        assertEquals(strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS), closed.warning)
+        assertEquals("No token can pay this fee", closed.warning)
+
+        val open = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = true)) as FeeModel.OnChain
+        assertTrue("neither coin is pickable", open.options.all { it.disabled })
+        assertEquals("Need ~0.001334 ETH, have 0 ETH", open.options[0].reason)
+        assertEquals("Need ~3.58361 USDT, have 0.754189 USDT", open.options[1].reason)
+        assertEquals("the line does not change with the list open", closed.warning, open.warning)
+    }
+
+    /**
+     * One coin short, one able: only the short one says why, and the line is
+     * still about the coin in force (#262) — picking the other one fixes it.
+     */
+    @Test
+    fun `issue 408 - a coin that can pay keeps the line about the coin in force`() {
+        val ethShort = eth.copy(short = FeeShortfall(need = "0.0004 ETH", have = "0 ETH"))
+        val fee = FeeView(
+            fee = estimate(FeeAssetView.Native, "400000000000000"),
+            options = listOf(ethShort, usdt),
+            confirm_fee_ready = false,
+        )
+        val open = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = true)) as FeeModel.OnChain
+        assertEquals(strings.t("send.warnInsufficientGas", mapOf("sym" to "ETH")), open.warning)
+        assertEquals("Need ~0.0004 ETH, have 0 ETH", open.options[0].reason)
+        assertNull("USDT can pay: nothing to explain", open.options[1].reason)
+        assertFalse(open.options[1].disabled)
+    }
+
+    /** While the fee is re-measured, nothing is settled: the line waits, as the gate does. */
+    @Test
+    fun `issue 408 - no coin pays is not said of a figure being re-measured`() {
+        val fee = FeeView(
+            busy = true,
+            fee = estimate(FeeAssetView.Native, "1333800000000000"),
+            options = listOf(eth.copy(short = FeeShortfall("0.001334 ETH", "0 ETH"))),
+            no_coin_pays = false,
+        )
+        assertNull((SigningLive.feeModel(ClearSigningView(), fee, ctx) as FeeModel.OnChain).warning)
     }
 
     /**

@@ -50,6 +50,10 @@ final class FeeStore {
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
+    /// The resolved number preset `configureSpeed` was last given: every fee
+    /// request carries it, and the core writes a coin's shortfall in it
+    /// (issue #408).
+    @ObservationIgnored private var number = "comma_dot"
 
     /// What a session was asked to price; compared minus the tier.
     private struct Ask {
@@ -88,7 +92,9 @@ final class FeeStore {
                 feeToken: token, autoFeeToken: false)
         }
 
-        var event: String {
+        /// `number`: the resolved preset the core writes a coin's shortfall
+        /// in (issue #408) — the one `configureSpeed` was last given.
+        func event(number: String) -> String {
             CoreJSON.string([
                 "type": "quote_requested",
                 "chain_id": chainId,
@@ -99,6 +105,7 @@ final class FeeStore {
                 "calls": calls,
                 "fee_token": feeToken.map { $0 as Any } ?? NSNull(),
                 "auto_fee_token": autoFeeToken,
+                "number": number,
             ])
         }
     }
@@ -306,7 +313,7 @@ final class FeeStore {
         askGeneration += 1
         inForce.ask = ask
         inForce.generation = askGeneration
-        inForce.send(ask.event)
+        inForce.send(ask.event(number: number))
         settleSpeed()
     }
 
@@ -390,6 +397,7 @@ final class FeeStore {
 
     /// The stored default and the resolved number preset — repeat freely.
     func configureSpeed(preferred: String, number: String) {
+        self.number = number
         speedCore.dispatch(CoreJSON.string(["type": "configure", "preferred": preferred, "number": number]))
     }
 
@@ -518,7 +526,7 @@ final class FeeStore {
             session.ask = ask
             session.generation = askGeneration
             previews.append(session)
-            session.send(ask.event)
+            session.send(ask.event(number: number))
         }
     }
 }

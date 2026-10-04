@@ -32,6 +32,7 @@ import {
 } from '$lib/services/safe-transaction';
 import { DeploymentReadError } from '$lib/services/deployment-read';
 import { feeQuoteDeadlineMs } from '$lib/core/kernels';
+import { resolvedFormatKeys } from '$lib/services/locale-format';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
 
@@ -54,7 +55,8 @@ export const IDLE_FEE_VIEW: FeeView = {
 	stale: false,
 	fee_token: null,
 	options: [],
-	confirm_fee_ready: false
+	confirm_fee_ready: false,
+	no_coin_pays: false
 };
 
 export interface FeeQuoteRequest {
@@ -329,7 +331,9 @@ export class FeeQuote {
 				tier: request.tier ?? DEFAULT_TIER,
 				calls: request.calls,
 				fee_token: request.feeToken,
-				auto_fee_token: request.autoFeeToken ?? false
+				auto_fee_token: request.autoFeeToken ?? false,
+				// Issue 408: the preset the core writes a coin's shortfall in.
+				number: resolvedFormatKeys().number
 			};
 			this.#dispatching = true;
 			try {

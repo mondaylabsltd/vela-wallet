@@ -1170,6 +1170,10 @@ object SigningLive {
         // Issue #262: the core shut the gate because the coin that pays is not
         // there — the send form's own sentence (#211), about the same shortfall.
         val short = estimate != null && !fee.busy && fee.failed == null && !fee.confirm_fee_ready && selected?.insufficient == true
+        // Issue #408: and not one coin on offer can pay — the core's verdict,
+        // said as that rather than naming the coin in force ("Insufficient ETH"
+        // over a wallet whose USDT was short too).
+        val noCoinPays = estimate != null && fee.no_coin_pays
         val options = if (ctx.feeOpen && choosable) {
             fee.options.map { option ->
                 FeeTokenOption(
@@ -1180,6 +1184,10 @@ object SigningLive {
                     fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
                     selected = option.selected,
                     disabled = option.insufficient,
+                    // Issue #408: a refused coin says why — the core's numbers.
+                    reason = option.short?.takeIf { option.insufficient }?.let { gap ->
+                        ctx.strings.t(I18nKeys.Flows.FEE_ROW_SHORT, mapOf("need" to gap.need, "have" to gap.have))
+                    },
                 )
             }
         } else {
@@ -1192,6 +1200,7 @@ object SigningLive {
             options = options,
             tappable = fee.failed != null || choosable,
             warning = when {
+                noCoinPays -> ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS)
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
                 // Spec 096 F2: the person chose a coin the transaction itself
                 // spends (the PancakeSwap USDC swap, fee in USDC); the core

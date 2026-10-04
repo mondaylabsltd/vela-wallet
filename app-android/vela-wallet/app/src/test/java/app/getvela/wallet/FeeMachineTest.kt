@@ -149,6 +149,37 @@ class FeeMachineTest {
         trace.cancel()
     }
 
+    /**
+     * Issue #408 through the real core: an account whose every fee coin is
+     * short. The preset the shell sends rides the request, and the view
+     * comes back with each coin's need and have written in it, and with the
+     * sheet's "no coin pays" — the words the signing sheet draws.
+     * Gnosis at 1.1 gwei and 660k gas is under a cent, so both fees sit at the
+     * $0.01 floor: 0.01 XDAI, 0.01 USDC.
+     */
+    @Test
+    fun `a wallet whose every coin is short gets each shortfall in its own preset`() = runBlocking {
+        scriptRelay()
+        port.always("vela_getInBandGasQuote") {
+            FakeRelayPort.body(
+                JSONArray()
+                    .put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "native").put("balance", "0x0").put("decimals", 18).put("symbol", "XDAI").put("usdBalance", "0").put("usdPrice", "1"))
+                    .put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "erc20").put("feeToken", "0x3333333333333333333333333333333333333333").put("balance", "0x1388").put("decimals", 6).put("symbol", "USDC").put("usdBalance", "0.005").put("usdPrice", "1")),
+            )
+        }
+        val host = host()
+        host.dispatch(request().copy(number = "dot_comma"), FeeEvent.serializer())
+        val settled = withTimeout(15_000) {
+            host.view.first { !it.busy && (it.failed != null || (it.fee != null && it.options.size == 2)) }
+        }
+        assertEquals(null, settled.failed)
+        assertTrue("neither coin can pay", settled.no_coin_pays)
+        val xdai = settled.options.single { it.symbol == "XDAI" }
+        val usdc = settled.options.single { it.symbol == "USDC" }
+        assertEquals(app.getvela.wallet.feature.send.core.FeeShortfall(need = "0,01 XDAI", have = "0 XDAI"), xdai.short)
+        assertEquals(app.getvela.wallet.feature.send.core.FeeShortfall(need = "0,01 USDC", have = "0,005 USDC"), usdc.short)
+    }
+
     @Test
     fun `a relay that answers nothing is a failure the core names, not a spinner`() = runBlocking {
         val host = host()

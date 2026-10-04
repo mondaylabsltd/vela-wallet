@@ -1240,7 +1240,6 @@
    "batchSubtitle": "{{count}} işlem, birlikte imzalanır",
    "batchCall": "Sözleşme çağrısı",
    "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor.",
-   "gasEstimateFailed": "Gas ücreti tahmin edilemedi — gönderim başarısız olabilir veya zaman aşımına uğrayabilir. Yeniden denemek için yukarıdaki ücrete dokunun.",
    "submitted": "Gönderildi — onay bekleniyor",
    "historicalNote": "Geçmiş bir imza — tam olarak onayladığınız şey.",
    "close": "Kapat",
@@ -1505,7 +1504,9 @@
    "reasonQuote": "Relay'den fiyat alınamadı. Otomatik olarak yeniden deneniyor.",
    "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
    "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
-   "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor."
+   "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
+   "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
+   "noCoinPays": "Bu ücreti karşılayan token yok"
   },
   "dock": {
    "receive": "Al",

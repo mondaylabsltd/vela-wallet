@@ -169,6 +169,9 @@ struct FeeTokenOption: Identifiable {
     let selected: Bool
     /// The core's `insufficient`: drawn for context, never pickable (issue 211).
     var disabled = false
+    /// Issue #408: why a disabled coin cannot pay, drawn under its row — the
+    /// core's shortfall, need and have in the coin's own unit. `nil` = none.
+    var reason: String?
 }
 
 enum FeeModel {

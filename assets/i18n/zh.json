@@ -1205,7 +1205,6 @@
   },
   "signing": {
    "loading": "加载中...",
-   "gasEstimateFailed": "无法估算 gas 费用 — 直接提交可能失败或超时。请点击上方费用重试。",
    "submitted": "已提交 — 等待链上确认",
    "historicalNote": "这是一条历史签名 — 与你当时确认的内容完全一致。",
    "close": "关闭",
@@ -1476,7 +1475,9 @@
    "reasonQuote": "没能从中继拿到报价，正在自动重试。",
    "reasonFeeToken": "中继暂时无法给这个币报价。正在重试——也可以换一个币付手续费。",
    "reasonSimulation": "中继暂时没能试运行这笔交易，正在自动重试。",
-   "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。"
+   "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。",
+   "rowShort": "需要 ~{{need}}，现有 {{have}}",
+   "noCoinPays": "所有代币都不够付这笔网络费"
   },
   "dock": {
    "receive": "收款",

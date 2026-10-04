@@ -129,6 +129,9 @@ pub struct FeeTokenOption {
     pub selected: bool,
     /// The core's balance<fee gate: drawn for context, never pickable.
     pub insufficient: bool,
+    /// Issue #408: why a greyed coin cannot pay, drawn under its row — the
+    /// core's shortfall, need and have in the coin's own unit.
+    pub reason: Option<SharedString>,
 }
 
 pub enum FeeModel {
@@ -909,6 +912,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 fee: "~0.0021 ETH".into(),
                                 selected: true,
                                 insufficient: false,
+                                reason: None,
                             },
                             FeeTokenOption {
                                 mark: usdc.clone(),
@@ -917,6 +921,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 fee: "~5.55 USDC".into(),
                                 selected: false,
                                 insufficient: false,
+                                reason: None,
                             },
                         ],
                     )),
