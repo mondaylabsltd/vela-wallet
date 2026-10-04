@@ -7841,7 +7841,10 @@ mod payee_tests {
                 // line that never is.
                 assert_eq!(to.value.as_ref(), "Wallet");
                 assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
-                assert!(!to.mono, "the name is words; the address line is mono");
+                // Issue #423: the first line is the NAME — "Vela User" is
+                // whose word it is, on the line under it, never the name.
+                assert_ne!(to.value.as_ref(), s.vela_user.as_ref());
+                assert!(!to.mono, "a name is words, not an address");
                 assert!(
                     matches!(to.lead, FactLead::Identicon(ref seed) if seed.as_ref() == DEV_WALLET),
                     "the identicon opens the address in full"
