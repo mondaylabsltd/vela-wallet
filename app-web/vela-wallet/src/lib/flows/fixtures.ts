@@ -1048,6 +1048,36 @@ function batchImport(m: WalletFlowMessages, identicon: Identicon): BatchImportMo
 	};
 }
 
+/**
+ * The confirm's To row. A split names its count; a single send a payee the
+ * public registry names — the name beside the face, as From, over whose word
+ * it is and the short address, in the body face (issue 423); a sweep a payee
+ * nobody named — the short address alone, in mono.
+ */
+function confirmTo(
+	m: WalletFlowMessages,
+	identicon: Identicon,
+	variant: 'single' | 'split' | 'sweep'
+): FactRowModel {
+	const label = m['send.toLabel'];
+	if (variant === 'split')
+		return { label, value: fill(m['send.recipientCount_other'], { count: 3 }) };
+	const lead = {
+		kind: 'identicon' as const,
+		svg: identicon(ALICE.addressFull),
+		address: ALICE.addressFull
+	};
+	if (variant === 'single') {
+		return {
+			label,
+			value: ALICE.name,
+			lead,
+			detail: `${m['send.velaUser']} · ${ALICE.addressDisplay}`
+		};
+	}
+	return { label, value: ALICE.addressDisplay, lead, mono: true };
+}
+
 function sendConfirm(
 	m: WalletFlowMessages,
 	identicon: Identicon,
@@ -1063,18 +1093,7 @@ function sendConfirm(
 				address: IDENTITY.addressFull
 			}
 		},
-		{
-			label: m['send.toLabel'],
-			value:
-				variant === 'split'
-					? fill(m['send.recipientCount_other'], { count: 3 })
-					: ALICE.addressDisplay,
-			lead:
-				variant === 'split'
-					? undefined
-					: { kind: 'identicon', svg: identicon(ALICE.addressFull), address: ALICE.addressFull },
-			mono: variant !== 'split'
-		},
+		confirmTo(m, identicon, variant),
 		{
 			label: m['componentsTx.detail.labelChain'],
 			value: NETWORKS[0].name,

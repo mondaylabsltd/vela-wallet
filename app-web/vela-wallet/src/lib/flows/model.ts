@@ -131,10 +131,11 @@ export interface FactRowModel {
 	/** Renders the value in the mono face (addresses, hashes). */
 	mono?: boolean;
 	/**
-	 * A second line under the value, in the mono face: the short address
-	 * under a NAME (spec 097 F). On the page that signs, a name is a claim and
-	 * the address is what is paid, so the two are drawn together — and on two
-	 * lines, so a long name can never push the address off the row.
+	 * A second line under the value, in the body face: whose word a NAME is
+	 * and the short address it stands for (spec 097 F). On the page that
+	 * signs, a name is a claim and the address is what is paid, so the two
+	 * are drawn together — and on two lines, so a long name can never push
+	 * the address off the row. The lead sits beside the name (issue 423).
 	 */
 	detail?: string;
 	/** Shows a copy affordance and its accessible name. */
