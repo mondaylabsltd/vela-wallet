@@ -13,6 +13,7 @@ import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { preferences } from '$lib/services/preferences.svelte';
 import AllowanceEditor from '$lib/signing/ui/AllowanceEditor.svelte';
+import AmountInput from './ui/AmountInput.svelte';
 import RecipientCard from './ui/RecipientCard.svelte';
 
 beforeAll(() => loadCore());
@@ -116,5 +117,113 @@ describe("a split row's share", () => {
 		const input = row('', oninput);
 		await type(input, '1.234,56', 'insertFromPaste');
 		expect(oninput).toHaveBeenLastCalledWith({ amount: '1234.56' });
+	});
+});
+
+/**
+ * Issue #421: a "0" then an "8" left "08" in the field — read as 8, ten times
+ * what somebody who missed the point meant — with Continue lit. The key
+ * replaces the zero, in every field that takes an amount; only a decimal mark
+ * may follow a leading zero, and a bare mark is given the zero it reads with.
+ */
+describe('a zero leading a digit (issue #421)', () => {
+	/** A key at the caret, as the browser applies it, then the field's handler. */
+	async function key(input: HTMLInputElement, ch: string) {
+		const at = input.selectionStart ?? input.value.length;
+		const next = input.value.slice(0, at) + ch + input.value.slice(at);
+		input.value = next;
+		input.setSelectionRange(at + 1, at + 1);
+		input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+		await tick();
+	}
+
+	const figure = (oninput: (value: string) => void) => {
+		const screen = render(AmountInput, {
+			props: { value: '', fiat: '≈ $0.00', denomLabel: 'POL', oninput }
+		});
+		return screen.container.querySelector('input.entry') as HTMLInputElement;
+	};
+
+	it('the send figure: "0" then "8" is 8 on screen and 8 sent on', async () => {
+		const oninput = vi.fn();
+		const input = figure(oninput);
+		await key(input, '0');
+		await key(input, '8');
+		expect(input.value).toBe('8');
+		expect(oninput).toHaveBeenLastCalledWith('8');
+	});
+
+	it('the send figure: a mark after the zero is how 0.8 is written', async () => {
+		const oninput = vi.fn();
+		const input = figure(oninput);
+		for (const ch of '0.08') await key(input, ch);
+		expect(input.value).toBe('0.08');
+		expect(oninput).toHaveBeenLastCalledWith('0.08');
+	});
+
+	it('the send figure: a bare mark reads "0." and the next key lands after it', async () => {
+		const oninput = vi.fn();
+		const input = figure(oninput);
+		await key(input, '.');
+		expect(input.value).toBe('0.');
+		expect(input.selectionStart).toBe(2);
+		await key(input, '5');
+		expect(input.value).toBe('0.5');
+		expect(oninput).toHaveBeenLastCalledWith('0.5');
+	});
+
+	it("a decimal-comma person's 0,8 is 0.8, never 8", async () => {
+		preferences.numberFormat = 'dot_comma';
+		const oninput = vi.fn();
+		const input = figure(oninput);
+		for (const ch of '0,8') await key(input, ch);
+		expect(oninput).toHaveBeenLastCalledWith('0.8');
+	});
+
+	it('a pasted 008.5 is 8.5', async () => {
+		const oninput = vi.fn();
+		const input = figure(oninput);
+		await type(input, '008.5', 'insertFromPaste');
+		expect(input.value).toBe('8.5');
+		expect(oninput).toHaveBeenLastCalledWith('8.5');
+	});
+
+	it("a split row's share and the custom allowance take the same rule", async () => {
+		const onrow = vi.fn();
+		const row = render(RecipientCard, {
+			props: {
+				recipient: {
+					ordinal: '#1',
+					name: '',
+					address: '',
+					identiconSvg: '',
+					amount: '',
+					amountValue: '0',
+					removeLabel: 'Remove'
+				},
+				symbol: 'POL',
+				oninput: onrow
+			}
+		}).container.querySelector('input.amount') as HTMLInputElement;
+		await type(row, '08');
+		expect(row.value).toBe('8');
+		expect(onrow).toHaveBeenLastCalledWith({ amount: '8' });
+
+		const oncustom = vi.fn();
+		const cap = render(AllowanceEditor, {
+			props: {
+				label: 'Allowance',
+				value: '0 USDC',
+				valueTone: 'neutral',
+				chips: [],
+				custom: { value: '0', symbol: 'USDC', placeholder: '0' },
+				oncustom
+			}
+		}).container.querySelector('input') as HTMLInputElement;
+		await type(cap, '00');
+		expect(cap.value).toBe('0');
+		await type(cap, '08');
+		expect(cap.value).toBe('8');
+		expect(oncustom).toHaveBeenLastCalledWith('8');
 	});
 });

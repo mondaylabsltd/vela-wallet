@@ -23,7 +23,8 @@ describe('a decimal-comma preset', () => {
 	it('reads a typed comma as the decimal mark', () => {
 		expect(clean('4,5')).toBe('4.5');
 		expect(clean('4,')).toBe('4.');
-		expect(clean(',5')).toBe('.5');
+		// With the zero it reads with (issue #421).
+		expect(clean(',5')).toBe('0.5');
 	});
 
 	it("keeps the field's own dot-decimal text intact on the next keystroke", () => {
@@ -68,10 +69,27 @@ describe('a decimal-point preset', () => {
 
 describe('under any preset', () => {
 	it('leaves a clean figure exactly as typed', () => {
-		for (const text of ['', '0', '4', '4.', '.5', '0.50', '007', '53.483600000000000001']) {
+		for (const text of ['', '0', '0.', '0.0', '0.08', '4', '4.', '0.50', '53.483600000000000001']) {
 			expect(cleanAmountText(text, '.'), text).toBe(text);
 			expect(cleanAmountText(text, ','), text).toBe(text);
 		}
+	});
+
+	// Issue #421: "08" was kept, shown as "08 POL" and read as 8 — ten times
+	// what somebody who missed the point meant. Only a mark follows a zero.
+	it('does not keep a zero that leads a digit', () => {
+		for (const preset of ['.', ',']) {
+			expect(cleanAmountText('08', preset, false, '0')).toBe('8');
+			expect(cleanAmountText('00', preset, false, '0')).toBe('0');
+			expect(cleanAmountText('0.08', preset, false, '0.0')).toBe('0.08');
+			expect(cleanAmountText('0.0', preset, false, '0.')).toBe('0.0');
+			expect(cleanAmountText('.', preset, false, '')).toBe('0.');
+			expect(cleanAmountText('008.5', preset, true)).toBe('8.5');
+		}
+		// A decimal-comma person's "0,8" is 0.8 — shown back as "0,8".
+		expect(cleanAmountText('0,8', ',', false, '0,')).toBe('0.8');
+		// And "0,800" is not grouping: nobody writes 800 behind a zero.
+		expect(cleanAmountText('0,800', '.', true)).toBeNull();
 	});
 
 	it('refuses a paste that is not one figure, instead of salvaging a different one', () => {
@@ -90,7 +108,7 @@ describe('under any preset', () => {
 
 	it('reads ONE typed comma as the decimal mark, under a decimal-point preset too', () => {
 		expect(cleanAmountText('4,', '.', false, '4')).toBe('4.');
-		expect(cleanAmountText(',5', '.', false, '5')).toBe('.5');
+		expect(cleanAmountText(',5', '.', false, '5')).toBe('0.5');
 		// Not a keystroke — a paste, an autofill, a keyboard's clipboard strip
 		// calling itself typing: still grouping.
 		expect(cleanAmountText('1,234', '.', false, '')).toBe('1234');
@@ -133,5 +151,11 @@ describe('the caret after a clean', () => {
 		expect(caretAfterClean('1.234,56', '1234.56', 8)).toBe(7);
 		expect(caretAfterClean('٤٫٥', '4.5', 3)).toBe(3);
 		expect(caretAfterClean('12', '12', 0)).toBe(0);
+	});
+
+	it('goes past the zero a bare mark is given, and stays put for a refused one', () => {
+		expect(caretAfterClean('.', '0.', 1)).toBe(2);
+		expect(caretAfterClean('08', '8', 2)).toBe(1);
+		expect(caretAfterClean('08', '8', 1)).toBe(0);
 	});
 });
