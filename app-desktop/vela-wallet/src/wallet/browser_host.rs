@@ -2462,6 +2462,155 @@ mod tests {
 
     /// The connection panel's network row: the site moves, the choice is
     /// kept per origin, and a chain the wallet does not have is not a choice.
+    /// Spec 100, the relay this page performs, against both real machines and
+    /// the real executors: the browser forwards the page's add, the sheet's
+    /// machine checks it (a fake network answers every probe), the person
+    /// approves, the save lands in the store, and the ending carried back
+    /// answers the page `null` with `chainChanged` — the network is in
+    /// Settings' list.
+    #[test]
+    fn a_pages_add_network_is_checked_saved_and_answered() {
+        use crate::core_host::{CoreHost, Pending};
+        use crate::resident::{Answer, Machine};
+        use vela_core::app::network_admin::{
+            Event as NetEvent, NetOperation, NetProviderKeys, NetRawChainData, NetShellResult,
+            NetStoredEndpoints, NetworkAdmin,
+        };
+
+        const CHAIN: u32 = 11_155_111;
+        const RPC: &str = "https://rpc.sepolia.example";
+
+        /// Answer every operation the way a reachable, compatible chain does;
+        /// the store writes and the ending go through the real executor.
+        fn settle(host: &mut CoreHost<NetworkAdmin>, mut pending: Vec<Pending<NetOperation>>) {
+            while let Some(Pending { id, operation }) = pending.pop() {
+                let result = match &operation {
+                    NetOperation::FetchChainInfo { chain_id } => NetShellResult::ChainInfo {
+                        chain_id: *chain_id,
+                        data: Some(NetRawChainData {
+                            chain_id: Some(CHAIN),
+                            name: Some("Ethereum Sepolia".to_owned()),
+                            native_currency_symbol: Some("ETH".to_owned()),
+                            rpc: vec![RPC.to_owned()],
+                            ..NetRawChainData::default()
+                        }),
+                    },
+                    NetOperation::ProbeRpc { url } => NetShellResult::Probed {
+                        url: url.clone(),
+                        reported_chain_id: Some(CHAIN),
+                        latency_ms: 20.0,
+                    },
+                    NetOperation::RpcGetCode { url, address } => NetShellResult::Code {
+                        url: url.clone(),
+                        address: address.clone(),
+                        code: Some("0x6080604052".to_owned()),
+                    },
+                    NetOperation::RpcCallP256 { url } => NetShellResult::P256Call {
+                        url: url.clone(),
+                        result: Some(format!("0x{}1", "0".repeat(63))),
+                    },
+                    other => match NetworkAdmin::perform(other) {
+                        Answer::Now(result) => result,
+                        _ => unreachable!("only local operations reach the executor here"),
+                    },
+                };
+                pending.extend(host.resolve(id, result));
+            }
+        }
+
+        storage::tests::with_temp_state("dbr-host-add-network", || {
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "a1",
+                "wallet_addEthereumChain",
+                json!([{"chainId":"0xaa36a7","chainName":"My Sepolia","rpcUrls":["https://rpc.invalid"]}]),
+            );
+            let order = out.into_iter().find_map(|next| match next {
+                Outbound::Signing(SigningOrder::AddNetwork {
+                    tab,
+                    id,
+                    origin,
+                    ask,
+                }) => Some((tab, id, origin, ask)),
+                _ => None,
+            });
+            let Some((tab, id, origin, ask)) = order else {
+                unreachable!("the add is forwarded to the sheet");
+            };
+            assert_eq!((tab.as_str(), id.as_str()), (TAB, "a1"));
+
+            let mut admin = CoreHost::<NetworkAdmin>::new();
+            let pending = admin.dispatch(NetEvent::Started);
+            for Pending { id, operation } in pending {
+                if matches!(operation, NetOperation::ReadStore) {
+                    admin.resolve(
+                        id,
+                        NetShellResult::StoreLoaded {
+                            custom_networks: Vec::new(),
+                            network_configs: Vec::new(),
+                            endpoints: NetStoredEndpoints::default(),
+                            provider_keys: NetProviderKeys::default(),
+                        },
+                    );
+                }
+            }
+            let pending = admin.dispatch(NetEvent::DappAddRequested {
+                tab,
+                id,
+                origin,
+                ask,
+            });
+            assert!(
+                !pending.iter().any(|p| matches!(&p.operation,
+                    NetOperation::ProbeRpc { url } if url.contains("rpc.invalid"))),
+                "the page's RPC is never asked for a chain the catalog knows"
+            );
+            settle(&mut admin, pending);
+            let sheet = admin.view().dapp_add;
+            assert_eq!(
+                sheet.as_ref().map(|add| (add.name.as_str(), add.can_add)),
+                Some(("Ethereum Sepolia", true))
+            );
+            let pending = admin.dispatch(NetEvent::DappAddApproved {
+                now_iso: "2026-10-04T12:00:00.000Z".to_owned(),
+            });
+            settle(&mut admin, pending);
+            assert!(admin.view().networks.iter().any(|n| n.chain_id == CHAIN));
+            assert!(
+                crate::executor::network_admin::read_store_custom_chain_ids().contains(&CHAIN),
+                "saved where Settings reads it"
+            );
+
+            let settled: Vec<_> = crate::executor::network_admin::take_dapp_add_settled()
+                .into_iter()
+                .filter(|settle| settle.id == "a1")
+                .collect();
+            assert_eq!(settled.len(), 1, "one ending");
+            let settle = settled.into_iter().next().unwrap();
+            let out = driver.dispatch(Event::AddNetworkAnswered {
+                tab: settle.tab,
+                id: settle.id,
+                outcome: settle.outcome,
+                now_ms: 0.0,
+            });
+            assert_eq!(
+                answers(&out),
+                vec![json!({"dir":"res","doc":"d1","id":"a1","result":null})]
+            );
+            let events: Vec<(Value, Value)> = delivered(&out)
+                .into_iter()
+                .filter(|(_, message)| message["dir"] == "evt")
+                .map(|(_, message)| (message["event"].clone(), message["data"].clone()))
+                .collect();
+            assert_eq!(events, vec![(json!("chainChanged"), json!("0xaa36a7"))]);
+            assert_eq!(driver.view().tabs[0].chain_id, CHAIN);
+        });
+    }
+
     #[test]
     fn a_person_can_pick_a_sites_network() {
         storage::tests::with_temp_state("dbr-host-pick", || {

@@ -100,6 +100,7 @@ use vela_core::app::contacts::{
     Event as ContactEvent,
 };
 use vela_core::app::dapp_browser::Event as DbrEvent;
+use vela_core::app::dapp_rpc::DappAddOutcome;
 use vela_core::app::display_currency::{DisplayCurrency, Event as CurrencyEvent};
 use vela_core::app::explore_sites::ExploreSites;
 use vela_core::app::fee_policy::Event as FeeEvent;
@@ -157,6 +158,16 @@ const SWITCHER_IDENTICON: f32 = 30.;
 /// The identicon viewer's artwork (`--size-identiconViewer`): big enough to
 /// read as a picture rather than an avatar.
 const VIEWER_IDENTICON: f32 = 160.;
+
+/// The add-network sheet a page opened (spec 100), from the resident.
+fn page_adding_network(
+    cx: &mut gpui::App,
+) -> Option<vela_core::app::network_admin::NetDappAddView> {
+    resident::resident::<NetworkAdmin>(cx)
+        .read(cx)
+        .view()
+        .dapp_add
+}
 
 /// What the gallery chip strip adds on top for the same reason. It is not
 /// centred, so this is the clearance itself, less the 8 the bar already had.
@@ -799,6 +810,13 @@ pub struct WalletPage {
     /// The consent sheet last seen, so the connection panel opens when a
     /// NEW question appears rather than on every answer the machine delivers.
     browser_consent: Option<(String, String)>,
+    /// The add-network sheet last seen (spec 100) — `(tab, id)` — for the
+    /// same reason.
+    browser_adding: Option<(String, String)>,
+    /// The `network_admin` resident this page watches for the add-network
+    /// sheet's endings (spec 100). A cleared store forgets the resident and a
+    /// new one boots, so the page re-watches whichever is current.
+    admin_watched: Option<gpui::EntityId>,
     /// The page's sinks are installed once per page, not once per frame.
     #[cfg(not(target_os = "linux"))]
     dapp_requests_armed: bool,
@@ -1371,6 +1389,8 @@ impl WalletPage {
             leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
             browser_consent: None,
+            browser_adding: None,
+            admin_watched: None,
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
             address_draft: None,
@@ -14947,7 +14967,93 @@ impl WalletPage {
             match order {
                 SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
                 SigningOrder::Cancel { id, .. } => self.cancel_dapp_signing(&id, cx),
+                // Spec 100: the add-network sheet is `network_admin`'s; this
+                // page only carries the request there and the ending back.
+                SigningOrder::AddNetwork {
+                    tab,
+                    id,
+                    origin,
+                    ask,
+                } => {
+                    let admin = self.network_admin(cx);
+                    admin.update(cx, |admin, cx| {
+                        admin.dispatch(
+                            NetEvent::DappAddRequested {
+                                tab,
+                                id,
+                                origin,
+                                ask,
+                            },
+                            cx,
+                        );
+                    });
+                }
+                SigningOrder::CancelAddNetwork { tab, id } => {
+                    let admin = self.network_admin(cx);
+                    admin.update(cx, |admin, cx| {
+                        admin.dispatch(NetEvent::DappAddCancelled { tab, id }, cx);
+                    });
+                }
             }
+        }
+        cx.notify();
+    }
+
+    /// The `network_admin` resident, watched (spec 100): its add-network
+    /// sheet opens the Connection column, and every ending it settles is
+    /// carried to the browser machine.
+    fn network_admin(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> gpui::Entity<resident::ResidentCore<NetworkAdmin>> {
+        let admin = resident::resident::<NetworkAdmin>(cx);
+        if self.admin_watched != Some(admin.entity_id()) {
+            self.admin_watched = Some(admin.entity_id());
+            cx.observe(&admin, Self::network_admin_changed).detach();
+        }
+        admin
+    }
+
+    /// What the add-network sheet decided (spec 100), acted on once: a NEW
+    /// sheet is put in front of somebody, and each ending goes to the browser
+    /// machine, which answers the page.
+    fn network_admin_changed(
+        &mut self,
+        admin: gpui::Entity<resident::ResidentCore<NetworkAdmin>>,
+        cx: &mut Context<Self>,
+    ) {
+        let adding = admin.read(cx).view().dapp_add.map(|add| (add.tab, add.id));
+        if adding.is_some() && adding != self.browser_adding {
+            self.panel = PanelId::Connection;
+        }
+        self.browser_adding = adding;
+        let settled = crate::executor::network_admin::take_dapp_add_settled();
+        if settled.is_empty() {
+            return;
+        }
+        let added = settled
+            .iter()
+            .any(|settle| matches!(settle.outcome, DappAddOutcome::Added { .. }));
+        let host = self.browser_host(cx);
+        host.update(cx, |host, cx| {
+            for settle in settled {
+                host.dispatch(
+                    DbrEvent::AddNetworkAnswered {
+                        tab: settle.tab,
+                        id: settle.id,
+                        outcome: settle.outcome,
+                        now_ms: crate::executor::now_ms(),
+                    },
+                    cx,
+                );
+            }
+            // The browser's list from what Settings now shows (the machine
+            // already added the chain itself; this keeps the host's copy true).
+            host.follow_networks(cx);
+        });
+        if added {
+            // A chain nobody has counted yet: the read Settings' Add makes.
+            crate::executor::balance_dashboard::refresh(cx);
         }
         cx.notify();
     }
@@ -15848,6 +15954,157 @@ impl WalletPage {
             )
     }
 
+    /// The add-network sheet a page opened (spec 100), when there is one —
+    /// only ever from a page this page's browser forwarded.
+    fn adding_network(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<vela_core::app::network_admin::NetDappAddView> {
+        self.browser_host.as_ref()?;
+        let admin = self.network_admin(cx);
+        admin.read(cx).view().dapp_add
+    }
+
+    /// The add-network sheet (spec 100): who asks, what would be added, the
+    /// check in Settings' words, and the answers. Every judgement is the
+    /// core's (`NetView.dapp_add`); `explore::add_network` picks the words.
+    fn add_network_body(
+        &mut self,
+        theme: &Theme,
+        add: &vela_core::app::network_admin::NetDappAddView,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let sheet = crate::explore::add_network::sheet(add, &self.loc);
+        let (_, _, letter) = signing_live::dapp_identity(&sheet.origin);
+        let dispatch = |event: NetEvent| {
+            move |this: &mut Self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>| {
+                let admin = this.network_admin(cx);
+                let event = event.clone();
+                admin.update(cx, |admin, cx| admin.dispatch(event, cx));
+                cx.notify();
+            }
+        };
+        let mut col = div().flex().flex_col().gap(px(16.)).child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(explore_components::site_avatar(
+                    letter,
+                    theme.accent,
+                    &explore_live::icons_of(&sheet.origin, None),
+                    40.,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(sheet.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .child(sheet.lead.clone()),
+                        ),
+                ),
+        );
+        let mut rows = div().flex().flex_col();
+        for (label, value) in &sheet.rows {
+            rows = rows.child(crate::settings::components::key_value_row(
+                theme,
+                &mut self.icons,
+                label.clone(),
+                value.clone(),
+                false,
+                false,
+                None,
+            ));
+        }
+        col = col.child(rows);
+        if let Some(text) = sheet.from_site.clone() {
+            col = col.child(crate::settings::components::callout(
+                theme,
+                &mut self.icons,
+                crate::settings::components::CalloutTone::Warning,
+                text,
+            ));
+        }
+        if let Some((tone, label)) = sheet.pill.clone() {
+            col = col.child(div().flex().child(status_pill(
+                theme,
+                &crate::settings::fixtures::pill(tone, label),
+            )));
+        }
+        if let Some(checks) = add
+            .compat
+            .as_ref()
+            .filter(|_| sheet.checks)
+            .and_then(|compat| settings_live::compat_checks(compat, &self.settings))
+        {
+            let title = self.settings.compatibility_check.clone();
+            col = col.child(check_list(theme, &mut self.icons, title, &checks));
+        }
+        if let Some(text) = sheet.note.clone() {
+            col = col.child(crate::settings::components::callout(
+                theme,
+                &mut self.icons,
+                crate::settings::components::CalloutTone::Warning,
+                text,
+            ));
+        }
+        if let Some(label) = sheet.add.clone() {
+            col = col.child(
+                div()
+                    .id("add-network-approve")
+                    .cursor_pointer()
+                    .on_click(cx.listener(dispatch(NetEvent::DappAddApproved {
+                        now_iso: crate::executor::now_iso(),
+                    })))
+                    .child(crate::flows::components::accent_button(theme, label)),
+            );
+        }
+        if let Some(label) = sheet.retry.clone() {
+            col = col.child(
+                div()
+                    .id("add-network-retry")
+                    .cursor_pointer()
+                    .on_click(cx.listener(dispatch(NetEvent::DappAddRetried)))
+                    .child(crate::flows::components::accent_button(theme, label)),
+            );
+        }
+        if let Some(label) = sheet.setup_tool.clone() {
+            col = col.child(
+                outline_button(
+                    ElementId::from("add-network-setup-tool"),
+                    theme,
+                    &mut self.icons,
+                    None,
+                    label,
+                )
+                .on_click(|_, _, cx| cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL)),
+            );
+        }
+        col.child(
+            outline_button(
+                ElementId::from("add-network-dismiss"),
+                theme,
+                &mut self.icons,
+                None,
+                sheet.dismiss.clone(),
+            )
+            .on_click(cx.listener(dispatch(NetEvent::DappAddDeclined))),
+        )
+    }
+
     /// DE3's third column — what a connected site can and cannot do.
     ///
     /// One panel, two moments: the site ASKING to connect, and the site that
@@ -15862,6 +16119,11 @@ impl WalletPage {
             .and_then(|host| host.read(cx).view.consent.clone())
         {
             return self.consent_body(theme, &consent, cx);
+        }
+        // Spec 100: a page asking to add a network — after a consent, which
+        // is the question the page usually needs answered first.
+        if let Some(add) = self.adding_network(cx) {
+            return self.add_network_body(theme, &add, cx);
         }
         // WHICH site, whether it is connected, and which chain it is on, from
         // the browser machine's view of the page on screen. The mock's
@@ -17136,7 +17398,8 @@ impl WalletPage {
                     self.identity.is_some(),
                     self.browser_host
                         .as_ref()
-                        .is_some_and(|host| host.read(cx).view.consent.is_some()),
+                        .is_some_and(|host| host.read(cx).view.consent.is_some())
+                        || (self.browser_host.is_some() && page_adding_network(cx).is_some()),
                     self.browsing && self.shown_tab_view(cx).is_some(),
                 ) =>
             {
