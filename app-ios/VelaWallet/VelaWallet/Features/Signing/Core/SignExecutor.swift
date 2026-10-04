@@ -349,6 +349,8 @@ final class SignExecutor {
             switch refused.failure {
             case .passkeyCancelled:
                 return ["type": "passkey_cancelled"]
+            case .signer(let kind, let message):
+                return Self.signerFailed(kind, message)
             case .trustedSigner(let notice):
                 ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
@@ -382,9 +384,25 @@ final class SignExecutor {
     }
 
     /// `SignSubmitOutcome::Failed`, whole: `refused` is the relay's refusal
-    /// (RJ3), `false` for everything else.
-    static func failed(_ message: String, refused: Bool = false) -> [String: Any] {
-        ["type": "failed", "message": message, "refused": refused]
+    /// (RJ3), `false` for everything else; `signer` the passkey classifier's
+    /// `FailureKind` when the ceremony is what failed (spec 099 R8), `nil`
+    /// when it is not the passkey's failure.
+    static func failed(
+        _ message: String, refused: Bool = false, signer: FailureKind? = nil
+    ) -> [String: Any] {
+        [
+            "type": "failed", "message": message, "refused": refused,
+            "signer": signer.map { $0.rawValue as Any } ?? NSNull(),
+        ]
+    }
+
+    /// The passkey ceremony failed (spec 099 R8): `failed` with the
+    /// classifier's kind, from which the core picks `signer_unavailable` /
+    /// `signer_not_discoverable` / `signer_failed`. A cancelled prompt is
+    /// `passkey_cancelled`, whichever way it arrives.
+    static func signerFailed(_ kind: FailureKind, _ message: String) -> [String: Any] {
+        guard kind != .cancelled else { return ["type": "passkey_cancelled"] }
+        return failed(message, signer: kind)
     }
 
     /// The record before the bytes (RJ1): tell the core the op is signed,
@@ -426,6 +444,7 @@ final class SignExecutor {
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .signer(let kind, let message) = refused.failure { return Self.signerFailed(kind, message) }
             if case .askerGone = refused.failure { return ["type": "asker_gone"] }
             if case .trustedSigner(let notice) = refused.failure {
                 ports.trustedSignerEnded(notice)

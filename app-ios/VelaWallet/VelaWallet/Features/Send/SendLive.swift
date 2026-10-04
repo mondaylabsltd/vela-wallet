@@ -1261,7 +1261,11 @@ enum SendLive {
         _ view: SendViewWire,
         display: WalletLive.Display,
         on model: SendReceiptModel,
-        loc: Loc
+        loc: Loc,
+        /// When the relay put this send on the network — the tracker's entry
+        /// for its op (`relay_sent_at_ms`, spec 099 R6). `nil`: not yet.
+        relaySentAtMs: Double? = nil,
+        nowMs: Double = Date().timeIntervalSince1970 * 1000
     ) -> SendReceiptModel {
         let token = view.selectedToken
         let symbol = token?.symbol ?? ""
@@ -1308,24 +1312,27 @@ enum SendLive {
                 captions = [loc.t("send.txRelayFunding")]
                 break
             }
+            // Spec 099 R6: the core's one countdown, from the relay's send.
+            // Before the relay has sent it the landing says the relay is
+            // sending it — never a chain's countdown over the relay's own
+            // queue, which read "taking longer than usual" within seconds.
+            let typicalS = view.receipt?.typicalInclusionS
+            let pace = LandingPaceWire.of(sentAtMs: relaySentAtMs, typicalS: typicalS, nowMs: nowMs)
+            if pace.waiting {
+                captions = [loc.t("send.txRelaySending")]
+                break
+            }
             captions = [loc.t("send.txWaitingConfirm")]
-            if let seconds = view.receipt?.typicalInclusionS {
+            if let seconds = typicalS {
                 let typical = loc.t("send.txTypicalTime", vars: [
                     "chainName": chain, "estSecs": String(seconds),
                 ])
-                // When the core says WHEN it was handed over, the screen counts
-                // (web `live-send.ts`, #199); the typical line leads the clock.
-                if let at = view.receipt?.submittedAtMs {
-                    eta = ReceiptEtaModel(
-                        submittedAtMs: at, typicalS: seconds, typicalLine: typical,
-                        // Filled with its own placeholder: the screen fills the number.
-                        remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
-                        elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
-                        slowLine: loc.t("send.txSlowConfirm")
-                    )
-                } else {
-                    captions.append(typical)
-                }
+                // The screen counts (web `live-send.ts`, #199); the typical
+                // line leads the clock.
+                eta = ReceiptEtaModel.counting(
+                    sentAtMs: relaySentAtMs, typicalS: seconds, typicalLine: typical, loc: loc, nowMs: nowMs
+                )
+                if eta == nil { captions.append(typical) }
             }
         case .confirmed:
             // Every coin the operation sent, as the core summed them (spec

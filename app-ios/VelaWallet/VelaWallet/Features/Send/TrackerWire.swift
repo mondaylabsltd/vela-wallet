@@ -47,6 +47,10 @@ struct TrackEntryWire: Decodable, Equatable {
     /// (spec 082 RA7, the 079 D2 explorer link). A link only: `txHash` above
     /// is the verdict's.
     var relayTxHash: String? = nil
+    /// When the tracker learned the relay had put the bundle on the network
+    /// (spec 099 R6). `nil` while the relay still holds it: the landing says
+    /// what the relay is doing and counts nothing down (`landingPace`).
+    var relaySentAtMs: Double? = nil
 
     /// This entry as the core's own `TrackEntryView` JSON — what
     /// `signEndingState` and `sendReceiptOutcomeOf` read.
@@ -61,6 +65,7 @@ struct TrackEntryWire: Decodable, Equatable {
             "submitted_at_ms": submittedAtMs.map { $0 as Any } ?? NSNull(),
             "outcome": outcome ?? "landing",
             "relay_tx_hash": relayTxHash.map { $0 as Any } ?? NSNull(),
+            "relay_sent_at_ms": relaySentAtMs.map { $0 as Any } ?? NSNull(),
         ])
     }
 }

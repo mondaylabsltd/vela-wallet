@@ -15,6 +15,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 /// The thirty mobile states — spec.md's matrix, stable across all four clients.
 enum FlowStateId: String, CaseIterable, Identifiable {
@@ -889,10 +890,43 @@ struct SendReceiptModel {
     var breakdown: [BreakdownRowModel] = []
 }
 
+/// The core's landing pace (`tx_tracker::LandingPace`, spec 099 R6): the
+/// countdown line and the ring, counted from when the relay put the bundle on
+/// the network — never from acceptance, which counted the relay's own queue
+/// and funding as the chain being slow.
+struct LandingPaceWire: Decodable, Equatable {
+    /// `waiting` (the relay has not sent it: no countdown, the landing says
+    /// what the relay is doing) · `none` (no usual time) · `remaining` ·
+    /// `elapsed` · `slow`. A string: a line this build has never heard of
+    /// draws no countdown rather than failing.
+    let line: String
+    /// What `remaining` / `elapsed` count.
+    let seconds: Int
+    /// How full the ring is; `nil` — the ring roams.
+    let progress: Double?
+
+    /// The relay has not put it on the network yet.
+    var waiting: Bool { line == "waiting" }
+    /// A countdown line is drawn.
+    var counts: Bool { line == "remaining" || line == "elapsed" || line == "slow" }
+
+    /// The core's `landingPace`. `typicalS` `nil` or out of range is "no usual
+    /// time".
+    static func of(sentAtMs: Double?, typicalS: Int?, nowMs: Double) -> LandingPaceWire {
+        let typical = typicalS.flatMap { UInt16(exactly: $0) }
+        let json = landingPace(sentAtMs: sentAtMs, typicalS: typical, nowMs: nowMs)
+        return (try? CoreJSON.decoder.decode(LandingPaceWire.self, from: Data(json.utf8)))
+            ?? LandingPaceWire(line: sentAtMs == nil ? "waiting" : "none", seconds: 0, progress: nil)
+    }
+}
+
 /// The submitted receipt's clock (web `SendReceipt.svelte`, spec 038 #D3).
-/// Only the number is the screen's; every sentence is filled here.
+/// Only the number is the screen's; every sentence is filled here, and WHICH
+/// sentence and how full the ring is are the core's `landingPace`.
 struct ReceiptEtaModel: Equatable {
-    let submittedAtMs: Double
+    /// When the relay put the bundle on the network (the tracker's
+    /// `relay_sent_at_ms`) — where the countdown starts.
+    let sentAtMs: Double
     let typicalS: Int
     /// "Gnosis typically confirms in ~15s" — already filled.
     let typicalLine: String
@@ -903,25 +937,45 @@ struct ReceiptEtaModel: Equatable {
     /// Past twice the typical time.
     let slowLine: String
 
-    func elapsedS(nowMs: Double) -> Int { max(0, Int((nowMs - submittedAtMs) / 1000)) }
-
-    /// Inside the typical time the line counts DOWN — "~9s remaining" is a
-    /// promise with an end, "6s elapsed" is a stopwatch.
-    func lines(nowMs: Double) -> [String] {
-        let elapsed = elapsedS(nowMs: nowMs)
-        let second = elapsed < typicalS
-            ? remainingTemplate.replacingOccurrences(of: "{{remaining}}", with: String(typicalS - elapsed))
-            : elapsed < typicalS * 2
-                ? elapsedTemplate.replacingOccurrences(of: "{{elapsed}}", with: String(elapsed))
-                : slowLine
-        return [typicalLine, second]
+    func pace(nowMs: Double) -> LandingPaceWire {
+        LandingPaceWire.of(sentAtMs: sentAtMs, typicalS: typicalS, nowMs: nowMs)
     }
 
-    /// The ring round the disc eases toward full and never gets there: ~70%
-    /// at the typical time, ~86% at twice it, a ceiling of 92%. Only the
-    /// confirmation closes it.
-    func progress(nowMs: Double) -> Double {
-        0.92 * (1 - exp(-1.4 * Double(elapsedS(nowMs: nowMs)) / Double(max(1, typicalS))))
+    /// Inside the typical time the line counts DOWN — "~9s remaining" is a
+    /// promise with an end, "6s elapsed" is a stopwatch. The core says which.
+    func lines(nowMs: Double) -> [String] {
+        let pace = pace(nowMs: nowMs)
+        switch pace.line {
+        case "remaining":
+            return [typicalLine, remainingTemplate.replacingOccurrences(of: "{{remaining}}", with: String(pace.seconds))]
+        case "elapsed":
+            return [typicalLine, elapsedTemplate.replacingOccurrences(of: "{{elapsed}}", with: String(pace.seconds))]
+        case "slow":
+            return [typicalLine, slowLine]
+        default:
+            return [typicalLine]
+        }
+    }
+
+    /// The ring round the disc, the core's curve: it eases toward full and
+    /// never gets there; only the confirmation closes it. `nil` — it roams.
+    func progress(nowMs: Double) -> Double? { pace(nowMs: nowMs).progress }
+
+    /// The receipt's clock for an op the relay has sent, or `nil` when there
+    /// is nothing to count (`landingPace` says `waiting` or `none`).
+    static func counting(
+        sentAtMs: Double?, typicalS: Int?, typicalLine: String?, loc: Loc, nowMs: Double
+    ) -> ReceiptEtaModel? {
+        guard let sentAtMs, let typicalS, let typicalLine,
+              LandingPaceWire.of(sentAtMs: sentAtMs, typicalS: typicalS, nowMs: nowMs).counts
+        else { return nil }
+        return ReceiptEtaModel(
+            sentAtMs: sentAtMs, typicalS: typicalS, typicalLine: typicalLine,
+            // Filled with its own placeholder: the screen fills the number.
+            remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
+            elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
+            slowLine: loc.t("send.txSlowConfirm")
+        )
     }
 }
 

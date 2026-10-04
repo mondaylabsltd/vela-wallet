@@ -7,7 +7,8 @@
 //  The drawn model keeps only its labels. The dApp is the **host** — guessing
 //  a pretty name from a domain is exactly the counterfeit route — the blocks
 //  are the core's reading, the fee is the fee policy's, and the slide opens
-//  only when all three gating machines say it may.
+//  only when the core's one gate says it may (`signConfirmState`, spec 099
+//  R7), with its line under it when it does not.
 //
 //  Ported from `app-android/.../feature/signing/SigningLive.kt` (spec 044
 //  T033), which is the desktop's `signing/live.rs`.
@@ -53,6 +54,9 @@ enum SigningLive {
         /// deployment could not be read) — the core's failure name for it,
         /// drawn as a failed quote is.
         var feeStartFailure: String?
+        /// The clock the landing's pace is read at (spec 099 R6); the screen
+        /// counts the seconds itself once a countdown runs.
+        var nowMs: Double = Date().timeIntervalSince1970 * 1000
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -217,7 +221,10 @@ enum SigningLive {
         fee: FeeViewWire?,
         context: Context,
         /// The sheet's speed control (spec 069); `nil` draws the fee alone.
-        speed: SendLive.SpeedInputs? = nil
+        speed: SendLive.SpeedInputs? = nil,
+        /// The core's gate over these views (`SigningController.confirmState`).
+        /// `nil` — nobody asked the core — keeps the slide shut.
+        gate: SignConfirmStateWire? = nil
     ) -> SigningModel {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
@@ -306,8 +313,7 @@ enum SigningLive {
                 ? nil
                 : (hint: s(loc, "slideToConfirm"),
                    action: confirmLabel(clear: clear, loc: loc),
-                   enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
-                                           speedTier: speed?.view.tier)),
+                   enabled: (gate ?? .shut).enabled),
             panelTitle: s(loc, "signatureRequest")
         )
         // Spec 079: the ✕, and — once approved — the send receipt in place of
@@ -316,6 +322,11 @@ enum SigningLive {
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
+        // Spec 099 R7: a shut slide says which part of the gate is shut — the
+        // core's line for it — never a dead control with no reason.
+        if !refused, let gate, !gate.enabled, let key = gate.key {
+            model.confirmBlockLine = loc.t(key)
+        }
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         model.dappOwn = own
@@ -333,33 +344,14 @@ enum SigningLive {
         return model
     }
 
-    // MARK: - The gate
+    // MARK: - What the fee row draws
 
-    /// The slide opens only when the request, the guard and the fee all say it
-    /// may — and only then.
-    ///
-    /// **An off-chain signature has no fee**, so the fee machine has nothing
-    /// to be ready about. Requiring its readiness there would make a
-    /// `personal_sign` unsignable forever.
-    ///
-    /// **The fee's say includes its speed** (spec 069): between a tap and that
-    /// speed's own figure landing, the core's `confirm_fee_ready` is still true
-    /// on the speed just left, and the slide must not sign it.
-    static func confirmEnabled(
-        sign: SignViewWire, guard guardView: GuardViewWire, fee: FeeViewWire?,
-        clear: ClearSigningViewWire, speedTier: String? = nil
-    ) -> Bool {
-        let feeReady = (fee?.confirmFeeReady ?? false) && !feeOfAnotherTier(fee, speedTier: speedTier)
-        // Spec 096 F7: and the request has been read — a slide that armed
-        // under "Loading…" signed what nobody had been shown yet.
-        let read = !clear.resolving && clear.surface != .loading
-        return sign.confirmGateOpen
-            && guardView.confirmAllowed
-            && (isOffChain(clear) || feeReady)
-            && read
-            && !sign.isSigning
-            && !sign.isSubmitting
-    }
+    // The GATE is the core's (`SignConfirmStateWire`, spec 099 R7): this file
+    // no longer decides whether the slide arms. The two readings below only
+    // pick what the fee row DRAWS — the "no network fee" line for a message,
+    // and no figure under a speed it was not priced at — and the core's gate
+    // applies the same two rules (`sign_confirm::off_chain`,
+    // `fee_of_another_tier`), which are not exported on their own.
 
     /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
     static func feeOfAnotherTier(_ fee: FeeViewWire?, speedTier: String?) -> Bool {
@@ -424,6 +416,9 @@ enum SigningLive {
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
             case .userRejected, .walletSwitchedChains: ""
+            // Spec 099 R8: the passkey failed — the signer layer's own line.
+            case .signerUnavailable, .signerNotDiscoverable, .signerFailed:
+                error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
             // The relay refused it (spec 082 RJ3): nothing was sent, and
             // "try again" would send the same refusal.
             default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
@@ -492,16 +487,19 @@ enum SigningLive {
         // reason, the sheet's own sentence for it. After spec 082 this is a
         // TRUE "not sent": a lost reply never reaches here (RA1). A relay's
         // refusal says so and never "try again" (RJ3, `failure_refused`).
+        // Spec 099 R8: a passkey that failed after the approval is the same
+        // ending — said in the signer's words, and tried again when the core
+        // says a retry can help (`failure_retryable`).
         if let error = sign.error, error.kind != .userRejected,
-           sign.pendingOpHash != nil || error.kind == .submitFailed {
+           sign.pendingOpHash != nil || error.kind == .submitFailed || error.kind.signerReasonKey != nil {
             // Spec 096 F8: the core holds the page's answer until this closes;
             // a failure that sent nothing may be tried again.
+            let reason = error.kind.signerReasonKey.map { loc.t($0) }
+                ?? (sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"))
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
-                captions: [
-                    summary, sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"),
-                ].compactMap { $0 },
+                captions: [summary, reason].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: !sign.failureRetryable,
                 retry: sign.failureRetryable ? loc.t("send.txRetryBtn") : nil
             )
@@ -537,23 +535,24 @@ enum SigningLive {
             let typicalLine = context.typicalS.map {
                 loc.t("send.txTypicalTime", vars: ["chainName": context.chainName, "estSecs": String($0)])
             }
-            var eta: ReceiptEtaModel?
-            if !still, let at = track?.submittedAtMs, let typical = context.typicalS, let typicalLine {
-                eta = ReceiptEtaModel(
-                    submittedAtMs: at, typicalS: typical, typicalLine: typicalLine,
-                    // Filled with its own placeholder: the screen fills the number.
-                    remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
-                    elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
-                    slowLine: loc.t("send.txSlowConfirm")
-                )
-            }
+            // Spec 099 R6: the core's one countdown, from when the relay put
+            // it on the network; before that the relay is sending it, and no
+            // chain's clock runs over the relay's own queue.
+            let pace = LandingPaceWire.of(
+                sentAtMs: track?.relaySentAtMs, typicalS: context.typicalS, nowMs: context.nowMs
+            )
+            let eta = still ? nil : ReceiptEtaModel.counting(
+                sentAtMs: track?.relaySentAtMs, typicalS: context.typicalS, typicalLine: typicalLine,
+                loc: loc, nowMs: context.nowMs
+            )
             return SendReceiptModel(
                 header: header, stage: .submitted,
                 title: loc.t("send.txSubmittedTitle"),
                 captions: [
                     summary,
-                    still ? s(loc, "stillConfirming") : loc.t("send.txWaitingConfirm"),
-                    eta == nil && !still ? typicalLine : nil,
+                    still ? s(loc, "stillConfirming")
+                        : pace.waiting ? loc.t("send.txRelaySending") : loc.t("send.txWaitingConfirm"),
+                    eta == nil && !still && !pace.waiting ? typicalLine : nil,
                 ].compactMap { $0 },
                 cta: closeBackground, ctaAccent: false, eta: eta
             )
@@ -675,6 +674,7 @@ enum SigningLive {
                 return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
             }
             let caption: String
+            var eta: ReceiptEtaModel?
             if feeHeld {
                 caption = loc.t("send.txHeldFees")
             } else if relayFunding && outcome != "unknown" {
@@ -684,14 +684,26 @@ enum SigningLive {
                 switch outcome {
                 case "unknown": caption = s(loc, "unknownOutcome")
                 case "still_confirming": caption = s(loc, "stillConfirming")
-                default: caption = loc.t("send.txWaitingConfirm")
+                default:
+                    // Spec 099 R6: counted from the relay's send, the core's
+                    // one countdown; before it the relay is sending it.
+                    let sentAt = track?.relaySentAtMs
+                    let pace = LandingPaceWire.of(sentAtMs: sentAt, typicalS: context.typicalS, nowMs: context.nowMs)
+                    caption = pace.waiting ? loc.t("send.txRelaySending") : loc.t("send.txWaitingConfirm")
+                    eta = ReceiptEtaModel.counting(
+                        sentAtMs: sentAt, typicalS: context.typicalS,
+                        typicalLine: context.typicalS.map {
+                            loc.t("send.txTypicalTime", vars: ["chainName": context.chainName, "estSecs": String($0)])
+                        },
+                        loc: loc, nowMs: context.nowMs
+                    )
                 }
             }
             return SendReceiptModel(
                 header: header, stage: .submitted,
                 title: loc.t("send.txSubmittedTitle"),
                 captions: [summary, caption].compactMap { $0 },
-                cta: loc.t("send.txCloseBackground"), ctaAccent: false
+                cta: loc.t("send.txCloseBackground"), ctaAccent: false, eta: eta
             )
         }
     }

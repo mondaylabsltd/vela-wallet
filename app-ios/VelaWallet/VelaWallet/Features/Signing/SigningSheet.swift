@@ -136,7 +136,19 @@ struct SigningSheet: View {
                     hint: confirm.hint, action: confirm.action,
                     enabled: confirm.enabled, onConfirm: onConfirm
                 )
-                .padding(.bottom, Tokens.Space.s16)
+                .padding(.bottom, model.confirmBlockLine == nil ? Tokens.Space.s16 : Tokens.Space.s0)
+            }
+            // Spec 099 R7: a shut slide says why — the core's line for the
+            // part of the gate that is shut, and the action that opens it.
+            if !confirm.enabled, let line = model.confirmBlockLine {
+                Text(verbatim: line)
+                    .typeRole(Typography.rowSub)
+                    .foregroundStyle(theme.fgMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Tokens.Space.s8)
+                    .padding(.bottom, Tokens.Space.s16)
+                    .accessibilityIdentifier("signing.confirmBlock")
             }
         }
     }

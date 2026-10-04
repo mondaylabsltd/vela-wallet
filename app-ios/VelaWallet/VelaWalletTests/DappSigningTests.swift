@@ -1137,24 +1137,14 @@ struct SigningLiveTests {
         #expect(target?.value == "USDC")
     }
 
-    /// F7: every machine says yes and the request is still being read — the
-    /// slide stays shut, under "Loading…".
+    /// F7: the request is still being read — the sheet says "Loading…". (The
+    /// slide staying shut under it is the core's gate since spec 099 R7:
+    /// `ConfirmGateTests`.)
     @Test func theSlideWaitsForTheReading() {
-        let openGate = SignViewWire(
-            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
-            pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
-            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
-            notice: nil, globalChainId: 56, blocked: nil
-        )
-        let readyFee = FeeViewWire(
-            busy: false, failed: nil, fee: nil, stale: false, feeToken: nil,
-            options: [], confirmFeeReady: true
-        )
         let reading = ClearSigningViewWire(
             resolving: true, resolved: false, result: nil, message: nil,
             surface: .loading, confirm: .confirm, blindTyped: nil, dangerHaptic: false
         )
-        #expect(!SigningLive.confirmEnabled(sign: openGate, guard: .empty, fee: readyFee, clear: reading))
         let drawn = SigningLive.blocks(clear: reading, to: nil, valueHex: nil, dataBytes: 0, context: bnbContext())
         #expect(drawn.count == 1)
         if case .sentence(let text, _)? = drawn.first {
@@ -1162,51 +1152,13 @@ struct SigningLiveTests {
         } else {
             Issue.record("loading is one neutral sentence")
         }
-        #expect(SigningLive.confirmEnabled(
-            sign: openGate, guard: .empty, fee: readyFee, clear: clear(surface: .clearSign)
-        ))
-    }
-
-    @Test func theSlideOpensOnlyWhenAllThreeMachinesAgree() {
-        let openGate = SignViewWire(
-            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
-            pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
-            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
-            notice: nil, globalChainId: 100, blocked: nil
-        )
-        let readyFee = FeeViewWire(
-            busy: false, failed: nil, fee: nil, stale: false, feeToken: nil,
-            options: [], confirmFeeReady: true
-        )
-        let unreadyFee = FeeViewWire(
-            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
-            options: [], confirmFeeReady: false
-        )
-        let blockingGuard = GuardViewWire(
-            surface: .approvalEditor, detected: nil, meta: GuardViewWire.empty.meta,
-            editor: nil, confirmAllowed: false, rewrittenParamsJson: nil, unlimitedConsented: false,
-            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
-        )
-
-        #expect(SigningLive.confirmEnabled(
-            sign: openGate, guard: .empty, fee: readyFee, clear: clear(surface: .clearSign)
-        ))
-        #expect(!SigningLive.confirmEnabled(
-            sign: openGate, guard: blockingGuard, fee: readyFee, clear: clear(surface: .clearSign)
-        ), "an unlimited approval with no cap chosen must hold the slide shut")
-        #expect(!SigningLive.confirmEnabled(
-            sign: openGate, guard: .empty, fee: unreadyFee, clear: clear(surface: .clearSign)
-        ))
-        // No fee, no waiting for one.
-        #expect(SigningLive.confirmEnabled(
-            sign: openGate, guard: .empty, fee: unreadyFee, clear: clear(surface: .messageSign)
-        ), "a personal_sign has no network fee and must not wait for a quote")
     }
 
     /// Spec 069: the sheet's fee card carries the send form's speed control,
     /// drawn by the same builder — and a fee left from the speed just walked
-    /// away from neither shows under the new one's name nor opens the slide,
-    /// though the core's own gate is still open on it (issue 681).
+    /// away from does not show under the new one's name (issue 681). That it
+    /// does not open the slide either is the core's gate (spec 099 R7,
+    /// `ConfirmGateTests`).
     @Test func theFeeCardCarriesTheSpeedControlAndNeverSignsAnotherSpeed() {
         let openGate = SignViewWire(
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
@@ -1266,11 +1218,9 @@ struct SigningLiveTests {
         #expect(feeValue(open) == "~" + (control?.options.first?.value ?? ""))
         #expect(control?.options[1].value == "…")
         #expect(control?.options.first?.gasPrice == "1 ~ 2 gwei")
-        #expect(open.confirm?.enabled == true)
 
         let picked = model(feeAtFast, speed("slow", picked: true, options: []))
         #expect(feeValue(picked) == loc.t("componentsUi.gas.estimating"))
-        #expect(picked.confirm?.enabled == false, "the slide never signs the speed walked away from")
 
         let feeAtSlow = FeeViewWire(
             busy: false, failed: nil, fee: estimate("slow", "1000000000000000"), stale: false,
@@ -1278,7 +1228,6 @@ struct SigningLiveTests {
         )
         let landed = model(feeAtSlow, speed("slow", picked: true, options: []))
         #expect(feeValue(landed)?.hasPrefix("~") == true)
-        #expect(landed.confirm?.enabled == true)
     }
 
     // -- Issue #262: the coin that pays -------------------------------------

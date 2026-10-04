@@ -45,12 +45,18 @@ struct ParityTests {
         return try! CoreJSON.decode(SendViewWire.self, from: object)
     }
 
-    private func receipt(_ view: SendViewWire) -> SendReceiptModel {
+    /// `relaySentAtMs`: when the tracker learned the relay sent it (spec 099
+    /// R6) — `nil`, the relay has not yet.
+    private func receipt(
+        _ view: SendViewWire, relaySentAtMs: Double? = nil, nowMs: Double = 1_000_000
+    ) -> SendReceiptModel {
         guard case .sendReceipt(let drawn) = WalletFlowFixtures.build(.sd4a, loc: loc).base else {
             Issue.record("sd4a is not a receipt")
             fatalError("unreachable")
         }
-        return SendLive.receipt(view, display: .usd, on: drawn, loc: loc)
+        return SendLive.receipt(
+            view, display: .usd, on: drawn, loc: loc, relaySentAtMs: relaySentAtMs, nowMs: nowMs
+        )
     }
 
     /// One sentence for three states told a person the phone was submitting
@@ -107,8 +113,9 @@ struct ParityTests {
         #expect(!funding.captions.contains(loc.t("send.txHeldFees")))
     }
 
-    /// #199: the core says WHEN the op was handed over; the receipt counts
-    /// against the chain's usual time instead of sitting on a still clock.
+    /// #199: the receipt counts against the chain's usual time instead of
+    /// sitting on a still clock — since spec 099 R6 from when the relay put
+    /// it on the network, by the core's one countdown (`landingPace`).
     @Test func aSubmittedReceiptCountsDownThenUpThenSaysItIsSlow() throws {
         func view(submittedAt: Any) throws -> SendViewWire {
             var object = try CoreJSON.object(SendCore().view())
@@ -119,19 +126,22 @@ struct ParityTests {
             ] as [String: Any]
             return try CoreJSON.decode(SendViewWire.self, from: object)
         }
-        let model = receipt(try view(submittedAt: 1_000_000))
+        let model = receipt(try view(submittedAt: 1_000_000), relaySentAtMs: 1_000_000)
         let eta = try #require(model.eta)
         #expect(model.captions == [loc.t("send.txWaitingConfirm")], "the typical line moves into the clock")
         #expect(eta.lines(nowMs: 1_004_000)[1] == loc.t("send.txRemaining", vars: ["remaining": "6"]))
         #expect(eta.lines(nowMs: 1_013_000)[1] == loc.t("send.txElapsed", vars: ["elapsed": "13"]))
         #expect(eta.lines(nowMs: 1_025_000)[1] == loc.t("send.txSlowConfirm"))
         #expect(eta.lines(nowMs: 1_000_000)[0].contains("10"))
-        #expect(eta.progress(nowMs: 1_010_000) > 0.6 && eta.progress(nowMs: 9_000_000) <= 0.92)
+        #expect((eta.progress(nowMs: 1_010_000) ?? 0) > 0.6 && (eta.progress(nowMs: 9_000_000) ?? 1) <= 0.92)
 
-        // Without the moment, the typical line is still said, as before.
-        let untimed = receipt(try view(submittedAt: NSNull()))
-        #expect(untimed.eta == nil)
-        #expect(untimed.captions.count == 2)
+        // Spec 099 R6: accepted, and the relay has not sent it yet — it says
+        // the relay is sending it, and no chain's clock runs over the relay's
+        // own queue (it read "taking longer than usual" within seconds).
+        let unsent = receipt(try view(submittedAt: 1_000_000), relaySentAtMs: nil, nowMs: 1_060_000)
+        #expect(unsent.eta == nil)
+        #expect(unsent.captions == [loc.t("send.txRelaySending")])
+        #expect(!unsent.captions.contains(loc.t("send.txSlowConfirm")))
     }
 
     /// #261: a split's receipt names its count and every person in it, from

@@ -13139,6 +13139,20 @@ public func browserAddressBar(shown: String?, pending: String?, failed: String?)
 })
 }
 /**
+ * Which browser tabs to let go of now (spec 099 R2): an `EngineInput` JSON in
+ * (tabs, selected, recent, busy, live, pressure), an `EnginePlan` JSON out
+ * (`{"suspend":[…]}`). `None` for input that does not read. See
+ * `vela_core::app::browser_tabs`.
+ */
+public func browserEnginePlan(inputJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_engine_plan(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The platform's raw load error → the one failure every shell shows, or
  * `None` when it is not a failure (a cancelled navigation). `platform` is
  * `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
@@ -13966,6 +13980,21 @@ public func keyMethodWords(method: String, chooser: String, unlock: String) -> K
 })
 }
 /**
+ * The landing's countdown (spec 099 R6), counted from when the relay put the
+ * bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
+ * JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.
+ */
+public func landingPace(sentAtMs: Double?, typicalS: UInt16?, nowMs: Double) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_landing_pace(
+        FfiConverterOptionDouble.lower(sentAtMs),
+        FfiConverterOptionUInt16.lower(typicalS),
+        FfiConverterDouble.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
  * How long a remote logo that failed to load stays failed: `None` for the
  * session (asking again will not help), `Some(ms)` for a miss that may heal.
  * With an HTTP `status` the miss is that status's class (404/410, 401/403,
@@ -14420,6 +14449,26 @@ public func sha256(data: Data) -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sha256(
         FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
+ * May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+ * clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
+ * no fee session) and the speed in force (`"fast"`…, `None` with no speed
+ * control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
+ * a view does not read, and the slide stays shut. See
+ * `vela_core::app::sign_confirm`.
+ */
+public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_confirm_state(
+        FfiConverterString.lower(signJson),
+        FfiConverterString.lower(guardJson),
+        FfiConverterString.lower(clearJson),
+        FfiConverterOptionString.lower(feeJson),
+        FfiConverterOptionString.lower(speedTier),uniffiCallStatus
     )
 })
 }
@@ -15610,6 +15659,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_address_bar() != 37746) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_engine_plan() != 22471) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 57968) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15817,6 +15869,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_key_method_words() != 64849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_landing_pace() != 32713) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_mark_miss_ttl_ms() != 58714) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15914,6 +15969,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 51832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {

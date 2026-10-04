@@ -679,6 +679,10 @@ final class SendExecutor {
         // sentence is its diagnostics line, as before 082.
         case .other(let message), .rejected(let message):
             return ["type": "other", "message": message.map { $0 as Any } ?? NSNull()]
+        // The send machine has no signer words of its own yet: the passkey's
+        // failure is its diagnostics line, as before 099.
+        case .signer(_, let message):
+            return ["type": "other", "message": message]
         // Nothing left the device (RA1): the generic refusal is TRUE now,
         // and the core's fixed sentence is the diagnostics line.
         case .notSent:

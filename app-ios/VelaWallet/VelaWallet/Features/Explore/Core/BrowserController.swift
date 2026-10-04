@@ -30,6 +30,19 @@
 //  on `onDisappear` cleared the connected chip on every trip to the wallet and
 //  never restored it.)
 //
+//  ## Which tabs keep their page is the core's (spec 099 FR-004)
+//
+//  Every open tab keeps its own `WKWebView` and its page keeps running when
+//  another tab is in front. How many may stay alive is not this file's call:
+//  after any tab change, any change of the browser machine's view and on the
+//  system's memory warning, it hands the core's `browserEnginePlan` the strip,
+//  the recency, the busy tabs and the engines it has, and lets go of exactly
+//  the ones the plan names. A suspended tab keeps its URL, title and last
+//  picture; the browser machine hears that its page went (the same two events
+//  a page that goes while its tab stays always meant); selecting it loads the
+//  page again, and the chrome says it was reloaded to save memory until the
+//  person leaves that tab.
+//
 //  ## The history wait is not superstition
 //
 //  `browser_history` publishes no `ready` flag, and a visit recorded before
@@ -39,6 +52,7 @@
 
 import Foundation
 import Observation
+import UIKit
 import WebKit
 import VelaCore
 
@@ -106,6 +120,22 @@ final class BrowserController {
     /// offered the wallet is the core's rule; this is only the fact it reads.
     private(set) var debugMode = false
 
+    /// Tabs whose engine `browserEnginePlan` let go of (spec 099 FR-004),
+    /// with their last picture for the switcher.
+    private var suspended: [String: UIImage?] = [:]
+    /// The tab whose page was loaded again because it had been suspended —
+    /// the status line says so until the person leaves it.
+    private(set) var reloadedTab: String?
+    /// A plan is being applied: the browser machine's view it changes does
+    /// not start another.
+    @ObservationIgnored private var planning = false
+    /// What each tab's status line last said when the person dismissed it
+    /// (or opened its details): gone until it would say something new.
+    private(set) var statusSeen: [String: String] = [:]
+    /// The tab whose status panel is open, as the browser machine was told.
+    private(set) var inspectedTab: String?
+    @ObservationIgnored private var memoryObserver: NSObjectProtocol?
+
     /// Visits recorded before the history store answered.
     private var queuedVisits: [[String: Any]] = []
     private var historyReady = false
@@ -113,10 +143,10 @@ final class BrowserController {
     // MARK: - Ports the app fills in
 
     struct Ports {
-        /// One call through the wallet's own pool — `["result": …]`,
-        /// `["error": …]`, or `nil` when no endpoint answered.
-        var poolCall: @MainActor (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
-        = { _, _, _, _ in nil }
+        /// One call through the wallet's own pool — the body, or why there is
+        /// none (every endpoint rate-limiting, or none answering).
+        var poolCall: @MainActor (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> DbrExecutor.Read
+        = { _, _, _, _ in .unanswered(rateLimited: false) }
         /// The transaction a user operation landed in (the relay's receipt).
         var resolveUserOp: @MainActor (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
         /// Open the signing sheet for a request. `nil` = there is no sheet to
@@ -158,12 +188,19 @@ final class BrowserController {
         dbrCore = CoreStore(
             bridge: DappBrowserCore(),
             perform: { [dbrExecutor] in await dbrExecutor.perform($0) },
-            onView: { [weak self] view in self?.dbr = view },
+            onView: { [weak self] view in self?.commitDbr(view) },
             onFault: { VelaLog.failure(.browser, kind: "dapp_browser_fault", VelaLog.error($0)) },
             neutralAnswer: { DbrExecutor.neutralAnswer($0) }
         )
 
         wirePorts()
+        // Spec 099 FR-004: the system asked for memory — every tab but the
+        // one in front and the busy ones lets its page go.
+        memoryObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.memoryWarning() }
+        }
     }
 
     private func wirePorts() {
@@ -172,7 +209,8 @@ final class BrowserController {
         dbrExecutor.ports = DbrExecutor.Ports(
             deliver: { [weak self] tab, json in self?.engines[tab]?.deliver(json) },
             poolCall: { [weak self] chainId, method, params, bundler in
-                await self?.ports.poolCall(chainId, method, params, bundler) ?? nil
+                guard let self else { return .unanswered(rateLimited: false) }
+                return await self.ports.poolCall(chainId, method, params, bundler)
             },
             resolveUserOp: { [weak self] chainId, hash in
                 await self?.ports.resolveUserOp(chainId, hash) ?? nil
@@ -390,7 +428,11 @@ final class BrowserController {
     }
 
     /// A tab's page as it was last seen (spec 079), for the switcher.
-    func snapshot(of tab: String) -> UIImage? { engines[tab]?.snapshot }
+    /// A suspended tab keeps the picture it had when its page was let go.
+    func snapshot(of tab: String) -> UIImage? {
+        if let engine = engines[tab] { return engine.snapshot }
+        return suspended[tab] ?? nil
+    }
 
     /// Photograph the page in front, then `done` — the tab switcher opens on
     /// a card that shows it. Never waits long: a snapshot that does not come
@@ -496,7 +538,7 @@ final class BrowserController {
     }
 
     func consentRejected() {
-        dbrCore.dispatch(CoreJSON.string(["type": "consent_rejected"]))
+        dbrCore.dispatch(CoreJSON.string(["type": "consent_rejected", "now_ms": now()]))
     }
 
     /// Disconnect one site — from the connection panel, the site menu or
@@ -536,6 +578,7 @@ final class BrowserController {
             "id": id,
             "payload": payload,
             "user_op_hash": userOpHash.map { $0 as Any } ?? NSNull(),
+            "now_ms": now(),
         ]))
     }
 
@@ -562,7 +605,105 @@ final class BrowserController {
     private func commitExplore(_ view: ExploreViewWire) {
         explore = view
         reconcile(view)
+        planEngines()
         flushReady()
+    }
+
+    private func commitDbr(_ view: DbrViewWire) {
+        dbr = view
+        // A request that settled may free a tab to be let go; one that opened
+        // keeps it (the core's `busy`).
+        planEngines()
+    }
+
+    // MARK: - Which engines stay (spec 099 FR-004)
+
+    /// The core's input: the strip, the tab in front, the recency, the busy
+    /// tabs and the engines that exist — `EngineInput`.
+    static func engineInput(
+        explore: ExploreViewWire, dbr: DbrViewWire, live: [String], pressure: Bool
+    ) -> [String: Any] {
+        [
+            "tabs": explore.tabs.map(\.id),
+            "selected": explore.selectedTab.map { $0 as Any } ?? NSNull(),
+            "recent": explore.recentTabs,
+            "busy": dbr.tabs.filter(\.busy).map(\.tab),
+            "live": live,
+            "pressure": pressure,
+        ]
+    }
+
+    /// The tabs the core's `browserEnginePlan` says to let go of now. Empty
+    /// when the core cannot read the input — keeping a page is the safe side.
+    static func enginePlan(_ input: [String: Any]) -> [String] {
+        guard let json = browserEnginePlan(inputJson: CoreJSON.string(input)),
+              let plan = try? CoreJSON.object(json)
+        else { return [] }
+        return plan["suspend"] as? [String] ?? []
+    }
+
+    /// The system asked the app to free memory.
+    func memoryWarning() {
+        VelaLog.notice(.browser, "memory warning live=\(engines.count)")
+        planEngines(pressure: true)
+    }
+
+    /// Ask the core which engines to let go of, and let go of exactly those.
+    private func planEngines(pressure: Bool = false) {
+        guard !planning, !engines.isEmpty else { return }
+        planning = true
+        defer { planning = false }
+        let input = Self.engineInput(
+            explore: explore, dbr: dbr, live: engines.keys.sorted(), pressure: pressure
+        )
+        for id in Self.enginePlan(input) { suspend(id) }
+    }
+
+    /// Let `id`'s page go and keep its tab: URL and title stay in the strip,
+    /// the picture stays for the switcher.
+    private func suspend(_ id: String) {
+        guard let engine = engines.removeValue(forKey: id) else { return }
+        if current === engine { current = nil }
+        suspended[id] = engine.snapshot
+        engine.tearDown()
+        VelaLog.notice(.browser, "suspend tab=\(id) (memory)")
+        // Its document is gone; its tab is not, and its next page must be
+        // answered — so not `tab_closed`, whose id is never a page again. A
+        // load of nothing that no document greets retires the page it
+        // replaces, exactly as a page that goes while its tab stays.
+        for event in Self.pageGoneEvents(tab: id, nowMs: now()) {
+            dbrCore.dispatch(CoreJSON.string(event))
+        }
+    }
+
+    /// What the browser machine hears when `tab`'s page goes and the tab
+    /// stays (the desktop's `page_gone_events`).
+    static func pageGoneEvents(tab: String, nowMs: Double) -> [[String: Any]] {
+        [
+            ["type": "navigation_started", "tab": tab, "url": "about:blank", "now_ms": nowMs],
+            ["type": "load_finished", "tab": tab, "url": "about:blank", "now_ms": nowMs],
+        ]
+    }
+
+    // MARK: - The tab's status (spec 099 FR-014)
+
+    /// The tab's status panel opened: the browser machine carries that tab's
+    /// whole record until it closes.
+    func inspectorOpened(tab: String) {
+        inspectedTab = tab
+        dbrCore.dispatch(CoreJSON.string(["type": "inspector_opened", "tab": tab]))
+    }
+
+    func inspectorClosed() {
+        guard inspectedTab != nil else { return }
+        inspectedTab = nil
+        dbrCore.dispatch(CoreJSON.string(["type": "inspector_closed"]))
+    }
+
+    /// The person dismissed (or opened) the line that said `seen` for `tab`:
+    /// it stays away until it would say something else.
+    func dismissStatus(tab: String, seen: String) {
+        statusSeen[tab] = seen
     }
 
     /// Make the engines match the tabs.
@@ -578,8 +719,17 @@ final class BrowserController {
             engines.removeValue(forKey: id)
             if current === engine { current = nil }
             engine.tearDown()
-            dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id]))
+            dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id, "now_ms": now()]))
         }
+        // A suspended tab that closed has no engine to tear down, but its
+        // record in the browser machine goes the same way.
+        for id in suspended.keys where !live.contains(id) {
+            suspended.removeValue(forKey: id)
+            dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id, "now_ms": now()]))
+        }
+        statusSeen = statusSeen.filter { live.contains($0.key) }
+        // The reloaded line lasts until the person leaves that tab.
+        if let reloadedTab, reloadedTab != view.selectedTab { self.reloadedTab = nil }
 
         defer { syncOnScreen() }
         guard let selected = view.selected, let url = selected.url, !url.isEmpty else {
@@ -602,32 +752,43 @@ final class BrowserController {
         let engine = makeEngine(id: selected.id)
         engine.setAppActive(appActive)
         current = engine
+        // Woken: its page was let go to save memory, and loads again — said,
+        // never silent (spec 099 FR-004).
+        if suspended.removeValue(forKey: selected.id) != nil {
+            reloadedTab = selected.id
+            VelaLog.notice(.browser, "wake tab=\(selected.id) reloaded (was suspended)")
+        }
         engine.load(url)
     }
 
     private func makeEngine(id: String) -> BrowserEngine {
         let engine = BrowserEngine(id: id, debugMode: debugMode)
         engine.onPageMessage = { [weak self] frameOrigin, isMainFrame, body in
-            self?.dbrCore.dispatch(CoreJSON.string([
+            guard let self else { return }
+            dbrCore.dispatch(CoreJSON.string([
                 "type": "page_message",
                 "tab": id,
                 "frame_origin": frameOrigin,
                 "is_main_frame": isMainFrame,
                 "message_json": body,
+                "now_ms": now(),
             ]))
         }
         engine.onNavigationStarted = { [weak self] url in
-            self?.dbrCore.dispatch(CoreJSON.string([
-                "type": "navigation_started", "tab": id, "url": url,
+            guard let self else { return }
+            dbrCore.dispatch(CoreJSON.string([
+                "type": "navigation_started", "tab": id, "url": url, "now_ms": now(),
             ]))
         }
         engine.onLoadFinished = { [weak self] url in
-            self?.dbrCore.dispatch(CoreJSON.string([
-                "type": "load_finished", "tab": id, "url": url,
+            guard let self else { return }
+            dbrCore.dispatch(CoreJSON.string([
+                "type": "load_finished", "tab": id, "url": url, "now_ms": now(),
             ]))
         }
         engine.onRendererGone = { [weak self] in
-            self?.dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": id]))
+            guard let self else { return }
+            dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": id, "now_ms": now()]))
         }
         engine.onMeta = { [weak self] url, title in
             self?.exploreCore.dispatch(CoreJSON.string([
@@ -700,23 +861,30 @@ extension BrowserController {
     func pageMessageForTesting(tab: String, frameOrigin: String, isMainFrame: Bool = true, body: String) {
         dbrCore.dispatch(CoreJSON.string([
             "type": "page_message", "tab": tab, "frame_origin": frameOrigin,
-            "is_main_frame": isMainFrame, "message_json": body,
+            "is_main_frame": isMainFrame, "message_json": body, "now_ms": now(),
         ]))
     }
 
     func navigationForTesting(tab: String, url: String, finished: Bool) {
         dbrCore.dispatch(CoreJSON.string([
             "type": finished ? "load_finished" : "navigation_started", "tab": tab, "url": url,
+            "now_ms": now(),
         ]))
     }
 
     func tabClosedForTesting(tab: String) {
-        dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": tab]))
+        dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": tab, "now_ms": now()]))
     }
 
     func rendererGoneForTesting(tab: String) {
-        dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": tab]))
+        dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": tab, "now_ms": now()]))
     }
+
+    /// The read deadline in place of the core's 30 s.
+    func readDeadlineForTesting(_ ms: Double?) { dbrExecutor.deadlineForTesting = ms }
+
+    /// The tabs whose engines were let go of.
+    var suspendedForTesting: Set<String> { Set(suspended.keys) }
 
     /// The engine a tab has, if one was made.
     func engineForTesting(_ tab: String) -> BrowserEngine? { engines[tab] }

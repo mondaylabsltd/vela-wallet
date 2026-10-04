@@ -42,6 +42,9 @@ final class FeeStore {
 
     /// The fee session in force — what the fee row and the fee-token sheet read.
     private(set) var view: FeeViewWire?
+    /// The same view as the core wrote it, for `signConfirmState` (spec 099
+    /// R7); `nil` while `view` is.
+    private(set) var viewJson: String?
     /// Told every view of the session in force — for an owner that reacts to
     /// one (the signing sheet re-asks a stale quote). Promotions included.
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
@@ -186,7 +189,8 @@ final class FeeStore {
             bridge: FeePolicyCore(),
             perform: { operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(key: key, view) },
-            onFault: { print("[vela-wallet] fee_policy fault: \($0)") }
+            onFault: { print("[vela-wallet] fee_policy fault: \($0)") },
+            keepsJson: true
         )
         return Session(key: key, core: core)
     }
@@ -208,6 +212,7 @@ final class FeeStore {
     /// readings behind it, so a retry measures again (issue 212).
     private func inForceChanged() {
         view = inForce.view
+        viewJson = inForce.view == nil ? nil : inForce.core.json
         if let view { onInForce?(view) }
         guard let view, !view.busy else { return }
         if view.failed != nil, let ask = inForce.ask {

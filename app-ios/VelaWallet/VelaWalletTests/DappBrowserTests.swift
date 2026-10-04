@@ -50,24 +50,32 @@ final class BrowserHarness {
     var cancels: [(tab: String, id: String)] = []
     var reads: [(chainId: Int, method: String, params: [Any], bundler: Bool)] = []
     var readAnswer: [String: Any]? = ["result": "0x10"]
+    /// With no answer: every endpoint said to slow down (spec 099 FR-009).
+    var readRateLimited = false
     var holdReads = false
     private var held: [CheckedContinuation<Void, Never>] = []
     var receiptLookups: [(chainId: Int, hash: String)] = []
     var receiptAnswer: String?
     var records: [[String: Any]] = []
+    /// The shell's clock every event carries (spec 099): `t0` until a test
+    /// moves it.
+    final class Clock { var ms = t0 }
+    let clock: Clock
 
     init(seed: (VelaStore) -> Void = { _ in }, signingSheet: Bool = true) {
         let suite = "vela.tests.dbr.\(UUID().uuidString)"
         UserDefaults().removePersistentDomain(forName: suite)
         store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
         seed(store)
-        browser = BrowserController(store: store, now: { t0 })
+        let clock = Clock()
+        self.clock = clock
+        browser = BrowserController(store: store, now: { clock.ms })
         browser.ports = BrowserController.Ports(
             poolCall: { [weak self] chainId, method, params, bundler in
-                guard let self else { return nil }
+                guard let self else { return .unanswered(rateLimited: false) }
                 reads.append((chainId, method, params, bundler))
                 if holdReads { await withCheckedContinuation { self.held.append($0) } }
-                return readAnswer
+                return readAnswer.map { .answered($0) } ?? .unanswered(rateLimited: readRateLimited)
             },
             resolveUserOp: { [weak self] chainId, hash in
                 self?.receiptLookups.append((chainId, hash))
@@ -644,7 +652,7 @@ struct DappBrowserTests {
     @Test func everyOperationIsAnswered() async throws {
         let suite = "vela.tests.dbr.ops.\(UUID().uuidString)"
         let executor = DbrExecutor(store: VelaStore(defaults: UserDefaults(suiteName: suite)!))
-        #expect(DbrExecutor.operations.count == 10)
+        #expect(DbrExecutor.operations.count == 11, "spec 099 added `log`")
         for name in DbrExecutor.operations {
             let reply = try CoreJSON.object(await executor.perform(["type": name]))
             #expect(!(reply["type"] as? String ?? "").isEmpty, "no answer for `\(name)`")
