@@ -67,5 +67,17 @@ The sheet is modal like the consent sheet (not swiped away); closing it by any m
 
 ## As built (2026-10-04)
 
-The code is the contract; nothing above changed while building it except as noted in
-[../results.md](../results.md).
+The code is the contract; these are the places it differs from, or adds to, the plan above.
+
+- **`added` waits for the store.** `DappAddApproved` emits `WriteCustomNetworks` and only once
+  the shell has answered it, `DappAddSettled{added}` (`Command::then`). The extension's worker
+  answers the page from the catalog the wallet publishes from the store; a settle that raced
+  the write would find the chain missing and answer 4902 over a network that was added.
+- **Busy.** The browser answers a second add -32002 itself; `network_admin` also answers a
+  second `DappAddRequested` from another `(tab, id)` with `DappAddSettled{busy}` (a second client
+  on the same machine), and ignores a repeat of the open one.
+- **Shells**: desktop keeps endings in a queue the executor fills (`take_dapp_add_settled`) —
+  the resident has no handle on the page; Android and iOS pass a callback into the executor; the
+  web has a listener module (`settings/core/dapp-add-settled.ts`).
+- **Ordering with the consent sheet.** Desktop and Android draw the consent first when both are
+  open; iOS keeps whichever sheet is up and shows the other when it closes.
