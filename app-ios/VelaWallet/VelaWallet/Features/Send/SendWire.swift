@@ -320,7 +320,7 @@ struct SendReceiptWire: Decodable, Equatable {
     /// haptic, no retry) and `not_sent` (the relay never had it). A string on
     /// purpose: a status this build has never heard of must not fail the view.
     let status: String
-    /// `fee_hold` / `fee_rejected`.
+    /// `fee_hold` / `fee_rejected` / `relay_funding`.
     let holdReason: String?
     /// `split` / `multi_select`; absent for a plain transfer.
     let kind: String?

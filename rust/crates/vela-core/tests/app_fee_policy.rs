@@ -3896,23 +3896,30 @@ fn every_wait_plus_its_re_quote_fits_in_fifteen_seconds() {
 }
 
 /// RJ13: the words under the fee row are the core's choice, not each shell's.
-/// A relay that cannot quote is "couldn't reach Vela"; a chain node that
-/// cannot be read names the chain (or the rate limit) — never Vela; a
-/// failure no network caused gets no reason line.
+/// Each relay failure says what happened — no price, a coin it cannot price,
+/// a simulation with no answer, a price past the chain's — never "check your
+/// connection" over a connection that works (the Arbitrum swap of
+/// 2026-10-03). A chain node that cannot be read names the chain (or the rate
+/// limit) — never Vela; a failure no network caused gets no reason line.
 #[test]
 fn the_fee_row_s_reason_is_the_core_s_key() {
     use vela_core::app::fee_policy::{failure_reason_key, FeeFailure};
-    for failure in [
-        FeeFailure::QuoteUnavailable,
-        FeeFailure::FeeTokenUnavailable,
-        FeeFailure::EstimateFailed,
-        FeeFailure::GasQuoteTooHigh,
+    for (failure, key) in [
+        (FeeFailure::QuoteUnavailable, "componentsUi.gas.reasonQuote"),
+        (
+            FeeFailure::FeeTokenUnavailable,
+            "componentsUi.gas.reasonFeeToken",
+        ),
+        (
+            FeeFailure::EstimateFailed,
+            "componentsUi.gas.reasonSimulation",
+        ),
+        (
+            FeeFailure::GasQuoteTooHigh,
+            "componentsUi.gas.reasonQuoteHigh",
+        ),
     ] {
-        assert_eq!(
-            failure_reason_key(failure),
-            Some("componentsUi.funding.denialNetworkError"),
-            "{failure:?}"
-        );
+        assert_eq!(failure_reason_key(failure), Some(key), "{failure:?}");
     }
     assert_eq!(
         failure_reason_key(FeeFailure::ChainRead { rate_limited: true }),

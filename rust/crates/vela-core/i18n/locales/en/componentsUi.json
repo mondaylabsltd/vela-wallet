@@ -1,37 +1,10 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "One quick step before you send",
-      "lead": "Your transactions run on a small {{symbol}} fee reserve. Add it once below — later transactions top it back up.",
-      "statusConfirming": "Your network fee is on its way — usually under a minute.",
-      "fundedTitle": "Network fee ready",
-      "amountLabel": "Amount to add",
-      "addressLabel": "Top-up address",
-      "networkHint": "Withdrawing from an exchange? Choose the {{network}} network.",
-      "openInWallet": "Pay from another wallet",
       "showQr": "Show QR code",
-      "hideQr": "Hide QR code",
-      "qrHint": "Scanning fills in the amount and network automatically",
       "autoCheckNote": "Continues automatically once it arrives",
-      "checkNow": "Check now",
       "checking": "Checking…",
-      "retryFree": "Retry free top-up",
-      "retrying": "Requesting…",
-      "detailsTitle": "Where does this money go?",
-      "detailsBody": "It goes into a dedicated network-fee reserve that Vela maintains for you — one per network. It fronts the on-chain cost of your transactions and is replenished from each transaction's fee. It can only be spent on network fees and can't be withdrawn.",
-      "continue": "Continue",
-      "cancel": "Not now",
-      "cancelDapp": "Cancel this transaction",
-      "denialDefault": "The free top-up didn't go through this time. Add it below, or try again later.",
-      "denialNotRecognized": "Brand-new wallets can take a few minutes to be recognized — we'll retry the free top-up automatically. Or add it below to send right now.",
-      "denialNonceExceeded": "The free top-up covers a wallet's first few transactions, and this wallet is past that. Add it below to continue.",
-      "denialTreasuryDepleted": "Vela's free allowance is temporarily used up. Add it below, or check back later.",
-      "denialBalanceTooLow": "The free top-up needs your wallet to already hold some {{symbol}}. Receive some first, or add it below from any wallet or exchange.",
-      "denialRateLimited": "You were topped up just moments ago. If it's still short, add the difference below.",
-      "denialTransferFailed": "The free top-up transfer failed. Retry, or add it below.",
-      "denialServiceUnavailable": "The free top-up service is having a moment — we'll retry automatically. Or add it below.",
-      "denialNetworkError": "Couldn't reach Vela — check your connection. We'll retry automatically.",
-      "denialPendingUnknown": "Couldn't confirm the last top-up — watching your balance now. If nothing arrives shortly, add it below."
+      "cancel": "Not now"
     },
     "bugReport": {
       "title": "Report a problem",
@@ -333,7 +306,11 @@
       "paidWith": "Paid with {{symbol}}",
       "rowBalance": "Balance",
       "rowSpend": "Est. cost",
-      "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail."
+      "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail.",
+      "reasonQuote": "Couldn't get a price from the relay. Retrying automatically.",
+      "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
+      "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
+      "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically."
     },
     "dock": {
       "receive": "Receive",
@@ -412,7 +389,6 @@
       "selfFundToggle": "Can't wait? Start it yourself",
       "customLead": "You added this network, so Vela's operator may have no way to hold gas on it — a local or private chain is nobody else's to fund. Starting its relayer is up to you.",
       "balanceLine": "Has {{balance}} of the {{floor}} {{symbol}} it needs",
-      "networkLine": "Network: {{network}}",
       "watching": "Checking every few seconds — closes by itself once funded.",
       "qrLabel": "Scan to send from another wallet"
     },

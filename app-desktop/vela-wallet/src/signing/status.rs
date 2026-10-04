@@ -330,10 +330,12 @@ pub fn approved(
                 user_op_hash,
                 outcome: TrackOutcome::Landing,
                 fee_held,
+                relay_funding,
             } if sign.pending_op_maybe_sent && !tracked(op, track) => SignEndingState::Following {
                 user_op_hash,
                 outcome: TrackOutcome::MaybeSent,
                 fee_held,
+                relay_funding,
             },
             other => other,
         };
@@ -470,15 +472,35 @@ fn drawn(
             user_op_hash,
             outcome,
             fee_held,
-        } => following(user_op_hash, *outcome, *fee_held, track, captions, clock, s),
+            relay_funding,
+        } => following(
+            user_op_hash,
+            *outcome,
+            Wait {
+                held: *fee_held,
+                funding: *relay_funding,
+            },
+            track,
+            captions,
+            clock,
+            s,
+        ),
     }
+}
+
+/// Why a followed operation waits, when the relay said: fees too high to
+/// send yet, or its own gas being topped up on the chain.
+#[derive(Clone, Copy)]
+struct Wait {
+    held: bool,
+    funding: bool,
 }
 
 /// An operation on its way, in the words its outcome stands for.
 fn following(
     op: &str,
     outcome: TrackOutcome,
-    held: bool,
+    wait: Wait,
     track: Option<&TrackEntryView>,
     mut captions: Vec<SharedString>,
     clock: &Clock,
@@ -506,13 +528,21 @@ fn following(
         s.tx_close_background.clone(),
         false,
     );
+    // The relay holds it while it tops up its gas (098 follow-up): that is
+    // the whole story — nothing is on the network, so no clock to count.
+    if wait.funding && outcome != TrackOutcome::Unknown {
+        captions.push(s.tx_relay_funding.clone());
+        out.captions = captions;
+        out.hash = Some((s.receipt_op_hash.clone(), op.to_owned()));
+        return out;
+    }
     match outcome {
         // Past the 24 h line: nobody asks any more, and nobody knows.
         TrackOutcome::Unknown => captions.push(s.unknown_outcome.clone()),
         // Past the window: handed to the network, not landed, still watched.
         TrackOutcome::StillConfirming => captions.push(s.still_confirming.clone()),
         TrackOutcome::Landing | TrackOutcome::Final | TrackOutcome::MaybeSent => {
-            captions.push(if held {
+            captions.push(if wait.held {
                 s.tx_held_fees.clone()
             } else {
                 s.tx_waiting_confirm.clone()
@@ -1454,8 +1484,24 @@ mod tests {
                 user_op_hash: OP.to_owned(),
                 outcome,
                 fee_held,
+                relay_funding: false,
             })
         };
+        // The relay topping up its gas (098 follow-up — Arbitrum read only
+        // "taking longer than usual"): its own line, and no clock counting
+        // down a confirmation nothing on the network is waiting for.
+        let funding = draw(SignEndingState::Following {
+            user_op_hash: OP.to_owned(),
+            outcome: TrackOutcome::Landing,
+            fee_held: false,
+            relay_funding: true,
+        });
+        assert_eq!(funding.captions, vec![s.tx_relay_funding.clone()]);
+        assert_eq!(funding.title, s.tx_submitted_title);
+        assert_eq!(
+            funding.hash,
+            Some((s.receipt_op_hash.clone(), OP.to_owned()))
+        );
         let maybe = following(TrackOutcome::MaybeSent, false);
         assert_eq!(maybe.title, s.tx_submitting);
         assert_eq!(maybe.captions, vec![s.maybe_sent.clone()]);

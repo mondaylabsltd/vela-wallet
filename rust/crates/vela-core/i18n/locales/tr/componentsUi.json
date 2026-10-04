@@ -1,37 +1,10 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "Göndermeden önce küçük bir adım",
-      "lead": "İşlemleriniz küçük bir {{symbol}} ücret rezerviyle çalışır. Aşağıdan bir kez ekleyin — sonraki işlemler rezervi kendiliğinden tamamlar.",
-      "statusConfirming": "Ağ ücretiniz yolda — genellikle bir dakikadan kısa sürer.",
-      "fundedTitle": "Ağ ücreti hazır",
-      "amountLabel": "Eklenecek tutar",
-      "addressLabel": "Yükleme adresi",
-      "networkHint": "Borsadan mı çekiyorsunuz? {{network}} ağını seçin.",
-      "openInWallet": "Başka bir cüzdandan öde",
       "showQr": "QR kodunu göster",
-      "hideQr": "QR kodunu gizle",
-      "qrHint": "Kodu taratmak tutarı ve ağı otomatik doldurur",
       "autoCheckNote": "Tutar ulaştığında otomatik olarak devam eder",
-      "checkNow": "Şimdi kontrol et",
       "checking": "Kontrol ediliyor…",
-      "retryFree": "Ücretsiz yüklemeyi tekrar dene",
-      "retrying": "İsteniyor…",
-      "detailsTitle": "Bu para nereye gidiyor?",
-      "detailsBody": "Vela'nın sizin için tuttuğu özel bir ağ ücreti rezervine gider — her ağ için bir tane. İşlemlerinizin zincir üstü maliyetini önden karşılar ve her işlemin ücretinden geri dolar. Yalnızca ağ ücretlerine harcanabilir ve geri çekilemez.",
-      "continue": "Devam et",
-      "cancel": "Şimdi değil",
-      "cancelDapp": "Bu işlemi iptal et",
-      "denialDefault": "Ücretsiz yükleme bu sefer gerçekleşmedi. Aşağıdan ekleyin veya daha sonra tekrar deneyin.",
-      "denialNotRecognized": "Yepyeni cüzdanların tanınması birkaç dakika sürebilir — ücretsiz yüklemeyi otomatik olarak tekrar deneyeceğiz. Ya da hemen göndermek için aşağıdan ekleyin.",
-      "denialNonceExceeded": "Ücretsiz yükleme bir cüzdanın ilk birkaç işlemini karşılar ve bu cüzdan o aşamayı geçti. Devam etmek için aşağıdan ekleyin.",
-      "denialTreasuryDepleted": "Vela'nın ücretsiz kotası geçici olarak tükendi. Aşağıdan ekleyin veya daha sonra tekrar bakın.",
-      "denialBalanceTooLow": "Ücretsiz yükleme için cüzdanınızda halihazırda bir miktar {{symbol}} olması gerekiyor. Önce biraz alın ya da herhangi bir cüzdan veya borsadan aşağıya ekleyin.",
-      "denialRateLimited": "Kısa süre önce yükleme yapıldı. Hâlâ yetersizse aradaki farkı aşağıdan ekleyin.",
-      "denialTransferFailed": "Ücretsiz yükleme transferi başarısız oldu. Tekrar deneyin veya aşağıdan ekleyin.",
-      "denialServiceUnavailable": "Ücretsiz yükleme hizmetinde geçici bir aksaklık var — otomatik olarak tekrar deneyeceğiz. Ya da aşağıdan ekleyin.",
-      "denialNetworkError": "Vela'ya ulaşılamadı — bağlantınızı kontrol edin. Otomatik olarak tekrar deneyeceğiz.",
-      "denialPendingUnknown": "Son yükleme doğrulanamadı — bakiyeniz izleniyor. Kısa süre içinde bir şey gelmezse aşağıdan ekleyin."
+      "cancel": "Şimdi değil"
     },
     "signing": {
       "loading": "Yükleniyor...",
@@ -330,7 +303,11 @@
       "paidWith": "{{symbol}} ile ödendi",
       "rowBalance": "Bakiye",
       "rowSpend": "Tahmini maliyet",
-      "feeCoinSpent": "Bu işlem {{sym}} bakiyenizi de kullanıyor. Ücret için yeterli kalmazsa işlem başarısız olur."
+      "feeCoinSpent": "Bu işlem {{sym}} bakiyenizi de kullanıyor. Ücret için yeterli kalmazsa işlem başarısız olur.",
+      "reasonQuote": "Relay'den fiyat alınamadı. Otomatik olarak yeniden deneniyor.",
+      "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
+      "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
+      "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor."
     },
     "dock": {
       "receive": "Al",
@@ -412,7 +389,6 @@
       "selfFundToggle": "Bekleyemiyor musun? Kendin başlat",
       "customLead": "Bu ağı sen ekledin; yerel ya da kurum içi bir zincirde Vela operatörünün gaz tutma imkânı olmayabilir. Relayer'ı başlatmak sana kalmış.",
       "balanceLine": "Gereken {{floor}} {{symbol}} içinden {{balance}} var",
-      "networkLine": "Ağ: {{network}}",
       "watching": "Birkaç saniyede bir kontrol ediliyor — bakiye gelince bu kendiliğinden kapanır.",
       "qrLabel": "Başka bir cüzdandan göndermek için tarayın"
     },

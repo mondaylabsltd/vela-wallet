@@ -2845,7 +2845,7 @@ mod tests_082 {
         // No tracker entry yet: following, landing.
         assert_eq!(
             state(&landed, None),
-            json!({"type": "following", "user_op_hash": LOCAL, "outcome": "landing", "fee_held": false})
+            json!({"type": "following", "user_op_hash": LOCAL, "outcome": "landing", "fee_held": false, "relay_funding": false})
         );
         assert_eq!(state(&landed, Some("null".into()))["type"], "following");
         // It landed and reverted: the W3 fault, now a cross.
@@ -3087,7 +3087,7 @@ mod tests_082 {
         );
         assert_eq!(
             fee_failure_reason_key("quote_unavailable".into()).as_deref(),
-            Some("componentsUi.funding.denialNetworkError")
+            Some("componentsUi.gas.reasonQuote")
         );
         assert_eq!(fee_failure_reason_key("missing_public_key".into()), None);
         assert_eq!(fee_failure_reason_key("bogus".into()), None);

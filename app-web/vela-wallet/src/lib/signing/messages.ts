@@ -243,6 +243,8 @@ export interface SigningMessages {
 		 */
 		stillConfirming: string;
 		unknownOutcome: string;
+		/** `send.txRelayFunding`: the relay is topping up its gas before it sends. */
+		relayFunding: string;
 		signed: string;
 		/**
 		 * Spec 082 RA10: the relay's reply was lost — `componentsUi.signing.

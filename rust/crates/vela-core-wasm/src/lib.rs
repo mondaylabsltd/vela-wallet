@@ -2431,7 +2431,7 @@ mod core_082_exports {
         );
 
         let state = |entry: Option<&str>| parse(&ok(sign_ending_state_inner(&ending, entry)));
-        let following_landing = json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "landing", "fee_held": false});
+        let following_landing = json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "landing", "fee_held": false, "relay_funding": false});
         assert_eq!(state(None), following_landing);
         assert_eq!(state(Some("")), following_landing);
         assert_eq!(state(Some("null")), following_landing);
@@ -2449,7 +2449,7 @@ mod core_082_exports {
         );
         assert_eq!(
             state(Some(&entry("pending", "maybe_sent", None))),
-            json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "maybe_sent", "fee_held": false})
+            json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "maybe_sent", "fee_held": false, "relay_funding": false})
         );
         assert!(sign_ending_state_inner("{\"type\":\"nope\"}", None).is_err());
         assert!(sign_ending_state_inner(&ending, Some("{}")).is_err());

@@ -303,6 +303,7 @@
   "txSubmitting": "Đang gửi lên mạng...",
   "txSubmitted": "Giao dịch đã được gửi lên mạng",
   "txSlowConfirm": "Lâu hơn bình thường, vui lòng đợi...",
+  "txRelayFunding": "Relay đang nạp thêm gas trên mạng này. Giao dịch của bạn sẽ được gửi ngay khi gas về.",
   "txWaitingConfirm": "Đang chờ blockchain xác nhận...",
   "txElapsed": "Đã trôi qua {{elapsed}}s — sắp xong",
   "txRemaining": "Còn ~{{remaining}}s",
@@ -1188,37 +1189,10 @@
  },
  "componentsUi": {
   "funding": {
-   "title": "Một bước nhỏ trước khi gửi",
-   "lead": "Giao dịch của bạn chạy trên một khoản dự phòng phí mạng nhỏ bằng {{symbol}}. Nạp một lần bên dưới — các giao dịch sau sẽ tự bù lại.",
-   "statusConfirming": "Phí mạng đang trên đường đến — thường dưới một phút.",
-   "fundedTitle": "Phí mạng đã sẵn sàng",
-   "amountLabel": "Số tiền cần nạp",
-   "addressLabel": "Địa chỉ nạp",
-   "networkHint": "Rút từ sàn giao dịch? Hãy chọn mạng {{network}}.",
-   "openInWallet": "Thanh toán từ ví khác",
    "showQr": "Hiện mã QR",
-   "hideQr": "Ẩn mã QR",
-   "qrHint": "Quét mã sẽ tự điền số tiền và mạng",
    "autoCheckNote": "Tự động tiếp tục khi tiền đến",
-   "checkNow": "Kiểm tra ngay",
    "checking": "Đang kiểm tra…",
-   "retryFree": "Thử lại nạp miễn phí",
-   "retrying": "Đang yêu cầu…",
-   "detailsTitle": "Khoản tiền này đi đâu?",
-   "detailsBody": "Nó được đưa vào một khoản dự phòng phí mạng riêng mà Vela duy trì cho bạn — mỗi mạng một khoản. Khoản này ứng trước chi phí trên chuỗi cho các giao dịch của bạn và được bù lại từ phí của mỗi giao dịch. Nó chỉ dùng để trả phí mạng và không thể rút ra.",
-   "continue": "Tiếp tục",
-   "cancel": "Để sau",
-   "cancelDapp": "Hủy giao dịch này",
-   "denialDefault": "Lần này nạp miễn phí chưa thành công. Bạn có thể nạp bên dưới, hoặc thử lại sau.",
-   "denialNotRecognized": "Ví mới tạo có thể cần vài phút để được ghi nhận — chúng tôi sẽ tự động thử lại nạp miễn phí. Hoặc nạp bên dưới để gửi ngay.",
-   "denialNonceExceeded": "Nạp miễn phí chỉ dành cho vài giao dịch đầu tiên của ví, và ví này đã vượt qua giai đoạn đó. Hãy nạp bên dưới để tiếp tục.",
-   "denialTreasuryDepleted": "Hạn mức miễn phí của Vela tạm thời đã hết. Bạn có thể nạp bên dưới, hoặc quay lại sau.",
-   "denialBalanceTooLow": "Nạp miễn phí yêu cầu ví đã có sẵn một ít {{symbol}}. Hãy nhận trước một ít, hoặc nạp bên dưới từ bất kỳ ví hay sàn giao dịch nào.",
-   "denialRateLimited": "Bạn vừa được nạp cách đây ít phút. Nếu vẫn thiếu, hãy nạp thêm phần chênh lệch bên dưới.",
-   "denialTransferFailed": "Chuyển khoản nạp miễn phí thất bại. Hãy thử lại, hoặc nạp bên dưới.",
-   "denialServiceUnavailable": "Dịch vụ nạp miễn phí đang gặp trục trặc — chúng tôi sẽ tự động thử lại. Hoặc bạn có thể nạp bên dưới.",
-   "denialNetworkError": "Không kết nối được với Vela — hãy kiểm tra mạng của bạn. Chúng tôi sẽ tự động thử lại.",
-   "denialPendingUnknown": "Chưa xác nhận được lần nạp trước — đang theo dõi số dư của bạn. Nếu một lúc nữa vẫn chưa đến, hãy nạp bên dưới."
+   "cancel": "Để sau"
   },
   "signing": {
    "loading": "Đang tải...",
@@ -1517,7 +1491,11 @@
    "paidWith": "Trả bằng {{symbol}}",
    "rowBalance": "Số dư",
    "rowSpend": "Chi phí ước tính",
-   "feeCoinSpent": "Giao dịch này cũng dùng {{sym}} của bạn. Nếu phần còn lại không đủ trả phí, giao dịch sẽ thất bại."
+   "feeCoinSpent": "Giao dịch này cũng dùng {{sym}} của bạn. Nếu phần còn lại không đủ trả phí, giao dịch sẽ thất bại.",
+   "reasonQuote": "Không lấy được báo giá từ relay. Đang tự động thử lại.",
+   "reasonFeeToken": "Relay hiện chưa định giá được coin này. Đang thử lại — hoặc trả phí bằng coin khác.",
+   "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
+   "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại."
   },
   "dock": {
    "receive": "Nhận",
@@ -1599,7 +1577,6 @@
    "selfFundToggle": "Không đợi được? Tự khởi động nó",
    "customLead": "Bạn đã tự thêm mạng này, nên bên vận hành Vela có thể không có cách nào giữ gas trên đó — một chuỗi nội bộ hoặc cục bộ không phải việc của người khác. Khởi động relayer là tùy bạn.",
    "balanceLine": "Đang có {{balance}} trên {{floor}} {{symbol}} cần thiết",
-   "networkLine": "Mạng: {{network}}",
    "watching": "Đang kiểm tra mỗi vài giây — mục này sẽ tự đóng khi đã có tiền.",
    "qrLabel": "Quét để gửi từ một ví khác"
   },

@@ -219,6 +219,7 @@ const RECEIPT = {
 	done: 'Done',
 	stillConfirming: 'Still confirming',
 	unknownOutcome: 'Unknown',
+	relayFunding: 'The relay is topping up its gas',
 	signed: 'Signed!',
 	maybeSent: 'May have been sent',
 	closeBackground: 'Close · keep running',

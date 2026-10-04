@@ -49,6 +49,7 @@
     "txSubmitting": "Envoi au réseau...",
     "txSubmitted": "Transaction envoyée au réseau",
     "txSlowConfirm": "Cela prend plus de temps que d'habitude, veuillez patienter...",
+    "txRelayFunding": "Le relais réapprovisionne son gas sur ce réseau. Il envoie votre transaction dès que c'est arrivé.",
     "txWaitingConfirm": "En attente de la confirmation de la blockchain...",
     "txElapsed": "{{elapsed}} s écoulées — bientôt terminé",
     "txRemaining": "~{{remaining}} s restantes",

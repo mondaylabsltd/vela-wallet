@@ -49,6 +49,7 @@
     "txSubmitting": "Mengirim ke jaringan...",
     "txSubmitted": "Transaksi dikirim ke jaringan",
     "txSlowConfirm": "Lebih lama dari biasanya, mohon tunggu...",
+    "txRelayFunding": "Relay sedang mengisi gas-nya di jaringan ini. Transaksi Anda dikirim begitu gas itu masuk.",
     "txWaitingConfirm": "Menunggu konfirmasi blockchain...",
     "txElapsed": "{{elapsed}} dtk berlalu — hampir selesai",
     "txRemaining": "~{{remaining}}s tersisa",

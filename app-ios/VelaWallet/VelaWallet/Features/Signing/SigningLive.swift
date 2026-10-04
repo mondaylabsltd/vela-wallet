@@ -670,13 +670,16 @@ enum SigningLive {
                 captions: [summary, s(loc, "refused")].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
-        case .following(let op, let outcome, let feeHeld):
+        case .following(let op, let outcome, let feeHeld, let relayFunding):
             if outcome == "maybe_sent" {
                 return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
             }
             let caption: String
             if feeHeld {
                 caption = loc.t("send.txHeldFees")
+            } else if relayFunding && outcome != "unknown" {
+                // The relay holds it while it tops up its gas (098 follow-up).
+                caption = loc.t("send.txRelayFunding")
             } else {
                 switch outcome {
                 case "unknown": caption = s(loc, "unknownOutcome")

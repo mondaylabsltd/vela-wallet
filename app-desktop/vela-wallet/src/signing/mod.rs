@@ -68,6 +68,8 @@ pub struct SigningStrings {
     /// Queued by the relay until network fees settle (`FeeHeld`) — said in
     /// place of the ordinary wait, as the send receipt says it.
     pub tx_held_fees: SharedString,
+    /// The relay is topping up its gas before it sends (098 follow-up).
+    pub tx_relay_funding: SharedString,
     /// Past the wait window: handed to the network, not landed, Vela keeps
     /// checking — never "failed" (the tracker's money rule).
     pub still_confirming: SharedString,
@@ -340,6 +342,7 @@ impl SigningStrings {
             tx_slow_confirm: loc.t("send.txSlowConfirm"),
             tx_close_background: loc.t("send.txCloseBackground"),
             tx_held_fees: loc.t("send.txHeldFees"),
+            tx_relay_funding: loc.t("send.txRelayFunding"),
             still_confirming: s("stillConfirming"),
             unknown_outcome: s("unknownOutcome"),
             maybe_sent: s("maybeSent"),
@@ -693,6 +696,7 @@ mod tests {
             s.tx_slow_confirm.as_ref(),
             s.tx_close_background.as_ref(),
             s.tx_held_fees.as_ref(),
+            s.tx_relay_funding.as_ref(),
             s.still_confirming.as_ref(),
             s.unknown_outcome.as_ref(),
             s.signed.as_ref(),

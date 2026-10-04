@@ -4292,6 +4292,33 @@ fn fee_hold_is_waiting_not_failure() {
     assert_eq!(view.tx_status, SendTxStatus::Confirmed);
 }
 
+/// The relay topping up its gas before it sends (098 follow-up): pending,
+/// its own words — and gone once the relay moves on, unlike the fee hold.
+#[test]
+fn the_relay_topping_up_its_gas_is_waiting_said_plainly_and_not_sticky() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(submitted(HASH));
+    settle_persistence(&mut sut);
+    sut.dispatch(Event::ReceiptUpdate {
+        user_op_hash: HASH.to_owned(),
+        outcome: SendReceiptOutcome::RelayFunding,
+    });
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::Submitted);
+    assert_eq!(receipt.hold_reason, Some(SendHoldReason::RelayFunding));
+
+    // Funded and sent: back to the ordinary words.
+    sut.dispatch(Event::ReceiptUpdate {
+        user_op_hash: HASH.to_owned(),
+        outcome: SendReceiptOutcome::Acknowledged,
+    });
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::Submitted);
+    assert_eq!(receipt.hold_reason, None);
+}
+
 #[test]
 fn raw_submit_errors_become_the_calm_semantic_key() {
     let mut sut = boot(vec![eth("2")]);
@@ -5672,6 +5699,10 @@ fn receipt_outcome_of_maps_every_tracker_status() {
         (
             track_entry(TrackStatus::FeeHeld, TrackOutcome::StillConfirming, None),
             Some(SendReceiptOutcome::FeeHeld),
+        ),
+        (
+            track_entry(TrackStatus::RelayFunding, TrackOutcome::Landing, None),
+            Some(SendReceiptOutcome::RelayFunding),
         ),
         (
             track_entry(TrackStatus::Pending, TrackOutcome::MaybeSent, None),

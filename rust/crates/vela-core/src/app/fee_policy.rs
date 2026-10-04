@@ -813,20 +813,27 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
 /// the failure is not the network's (a missing key, a calculation that cannot
 /// come out), and the row keeps its dash.
 ///
-/// - the relay could not quote → `componentsUi.funding.denialNetworkError`
-///   ("Couldn't reach Vela — …, we'll retry automatically");
+/// - the relay gave no price → `componentsUi.gas.reasonQuote`;
+/// - the relay cannot price the chosen fee coin →
+///   `componentsUi.gas.reasonFeeToken` (pay in another coin, or wait);
+/// - the relay's simulation gave no estimate → `componentsUi.gas.reasonSimulation`;
+/// - the relay's gas price is past the chain's by more than
+///   `MAX_QUOTE_VS_CHAIN_MULTIPLE` → `componentsUi.gas.reasonQuoteHigh`;
 /// - a chain node rate-limits the read → `home.balanceDetailStatusRetrying`;
 /// - a chain node cannot be reached → `explore.chainDown`, whose `{{chain}}`
 ///   the shell fills with the chain's name.
 ///
 /// G48: a public node's `eth_getCode` rate limit on Ethereum read "无法连接
-/// Vela 服务" with no fault anywhere near Vela.
+/// Vela 服务" with no fault anywhere near Vela. The four relay failures used to
+/// share that line too: a Uniswap swap on Arbitrum whose simulation was not
+/// answered read "check your connection" over a connection that was fine
+/// (2026-10-03). Each now says what happened.
 pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
     match failure {
-        FeeFailure::QuoteUnavailable
-        | FeeFailure::FeeTokenUnavailable
-        | FeeFailure::EstimateFailed
-        | FeeFailure::GasQuoteTooHigh => Some("componentsUi.funding.denialNetworkError"),
+        FeeFailure::QuoteUnavailable => Some("componentsUi.gas.reasonQuote"),
+        FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeToken"),
+        FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
+        FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
         FeeFailure::ChainRead {
             rate_limited: false,

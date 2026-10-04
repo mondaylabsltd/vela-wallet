@@ -49,6 +49,7 @@
     "txSubmitting": "Ağa gönderiliyor...",
     "txSubmitted": "İşlem ağa gönderildi",
     "txSlowConfirm": "Normalden uzun sürüyor, lütfen bekleyin...",
+    "txRelayFunding": "Relay bu ağdaki gas'ını dolduruyor. Gelir gelmez işleminizi gönderir.",
     "txWaitingConfirm": "Blok zinciri onayı bekleniyor...",
     "txElapsed": "{{elapsed}} sn geçti — neredeyse bitti",
     "txRemaining": "~{{remaining}} sn kaldı",

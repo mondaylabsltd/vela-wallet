@@ -36,6 +36,7 @@ const copy: DappReceiptCopy = {
 	done: 'Done',
 	stillConfirming: 'Not on-chain yet. Vela keeps checking — don’t send it again.',
 	unknownOutcome: 'Still unconfirmed after 24 hours.',
+	relayFunding: 'The relay is topping up its gas on this network.',
 	signed: 'Signed!',
 	maybeSent: "It may have been sent. Vela keeps checking — don't send it again.",
 	closeBackground: 'Close · keep running',
@@ -247,7 +248,7 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 		});
 		const following = (outcome: TrackEntryView['outcome']) =>
 			landingFromEnding(
-				{ type: 'following', user_op_hash: OP, outcome, fee_held: false },
+				{ type: 'following', user_op_hash: OP, outcome, fee_held: false, relay_funding: false },
 				OP,
 				false
 			).kind;
@@ -256,6 +257,30 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 		expect(following('still_confirming')).toBe('still_confirming');
 		expect(following('unknown')).toBe('unknown');
 		expect(following('maybe_sent')).toBe('maybe_sent');
+		// The relay holds it while it tops up its gas: that is the word, not
+		// the plain wait (098 follow-up — Arbitrum read "taking longer").
+		expect(
+			landingFromEnding(
+				{
+					type: 'following',
+					user_op_hash: OP,
+					outcome: 'landing',
+					fee_held: false,
+					relay_funding: true
+				},
+				OP,
+				false
+			)
+		).toEqual({ kind: 'relay_funding', opHash: OP });
+	});
+
+	it('a relay topping up its gas is said, and the receipt waits to be read', () => {
+		const state = { kind: 'relay_funding', opHash: OP } as const;
+		expect(dappReceiptModel(state, copy, () => null)).toMatchObject({
+			stage: 'submitted',
+			captions: [copy.relayFunding]
+		});
+		expect(autoCloseAfterMs(state)).toBeNull();
 	});
 
 	it('a lost reply reads "may have been sent" before the tracker has an entry', () => {

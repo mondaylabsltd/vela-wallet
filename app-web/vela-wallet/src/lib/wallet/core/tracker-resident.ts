@@ -119,6 +119,9 @@ export function outcomeOf(entry: TrackEntryView): SendReceiptOutcome | null {
 			return { type: 'failed', rejected: false, not_sent: true };
 		case 'fee_held':
 			return { type: 'fee_held' };
+		case 'relay_funding':
+			// The relay holds it while it tops up its gas: still pending.
+			return { type: 'relay_funding' };
 		case 'pending':
 		case 'unreachable':
 		case 'accepted_not_landed':
@@ -148,7 +151,11 @@ function deliver(view: TrackView): void {
 		watcher.lastSent = key;
 		// Still pending — only the wording changes (invariant ②) — so the watcher
 		// stays registered for the verdict that may follow.
-		if (outcome.type !== 'fee_held' && outcome.type !== 'acknowledged') {
+		if (
+			outcome.type !== 'fee_held' &&
+			outcome.type !== 'relay_funding' &&
+			outcome.type !== 'acknowledged'
+		) {
 			watchers.delete(entry.user_op_hash);
 		}
 		watcher.notify(outcome);

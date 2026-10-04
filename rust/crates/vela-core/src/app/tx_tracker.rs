@@ -145,6 +145,16 @@ pub fn receipt_interval_ms(in_window: bool, age_ms: f64) -> f64 {
 /// reimbursement — `FEE_HOLD_STAGE` (`tx-reconciler.ts:84`).
 pub const FEE_HOLD_STAGE: &str = "in_band_settlement_hold";
 
+/// The executor stage of an op waiting while the relay tops up the gas it
+/// pays with on the chain — the treasury → relayer transfer has to land
+/// before the bundle can be sent (vela-relay `execution.rs`, "waiting for
+/// relayer funding transaction confirmation").
+///
+/// Until it was read, a person watched "taking longer than usual" over an op
+/// the relay was deliberately holding — and on Arbitrum, where every top-up
+/// was refused (2026-10-03), over one it would never send.
+pub const RELAY_FUNDING_STAGE: &str = "funding";
+
 /// A relay `not_found` counts only from this age on (spec 082 RA4): before
 /// it, the relay may simply not have written the op down yet.
 pub const NOT_FOUND_GRACE_MS: f64 = 60_000.0;
@@ -856,6 +866,17 @@ impl Entry {
             Some((TrackLifecycle::Queued, Some(stage))) if stage == FEE_HOLD_STAGE
         )
     }
+
+    /// The relay's last word is that it is topping up its gas on the chain
+    /// ([`RELAY_FUNDING_STAGE`]). Live, not a window verdict: it says why the
+    /// op is waiting for exactly as long as the relay says so, and the next
+    /// status that moves on takes it away.
+    fn relay_funding(&self) -> bool {
+        matches!(
+            &self.last_status,
+            Some((TrackLifecycle::Queued, Some(stage))) if stage == RELAY_FUNDING_STAGE
+        )
+    }
 }
 
 #[derive(Default)]
@@ -891,6 +912,10 @@ pub enum TrackStatus {
     Pending,
     /// Queued until network fees settle — the relay sends it itself.
     FeeHeld,
+    /// Queued while the relay tops up the gas it pays with on this chain
+    /// ([`RELAY_FUNDING_STAGE`]) — it sends the op itself once that lands.
+    /// Pending; it lasts only as long as the relay says so.
+    RelayFunding,
     Confirmed,
     /// Dropped from the network / reverted. Terminal.
     Dropped,
@@ -1052,6 +1077,7 @@ impl App for TxTracker {
             .iter()
             .map(|(hash, entry)| {
                 let status = match &entry.status {
+                    EntryStatus::Pending if entry.relay_funding() => TrackStatus::RelayFunding,
                     EntryStatus::Pending if entry.window_closed => TrackStatus::AcceptedNotLanded,
                     EntryStatus::Pending => TrackStatus::Pending,
                     EntryStatus::FeeHeld => TrackStatus::FeeHeld,

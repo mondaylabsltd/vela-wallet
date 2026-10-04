@@ -303,6 +303,7 @@
   "txSubmitting": "Enviando a la red...",
   "txSubmitted": "Transacción enviada a la red",
   "txSlowConfirm": "Está tardando más de lo normal, espera un momento...",
+  "txRelayFunding": "El relay está recargando su gas en esta red. Enviará tu transacción en cuanto llegue.",
   "txWaitingConfirm": "Esperando la confirmación de la blockchain...",
   "txElapsed": "{{elapsed}}s transcurridos — ya casi",
   "txRemaining": "~{{remaining}}s restantes",
@@ -1191,37 +1192,10 @@
  },
  "componentsUi": {
   "funding": {
-   "title": "Un paso rápido antes de enviar",
-   "lead": "Tus transacciones funcionan con una pequeña reserva de {{symbol}} para comisiones de red. Agrégala una vez abajo — las transacciones siguientes la reponen solas.",
-   "statusConfirming": "Tu comisión de red va en camino — normalmente tarda menos de un minuto.",
-   "fundedTitle": "Comisión de red lista",
-   "amountLabel": "Monto a agregar",
-   "addressLabel": "Dirección de recarga",
-   "networkHint": "¿Retiras desde un exchange? Elige la red {{network}}.",
-   "openInWallet": "Pagar desde otra billetera",
    "showQr": "Mostrar código QR",
-   "hideQr": "Ocultar código QR",
-   "qrHint": "Al escanear se completan el monto y la red automáticamente",
    "autoCheckNote": "Continúa automáticamente en cuanto llegue",
-   "checkNow": "Verificar ahora",
    "checking": "Verificando…",
-   "retryFree": "Reintentar recarga gratuita",
-   "retrying": "Solicitando…",
-   "detailsTitle": "¿A dónde va este dinero?",
-   "detailsBody": "Va a una reserva dedicada para comisiones de red que Vela mantiene por ti — una por cada red. Con ella se adelanta el costo on-chain de tus transacciones y se repone con la comisión de cada una. Solo puede usarse para comisiones de red y no se puede retirar.",
-   "continue": "Continuar",
-   "cancel": "Ahora no",
-   "cancelDapp": "Cancelar esta transacción",
-   "denialDefault": "La recarga gratuita no se aplicó esta vez. Agrégala abajo o inténtalo más tarde.",
-   "denialNotRecognized": "Las billeteras recién creadas pueden tardar unos minutos en ser reconocidas — reintentaremos la recarga gratuita automáticamente. O agrégala abajo para enviar ahora mismo.",
-   "denialNonceExceeded": "La recarga gratuita cubre las primeras transacciones de una billetera, y esta ya pasó ese punto. Agrégala abajo para continuar.",
-   "denialTreasuryDepleted": "El cupo gratuito de Vela se agotó por el momento. Agrégala abajo o vuelve más tarde.",
-   "denialBalanceTooLow": "La recarga gratuita requiere que tu billetera ya tenga algo de {{symbol}}. Recibe un poco primero, o agrégala abajo desde cualquier billetera o exchange.",
-   "denialRateLimited": "Recibiste una recarga hace apenas un momento. Si aún falta, agrega la diferencia abajo.",
-   "denialTransferFailed": "La transferencia de la recarga gratuita falló. Reintenta o agrégala abajo.",
-   "denialServiceUnavailable": "El servicio de recarga gratuita está teniendo problemas — reintentaremos automáticamente. O agrégala abajo.",
-   "denialNetworkError": "No pudimos conectar con Vela — revisa tu conexión. Reintentaremos automáticamente.",
-   "denialPendingUnknown": "No pudimos confirmar la última recarga — estamos vigilando tu saldo. Si no llega pronto, agrégala abajo."
+   "cancel": "Ahora no"
   },
   "signing": {
    "loading": "Cargando...",
@@ -1520,7 +1494,11 @@
    "paidWith": "Pagado con {{symbol}}",
    "rowBalance": "Saldo",
    "rowSpend": "Costo est.",
-   "feeCoinSpent": "Esta transacción también usa tu {{sym}}. Si no queda suficiente para la comisión, fallará."
+   "feeCoinSpent": "Esta transacción también usa tu {{sym}}. Si no queda suficiente para la comisión, fallará.",
+   "reasonQuote": "No se pudo obtener un precio del relay. Reintentando automáticamente.",
+   "reasonFeeToken": "El relay no puede cotizar esta moneda por ahora. Reintentando; también puedes pagar con otra moneda.",
+   "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
+   "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente."
   },
   "dock": {
    "receive": "Recibir",
@@ -1602,7 +1580,6 @@
    "selfFundToggle": "¿No puedes esperar? Inícialo tú",
    "customLead": "Tú agregaste esta red, así que el operador de Vela quizá no tenga forma de tener gas ahí — una cadena local o interna no le toca a nadie más. Iniciar su relayer depende de ti.",
    "balanceLine": "Tiene {{balance}} de los {{floor}} {{symbol}} que necesita",
-   "networkLine": "Red: {{network}}",
    "watching": "Se revisa cada pocos segundos; esto se cierra solo en cuanto tenga fondos.",
    "qrLabel": "Escanea para enviar desde otra billetera"
   },
