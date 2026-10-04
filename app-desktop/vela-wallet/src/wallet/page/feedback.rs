@@ -366,6 +366,26 @@ impl WalletPage {
         } else {
             Vec::new()
         };
+        // Spec 099 FR-014: the browser tab's latest trouble, by layer and
+        // reason — the report's "recent failures" line, never a page's params.
+        let failures = self
+            .shown_tab_view(cx)
+            .and_then(|tab| tab.last_failure)
+            .map(|note| {
+                vec![format!(
+                    "dapp: {}/{} ({})",
+                    serde_json::to_value(note.layer)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap_or_default(),
+                    serde_json::to_value(note.reason)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap_or_default(),
+                    note.method
+                )]
+            })
+            .unwrap_or_default();
         bug_report::DeviceFacts {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             commit: env!("VELA_GIT_COMMIT").to_owned(),
@@ -373,7 +393,7 @@ impl WalletPage {
             os: bug_report::desktop_os(),
             language: self.locale.to_string(),
             unreachable,
-            failures: Vec::new(),
+            failures,
         }
     }
 
