@@ -1330,7 +1330,11 @@ enum SigningLive {
                         "~\(SendLive.feeFromBase($0, decimals: option.decimals)) \(option.symbol)"
                     } ?? "—",
                     selected: option.selected,
-                    disabled: option.insufficient
+                    disabled: option.insufficient,
+                    // Issue #408: a refused coin says why — the core's numbers.
+                    reason: option.insufficient ? option.short.map {
+                        context.loc.t("componentsUi.gas.rowShort", vars: ["need": $0.need, "have": $0.have])
+                    } : nil
                 )
             })
             : nil
@@ -1338,7 +1342,12 @@ enum SigningLive {
         // pay this fee — the send form's own sentence (#211), about the same
         // shortfall. A dark slide with no reason is issue 204.
         var warning: String?
-        if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
+        if let fee, fee.fee != nil, fee.noCoinPays {
+            // Issue #408: and not one coin on offer can pay — the core's
+            // verdict, said as that rather than naming the coin in force
+            // ("Insufficient ETH" over a wallet whose USDT was short too).
+            warning = context.loc.t("componentsUi.gas.noCoinPays")
+        } else if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
         } else if let fee, !fee.busy, fee.failed == nil,

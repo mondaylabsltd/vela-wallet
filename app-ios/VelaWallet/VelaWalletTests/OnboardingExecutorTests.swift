@@ -39,9 +39,34 @@ struct OnboardingExecutorTests {
     /// fall through to `accounts_unavailable` and sign the device out.
     ///
     /// Eight since 2026-09-23: `remove_account`, one wallet leaving a device
-    /// that keeps the others.
-    @Test func sessionOperationsAreAllEight() {
-        #expect(SessionExecutor.operations.count == 8)
+    /// that keeps the others. Eleven since issue #409: the landing watch's
+    /// outbox read, its wait on a registry task, and the removal of a record
+    /// whose landing was confirmed.
+    @Test func sessionOperationsAreAllEleven() {
+        #expect(SessionExecutor.operations.count == 11)
+    }
+
+    /// Issue #409: a one-key create is answered at the registry's 202 with the
+    /// task it was queued under; a multi-key create and every re-publish still
+    /// wait for the landing; a group already on-chain is landed either way.
+    @Test func aPublishThatAskedIsAnsweredOnAcceptance() throws {
+        let pending = RegisterAck(id: "t1", status: "pending")
+        #expect(try OnboardingExecutor.afterRegister(pending, answerWhenAccepted: true) == .accepted("t1"))
+        #expect(try OnboardingExecutor.afterRegister(pending, answerWhenAccepted: false) == .awaitLanding("t1"))
+        for asked in [true, false] {
+            #expect(
+                try OnboardingExecutor.afterRegister(RegisterAck(id: nil, status: "done"), answerWhenAccepted: asked)
+                    == .landed
+            )
+            // A 202 without a task leaves nothing to confirm the landing by.
+            #expect(throws: RegistryFailure.self) {
+                try OnboardingExecutor.afterRegister(RegisterAck(id: nil, status: "pending"), answerWhenAccepted: asked)
+            }
+        }
+        let accepted = OnboardingExecutor.publishedResult(taskId: "t1")
+        #expect(type(of: accepted) == "registry_accepted")
+        #expect(accepted["task_id"] as? String == "t1")
+        #expect(type(of: OnboardingExecutor.publishedResult(taskId: nil)) == "registry_published")
     }
 
     /// `network` is the one bit of classification only a shell can supply: a

@@ -762,7 +762,6 @@
    "headerCreated": "Dompet Dibuat",
    "headerDefault": "Buat Dompet",
    "headerSyncFailed": "Sinkronisasi Lintas Perangkat",
-   "identiconHint": "Pola identitas yang dihasilkan dari alamat",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Terikat perangkat",
    "keyHardwareBadge": "Perangkat keras",
@@ -796,7 +795,6 @@
    "pinLabel": "PIN",
    "pinRejected": "PIN itu ditolak. Ketika percobaan habis, kunci mengunci dirinya sendiri dan hanya reset yang membukanya — dan reset menghapus semua passkey di dalamnya.",
    "pinTitle": "Masukkan PIN kunci keamanan Anda",
-   "progressMeterLabel": "Menurunkan alamat",
    "progressSubtitle": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
    "progressTitle": "Sedang membuat dompet",
    "providerGeneric": "Ponsel atau tablet",
@@ -824,7 +822,8 @@
    "stepKeysLabel": "Kunci",
    "stepNamingDetail": "Beri nama dompet Anda. Nama ikut tertulis on-chain bersama kunci publik Anda.",
    "stepNamingLabel": "Nama",
-   "successMessage": "Salah satu dari {{count}} kunci bisa masuk sendiri. Kontrak di-deploy pada transaksi pertama.",
+   "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
+   "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successTitle": "Dompet dibuat",
    "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
    "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
@@ -838,8 +837,7 @@
    "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
    "touchTitle": "Sentuh kunci keamanan Anda",
    "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
-   "verifyStuckHint": "Verifikasi terus gagal? Perangkat Anda mungkin tidak menyimpan passkey ini dengan benar. Aman untuk memulai ulang — belum ada yang dibuat.",
-   "walletAddressLabel": "Alamat dompet"
+   "verifyStuckHint": "Verifikasi terus gagal? Perangkat Anda mungkin tidak menyimpan passkey ini dengan benar. Aman untuk memulai ulang — belum ada yang dibuat."
   },
   "login": {
    "alertNotSupportedTitle": "Tidak Didukung",
@@ -1242,7 +1240,6 @@
    "batchSubtitle": "{{count}} transaksi, ditandatangani bersamaan",
    "batchCall": "Panggilan kontrak",
    "balanceUnderfundedNative": "{{symbol}} tidak cukup untuk menutup transfer ini — kemungkinan besar akan gagal on-chain.",
-   "gasEstimateFailed": "Biaya gas tidak dapat diperkirakan — pengiriman bisa gagal atau habis waktu. Ketuk biaya di atas untuk mencoba lagi.",
    "submitted": "Terkirim — menunggu konfirmasi",
    "historicalNote": "Tanda tangan sebelumnya — persis seperti yang Anda setujui.",
    "close": "Tutup",
@@ -1507,7 +1504,9 @@
    "reasonQuote": "Tidak bisa mendapatkan harga dari relay. Mencoba lagi otomatis.",
    "reasonFeeToken": "Relay belum bisa memberi harga untuk koin ini. Mencoba lagi — atau bayar biaya dengan koin lain.",
    "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
-   "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis."
+   "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
+   "rowShort": "Perlu ~{{need}}, ada {{have}}",
+   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
   },
   "dock": {
    "receive": "Terima",
@@ -1914,6 +1913,8 @@
   "newTab": "Tab baru",
   "startPage": "Halaman awal",
   "closeAllTabs": "Tutup semua tab",
+  "closeOtherTabs": "Tutup tab lain",
+  "closeTabsToRight": "Tutup tab di kanan",
   "closeTab": "Tutup tab",
   "openTabs": "{{n}} tab terbuka",
   "addToFavorites": "Tambahkan ke favorit",

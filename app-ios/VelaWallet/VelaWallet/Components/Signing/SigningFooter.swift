@@ -76,35 +76,50 @@ struct SigningFeeView: View {
                 ForEach(selector.options) { option in
                     // A coin that cannot pay is DRAWN and not pickable: hiding
                     // it would be a second filter beside the core's own.
-                    Button { onPick(option.id) } label: {
-                        HStack(spacing: Tokens.Space.s12) {
-                            LetterAvatarView(letter: option.mark.letter, tint: option.mark.tint,
-                                             size: Tokens.Space.s32)
-                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                                Text(verbatim: option.name)
-                                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                        Button { onPick(option.id) } label: {
+                            HStack(spacing: Tokens.Space.s12) {
+                                LetterAvatarView(letter: option.mark.letter, tint: option.mark.tint,
+                                                 size: Tokens.Space.s32)
+                                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                                    Text(verbatim: option.name)
+                                        .typeRole(Typography.rowTitle.scaled(textScale))
+                                        .foregroundStyle(theme.fgBase)
+                                    Text(verbatim: option.balance)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.fgMuted)
+                                }
+                                Spacer(minLength: Tokens.Space.s8)
+                                Text(verbatim: option.fee)
+                                    .typeRole(Typography.label.scaled(textScale))
                                     .foregroundStyle(theme.fgBase)
-                                Text(verbatim: option.balance)
-                                    .typeRole(Typography.rowSub.scaled(textScale))
-                                    .foregroundStyle(theme.fgMuted)
+                                if option.selected {
+                                    LucideIcon(.check, size: LucideIconSize.checkmark)
+                                        .foregroundStyle(theme.accentBase)
+                                }
                             }
-                            Spacer(minLength: Tokens.Space.s8)
-                            Text(verbatim: option.fee)
-                                .typeRole(Typography.label.scaled(textScale))
-                                .foregroundStyle(theme.fgBase)
-                            if option.selected {
-                                LucideIcon(.check, size: LucideIconSize.checkmark)
-                                    .foregroundStyle(theme.accentBase)
-                            }
+                            .padding(Tokens.Space.s8)
+                            .background(option.selected ? theme.bgRaised : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                            .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                         }
-                        .padding(Tokens.Space.s8)
-                        .background(option.selected ? theme.bgRaised : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
-                        .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                        .buttonStyle(.plain)
+                        .disabled(option.disabled)
+                        .opacity(option.disabled ? 0.45 : 1)
+                        // Issue #408: why a greyed coin cannot pay, under its row
+                        // and at full strength — the dimming is not a reason. Set
+                        // in past the mark, under the name.
+                        if let reason = option.reason {
+                            Text(verbatim: reason)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .foregroundStyle(theme.errorBase)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.leading, Tokens.Space.s8 + Tokens.Space.s32 + Tokens.Space.s12)
+                                .padding(.trailing, Tokens.Space.s8)
+                                .padding(.bottom, Tokens.Space.s4)
+                                .accessibilityIdentifier("signing.fee.option.reason")
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(option.disabled)
-                    .opacity(option.disabled ? 0.45 : 1)
                 }
             }
             .padding(.horizontal, Tokens.Space.s16)

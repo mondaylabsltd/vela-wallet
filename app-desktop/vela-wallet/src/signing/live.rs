@@ -1786,12 +1786,23 @@ pub fn fee_model(
                             }),
                             selected: option.selected,
                             insufficient: option.insufficient,
+                            // Issue #408: a refused coin says why — the core's
+                            // numbers, in the core's words for them.
+                            reason: option.short.as_ref().filter(|_| option.insufficient).map(
+                                |gap| {
+                                    SharedString::from(crate::signing::fill(
+                                        &s.fee_row_short,
+                                        &[("need", &gap.need), ("have", &gap.have)],
+                                    ))
+                                },
+                            ),
                         }
                     })
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s)
+        warning: no_coin_pays_warning(fee, s)
+            .or_else(|| insufficient_gas_warning(fee, s))
             .or(refused)
             .or_else(|| spent_fee_coin_warning(fee, s))
             .or(reason),
@@ -1848,6 +1859,16 @@ pub fn fee_row_state(
             }
         }
     }
+}
+
+/// Issue #408: not one coin on offer can pay this fee — the core's verdict
+/// (`no_coin_pays`), said as that. Issue #262's sentence names the coin in
+/// force, which over a wallet whose every coin is short ("Insufficient ETH
+/// for gas fees", 0.75 USDT against a 3.58 USDT fee) reads as if another
+/// coin could stand in.
+#[must_use]
+pub fn no_coin_pays_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    (fee.fee.is_some() && fee.no_coin_pays).then(|| s.fee_no_coin_pays.clone())
 }
 
 /// Issue #262: a wallet with 0 ETH and some USDT on mainnet was quoted in
@@ -3775,6 +3796,7 @@ mod fee_tests {
             insufficient,
             selected,
             spent_by_operation: false,
+            short: None,
         }
     }
 
@@ -4051,6 +4073,152 @@ mod fee_tests {
             }
             _ => unreachable!("an open fee row lists its coins"),
         }
+    }
+
+    /// Issue #408, as reported: 0 ETH and 0.754189 USDT against ~0.001334 ETH
+    /// or ~3.58361 USDT. Each greyed coin says need and have — the core's
+    /// words for the numbers — and the line under the fee says no coin can
+    /// pay, where it used to say "Insufficient ETH for gas fees".
+    #[test]
+    fn issue_408_every_greyed_coin_says_why_and_the_line_says_no_coin_can_pay() {
+        use vela_core::app::fee_policy::FeeShortfall;
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let short = |need: &str, have: &str| {
+            Some(FeeShortfall {
+                need: need.to_owned(),
+                have: have.to_owned(),
+            })
+        };
+        let mut fee = quoted(
+            vec![
+                FeeOptionView {
+                    decimals: 18,
+                    balance: "0".to_owned(),
+                    amount: Some("1333800000000000".to_owned()),
+                    short: short("0.001334 ETH", "0 ETH"),
+                    ..option("ETH", None, true, true)
+                },
+                FeeOptionView {
+                    balance: "754189".to_owned(),
+                    amount: Some("3583610".to_owned()),
+                    short: short("3.58361 USDT", "0.754189 USDT"),
+                    ..option(
+                        "USDT",
+                        Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                        true,
+                        false,
+                    )
+                },
+            ],
+            false,
+        );
+        fee.no_coin_pays = true;
+
+        let model = fee_model(
+            &clear,
+            &fee,
+            1,
+            true,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        );
+        let FeeModel::OnChain {
+            selector: Some((_, options)),
+            warning,
+            ..
+        } = model
+        else {
+            unreachable!("an open fee row lists its coins")
+        };
+        assert_eq!(warning, Some(s.fee_no_coin_pays.clone()));
+        assert_ne!(
+            warning.as_ref().map(SharedString::to_string),
+            Some(crate::signing::fill(
+                &s.warn_insufficient_gas,
+                &[("sym", "ETH")]
+            )),
+            "not the coin in force alone"
+        );
+        let reasons: Vec<Option<String>> = options
+            .iter()
+            .map(|option| option.reason.as_ref().map(SharedString::to_string))
+            .collect();
+        assert_eq!(
+            reasons,
+            vec![
+                Some(crate::signing::fill(
+                    &s.fee_row_short,
+                    &[("need", "0.001334 ETH"), ("have", "0 ETH")]
+                )),
+                Some(crate::signing::fill(
+                    &s.fee_row_short,
+                    &[("need", "3.58361 USDT"), ("have", "0.754189 USDT")]
+                )),
+            ]
+        );
+        assert!(
+            reasons
+                .iter()
+                .flatten()
+                .all(|reason| !reason.contains("{{")),
+            "{reasons:?}"
+        );
+        assert!(options.iter().all(|option| option.insufficient));
+    }
+
+    /// One coin short, one able: only the short one says why, and the line is
+    /// still about the coin in force (#262) — picking the other one fixes it.
+    #[test]
+    fn issue_408_a_coin_that_can_pay_keeps_the_line_about_the_coin_in_force() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let fee = quoted(
+            vec![
+                FeeOptionView {
+                    short: Some(vela_core::app::fee_policy::FeeShortfall {
+                        need: "1.25 ETH".to_owned(),
+                        have: "0 ETH".to_owned(),
+                    }),
+                    ..option("ETH", None, true, true)
+                },
+                option(
+                    "USDT",
+                    Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                    false,
+                    false,
+                ),
+            ],
+            false,
+        );
+        assert!(no_coin_pays_warning(&fee, &s).is_none());
+        let FeeModel::OnChain {
+            selector: Some((_, options)),
+            warning,
+            ..
+        } = fee_model(
+            &clear,
+            &fee,
+            1,
+            true,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        )
+        else {
+            unreachable!("an open fee row lists its coins")
+        };
+        assert_eq!(warning, insufficient_gas_warning(&fee, &s));
+        assert!(options[0].reason.is_some());
+        assert!(
+            options[1].reason.is_none(),
+            "USDT can pay: nothing to explain"
+        );
     }
 
     /// A fee row whose quote the relay refused: the operation fails with the

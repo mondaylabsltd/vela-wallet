@@ -52,8 +52,11 @@ class I18nRuntime(
     override fun t(key: String, vars: Map<String, String>): String =
         engine.t(key, options(vars.map { (name, value) -> TVar(name, value) }))
 
-    private fun options(vars: List<TVar>): TOptions = TOptions(
-        count = null,
+    override fun t(key: String, count: Int): String =
+        engine.t(key, options(emptyList(), count = count.toDouble()))
+
+    private fun options(vars: List<TVar>, count: Double? = null): TOptions = TOptions(
+        count = count,
         context = null,
         defaultValue = null,
         lng = null,

@@ -6,7 +6,9 @@
 //!   │ cancel-at-register KEEPS drafts    └──add_key(≤7)─────┘ │
 //!   │                                                finish_keys
 //!   │                                                        ▼
-//!   └────────────── SavingPending ─► Syncing{publish → remove pending}
+//!   └────────────── SavingPending ─► Syncing{publish ─┬─ landed ─► remove pending}
+//!                                                     └─ accepted (ONE key) ─►
+//!                                                        record the task id}
 //!                                                        ─► Saving ─► Created
 //! ```
 //!
@@ -23,6 +25,16 @@
 //! A publish failure surfaces the retry screen while the passkeys and their
 //! drafts are kept; a single key additionally stays recoverable on-device
 //! from two signatures.
+//!
+//! That last fact is why a ONE-key wallet does not wait for the chain (issue
+//! #409, owner's decision 2026-10-04). Its publish is answered as soon as the
+//! registry has ACCEPTED it — signed, and queued durably server-side — and the
+//! landing finishes in the background: measured on a Xiaomi, that wait was
+//! 6.9 s of the 7.75 s after the last tap. The pending record is NOT removed
+//! then. It is re-written with the registry's task id, so it keeps saying "not
+//! confirmed yet" — to the sign-out warning, and to the session's landing
+//! watch, which confirms the landing by reading that task (no passkey) and
+//! only then removes the record. Several keys keep today's order exactly.
 
 use crux_core::{command::AbortHandle, render::render, App, Command};
 use serde::{Deserialize, Serialize};
@@ -356,6 +368,10 @@ pub enum SyncStep {
     Publishing,
     /// Clearing the pending-upload record after a successful publish.
     RemovingPending,
+    /// Issue 409: a one-key wallet's publish was accepted, not yet landed —
+    /// re-writing its pending record with the registry's task id, so the
+    /// record keeps the landing outstanding and says how to confirm it.
+    RecordingAcceptance,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -978,40 +994,46 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
     // The wallet's creation moment is the first key's mint time — no clock
     // lives in the core.
     let created_at_iso = model.drafts[0].registered_at_iso.clone();
-    let first = keys[0].clone();
-    let members = keys
-        .iter()
-        .map(|key| super::PendingUploadMember {
-            credential_id: key.credential_id.clone(),
-            name: key.name.clone(),
-            public_key_hex: key.public_key_hex.clone(),
-            attestation_object_hex: key.attestation_object_hex.clone(),
-            authenticator_attachment: key.authenticator_attachment.clone(),
-            transports: key.transports.clone(),
-            signer_origin: key.signer_origin.clone(),
-        })
-        .collect();
-    model.prepared = Some(Prepared {
+    let prepared = Prepared {
         keys,
         address,
-        created_at_iso: created_at_iso.clone(),
-    });
+        created_at_iso,
+    };
+    let record = pending_record(&prepared, None);
+    model.prepared = Some(prepared);
     model.stage = Stage::SavingPending;
-    request(
-        model,
-        ShellOperation::SavePendingUpload {
-            record: PendingUpload {
-                id: first.credential_id,
-                name: first.name,
-                public_key_hex: first.public_key_hex,
-                attestation_object_hex: first.attestation_object_hex,
-                created_at_iso,
-                authenticator_attachment: first.authenticator_attachment,
-                transports: first.transports,
-                members,
-            },
-        },
-    )
+    request(model, ShellOperation::SavePendingUpload { record })
+}
+
+/// The pending-upload record for a prepared wallet: the first key's fields
+/// as the scalars (what legacy readers know), the whole founding set as
+/// `members`, and — once the registry has accepted a one-key publish — the
+/// task that publish was queued under (issue 409).
+fn pending_record(prepared: &Prepared, task_id: Option<String>) -> PendingUpload {
+    let first = prepared.first();
+    PendingUpload {
+        id: first.credential_id.clone(),
+        name: first.name.clone(),
+        public_key_hex: first.public_key_hex.clone(),
+        attestation_object_hex: first.attestation_object_hex.clone(),
+        created_at_iso: prepared.created_at_iso.clone(),
+        authenticator_attachment: first.authenticator_attachment.clone(),
+        transports: first.transports.clone(),
+        members: prepared
+            .keys
+            .iter()
+            .map(|key| super::PendingUploadMember {
+                credential_id: key.credential_id.clone(),
+                name: key.name.clone(),
+                public_key_hex: key.public_key_hex.clone(),
+                attestation_object_hex: key.attestation_object_hex.clone(),
+                authenticator_attachment: key.authenticator_attachment.clone(),
+                transports: key.transports.clone(),
+                signer_origin: key.signer_origin.clone(),
+            })
+            .collect(),
+        task_id,
+    }
 }
 
 fn start_over(model: &mut Model) -> Command<Effect, Event> {
@@ -1254,6 +1276,23 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 },
             )
         }
+        // Issue #409: a ONE-key wallet's publish was accepted — signed and
+        // queued durably by the registry. Its key stays recoverable on-device
+        // from two signatures whatever the chain does, so it is entered now and
+        // the landing finishes in the background. The pending record stays:
+        // re-written with the task id, it is what the sign-out warning reads
+        // and what the session's landing watch confirms (by reading the task,
+        // never by a passkey) before removing it.
+        (Stage::Syncing(SyncStep::Publishing), ShellResult::RegistryAccepted { task_id }) => {
+            record_acceptance(model, task_id)
+        }
+        // The task id is a convenience for the watch, not a condition of
+        // entering: a record it could not be written into still exists, still
+        // warns, and the wallet is as recoverable as it was a moment ago.
+        (
+            Stage::Syncing(SyncStep::RecordingAcceptance),
+            ShellResult::PendingUploadSaved | ShellResult::StorageFailed { .. },
+        ) => save_account(model),
         // Publish failed. There is no silent retry — the publish needs a
         // passkey signature — so offer the retry screen. The pending record is
         // kept, and the key stays recoverable on-device regardless.
@@ -1317,6 +1356,44 @@ fn begin_publish(model: &mut Model) -> Command<Effect, Event> {
     }
 }
 
+/// Issue 409: a one-key wallet's publish was accepted. Re-write its pending
+/// record with the task, then save the account and enter.
+///
+/// Only a one-key wallet's publish asks to be answered on acceptance. A
+/// multi-key wallet answered this way would be entered before a sibling device
+/// could rebuild its address — so a shell that did that anyway gets the retry
+/// screen, never the wallet; retrying is safe, the registry being idempotent
+/// by content.
+fn record_acceptance(model: &mut Model, task_id: String) -> Command<Effect, Event> {
+    let Some(prepared) = model.prepared.clone() else {
+        return Command::done();
+    };
+    if !enters_on_acceptance(&prepared) {
+        model.sync.last_error = Some(
+            "the registry accepted this wallet's keys, but has not confirmed them on-chain yet"
+                .to_owned(),
+        );
+        model.stage = Stage::SyncFailed;
+        model.status = None;
+        return render();
+    }
+    model.stage = Stage::Syncing(SyncStep::RecordingAcceptance);
+    request(
+        model,
+        ShellOperation::SavePendingUpload {
+            record: pending_record(&prepared, Some(task_id)),
+        },
+    )
+}
+
+/// May this wallet be entered once the registry has accepted its publish,
+/// before the landing? Only with ONE key (owner's decision, 2026-10-04): that
+/// key stays recoverable on-device from two signatures, while a multi-key
+/// wallet's address can only be rebuilt elsewhere from the on-chain group.
+fn enters_on_acceptance(prepared: &Prepared) -> bool {
+    prepared.keys.len() == 1
+}
+
 /// Build the registry publish operation for a prepared wallet: one member per
 /// founding key, `key_names` in the same canonical founding order, every
 /// member carrying its creation-time proof — the executor closes the group
@@ -1354,11 +1431,13 @@ fn registry_publish_op(
         // signature happens and no route is consulted; the default satisfies
         // the field.
         method: KeyMethod::default(),
+        answer_when_accepted: enters_on_acceptance(prepared),
     })
 }
 
 /// The only place an account is ever written — reachable only after the
-/// possession-proven publish has landed (or degraded to the retry screen).
+/// possession-proven publish has landed or, for a one-key wallet, been accepted
+/// by the registry (issue 409).
 fn save_account(model: &mut Model) -> Command<Effect, Event> {
     let Some(prepared) = model.prepared.clone() else {
         return Command::done();

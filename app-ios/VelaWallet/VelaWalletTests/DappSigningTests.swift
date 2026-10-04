@@ -1353,6 +1353,109 @@ struct SigningLiveTests {
         }
     }
 
+    // -- Issue #408: a coin that cannot pay says why --------------------------
+
+    /// The report itself (Android v0.9.6, "Back up public keys" on Ethereum):
+    /// 0 ETH and 0.754189 USDT against ~0.001334 ETH or ~3.58361 USDT. Each
+    /// greyed coin now says need and have in its own unit — the core's words
+    /// for the numbers — and the line under the fee says no coin can pay,
+    /// where it used to say "Insufficient ETH for gas fees".
+    @Test func issue408EveryGreyedCoinSaysWhyAndTheLineSaysNoCoinCanPay() {
+        var eth = option("ETH", contract: nil, decimals: 18, balance: "0",
+                         amount: "1333800000000000", insufficient: true, selected: true)
+        eth.short = FeeShortfallWire(need: "0.001334 ETH", have: "0 ETH")
+        var usdt = option("USDT", contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                          decimals: 6, balance: "754189", amount: "3583610",
+                          insufficient: true, selected: false)
+        usdt.short = FeeShortfallWire(need: "3.58361 USDT", have: "0.754189 USDT")
+        var fee = FeeViewWire(
+            busy: false, failed: nil,
+            fee: FeeEstimateWire(
+                chainId: 1, totalWei: "1333800000000000", maxFeePerGas: "0", totalGas: "450000",
+                deployed: true, quoted: true, feeAsset: .native, feeRecipient: "0xrelay"
+            ),
+            stale: false, feeToken: nil, options: [eth, usdt], confirmFeeReady: false
+        )
+        fee.noCoinPays = true
+
+        guard case .onchain(_, _, _, let closed, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: context()
+        ) else {
+            Issue.record("a transaction's fee row is on-chain")
+            return
+        }
+        #expect(closed == loc.t("componentsUi.gas.noCoinPays"))
+        #expect(closed == "No token can pay this fee")
+
+        var ctx = context()
+        ctx.feeOpen = true
+        guard case .onchain(_, _, let open?, let warning, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with two coins is drawn")
+            return
+        }
+        #expect(warning == closed, "the line does not change with the list open")
+        let everyCoinGreyed = open.options.allSatisfy { $0.disabled }
+        #expect(everyCoinGreyed)
+        #expect(open.options[0].reason == "Need ~0.001334 ETH, have 0 ETH")
+        #expect(open.options[1].reason == "Need ~3.58361 USDT, have 0.754189 USDT")
+    }
+
+    /// One coin short, one able: only the short one says why, and the line is
+    /// still about the coin in force (#262) — picking the other one fixes it.
+    @Test func issue408ACoinThatCanPayKeepsTheLineAboutTheCoinInForce() {
+        var eth = option("ETH", contract: nil, decimals: 18, balance: "0",
+                         amount: "400000000000000", insufficient: true, selected: true)
+        eth.short = FeeShortfallWire(need: "0.0004 ETH", have: "0 ETH")
+        let usdt = option("USDT", contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                          decimals: 6, balance: "2000000", amount: "1020000",
+                          insufficient: false, selected: false)
+        let fee = FeeViewWire(
+            busy: false, failed: nil,
+            fee: FeeEstimateWire(
+                chainId: 1, totalWei: "400000000000000", maxFeePerGas: "0", totalGas: "300000",
+                deployed: true, quoted: true, feeAsset: .native, feeRecipient: "0xrelay"
+            ),
+            stale: false, feeToken: nil, options: [eth, usdt], confirmFeeReady: false
+        )
+        var ctx = context()
+        ctx.feeOpen = true
+        guard case .onchain(_, _, let open?, let warning, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with two coins is drawn")
+            return
+        }
+        #expect(warning == loc.t("send.warnInsufficientGas", vars: ["sym": "ETH"]))
+        #expect(open.options[0].reason == "Need ~0.0004 ETH, have 0 ETH")
+        #expect(open.options[1].reason == nil, "USDT can pay: nothing to explain")
+    }
+
+    /// The core's words decode as it writes them, and a view from before them
+    /// still decodes — the fields are additive, so neither fails a fee view.
+    @Test func issue408TheShortfallDecodesAndItsAbsenceIsTolerated() throws {
+        let row = """
+        {"symbol":"USDT","contract":"0xdac1","decimals":6,"balance":"754189","recipient":"0x3e59",\
+        "usd_balance":"0.75","usd_price":"1","amount":"3583610","insufficient":true,"selected":false,\
+        "spent_by_operation":false
+        """
+        let decoder = CoreJSON.decoder
+        let now = try decoder.decode(FeeViewWire.self, from: Data("""
+        {"busy":false,"failed":null,"fee":null,"stale":false,"fee_token":null,\
+        "options":[\(row),"short":{"need":"3.58361 USDT","have":"0.754189 USDT"}}],\
+        "confirm_fee_ready":false,"no_coin_pays":true}
+        """.utf8))
+        #expect(now.noCoinPays)
+        #expect(now.options.first?.short == FeeShortfallWire(need: "3.58361 USDT", have: "0.754189 USDT"))
+        let before = try decoder.decode(FeeViewWire.self, from: Data("""
+        {"busy":false,"failed":null,"fee":null,"stale":false,"fee_token":null,\
+        "options":[\(row)}],"confirm_fee_ready":false}
+        """.utf8))
+        #expect(!before.noCoinPays)
+        #expect(before.options.first?.short == nil)
+    }
+
     /// An unlimited approval opens on its own "as requested" chip — kept as
     /// the site asked (2026-09-26) — reads as the danger it is, says so, and
     /// its consent rides into the approve opts.

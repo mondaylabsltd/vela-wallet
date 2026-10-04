@@ -20,8 +20,10 @@
  * machine instead of a one-shot call.
  */
 import { loadCore } from '$lib/core/client';
+import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
+import type { FeeEvent } from '$lib/core/generated/FeeEvent';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -32,6 +34,7 @@ import {
 } from '$lib/services/safe-transaction';
 import { DeploymentReadError } from '$lib/services/deployment-read';
 import { feeQuoteDeadlineMs } from '$lib/core/kernels';
+import { resolvedFormatKeys } from '$lib/services/locale-format';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
 
@@ -54,7 +57,8 @@ export const IDLE_FEE_VIEW: FeeView = {
 	stale: false,
 	fee_token: null,
 	options: [],
-	confirm_fee_ready: false
+	confirm_fee_ready: false,
+	no_coin_pays: false
 };
 
 export interface FeeQuoteRequest {
@@ -220,6 +224,14 @@ export class FeeQuote {
 	 * a refused estimate and never advances to confirm.
 	 */
 	#dispatching = false;
+	/**
+	 * Spec 083 fee, issue 411: what the operation moves, per asset, as the
+	 * surface's own simulation measured it — with the calls it measured
+	 * (their JSON), so it is told only to a question about those very calls.
+	 * The core forgets it on every `quote_requested`, so it is told again
+	 * right after each one ({@link balanceChangesMeasured}).
+	 */
+	#measured: { calls: string; changes: FeeBalanceChange[] } | null = null;
 
 	/** The settled quote in the shape the submit paths sign. */
 	get estimate(): TransactionFeeEstimate | null {
@@ -329,7 +341,9 @@ export class FeeQuote {
 				tier: request.tier ?? DEFAULT_TIER,
 				calls: request.calls,
 				fee_token: request.feeToken,
-				auto_fee_token: request.autoFeeToken ?? false
+				auto_fee_token: request.autoFeeToken ?? false,
+				// Issue 408: the preset the core writes a coin's shortfall in.
+				number: resolvedFormatKeys().number
 			};
 			this.#dispatching = true;
 			try {
@@ -338,6 +352,10 @@ export class FeeQuote {
 					started.add(session);
 					session.start(event);
 				}
+				// The question cleared what the core knew the operation moves:
+				// told again at once, before anything else can reach it.
+				const measured = this.#measuredFor(request);
+				if (measured) session.dispatch(measured);
 			} finally {
 				this.#dispatching = false;
 			}
@@ -383,6 +401,38 @@ export class FeeQuote {
 			return;
 		}
 		this.#session?.dispatch({ type: 'requote' });
+	}
+
+	/**
+	 * The surface's own simulation of the operation answered (spec 083 fee,
+	 * issue 411): what it moves, per asset — the coins' own `Transfer` logs
+	 * and the node's trace of native value. Which fee coin can pay is what the
+	 * operation LEAVES of it, and a coin the calls only NAME (a router's swap
+	 * path) is one the core may pay in once this says enough of it is left: a
+	 * Uniswap swap on Polygon whose path named both stablecoins was priced in
+	 * POL, held at 0, because nobody said so.
+	 *
+	 * Kept for every question about `calls`, and told now when the question
+	 * on record is about them and has reached the core. `null` forgets it — a
+	 * new operation. Never call it for a simulation that reverted or could not
+	 * check: that is no measurement.
+	 */
+	balanceChangesMeasured(calls: FeeCall[] | null, changes: FeeBalanceChange[] = []): void {
+		this.#measured = calls === null ? null : { calls: JSON.stringify(calls), changes };
+		const request = this.#lastRequest;
+		const session = this.#session;
+		if (!request || !session || !started.has(session) || this.#neverReachedCore) return;
+		// A question still on its way in (the deployment read) is told after it.
+		if (this.pending && this.#settle === null) return;
+		const measured = this.#measuredFor(request);
+		if (measured) session.dispatch(measured);
+	}
+
+	/** The event that tells the core what `request`'s calls move, if they were measured. */
+	#measuredFor(request: FeeQuoteRequest): FeeEvent | null {
+		const measured = this.#measured;
+		if (!measured || JSON.stringify(request.calls) !== measured.calls) return null;
+		return { type: 'balance_changes_measured', changes: measured.changes };
 	}
 
 	/** Leaving the confirm step: drop the asset choice and any stale ERC-20 estimate. */
@@ -487,6 +537,8 @@ export class FeeQuote {
 		this.#latest = donor.#latest;
 		this.#lastRequest = request;
 		this.#publicKey = donor.#publicKey;
+		// The donor priced the same operation and was told the same measurement.
+		this.#measured = donor.#measured ?? this.#measured;
 		this.#contextLost = donor.#contextLost;
 		this.#contextRateLimited = donor.#contextRateLimited;
 		this.#neverReachedCore = donor.#neverReachedCore;
@@ -509,6 +561,7 @@ export class FeeQuote {
 		donor.#seq += 1;
 		donor.#resolve({ kind: 'abandoned' });
 		donor.#lastRequest = null;
+		donor.#measured = null;
 		donor.#raw = IDLE_FEE_VIEW;
 		donor.#latest = IDLE_FEE_VIEW;
 		donor.#publicKey = undefined;

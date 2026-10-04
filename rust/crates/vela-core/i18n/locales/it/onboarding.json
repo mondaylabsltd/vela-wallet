@@ -155,7 +155,6 @@
       "headerCreated": "Wallet creato",
       "headerDefault": "Crea wallet",
       "headerSyncFailed": "Sincronizzazione tra dispositivi",
-      "identiconHint": "Un motivo identificativo generato dall'indirizzo",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "Legata al dispositivo",
       "keyHardwareBadge": "Hardware",
@@ -189,7 +188,6 @@
       "pinLabel": "PIN",
       "pinRejected": "Questo PIN non è stato accettato. Esauriti i tentativi la chiave si blocca da sola e solo un ripristino la sblocca, cancellando tutte le passkey che contiene.",
       "pinTitle": "Inserisci il PIN della chiave di sicurezza",
-      "progressMeterLabel": "Derivazione indirizzo",
       "progressSubtitle": "Deriviamo l'indirizzo da {{count}} chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora.",
       "progressTitle": "Creazione del wallet",
       "providerGeneric": "Telefono o tablet",
@@ -217,7 +215,9 @@
       "stepKeysLabel": "Chiavi",
       "stepNamingDetail": "Dai un nome al tuo wallet. Finisce on-chain insieme alla tua chiave pubblica.",
       "stepNamingLabel": "Nome",
-      "successMessage": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
+      "successMessage_one": "La tua chiave accede da sola. Il contratto viene distribuito alla prima transazione.",
+      "successMessage_many": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
+      "successMessage_other": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
       "successTitle": "Wallet creato",
       "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
       "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non riuscirai ad accedere su altri dispositivi finché il problema non viene risolto.",
@@ -231,8 +231,7 @@
       "touchSelectBody": "Sono collegate più chiavi di sicurezza e stanno lampeggiando tutte. Tocca quella che vuoi usare.",
       "touchTitle": "Tocca la tua chiave di sicurezza",
       "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto.",
-      "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla.",
-      "walletAddressLabel": "Indirizzo del wallet"
+      "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla."
     },
     "login": {
       "alertNotSupportedTitle": "Non supportato",

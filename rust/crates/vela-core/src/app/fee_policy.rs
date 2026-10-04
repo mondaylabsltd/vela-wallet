@@ -78,6 +78,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use crate::l10n::number::{group_digits, NumberPreset, MAX_TOKEN_DECIMALS};
+
 // ---------------------------------------------------------------------------
 // Constants — every value mirrors the TS source it is named after
 // ---------------------------------------------------------------------------
@@ -688,6 +690,12 @@ pub enum Event {
         /// `#[serde(default)]`: a shell that does not send it keeps that.
         #[serde(default)]
         auto_fee_token: bool,
+        /// The person's number preset (resolved, never `auto`), in which the
+        /// view writes the amounts it states itself — a coin's shortfall
+        /// ([`FeeOptionView::short`], issue 408). `#[serde(default)]`: a
+        /// shell that does not send it reads `1,234.56`.
+        #[serde(default)]
+        number: NumberPreset,
     },
     /// A fee-asset chip tap. `None` = native.
     SelectFeeAsset { token: Option<String> },
@@ -807,6 +815,15 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         }
     }
 }
+
+/// The line under a refused fee coin's row: `{{need}}` and `{{have}}` are its
+/// [`FeeShortfall`]'s, written by the core (issue #408).
+pub const ROW_SHORT_KEY: &str = "componentsUi.gas.rowShort";
+
+/// The line under the fee when not one coin on offer can pay it
+/// ([`FeeView::no_coin_pays`], issue #408) — and the shut slide's, which would
+/// otherwise say to pick another coin.
+pub const NO_COIN_PAYS_KEY: &str = "componentsUi.gas.noCoinPays";
 
 /// The corpus key of the reason line under a failed fee (spec 082 RJ13) — the
 /// one choice every shell used to make for itself. `None` = no reason line:
@@ -1724,6 +1741,9 @@ pub struct Model {
     /// coin the run began with. A run that ends in failure lands on one of
     /// them ([`landing_coin`]). Emptied when a run begins.
     refused: Vec<Option<String>>,
+    /// The number preset the request was asked in — what the view writes a
+    /// shortfall's amounts in ([`FeeShortfall`]).
+    number: NumberPreset,
 }
 
 // ---------------------------------------------------------------------------
@@ -1807,6 +1827,40 @@ pub struct FeeOptionView {
     /// reader that predates it reads `false`.
     #[serde(default)]
     pub spent_by_operation: bool,
+    /// Why this coin cannot be chosen, when the reason is a shortfall the
+    /// numbers prove (issue 408): this fee in this coin, and what the coin
+    /// has to pay it from — less than that. Each sheet draws it under the
+    /// greyed row ([`ROW_SHORT_KEY`]), so a coin that cannot pay
+    /// says so instead of silently refusing the tap.
+    ///
+    /// `None` when the coin can pay, and when it cannot be weighed at all:
+    /// a coin the quote cannot price (its fee is a dash, and `insufficient`
+    /// still refuses it), or any coin after [`FeeFailure::WouldFail`], where
+    /// there is no fee to weigh. `#[serde(default)]`: a reader that predates
+    /// it reads `None`.
+    #[serde(default)]
+    pub short: Option<FeeShortfall>,
+}
+
+/// A coin's shortfall against this fee (issue 408), each side written out
+/// with its unit by the core — `3.58361 USDT`, `0.754189 USDT` — so no shell
+/// relabels a number or picks its own rounding. Written in the request's
+/// number preset ([`Event::QuoteRequested`]'s `number`): grouped, its decimal
+/// mark, at most six places.
+///
+/// `need` is rounded UP and `have` DOWN, as a fee and a balance each must be
+/// to never read kinder than they are; so `need` always reads larger, and a
+/// figure under a millionth keeps two significant digits instead of reading
+/// as zero (`0.00000013 ETH`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeeShortfall {
+    /// This transaction's fee in the coin.
+    pub need: String,
+    /// What the coin has to pay it from: its balance, or — once the
+    /// operation's balance changes were measured (spec 083) — what the
+    /// operation leaves of it.
+    pub have: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1824,6 +1878,18 @@ pub struct FeeView {
     pub options: Vec<FeeOptionView>,
     /// The single gate consumers AND into their confirm button.
     pub confirm_fee_ready: bool,
+    /// Not one coin on offer can pay this fee — every option carries a
+    /// [`FeeOptionView::short`] (issue 408). The sheet's line under the fee
+    /// says that ([`NO_COIN_PAYS_KEY`]) instead of naming the coin in
+    /// force as if another could stand in for it: an account holding 0 ETH and
+    /// 0.75 USDT against a 3.58 USDT fee read "Insufficient ETH for gas fees".
+    ///
+    /// Only a PROVEN shortfall counts, as for the gate (issue 262): a coin
+    /// the quote cannot price might pay, so its presence keeps this `false`.
+    /// Never set while busy, failed or unpriced. `#[serde(default)]`: a reader
+    /// that predates it reads `false`.
+    #[serde(default)]
+    pub no_coin_pays: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1850,8 +1916,10 @@ impl App for FeePolicy {
                 calls,
                 fee_token,
                 auto_fee_token,
+                number,
             } => {
                 model.attempt += 1;
+                model.number = number;
                 model.form_chain_id = Some(chain_id);
                 model.ctx = Some(RequestCtx {
                     chain_id,
@@ -1970,14 +2038,23 @@ impl App for FeePolicy {
         // an unpriceable row (Tempo's native) is not mistaken for an empty one.
         let confirm_fee_ready =
             !busy && failed.is_none() && fee.is_some() && !selected_fee_is_short(model);
+        let options = option_views(model);
+        // Issue #408: said only of a settled figure, and only when every coin
+        // on offer is PROVABLY short of it.
+        let no_coin_pays = !busy
+            && failed.is_none()
+            && fee.is_some()
+            && !options.is_empty()
+            && options.iter().all(|option| option.short.is_some());
         FeeView {
             busy,
             failed,
             fee,
             stale: model.stale,
             fee_token: model.fee_token.clone(),
-            options: option_views(model),
+            options,
             confirm_fee_ready,
+            no_coin_pays,
         }
     }
 }
@@ -3189,7 +3266,18 @@ fn price_generic(
     // simulation) because the amount is only knowable once the gas is.
     // The native row is NOT gated: quoting it is the caller's only remaining
     // option, and `estimateTransactionFee` does not gate it either.
-    if model.fee_token.is_some() && fee_row_insufficient(selected.balance, Some(fee_amount)) {
+    //
+    // Refused only when NEITHER reading of the coin covers the fee — its
+    // balance, nor what the measured operation leaves of it ([`payable_balance`],
+    // spec 083 fee). Issue #411: a swap of all the pUSD into USDC, with 0.10
+    // USDC held, is paid from the USDC the swap brings in; the machine picks
+    // USDC for exactly that reason, and this gate, reading the balance alone,
+    // refused the machine's own pick — no amount, every coin marked short,
+    // nothing the sheet could explain. The other way round (a coin the person
+    // picked that the swap drains) is still quoted, amount and all, and marked
+    // short by `selected_fee_is_short`, so the sheet can say why.
+    let covering = selected.balance.max(payable_balance(model, &selected));
+    if model.fee_token.is_some() && fee_row_insufficient(covering, Some(fee_amount)) {
         return fail(model, FeeFailure::FeeTokenUnavailable);
     }
     // Every signed UserOp pays maxFeePerGas = 0; the fee rides in the leg.
@@ -3849,6 +3937,20 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
             } else {
                 fee_row_insufficient(payable, amount)
             };
+            // Issue #408: the reason the row is refused, when the numbers
+            // prove it — a fee and less than it to pay from. An unpriced row
+            // has no fee to state, and after `WouldFail` there is none.
+            let short = amount
+                .filter(|need| !would_fail && payable < *need)
+                .and_then(|need| {
+                    let text = |units, up| {
+                        coin_amount_text(units, row.decimals, &row.symbol, up, model.number)
+                    };
+                    Some(FeeShortfall {
+                        need: text(need, true)?,
+                        have: text(payable, false)?,
+                    })
+                });
             let selected = match (&model.fee_token, &row.fee_token, row.is_native) {
                 (None, _, true) => true,
                 (Some(sel), Some(contract), false) => sel.eq_ignore_ascii_case(contract),
@@ -3866,9 +3968,94 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
                 insufficient,
                 selected,
                 spent_by_operation: spend.as_ref().is_some_and(|spend| spend.unstated(row)),
+                short,
             }
         })
         .collect()
+}
+
+/// Decimal places a stated coin amount keeps — the fee rows' own budget.
+const STATED_PLACES: usize = 6;
+
+/// A coin amount written out with its unit, for a sentence a person reads
+/// ([`FeeShortfall`]): `1,234.5 USDT`, `0.001335 ETH`, `0 ETH`.
+///
+/// At most [`STATED_PLACES`] decimals, rounded `up` (a fee) or down (a
+/// balance) — never to nearest, so a fee never reads cheaper than it is and a
+/// balance never richer. A non-zero amount under the last place keeps two
+/// significant digits, rounded the same way, instead of reading as `0`.
+/// Trailing zeros go; the whole part is grouped and the decimal mark is the
+/// preset's. Exact: the digits are cut as text, never through a float, so an
+/// 18-decimal balance of any size is written as it is.
+///
+/// `None` past [`MAX_TOKEN_DECIMALS`]: ERC-20 `decimals` is a `uint8`, and a
+/// wider claim is no amount — a wrong number is worse than none.
+#[must_use]
+pub fn coin_amount_text(
+    units: u128,
+    decimals: u32,
+    symbol: &str,
+    up: bool,
+    preset: NumberPreset,
+) -> Option<String> {
+    if decimals > MAX_TOKEN_DECIMALS {
+        return None;
+    }
+    let places = usize::try_from(decimals).ok()?;
+    Some(format!(
+        "{} {symbol}",
+        coin_digits(units, places, up, preset)
+    ))
+}
+
+fn coin_digits(units: u128, places: usize, up: bool, preset: NumberPreset) -> String {
+    if units == 0 {
+        return "0".to_owned();
+    }
+    let raw = units.to_string();
+    let padded = format!("{raw:0>width$}", width = places + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - places);
+    // Under the last kept place: two significant digits, wherever they sit.
+    let keep = if whole == "0" && fraction.bytes().take(STATED_PLACES).all(|b| b == b'0') {
+        fraction
+            .bytes()
+            .position(|b| b != b'0')
+            .map_or(fraction.len(), |first| first + 2)
+    } else {
+        STATED_PLACES
+    }
+    .min(fraction.len());
+    let (kept, dropped) = fraction.split_at(keep);
+    let mut digits: Vec<u8> = whole.bytes().chain(kept.bytes()).collect();
+    if up && dropped.bytes().any(|b| b != b'0') {
+        // One unit in the last kept place, carried as far as it goes.
+        let mut index = digits.len();
+        loop {
+            if index == 0 {
+                digits.insert(0, b'1');
+                break;
+            }
+            index -= 1;
+            if digits[index] == b'9' {
+                digits[index] = b'0';
+            } else {
+                digits[index] += 1;
+                break;
+            }
+        }
+    }
+    let split = digits.len() - keep;
+    let whole = String::from_utf8_lossy(&digits[..split]).into_owned();
+    let whole = whole.trim_start_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    let fraction = String::from_utf8_lossy(&digits[split..]).into_owned();
+    let fraction = fraction.trim_end_matches('0');
+    let grouped = group_digits(whole, preset);
+    if fraction.is_empty() {
+        grouped
+    } else {
+        format!("{grouped}{}{fraction}", preset.separators().decimal)
+    }
 }
 
 // ---------------------------------------------------------------------------

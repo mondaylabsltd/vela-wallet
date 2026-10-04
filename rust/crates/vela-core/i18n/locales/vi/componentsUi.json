@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
       "batchCall": "Gọi hợp đồng",
       "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain.",
-      "gasEstimateFailed": "Không ước tính được phí gas — việc gửi có thể thất bại hoặc hết thời gian chờ. Chạm vào mức phí ở trên để thử lại.",
       "submitted": "Đã gửi — đang chờ xác nhận",
       "historicalNote": "Một chữ ký trong quá khứ — đúng những gì bạn đã phê duyệt.",
       "close": "Đóng",
@@ -318,7 +317,9 @@
       "reasonQuote": "Không lấy được báo giá từ relay. Đang tự động thử lại.",
       "reasonFeeToken": "Relay hiện chưa định giá được coin này. Đang thử lại — hoặc trả phí bằng coin khác.",
       "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
-      "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại."
+      "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại.",
+      "rowShort": "Cần ~{{need}}, có {{have}}",
+      "noCoinPays": "Không token nào đủ trả phí này"
     },
     "dock": {
       "receive": "Nhận",

@@ -87,6 +87,12 @@ final class SigningController {
         /// (`token_trust`'s sim view) — read at the slide, so the record keeps
         /// the lines the person saw (083 F1, spec 093).
         var simView: () -> TrustSimViewWire? = { nil }
+        /// `eth_simulateV1` with these params, its answer as it came; `nil` =
+        /// through the pool (the Android twin's `Ports.simulate`). What the
+        /// answer MEANS stays the core's (`simOutcome`). `@MainActor`: the
+        /// controller calls it there, and an unannotated async function type
+        /// is a call to NULL on iOS 17 (087 F33).
+        var simulate: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
     }
 
     private(set) var sign: SignViewWire = .empty
@@ -431,7 +437,7 @@ final class SigningController {
         else { return }
         feeCalls = calls.map { ["to": $0.to, "value": $0.value, "data": $0.data] }
         requestQuote(chainId: incoming.chainId)
-        simulate(chainId: incoming.chainId, calls: calls)
+        simulate(chainId: incoming.chainId, calls: calls, feeCalls: feeCalls)
     }
 
     /// Ask the chain what these calls WOULD do, and hand the answer to the core
@@ -446,7 +452,14 @@ final class SigningController {
     ///
     /// The last one is the one that matters. A wallet that says nothing when it
     /// could not check teaches people that silence means safe.
-    private func simulate(chainId: Int, calls: [UserOpCall]) {
+    ///
+    /// Spec 083 fee, issue #411: deltas also go to the fee machine — to every
+    /// session pricing `feeCalls` — before the tokens are judged, because which
+    /// coin can pay does not wait on token names. A Uniswap swap on Polygon
+    /// whose path named both stablecoins was paid in POL, held at 0, because
+    /// nobody told the machine what the swap leaves. A revert, or a run
+    /// nobody could check, tells it nothing.
+    private func simulate(chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]]) {
         simulation = .pending
         let legs = calls.map {
             SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
@@ -457,9 +470,14 @@ final class SigningController {
         }
         Task { [weak self] in
             guard let self else { return }
-            let answer = await pool.call(
-                chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
-            )
+            let answer: RpcOutcome
+            if let simulate = ports.simulate {
+                answer = await simulate(chainId, payload)
+            } else {
+                answer = await pool.call(
+                    chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
+                )
+            }
             let outcome = simOutcome(user: wallet.address, replyJson: Self.simReply(answer))
             simulation = Self.simulation(of: outcome)
             if outcome.kind != "deltas" {
@@ -468,7 +486,13 @@ final class SigningController {
             }
             // Checked: the person's own moves, to the machine that judges
             // them — the one entrance that may never admit a token.
-            let deltas = (try? JSONSerialization.jsonObject(with: Data(outcome.deltasJson.utf8))) as? [[String: Any]] ?? []
+            let parsed = (try? JSONSerialization.jsonObject(with: Data(outcome.deltasJson.utf8))) as? [[String: Any]]
+            let deltas = parsed ?? []
+            // What it moves, to the fee machine first: moves this build could
+            // not read are no measurement, and it is told nothing.
+            if let parsed, let changes = SimDeltas.feeBalanceChanges(parsed) {
+                fees.balanceChanges(calls: feeCalls, changes: changes)
+            }
             ports.simDeltas(wallet.address, chainId, deltas)
         }
     }

@@ -104,7 +104,9 @@ enum ExploreLive {
             tabsScreen: TabsScreenCopy(
                 title: loc.t("explore.tabs"), done: loc.t("explore.done"),
                 newTab: loc.t("explore.newTab"), closeAll: loc.t("explore.closeAllTabs"),
-                close: loc.t("explore.closeTab")
+                close: loc.t("explore.closeTab"),
+                closeOthers: loc.t("explore.closeOtherTabs"),
+                closeRight: loc.t("explore.closeTabsToRight")
             ),
             sheet: nil,
             menus: (
@@ -221,7 +223,7 @@ enum ExploreLive {
     static func tabs(
         explore: ExploreViewWire, snapshot: (String) -> UIImage? = { _ in nil }, loc: Loc
     ) -> [TabModel] {
-        explore.tabs.map { tab in
+        let models = explore.tabs.map { tab in
             let isStart = (tab.url ?? "").isEmpty
             var model = TabModel(
                 id: tab.id,
@@ -236,6 +238,19 @@ enum ExploreLive {
             // A start page keeps its drawing; a page shows itself.
             if !isStart { model.snapshot = snapshot(tab.id) }
             return model
+        }
+        return offeringCloses(models, strip: explore.tabs)
+    }
+
+    /// Which batch closes each card's long-press menu offers (spec 099): the
+    /// ones whose scope the core says takes at least one tab of `strip`.
+    static func offeringCloses(_ models: [TabModel], strip: [ExploreTabWire]) -> [TabModel] {
+        let json = BrowserController.stripJSON(strip)
+        return models.map { tab in
+            var tab = tab
+            tab.closesOthers = !BrowserController.tabsClosed(by: .others(keep: tab.id), strip: json).isEmpty
+            tab.closesRight = !BrowserController.tabsClosed(by: .right(of: tab.id), strip: json).isEmpty
+            return tab
         }
     }
 

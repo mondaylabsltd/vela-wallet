@@ -155,7 +155,6 @@
       "headerCreated": "钱包已创建",
       "headerDefault": "创建钱包",
       "headerSyncFailed": "跨设备同步",
-      "identiconHint": "地址生成的身份图案",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "设备绑定",
       "keyHardwareBadge": "硬件",
@@ -189,7 +188,6 @@
       "pinLabel": "PIN 码",
       "pinRejected": "PIN 码不正确。次数用尽后密钥会自我锁定，只能通过重置解锁——而重置会清除密钥上的所有通行密钥。",
       "pinTitle": "输入安全密钥的 PIN 码",
-      "progressMeterLabel": "推导地址",
       "progressSubtitle": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
       "progressTitle": "正在生成钱包",
       "providerGeneric": "手机或平板",
@@ -217,7 +215,8 @@
       "stepKeysLabel": "密钥",
       "stepNamingDetail": "给钱包起个名字。它会和公钥一起写进合约。",
       "stepNamingLabel": "命名",
-      "successMessage": "{{count}} 把密钥都能单独登录。合约在首笔交易时部署。",
+      "successMessage_one": "单把密钥即可登录。合约在首笔交易时部署。",
+      "successMessage_other": "单把密钥即可登录。合约在首笔交易时部署。",
       "successTitle": "钱包已创建",
       "syncFailedHint": "请检查网络，或在下方配置自定义端点。",
       "syncFailedMessage": "钱包已创建，但您的公钥未同步到服务器。在此问题解决之前，您将无法在其他设备上登录。",
@@ -231,8 +230,7 @@
       "touchSelectBody": "插着多个安全密钥，它们都在闪烁。触摸你想使用的那一个。",
       "touchTitle": "触摸你的安全密钥",
       "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
-      "verifyStuckHint": "验证一直失败？您的设备可能没有正确保存这枚通行密钥。可以放心重新开始——目前还没有创建任何内容。",
-      "walletAddressLabel": "钱包地址"
+      "verifyStuckHint": "验证一直失败？您的设备可能没有正确保存这枚通行密钥。可以放心重新开始——目前还没有创建任何内容。"
     },
     "login": {
       "alertNotSupportedTitle": "不支持",

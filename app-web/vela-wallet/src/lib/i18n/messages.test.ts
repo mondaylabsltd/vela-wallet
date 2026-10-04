@@ -8,7 +8,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SUPPORTED_LOCALES, textDirectionOf } from './locales';
-import { FLOW_KEYS, WELCOME_KEYS } from './messages';
+import { FLOW_KEYS, FLOW_PLURAL_KEYS, WELCOME_KEYS } from './messages';
 import { fillTemplate } from './fill';
 import {
 	rawResolve,
@@ -79,7 +79,7 @@ describe('onboarding flow messages resolve through the vela-core engine (spec 01
 			'onboarding.create.keysTitleBlocked',
 			'onboarding.create.methodSecurityKeyBody',
 			'onboarding.create.taskDeriveAddress',
-			'onboarding.create.walletAddressLabel',
+			'onboarding.create.successTitle',
 			'onboarding.create.statusSyncingKey',
 			'onboarding.login.statusAwaitingPasskey',
 			'onboarding.login.recoverOfferBody',
@@ -100,12 +100,42 @@ describe('onboarding flow messages resolve through the vela-core engine (spec 01
 	it('resolveFlowMessages serializes every key, agreeing with the raw engine', () => {
 		for (const locale of ['en', 'zh', 'ru', 'zh-HK'] as const) {
 			const flow = resolveFlowMessages(locale);
-			expect(Object.keys(flow)).toHaveLength(FLOW_KEYS.length);
+			const forms = Object.keys(flow).filter((key) => !FLOW_KEYS.includes(key));
+			expect(Object.keys(flow)).toHaveLength(FLOW_KEYS.length + forms.length);
+			for (const key of forms) {
+				expect(
+					FLOW_PLURAL_KEYS.some((plural) => key.startsWith(`${plural}_`)),
+					key
+				).toBe(true);
+				expect(flow[key], `${locale} ${key}`).toBe(rawResolve(locale, key));
+			}
 			for (const key of FLOW_KEYS) {
 				expect(flow[key].length, `${locale} ${key}`).toBeGreaterThan(0);
 				expect(flow[key], `${locale} ${key}`).toBe(rawResolve(locale, key));
 			}
 		}
+	});
+
+	// Issue 409: a plural key ships as the forms its locale has — the core's
+	// categories — never as a bare key (it has none), and never as forms the
+	// locale's rule cannot pick.
+	it('plural flow keys ship each locale’s own forms', () => {
+		const forms = (locale: 'en' | 'zh' | 'ru' | 'fr') =>
+			Object.keys(resolveFlowMessages(locale))
+				.filter((key) => key.startsWith('onboarding.create.successMessage'))
+				.sort();
+		const base = 'onboarding.create.successMessage';
+		expect(forms('en')).toEqual([`${base}_one`, `${base}_other`]);
+		expect(forms('zh')).toEqual([`${base}_other`]);
+		expect(forms('fr')).toEqual([`${base}_many`, `${base}_one`, `${base}_other`]);
+		expect(forms('ru')).toEqual([`${base}_few`, `${base}_many`, `${base}_one`, `${base}_other`]);
+		const en = resolveFlowMessages('en');
+		expect(fillTemplate(en[`${base}_one`], { count: 1 })).toBe(
+			'Your key can sign in on its own. The contract deploys with your first transaction.'
+		);
+		expect(fillTemplate(en[`${base}_other`], { count: 2 })).toBe(
+			'Any of your 2 keys can sign in on its own. The contract deploys with your first transaction.'
+		);
 	});
 
 	it('zh copy is the mocks’ verbatim source (contracts/i18n-keys.md)', () => {
@@ -197,9 +227,13 @@ describe('every key the onboarding surfaces can request is in FLOW_KEYS', () => 
 			}
 		}
 		expect(requested.size).toBeGreaterThan(30);
-		const provided = new Set<string>(FLOW_KEYS);
+		// A plural key (issue 409) is requested bare and shipped as its forms.
+		const provided = new Set<string>([...FLOW_KEYS, ...FLOW_PLURAL_KEYS]);
 		for (const key of requested) {
-			expect(provided.has(key), `"${key}" is requested but missing from FLOW_KEYS`).toBe(true);
+			expect(
+				provided.has(key),
+				`"${key}" is requested but missing from FLOW_KEYS / FLOW_PLURAL_KEYS`
+			).toBe(true);
 		}
 	});
 });

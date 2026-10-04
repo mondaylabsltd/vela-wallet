@@ -61,6 +61,16 @@ class SpeedControl(
     private var askSeq = 0L
     private val previews = mutableListOf<FeeSession>()
 
+    /**
+     * Spec 083 fee, issue #411: what the operation moves, per asset, as the
+     * surface's own simulation measured it — with the calls it measured, so
+     * it is told only to a session pricing those very calls (guarded by
+     * [sessionLock]). The fee machine forgets it on every `QuoteRequested`,
+     * so every session is told again right after each question it is asked
+     * (the desktop's `speed_control::balance_changes`).
+     */
+    private var measured: Pair<List<FeeCall>, List<FeeBalanceChange>>? = null
+
     /** What a session was asked to price; compared minus the tier. */
     data class QuoteAsk(
         val chainId: Int,
@@ -78,7 +88,8 @@ class SpeedControl(
     ) {
         fun sameOperation(other: QuoteAsk): Boolean = copy(tier = other.tier) == other
 
-        fun event(deployed: Boolean) = FeeEvent.QuoteRequested(
+        /** `number`: the resolved preset the core writes a shortfall's amounts in (issue #408). */
+        fun event(deployed: Boolean, number: String) = FeeEvent.QuoteRequested(
             chain_id = chainId,
             account = account,
             deployed = deployed,
@@ -87,6 +98,7 @@ class SpeedControl(
             calls = calls,
             fee_token = feeToken,
             auto_fee_token = autoFeeToken,
+            number = number,
         )
     }
 
@@ -351,7 +363,10 @@ class SpeedControl(
         val deployed = session.deployed ?: return false
         if (session.reading || session.view.busy) return false
         VelaLog.event("$area.fee", "re-quote on stale", "chain" to ask.chainId)
-        session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
+        synchronized(sessionLock) {
+            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
+            tellMeasured(session)
+        }
         return true
     }
 
@@ -408,7 +423,8 @@ class SpeedControl(
                     session.chainRead.value = null
                     session.deployed = read.deployed
                     val before = session.view.fee
-                    val event = session.host.dispatchNumbered(ask.event(read.deployed), FeeEvent.serializer())
+                    val event = session.host.dispatchNumbered(ask.event(read.deployed, numberPreset()), FeeEvent.serializer())
+                    tellMeasured(session)
                     Asked(session, before, event)
                 }
             }
@@ -516,8 +532,48 @@ class SpeedControl(
             session.deployed = deployed
             session.generation = generation
             previews.add(session.start())
-            session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
+            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
+            tellMeasured(session)
         }
+    }
+
+    // -- what the operation moves (spec 083 fee, issue #411) -------------------------
+
+    /**
+     * The surface's own simulation of the operation answered: what it moves,
+     * per asset — the coins' own `Transfer` logs and the node's trace of
+     * native value ([app.getvela.wallet.feature.signing.core.SimDeltas.feeBalanceChanges]).
+     * Which fee coin can pay is what the operation LEAVES of it, and a coin
+     * the calls only name (a router's swap path) is one the machine may pay in
+     * once this says enough of it is left.
+     *
+     * Kept for every question about [calls], and told now to each session that
+     * was already asked one — the session in force and every speed preview
+     * pricing those very calls. A session still reading its deployment hears
+     * it right after its question instead. Never call this for a simulation
+     * that could not check or that reverted: that is no measurement.
+     */
+    fun balanceChanges(calls: List<FeeCall>, changes: List<FeeBalanceChange>) {
+        val told = synchronized(sessionLock) {
+            measured = calls to changes
+            (listOf(inForce.value) + previews).count { session ->
+                !session.reading && session.deployed != null && tellMeasured(session)
+            }
+        }
+        VelaLog.event("$area.fee", "balance changes measured", "changes" to changes.size, "told" to told)
+    }
+
+    /**
+     * Tell `session` what its operation moves, when it prices the calls that
+     * were measured. Called under [sessionLock], straight after the session's
+     * `QuoteRequested` — which clears it in the machine — so nothing is
+     * dispatched between the question and the measurement.
+     */
+    private fun tellMeasured(session: FeeSession): Boolean {
+        val (calls, changes) = measured ?: return false
+        if (session.ask?.calls != calls) return false
+        session.host.dispatch(FeeEvent.BalanceChangesMeasured(changes), FeeEvent.serializer())
+        return true
     }
 
     // -- intents ---------------------------------------------------------------------
@@ -527,6 +583,7 @@ class SpeedControl(
      * with the one before it (spec 068), and it starts at the stored default.
      */
     fun reset() {
+        synchronized(sessionLock) { measured = null }
         speedHost.dispatch(FeeSpeedEvent.Reset, FeeSpeedEvent.serializer())
         preferenceChanged()
     }

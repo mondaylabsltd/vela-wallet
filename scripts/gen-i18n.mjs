@@ -538,6 +538,29 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
 //   branch (why the slide is shut), and `send.txRelaySending` (the landing
 //   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
+// 1876 (issue #409, 2026-10-04): `onboarding.create.successMessage` said "Any
+//   of your 1 keys" to a one-key wallet. It is now plural by `{{count}}` —
+//   `successMessage_{one,other}`, plus `_many` (es-MX, pt-BR, fr, it, ru) and
+//   `_few` (ru): 4 paths for the 1 they replace. The ja + en room they needed
+//   under SC-005 came from three strings no shell has drawn since the done and
+//   progress screens lost them (`create.identiconHint`, `create.walletAddressLabel`,
+//   `create.progressMeterLabel`), not from a budget move. Same branches:
+//   1779 − 1 + 4 − 3 = 1779 leaves — the count is unchanged, the set is not.
+// 1878 (099, same day): + `explore.closeOtherTabs`, `explore.closeTabsToRight`
+//   — the browser's batch close, beside `closeAllTabs`. Same branches.
+// 1878 (merge of #409 into main after 099, 2026-10-04): #409's set (1779 leaves)
+//   + 099's two batch-close keys = 1781 leaves, 97 branches.
+// 1878 (issue #408, 2026-10-04): + `componentsUi.gas.rowShort` — a fee coin
+//   that cannot pay says why under its greyed row, need and have in its own
+//   unit — and `componentsUi.gas.noCoinPays`, the line under the fee when not
+//   one coin on offer can pay it (it used to name the coin in force: "Insufficient
+//   ETH for gas fees" over a wallet whose USDT was short too). Same branches:
+//   1779 + 2 = 1781 leaves.
+// 1877 (issue #408): − `componentsUi.signing.gasEstimateFailed` — no client
+//   draws it (the fee row's failed state says what failed); its bytes pay for
+//   the two above inside the unchanged SC-005 budget. 1780 leaves.
+// 1879 (merge of #417 into #408, 2026-10-04): #417's 1781 leaves + #408's net
+//   one (+ rowShort, noCoinPays, − gasEstimateFailed) = 1782 leaves, 97 branches.
 // 1877 (100, 2026-10-04): a page may ask Vela to add a network — + `connect.
 //   browser.{addLead,addFromSite}` (who asks; "the name and coin are the
 //   site's") and `componentsUi.browserStatus.reason.badRpc`; the sheet's other
@@ -547,8 +570,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the full path nor the leaf name appears outside the corpus and the
 //   generated tables) — the room the three need under SC-005, instead of a
 //   budget move. Same branches: 1779 + 3 - 2 = 1780 leaves.
-if (PATHS.length !== 1877) fail(`expected 1877 paths (1780 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
+// 1880 (merge of #419 into 100, 2026-10-04): #419's 1782 leaves (main + #409,
+//   #408; #411 moved no key) + 100's net one (+ addLead, addFromSite, badRpc,
+//   − alertNotFound{Title,Body}) = 1783 leaves, 97 branches.
+if (PATHS.length !== 1880) fail(`expected 1880 paths (1783 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1783) fail(`expected 1783 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -862,7 +888,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 144,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 145,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

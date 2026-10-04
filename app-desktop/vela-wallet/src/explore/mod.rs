@@ -47,24 +47,22 @@ pub struct ExploreStrings {
     pub new_tab: SharedString,
     pub start_page: SharedString,
     pub close_tab: SharedString,
+    /// Spec 099: the tab menu's batch closes, Chrome's three.
+    pub close_other_tabs: SharedString,
+    pub close_tabs_to_right: SharedString,
+    pub close_all_tabs: SharedString,
     pub add_to_favorites: SharedString,
     /// What the corpus calls the place a URL is typed. The desktop's
     /// add-a-favourite dialog takes one, and nothing else, so its field says
     /// this rather than the search box's "搜索 dApp，或输入网址" — an offer to
     /// search that this dialog cannot honour.
     pub address_bar: SharedString,
-    pub refresh: SharedString,
     pub back: SharedString,
     pub forward: SharedString,
     pub reload: SharedString,
-    /// The site menu's seven, in the web's order (078 E-03).
-    pub share: SharedString,
-    pub copy_link: SharedString,
+    /// The toolbar's ↗ (spec 099) — the one row of the old ⋯ menu with no
+    /// other door; its accessible name.
     pub open_in_system_browser: SharedString,
-    pub close_page: SharedString,
-    /// What a copy says it did.
-    pub copied: SharedString,
-    pub site_menu: SharedString,
     pub account: SharedString,
     pub connected_tag: SharedString,
     /// What the Connection panel says of a site the core holds no grant for
@@ -132,18 +130,15 @@ impl ExploreStrings {
             new_tab: s("explore.newTab"),
             start_page: s("explore.startPage"),
             close_tab: s("explore.closeTab"),
+            close_other_tabs: s("explore.closeOtherTabs"),
+            close_tabs_to_right: s("explore.closeTabsToRight"),
+            close_all_tabs: s("explore.closeAllTabs"),
             add_to_favorites: s("explore.addToFavorites"),
             address_bar: s("explore.addressBar"),
-            refresh: s("explore.refresh"),
             back: s("explore.back"),
             forward: s("explore.forward"),
             reload: s("explore.reload"),
-            share: s("explore.share"),
-            copy_link: s("explore.copyLink"),
             open_in_system_browser: s("explore.openInSystemBrowser"),
-            close_page: s("explore.closePage"),
-            copied: s("componentsUi.identiconViewer.copied"),
-            site_menu: s("explore.siteMenu"),
             account: s("explore.account"),
             connected_tag: s("explore.connectedTag"),
             not_connected: s("home.connEmptyTitle"),
@@ -200,9 +195,32 @@ mod tests {
             (s.request_open.as_ref(), "explore.requestOpen"),
             // Spec 097 E: a site with no grant says so.
             (s.not_connected.as_ref(), "home.connEmptyTitle"),
+            // Spec 099: the tab menu's batch closes, and the ⋯'s one row
+            // that became a control of its own.
+            (s.close_other_tabs.as_ref(), "explore.closeOtherTabs"),
+            (s.close_tabs_to_right.as_ref(), "explore.closeTabsToRight"),
+            (s.close_all_tabs.as_ref(), "explore.closeAllTabs"),
+            (
+                s.open_in_system_browser.as_ref(),
+                "explore.openInSystemBrowser",
+            ),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
+        // Spec 099: the tab menu is close, then the three batch closes, in
+        // the order the page's actions are wired.
+        let menu = fixtures::tab_menu(&s);
+        let labels: Vec<_> = menu.items.iter().map(|item| item.label.clone()).collect();
+        assert_eq!(
+            labels,
+            [
+                s.close_tab.clone(),
+                s.close_other_tabs.clone(),
+                s.close_tabs_to_right.clone(),
+                s.close_all_tabs.clone()
+            ]
+        );
+        assert_eq!(menu.divider_after, Some(0));
         assert!(
             s.consent_title.contains("{{host}}"),
             "connect.browser.title must keep its host slot"

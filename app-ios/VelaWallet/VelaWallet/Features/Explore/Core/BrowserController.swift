@@ -399,10 +399,46 @@ final class BrowserController {
         exploreCore.dispatch(CoreJSON.string(["type": "tab_closed", "id": id]))
     }
 
+    /// Close several tabs at once (spec 099 — Chrome's "close other tabs",
+    /// "close tabs to the right", "close all tabs").
+    ///
+    /// Which ones is the core's (`exploreTabsClosedBy`), and one `tabs_closed`
+    /// closes them in one write: a selection that survives stays, a closed one
+    /// moves to the nearest surviving tab on its right, else its left, and
+    /// none left is the start page. Nothing else is done here: each closed
+    /// tab leaves the explore view, and `reconcile` tears its engine down and
+    /// tells the browser machine `tab_closed` — exactly as for a single close.
+    /// Returns the ids it closed; none means nothing was sent.
+    @discardableResult
+    func closeTabs(_ scope: ExploreTabCloseScope) -> [String] {
+        let ids = Self.tabsClosed(by: scope, strip: Self.stripJSON(explore.tabs))
+        guard !ids.isEmpty else { return [] }
+        VelaLog.notice(.browser, "close tabs n=\(ids.count)")
+        exploreCore.dispatch(CoreJSON.string(["type": "tabs_closed", "ids": ids]))
+        return ids
+    }
+
     func closeAllTabs() {
-        for tab in explore.tabs {
-            exploreCore.dispatch(CoreJSON.string(["type": "tab_closed", "id": tab.id]))
-        }
+        closeTabs(.all)
+    }
+
+    /// The strip as the core reads it (`ExploreView.tabs`, JSON).
+    static func stripJSON(_ tabs: [ExploreTabWire]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: tabs.map(\.wire)),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
+    }
+
+    /// The tabs `scope` takes from `strip` (`stripJSON`), in strip order — the
+    /// core's `tabs_closed_by`. Empty when the core cannot read the input:
+    /// closing nothing is the safe side.
+    static func tabsClosed(by scope: ExploreTabCloseScope, strip: String) -> [String] {
+        guard let json = exploreTabsClosedBy(tabsJson: strip, scopeJson: CoreJSON.string(scope.wire)),
+              let data = json.data(using: .utf8),
+              let ids = (try? JSONSerialization.jsonObject(with: data)) as? [String]
+        else { return [] }
+        return ids
     }
 
     func goBack() { current?.goBack() }

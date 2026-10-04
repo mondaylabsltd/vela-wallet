@@ -762,7 +762,6 @@
    "headerCreated": "Cüzdan Oluşturuldu",
    "headerDefault": "Cüzdan Oluştur",
    "headerSyncFailed": "Cihazlar Arası Eşitleme",
-   "identiconHint": "Adresten üretilen kimlik deseni",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Cihaza bağlı",
    "keyHardwareBadge": "Donanım",
@@ -796,7 +795,6 @@
    "pinLabel": "PIN",
    "pinRejected": "Bu PIN kabul edilmedi. Denemeler bittiğinde anahtar kendini kilitler ve yalnızca sıfırlama açar — sıfırlama ise üzerindeki tüm geçiş anahtarlarını siler.",
    "pinTitle": "Güvenlik anahtarınızın PIN'ini girin",
-   "progressMeterLabel": "Adres türetiliyor",
    "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
    "progressTitle": "Cüzdanınız oluşturuluyor",
    "providerGeneric": "Telefon veya tablet",
@@ -824,7 +822,8 @@
    "stepKeysLabel": "Anahtarlar",
    "stepNamingDetail": "Cüzdanınıza bir ad verin. Açık anahtarınızla birlikte zincire yazılır.",
    "stepNamingLabel": "Ad",
-   "successMessage": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
+   "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
+   "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successTitle": "Cüzdan oluşturuldu",
    "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
    "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
@@ -838,8 +837,7 @@
    "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
    "touchTitle": "Güvenlik anahtarınıza dokunun",
    "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
-   "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı.",
-   "walletAddressLabel": "Cüzdan adresi"
+   "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı."
   },
   "login": {
    "alertNotSupportedTitle": "Desteklenmiyor",
@@ -1242,7 +1240,6 @@
    "batchSubtitle": "{{count}} işlem, birlikte imzalanır",
    "batchCall": "Sözleşme çağrısı",
    "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor.",
-   "gasEstimateFailed": "Gas ücreti tahmin edilemedi — gönderim başarısız olabilir veya zaman aşımına uğrayabilir. Yeniden denemek için yukarıdaki ücrete dokunun.",
    "submitted": "Gönderildi — onay bekleniyor",
    "historicalNote": "Geçmiş bir imza — tam olarak onayladığınız şey.",
    "close": "Kapat",
@@ -1507,7 +1504,9 @@
    "reasonQuote": "Relay'den fiyat alınamadı. Otomatik olarak yeniden deneniyor.",
    "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
    "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
-   "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor."
+   "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
+   "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
+   "noCoinPays": "Bu ücreti karşılayan token yok"
   },
   "dock": {
    "receive": "Al",
@@ -1914,6 +1913,8 @@
   "newTab": "Yeni sekme",
   "startPage": "Başlangıç sayfası",
   "closeAllTabs": "Tüm sekmeleri kapat",
+  "closeOtherTabs": "Diğer sekmeleri kapat",
+  "closeTabsToRight": "Sağdaki sekmeleri kapat",
   "closeTab": "Sekmeyi kapat",
   "openTabs": "{{n}} sekme açık",
   "addToFavorites": "Favorilere ekle",

@@ -62,6 +62,11 @@
 						<span class="check"><Icon icon={UTILITY_ICONS.check} size="base" /></span>
 					{/if}
 				</button>
+				{#if option.reason}
+					<!-- Issue 408: why a greyed coin cannot pay, under its row and at full
+					     strength — the dimming is not a reason. Set in past the mark. -->
+					<p class="option-reason">{option.reason}</p>
+				{/if}
 			{/each}
 		</section>
 	{:else}
@@ -218,6 +223,16 @@
 
 	.option.selected {
 		background: var(--color-bg-raised);
+	}
+
+	.option-reason {
+		/* The option's padding, its mark (32, `--space-4xl`) and the gap after it. */
+		margin: 0 var(--space-md) var(--space-sm)
+			calc(var(--space-md) + var(--space-4xl) + var(--space-lg));
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: 500;
+		color: var(--color-error-base);
 	}
 
 	.who {

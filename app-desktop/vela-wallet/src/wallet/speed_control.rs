@@ -93,6 +93,8 @@ impl QuoteAsk {
             calls: self.calls.clone(),
             fee_token: self.fee_token.clone(),
             auto_fee_token: self.auto_fee_token,
+            // Issue #408: the preset the core writes a coin's shortfall in.
+            number: crate::executor::format_prefs::current().number,
         }
     }
 }

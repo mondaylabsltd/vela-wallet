@@ -122,6 +122,28 @@ final class Loc {
         return (try? engine.t(key: key, opts: opts)) ?? key
     }
 
+    /// Resolve a PLURAL key: `count` chooses the form — `_one`, `_few`,
+    /// `_many` or `_other`, by the language's CLDR rule, in the core — and
+    /// fills `{{count}}`.
+    ///
+    /// `t(_:vars:)` cannot stand in for this: a `"count"` var fills the
+    /// number as text and selects no form, so a plural key handed to it
+    /// echoes (issue #409). Never pick the suffix here either — `count == 1`
+    /// is not Russian's rule (2–4 is `_few`), nor Chinese's (one form).
+    func t(_ key: String, count: Int, vars: [String: String] = [:]) -> String {
+        _ = resolvedLanguage
+        guard let engine else { return key }
+        let opts = TOptions(
+            count: Double(count),
+            context: nil,
+            defaultValue: nil,
+            lng: nil,
+            ordinal: false,
+            vars: vars.map { TVar(name: $0.key, value: $0.value) }
+        )
+        return (try? engine.t(key: key, opts: opts)) ?? key
+    }
+
     // MARK: - Language detection (the core's rule, spec 095)
 
     /// What "follow the system" means: the first of the person's preferred

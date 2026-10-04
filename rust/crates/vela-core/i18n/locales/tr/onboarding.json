@@ -155,7 +155,6 @@
       "headerCreated": "Cüzdan Oluşturuldu",
       "headerDefault": "Cüzdan Oluştur",
       "headerSyncFailed": "Cihazlar Arası Eşitleme",
-      "identiconHint": "Adresten üretilen kimlik deseni",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "Cihaza bağlı",
       "keyHardwareBadge": "Donanım",
@@ -189,7 +188,6 @@
       "pinLabel": "PIN",
       "pinRejected": "Bu PIN kabul edilmedi. Denemeler bittiğinde anahtar kendini kilitler ve yalnızca sıfırlama açar — sıfırlama ise üzerindeki tüm geçiş anahtarlarını siler.",
       "pinTitle": "Güvenlik anahtarınızın PIN'ini girin",
-      "progressMeterLabel": "Adres türetiliyor",
       "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
       "progressTitle": "Cüzdanınız oluşturuluyor",
       "providerGeneric": "Telefon veya tablet",
@@ -217,7 +215,8 @@
       "stepKeysLabel": "Anahtarlar",
       "stepNamingDetail": "Cüzdanınıza bir ad verin. Açık anahtarınızla birlikte zincire yazılır.",
       "stepNamingLabel": "Ad",
-      "successMessage": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
+      "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
+      "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
       "successTitle": "Cüzdan oluşturuldu",
       "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
       "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
@@ -231,8 +230,7 @@
       "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
       "touchTitle": "Güvenlik anahtarınıza dokunun",
       "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
-      "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı.",
-      "walletAddressLabel": "Cüzdan adresi"
+      "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",

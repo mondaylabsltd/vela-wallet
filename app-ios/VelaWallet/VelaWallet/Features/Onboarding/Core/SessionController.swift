@@ -31,9 +31,9 @@ final class SessionController {
     /// No effect in flight — `CoreDriver.isIdle`.
     var isIdle: Bool { driver.isIdle }
 
-    init(store: AccountStore) {
+    init(store: AccountStore, registryTransport: @escaping RegistryClient.Transport = RegistryClient.urlSession) {
         self.store = store
-        self.executor = SessionExecutor(store: store)
+        self.executor = SessionExecutor(store: store, registryTransport: registryTransport)
         self.driver = CoreDriver(
             bridge: SessionCore(),
             perform: { [executor] operation in await executor.perform(operation) },

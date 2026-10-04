@@ -765,7 +765,6 @@
    "headerCreated": "Carteira criada",
    "headerDefault": "Criar carteira",
    "headerSyncFailed": "Sincronização entre dispositivos",
-   "identiconHint": "Um padrão de identidade gerado a partir do endereço",
    "keyCount": "{{current}} / {{max}}",
    "keyDeviceOnlyBadge": "Vinculada ao aparelho",
    "keyHardwareBadge": "Hardware",
@@ -799,7 +798,6 @@
    "pinLabel": "PIN",
    "pinRejected": "Esse PIN não foi aceito. Quando as tentativas acabam, a chave se bloqueia e só uma redefinição a libera — o que apaga todas as chaves de acesso nela.",
    "pinTitle": "Digite o PIN da sua chave de segurança",
-   "progressMeterLabel": "Derivando endereço",
    "progressSubtitle": "Derivando o endereço de {{count}} chaves. O contrato é implantado na sua primeira transação — sem gas agora.",
    "progressTitle": "Criando sua carteira",
    "providerGeneric": "Celular ou tablet",
@@ -827,7 +825,9 @@
    "stepKeysLabel": "Chaves",
    "stepNamingDetail": "Dê um nome à sua carteira. Ele vai para a blockchain junto com sua chave pública.",
    "stepNamingLabel": "Nome",
-   "successMessage": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
+   "successMessage_one": "Sua chave entra sozinha. O contrato é implantado na primeira transação.",
+   "successMessage_many": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
+   "successMessage_other": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
    "successTitle": "Carteira criada",
    "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
    "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
@@ -841,8 +841,7 @@
    "touchSelectBody": "Há várias chaves de segurança conectadas e todas estão piscando. Toque naquela que você quer usar.",
    "touchTitle": "Toque na sua chave de segurança",
    "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
-   "verifyStuckHint": "A verificação continua falhando? Seu dispositivo pode não ter salvado esta passkey corretamente. É seguro recomeçar — nada foi criado ainda.",
-   "walletAddressLabel": "Endereço da carteira"
+   "verifyStuckHint": "A verificação continua falhando? Seu dispositivo pode não ter salvado esta passkey corretamente. É seguro recomeçar — nada foi criado ainda."
   },
   "login": {
    "alertNotSupportedTitle": "Não compatível",
@@ -1245,7 +1244,6 @@
    "batchSubtitle": "{{count}} transações, assinadas juntas",
    "batchCall": "Chamada de contrato",
    "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain.",
-   "gasEstimateFailed": "Não foi possível estimar a taxa de gas — o envio pode falhar ou expirar. Toque na taxa acima para tentar de novo.",
    "submitted": "Enviada — aguardando confirmação",
    "historicalNote": "Uma assinatura anterior — exatamente o que você aprovou.",
    "close": "Fechar",
@@ -1510,7 +1508,9 @@
    "reasonQuote": "Não foi possível obter um preço do relay. Tentando de novo automaticamente.",
    "reasonFeeToken": "O relay não consegue cotar esta moeda agora. Tentando de novo — ou pague a taxa com outra moeda.",
    "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
-   "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente."
+   "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente.",
+   "rowShort": "Precisa de ~{{need}}, tem {{have}}",
+   "noCoinPays": "Nenhum token cobre esta taxa"
   },
   "dock": {
    "receive": "Receber",
@@ -1918,6 +1918,8 @@
   "newTab": "Nova aba",
   "startPage": "Página inicial",
   "closeAllTabs": "Fechar todas as abas",
+  "closeOtherTabs": "Fechar as outras abas",
+  "closeTabsToRight": "Fechar as abas à direita",
   "closeTab": "Fechar aba",
   "openTabs": "{{n}} abas abertas",
   "addToFavorites": "Adicionar aos favoritos",

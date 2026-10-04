@@ -28,6 +28,7 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
+	import { tellBalanceChanges } from '$lib/signing/fee-balance-changes';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
@@ -425,6 +426,18 @@
 				? (account.keys[0]?.public_key_hex ?? account.public_key_hex)
 				: undefined
 		});
+		// Issue 411: what the calls move decides which coin can pay — a swap
+		// whose path names the stablecoins it trades leaves the machine nothing
+		// to count on until a simulation says what the swap leaves of them.
+		// Told to the fee in force and every speed pricing these calls, for as
+		// long as this request is the one on the sheet; a revert or a node that
+		// could not check tells it nothing.
+		const requestId = request.id;
+		void tellBalanceChanges(
+			speedControl,
+			{ from: identity.address, calls, chainId: request.chain_id },
+			() => quotedFor === requestId
+		);
 	});
 
 	/**

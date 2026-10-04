@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Value, json};
 
-use vela_core::app::{Account, PendingUpload};
+use vela_core::app::{Account, OutboxRecord, PendingUpload};
 
 /// The four keys, spelled exactly as every other client spells them.
 pub const KEY_ACCOUNTS: &str = "vela.accounts";
@@ -481,6 +481,17 @@ pub fn save_active_index(index: usize) -> Result<()> {
 
 pub fn has_pending_uploads() -> Result<bool> {
     Ok(!read_list(KEY_PENDING_UPLOADS)?.is_empty())
+}
+
+/// Every record in the outbox, as stored — for the session's landing watch
+/// (issue #409). A record this build cannot read is handed over as `None`
+/// rather than failing the read: the core skips it, and the others are still
+/// confirmed.
+pub fn load_pending_uploads() -> Result<Vec<OutboxRecord>> {
+    Ok(read_list(KEY_PENDING_UPLOADS)?
+        .into_iter()
+        .map(|item| OutboxRecord(serde_json::from_value(item).ok()))
+        .collect())
 }
 
 /// Keyed by `id`, which for a pending upload IS the credential id of its first

@@ -34,6 +34,29 @@ struct EngineSmokeTests {
         #expect(value != "Create Wallet")
     }
 
+    /// Issue #409: the done screen's line is plural, and the count reaches
+    /// the core as the PLURAL count. As a text var it fills the number but
+    /// picks no form — so the bare key, which has no value now, echoes.
+    @Test func theDoneLineAgreesWithItsCount() {
+        let key = I18nKeys.Create.successMessage
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        #expect(en.t(key, count: 1)
+            == "Your key can sign in on its own. The contract deploys with your first transaction.")
+        #expect(en.t(key, count: 2)
+            == "Any of your 2 keys can sign in on its own. The contract deploys with your first transaction.")
+        #expect(en.t(key, vars: ["count": "1"]) == key)
+
+        // Russian's 2–4 is `few`, which `count == 1 ? one : other` would miss.
+        let ru = Loc(overrideTag: "ru", preferredLanguages: [])
+        #expect(ru.t(key, count: 1).hasPrefix("Ваш ключ"))
+        #expect(ru.t(key, count: 3).contains("из 3 ключей"))
+
+        // Chinese has one form for every count, so it must not say how many.
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        #expect(zh.t(key, count: 1) == zh.t(key, count: 3))
+        #expect(zh.t(key, count: 1) != key)
+    }
+
     @Test func missingKeyEchoesItself() {
         let loc = Loc(overrideTag: "en", preferredLanguages: [])
         #expect(loc.t("onboarding.welcome.noSuchKey") == "onboarding.welcome.noSuchKey")

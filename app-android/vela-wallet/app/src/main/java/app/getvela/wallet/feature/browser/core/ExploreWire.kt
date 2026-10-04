@@ -147,4 +147,33 @@ sealed class ExploreEvent {
     @Serializable
     @SerialName("tab_closed")
     data class TabClosed(val id: String) : ExploreEvent()
+
+    /**
+     * Spec 099: close several at once — the ids [BrowserTabs.closedBy] names
+     * for a [TabCloseScope]. One write; the selection follows the core's rule
+     * (a survivor stays; a closed one moves to the nearest surviving tab on
+     * its right, else its left; none left is the start page).
+     */
+    @Serializable
+    @SerialName("tabs_closed")
+    data class TabsClosed(val ids: List<String>) : ExploreEvent()
+}
+
+/** Spec 099: what a batch close takes — the core's `explore_sites::TabCloseScope`. */
+@Serializable
+sealed class TabCloseScope {
+    /** Every tab but this one ("close other tabs"). */
+    @Serializable
+    @SerialName("others")
+    data class Others(val keep: String) : TabCloseScope()
+
+    /** Every tab to the right of this one in the strip. */
+    @Serializable
+    @SerialName("right")
+    data class Right(val of: String) : TabCloseScope()
+
+    /** Every tab. */
+    @Serializable
+    @SerialName("all")
+    data object All : TabCloseScope()
 }

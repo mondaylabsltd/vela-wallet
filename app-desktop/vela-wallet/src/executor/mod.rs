@@ -316,17 +316,16 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             group_seed_hex,
             group_public_key_hex,
             method,
-        } => match registry::publish(
+            answer_when_accepted,
+        } => published(registry::publish(
             metadata_hex,
             members,
             group_seed_hex,
             group_public_key_hex,
             *method,
+            *answer_when_accepted,
             ceremony,
-        ) {
-            Ok(()) => ShellResult::RegistryPublished,
-            Err(error) => index_failed(error),
-        },
+        )),
 
         ShellOperation::RegistryQueryByPublicKey { public_key_hex } => {
             match registry::query_by_public_key(public_key_hex) {
@@ -416,7 +415,42 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
             // rather than skipped, because the core is waiting for the ack.
             SessionShellResult::ExtensionCacheCleared
         }
+        // Issue #409 — the landing watch. The outbox goes over as stored; the
+        // core decides which records a read can settle.
+        SessionOperation::LoadPendingUploads => match storage::load_pending_uploads() {
+            Ok(records) => SessionShellResult::PendingUploadsLoaded { records },
+            Err(_) => SessionShellResult::PendingUploadsUnavailable,
+        },
+        // Blocking — up to the publish's own 120 s budget. `session.rs` runs
+        // this one on the background executor (`session_blocks`).
+        SessionOperation::AwaitRegistryLanding { task_id } => match registry::await_task(task_id) {
+            Ok(()) => SessionShellResult::RegistryLanded,
+            Err(error) => SessionShellResult::RegistryLandingUnconfirmed {
+                message: error.message,
+            },
+        },
+        SessionOperation::RemovePendingUpload { credential_id } => {
+            let _ = storage::remove_pending_upload(credential_id);
+            SessionShellResult::PendingUploadRemoved
+        }
     }
+}
+
+/// A publish's answer. Issue #409: one the core asked to have answered on
+/// acceptance comes back as `RegistryAccepted` with its task, never as
+/// published — the landing is the session's landing watch's to confirm.
+fn published(outcome: registry::Result<registry::Published>) -> ShellResult {
+    match outcome {
+        Ok(registry::Published::Landed) => ShellResult::RegistryPublished,
+        Ok(registry::Published::Accepted { task_id }) => ShellResult::RegistryAccepted { task_id },
+        Err(error) => index_failed(error),
+    }
+}
+
+/// Does this session operation leave the machine — and so must not run on the
+/// main thread? Every other session operation is one small local file.
+pub fn session_blocks(operation: &SessionOperation) -> bool {
+    matches!(operation, SessionOperation::AwaitRegistryLanding { .. })
 }
 
 // ---------------------------------------------------------------------------
@@ -757,5 +791,99 @@ mod timezone_tests {
     fn a_failed_call_falls_back_to_utc_rather_than_to_garbage() {
         assert_eq!(windows_offset_seconds(u32::MAX, 999, 999, 999), 0);
         assert_eq!(windows_offset_seconds(7, -60, 0, -60), 0);
+    }
+}
+
+#[cfg(test)]
+mod landing_409_tests {
+    use super::*;
+    use vela_core::app::{OutboxRecord, PendingUpload};
+
+    fn record(id: &str, task_id: Option<&str>) -> PendingUpload {
+        PendingUpload {
+            id: id.to_owned(),
+            name: "Everyday wallet".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            attestation_object_hex: "a0".to_owned(),
+            created_at_iso: "2026-10-04T00:00:00.000Z".to_owned(),
+            authenticator_attachment: String::new(),
+            transports: String::new(),
+            members: Vec::new(),
+            task_id: task_id.map(str::to_owned),
+        }
+    }
+
+    /// Issue #409: a publish the core asked to have answered on acceptance
+    /// comes back as accepted, with its task — never as published.
+    #[test]
+    fn an_accepted_publish_is_answered_with_its_task() {
+        assert_eq!(
+            published(Ok(registry::Published::Accepted {
+                task_id: "t1".to_owned()
+            })),
+            ShellResult::RegistryAccepted {
+                task_id: "t1".to_owned()
+            }
+        );
+        assert_eq!(
+            published(Ok(registry::Published::Landed)),
+            ShellResult::RegistryPublished
+        );
+    }
+
+    /// Only the wait on a registry task leaves the machine; every other
+    /// session operation stays on the synchronous pump.
+    #[test]
+    fn only_the_landing_wait_blocks() {
+        assert!(session_blocks(&SessionOperation::AwaitRegistryLanding {
+            task_id: "t1".to_owned()
+        }));
+        for local in [
+            SessionOperation::LoadPendingUploads,
+            SessionOperation::CheckPendingUploads,
+            SessionOperation::RemovePendingUpload {
+                credential_id: "cred0".to_owned(),
+            },
+        ] {
+            assert!(!session_blocks(&local), "{local:?}");
+        }
+    }
+
+    /// The outbox goes to the core as stored — the task id included — and a
+    /// record this build cannot read costs only itself.
+    #[test]
+    fn the_outbox_is_read_whole_and_leniently_and_a_confirmed_record_goes() {
+        storage::tests::with_temp_state("landing-409-outbox", || {
+            storage::tests::write_pending_upload("unreadable");
+            assert!(storage::save_pending_upload(&record("cred0", Some("t1"))).is_ok());
+
+            let SessionShellResult::PendingUploadsLoaded { records } =
+                perform_session(&SessionOperation::LoadPendingUploads)
+            else {
+                unreachable!("the outbox reads")
+            };
+            assert_eq!(records.len(), 2);
+            assert_eq!(records[0], OutboxRecord(None));
+            assert_eq!(
+                records[1]
+                    .0
+                    .as_ref()
+                    .and_then(PendingUpload::awaits_landing),
+                Some("t1")
+            );
+
+            assert_eq!(
+                perform_session(&SessionOperation::RemovePendingUpload {
+                    credential_id: "cred0".to_owned()
+                }),
+                SessionShellResult::PendingUploadRemoved
+            );
+            let SessionShellResult::PendingUploadsLoaded { records } =
+                perform_session(&SessionOperation::LoadPendingUploads)
+            else {
+                unreachable!("the outbox reads")
+            };
+            assert_eq!(records, vec![OutboxRecord(None)], "only cred0 went");
+        });
     }
 }

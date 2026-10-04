@@ -50,7 +50,6 @@
     },
     "signing": {
       "loading": "Loading...",
-      "gasEstimateFailed": "Couldn't estimate the gas fee — submitting may fail or time out. Tap the fee above to retry.",
       "submitted": "Submitted — waiting for confirmation",
       "historicalNote": "A past signature — exactly what you approved.",
       "close": "Close",
@@ -321,7 +320,9 @@
       "reasonQuote": "Couldn't get a price from the relay. Retrying automatically.",
       "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
       "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
-      "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically."
+      "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
+      "rowShort": "Need ~{{need}}, have {{have}}",
+      "noCoinPays": "No token can pay this fee"
     },
     "dock": {
       "receive": "Receive",

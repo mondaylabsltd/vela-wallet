@@ -18,21 +18,37 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
+import { pluralTemplate } from '$lib/i18n/plural';
 import en from '../../../../../../../assets/i18n/en.json';
+import ru from '../../../../../../../assets/i18n/ru.json';
+import zh from '../../../../../../../assets/i18n/zh.json';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 import KeysScreen from './KeysScreen.svelte';
 import DoneScreen from './DoneScreen.svelte';
 
-const strings = (key: string, params?: Record<string, string | number>): string => {
-	const value = key
-		.split('.')
-		.reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], en);
-	if (typeof value !== 'string') throw new Error(`no corpus value for "${key}"`);
-	return Object.entries(params ?? {}).reduce(
-		(text, [name, fill]) => text.replaceAll(`{{${name}}}`, String(fill)),
-		value
-	);
-};
+/** A screen's `strings`, over one real catalog — plural keys the way the routes resolve them. */
+const stringsIn =
+	(catalog: unknown, locale: string) =>
+	(key: string, params?: Record<string, string | number>): string => {
+		const lookup = (path: string) => {
+			const node = path
+				.split('.')
+				.reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], catalog);
+			return typeof node === 'string' ? node : undefined;
+		};
+		const value =
+			lookup(key) ??
+			(typeof params?.count === 'number'
+				? pluralTemplate(lookup, locale, key, params.count)
+				: undefined);
+		if (value === undefined) throw new Error(`no corpus value for "${key}"`);
+		return Object.entries(params ?? {}).reduce(
+			(text, [name, fill]) => text.replaceAll(`{{${name}}}`, String(fill)),
+			value
+		);
+	};
+
+const strings = stringsIn(en, 'en');
 
 // The real core draws (or declines to draw) the fallback artwork, which is the
 // half of this fix that lives in Rust.
@@ -89,16 +105,44 @@ const keysScreen = (keys: CreateKeyRow[]) =>
 		}
 	});
 
-const doneScreen = (keys: CreateKeyRow[]) =>
+const doneScreen = (keys: CreateKeyRow[], copy = strings) =>
 	render(DoneScreen, {
 		props: {
 			address: '0x71C7A4E9b2F03D8cA51e7F6d92B4c8035E9A3F1c',
 			walletName: 'Everyday wallet',
 			keys,
-			strings,
+			strings: copy,
 			onEnter: () => {}
 		}
 	});
+
+/**
+ * Issue 409: the line under "Wallet created" read "Any of your 1 keys can
+ * sign in on its own." It is plural now, and the form is the core's choice.
+ */
+describe('DoneScreen: the line under the title agrees with its count', () => {
+	const subtitle = (container: HTMLElement) =>
+		container.querySelector<HTMLElement>('.subtitle')?.textContent ?? '';
+
+	it('says "your key" for one key and "any of your N keys" for several', () => {
+		expect(subtitle(doneScreen([PHONE]).container)).toBe(
+			'Your key can sign in on its own. The contract deploys with your first transaction.'
+		);
+		expect(subtitle(doneScreen([PHONE, FOB]).container)).toBe(
+			'Any of your 2 keys can sign in on its own. The contract deploys with your first transaction.'
+		);
+	});
+
+	it('takes Russian’s own form for 2–4 keys, and one sentence for every count in Chinese', () => {
+		const inRu = stringsIn(ru, 'ru');
+		expect(subtitle(doneScreen([PHONE], inRu).container)).toMatch(/^Ваш ключ/);
+		expect(subtitle(doneScreen([PHONE, FOB, PHONE], inRu).container)).toContain('из 3 ключей');
+		const inZh = stringsIn(zh, 'zh');
+		expect(subtitle(doneScreen([PHONE], inZh).container)).toBe(
+			subtitle(doneScreen([PHONE, FOB, PHONE], inZh).container)
+		);
+	});
+});
 
 /** The rows only, so the screen's own headings never answer for them. */
 const rowText = (container: HTMLElement, selector: string) =>

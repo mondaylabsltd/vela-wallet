@@ -155,7 +155,6 @@
       "headerCreated": "ウォレットを作成しました",
       "headerDefault": "ウォレットを作成",
       "headerSyncFailed": "端末間の同期",
-      "identiconHint": "アドレスから生成される識別パターン",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "端末に紐付け",
       "keyHardwareBadge": "ハードウェア",
@@ -189,7 +188,6 @@
       "pinLabel": "PIN",
       "pinRejected": "PIN が正しくありません。試行回数がなくなるとキーはロックされ、リセットでしか解除できません。リセットするとキー上のパスキーはすべて消去されます。",
       "pinTitle": "セキュリティキーの PIN を入力",
-      "progressMeterLabel": "アドレスを導出中",
       "progressSubtitle": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
       "progressTitle": "ウォレットを作成中",
       "providerGeneric": "スマホまたはタブレット",
@@ -217,7 +215,8 @@
       "stepKeysLabel": "鍵",
       "stepNamingDetail": "ウォレットに名前を付けます。公開鍵と一緒にチェーンへ書き込まれます。",
       "stepNamingLabel": "名前",
-      "successMessage": "{{count}} 本のどの鍵でも単独でサインインできます。コントラクトは最初の取引で配置されます。",
+      "successMessage_one": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
+      "successMessage_other": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
       "successTitle": "ウォレットを作成しました",
       "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
       "syncFailedMessage": "ウォレットは作成されましたが、公開鍵がサーバーに同期されませんでした。これが解決するまで、他の端末でサインインできません。",
@@ -231,8 +230,7 @@
       "touchSelectBody": "複数のセキュリティキーが接続されていて、すべて点滅しています。使いたいものにタッチしてください。",
       "touchTitle": "セキュリティキーにタッチ",
       "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。",
-      "verifyStuckHint": "確認が何度も失敗しますか？端末がこのパスキーを正しく保存できていない可能性があります。まだ何も作成されていないので、安心して最初からやり直せます。",
-      "walletAddressLabel": "ウォレットアドレス"
+      "verifyStuckHint": "確認が何度も失敗しますか？端末がこのパスキーを正しく保存できていない可能性があります。まだ何も作成されていないので、安心して最初からやり直せます。"
     },
     "login": {
       "alertNotSupportedTitle": "非対応",

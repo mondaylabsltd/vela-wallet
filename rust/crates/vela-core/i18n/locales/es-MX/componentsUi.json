@@ -53,7 +53,6 @@
       "batchSubtitle": "{{count}} transacciones, firmadas juntas",
       "batchCall": "Llamada al contrato",
       "balanceUnderfundedNative": "No tienes suficiente {{symbol}} para cubrir esta transferencia; se espera que falle on-chain.",
-      "gasEstimateFailed": "No se pudo estimar la comisión de gas — el envío podría fallar o agotar el tiempo. Toca la comisión de arriba para reintentar.",
       "submitted": "Enviada — esperando confirmación",
       "historicalNote": "Una firma pasada — exactamente lo que aprobaste.",
       "close": "Cerrar",
@@ -318,7 +317,9 @@
       "reasonQuote": "No se pudo obtener un precio del relay. Reintentando automáticamente.",
       "reasonFeeToken": "El relay no puede cotizar esta moneda por ahora. Reintentando; también puedes pagar con otra moneda.",
       "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
-      "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente."
+      "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
+      "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
+      "noCoinPays": "Ningún token alcanza para esta comisión"
     },
     "dock": {
       "receive": "Recibir",

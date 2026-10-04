@@ -46,6 +46,12 @@ use crate::settings::SettingsStrings;
 mod feedback;
 use feedback::FeedbackDraft;
 
+/// A menu that drops over the in-app page (spec 099): in a window of its own
+/// on macOS, through a hole in the page's window on Windows, and never
+/// painted under the page.
+mod menu_float;
+use menu_float::{MenuFloat, OverPage, drops_over_page};
+
 /// How many focus handles the endpoints panel claims before the providers
 /// panel starts. Four fields, one per service.
 const ENDPOINT_FOCUS_COUNT: usize = 4;
@@ -337,8 +343,6 @@ enum ContactsMenu {
     Header,
     /// Group-row context menu, top-left at the cursor (DC6 / M2).
     Group,
-    /// Spec 022 M3 — the browsing toolbar's ⋯ site menu.
-    Site,
     /// Spec 022 M4 — right-click on a favourite tile (DE2).
     Tile,
     /// Spec 032 phase 40 — right-click on a row in Recent. The only way to
@@ -354,6 +358,9 @@ enum ContactsMenu {
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
+    /// Spec 099 — right-click on a tab: close it, the others, the ones to
+    /// its right, or all of them.
+    Tab,
 }
 
 /// The identicon, big, beside the address that drew it (078 H-02, the web's
@@ -767,6 +774,10 @@ pub struct WalletPage {
     /// its view loads on behind the one on screen, and a failure it met is
     /// there when it comes back.
     loads: std::collections::BTreeMap<String, crate::wallet::browser_host::LoadDriver>,
+    /// Spec 099: the tab a tab menu was opened over.
+    menu_tab: Option<String>,
+    /// Spec 099: the window a menu over the page is drawn in (macOS).
+    menu_float: MenuFloat,
     /// Spec 099 FR-014: per tab, the status line last put away (its Details
     /// opened, or ✕) — the line comes back only for something new.
     status_seen: std::collections::BTreeMap<String, String>,
@@ -1279,6 +1290,21 @@ impl WalletPage {
             }
         })
         .detach();
+        // Spec 099: a menu in a window of its own closes as one in this
+        // window would — when the window goes to the background, or moves or
+        // resizes out from under it. (A press anywhere and Esc are the float's
+        // own watch, `menu_float::watch`.)
+        #[cfg(target_os = "macos")]
+        {
+            cx.observe_window_activation(window, |page, window, cx| {
+                if !window.is_window_active() {
+                    page.dismiss_menu_float(cx);
+                }
+            })
+            .detach();
+            cx.observe_window_bounds(window, |page, _, cx| page.dismiss_menu_float(cx))
+                .detach();
+        }
 
         let page = cx.weak_entity();
         window
@@ -1375,6 +1401,8 @@ impl WalletPage {
             tab_strip: explore_components::TabStripScroll::default(),
             loads: std::collections::BTreeMap::new(),
             status_seen: std::collections::BTreeMap::new(),
+            menu_tab: None,
+            menu_float: MenuFloat::default(),
             suspended: std::collections::BTreeSet::new(),
             reloaded_tab: None,
             bar_committed: None,
@@ -4497,13 +4525,14 @@ impl WalletPage {
     /// closed (spec 070): the scrim covers where it was.
     #[cfg(not(target_os = "linux"))]
     fn dialog_over_browser(&self, cx: &gpui::App) -> bool {
-        // The site menus drop over the page too, and a native view paints
-        // over them: the ⋯ menu showed a sliver above the page and nothing
-        // else (found verifying 078 E-03). While one is open the page steps
-        // aside, as it does for a dialog, and comes back when it closes.
-        // On Windows the page stays: the menu cuts its own hole in the
-        // webview's window instead (spec 083 D2, `webview::cut_out`).
-        self.dialog_up(cx) || (!cfg!(target_os = "windows") && self.site_menu_open())
+        // A menu that drops over the page is under it too: the page is a
+        // native view and paints over anything gpui draws (078 E-03; spec
+        // 099: the tab menu's rows below the strip could be neither seen nor
+        // clicked). macOS draws such a menu in a window of its own and
+        // Windows cuts a hole for it (spec 083 D2), so the page stays; only
+        // where neither could be done does it step aside while the menu is
+        // open (`menu_float::over_page`).
+        self.dialog_up(cx) || self.menu_over_page() == Some(OverPage::HidePage)
     }
 
     /// Any centred dialog the page root draws over the window (spec 097 E).
@@ -4542,18 +4571,12 @@ impl WalletPage {
         self.browser_host.as_ref()?.read(cx).tab(id).cloned()
     }
 
-    /// The core holds a grant for the site on screen (spec 097 E).
-    fn site_connected(&self, cx: &gpui::App) -> bool {
-        self.shown_tab_view(cx)
-            .is_some_and(|tab| tab.connected_address.is_some())
-    }
-
-    /// A menu that drops over the page: the site's ⋯ and its network picker.
-    fn site_menu_open(&self) -> bool {
-        matches!(
-            self.menu,
-            Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
-        )
+    /// How the open menu is kept visible with the page, when it drops over
+    /// it (a tab's menu, the site's network picker); `None` for no menu or
+    /// one that opens where no page is.
+    fn menu_over_page(&self) -> Option<OverPage> {
+        let (kind, _, _) = self.menu?;
+        drops_over_page(kind).then(|| menu_float::over_page_here(self.menu_float.refused()))
     }
 
     /// 078 H-02 — every artwork with an address behind it opens this.
@@ -13189,6 +13212,68 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// Close several tabs at once (spec 099 — Chrome's "close other tabs",
+    /// "close tabs to the right", "close all tabs"). Which ones is the core's
+    /// (`tabs_closed_by`); each one's page goes with its view, and the core
+    /// settles what it had open, as for a single close. The selection then
+    /// follows the explore machine's rule, as it does for one.
+    fn close_browser_tabs(
+        &mut self,
+        scope: &vela_core::app::explore_sites::TabCloseScope,
+        cx: &mut Context<Self>,
+    ) {
+        let resident = resident::resident::<ExploreSites>(cx);
+        let ids =
+            vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
+        if ids.is_empty() {
+            return;
+        }
+        crate::diag::vlog!("browser", "close tabs n={} ({scope:?})", ids.len());
+        let shown_closed = self.shown_tab.as_ref().is_some_and(|id| ids.contains(id));
+        for id in &ids {
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::close(id);
+            self.loads.remove(id);
+            self.suspended.remove(id);
+            self.status_seen.remove(id);
+            if let Some(host) = self.browser_host.clone() {
+                host.update(cx, |host, cx| host.tab_closed(id, cx));
+            }
+        }
+        resident.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::TabsClosed { ids: ids.clone() },
+                cx,
+            );
+        });
+        if shown_closed || !self.browsing {
+            if shown_closed {
+                self.load = crate::wallet::browser_host::LoadDriver::default();
+                self.shown_tab = None;
+            }
+            let view = resident.read(cx).view();
+            let next = view
+                .selected_tab
+                .as_ref()
+                .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
+                .map(|tab| (tab.id.clone(), tab.url.clone()));
+            match next {
+                Some((id, Some(url))) if self.browsing || shown_closed => {
+                    self.switch_to_tab(id, url, cx);
+                }
+                Some((id, _)) => {
+                    self.show_tab(Some(id), cx);
+                    self.browsing = false;
+                }
+                None => {
+                    self.show_tab(None, cx);
+                    self.browsing = false;
+                }
+            }
+        }
+        cx.notify();
+    }
+
     /// Every page is closed, not merely hidden (an erase): their requests are
     /// settled (4900), a sheet showing one of them closes, and the documents
     /// stop running. Hiding a webview alone would leave its page alive and
@@ -13288,6 +13373,21 @@ impl WalletPage {
                 new_tab: Some(Box::new(cx.listener(|page, _: &gpui::ClickEvent, _, cx| {
                     page.browser_go(crate::wallet::browser_host::Go::NewTab, cx);
                 })) as panels::Click),
+                // Spec 099: right-click a tab for its closes.
+                menu: ids
+                    .iter()
+                    .map(|id| {
+                        let id = id.clone();
+                        Some(
+                            Box::new(cx.listener(move |page, event: &MouseDownEvent, _, cx| {
+                                page.menu_tab = Some(id.clone());
+                                page.menu =
+                                    Some((ContactsMenu::Tab, event.position, Anchor::TopLeft));
+                                cx.notify();
+                            })) as explore_components::TabMenuOpen,
+                        )
+                    })
+                    .collect(),
                 held,
                 scroll: Some(self.tab_strip.clone()),
             }
@@ -13333,27 +13433,6 @@ impl WalletPage {
                             .iter()
                             .any(|site| &site.origin == origin)
                 });
-        // The two trailing affordances open different things, so the page — not
-        // the component — carries their listeners.
-        // Filled in the accent on a page already pinned (078 E-04).
-        let star = explore_components::toolbar_control_with(
-            theme,
-            &mut self.icons,
-            Icon::Star,
-            if favorite_origin.is_some() {
-                theme.accent
-            } else {
-                theme.fg_base
-            },
-            favorite_origin.is_some(),
-            true,
-        );
-        let dots = explore_components::toolbar_control(
-            theme,
-            &mut self.icons,
-            Icon::Ellipsis,
-            theme.fg_base,
-        );
         // The green dot IS the connection state, so live it is the core's
         // word — a grant for the site on screen — and never "a page is open".
         let connected = if live_browser {
@@ -13363,71 +13442,117 @@ impl WalletPage {
         } else {
             browsing
         };
-        let chip = explore_components::account_chip(
-            theme,
-            &mut self.identicons,
-            identity.name.clone(),
-            &identity.address,
-            connected,
-        );
-        let trailing = div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(
+        // The trailing controls act on different things, so the page — not
+        // the component — carries their listeners; it draws them in the
+        // component's order (`TRAILING_CONTROLS`: no ⋯, spec 099).
+        let mut trailing = div().flex().items_center().gap(px(8.));
+        for control in explore_components::TRAILING_CONTROLS {
+            trailing = trailing.child(match control {
                 // The star pins the page that is open. It reads the url from
                 // the WEBVIEW, never from the address bar's text: what is
                 // pinned has to be the document that is actually loaded.
-                div()
-                    .id("toolbar-star")
-                    .cursor_pointer()
-                    .child(star)
-                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                        if let Some(origin) = favorite_origin.clone() {
-                            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    vela_core::app::explore_sites::Event::FavoriteRemoved {
-                                        origin,
-                                    },
+                // Filled in the accent on a page already pinned (078 E-04).
+                explore_components::TrailingControl::Favorite => {
+                    let pinned = favorite_origin.is_some();
+                    let star = explore_components::toolbar_control_with(
+                        theme,
+                        &mut self.icons,
+                        Icon::Star,
+                        if pinned { theme.accent } else { theme.fg_base },
+                        pinned,
+                        true,
+                    );
+                    let favorite_origin = favorite_origin.clone();
+                    div()
+                        .id("toolbar-star")
+                        .cursor_pointer()
+                        .child(star)
+                        .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            if let Some(origin) = favorite_origin.clone() {
+                                resident::resident::<ExploreSites>(cx).update(
                                     cx,
+                                    |resident, cx| {
+                                        resident.dispatch(
+                                            vela_core::app::explore_sites::Event::FavoriteRemoved {
+                                                origin,
+                                            },
+                                            cx,
+                                        );
+                                    },
                                 );
-                            });
-                            cx.notify();
-                            return;
-                        }
-                        this.pin_current_page(cx);
-                        cx.notify();
-                    })),
-            )
-            .child(
-                div()
-                    .id("site-menu")
-                    .cursor_pointer()
-                    .child(dots)
-                    .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                        this.menu = Some((ContactsMenu::Site, event.position(), Anchor::TopRight));
-                        cx.notify();
-                    })),
-            )
-            .child({
-                // The chip opens the Connection panel of the page on screen —
-                // on the start page there is none, so it opens nothing (spec
-                // 097 E: it opened the drawing's "app.uniswap.org · Connected").
-                let area = div().id("account-chip").child(chip);
-                if browsing {
-                    area.cursor_pointer()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.panel = if this.panel == PanelId::Connection {
-                                PanelId::None
-                            } else {
-                                PanelId::Connection
-                            };
+                                cx.notify();
+                                return;
+                            }
+                            this.pin_current_page(cx);
                             cx.notify();
                         }))
-                } else {
-                    area
+                }
+                // Spec 099: the old ⋯ menu's one row with no other door. The
+                // page's own address, read from the WEBVIEW at the click —
+                // never the bar's text — and handed to another program's
+                // command line (083). Over the start page there is no page
+                // to hand over, so it is off; the drawing (no session) shows
+                // it as it is over a page, and answers nothing.
+                explore_components::TrailingControl::OpenInSystemBrowser => {
+                    let open_out = explore_components::toolbar_control_with(
+                        theme,
+                        &mut self.icons,
+                        Icon::ExternalLink,
+                        theme.fg_base,
+                        false,
+                        browsing,
+                    );
+                    let area = div()
+                        .id("toolbar-open-out")
+                        .aria_label(self.explore.open_in_system_browser.clone())
+                        .child(open_out);
+                    if live_browser {
+                        area.cursor_pointer().on_click(cx.listener(
+                            |this, _: &gpui::ClickEvent, _, cx| {
+                                #[cfg(not(target_os = "linux"))]
+                                let engine = crate::webview::current_url();
+                                #[cfg(target_os = "linux")]
+                                let engine: Option<String> = None;
+                                if let Some(url) =
+                                    explore_live::system_browser_url(this.browsing, engine)
+                                {
+                                    crate::executor::opener::open_from_page(&url, cx);
+                                }
+                            },
+                        ))
+                    } else {
+                        area
+                    }
+                }
+                // The chip opens the Connection panel of the page on screen —
+                // its Disconnect, for a connected site. On the start page
+                // there is none, so it opens nothing (spec 097 E: it opened
+                // the drawing's "app.uniswap.org · Connected").
+                explore_components::TrailingControl::Account => {
+                    let chip = explore_components::account_chip(
+                        theme,
+                        &mut self.identicons,
+                        identity.name.clone(),
+                        &identity.address,
+                        connected,
+                    );
+                    let area = div().id("account-chip").child(chip);
+                    if browsing {
+                        area.cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.panel = if this.panel == PanelId::Connection {
+                                    PanelId::None
+                                } else {
+                                    PanelId::Connection
+                                };
+                                cx.notify();
+                            }))
+                    } else {
+                        area
+                    }
                 }
             });
+        }
         let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
         // Spec 079 US3: a load that failed stands where the page was.
         let failed_load = self
@@ -13484,21 +13609,20 @@ impl WalletPage {
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
             selected: self.address_selected,
-            notice: if held_words {
-                Some(if self.held_close {
+            notice: held_words.then(|| {
+                if self.held_close {
                     self.loc.t(CLOSE_HELD_WORDS)
                 } else {
                     self.explore.request_open.clone()
-                })
-            } else {
-                (self.copied.as_deref() == Some(EXPLORE_COPY)).then(|| self.explore.copied.clone())
-            },
-            notice_warns: held_words,
+                }
+            }),
         };
         // Editable once somebody is signed in: a click takes the page's URL
         // into the field, Enter goes wherever the core's `browser_input` says
         // the text means — a URL, or a search for it. While typing, the text
-        // is the shared editor (caret, selection, IME), like every well.
+        // is the shared editor (caret, selection, IME), like every well. The
+        // URL comes in selected (`edit_address`), so a click and ⌘C copy the
+        // link — the old ⋯ menu's Copy link and Share (spec 099).
         let live_address = self.identity.is_some();
         let address_change: crate::ui::editor::OnChange = {
             let page = cx.entity().downgrade();
@@ -18970,79 +19094,6 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // The site menu, in the web's order (078 E-03): refresh, share,
-            // copy link, add to favourites, open in the system browser,
-            // disconnect, close. All seven act. There is no share sheet a
-            // gpui window can raise, so Share hands the link over the one way
-            // this machine shares everything — the clipboard — and says so.
-            ContactsMenu::Site => {
-                let connected = self.site_connected(cx);
-                #[cfg(not(target_os = "linux"))]
-                let url = crate::webview::current_url().filter(|url| url != "about:blank");
-                #[cfg(target_os = "linux")]
-                let url: Option<String> = None;
-                let copy = |url: Option<String>| {
-                    url.map(|url| {
-                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            this.menu = None;
-                            this.copy_text(EXPLORE_COPY, url.clone(), CONTACTS_COPY_HOLD, cx);
-                        })) as contacts_components::MenuAction
-                    })
-                };
-                let mut actions = vec![
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        this.browser_go(crate::wallet::browser_host::Go::Reload, cx);
-                    })) as contacts_components::MenuAction),
-                    copy(url.clone()),
-                    copy(url.clone()),
-                    // Pins the page that is loaded — the star's own act.
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        this.pin_current_page(cx);
-                        cx.notify();
-                    })) as contacts_components::MenuAction),
-                    url.clone().map(|url| {
-                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            this.menu = None;
-                            // The page's own address, handed to another
-                            // program's command line (083).
-                            crate::executor::opener::open_from_page(&url, cx);
-                            cx.notify();
-                        })) as contacts_components::MenuAction
-                    }),
-                    // Disconnect is the CORE's: the site on screen, by name — its
-                    // grant goes, and every open page of it hears
-                    // `accountsChanged []` and `disconnect`.
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        let origin = this.shown_tab_view(cx).and_then(|tab| tab.origin);
-                        if let Some(origin) = origin {
-                            this.revoke_site(origin, cx);
-                        }
-                        cx.notify();
-                    })) as contacts_components::MenuAction),
-                    // Close closes the PAGE — the tab on screen, as the phones'
-                    // "Close page" does. Its requests are settled by the core
-                    // when its document goes; merely leaving Explore settles
-                    // nothing.
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        this.panel = PanelId::None;
-                        match this.shown_tab.clone() {
-                            Some(id) => this.close_browser_tab(&id, cx),
-                            None => this.close_browser_pages(cx),
-                        }
-                        cx.notify();
-                    })) as contacts_components::MenuAction),
-                ];
-                // A site with no grant has nothing to disconnect (spec 097 E):
-                // the row is not drawn (`site_menu`), so its action goes too.
-                if !connected {
-                    actions.remove(explore_fixtures::SITE_MENU_DISCONNECT);
-                }
-                actions
-            }
             // "Move to a group": the person's own groups, newest last, with
             // "new group" at the top. The index is the position in the SAME
             // list the menu was built from — read again here rather than
@@ -19207,6 +19258,31 @@ impl WalletPage {
                 actions
             }
 
+            // Spec 099: a tab's closes — this one, then the core's scopes.
+            ContactsMenu::Tab => {
+                use vela_core::app::explore_sites::TabCloseScope;
+                let scoped = |scope: fn(String) -> Option<TabCloseScope>| {
+                    Some(
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            if let Some(id) = this.menu_tab.take() {
+                                match scope(id.clone()) {
+                                    Some(scope) => this.close_browser_tabs(&scope, cx),
+                                    None => this.close_browser_tab(&id, cx),
+                                }
+                            }
+                            cx.notify();
+                        })) as contacts_components::MenuAction,
+                    )
+                };
+                vec![
+                    scoped(|_| None),
+                    scoped(|keep| Some(TabCloseScope::Others { keep })),
+                    scoped(|of| Some(TabCloseScope::Right { of })),
+                    scoped(|_| Some(TabCloseScope::All)),
+                ]
+            }
+
             // A row in Recent: open it in a new tab, pin it, or forget it.
             // All three belong to a core — the tabs', the favourites' and the
             // history's — which is why this menu could be armed the day it
@@ -19330,14 +19406,16 @@ impl WalletPage {
         }
     }
 
-    fn menu_overlay(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
-        let (kind, position, anchor) = self.menu?;
-        let model = match kind {
+    /// What the menu `kind` lists — its rows, in the order its actions are
+    /// armed (`menu_actions`).
+    fn menu_model(
+        &self,
+        kind: ContactsMenu,
+        cx: &mut Context<Self>,
+    ) -> contacts_fixtures::MenuModel {
+        match kind {
             ContactsMenu::Header => contacts_fixtures::header_dropdown(&self.contacts),
             ContactsMenu::Group => contacts_fixtures::group_context(&self.contacts),
-            ContactsMenu::Site => {
-                explore_fixtures::site_menu(&self.explore, self.site_connected(cx))
-            }
             ContactsMenu::Recent => explore_fixtures::recent_menu(&self.explore),
             ContactsMenu::MoveGroup => explore_fixtures::group_pick_menu(
                 &self.explore,
@@ -19350,15 +19428,21 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
-            // Drawn by its own card below: logos and figures, not glyphs.
+            ContactsMenu::Tab => explore_fixtures::tab_menu(&self.explore),
+            // Drawn by its own card: logos and figures, not glyphs.
             ContactsMenu::SiteNetwork => contacts_fixtures::MenuModel {
                 items: Vec::new(),
                 divider_after: None,
             },
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
-        };
+        }
+    }
+
+    /// The open menu's card, its rows armed — the same card in the window
+    /// and in a float of its own (spec 099).
+    fn menu_card_of(&mut self, kind: ContactsMenu, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let actions = self.menu_actions(kind, cx);
-        let card = if matches!(kind, ContactsMenu::SiteNetwork) {
+        if matches!(kind, ContactsMenu::SiteNetwork) {
             // What the account holds on each network: the home screen's own
             // figures, as they stand now.
             let money = self.money(cx);
@@ -19377,8 +19461,30 @@ impl WalletPage {
                 actions,
             )
         } else {
+            let model = self.menu_model(kind, cx);
             menu_card(theme, &mut self.icons, &model, actions)
-        };
+        }
+    }
+
+    /// How big [`Self::menu_card_of`] draws `kind`, its shadow aside — what
+    /// a float is sized to before anything is laid out in it.
+    #[cfg(target_os = "macos")]
+    fn menu_card_size_of(&self, kind: ContactsMenu, cx: &mut Context<Self>) -> gpui::Size<Pixels> {
+        if matches!(kind, ContactsMenu::SiteNetwork) {
+            explore_components::network_pick_card_size(self.site_networks.len())
+        } else {
+            contacts_components::menu_card_size(&self.menu_model(kind, cx))
+        }
+    }
+
+    fn menu_overlay(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let (kind, position, anchor) = self.menu?;
+        let over = self.menu_over_page();
+        // Spec 099: drawn in a window of its own, above the page.
+        if over == Some(OverPage::Float) {
+            return None;
+        }
+        let card = self.menu_card_of(kind, theme, cx);
         Some(
             deferred(
                 anchored()
@@ -19397,31 +19503,24 @@ impl WalletPage {
                             // Spec 083 D2 (Windows): measured where it is
                             // painted — after the page, so this frame's layout
                             // — and cut out of the webview's window.
-                            .children(
-                                (cfg!(target_os = "windows")
-                                    && matches!(
-                                        kind,
-                                        ContactsMenu::Site | ContactsMenu::SiteNetwork
-                                    ))
-                                .then(|| {
-                                    gpui::canvas(
-                                        |_, _, _| (),
-                                        |bounds, (), window, _| {
-                                            #[cfg(target_os = "windows")]
-                                            crate::webview::cut_out(
-                                                Some(bounds),
-                                                window.scale_factor(),
-                                            );
-                                            #[cfg(not(target_os = "windows"))]
-                                            let _ = (bounds, window);
-                                        },
-                                    )
-                                    .absolute()
-                                    .top_0()
-                                    .left_0()
-                                    .size_full()
-                                }),
-                            ),
+                            .children((over == Some(OverPage::CutOut)).then(|| {
+                                gpui::canvas(
+                                    |_, _, _| (),
+                                    |bounds, (), window, _| {
+                                        #[cfg(target_os = "windows")]
+                                        crate::webview::cut_out(
+                                            Some(bounds),
+                                            window.scale_factor(),
+                                        );
+                                        #[cfg(not(target_os = "windows"))]
+                                        let _ = (bounds, window);
+                                    },
+                                )
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full()
+                            })),
                     ),
             )
             .with_priority(1)
@@ -19486,6 +19585,11 @@ impl Render for WalletPage {
         // wallet for a moment failed a connect or a signature the person was
         // in the middle of. Only closing the tab or the page going away
         // settles its requests.
+        //
+        // A menu over the page gets its window first (spec 099, macOS): the
+        // check below asks whether one could be opened.
+        #[cfg(target_os = "macos")]
+        self.sync_menu_float(window, cx);
         #[cfg(not(target_os = "linux"))]
         if !(self.section == Section::Explore && self.browsing && self.identity.is_some())
             || self.dialog_over_browser(cx)
@@ -19494,7 +19598,7 @@ impl Render for WalletPage {
         }
         // The menu closed: the webview's window is whole again (083 D2).
         #[cfg(target_os = "windows")]
-        if !self.site_menu_open() {
+        if self.menu_over_page() != Some(OverPage::CutOut) {
             crate::webview::cut_out(None, 1.0);
         }
         // Typing stops when the address bar loses the keyboard.
@@ -19798,8 +19902,6 @@ fn confirmed_sends(
         .collect()
 }
 
-/// The site menu's copy, said in the address bar (078 E-03).
-const EXPLORE_COPY: &str = "explore-copy";
 /// The technical details' address copy (078 G-05).
 const SIGNING_TECH_COPY: &str = "signing-tech-copy";
 const CONTACT_QR_COPY: &str = "contact-qr";
@@ -20016,7 +20118,7 @@ mod tests {
             );
         }
         // Drawn where the browser never is: the send flow's (a Wallet column),
-        // its scanner, the menus (the site's own are `site_menu_open`), toasts,
+        // its scanner, the menus (those over the page are `menu_over_page`), toasts,
         // and the Feedback page's picture viewer (`viewer_open`, listed too).
         let elsewhere = [
             "scan_overlay",

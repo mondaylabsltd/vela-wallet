@@ -527,8 +527,9 @@ class SigningController(
             // (`approveOpts`). A chip tap ends auto (`SpeedControl.chooseFeeToken`).
             speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
+            // Its moves also tell the fee machine which coins can pay (#411).
             scope.launch {
-                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) ?: return@launch
+                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }, feeCalls) ?: return@launch
             }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
@@ -584,8 +585,15 @@ class SigningController(
      * The simulation, read by the core (spec 082 RG6): the pool's answer goes
      * to `simOutcome` as it came, and only a `deltas` verdict is judged by the
      * trust machine. `null` when this host has no simulator.
+     *
+     * Spec 083 fee, issue #411: a `deltas` verdict also goes to the fee
+     * machine — to every session pricing [feeCalls] — BEFORE the tokens are
+     * judged, because which coin can pay does not wait on token names. A
+     * Uniswap swap on Polygon whose path named both stablecoins was paid in
+     * POL, held at 0, because nobody told the machine what the swap leaves.
+     * A revert or a run nobody could check tells it nothing.
      */
-    private suspend fun simulated(chainId: Int, calls: List<SimDeltas.Call>): SimOutcome? {
+    private suspend fun simulated(chainId: Int, calls: List<SimDeltas.Call>, feeCalls: List<FeeCall>): SimOutcome? {
         val params = SimDeltas.payload(wallet.address, calls)?.let { array -> (0 until array.length()).map(array::get) }
         val answer = if (params == null) {
             null
@@ -601,6 +609,7 @@ class SigningController(
         if (notice != null) return notice
         // Moves this build cannot read are not "nothing moves".
         val deltas = SimDeltas.deltas(record) ?: return SimDeltas.couldNotCheck()
+        speedControl.balanceChanges(feeCalls, SimDeltas.feeBalanceChanges(deltas))
         val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()
