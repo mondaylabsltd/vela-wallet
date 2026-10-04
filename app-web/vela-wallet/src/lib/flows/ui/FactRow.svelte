@@ -23,31 +23,38 @@
 	let { fact, copied = false, oncopy }: Props = $props();
 </script>
 
+{#snippet lead()}
+	{#if fact.lead?.kind === 'dot'}
+		<span class="dot" style:background={fact.lead.color} aria-hidden="true"></span>
+	{:else if fact.lead?.kind === 'token'}
+		<TokenIcon
+			ticker={fact.lead.mark.ticker}
+			badgeColor={fact.lead.mark.badgeColor}
+			logoUrls={fact.lead.mark.logoUrls}
+			badgeLogoUrl={fact.lead.mark.badgeLogoUrl}
+			badgeHidden={fact.lead.mark.badgeHidden}
+			size="inline"
+		/>
+	{:else if fact.lead?.kind === 'identicon'}
+		<span class="mark"
+			><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
+		>
+	{/if}
+{/snippet}
+
 <div class="fact">
 	<span class="label">{fact.label}</span>
 	<span class="value-wrap">
-		{#if fact.lead?.kind === 'dot'}
-			<span class="dot" style:background={fact.lead.color} aria-hidden="true"></span>
-		{:else if fact.lead?.kind === 'token'}
-			<TokenIcon
-				ticker={fact.lead.mark.ticker}
-				badgeColor={fact.lead.mark.badgeColor}
-				logoUrls={fact.lead.mark.logoUrls}
-				badgeLogoUrl={fact.lead.mark.badgeLogoUrl}
-				badgeHidden={fact.lead.mark.badgeHidden}
-				size="inline"
-			/>
-		{:else if fact.lead?.kind === 'identicon'}
-			<span class="mark"
-				><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
-			>
-		{/if}
 		{#if fact.detail !== undefined}
 			<span class="lines">
-				<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+				<span class="first">
+					{@render lead()}
+					<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+				</span>
 				<span class="detail">{fact.detail}</span>
 			</span>
 		{:else}
+			{@render lead()}
 			<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
 		{/if}
 		{#if fact.copy !== undefined}
@@ -116,7 +123,11 @@
 	}
 
 	/* A name over the address it stands for (spec 097 F): the name may be cut,
-	   the address under it never is. */
+	   the address under it never is. Issue 423: the art sits beside the NAME,
+	   on one line, as the From row's does, and the line under it — whose word
+	   the name is and the short address — is in the body face. Beside the
+	   two-line column the art floated between the lines, far from a short
+	   name, over a line set in mono. */
 	.lines {
 		display: flex;
 		flex-direction: column;
@@ -124,12 +135,15 @@
 		min-width: 0;
 	}
 
-	.lines .value {
+	.first {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		min-width: 0;
 		max-width: 100%;
 	}
 
 	.detail {
-		font-family: var(--font-mono);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 		white-space: nowrap;

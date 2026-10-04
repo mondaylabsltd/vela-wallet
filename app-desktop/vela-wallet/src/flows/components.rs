@@ -340,11 +340,11 @@ pub fn fact_row(
         .justify_end()
         .gap(px(6.));
 
-    value_side = match &fact.lead {
-        FactLead::None => value_side,
-        FactLead::Token(mark) => value_side.child(inline_mark(theme, mark)),
+    let lead = match &fact.lead {
+        FactLead::None => None,
+        FactLead::Token(mark) => Some(inline_mark(theme, mark).into_any_element()),
         FactLead::Identicon(seed) => {
-            value_side.child(openable_identicon(identicons, seed.as_ref(), 20.))
+            Some(openable_identicon(identicons, seed.as_ref(), 20.).into_any_element())
         }
     };
 
@@ -378,21 +378,32 @@ pub fn fact_row(
         })
         .child(text);
     value_side = match &fact.detail {
-        None => value_side.child(value),
-        // The short address under a payee's name, muted mono, whole. The
-        // column hugs its lines (the identicon stays beside them) and only
-        // the name gives way when the row is narrow.
+        None => value_side.children(lead).child(value),
+        // Issue #423: a payee's identicon sits beside its NAME, on one line,
+        // as the From row's does; under them, whose word the name is and the
+        // short address ("Vela User · 0x14fB…eA5c") — muted, whole, in the
+        // body face. Beside a two-line column the identicon floated between
+        // the lines, far from a short name, and the mono line read like code.
+        // Only the name gives way when the row is narrow.
         Some(detail) => value_side.child(
             div()
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
                 .items_end()
-                .child(value.max_w_full())
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .max_w_full()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .children(lead)
+                        .child(value),
+                )
                 .child(
                     div()
                         .whitespace_nowrap()
-                        .font_family(theme::font_mono())
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .child(detail.clone()),

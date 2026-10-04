@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
-import app.getvela.wallet.core.format.cleanAmountEdit
+import app.getvela.wallet.core.format.amountFieldOf
+import app.getvela.wallet.core.format.cleanAmountFieldEdit
 import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.marks.RemoteLogo
 import androidx.compose.foundation.layout.Column
@@ -670,8 +671,8 @@ fun AllowanceEditor(
             custom?.let { input ->
                 // Spec 044: the guard's custom amount — local echo, the core's
                 // text when it differs (the send form's rule).
-                var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(input.value) }
-                androidx.compose.runtime.LaunchedEffect(input.value) { if (input.value != typed && input.value.isEmpty()) typed = input.value }
+                var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(amountFieldOf(input.value)) }
+                androidx.compose.runtime.LaunchedEffect(input.value) { if (input.value != typed.text && input.value.isEmpty()) typed = amountFieldOf(input.value) }
                 androidx.compose.foundation.layout.Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -682,11 +683,13 @@ fun AllowanceEditor(
                     androidx.compose.foundation.text.BasicTextField(
                         value = typed,
                         // Spec 073: the cap's parser drops every comma, so a
-                        // raw "4,5" allowed 45 — cleaned by the core's rule first.
+                        // raw "4,5" allowed 45 — cleaned by the core's rule
+                        // first, caret and all (issue #421: "08" is 8).
                         onValueChange = { next ->
-                            cleanAmountEdit(next, typed)?.let { clean ->
-                                typed = clean
-                                onCustomAmount(clean)
+                            cleanAmountFieldEdit(next, typed)?.let { edit ->
+                                val changed = edit.text != typed.text
+                                typed = edit
+                                if (changed) onCustomAmount(edit.text)
                             }
                         },
                         singleLine = true,
@@ -694,7 +697,7 @@ fun AllowanceEditor(
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
-                            if (typed.isEmpty()) Text(text = input.placeholder, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
+                            if (typed.text.isEmpty()) Text(text = input.placeholder, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
                             inner()
                         },
                     )

@@ -2470,13 +2470,23 @@ pub fn amount_to_input_with(
 /// it had.
 #[must_use]
 pub fn amount_edited(next: &str, previous: &str) -> Option<String> {
-    use vela_core::l10n::amount_text;
-    amount_text::clean(
+    amount_edited_with(
         next,
+        previous,
         crate::executor::format_prefs::current().number,
-        amount_text::Entry::Unknown,
-        Some(previous),
     )
+}
+
+/// [`amount_edited`] under a named preset — the seam a test types through
+/// without touching the person's global choice.
+#[must_use]
+pub fn amount_edited_with(
+    next: &str,
+    previous: &str,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(next, preset, amount_text::Entry::Unknown, Some(previous))
 }
 
 #[must_use]
@@ -2593,6 +2603,59 @@ mod split_tests {
         assert_eq!(amount_edited("4,", "4").as_deref(), Some("4."));
         assert_eq!(amount_edited("4.5", "4.").as_deref(), Some("4.5"));
         assert_eq!(amount_edited("0x10", ""), None);
+    }
+
+    /// Issue #421 through the page's own round trip: the field's text goes
+    /// through `amount_edited` to the core, and the field shows the core's
+    /// figure back through `amount_to_input` — so what each key leaves on
+    /// screen is exactly what the core holds. "0" then "8" is "8"; only a
+    /// decimal mark may follow a leading zero, in the person's own mark.
+    #[test]
+    fn a_zero_leading_a_digit_is_not_kept_in_any_amount_field() {
+        use vela_core::l10n::number::NumberPreset;
+
+        /// Keys typed at the end of the field, one at a time: the field text
+        /// after each, and the figure the core was handed last.
+        fn type_keys(keys: &str, preset: NumberPreset) -> (String, String) {
+            let (mut field, mut core) = (String::new(), String::new());
+            for key in keys.chars() {
+                let next = format!("{field}{key}");
+                if let Some(clean) = amount_edited_with(&next, &field, preset) {
+                    core = clean;
+                    field = amount_to_input_with(&core, preset);
+                }
+            }
+            (field, core)
+        }
+
+        for preset in [NumberPreset::CommaDot, NumberPreset::Indian] {
+            assert_eq!(type_keys("08", preset), ("8".into(), "8".into()));
+            assert_eq!(type_keys("00", preset), ("0".into(), "0".into()));
+            assert_eq!(type_keys("0.08", preset), ("0.08".into(), "0.08".into()));
+            assert_eq!(type_keys("0.0", preset), ("0.0".into(), "0.0".into()));
+            assert_eq!(type_keys(".", preset), ("0.".into(), "0.".into()));
+            assert_eq!(type_keys(".5", preset), ("0.5".into(), "0.5".into()));
+        }
+        for preset in [NumberPreset::DotComma, NumberPreset::SpaceComma] {
+            // The person's mark on screen, the core's dot underneath.
+            assert_eq!(type_keys("0,8", preset), ("0,8".into(), "0.8".into()));
+            assert_eq!(type_keys("08", preset), ("8".into(), "8".into()));
+            assert_eq!(type_keys(",", preset), ("0,".into(), "0.".into()));
+            assert_eq!(type_keys("0,0", preset), ("0,0".into(), "0.0".into()));
+        }
+        // A paste: the zeros go, the figure stays.
+        assert_eq!(
+            amount_edited_with("008.5", "", NumberPreset::CommaDot).as_deref(),
+            Some("8.5")
+        );
+        // A split row's share and the custom allowance call the same rule.
+        let rows = vec![row("rcpt_1", "0xAAA", "0", None)];
+        assert_eq!(
+            split_amount_edited(&rows, 0, "08".to_owned())[0].amount,
+            "8"
+        );
+        assert_eq!(amount_edited("08", "0").as_deref(), Some("8"));
+        assert_eq!(amount_edited("00", "0").as_deref(), Some("0"));
     }
 
     #[test]
@@ -7841,7 +7904,10 @@ mod payee_tests {
                 // line that never is.
                 assert_eq!(to.value.as_ref(), "Wallet");
                 assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
-                assert!(!to.mono, "the name is words; the address line is mono");
+                // Issue #423: the first line is the NAME — "Vela User" is
+                // whose word it is, on the line under it, never the name.
+                assert_ne!(to.value.as_ref(), s.vela_user.as_ref());
+                assert!(!to.mono, "a name is words, not an address");
                 assert!(
                     matches!(to.lead, FactLead::Identicon(ref seed) if seed.as_ref() == DEV_WALLET),
                     "the identicon opens the address in full"

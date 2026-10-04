@@ -32,6 +32,7 @@ import app.getvela.wallet.feature.wallet.WalletLive
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -693,6 +694,45 @@ class SendLiveTest {
 
         // A sweep's one recipient is drawn the same way.
         assertEquals(registry, to(view.copy(multi_select_mode = true)))
+    }
+
+    /**
+     * Issue #423: on the Xiaomi the To row read "Wallet" bold over "Vela User ·
+     * 0x14fb…ea5c" in grey mono — and was read as an account TYPE over the
+     * person's name. "Wallet" is the name the public registry holds for that
+     * address (the fallback a passkey with no name registers under); "Vela
+     * User" is only whose word it is. The row's first line — the one beside
+     * the avatar, in the From row's face — is the name; the kind is never it.
+     */
+    @Test
+    fun `the To row's first line is the payee's name, never the word for whose name it is`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
+        fun to(payee: SendPayee) = SendLive.confirm(
+            drawn.model,
+            SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = wallet, confirm_amount = "0.8", fee = fee(), payees = listOf(payee)),
+            ctx(),
+        ).facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+        val kinds = listOf(
+            SendNameSource.Registry to strings.t(I18nKeys.Flows.VELA_USER),
+            SendNameSource.Service("ENS") to "ENS",
+        )
+        for ((source, kind) in kinds) {
+            val row = to(SendPayee(wallet, "Wallet", source))
+            assertEquals("the name is the first line", "Wallet", row.value)
+            assertNotEquals(kind, row.value)
+            assertEquals("the kind and the short address are the line under it", "$kind · 0x14fB…eA5c", row.detail)
+            assertEquals("the avatar is the From row's — beside the name", FactLead.Identicon(wallet), row.lead)
+            assertFalse("a name is not drawn in mono", row.mono)
+        }
+
+        // The gallery's confirm draws the same case: a registry name over its
+        // kind and short address, the face beside it, nothing in mono.
+        val gallery = drawn.model.facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+        assertEquals("Alice", gallery.value)
+        assertEquals("${strings.t(I18nKeys.Flows.VELA_USER)} · 0x9F3c…21aE", gallery.detail)
+        assertTrue(gallery.lead is FactLead.Identicon)
+        assertFalse(gallery.mono)
     }
 
     /** Issue 209: a filter that hid every row is a different sentence from an empty account. */

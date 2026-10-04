@@ -114,11 +114,12 @@ struct FactRowModel: Identifiable {
     var lead: FactLead?
     /// Renders the value in the mono face (addresses, hashes).
     var mono = false
-    /// A second line under the value, in the mono face, never cut: under a
+    /// A second line under the value, in the body face, never cut: under a
     /// NAME, whose word it is and the short address — "Vela User ·
     /// 0x14fB…eA5c" (spec 097 F). On the page that signs a name is a claim and
     /// the address is what is paid, so the two are drawn together — on two
     /// lines, so a long name can never push the tag or the address off the row.
+    /// The lead sits beside the name, on its line, as the From row's (#423).
     var detail: String?
     /// Shows a copy affordance under this accessible name.
     var copy: String?

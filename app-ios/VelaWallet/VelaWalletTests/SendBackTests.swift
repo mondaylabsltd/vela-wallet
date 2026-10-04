@@ -92,7 +92,7 @@ struct SendBackTests {
             store: store, relay: relay, pool: pool,
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
             accounts: accountPort,
-            fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil),
+            fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
             metadata: TokenMetadata(store: store, pool: pool),
             accountStore: accounts,

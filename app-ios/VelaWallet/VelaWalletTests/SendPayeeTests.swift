@@ -91,6 +91,38 @@ struct SendPayeeTests {
         expectFace(row, Self.devWallet)
     }
 
+    /// Issue #423: on the Xiaomi "Wallet" over "Vela User · 0x14fb…ea5c" was
+    /// read as an account type over the person's name. "Wallet" IS the name
+    /// the registry holds for that address; "Vela User" — or a service's own
+    /// label — is only whose word it is. The first line, beside the face, is
+    /// the name; the kind is only ever on the line under it. The gallery's
+    /// confirm draws the same case.
+    @Test func theToRowsFirstLineIsTheNameNeverTheWordForWhoseNameItIs() throws {
+        let kinds: [([String: Any], String)] = [
+            (registry, loc.t("send.velaUser")),
+            (["type": "service", "label": "ENS"], "ENS"),
+        ]
+        for (source, kind) in kinds {
+            let view = try sendView([
+                "stage": "confirm", "selected_token": xdai, "recipient": Self.devWallet,
+                "confirm_amount": "0.8",
+                "payees": [payee(Self.devWallet, "Wallet", source)],
+            ])
+            let row = try toRow(try confirm(view))
+            #expect(row.value == "Wallet", "the name is the first line")
+            #expect(row.value != kind)
+            #expect(row.detail == "\(kind) · 0x14fB…eA5c")
+            #expect(!row.mono)
+            expectFace(row, Self.devWallet)
+        }
+
+        let gallery = WalletFlowFixtures.toFact(.single, loc: loc)
+        #expect(gallery.value == "Alice")
+        #expect(gallery.detail == "\(loc.t("send.velaUser")) · 0x9F3c…21aE")
+        #expect(!gallery.mono)
+        if case .identicon? = gallery.lead {} else { Issue.record("the gallery's To row lost its face") }
+    }
+
     /// The core allows a registry name of 64 characters. Cut with the name,
     /// a tag on the name's line would vanish exactly when someone made the
     /// name long on purpose; it rides with the address instead.
