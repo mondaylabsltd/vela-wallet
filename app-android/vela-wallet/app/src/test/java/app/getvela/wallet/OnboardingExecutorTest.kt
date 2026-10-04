@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import app.getvela.wallet.feature.onboarding.core.OnboardingExecutor
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
+import app.getvela.wallet.feature.onboarding.core.RegisterAck
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.RegistryFailure
 import app.getvela.wallet.feature.onboarding.core.SessionExecutor
@@ -50,11 +51,64 @@ class OnboardingExecutorTest {
      * it would fall through to `accounts_unavailable` and sign the device out.
      *
      * Eight since 2026-09-23: `remove_account`, one wallet leaving a device
-     * that keeps the others.
+     * that keeps the others. Eleven since issue #409: the landing watch's
+     * outbox read, its wait on a registry task, and the removal of a record
+     * whose landing was confirmed.
      */
     @Test
-    fun sessionOperationsAreAllEight() {
-        assertEquals(8, SessionExecutor.OPERATIONS.size)
+    fun sessionOperationsAreAllEleven() {
+        assertEquals(11, SessionExecutor.OPERATIONS.size)
+    }
+
+    /** The landing watch's failures keep the record: nothing is removed on a guess. */
+    @Test
+    fun theLandingWatchFailsTowardKeepingTheRecord() {
+        val wait = JSONObject(
+            SessionExecutor.escapedFailure(
+                operation("await_registry_landing").put("task_id", "t1"),
+                RuntimeException("boom"),
+            ),
+        )
+        assertEquals("registry_landing_unconfirmed", wait.getString("type"))
+        assertEquals("boom", wait.getString("message"))
+        assertEquals(
+            "pending_uploads_unavailable",
+            JSONObject(SessionExecutor.escapedFailure(operation("load_pending_uploads"), Error())).getString("type"),
+        )
+    }
+
+    /**
+     * Issue #409: a one-key create is answered at the registry's 202 with the
+     * task it was queued under; a multi-key create and every re-publish still
+     * wait for the landing; a group already on-chain is landed either way.
+     */
+    @Test
+    fun aPublishThatAskedIsAnsweredOnAcceptance() {
+        val pending = RegisterAck(id = "t1", status = "pending")
+        assertEquals(
+            OnboardingExecutor.AfterRegister.Accepted("t1"),
+            OnboardingExecutor.afterRegister(pending, answerWhenAccepted = true),
+        )
+        assertEquals(
+            OnboardingExecutor.AfterRegister.AwaitLanding("t1"),
+            OnboardingExecutor.afterRegister(pending, answerWhenAccepted = false),
+        )
+        for (asked in listOf(true, false)) {
+            assertEquals(
+                OnboardingExecutor.AfterRegister.Landed,
+                OnboardingExecutor.afterRegister(RegisterAck(id = null, status = "done"), asked),
+            )
+            // A 202 without a task leaves nothing to confirm the landing by.
+            val thrown = runCatching {
+                OnboardingExecutor.afterRegister(RegisterAck(id = null, status = "pending"), asked)
+            }.exceptionOrNull()
+            assertTrue(thrown is RegistryFailure)
+        }
+
+        val accepted = OnboardingExecutor.publishedResult("t1")
+        assertEquals("registry_accepted", accepted.getString("type"))
+        assertEquals("t1", accepted.getString("task_id"))
+        assertEquals("registry_published", OnboardingExecutor.publishedResult(null).getString("type"))
     }
 
     /**

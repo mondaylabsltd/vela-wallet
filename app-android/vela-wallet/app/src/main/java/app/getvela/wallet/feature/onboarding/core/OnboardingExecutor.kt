@@ -269,10 +269,7 @@ class OnboardingExecutor(
                 result("pending_upload_removed") {}
             }
 
-            "registry_publish" -> {
-                publish(operation)
-                result("registry_published") {}
-            }
+            "registry_publish" -> publishedResult(publish(operation))
 
             "registry_query_by_public_key" -> {
                 val status = registry.queryByPublicKey(operation.optString("public_key_hex"))
@@ -341,8 +338,12 @@ class OnboardingExecutor(
      * and **no prompt is raised**; that is the whole point of the interleaved
      * create-then-confirm flow. The empty-seed path is the login re-publish: a
      * fresh group key, and one live assertion per member that has no proof.
+     *
+     * Returns the registry task when the core asked to be answered on
+     * acceptance (`answer_when_accepted` — issue #409, a one-key create) and the
+     * group has not landed yet; `null` once it has landed.
      */
-    private suspend fun publish(operation: JSONObject) {
+    private suspend fun publish(operation: JSONObject): String? {
         val members = operation.optJSONArray("members").objects().map(PublishMember::from)
         if (members.isEmpty()) {
             throw RegistryFailure("registry publish needs at least one member", network = false)
@@ -463,19 +464,44 @@ class OnboardingExecutor(
             "sinceStartMs" to acceptedAt - publishStarted,
         )
 
-        // `done` up front means the identical group was already on-chain —
-        // idempotent by content hash, and just as landed as a fresh one.
-        if (ack.status == "done") return
-        val id = ack.id
-            ?: throw RegistryFailure("register was accepted without a task id", network = false)
-        registry.awaitTask(id)
-        val landedAt = SystemClock.elapsedRealtime()
-        VelaLog.event(
-            "registry.publish",
-            "landed",
-            "waitedMs" to landedAt - acceptedAt,
-            "totalMs" to landedAt - publishStarted,
-        )
+        when (val next = afterRegister(ack, operation.optBoolean("answer_when_accepted"))) {
+            AfterRegister.Landed -> return null
+            // Issue #409: a one-key create is answered here, at the 202. The
+            // landing is the session's to confirm from now on — its own
+            // `registry.landing` lines say when it does.
+            is AfterRegister.Accepted -> {
+                VelaLog.event(
+                    "registry.publish",
+                    "accepted",
+                    "task" to next.taskId,
+                    "totalMs" to acceptedAt - publishStarted,
+                )
+                return next.taskId
+            }
+            is AfterRegister.AwaitLanding -> {
+                registry.awaitTask(next.taskId)
+                val landedAt = SystemClock.elapsedRealtime()
+                VelaLog.event(
+                    "registry.publish",
+                    "landed",
+                    "waitedMs" to landedAt - acceptedAt,
+                    "totalMs" to landedAt - publishStarted,
+                )
+                return null
+            }
+        }
+    }
+
+    /** What the register's answer leaves to do. */
+    sealed interface AfterRegister {
+        /** The group has a receipt on-chain (or the identical one already had). */
+        data object Landed : AfterRegister
+
+        /** Answer the core now with this task (issue #409). */
+        data class Accepted(val taskId: String) : AfterRegister
+
+        /** Poll this task until the group has landed, then answer. */
+        data class AwaitLanding(val taskId: String) : AfterRegister
     }
 
     // -- spec 075: the Trusted Signer as a passkey route -----------------------
@@ -609,6 +635,29 @@ class OnboardingExecutor(
     }
 
     companion object {
+        /**
+         * The one new rule of issue #409, apart from the HTTP so a JVM test can
+         * pin it: when the core asked to be answered on acceptance, the 202's
+         * task id IS the answer; otherwise the landing is waited for, as it
+         * always was. `done` up front means the identical group was already
+         * on-chain — idempotent by content hash, and just as landed as a fresh
+         * one.
+         */
+        fun afterRegister(ack: RegisterAck, answerWhenAccepted: Boolean): AfterRegister {
+            if (ack.status == "done") return AfterRegister.Landed
+            val id = ack.id
+                ?: throw RegistryFailure("register was accepted without a task id", network = false)
+            return if (answerWhenAccepted) AfterRegister.Accepted(id) else AfterRegister.AwaitLanding(id)
+        }
+
+        /** The publish's answer: accepted with its task, or published. */
+        fun publishedResult(taskId: String?): JSONObject =
+            if (taskId != null) {
+                JSONObject().put("type", "registry_accepted").put("task_id", taskId)
+            } else {
+                JSONObject().put("type", "registry_published")
+            }
+
         /** Every operation this executor is required to handle (contract §1). */
         val OPERATIONS = listOf(
             "check_passkey_support",
