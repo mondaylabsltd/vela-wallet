@@ -452,6 +452,8 @@ pub struct FlowStrings {
     /// (`SendReceiptView.hold_reason`). Both sentences were already in the
     /// corpus and no shell — desktop or web — was saying either.
     pub tx_held_fees: SharedString,
+    /// The relay is topping up its gas before it sends (098 follow-up).
+    pub tx_relay_funding: SharedString,
     pub tx_rejected_fees: SharedString,
     pub tx_typical_time: String,
     /// Spec 038 #D3: the two lines beside the usual-time sentence.
@@ -823,6 +825,7 @@ impl FlowStrings {
             tx_submitted_title: s("send.txSubmittedTitle"),
             tx_waiting_confirm: s("send.txWaitingConfirm"),
             tx_held_fees: s("send.txHeldFees"),
+            tx_relay_funding: s("send.txRelayFunding"),
             tx_rejected_fees: s("send.txRejectedFees"),
             tx_typical_time: raw("send.txTypicalTime"),
             tx_slow_confirm: s("send.txSlowConfirm"),

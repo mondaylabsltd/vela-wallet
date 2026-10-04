@@ -2650,7 +2650,8 @@ fn the_ending_state_is_the_tracker_s() {
                 SignEndingState::Following {
                     user_op_hash: LOCAL_OP.to_owned(),
                     outcome,
-                    fee_held: false
+                    fee_held: false,
+                    relay_funding: false,
                 },
                 "{status:?}"
             );
@@ -2667,7 +2668,25 @@ fn the_ending_state_is_the_tracker_s() {
             SignEndingState::Following {
                 user_op_hash: LOCAL_OP.to_owned(),
                 outcome: TrackOutcome::StillConfirming,
-                fee_held: true
+                fee_held: true,
+                relay_funding: false,
+            }
+        );
+        // The relay topping up its gas: its own line, not the fee hold's.
+        assert_eq!(
+            ending_state(
+                ending,
+                Some(&entry(
+                    TrackStatus::RelayFunding,
+                    TrackOutcome::Landing,
+                    None
+                ))
+            ),
+            SignEndingState::Following {
+                user_op_hash: LOCAL_OP.to_owned(),
+                outcome: TrackOutcome::Landing,
+                fee_held: false,
+                relay_funding: true,
             }
         );
         // No entry yet — or another op's — is the ring, never "confirmed".
@@ -2676,7 +2695,8 @@ fn the_ending_state_is_the_tracker_s() {
             SignEndingState::Following {
                 user_op_hash: LOCAL_OP.to_owned(),
                 outcome: TrackOutcome::Landing,
-                fee_held: false
+                fee_held: false,
+                relay_funding: false,
             }
         );
         let mut other = entry(TrackStatus::Confirmed, TrackOutcome::Final, Some(LANDED_TX));
@@ -2700,7 +2720,8 @@ fn the_ending_state_is_the_tracker_s() {
         SignEndingState::Following {
             user_op_hash: LOCAL_OP.to_owned(),
             outcome: TrackOutcome::MaybeSent,
-            fee_held: false
+            fee_held: false,
+            relay_funding: false,
         }
     );
     assert_eq!(
@@ -2711,7 +2732,8 @@ fn the_ending_state_is_the_tracker_s() {
         SignEndingState::Following {
             user_op_hash: LOCAL_OP.to_owned(),
             outcome: TrackOutcome::Landing,
-            fee_held: false
+            fee_held: false,
+            relay_funding: false,
         }
     );
     // A reverted op whose tracker entry has no tx yet still links the answer's.
@@ -3709,7 +3731,8 @@ fn a_landed_ending_never_reads_not_sent_or_refused() {
             SignEndingState::Following {
                 user_op_hash: LOCAL_OP.to_owned(),
                 outcome: TrackOutcome::Landing,
-                fee_held: false
+                fee_held: false,
+                relay_funding: false,
             },
             "{status:?}"
         );

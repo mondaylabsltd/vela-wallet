@@ -520,8 +520,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settingsModals.rpcProviders.relayNotice` — said where an RPC or a provider
 //   key is set: the relay is sent the RPC the wallet uses, key and all. Same
 //   branches: 1841 + 2 = 1843.
-if (PATHS.length !== 1843) fail(`expected 1843 paths (1751 leaf + 92 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1751) fail(`expected 1751 leaf paths, got ${leafSet.size}`);
+// 1848 (098 follow-up, 2026-10-03): + `componentsUi.gas.reason{Quote,FeeToken,
+//   Simulation,QuoteHigh}` — the fee row says which relay failure it was
+//   instead of "check your connection" for all four — and `send.txRelayFunding`,
+//   said while the relay tops up its gas. Minus `componentsUi.funding.
+//   denialNetworkError` (the line those four replace) and `componentsUi.
+//   treasuryBootstrap.networkLine` (098's, read by no shell). Same branches:
+//   1843 + 5 - 2 = 1846.
+// 1820 (same day): - the other 26 `componentsUi.funding.*` strings of the
+//   retired gas-account funding sheet (title, lead, the denial* reasons, …),
+//   read by no shell since the treasury sheet replaced it (098 §4) — the room
+//   the five lines above needed under SC-005, instead of a budget move. The
+//   four still read (cancel, showQr, autoCheckNote, checking) stay. Same
+//   branches: 1846 - 26 = 1820.
+if (PATHS.length !== 1820) fail(`expected 1820 paths (1728 leaf + 92 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1728) fail(`expected 1728 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 92) fail(`expected 92 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

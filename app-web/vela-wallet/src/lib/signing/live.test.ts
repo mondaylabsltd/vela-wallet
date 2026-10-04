@@ -371,7 +371,7 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		expect(fee).toMatchObject({ value: m.feeEstimating, refreshing: true });
 	});
 
-	const NET = m.feeReasons['componentsUi.funding.denialNetworkError'];
+	const NET = m.feeReasons['componentsUi.gas.reasonQuote'];
 
 	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
 		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
@@ -385,17 +385,20 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		});
 	});
 
-	it('every failure a retry can clear gets the sentence; the ones it cannot, none', () => {
-		// The core's schedule (`requote_delay_ms`) decides — the sentence
-		// promises the retry the timer makes.
-		for (const failed of [
-			'quote_unavailable',
-			'fee_token_unavailable',
-			'estimate_failed',
-			'gas_quote_too_high'
+	it('every failure a retry can clear gets its own sentence; the ones it cannot, none', () => {
+		// The core's schedule (`requote_delay_ms`) decides the retry; the core's
+		// key says which failure it was — never "check your connection" over a
+		// simulation the relay did not answer (Arbitrum, 2026-10-03).
+		for (const [failed, key] of [
+			['quote_unavailable', 'componentsUi.gas.reasonQuote'],
+			['fee_token_unavailable', 'componentsUi.gas.reasonFeeToken'],
+			['estimate_failed', 'componentsUi.gas.reasonSimulation'],
+			['gas_quote_too_high', 'componentsUi.gas.reasonQuoteHigh']
 		] as const) {
+			const warning = m.feeReasons[key];
+			expect(warning, key).toBeTruthy();
 			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
-				warning: NET
+				warning
 			});
 		}
 		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {

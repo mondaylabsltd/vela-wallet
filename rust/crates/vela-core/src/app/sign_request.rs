@@ -1188,11 +1188,14 @@ pub enum SignEndingState {
     Refused,
     /// Still on its way: the words come from `outcome` (`MaybeSent` →
     /// `maybeSent`, `Landing` → the ring, `StillConfirming`, `Unknown`);
-    /// `fee_held` swaps in the fee-hold line.
+    /// `fee_held` swaps in the fee-hold line; `relay_funding` the line that
+    /// the relay is topping up its gas on this chain before it sends.
     Following {
         user_op_hash: String,
         outcome: TrackOutcome,
         fee_held: bool,
+        #[serde(default)]
+        relay_funding: bool,
     },
 }
 
@@ -1223,6 +1226,7 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
             user_op_hash: op,
             outcome: TrackOutcome::Landing,
             fee_held: false,
+            relay_funding: false,
         };
     };
     let tx_hash = || {
@@ -1244,11 +1248,13 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
             user_op_hash: op,
             outcome: TrackOutcome::Landing,
             fee_held: false,
+            relay_funding: false,
         },
         TrackStatus::NotSent => SignEndingState::NotSent,
         TrackStatus::Rejected => SignEndingState::Refused,
         TrackStatus::Pending
         | TrackStatus::FeeHeld
+        | TrackStatus::RelayFunding
         | TrackStatus::Unreachable
         | TrackStatus::AcceptedNotLanded => SignEndingState::Following {
             user_op_hash: op,
@@ -1261,6 +1267,7 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
                 entry.outcome
             },
             fee_held: entry.status == TrackStatus::FeeHeld,
+            relay_funding: entry.status == TrackStatus::RelayFunding,
         },
     }
 }

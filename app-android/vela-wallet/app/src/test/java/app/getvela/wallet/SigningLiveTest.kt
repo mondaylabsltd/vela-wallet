@@ -736,7 +736,12 @@ class SigningLiveTest {
         assertEquals(strings.t("home.balanceDetailStatusRetrying"), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = true)))
         assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
         assertTrue("the chain is named", warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false))!!.contains("Gnosis"))
-        assertEquals(strings.t("componentsUi.funding.denialNetworkError"), warning(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable))
+        // Each relay failure says which it was — never "check your connection"
+        // over a simulation the relay did not answer (Arbitrum, 2026-10-03).
+        assertEquals(strings.t("componentsUi.gas.reasonQuote"), warning(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable))
+        assertEquals(strings.t("componentsUi.gas.reasonFeeToken"), warning(app.getvela.wallet.feature.send.core.FeeFailure.FeeTokenUnavailable))
+        assertEquals(strings.t("componentsUi.gas.reasonSimulation"), warning(app.getvela.wallet.feature.send.core.FeeFailure.EstimateFailed))
+        assertEquals(strings.t("componentsUi.gas.reasonQuoteHigh"), warning(app.getvela.wallet.feature.send.core.FeeFailure.GasQuoteTooHigh))
         assertNull(warning(app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed))
         val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
         assertTrue("a chain read that failed is tapped to ask again", down.tappable)
@@ -819,7 +824,7 @@ class SigningLiveTest {
         assertTrue(measuring.refreshing)
 
         val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable), ctx) as FeeModel.OnChain
-        assertEquals(strings.t("componentsUi.funding.denialNetworkError"), down.warning)
+        assertEquals(strings.t("componentsUi.gas.reasonQuote"), down.warning)
         assertTrue("a failed quote is tapped to ask again", down.tappable)
 
         val broken = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey), ctx) as FeeModel.OnChain

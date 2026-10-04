@@ -65,6 +65,7 @@ import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
+import app.getvela.wallet.feature.send.core.SendHoldReason
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendToken
@@ -1338,9 +1339,11 @@ object SendLive {
                 stage = ReceiptStage.Failed,
                 title = s.t(I18nKeys.Flows.STATUS_FAILED),
                 captions = listOf(
+                    // Only the fee refusal says "the fee rose": a fee hold
+                    // survives into a later failure that is not that.
                     when (receipt.hold_reason) {
-                        null -> s.t(I18nKeys.Flows.TX_FAILED_HINT)
-                        else -> s.t(I18nKeys.Flows.TX_REJECTED_FEES)
+                        SendHoldReason.FeeRejected -> s.t(I18nKeys.Flows.TX_REJECTED_FEES)
+                        else -> s.t(I18nKeys.Flows.TX_FAILED_HINT)
                     },
                 ),
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
@@ -1355,7 +1358,10 @@ object SendLive {
                 // Issue 199 (web cf2a9e17): with the relay's clock and the chain's
                 // usual time the screen counts the wait down and fills its ring.
                 // Without the clock the typical time is still worth saying, once.
-                val eta = if (receipt.submitted_at_ms != null && receipt.typical_inclusion_s != null && typicalLine != null) {
+                // The relay topping up its gas (098 follow-up): nothing is on the
+                // network yet, so no confirmation clock to count.
+                val funding = receipt.hold_reason == SendHoldReason.RelayFunding
+                val eta = if (!funding && receipt.submitted_at_ms != null && receipt.typical_inclusion_s != null && typicalLine != null) {
                     ReceiptEtaModel(
                         submittedAtMs = receipt.submitted_at_ms,
                         typicalS = receipt.typical_inclusion_s,
@@ -1374,8 +1380,12 @@ object SendLive {
                     // A sweep's coins first (spec 097 F), so the wait's own
                     // lines — and the clock under them — stay together.
                     captions = coinLines + listOfNotNull(
-                        if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
-                        typicalLine.takeIf { eta == null },
+                        when (receipt.hold_reason) {
+                            SendHoldReason.FeeHold -> s.t(I18nKeys.Flows.TX_HELD_FEES)
+                            SendHoldReason.RelayFunding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
+                            else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
+                        },
+                        typicalLine.takeIf { eta == null && !funding },
                     ),
                     hash = null,
                     viewOnExplorer = null,

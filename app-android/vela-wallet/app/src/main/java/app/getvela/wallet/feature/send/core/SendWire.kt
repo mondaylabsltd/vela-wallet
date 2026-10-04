@@ -473,6 +473,9 @@ enum class SendHoldReason {
     @SerialName("fee_hold") FeeHold,
 
     @SerialName("fee_rejected") FeeRejected,
+
+    /** The relay is topping up its gas on the chain before it sends (098 follow-up). */
+    @SerialName("relay_funding") RelayFunding,
 }
 
 @Serializable
@@ -535,6 +538,11 @@ sealed class SendReceiptOutcome {
     @Serializable
     @SerialName("fee_held")
     data object FeeHeld : SendReceiptOutcome()
+
+    /** The relay holds it while it tops up its gas; not sticky (098 follow-up). */
+    @Serializable
+    @SerialName("relay_funding")
+    data object RelayFunding : SendReceiptOutcome()
 
     /** The relay has shown it holds an op whose reply was lost: back to "submitted". */
     @Serializable

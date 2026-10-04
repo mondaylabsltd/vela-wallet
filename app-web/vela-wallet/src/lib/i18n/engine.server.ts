@@ -826,7 +826,10 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
  * names. A key the core adds later and this list lacks draws no line.
  */
 export const FEE_REASON_KEYS = [
-	'componentsUi.funding.denialNetworkError',
+	'componentsUi.gas.reasonQuote',
+	'componentsUi.gas.reasonFeeToken',
+	'componentsUi.gas.reasonSimulation',
+	'componentsUi.gas.reasonQuoteHigh',
 	'home.balanceDetailStatusRetrying',
 	'explore.chainDown'
 ] as const;
@@ -1016,6 +1019,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			// tracker gave up at 24 h, and when a message was signed.
 			stillConfirming: k('componentsUi.signing.stillConfirming'),
 			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
+			relayFunding: k('send.txRelayFunding'),
 			signed: k('clearSigning.alertSignedTitle'),
 			// Spec 082 RA10: a lost reply, its way out, and "not sent".
 			maybeSent: k('componentsUi.signing.maybeSent'),

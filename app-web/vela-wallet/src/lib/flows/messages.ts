@@ -359,6 +359,7 @@ export const WALLET_FLOW_KEYS = [
 	'send.txRemaining',
 	'send.txElapsed',
 	'send.txSlowConfirm',
+	'send.txRelayFunding',
 	'componentsTx.receipt.txHash',
 	'componentsTx.receipt.done',
 	// Spec 082 RA10: a lost relay reply ("may have been sent") and a provable

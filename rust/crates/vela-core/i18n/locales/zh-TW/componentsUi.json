@@ -1,37 +1,10 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "發送前，還差一步",
-      "lead": "交易需要一小筆 {{symbol}} 作為網路費儲備，轉入一次即可 — 之後會隨每筆交易自動回補。",
-      "statusConfirming": "網路費在路上 — 通常不到一分鐘。",
-      "fundedTitle": "網路費已就緒",
-      "amountLabel": "需轉入",
-      "addressLabel": "儲值地址",
-      "networkHint": "從交易所提領時，請選擇 {{network}} 網路。",
-      "openInWallet": "用其他錢包支付",
       "showQr": "顯示 QR code",
-      "hideQr": "收起 QR code",
-      "qrHint": "掃描後會自動帶入金額與網路",
       "autoCheckNote": "到帳後自動繼續",
-      "checkNow": "立即檢查",
       "checking": "檢查中…",
-      "retryFree": "重試免費儲值",
-      "retrying": "申請中…",
-      "detailsTitle": "這筆錢去哪了？",
-      "detailsBody": "它會存入 Vela 為你維護的專屬網路費儲備（每條網路一個），用於墊付交易的鏈上費用，並從每筆交易的手續費中回補。這筆儲備只用於支付網路費，無法提回。",
-      "continue": "繼續",
-      "cancel": "暫時不用",
-      "cancelDapp": "取消這筆交易",
-      "denialDefault": "免費網路費這次沒能生效。可以在下方轉入，或稍後再試。",
-      "denialNotRecognized": "新錢包需要幾分鐘才能被系統識別，稍後會自動重試免費網路費 — 也可以現在轉入，立即發送。",
-      "denialNonceExceeded": "免費網路費僅限錢包最初幾筆交易，這個錢包已超出。請在下方轉入後繼續。",
-      "denialTreasuryDepleted": "Vela 的免費額度暫時用完了。請在下方轉入，或稍後再來。",
-      "denialBalanceTooLow": "免費網路費需要錢包已持有少量 {{symbol}}。請先接收一些，或從任何錢包、交易所轉入下方地址。",
-      "denialRateLimited": "幾分鐘前才為你儲值過。若仍不足，請在下方補足。",
-      "denialTransferFailed": "免費儲值轉帳失敗了。可以重試，或自行轉入。",
-      "denialServiceUnavailable": "免費儲值服務暫時不穩定，稍後會自動重試 — 也可以直接轉入。",
-      "denialNetworkError": "無法連上 Vela 服務 — 請檢查網路連線，稍後會自動重試。",
-      "denialPendingUnknown": "上次儲值結果未能確認 — 正在檢查餘額。若遲遲未到帳，請在下方自行轉入。"
+      "cancel": "暫時不用"
     },
     "signing": {
       "loading": "載入中…",
@@ -291,7 +264,11 @@
       "paidWith": "以 {{symbol}} 支付",
       "rowBalance": "餘額",
       "rowSpend": "預估費用",
-      "feeCoinSpent": "這筆交易也會用到你的 {{sym}}，剩下的不夠付網路費時，交易會失敗。"
+      "feeCoinSpent": "這筆交易也會用到你的 {{sym}}，剩下的不夠付網路費時，交易會失敗。",
+      "reasonQuote": "沒能從中繼取得報價，正在自動重試。",
+      "reasonFeeToken": "中繼暫時無法替這個幣報價。正在重試——也可以改用別的幣付手續費。",
+      "reasonSimulation": "中繼暫時沒能試跑這筆交易，正在自動重試。",
+      "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網路本身，正在自動重試。"
     },
     "dock": {
       "receive": "收款",
@@ -412,7 +389,6 @@
       "selfFundToggle": "等不及？自己啟動它",
       "customLead": "這是你自己新增的網路，Vela 營運方可能根本無法在上面持有 gas——本地或內部的鏈不該由別人來儲值。啟動它的中繼要由你自己來。",
       "balanceLine": "現有 {{balance}}，需要 {{floor}} {{symbol}}",
-      "networkLine": "網路：{{network}}",
       "watching": "每隔幾秒會自動檢查一次——儲值到帳後這裡會自動關閉。",
       "qrLabel": "用另一個錢包掃碼轉帳"
     },

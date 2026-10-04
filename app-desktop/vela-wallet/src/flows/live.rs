@@ -3642,6 +3642,9 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         .and_then(|receipt| receipt.hold_reason);
     let held = (hold == Some(SendHoldReason::FeeHold)).then(|| s.tx_held_fees.clone());
     let rejected = (hold == Some(SendHoldReason::FeeRejected)).then(|| s.tx_rejected_fees.clone());
+    // The relay holds it while it tops up its gas on the chain: why it waits,
+    // in place of a wait that reads like the network's (098 follow-up).
+    let funding = (hold == Some(SendHoldReason::RelayFunding)).then(|| s.tx_relay_funding.clone());
 
     // Spec 082 RA4/RA10: the relay never had it — nothing was sent, which is
     // exactly what the generic failure says. Never the fee-rejected words: no
@@ -3789,8 +3792,14 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 // Spec 038 #D3: count, don't spin. The core hands over when the
                 // relay accepted the op and this chain's usual time; the shell
                 // owns the clock and the sentences are the corpus's.
-                let mut lines = vec![held.unwrap_or_else(|| s.tx_waiting_confirm.clone())];
-                if let Some(receipt) = send.receipt.as_ref()
+                let mut lines = vec![
+                    held.or_else(|| funding.clone())
+                        .unwrap_or_else(|| s.tx_waiting_confirm.clone()),
+                ];
+                // Nothing is on the network while the relay funds itself, so
+                // there is no confirmation time to count down.
+                if funding.is_none()
+                    && let Some(receipt) = send.receipt.as_ref()
                     && let (Some(at), Some(typical)) =
                         (receipt.submitted_at_ms, receipt.typical_inclusion_s)
                 {
@@ -4774,6 +4783,12 @@ mod tests {
         let s = strings();
         let held = receipt_with(SendReceiptStatus::Submitted, Some(SendHoldReason::FeeHold));
         assert_eq!(held.captions, vec![s.tx_held_fees.clone()]);
+        // The relay topping up its gas: why it waits, in place of the wait.
+        let funding = receipt_with(
+            SendReceiptStatus::Submitted,
+            Some(SendHoldReason::RelayFunding),
+        );
+        assert_eq!(funding.captions, vec![s.tx_relay_funding.clone()]);
         assert_ne!(
             held.captions,
             vec![s.tx_waiting_confirm.clone()],

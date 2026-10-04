@@ -53,6 +53,12 @@ export interface DappReceiptCopy {
 	stillConfirming: string;
 	/** Spec 079: `componentsUi.signing.unknownOutcome` — past the tracker's 24 h. */
 	unknownOutcome: string;
+	/**
+	 * `send.txRelayFunding` — the relay is topping up the gas it pays with on
+	 * this network and sends the operation once that lands. Said instead of
+	 * the plain wait, for as long as the relay says so (098 follow-up).
+	 */
+	relayFunding: string;
 	/** Spec 079: `clearSigning.alertSignedTitle` — a message was signed ("已签名！"). */
 	signed: string;
 	/**
@@ -85,6 +91,8 @@ export type DappReceiptState =
 	| { kind: 'still_confirming'; opHash: string }
 	/** Spec 079: abandoned at 24 h — neither landed nor failed, and no longer asked about. */
 	| { kind: 'unknown'; opHash: string }
+	/** The relay holds it while it tops up its gas on the chain (tracker `relay_funding`). */
+	| { kind: 'relay_funding'; opHash: string }
 	/** The tracker's confirmation; `txHash` is `''` when it named none. */
 	| { kind: 'confirmed'; opHash: string; txHash: string }
 	/** Spec 082: the op landed and reverted — the chain said no; its transaction is the proof. */
@@ -197,6 +205,16 @@ export function dappReceiptModel(
 				cta: copy.done
 			};
 		}
+		case 'relay_funding':
+			// Still on its way, and why it is waiting: the relay's own gas, not
+			// the network and not this wallet.
+			return {
+				stage: 'submitted',
+				title: copy.submitted,
+				captions: [copy.relayFunding],
+				hash: { label: copy.opHashLabel, value: state.opHash },
+				cta: copy.done
+			};
 		case 'still_confirming':
 		case 'unknown':
 			// The clock, not a cross: the tracker has no verdict, and the
@@ -238,6 +256,8 @@ export function landingFromEnding(
 		case 'refused':
 			return { kind: 'refused', opHash };
 		case 'following':
+			// The relay holds it and says why it waits: that, before the clock.
+			if (ending.relay_funding) return { kind: 'relay_funding', opHash };
 			switch (ending.outcome) {
 				case 'maybe_sent':
 					return { kind: 'maybe_sent', opHash };
@@ -305,6 +325,7 @@ export function autoCloseAfterMs(state: DappReceiptState): number | null {
 			return LANDED_CLOSE_MS;
 		case 'submitting':
 		case 'submitted':
+		case 'relay_funding':
 		case 'still_confirming':
 		case 'unknown':
 		case 'maybe_sent':

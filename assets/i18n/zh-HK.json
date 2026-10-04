@@ -303,6 +303,7 @@
   "txSubmitting": "正在提交至網絡⋯",
   "txSubmitted": "交易已提交至網絡",
   "txSlowConfirm": "比平常需時較長，請稍候⋯",
+  "txRelayFunding": "中繼正在補充它在這條網絡上的 gas，到賬後會立即發出你的交易。",
   "txWaitingConfirm": "正在等待區塊鏈確認⋯",
   "txElapsed": "已過 {{elapsed}} 秒 — 快完成了",
   "txRemaining": "尚餘約 {{remaining}} 秒",
@@ -1188,37 +1189,10 @@
  },
  "componentsUi": {
   "funding": {
-   "title": "發送之前，還差一步",
-   "lead": "你的交易依靠一小筆 {{symbol}} 網絡費儲備運作。只需在下方加值一次 — 之後的交易會自動補回。",
-   "statusConfirming": "你的網絡費正在途中 — 通常不用一分鐘。",
-   "fundedTitle": "網絡費已就緒",
-   "amountLabel": "需要加值的金額",
-   "addressLabel": "加值地址",
-   "networkHint": "從交易所提幣？請選擇 {{network}} 網絡。",
-   "openInWallet": "用另一個錢包支付",
    "showQr": "顯示 QR 碼",
-   "hideQr": "收起 QR 碼",
-   "qrHint": "掃碼會自動帶入金額及網絡",
    "autoCheckNote": "到帳之後會自動繼續",
-   "checkNow": "立即檢查",
    "checking": "正在檢查⋯",
-   "retryFree": "重試免費加值",
-   "retrying": "正在申請⋯",
-   "detailsTitle": "這筆資金會去哪裡？",
-   "detailsBody": "這筆資金會存入 Vela 為你維護的專屬網絡費儲備（每個網絡一個），用以墊付交易的鏈上費用，並由每筆交易的手續費補回。此儲備只可用於支付網絡費，無法提取。",
-   "continue": "繼續",
-   "cancel": "暫時不用",
-   "cancelDapp": "取消此交易",
-   "denialDefault": "免費加值今次未能成功。你可以在下方自行加值，或稍後再試。",
-   "denialNotRecognized": "全新的錢包可能需要幾分鐘才會被系統識別 — 我們會自動重試免費加值。你亦可在下方自行加值，立即發送。",
-   "denialNonceExceeded": "免費加值只涵蓋錢包最初的幾筆交易，而此錢包已超出範圍。請在下方自行加值以繼續。",
-   "denialTreasuryDepleted": "Vela 的免費額度暫時用盡。你可以在下方自行加值，或稍後再回來查看。",
-   "denialBalanceTooLow": "免費加值需要你的錢包本身已持有少量 {{symbol}}。請先接收一些，或從任何錢包或交易所向下方地址加值。",
-   "denialRateLimited": "剛剛才為你加值過。如果仍然不足，請在下方補回差額。",
-   "denialTransferFailed": "免費加值的轉帳失敗了。你可以重試，或自行加值。",
-   "denialServiceUnavailable": "免費加值服務暫時不太穩定 — 我們會自動重試。你亦可直接自行加值。",
-   "denialNetworkError": "無法連接 Vela — 請檢查你的網絡連線，我們會自動重試。",
-   "denialPendingUnknown": "未能確認上次加值的結果 — 現正為你留意餘額。如短時間內仍未到帳，請在下方自行加值。"
+   "cancel": "暫時不用"
   },
   "signing": {
    "loading": "正在載入⋯",
@@ -1478,7 +1452,11 @@
    "paidWith": "以 {{symbol}} 支付",
    "rowBalance": "餘額",
    "rowSpend": "預估費用",
-   "feeCoinSpent": "呢筆交易都會用到你嘅 {{sym}}，剩低嘅唔夠俾網絡費用，交易就會失敗。"
+   "feeCoinSpent": "呢筆交易都會用到你嘅 {{sym}}，剩低嘅唔夠俾網絡費用，交易就會失敗。",
+   "reasonQuote": "未能從中繼取得報價，正在自動重試。",
+   "reasonFeeToken": "中繼暫時未能為這個幣報價。正在重試——亦可改用其他幣支付手續費。",
+   "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
+   "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。"
   },
   "dock": {
    "receive": "收款",
@@ -1599,7 +1577,6 @@
    "selfFundToggle": "等唔切？自己啟動佢",
    "customLead": "呢個係你自己加嘅網絡，Vela 營運方可能根本冇辦法喺上面持有 gas——本地或者內部嘅鏈唔應該由第個人嚟充。啟動佢嘅中繼要由你自己嚟。",
    "balanceLine": "而家有 {{balance}}，需要 {{floor}} {{symbol}}",
-   "networkLine": "網絡：{{network}}",
    "watching": "每隔幾秒會自動再查一次——增值到咗之後呢度會自動關閉。",
    "qrLabel": "用另一個錢包掃碼轉賬"
   },

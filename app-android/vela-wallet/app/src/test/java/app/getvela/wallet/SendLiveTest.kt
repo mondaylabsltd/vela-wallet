@@ -348,6 +348,35 @@ class SendLiveTest {
     }
 
     /**
+     * 098 follow-up: the relay topping up its gas says so in place of the
+     * wait, with no confirmation clock (nothing is on the network yet); a
+     * fee hold keeps its own words; and a failure after a fee hold is not
+     * "the fee rose" — only a fee refusal is.
+     */
+    @Test
+    fun `the receipt says why the relay waits, and only a fee refusal blames the fee`() {
+        val c = ctx()
+        val model = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
+        val base = SendView(stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Submitting, user_op_hash = "0xop")
+        fun submitted(hold: app.getvela.wallet.feature.send.core.SendHoldReason?) = base.copy(
+            receipt = SendReceiptView(status = SendReceiptStatus.Submitted, amount = "0.001", usd_value = 0.0, typical_inclusion_s = 5, submitted_at_ms = 1.0, hold_reason = hold),
+        )
+        val funding = SendLive.receipt(model, submitted(app.getvela.wallet.feature.send.core.SendHoldReason.RelayFunding), c)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_RELAY_FUNDING)), funding.captions)
+        assertNull("no clock while nothing is on the network", funding.eta)
+        val held = SendLive.receipt(model, submitted(app.getvela.wallet.feature.send.core.SendHoldReason.FeeHold), c)
+        assertTrue(held.captions.contains(strings.t(I18nKeys.Flows.TX_HELD_FEES)))
+
+        fun failed(hold: app.getvela.wallet.feature.send.core.SendHoldReason?) = SendLive.receipt(
+            model,
+            base.copy(tx_status = SendTxStatus.Idle, receipt = SendReceiptView(status = SendReceiptStatus.Failed, amount = "0.001", usd_value = 0.0, hold_reason = hold)),
+            c,
+        ).captions
+        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)), failed(app.getvela.wallet.feature.send.core.SendHoldReason.FeeRejected))
+        assertFalse(failed(app.getvela.wallet.feature.send.core.SendHoldReason.FeeHold).contains(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)))
+    }
+
+    /**
      * Spec 097 F (S3): a two-coin sweep's success screen said "Send ETH |
      * Sent 0.000418 ETH | To Wallet · Base" although 0.034929 USDC moved in
      * the same operation (Android captioned it "2 recipients" besides — a

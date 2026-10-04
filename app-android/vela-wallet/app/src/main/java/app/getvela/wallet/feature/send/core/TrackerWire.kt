@@ -45,6 +45,9 @@ enum class TrackStatus {
 
     @SerialName("fee_held") FeeHeld,
 
+    /** Queued while the relay tops up its gas on the chain (098 follow-up). */
+    @SerialName("relay_funding") RelayFunding,
+
     @SerialName("confirmed") Confirmed,
 
     @SerialName("dropped") Dropped,

@@ -11,7 +11,7 @@ nothing released, no phones touched.
 | `b3d9cdfd5` | docs(098): the design |
 | `0419e8536` `7bd851bf0` `cfa167fd1` | web, desktop, iOS + Android: `x-vela-rpc-url` on every relay request (FR-001) |
 | `36a968b42` | core: the can't-reach stop; the funding stop re-probes every 10 s and moves on by itself (FR-004, FR-008) |
-| `6edc503e5` | **PROPOSED** i18n residency move — the owner's call (below) |
+| `6edc503e5` | i18n residency move — approved by the owner 2026-10-03 (below) |
 | `3105fe7e3` `9edeafe23` `39c527d7d` `d98763bc8` | web, desktop, Android, iOS: both stops drawn where the core opens them |
 | `ae8eb386c` | four shells: "the relay is sent this address" where an RPC or provider key is set (FR-002) |
 | `3fabc535d` | getvela.app: privacy policy; networks-and-fees, 15 languages (FR-003, FR-009) |
@@ -57,13 +57,12 @@ from warnings already on `main`.
 
 ## What remains for the owner
 
-1. **The residency proposal** (`6edc503e5`): SC-005's budget 141,800 → 144,400 and its
-   reduction claim 86% → 85.8%. 098's words put the `ja` + `en` runtime route at 143,429
-   after `en` and `ja` were tightened. Revert the commit to keep the old line — then the
-   words have to go elsewhere or get shorter.
+1. ~~The residency proposal~~ — **approved** 2026-10-03: 「i18n 体积预算上调 统一」. Budget
+   141,800 → 144,400, reduction claim 86% → 85.8%.
 2. **vela-relay PR #15**: review, merge, deploy both shells. Until then the live relay still
    answers `503` for 1337, 31337 and 123456789, and the wallet carries on through them as
    before — the funding stop works today; the can't-reach stop waits for the deploy. After
    it: `curl -s -w ' %{http_code}\n' <relay>/v1/treasury/123456789` → `not_listed … 404`;
    `…/1337` → `no_rpc … 404`.
-3. **FR-007 not built** — the numbers are in spec §3.3. Say so if you want it anyway.
+3. ~~FR-007~~ — **ruled** 2026-10-03: a chain the directory does not list is not supported
+   (「如果目录里没有的，可以不支持」).

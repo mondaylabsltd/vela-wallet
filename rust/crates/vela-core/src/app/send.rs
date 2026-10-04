@@ -793,6 +793,10 @@ pub enum SendReceiptOutcome {
     /// The relay parked the op until fees settle — pending, new wording only
     /// (invariant ⑦).
     FeeHeld,
+    /// The relay is topping up its gas on the chain before it sends the op
+    /// (tracker `RelayFunding`): pending, its own words, gone once the relay
+    /// moves on.
+    RelayFunding,
     /// The relay has shown it holds an op whose submit reply was lost (spec
     /// 082 RA10): the receipt goes back to the ordinary "submitted" words.
     Acknowledged,
@@ -823,6 +827,7 @@ pub fn receipt_outcome_of(entry: &TrackEntryView) -> Option<SendReceiptOutcome> 
             not_sent: true,
         }),
         TrackStatus::FeeHeld => Some(SendReceiptOutcome::FeeHeld),
+        TrackStatus::RelayFunding => Some(SendReceiptOutcome::RelayFunding),
         TrackStatus::Pending | TrackStatus::Unreachable | TrackStatus::AcceptedNotLanded => {
             match entry.outcome {
                 TrackOutcome::Landing | TrackOutcome::StillConfirming => {
@@ -1715,6 +1720,9 @@ pub struct Model {
     /// The submit's reply was lost; cleared when the relay acknowledges.
     receipt_maybe_sent: bool,
     fee_held: bool,
+    /// The relay is topping up its gas before it sends (098 follow-up). Not
+    /// sticky: the next outcome clears it.
+    relay_funding: bool,
     /// The submit result's clock (#D3); `None` until the relay accepted.
     submitted_at_ms: Option<f64>,
     fee_rejected: bool,
@@ -1864,6 +1872,9 @@ pub enum SendReceiptStatus {
 pub enum SendHoldReason {
     FeeHold,
     FeeRejected,
+    /// The relay is topping up the gas it pays with on this chain; it sends
+    /// the operation once that lands.
+    RelayFunding,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -4865,6 +4876,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
+    model.relay_funding = false;
     model.fee_rejected = false;
 
     match model.public_key_hex.clone() {
@@ -5287,10 +5299,18 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
             // The hold stage comes only from the relay's status, so the relay
             // holds the op: no longer "may have been sent" (RA10).
             model.fee_held = true;
+            model.relay_funding = false;
+            model.receipt_maybe_sent = false;
+        }
+        SendReceiptOutcome::RelayFunding => {
+            // Waiting on the relay's own gas, said as such — and the stage
+            // comes only from the relay's status, so it holds the op (RA10).
+            model.relay_funding = true;
             model.receipt_maybe_sent = false;
         }
         SendReceiptOutcome::Acknowledged => {
             // The relay holds it: the ordinary "submitted" words (RA10).
+            model.relay_funding = false;
             model.receipt_maybe_sent = false;
         }
     }
@@ -6363,6 +6383,8 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
             Some(SendHoldReason::FeeRejected)
         } else if model.fee_held {
             Some(SendHoldReason::FeeHold)
+        } else if model.relay_funding {
+            Some(SendHoldReason::RelayFunding)
         } else {
             None
         },

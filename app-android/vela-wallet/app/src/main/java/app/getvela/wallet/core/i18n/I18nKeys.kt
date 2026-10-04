@@ -766,6 +766,7 @@ object I18nKeys {
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
+        const val TX_RELAY_FUNDING = "send.txRelayFunding"
         const val TX_REJECTED_FEES = "send.txRejectedFees"
         const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
         const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
