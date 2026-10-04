@@ -115,6 +115,17 @@ data class FeeBundlerQuote(
     val relayer_fee_per_gas: String? = null,
 )
 
+/**
+ * What the operation being priced does to one asset of the account, as the
+ * signing sheet's own simulation measured it (spec 083 fee, issue #411):
+ * `token = null` is the chain's coin, else the token contract; `delta` is
+ * signed base units as a decimal string, negative leaving the account. The
+ * machine reads it for one thing — how much of each fee coin the operation
+ * leaves to pay its fee from.
+ */
+@Serializable
+data class FeeBalanceChange(val token: String? = null, val delta: String)
+
 /** One in-band fee asset the relay quoted for this account on this chain. */
 @Serializable
 data class FeeAssetQuote(
@@ -428,4 +439,17 @@ sealed class FeeEvent {
     @Serializable
     @SerialName("quote_expired")
     data object QuoteExpired : FeeEvent()
+
+    /**
+     * The sheet's simulation of the operation answered (spec 083 fee): what
+     * it moves, per asset. From here on a fee coin pays only from what the
+     * operation leaves of it — and a coin that the calls name but the
+     * simulation shows enough left of can be the machine's pick again (issue
+     * #411: a Uniswap swap on Polygon preselected POL, held at 0, because the
+     * router's path named both stablecoins). Forgotten on every
+     * [QuoteRequested], so [SpeedControl] tells it again after each.
+     */
+    @Serializable
+    @SerialName("balance_changes_measured")
+    data class BalanceChangesMeasured(val changes: List<FeeBalanceChange> = emptyList()) : FeeEvent()
 }

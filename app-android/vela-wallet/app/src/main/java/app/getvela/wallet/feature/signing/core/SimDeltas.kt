@@ -2,8 +2,10 @@ package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.feature.send.core.FeeBalanceChange
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
 import kotlinx.serialization.builtins.ListSerializer
 import org.json.JSONArray
 import org.json.JSONObject
@@ -80,6 +82,22 @@ object SimDeltas {
         runCatching { Wire.json.decodeFromString(ListSerializer(TrustAssetDelta.serializer()), record.deltasJson) }
             .onFailure { VelaLog.failure("signing.sim", "the core's deltas could not be read", it) }
             .getOrNull()
+
+    /**
+     * A clean run's deltas as the fee machine reads them (spec 083 fee, issue
+     * #411; the desktop's `fee_balance_changes`): what the operation moves of
+     * each asset, native or by contract. The core derived each from the
+     * coin's OWN `Transfer` logs (the contract that emitted them) or the
+     * node's trace of native value — nothing a site's contract can emit on a
+     * coin's behalf. A token move with no contract names no coin and is
+     * dropped: never read as the native one.
+     */
+    fun feeBalanceChanges(deltas: List<TrustAssetDelta>): List<FeeBalanceChange> = deltas.mapNotNull { delta ->
+        when (delta.kind) {
+            TrustDeltaKind.Native -> FeeBalanceChange(token = null, delta = delta.delta)
+            TrustDeltaKind.Erc20 -> delta.token?.let { FeeBalanceChange(token = it, delta = delta.delta) }
+        }
+    }
 
     /** The core's "could not check" line, for a run whose moves nobody could judge. */
     fun couldNotCheck(): SigningController.SimOutcome.Notice =
