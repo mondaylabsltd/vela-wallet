@@ -6,6 +6,12 @@
 //!                    └─ read failed ──────────────────────────────────► Empty
 //! Active ─ SwitchAccount / AccountEstablished ─► Active (index persisted)
 //! Active ─ SignOut ─► CheckPendingUploads ─► confirm dialog ─► SignedOut
+//!
+//! landing watch (issue #409), alongside — started on every restore into
+//! Active and every establishment:
+//!   LoadPendingUploads ─► per accepted one-key record:
+//!     AwaitRegistryLanding(task) ─┬─ landed ─► RemovePendingUpload
+//!                                 └─ not confirmed ─► record kept
 //! ```
 //!
 //! The session is the account source of truth every money flow sits on top of
@@ -71,15 +77,37 @@
 //!   price source and locale preferences all stay. The user gets them back by
 //!   authenticating, not by restoring a backup.
 //! - The pending-upload outbox is NOT cleared either, for a different reason: a
-//!   record there means some public key never reached the index service, and
-//!   deleting it turns a retry-on-next-launch into a credential the index can
-//!   never answer for. The core cannot enforce a key set (it names sentences,
-//!   not storage) — [`SessionOperation::ClearSignedInWallet`] states it and the
-//!   shell obeys.
+//!   record there means some public key has not been confirmed on the
+//!   registry, and deleting it loses the only trace of that — the sign-out
+//!   warning, and the landing watch below. The core cannot enforce a key set
+//!   (it names sentences, not storage) —
+//!   [`SessionOperation::ClearSignedInWallet`] states it and the shell obeys.
 //!
 //! Invariant ⑤ is what makes this safe to decide: the confirmation dialog only
 //! exists after the pending-upload check has answered, so the destructive
 //! button is never reachable without the warning it may need.
+//!
+//! ## The landing watch (issue #409)
+//!
+//! A one-key wallet is entered as soon as the registry has ACCEPTED its publish
+//! (owner's decision, 2026-10-04); the on-chain landing finishes afterwards,
+//! and by then the create screen — and the onboarding core with it — is gone.
+//! This machine is the one that is still here, so it confirms the landing:
+//! whenever it holds a wallet (a restore into Active, an establishment) it
+//! reads the outbox and, for each record waiting only on a landing
+//! ([`super::PendingUpload::awaits_landing`] — one key, a task id), asks the
+//! shell to wait on that registry task. Landed ⇒ the record is removed.
+//! Anything else — the task failed, was not found, or was still pending when
+//! the shell's budget ran out — leaves it exactly where it was: the sign-out
+//! dialog keeps warning, and the next launch asks again.
+//!
+//! Every step is a READ of the registry or a write of the local outbox. There
+//! is no passkey operation in this machine's vocabulary at all, so confirming a
+//! landing late can never put a prompt in front of anyone.
+//!
+//! Multi-key records are never touched: they carry no task id, because a
+//! multi-key wallet is only entered after its landing, and its record is
+//! removed by the create flow itself, exactly as before.
 //!
 //! Out of scope on purpose: `SET_CONNECTED` (browser connection) belongs to
 //! the dapp-connection machine, `shortAddress` and the balance-sorted switcher
@@ -132,10 +160,10 @@ pub enum SessionOperation {
     /// address is derived from the passkey rather than restored from disk.
     ///
     /// The pending-upload outbox is excluded for a second, independent reason:
-    /// a record there is a public key the index service has not confirmed, and
-    /// the next launch's `retryPendingUploads()` needs no account list to
-    /// finish the job — but a deleted record can never be retried, and that
-    /// credential becomes unfindable at login.
+    /// a record there is a public key the registry has not confirmed, and the
+    /// landing watch needs no account list to finish the job (issue 409) —
+    /// but a deleted record can never be confirmed, and the warning it carries
+    /// is gone with it.
     ///
     /// Worded as a sentence because the key list is the shell's to know (016
     /// rule). Best effort, like every other write here: a storage failure
@@ -159,6 +187,19 @@ pub enum SessionOperation {
     /// the extension keep answering as an account this device is no longer
     /// signed into. A no-op wherever no extension exists.
     ClearExtensionCache,
+    /// Issue 409: read the pending-upload outbox, every record as stored —
+    /// the landing watch decides which of them a read can settle.
+    LoadPendingUploads,
+    /// Issue 409: has this registry task landed? The shell polls the
+    /// registry's task status on its own budget — the same interval and limit
+    /// the create's publish always polled with — and answers once the task is
+    /// terminal or the budget is spent. A read: no passkey, no signature,
+    /// nothing written.
+    AwaitRegistryLanding { task_id: String },
+    /// Issue 409: drop the outbox record whose landing was just confirmed,
+    /// keyed by its `id` (the wallet's first credential id). Best effort: a
+    /// record that survives a failed write is confirmed again next launch.
+    RemovePendingUpload { credential_id: String },
 }
 
 /// What the shell observed.
@@ -197,6 +238,23 @@ pub enum SessionShellResult {
     /// signed out when they arrive, and neither can put it back.
     SignedInWalletCleared,
     ExtensionCacheCleared,
+    /// Issue 409: the outbox as stored. A record this build cannot read
+    /// arrives as `null` and costs only itself. A read that fails outright is
+    /// [`Self::PendingUploadsUnavailable`], as for the sign-out check.
+    PendingUploadsLoaded {
+        records: Vec<super::OutboxRecord>,
+    },
+    /// Issue 409: the task is `done` — the group has a receipt on-chain.
+    RegistryLanded,
+    /// Issue 409: the landing is NOT confirmed — the task failed, is not
+    /// known (any more), was still pending when the shell's budget ran out, or
+    /// the registry could not be reached. The record stays; `message` is for
+    /// the log.
+    RegistryLandingUnconfirmed {
+        message: String,
+    },
+    /// Issue 409: the confirmed record is gone (best effort).
+    PendingUploadRemoved,
 }
 
 impl Operation for SessionOperation {
@@ -252,6 +310,17 @@ pub enum Event {
         attempt: u64,
         result: SessionShellResult,
     },
+    /// Internal: a landing-watch effect resolved (issue 409). Kept apart from
+    /// [`Self::ShellCompleted`] on purpose: `attempt` is bumped by every sign-out,
+    /// switch and establishment, and a confirmation in flight must survive all
+    /// of them — a key that landed has landed whoever is signed in. `watch` is
+    /// the generation of the watch that asked; an older watch's answer is
+    /// dropped, the newer one having read the outbox again.
+    #[serde(skip)]
+    WatchCompleted {
+        watch: u64,
+        result: SessionShellResult,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +362,12 @@ pub struct Model {
     /// dropped. This is what keeps a late restore from clobbering a session
     /// already established by onboarding.
     attempt: u64,
+    /// The landing watch (issue 409): the generation of the newest one.
+    watch: u64,
+    /// Records this watch has still to confirm: `(credential id, task id)`.
+    watch_queue: std::collections::VecDeque<(String, String)>,
+    /// The record whose task is being waited on right now.
+    watching: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +491,12 @@ impl App for Session {
                     return Command::done();
                 }
                 accept(model, result)
+            }
+            Event::WatchCompleted { watch, result } => {
+                if watch != model.watch {
+                    return Command::done();
+                }
+                accept_watch(model, result)
             }
         }
     }
@@ -569,12 +650,15 @@ fn establish(model: &mut Model, mode: CompletionMode) -> Command<SessionEffect, 
                 }
             };
             model.phase = Phase::Active;
-            requests(
+            let saved = requests(
                 model,
                 vec![SessionOperation::SaveActiveIndex {
                     index: model.active_index,
                 }],
-            )
+            );
+            // A wallet created a moment ago may be one whose landing is still
+            // finishing (issue #409): its pending record carries the task.
+            Command::all([saved, start_watch(model)])
         }
         CompletionMode::SetWallet {
             accounts,
@@ -600,7 +684,8 @@ fn establish(model: &mut Model, mode: CompletionMode) -> Command<SessionEffect, 
                 Phase::Empty
             };
             if has_wallet {
-                requests(model, vec![SessionOperation::SaveActiveIndex { index }])
+                let saved = requests(model, vec![SessionOperation::SaveActiveIndex { index }]);
+                Command::all([saved, start_watch(model)])
             } else {
                 render()
             }
@@ -787,7 +872,80 @@ fn try_finish_restore(model: &mut Model) -> Command<SessionEffect, Event> {
     writes.push(SessionOperation::SaveActiveIndex {
         index: active_index,
     });
-    requests(model, writes)
+    let written = requests(model, writes);
+    // The launch is where a landing the last run could not see finish is
+    // confirmed (issue #409) — the app closed inside those seconds, or the
+    // registry was slow past the shell's budget.
+    Command::all([written, start_watch(model)])
+}
+
+// ---------------------------------------------------------------------------
+// The landing watch (issue #409)
+// ---------------------------------------------------------------------------
+
+/// Read the outbox afresh and confirm every landing it is waiting on. A newer
+/// watch supersedes an older one: it reads the outbox again, so it sees every
+/// record the older one would have, and the older one's answers are dropped.
+fn start_watch(model: &mut Model) -> Command<SessionEffect, Event> {
+    model.watch += 1;
+    model.watch_queue.clear();
+    model.watching = None;
+    watch_request(model, SessionOperation::LoadPendingUploads)
+}
+
+fn accept_watch(model: &mut Model, result: SessionShellResult) -> Command<SessionEffect, Event> {
+    match result {
+        SessionShellResult::PendingUploadsLoaded { records } => {
+            model.watch_queue = records
+                .into_iter()
+                .filter_map(|record| record.0)
+                .filter_map(|record| {
+                    let task_id = record.awaits_landing()?.to_owned();
+                    Some((record.id, task_id))
+                })
+                .collect();
+            next_landing(model)
+        }
+        SessionShellResult::RegistryLanded => match model.watching.take() {
+            // Confirmed: only now may the record go.
+            Some(credential_id) => watch_request(
+                model,
+                SessionOperation::RemovePendingUpload { credential_id },
+            ),
+            None => Command::done(),
+        },
+        // Not confirmed. The record stays — warning at sign-out, asked again
+        // next launch — and the watch moves on to the next one.
+        SessionShellResult::RegistryLandingUnconfirmed { .. } => {
+            model.watching = None;
+            next_landing(model)
+        }
+        SessionShellResult::PendingUploadRemoved => next_landing(model),
+        // The outbox could not be read: nothing is known, so nothing changes.
+        _ => {
+            model.watch_queue.clear();
+            model.watching = None;
+            Command::done()
+        }
+    }
+}
+
+/// Wait on the next record's task, one at a time.
+fn next_landing(model: &mut Model) -> Command<SessionEffect, Event> {
+    let Some((credential_id, task_id)) = model.watch_queue.pop_front() else {
+        model.watching = None;
+        return Command::done();
+    };
+    model.watching = Some(credential_id);
+    watch_request(model, SessionOperation::AwaitRegistryLanding { task_id })
+}
+
+/// Issue one watch operation, its answer tagged with this watch's generation
+/// rather than with `attempt` (see [`Event::WatchCompleted`]).
+fn watch_request(model: &Model, operation: SessionOperation) -> Command<SessionEffect, Event> {
+    let watch = model.watch;
+    Command::request_from_shell(operation)
+        .then_send(move |result| Event::WatchCompleted { watch, result })
 }
 
 // ---------------------------------------------------------------------------

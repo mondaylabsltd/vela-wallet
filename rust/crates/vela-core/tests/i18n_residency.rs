@@ -57,7 +57,13 @@ const CORPUS_BYTES: usize = 990_499;
 /// `en` and `ja` were tightened. Same rule: ~1 KB above the measurement.
 /// Approved by the owner the same day, with the reduction claim below:
 /// 「i18n 体积预算上调 统一」.
-const SC005_BUDGET: usize = 144_400;
+///
+/// 2026-10-04 (099): the dApp browser's layers in words — the tab status,
+/// each request's reason, why the slide is shut, "the relay is sending it" —
+/// 51 strings in every locale, which fit at 144,350 only after `en` and `ja`
+/// were cut to the bone and one line dropped, with 50 bytes left. Same rule:
+/// ~1 KB above the measurement. Approved by the owner: 「Text budget 提高预算」.
+const SC005_BUDGET: usize = 145_400;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
 ///

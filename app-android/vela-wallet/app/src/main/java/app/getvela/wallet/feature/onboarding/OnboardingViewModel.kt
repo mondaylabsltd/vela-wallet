@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -327,6 +328,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                     "canFinish" to next.canFinish,
                     "needsSecondKey" to next.needsSecondKey,
                 )
+                timeCreateStep(next)
                 createView = next
             },
             escapedFailure = OnboardingExecutor::escapedFailure,
@@ -353,24 +355,38 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     fun ackToggled(index: Int) =
         send(createDriver, JSONObject().put("type", "ack_toggled").put("index", index))
 
-    fun submit() = send(createDriver, JSONObject().put("type", "submit"))
+    fun submit() {
+        markCreateTap("submit")
+        send(createDriver, JSONObject().put("type", "submit"))
+    }
 
-    fun addKey(method: KeyMethod) = send(
-        createDriver,
-        JSONObject().put("type", "add_key").put("name", "").put("method", method.wire),
-    )
+    fun addKey(method: KeyMethod) {
+        markCreateTap("add key", "method" to method.wire)
+        send(
+            createDriver,
+            JSONObject().put("type", "add_key").put("name", "").put("method", method.wire),
+        )
+    }
 
-    fun confirmKey(index: Int) =
+    fun confirmKey(index: Int) {
+        markCreateTap("confirm key", "index" to index)
         send(createDriver, JSONObject().put("type", "confirm_key").put("index", index))
+    }
 
     fun removeKey(index: Int) =
         send(createDriver, JSONObject().put("type", "remove_key").put("index", index))
 
-    fun finishKeys() = send(createDriver, JSONObject().put("type", "finish_keys"))
+    fun finishKeys() {
+        markCreateTap("finish keys")
+        send(createDriver, JSONObject().put("type", "finish_keys"))
+    }
 
     fun startOver() = send(createDriver, JSONObject().put("type", "start_over"))
 
-    fun retryUpload() = send(createDriver, JSONObject().put("type", "retry_upload"))
+    fun retryUpload() {
+        markCreateTap("retry upload")
+        send(createDriver, JSONObject().put("type", "retry_upload"))
+    }
 
     fun enterWallet() = send(createDriver, JSONObject().put("type", "enter_wallet"))
 
@@ -542,6 +558,53 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 container.trustedSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
             },
         )
+    }
+
+    // -- create timing (issue #409) -------------------------------------------
+    //
+    // "The last step took about fifteen seconds" is a sentence nobody can act
+    // on; which step, waiting on what, is. Every tap that starts work is
+    // marked, and every change of what the person SEES (screen, stage, status)
+    // is logged with the step it left, how long that step was on screen, and
+    // the time since the tap — so one `adb logcat -s VelaLog` run reads as a
+    // timeline (`stepMs` is the step being LEFT):
+    //
+    //   create.timing  finish keys
+    //   create.timing  Progress form/computing_address  left=Keys add_keys/-  stepMs=3  sinceTapMs=3
+    //   create.timing  Progress form/syncing_key  left=Progress form/computing_address  stepMs=41  sinceTapMs=44
+    //   create.timing  Done created/-  left=Progress form/syncing_key  stepMs=9816  sinceTapMs=9860
+    //
+    // Debug builds only, like every VelaLog line. What each step waited on is
+    // on the `core.operation` / `core.result` and `registry` lines between.
+
+    private var createTapAt = 0L
+    private var createTap = "-"
+    private var createStepAt = 0L
+    private var createStep = ""
+
+    private fun markCreateTap(tap: String, vararg fields: Pair<String, Any?>) {
+        val now = SystemClock.elapsedRealtime()
+        createTapAt = now
+        createStepAt = now
+        createTap = tap
+        VelaLog.event("create.timing", tap, *fields)
+    }
+
+    private fun timeCreateStep(view: CreateView) {
+        val screen = app.getvela.wallet.feature.onboarding.flow.screenFor(view).name
+        val step = "$screen ${view.stage.wire}/${view.status?.wire ?: "-"}"
+        if (step == createStep) return
+        val now = SystemClock.elapsedRealtime()
+        VelaLog.event(
+            "create.timing",
+            step,
+            "left" to createStep.ifEmpty { "-" },
+            "stepMs" to if (createStep.isEmpty()) "-" else now - createStepAt,
+            "sinceTap" to createTap,
+            "sinceTapMs" to if (createTapAt == 0L) "-" else now - createTapAt,
+        )
+        createStep = step
+        createStepAt = now
     }
 
     private fun send(driver: CoreDriver?, event: JSONObject) {

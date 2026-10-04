@@ -1,20 +1,31 @@
 package app.getvela.wallet.feature.onboarding.core
 
+import app.getvela.wallet.core.diagnostics.VelaLog
 import org.json.JSONObject
 
 /**
- * The session machine's seven operations.
+ * The session machine's eleven operations.
  *
  * A separate vocabulary from onboarding's eighteen, and a separate executor,
  * because the session machine is **app-resident** — one per process, outliving
  * every screen — while an onboarding core exists only for the length of a flow.
  *
- * Five of the seven are best effort by contract: the session is already in the
- * state the write was meant to record, and a failed write cannot put it back.
- * That is why so many branches below discard their error — deliberately, and
- * only where the contract says the shell swallows it.
+ * The writes are best effort by contract: the session is already in the state
+ * the write was meant to record, and a failed write cannot put it back. That is
+ * why so many branches below discard their error — deliberately, and only where
+ * the contract says the shell swallows it.
+ *
+ * Three belong to the landing watch (issue #409): a one-key wallet is entered
+ * at the registry's 202, and the session — still here when the create screen is
+ * gone — reads the outbox, waits on each accepted record's registry task, and
+ * removes a record once its task has landed. A read and a local write; no
+ * passkey anywhere.
  */
-class SessionExecutor(private val store: AccountStore) {
+class SessionExecutor(
+    private val store: AccountStore,
+    /** The registry the landing watch reads, at the endpoint Settings names. */
+    private val registry: suspend () -> RegistryClient = { RegistryClient(store.registryUrlOrDefault()) },
+) {
 
     suspend fun perform(operation: JSONObject): String =
         when (val type = operation.getString("type")) {
@@ -66,6 +77,55 @@ class SessionExecutor(private val store: AccountStore) {
             // ack and would otherwise never leave the sign-out.
             "clear_extension_cache" -> result("extension_cache_cleared") {}
 
+            // Issue #409 — the landing watch. The outbox goes over as stored;
+            // the core decides which records a read can settle, and a record it
+            // cannot read costs only itself.
+            "load_pending_uploads" -> try {
+                result("pending_uploads_loaded") { put("records", store.loadPendingUploads()) }
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                result("pending_uploads_unavailable") {}
+            }
+
+            // The same poll, interval and budget the create's publish always
+            // waited with — now after "Wallet created" instead of before it.
+            "await_registry_landing" -> {
+                val task = operation.optString("task_id")
+                val started = System.currentTimeMillis()
+                VelaLog.event("registry.landing", "wait", "task" to task)
+                try {
+                    registry().awaitTask(task)
+                    VelaLog.event(
+                        "registry.landing",
+                        "landed",
+                        "task" to task,
+                        "waitedMs" to System.currentTimeMillis() - started,
+                    )
+                    result("registry_landed") {}
+                } catch (error: Throwable) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    VelaLog.event(
+                        "registry.landing",
+                        "unconfirmed",
+                        "task" to task,
+                        "waitedMs" to System.currentTimeMillis() - started,
+                        "reason" to error.message,
+                    )
+                    result("registry_landing_unconfirmed") {
+                        put("message", error.message ?: error.javaClass.simpleName)
+                    }
+                }
+            }
+
+            // Only ever after `registry_landed` — the core's rule. Best effort:
+            // a record that survives is confirmed again next launch.
+            "remove_pending_upload" -> {
+                val credentialId = operation.optString("credential_id")
+                runCatching { store.removePendingUpload(credentialId) }
+                VelaLog.event("registry.landing", "record removed", "cred" to VelaLog.shortId(credentialId))
+                result("pending_upload_removed") {}
+            }
+
             else -> error("unhandled session operation: $type")
         }.toString()
 
@@ -80,6 +140,9 @@ class SessionExecutor(private val store: AccountStore) {
             "remove_account",
             "clear_signed_in_wallet",
             "clear_extension_cache",
+            "load_pending_uploads",
+            "await_registry_landing",
+            "remove_pending_upload",
         )
 
         private inline fun result(type: String, fill: JSONObject.() -> Unit): JSONObject =
@@ -103,6 +166,13 @@ class SessionExecutor(private val store: AccountStore) {
                 "remove_account" -> JSONObject().put("type", "account_removed")
                 "clear_signed_in_wallet" -> JSONObject().put("type", "signed_in_wallet_cleared")
                 "clear_extension_cache" -> JSONObject().put("type", "extension_cache_cleared")
+                // The landing watch: an unknown answer keeps the record — the
+                // watch stops, the warning stays, the next launch asks again.
+                "load_pending_uploads" -> JSONObject().put("type", "pending_uploads_unavailable")
+                "await_registry_landing" -> JSONObject()
+                    .put("type", "registry_landing_unconfirmed")
+                    .put("message", error.message ?: error.javaClass.simpleName)
+                "remove_pending_upload" -> JSONObject().put("type", "pending_upload_removed")
                 else -> JSONObject().put("type", "accounts_unavailable")
             }
             return body.toString()

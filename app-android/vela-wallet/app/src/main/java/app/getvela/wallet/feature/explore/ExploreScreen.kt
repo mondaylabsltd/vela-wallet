@@ -54,6 +54,7 @@ import app.getvela.wallet.feature.explore.components.GroupManageSheetContent
 import app.getvela.wallet.feature.explore.components.PickerOption
 import app.getvela.wallet.feature.explore.components.PickerSheetContent
 import app.getvela.wallet.feature.explore.components.SiteMenuSheetContent
+import app.getvela.wallet.feature.explore.components.TabMenuSheetContent
 import app.getvela.wallet.feature.explore.components.SiteRow
 import app.getvela.wallet.feature.explore.components.SiteTile
 import app.getvela.wallet.feature.signing.SigningScreenModel
@@ -93,6 +94,12 @@ class ExploreCallbacks(
     val onStatusSeen: (String) -> Unit = {},
     /** Spec 099 FR-014: the shown tab's status panel opened (`true`) or closed — the core carries its record meanwhile. */
     val onInspector: (Boolean) -> Unit = {},
+    /** Spec 099: a tab's menu — close every other tab (the core names which). */
+    val onTabsCloseOthers: (String) -> Unit = {},
+    /** Spec 099: a tab's menu — close every tab to its right in the strip (the core names which). */
+    val onTabsCloseRight: (String) -> Unit = {},
+    /** Spec 099: which of a tab's batch closes would take any tab — the core's answer, asked as its menu opens. */
+    val tabCloses: (String) -> TabCloses = { TabCloses() },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -159,12 +166,15 @@ fun ExploreScreen(
     var picker by remember { mutableStateOf<String?>(null) }
     /** Spec 099 FR-014: the shown tab's status panel is up. */
     var statusOpen by remember { mutableStateOf(false) }
+    /** Spec 099: the tab whose long-press menu is up in the switcher. */
+    var tabMenu by remember { mutableStateOf<String?>(null) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(signingOpen) {
         if (signingOpen) {
             sheet = null
             picker = null
             statusOpen = false
+            tabMenu = null
         }
     }
     // Spec 070: system Back walks the page's own history first, then leaves
@@ -202,6 +212,7 @@ fun ExploreScreen(
                 onClose = { id -> live?.onTabClose(id) ?: run { viewOverride = ExploreView.Start } },
                 onNew = { live?.onTabNew(); viewOverride = ExploreView.Start },
                 onCloseAll = { live?.onTabsCloseAll(); viewOverride = ExploreView.Start },
+                onMenu = { id -> tabMenu = id },
             )
 
             ExploreView.Browsing -> {
@@ -355,24 +366,30 @@ fun ExploreScreen(
                     // Live: the rows are the core's and change under an open
                     // sheet (a new group appeared only after reopening —
                     // device-found); the drawn snapshot serves the gallery.
-                    is ExploreSheet.GroupManage -> GroupManageSheetContent(
-                        sheet = if (live != null) model.groupManageSheet else current,
-                        hidden = hidden,
-                        closeLabel = strings.t("explore.close"),
-                        hideLabel = strings.t("explore.hide"),
-                        showLabel = strings.t("explore.show"),
-                        deleteLabel = strings.t("explore.delete"),
-                        onClose = { sheet = null },
-                        onToggle = { id ->
-                            val row = current.rows.firstOrNull { it.id == id }
-                            if (live != null && row != null) {
-                                live.onGroupToggle(id, !row.hidden)
-                            } else {
-                                hidden = if (hidden.contains(id)) hidden - id else hidden + id
-                            }
-                        },
-                        onNew = { live?.onGroupNew() },
-                    )
+                    is ExploreSheet.GroupManage -> {
+                        val shown = if (live != null) model.groupManageSheet else current
+                        GroupManageSheetContent(
+                            sheet = shown,
+                            hidden = hidden,
+                            closeLabel = strings.t("explore.close"),
+                            hideLabel = strings.t("explore.hide"),
+                            showLabel = strings.t("explore.show"),
+                            deleteLabel = strings.t("explore.delete"),
+                            onClose = { sheet = null },
+                            onToggle = { id ->
+                                // The row as drawn, not as the sheet opened: the
+                                // snapshot still said "shown" after a hide, so a
+                                // second tap hid it again (#410).
+                                val row = shown.rows.firstOrNull { it.id == id }
+                                if (live != null && row != null) {
+                                    live.onGroupToggle(id, !row.hidden)
+                                } else {
+                                    hidden = if (hidden.contains(id)) hidden - id else hidden + id
+                                }
+                            },
+                            onNew = { live?.onGroupNew() },
+                        )
+                    }
 
                     is ExploreSheet.SiteMenu -> SiteMenuSheetContent(
                         sheet = current,
@@ -410,6 +427,36 @@ fun ExploreScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+
+    // Spec 099: a tab's long-press menu. Closing all goes to the start page, as
+    // the switcher's own 关闭全部标签页 does; the other closes leave the
+    // switcher up with what is left.
+    tabMenu?.takeIf { view == ExploreView.Tabs }?.let { id -> model.tabs.firstOrNull { it.id == id } }?.let { tab ->
+        val closes = remember(tab.id, model.tabs) { live?.tabCloses?.invoke(tab.id) ?: TabCloses() }
+        VelaModalSheet(
+            onDismissRequest = { tabMenu = null },
+            containerColor = colors.bgBase,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                TabMenuSheetContent(
+                    tab = tab,
+                    items = ExploreFixtures.tabMenu(model.tabsScreen, closes),
+                    closeLabel = strings.t("explore.close"),
+                    onClose = { tabMenu = null },
+                    onPick = { pick ->
+                        tabMenu = null
+                        when (pick) {
+                            ExploreFixtures.TAB_MENU_CLOSE -> live?.onTabClose(tab.id) ?: run { viewOverride = ExploreView.Start }
+                            ExploreFixtures.TAB_MENU_OTHERS -> live?.onTabsCloseOthers(tab.id)
+                            ExploreFixtures.TAB_MENU_RIGHT -> live?.onTabsCloseRight(tab.id)
+                            ExploreFixtures.TAB_MENU_ALL -> { live?.onTabsCloseAll(); viewOverride = ExploreView.Start }
+                        }
+                    },
+                )
             }
         }
     }

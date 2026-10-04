@@ -16,6 +16,7 @@
 	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { pluralTemplate } from '$lib/i18n/plural';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
 	import { session } from '$lib/session/core/session.svelte';
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
@@ -23,8 +24,17 @@
 
 	let { data }: PageProps = $props();
 
+	// A plural key (the done screen's line, issue 409) has no bare value: its
+	// form is picked by the core from `params.count`.
 	const strings = (key: string, params?: Record<string, string | number>) =>
-		fillTemplate(data.flow[key] ?? key, params);
+		fillTemplate(
+			data.flow[key] ??
+				(typeof params?.count === 'number'
+					? pluralTemplate((k) => data.flow[k], data.locale, key, params.count)
+					: undefined) ??
+				key,
+			params
+		);
 
 	const home = $derived(resolve('/[locale]', { locale: data.locale }));
 	const wallet = $derived(resolve('/[locale]/wallet', { locale: data.locale }));

@@ -94,6 +94,23 @@ the shell's own copy of a rule it replaces. Core tests fail on the old core befo
 - [x] T052 `docs/dapp-browser/ARCHITECTURE.md`: the six layers, where each is seen and logged.
 - [x] T053 `results.md`; PR.
 
+## Phase 6 — Closing many tabs (owner, 2026-10-04: "像 Chrome 一样批量关闭")
+
+- [x] T060 Core `explore_sites`: `TabCloseScope { others | right | all }`, `tabs_closed_by`,
+  `Event::TabsClosed { ids }` (one step, one persist; the selection rule in contracts/core.md);
+  UniFFI `explore_tabs_closed_by`; tests in `tests/app_explore_sites.rs`; corpus
+  `explore.closeOtherTabs`, `explore.closeTabsToRight`.
+- [x] T061 Desktop: right-click a tab → close / close other tabs / close tabs to the right /
+  close all tabs; `close_browser_tabs` closes each view and settles its requests.
+- [x] T062 [P] Android: long-press a tab in the switcher → the same four (a sheet like the site
+  menu; a scope that closes nothing is greyed); `closeAllTabs` becomes one `TabsClosed`.
+- [x] T063 [P] iOS: the same, as a context menu (a scope that closes nothing is left out).
+- [x] T064 Desktop (owner, on the Mac: the page vanished under ⋯, and the tab menu's rows below
+  the strip were painted under the page): no ⋯ menu — every row already had a door, and open in
+  the system browser becomes a toolbar control (`TRAILING_CONTROLS`); the menus that drop over
+  the page (a tab's, the network picker) float in a window of their own on macOS, cut a hole on
+  Windows, and hide the page only where neither can be had (`wallet/page/menu_float.rs`).
+
 ## Order
 
 T001–T002 → T003–T007 (one machine, in sequence) ∥ T008–T011 → T012–T013 → desktop T020–T028 →

@@ -155,7 +155,6 @@
       "headerCreated": "Đã tạo ví",
       "headerDefault": "Tạo ví",
       "headerSyncFailed": "Đồng bộ đa thiết bị",
-      "identiconHint": "Hoạ tiết nhận dạng sinh từ địa chỉ",
       "keyCount": "{{current}} / {{max}}",
       "keyDeviceOnlyBadge": "Gắn với thiết bị",
       "keyHardwareBadge": "Phần cứng",
@@ -189,7 +188,6 @@
       "pinLabel": "Mã PIN",
       "pinRejected": "Mã PIN không đúng. Khi hết lượt thử, khoá sẽ tự khoá lại và chỉ có thể mở bằng cách đặt lại — thao tác đó xoá sạch mọi passkey trên khoá.",
       "pinTitle": "Nhập mã PIN của khoá bảo mật",
-      "progressMeterLabel": "Đang suy ra địa chỉ",
       "progressSubtitle": "Suy ra địa chỉ từ {{count}} khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas.",
       "progressTitle": "Đang tạo ví",
       "providerGeneric": "Điện thoại hoặc máy tính bảng",
@@ -217,7 +215,8 @@
       "stepKeysLabel": "Khoá",
       "stepNamingDetail": "Đặt tên cho ví. Tên sẽ được ghi lên chuỗi cùng khoá công khai.",
       "stepNamingLabel": "Tên",
-      "successMessage": "Bất kỳ khoá nào trong {{count}} khoá đều đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
+      "successMessage_one": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
+      "successMessage_other": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
       "successTitle": "Đã tạo ví",
       "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
       "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
@@ -231,8 +230,7 @@
       "touchSelectBody": "Có nhiều khoá bảo mật đang cắm và tất cả đều nhấp nháy. Hãy chạm vào khoá bạn muốn dùng.",
       "touchTitle": "Chạm vào khoá bảo mật của bạn",
       "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
-      "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả.",
-      "walletAddressLabel": "Địa chỉ ví"
+      "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả."
     },
     "login": {
       "alertNotSupportedTitle": "Không hỗ trợ",

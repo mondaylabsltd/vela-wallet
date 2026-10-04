@@ -168,9 +168,24 @@ class RegistryClient(
     suspend fun awaitTask(id: String) {
         var waited = 0L
         var lastError: String? = null
+        // Issue #409: this loop is where a create spends most of its last step
+        // — the registry answers `done` only once the group's transaction has a
+        // receipt on-chain. One line per poll says which side the time is on:
+        // `pending` with no `tx` is the registry's queue, `tx=true` is the chain.
+        val startedAt = System.currentTimeMillis()
+        var polls = 0
         while (waited < POLL_TIMEOUT_MS) {
             try {
                 val task = get("/api/task/${encode(id)}", READ_TIMEOUT_MS, "Task status")
+                polls += 1
+                VelaLog.event(
+                    "registry",
+                    "task",
+                    "poll" to polls,
+                    "status" to task.optString("status"),
+                    "tx" to (task.nullableString("txHash") != null),
+                    "elapsedMs" to System.currentTimeMillis() - startedAt,
+                )
                 when (task.optString("status")) {
                     "done" -> return
                     "failed" -> throw RegistryFailure(

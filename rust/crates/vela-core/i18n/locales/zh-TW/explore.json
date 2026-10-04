@@ -30,6 +30,8 @@
     "newTab": "新增分頁",
     "startPage": "起始頁",
     "closeAllTabs": "關閉全部分頁",
+    "closeOtherTabs": "關閉其他分頁",
+    "closeTabsToRight": "關閉右側分頁",
     "closeTab": "關閉分頁",
     "openTabs": "已開啟 {{n}} 個分頁",
     "addToFavorites": "加入收藏",

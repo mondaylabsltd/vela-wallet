@@ -273,9 +273,34 @@ fn tint_of(host: &str) -> Hsla {
     hsla(hue, 0.72, 0.55, 1.0)
 }
 
+/// What the toolbar's "open in the system browser" hands the system (spec
+/// 099): the address of the page on screen as its engine has it — never the
+/// address bar's text, which may be a half-typed edit or a failed address —
+/// and nothing over the start page, where the control is drawn disabled, or
+/// for an engine with no document yet.
+#[must_use]
+pub fn system_browser_url(page_on_screen: bool, engine_url: Option<String>) -> Option<String> {
+    engine_url.filter(|url| page_on_screen && !url.is_empty() && url != "about:blank")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 099: the ⋯ menu's "open in the system browser" is a control of
+    /// its own — the engine's address, and nothing with no page.
+    #[test]
+    fn the_system_browser_gets_the_page_or_nothing() {
+        let page = Some("https://app.uniswap.org/swap".to_owned());
+        assert_eq!(system_browser_url(true, page.clone()), page);
+        assert_eq!(system_browser_url(false, page), None, "the start page");
+        assert_eq!(system_browser_url(true, None), None, "no engine yet");
+        assert_eq!(
+            system_browser_url(true, Some("about:blank".to_owned())),
+            None,
+            "a view with no document"
+        );
+    }
 
     fn entry(host: &str, title: &str) -> BhistEntry {
         BhistEntry {
@@ -451,54 +476,5 @@ mod tests {
             Some(crate::diag::host_of("https://")),
         );
         assert_eq!(tabs[0].title, SharedString::from("Uniswap Interface"));
-    }
-}
-
-#[cfg(test)]
-mod menu_tests {
-    use super::super::ExploreStrings;
-    use super::super::fixtures::{SITE_MENU_DISCONNECT, site_menu};
-
-    /// The site menu's ORDER is a contract with the page.
-    ///
-    /// `page.rs` arms all seven by position (078 E-03: the web's order —
-    /// refresh, share, copy link, favourite, system browser, disconnect,
-    /// close) because that is how the menu component takes its actions. An
-    /// item inserted into the drawing would slide every action below it onto
-    /// the wrong row, and "Add to favourites" would start revoking a site's
-    /// access. Nothing crashes; it would just quietly do the wrong thing, so
-    /// the order is pinned here rather than trusted.
-    #[test]
-    fn the_site_menu_keeps_the_order_the_page_arms() {
-        let s = ExploreStrings::resolve(&crate::loc::Loc::from_env());
-        let labels: Vec<String> = site_menu(&s, true)
-            .items
-            .iter()
-            .map(|item| item.label.to_string())
-            .collect();
-        assert_eq!(
-            labels,
-            vec![
-                s.refresh.to_string(),
-                s.share.to_string(),
-                s.copy_link.to_string(),
-                s.add_to_favorites.to_string(),
-                s.open_in_system_browser.to_string(),
-                s.disconnect.to_string(),
-                s.close_page.to_string(),
-            ],
-            "the site menu was reordered; page.rs arms every item by position"
-        );
-        // Spec 097 E: a site with no grant has no Disconnect — the page drops
-        // the action at the same index, so the rows below keep theirs.
-        assert_eq!(labels[SITE_MENU_DISCONNECT], s.disconnect.to_string());
-        let unconnected: Vec<String> = site_menu(&s, false)
-            .items
-            .iter()
-            .map(|item| item.label.to_string())
-            .collect();
-        let mut expected = labels.clone();
-        expected.remove(SITE_MENU_DISCONNECT);
-        assert_eq!(unconnected, expected);
     }
 }
