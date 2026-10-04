@@ -1969,3 +1969,108 @@ describe('who is signed in (spec 086, issue #315)', () => {
 		expect(env.events).toEqual([]);
 	});
 });
+
+describe('a page asks to add a network (spec 100)', () => {
+	const catalog = {
+		version: 1,
+		chains: {
+			'100': {
+				chainId: 100,
+				name: 'Gnosis',
+				rpc: ['https://rpc.gnosis.example'],
+				bundler: 'https://relay.example/100'
+			}
+		}
+	};
+	const SEPOLIA = 11155111;
+	const withSepolia = {
+		version: 1,
+		chains: {
+			...catalog.chains,
+			[String(SEPOLIA)]: {
+				chainId: SEPOLIA,
+				name: 'Ethereum Sepolia',
+				rpc: ['https://rpc.sepolia.example'],
+				bundler: `https://relay.example/${SEPOLIA}`
+			}
+		}
+	};
+	const addSepolia = [
+		{ chainId: '0xaa36a7', chainName: 'Sepolia', rpcUrls: ['https://x.example'] }
+	];
+
+	it('a chain the wallet has is still a switch, answered at once', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const reply = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 'c1',
+			method: 'wallet_addEthereumChain',
+			params: [{ chainId: '0x64' }]
+		});
+		expect(reply).toEqual({ result: null });
+		expect(env.local.data['vela.chain.https://a.example']).toBe(100);
+		expect(env.chrome.sidePanel.open).not.toHaveBeenCalled();
+	});
+
+	it('a chain it lacks goes to the surface, like a connect', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 'n1', 'wallet_addEthereumChain', addSepolia);
+		await settleAll();
+		expect(reply).toEqual({ accepted: true });
+		expect(owedOf(panel)).toEqual(['7:n1']);
+	});
+
+	it('a second add while one is open is -32002', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'n1', 'wallet_addEthereumChain', addSepolia);
+		await settleAll();
+		const other = env.openPage(9, 'doc-b', 'https://b.example');
+		const { reply } = await env.ask(other, 'n2', 'wallet_addEthereumChain', addSepolia);
+		expect(reply.error.code).toBe(-32002);
+	});
+
+	it('an approved add moves the site to the chain before the page hears null', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'n1', 'wallet_addEthereumChain', addSepolia);
+		await settleAll();
+		// The surface published the catalog with the new network, then answered.
+		env.local.data['vela.ext.chains'] = withSepolia;
+		panel.post({ type: 'answer', rid: '7:n1', result: null });
+		await settleAll();
+		expect(env.local.data['vela.chain.https://a.example']).toBe(SEPOLIA);
+		expect(page.answers).toEqual([{ id: 'n1', result: null, error: undefined }]);
+	});
+
+	it('a refusal from the sheet reaches the page as it is, and moves nothing', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'n1', 'wallet_addEthereumChain', addSepolia);
+		await settleAll();
+		panel.post({
+			type: 'answer',
+			rid: '7:n1',
+			error: { code: 4902, message: 'Chain 11155111 is not compatible with Vela Wallet' }
+		});
+		await settleAll();
+		expect(page.answers[0].error?.code).toBe(4902);
+		expect(env.local.data['vela.chain.https://a.example']).toBeUndefined();
+	});
+});

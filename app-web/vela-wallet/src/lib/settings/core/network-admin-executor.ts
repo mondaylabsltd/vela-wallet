@@ -45,6 +45,7 @@ import type { NetProviderKeys } from '$lib/core/generated/NetProviderKeys';
 import type { NetShellResult } from '$lib/core/generated/NetShellResult';
 import type { NetStoredEndpoints } from '$lib/core/generated/NetStoredEndpoints';
 import type { NetEffect } from './network-admin-types';
+import { dappAddSettled } from './dapp-add-settled';
 
 /** The same keys the Expo `services/storage.ts` owns; value formats unchanged.
  *  `vela.serviceEndpoints` is NOT here: it lives in localStorage with its
@@ -511,6 +512,13 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 			// no bundler client yet). Answered, never skipped.
 			return { type: 'bundler_cache_cleared' };
 
+		case 'dapp_add_settled': {
+			// Spec 100: the add-network sheet's ending, for whoever owes the
+			// page its answer (the extension's request surface).
+			dappAddSettled(operation.tab, operation.id, operation.outcome);
+			return { type: 'written' };
+		}
+
 		default: {
 			const never: never = operation;
 			throw new Error(`unhandled network_admin operation: ${JSON.stringify(never)}`);
@@ -571,6 +579,8 @@ export function networkAdminOperationFailure(effect: NetEffect): NetShellResult 
 			return { type: 'invalidated' };
 		case 'clear_bundler_cache':
 			return { type: 'bundler_cache_cleared' };
+		case 'dapp_add_settled':
+			return { type: 'written' };
 		default: {
 			const never: never = operation;
 			throw new Error(`unhandled network_admin operation: ${JSON.stringify(never)}`);

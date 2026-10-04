@@ -176,7 +176,11 @@ async function loadGranted() {
 			for (const [key, value] of Object.entries(all)) {
 				if (key.startsWith(PERM_PREFIX)) grants.set(key.slice(PERM_PREFIX.length), value);
 			}
-			grantMirror = { grants, snapshot: all[EXT_CACHE_KEY] ?? null };
+			grantMirror = {
+				grants,
+				snapshot: all[EXT_CACHE_KEY] ?? null,
+				catalog: all[CHAINS_KEY] ?? null
+			};
 		} catch {
 			grantMirror = null;
 		}
@@ -188,13 +192,14 @@ const grantsLoaded = loadGranted();
 
 /** One storage change, into the mirror. */
 function noteGrantedChange(key, value) {
-	if (key !== EXT_CACHE_KEY && !key.startsWith(PERM_PREFIX)) return;
+	if (key !== EXT_CACHE_KEY && key !== CHAINS_KEY && !key.startsWith(PERM_PREFIX)) return;
 	if (grantedLoading) {
 		grantedStale = true;
 		return;
 	}
 	if (!grantMirror) return;
 	if (key === EXT_CACHE_KEY) grantMirror.snapshot = value ?? null;
+	else if (key === CHAINS_KEY) grantMirror.catalog = value ?? null;
 	else if (value === undefined) grantMirror.grants.delete(key.slice(PERM_PREFIX.length));
 	else grantMirror.grants.set(key.slice(PERM_PREFIX.length), value);
 }
@@ -461,9 +466,17 @@ function end(step) {
 async function answer(rid, given, opHash, caller) {
 	const record = records.get(rid);
 	if (!record || (caller && !callerOwns(record, caller))) return false;
-	const { payload, maybeSent } = surfaceAnswer(record, given);
+	let { payload, maybeSent } = surfaceAnswer(record, given);
 	records.delete(rid);
 	await unpersist(rid);
+	// Spec 100: an add the person approved moves the site to the chain — the
+	// worker is the one writer of `vela.chain.<origin>`, and the storage
+	// listener tells every tab of it (`chainChanged`). The surface published
+	// the new catalog before answering, so the switch knows the chain.
+	if (record.method === 'wallet_addEthereumChain' && !payload.error) {
+		const switched = await switchChain(record.method, record.params, record.origin);
+		if (switched.error) payload = { error: switched.error };
+	}
 	const delivered = await deliver(record, payload);
 	void swlog.log('req.answered', {
 		...(maybeSent ? { cause: 'surface_settled', maybe_sent: 1 } : {}),
@@ -1039,8 +1052,23 @@ async function answerFromSnapshot(method, origin) {
  * `wallet_switchEthereumChain` (EIP-3326) and `wallet_addEthereumChain`
  * (EIP-3085) for a chain the wallet already has: the pick is written for the
  * ORIGIN and the page hears `chainChanged` from the storage listener. A chain
- * the catalog does not know is 4902.
+ * the catalog does not know is 4902 — an add reaches here for one only when
+ * the mirror could not tell (spec 100: otherwise it went to the sheet).
  */
+/**
+ * Spec 100: does this `wallet_addEthereumChain` need Vela's sheet — a chain
+ * named, and the mirrored catalog sure the wallet lacks it? `false` whenever
+ * the mirror cannot say: the switch path then answers as before.
+ */
+function addChainNeedsSheet(params) {
+	const chainId = switchChainParam(params);
+	const catalog = grantMirror?.catalog;
+	return chainId > 0 && !!catalog && !chainKnown(catalog, chainId);
+}
+
+/** -32002: another add-network request is open (`dapp_rpc::ADD_BUSY`). */
+const ADD_BUSY = -32002;
+
 async function switchChain(method, params, origin) {
 	const chainId = switchChainParam(params);
 	if (chainId <= 0) {
@@ -1055,14 +1083,7 @@ async function switchChain(method, params, origin) {
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
 	if (!chainKnown(catalog, chainId)) {
-		return {
-			error: rpcError(
-				ERR.CHAIN_NOT_ADDED,
-				method === 'wallet_addEthereumChain'
-					? `Add chain ${chainId} in Vela's network settings first`
-					: `Chain ${chainId} is not in Vela's networks`
-			)
-		};
+		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Chain ${chainId} is not in Vela's networks`) };
 	}
 	if (chainOf(origin, all) !== chainId) {
 		try {
@@ -1355,9 +1376,27 @@ function route(request, sender, reply) {
 			void answerFromSnapshot(request.method, origin).then(reply);
 			return;
 		case 'switch':
-		case 'addChain':
 			void switchChain(request.method, request.params, origin).then(reply);
 			return;
+		case 'addChain': {
+			// Spec 100: a chain the wallet has is a switch, answered here as
+			// before. One it lacks goes to Vela's add-network sheet, on the
+			// surface, like a connect — decided synchronously from the mirror
+			// (the panel may only open inside the page's gesture). A mirror
+			// that cannot say, or no chain named, takes the switch path, which
+			// answers as it always has.
+			if (!addChainNeedsSheet(request.params)) {
+				void switchChain(request.method, request.params, origin).then(reply);
+				return;
+			}
+			// One add-network sheet at a time, from any site (the core's rule,
+			// `dapp_rpc::DappAddOutcome::Busy`).
+			if ([...records.values()].some((r) => r.method === 'wallet_addEthereumChain')) {
+				reply({ error: rpcError(ADD_BUSY, 'A request to add a network is already open') });
+				return;
+			}
+			break;
+		}
 		case 'revoke':
 			void chrome.storage.local
 				.remove(PERM_PREFIX + origin)

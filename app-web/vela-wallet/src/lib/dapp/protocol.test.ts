@@ -26,6 +26,8 @@ import {
 	chainEndpoints,
 	chainKnown,
 	classifyMethod,
+	droppedChannelAnswer,
+	HELD_BUCKETS,
 	hostLabel,
 	isWellFormedRequest,
 	maybeSentPayload,
@@ -158,6 +160,9 @@ describe('what the worker now routes itself (reads, switching)', () => {
 	it('gives chain switching and asset watching their own buckets', () => {
 		expect(classifyMethod('wallet_switchEthereumChain')).toBe('switch');
 		expect(classifyMethod('wallet_addEthereumChain')).toBe('addChain');
+		// Spec 100: a person answers it — held, and retried once on a drop, like a connect.
+		expect(HELD_BUCKETS.has('addChain')).toBe(true);
+		expect(droppedChannelAnswer('addChain', 'wallet_addEthereumChain', 0)).toEqual({ retry: true });
 		expect(classifyMethod('wallet_watchAsset')).toBe('watchAsset');
 		expect(classifyMethod('eth_estimateGas')).toBe('read');
 		expect(classifyMethod('eth_sendUserOperation')).toBe('read');

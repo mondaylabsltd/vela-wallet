@@ -10,7 +10,7 @@
  *
  * Spec 082 (RB3, RB4, RB6, RB11) gave it the page's half of a request's life:
  *
- *   - a sign/connect request is handed to the worker, which says only
+ *   - a sign/connect/add-network request is handed to the worker, which says only
  *     `accepted`; the answer arrives later as a message addressed to THIS
  *     document (`{type:'answer'}`), whenever the person decides;
  *   - while the page owes such an answer it holds a `vela.doc` port, which is
@@ -33,6 +33,7 @@ import {
 	DOC_PORT,
 	RECONNECT_BACKOFF_MS,
 	REQUEST_TTL_MS,
+	HELD_BUCKETS,
 	classifyMethod,
 	droppedChannelAnswer,
 	settleError
@@ -256,7 +257,7 @@ import {
 		// shape. It does NOT supply the origin: `sender.origin` on the other side
 		// is the browser's own fact, and that is the one a grant is keyed on.
 		const bucket = typeof d.method === 'string' ? classifyMethod(d.method) : 'unsupported';
-		if (typeof d.id === 'string' && (bucket === 'sign' || bucket === 'connect')) {
+		if (typeof d.id === 'string' && HELD_BUCKETS.has(bucket)) {
 			void askOwed(d, bucket);
 		} else {
 			void askRead(d, bucket);
