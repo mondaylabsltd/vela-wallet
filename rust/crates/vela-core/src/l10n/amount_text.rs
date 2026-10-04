@@ -51,6 +51,25 @@
 //! same stray character is simply dropped, because there the figure on screen
 //! does not change and the person sees their key do nothing.
 //!
+//! A figure has ONE spelling (issue #421). "08" was kept as typed, shown as
+//! "08 POL", read as 8 — and a person who meant 0.8 and missed the point
+//! sent ten times what they meant, with Continue lit and nothing on screen
+//! saying which reading was taken. So a zero that leads a whole part with a
+//! digit after it is not kept: "0" then "8" is "8" (the key replaces the
+//! zero), "00" is "0", a pasted "008.5" is "8.5". Only a decimal mark may
+//! follow a leading zero — "0.08", "0.0" and "0." stay as typed. A figure that
+//! starts at its decimal mark is given the zero it reads with: "." is "0.",
+//! ".5" is "0.5". The rule runs on the cleaned dot-decimal text, so it is the
+//! same under every preset: a decimal-comma person's "0,8" is "0.8", which
+//! their field shows as "0,8". And because the field shows what this returns
+//! and sends THAT on, the figure on screen, the fiat line under it and the
+//! amount Continue judges are one number.
+//!
+//! The same reading keeps a pasted "0,800" or "0.800.000" from passing as
+//! thousands grouping: no grouped figure starts with a zero, so under a
+//! preset whose decimal mark is the other one it has no safe reading and is
+//! refused — 800 is a thousand times somebody's 0,800.
+//!
 //! Strings only. This is an amount of money; it never passes through a number.
 
 use super::number::NumberPreset;
@@ -163,10 +182,22 @@ pub fn clean(
         return None;
     }
     Some(if rest.is_empty() {
-        whole.to_owned()
+        one_spelling(whole, false).to_owned()
     } else {
-        format!("{whole}.{}", rest.concat())
+        format!("{}.{}", one_spelling(whole, true), rest.concat())
     })
+}
+
+/// A whole part as it is written once (issue #421): no zero leading another
+/// digit ("08" → "8", "00" → "0"), and a "0" before a decimal mark that has
+/// nothing in front of it ("." → "0."). `pointed` = a decimal mark follows.
+fn one_spelling(whole: &str, pointed: bool) -> &str {
+    let trimmed = whole.trim_start_matches('0');
+    if trimmed.is_empty() && (pointed || !whole.is_empty()) {
+        "0"
+    } else {
+        trimmed
+    }
 }
 
 /// Where the caret belongs in `clean`, having been at `caret` in `raw`: after
@@ -192,6 +223,16 @@ pub fn caret_after_clean(raw: &str, clean: &str, caret: usize) -> usize {
         let next = clean[kept];
         if ch == next || (is_mark(ch) && is_mark(next)) {
             kept += 1;
+        } else if kept == 0
+            && is_mark(ch)
+            && next == '0'
+            && clean.get(1).copied().is_some_and(is_mark)
+        {
+            // The "0" `clean` gave a figure that started at its mark
+            // ("." → "0."): the caret goes after the mark, past the zero —
+            // left between the two, the next digit would land in front of
+            // the point and "0.5" would read 5.
+            kept = 2;
         }
     }
     kept
@@ -274,6 +315,10 @@ fn grouping_only(text: &str) -> bool {
         return false;
     }
     let (first, rest) = (groups[0], &groups[1..]);
+    // No grouped figure starts with a zero: "0,800" is somebody's 0.8.
+    if first.starts_with('0') {
+        return false;
+    }
     let western = first.len() <= 3 && rest.iter().all(|g| g.len() == 3);
     let (last, middle) = rest.split_last().unwrap_or((&"", &[]));
     let indian = first.len() <= 2 && last.len() == 3 && middle.iter().all(|g| g.len() == 2);
@@ -292,7 +337,8 @@ fn grouped(text: &str, group: char, decimal: char) -> bool {
             .count()
     };
     let lead = digits(0);
-    if !(1..=3).contains(&lead) {
+    // …and never with a zero ("0.800.000" is not eight hundred thousand).
+    if !(1..=3).contains(&lead) || bytes[0] == b'0' {
         return false;
     }
     let mut i = lead;
@@ -335,7 +381,8 @@ mod tests {
     fn a_decimal_comma_preset_reads_a_typed_comma_as_the_decimal_mark() {
         assert_eq!(typed("4,5", COMMA), s("4.5"));
         assert_eq!(typed("4,", COMMA), s("4."));
-        assert_eq!(typed(",5", COMMA), s(".5"));
+        // The zero a figure reads with (issue #421).
+        assert_eq!(typed(",5", COMMA), s("0.5"));
         // The space-grouped preset is a decimal-comma preset too.
         assert_eq!(typed("4,5", NumberPreset::SpaceComma), s("4.5"));
     }
@@ -385,11 +432,14 @@ mod tests {
         for text in [
             "",
             "0",
+            "0.",
+            "0.0",
+            "0.08",
             "4",
             "4.",
-            ".5",
             "0.50",
-            "007",
+            "10",
+            "100.05",
             "53.483600000000000001",
         ] {
             for preset in [DOT, COMMA] {
@@ -402,6 +452,102 @@ mod tests {
                     s(text),
                     "{text}"
                 );
+            }
+        }
+    }
+
+    /// Issue #421: "08" was kept, shown as "08 POL" and read as 8 — ten times
+    /// what a person who missed the point meant. A zero leading another digit
+    /// is not kept; only a decimal mark may follow it.
+    #[test]
+    fn a_zero_leading_a_digit_is_not_kept() {
+        for preset in [DOT, COMMA, NumberPreset::SpaceComma, NumberPreset::Indian] {
+            // "0" on screen, then "8": the key replaces the zero.
+            assert_eq!(clean("08", preset, Entry::Unknown, Some("0")), s("8"));
+            assert_eq!(clean("08", preset, Entry::Typed, Some("0")), s("8"));
+            // "0" then "0" stays one zero.
+            assert_eq!(clean("00", preset, Entry::Unknown, Some("0")), s("0"));
+            // A decimal mark may follow it, and digits that mark.
+            assert_eq!(
+                clean("0.08", preset, Entry::Unknown, Some("0.0")),
+                s("0.08")
+            );
+            assert_eq!(clean("0.0", preset, Entry::Unknown, Some("0.")), s("0.0"));
+            assert_eq!(clean("0.", preset, Entry::Unknown, Some("0")), s("0."));
+            // A figure that starts at its mark reads with its zero.
+            assert_eq!(clean(".", preset, Entry::Unknown, Some("")), s("0."));
+            assert_eq!(clean(".5", preset, Entry::Unknown, Some("5")), s("0.5"));
+            // Pasted: the zeros go, the figure stays.
+            assert_eq!(pasted("008.5", preset), s("8.5"));
+            assert_eq!(clean("008.5", preset, Entry::Unknown, Some("")), s("8.5"));
+            assert_eq!(pasted("0008", preset), s("8"));
+            assert_eq!(pasted("00.5", preset), s("0.5"));
+            assert_eq!(pasted("000", preset), s("0"));
+            // Zeros AFTER the first digit are the figure's.
+            assert_eq!(pasted("800", preset), s("800"));
+            assert_eq!(pasted("100.05", preset), s("100.05"));
+            assert_eq!(pasted("0.050", preset), s("0.050"));
+            // Deleting down to a zero-led figure: "10" without its 1 is "0".
+            assert_eq!(clean("00", preset, Entry::Unknown, Some("100")), s("0"));
+            assert_eq!(clean("05", preset, Entry::Unknown, Some("0.5")), s("5"));
+        }
+    }
+
+    /// Under a decimal-comma preset the mark the person types is `,`: "0,8"
+    /// is 0.8 — the core's "0.8", which their field shows as "0,8" — never 8.
+    #[test]
+    fn a_decimal_comma_zero_keeps_its_mark() {
+        for preset in [COMMA, NumberPreset::SpaceComma] {
+            assert_eq!(clean("0,", preset, Entry::Unknown, Some("0")), s("0."));
+            assert_eq!(clean("0,8", preset, Entry::Unknown, Some("0,")), s("0.8"));
+            assert_eq!(clean("0,8", preset, Entry::Unknown, Some("0.")), s("0.8"));
+            assert_eq!(pasted("0,8", preset), s("0.8"));
+            assert_eq!(clean(",", preset, Entry::Unknown, Some("")), s("0."));
+            assert_eq!(
+                clean("0,08", preset, Entry::Unknown, Some("0,0")),
+                s("0.08")
+            );
+            assert_eq!(pasted("008,5", preset), s("8.5"));
+        }
+        // One typed comma under a decimal-point preset is the mark too.
+        assert_eq!(clean("0,", DOT, Entry::Unknown, Some("0")), s("0."));
+    }
+
+    /// A pasted "0,800" is not thousands grouping under a decimal-point
+    /// preset: nobody groups 800 behind a zero, and it is somebody's 0,800.
+    #[test]
+    fn a_zero_led_figure_is_never_read_as_grouping() {
+        assert_eq!(pasted("0,800", DOT), None);
+        assert_eq!(clean("0,800", DOT, Entry::Unknown, Some("")), None);
+        assert_eq!(pasted("0.800.000", COMMA), None);
+        assert_eq!(pasted("0,800,000", DOT), None);
+        // Where the comma IS the decimal mark it reads as one.
+        assert_eq!(pasted("0,800", COMMA), s("0.800"));
+        // Real grouping is untouched.
+        assert_eq!(pasted("1,234", DOT), s("1234"));
+        assert_eq!(pasted("1.234.567", COMMA), s("1234567"));
+    }
+
+    /// What `clean` returns is a fixed point: a shell that cleaned, held the
+    /// result and cleaned it again on the next render sends the same figure.
+    #[test]
+    fn a_cleaned_figure_cleans_to_itself() {
+        let inputs = [
+            "08", "00", "008.5", ".", ".5", "0.08", "0.0", "4,5", "1,234.56", "0,8", "٤٫٥",
+            "$08.10", "000.000",
+        ];
+        for preset in [DOT, COMMA, NumberPreset::SpaceComma, NumberPreset::Indian] {
+            for raw in inputs {
+                for entry in [Entry::Typed, Entry::Pasted] {
+                    let Some(once) = clean(raw, preset, entry, None) else {
+                        continue;
+                    };
+                    assert_eq!(
+                        clean(&once, preset, entry, None).as_deref(),
+                        Some(once.as_str()),
+                        "{raw} → {once} under {preset:?}"
+                    );
+                }
             }
         }
     }
@@ -424,7 +570,7 @@ mod tests {
     #[test]
     fn one_typed_comma_is_the_decimal_mark_under_a_decimal_point_preset_too() {
         assert_eq!(clean("4,", DOT, Entry::Typed, Some("4")), s("4."));
-        assert_eq!(clean(",5", DOT, Entry::Typed, Some("5")), s(".5"));
+        assert_eq!(clean(",5", DOT, Entry::Typed, Some("5")), s("0.5"));
         // Not a keystroke — a paste, an autofill, a keyboard's clipboard strip
         // calling itself typing: still grouping.
         assert_eq!(clean("1,234", DOT, Entry::Typed, Some("")), s("1234"));
@@ -528,6 +674,29 @@ mod tests {
         assert_eq!(caret_after_clean("1.234,56", "1234.56", 8), 7);
         assert_eq!(caret_after_clean("٤٫٥", "4.5", 3), 3);
         assert_eq!(caret_after_clean("12", "12", 0), 0);
+    }
+
+    /// Issue #421's edits, and where the caret lands after each: a native
+    /// field that left it where the key was would put the next digit in the
+    /// wrong place — between "0" and "." the "5" of ".5" reads 5, not 0.5.
+    #[test]
+    fn the_caret_follows_a_zero_given_or_taken() {
+        // "." → "0.": after the mark, so the next key is a decimal digit.
+        assert_eq!(caret_after_clean(".", "0.", 1), 2);
+        assert_eq!(caret_after_clean(",", "0.", 1), 2);
+        assert_eq!(caret_after_clean(".5", "0.5", 1), 2);
+        assert_eq!(caret_after_clean(".5", "0.5", 2), 3);
+        // Before the mark it stays before the zero.
+        assert_eq!(caret_after_clean(".5", "0.5", 0), 0);
+        // "08" → "8": after the 8.
+        assert_eq!(caret_after_clean("08", "8", 2), 1);
+        // A zero typed in FRONT of "8" is refused, and the caret stays put.
+        assert_eq!(caret_after_clean("08", "8", 1), 0);
+        assert_eq!(caret_after_clean("008.5", "8.5", 5), 3);
+        assert_eq!(caret_after_clean("00", "0", 2), 1);
+        // A zero that is kept is still counted.
+        assert_eq!(caret_after_clean("0.5", "0.5", 1), 1);
+        assert_eq!(caret_after_clean("00.5", "0.5", 4), 3);
     }
 
     #[test]
