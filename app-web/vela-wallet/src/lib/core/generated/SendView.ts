@@ -175,10 +175,19 @@ multi_specs: Array<SendMultiSpecView>, show_scanner: boolean, show_contact_picke
 /**
  * Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
  */
-fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, can_continue: boolean, 
+fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, 
 /**
- * The confirm slide gate: fee settled ∧ nothing re-quoting ∧ no
- * same-asset breach ∧ idle.
+ * The form's button gate — the whole of it. While a relay stop is up the
+ * button is that stop's retry, and pressing it sends [`Event::Continue`]
+ * all the same; a shell draws this flag and adds no reason of its own
+ * (issue 424).
+ */
+can_continue: boolean, 
+/**
+ * The confirm slide gate, the whole of it: fee settled ∧ nothing
+ * re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
+ * refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
+ * the same predicate; a shell adds nothing to it (issue 424).
  */
 can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, 
 /**
