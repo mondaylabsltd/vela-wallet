@@ -46,6 +46,13 @@ final class StaggeredRelayPort: RelayPort {
 /// `timeLimit`: several waits here are for a port the executor calls, which no
 /// machine's idleness bounds (`Waits.swift`); one that never comes is a hang,
 /// and this is what reports it. Far above any real run, loaded or not.
+///
+/// Every fee store here runs with the core's timers stopped (`timers:
+/// .stopped`). The quote's 15 s deadline (spec 094 S9) used to run on the
+/// wall clock under these scripted relays, and a starved CI runner — 18 s to
+/// hand back a 30 ms read — outlasted it: the automatic quote came back
+/// `quote_unavailable` and no speed row ever settled (`chain_read`), for
+/// quotes the code never failed.
 @MainActor
 @Suite(.timeLimit(.minutes(10)))
 struct SendHoldingsAndFeesTests {
@@ -332,7 +339,7 @@ struct SendHoldingsAndFeesTests {
         let port = StaggeredRelayPort()
         scriptFeeReads(port)
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         fees.configureSpeed(preferred: "fast", number: "comma_dot")
         fees.speedStage(onForm: true)
         fees.toggleSpeed()
@@ -373,6 +380,35 @@ struct SendHoldingsAndFeesTests {
         // disabled, 171/558/1015 ms and three reads of each question.
     }
 
+    /// The stopped clock every store here runs on: the core's timers are held,
+    /// never answered — a quote cannot be failed by its deadline however long
+    /// the runner takes to hand it its answers, nor go stale — and `isIdle`
+    /// does not wait on them. The app's clock answers both.
+    @Test func aStoppedClockHoldsTheTimersAndNotTheIdleBound() async throws {
+        let port = StaggeredRelayPort()
+        port.baseMs = 0
+        port.staggerMs = 0
+        scriptFeeReads(port)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
+        let view = await fees.quote(
+            chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
+            calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+            feeToken: nil
+        )
+        #expect(view?.fee != nil && view?.failed == nil, "\(String(describing: view))")
+        // Priced, with the deadline and the staleness timer held: idle. (Were
+        // they counted, this would wait out the suite's time limit.)
+        await Wait.until { fees.isIdle }
+        #expect(fees.view?.stale == false, "no time passed")
+        // The app's clock answers them — after 0 ms here: nothing is timed.
+        let executor = FeeExecutor(relay: relay, accounts: ScriptedAccounts())
+        for (timer, elapsed) in [("start_deadline", "deadline_elapsed"), ("start_ttl", "ttl_elapsed")] {
+            let answer = try CoreJSON.object(await executor.perform(["type": timer, "ms": 0]))
+            #expect(answer["type"] as? String == elapsed)
+        }
+    }
+
     // MARK: - The fee coin nobody chose
 
     /// 0 xDAI and 500 USDC: asked with the coin left to the machine, the quote
@@ -383,7 +419,7 @@ struct SendHoldingsAndFeesTests {
         port.staggerMs = 0
         scriptFeeReads(port, nativeWei: "0x0", usdcUnits: "0x1dcd6500")
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let send = try executor(relay: relay, fees: fees, balances: { nil })
         let answer = try CoreJSON.object(await send.perform([
             "type": "estimate_fee", "chain_id": 100, "account": golden,
@@ -416,7 +452,7 @@ struct SendHoldingsAndFeesTests {
         port.staggerMs = 0
         scriptFeeReads(port)
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let send = try executor(relay: relay, fees: fees, balances: { nil })
         let answer = try CoreJSON.object(await send.perform([
             "type": "prewarm_fees", "account": golden, "chain_ids": [100],
@@ -459,7 +495,7 @@ struct SendHoldingsAndFeesTests {
     /// load".
     @Test func fetchTokensWaitsForTheFirstRound() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         var current: BalanceViewWire?
         var settled: Int?
         var opened: [String] = []
@@ -493,7 +529,7 @@ struct SendHoldingsAndFeesTests {
     /// whatever it holds.
     @Test func aLoadThatReachedNothingIsReadOnceMore() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         var current = try balance([], failed: [1, 100])
         var round: Int? = 1
         var refreshes = 0
@@ -520,7 +556,7 @@ struct SendHoldingsAndFeesTests {
     /// Only a SECOND load that reached nothing is "could not load".
     @Test func onlyASecondEmptyLoadAnswersNull() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         var current = try balance([], failed: [100])
         var round: Int? = 4
         var refreshes = 0
@@ -543,7 +579,7 @@ struct SendHoldingsAndFeesTests {
     /// once more, and a next load that still reached nothing is the refusal.
     @Test func anUnreachableDashboardIsReadOnceMoreThenRefused() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         var current = try balance([], refreshedAt: nil, failed: [100], unreachable: true)
         var round: Int?
         var refreshes = 0
@@ -565,7 +601,7 @@ struct SendHoldingsAndFeesTests {
     /// failure, and nothing is read again.
     @Test func anEmptyWalletIsAnAnswerNotARetry() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let empty = try balance([])
         var refreshes = 0
         var ports = SendExecutor.Ports()
@@ -581,7 +617,7 @@ struct SendHoldingsAndFeesTests {
     /// iOS wire.
     @Test func aNewRoundReachesThePickerAndTheForm() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let first = try balance([("xDAI", "0.5", 1.0)])
         let send = SendStore(executor: try executor(relay: relay, fees: fees, balances: { first }))
         send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
@@ -656,7 +692,7 @@ struct SendHoldingsAndFeesTests {
         // 12.345678 xDAI held; 500 USDC pays the fee.
         scriptFeeReads(port, nativeWei: "0xab54a8bb155ae000", usdcUnits: "0x1dcd6500")
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let held = try balance([("xDAI", "12.345678", 1.0)])
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
@@ -749,7 +785,7 @@ struct SendHoldingsAndFeesTests {
         let loc = Loc(overrideTag: "en")
         let raw = "0.043790209243313861"
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let held = try balance([("xDAI", raw, 1.0)])
         let send = SendStore(executor: try executor(relay: relay, fees: fees, balances: { held }))
         send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
