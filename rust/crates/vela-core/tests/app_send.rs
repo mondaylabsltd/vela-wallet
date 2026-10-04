@@ -6811,3 +6811,297 @@ fn a_dismissed_sheet_stops_watching() {
     assert!(ops.is_empty(), "no probe after the sheet closed: {ops:?}");
     assert_eq!(sut.view().stage, SendStage::EnterDetails);
 }
+
+// ===========================================================================
+// Issue #424 — Continue on Unichain, into a relay with no gas there
+// ===========================================================================
+//
+// The shape the device met (Android 0.9.6, 2026-10-04): 0.0001 ETH on
+// Unichain from a 0.002336 balance, a 0.000013 ETH fee, and a relay whose
+// treasury on chain 130 had never been funded —
+// `GET /v1/treasury/130` → `{"balance":"0x0","floor":"0x5af3107a4000",
+// "bootstrapNeeded":true}`. The core stopped the send on the form and said
+// why; the phones of that release drew the stop on the confirm page only, so
+// the tap did nothing anyone could see.
+
+const UNICHAIN: u32 = 130;
+/// The relay's treasury, as `/v1/treasury/130` names it.
+const RELAY_TREASURY: &str = "0x3e59292e18417f814112f731e7163534c6d2fe3c";
+
+fn unichain_eth(balance: &str) -> SendToken {
+    SendToken {
+        network: "unichain".to_owned(),
+        chain_id: UNICHAIN,
+        symbol: "ETH".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(2_700.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// `/v1/treasury/130` on 2026-10-04: nothing there, a 0.0001 ETH floor.
+fn unichain_empty_treasury() -> Res {
+    Res::TreasuryProbed {
+        probe: SendTreasuryProbe::LowFloat {
+            status: SendTreasuryStatus {
+                chain_id: UNICHAIN,
+                address: RELAY_TREASURY.to_owned(),
+                asset: SendTreasuryAsset::Native,
+                balance: "0".to_owned(),
+                floor: "100000000000000".to_owned(),
+                bootstrap_needed: true,
+                operator_served: false,
+            },
+        },
+    }
+}
+
+/// The form as the screenshot shows it, Continue pressed, the estimate in:
+/// waiting on the treasury.
+fn unichain_to_the_treasury_answer() -> Sut {
+    let token = unichain_eth("0.002336");
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.resolve(Res::TokensLoaded {
+        tokens: Some(vec![token.clone()]),
+        chains: vec![SendChainInfo {
+            chain_id: UNICHAIN,
+            network: "unichain".to_owned(),
+            native_symbol: "ETH".to_owned(),
+        }],
+    });
+    for _ in &ops {
+        sut.resolve(Res::FeesPrewarmed);
+    }
+    sut.dispatch(Event::SelectToken {
+        token_id: token.id(),
+    });
+    settle_warm_quote(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.0001".to_owned(),
+    });
+    assert!(
+        sut.view().can_continue,
+        "the form is complete: Continue is live"
+    );
+
+    let ops = sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee {
+                    chain_id: UNICHAIN,
+                    ..
+                },
+                Op::ProbeTreasury { chain_id: UNICHAIN },
+                Op::StartTimer {
+                    tag: SendTimerTag::EstimateTimeout,
+                    ..
+                }
+            ]
+        ),
+        "the pre-check asks Unichain's fee and Unichain's treasury: {ops:?}"
+    );
+    assert!(sut
+        .resolve(fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)))
+        .is_empty());
+    sut
+}
+
+/// The core's half of #424: Continue into an empty relay is never silent. It
+/// stays on the form, names the relay's treasury and what it lacks, and the
+/// form's one button stays live — it is the stop's retry.
+#[test]
+fn unichain_continue_into_an_empty_relay_stops_on_the_form_and_says_why() {
+    let mut sut = unichain_to_the_treasury_answer();
+    assert_only_the_watch(
+        &sut.resolve(unichain_empty_treasury()),
+        "the funding stop opens and watches",
+    );
+    let view = sut.view();
+    assert_eq!(
+        view.stage,
+        SendStage::EnterDetails,
+        "confirm is not entered"
+    );
+    assert!(!view.estimating_gas, "the check is over");
+    let stop = view
+        .treasury_bootstrap
+        .expect("the reason is in the view, on the form");
+    assert_eq!(stop.chain_id, UNICHAIN);
+    assert_eq!(stop.address, RELAY_TREASURY);
+    assert_eq!(
+        (stop.balance.as_str(), stop.floor.as_str()),
+        ("0", "100000000000000")
+    );
+    // Unichain ships with Vela: the relay is the operator's to fund.
+    assert!(stop.operator_served);
+    assert!(view.relay_unreachable.is_none());
+    // The button's gate is the core's one predicate, whatever the button says.
+    assert!(view.can_continue, "the stop's retry is pressable");
+    assert!(!view.can_confirm);
+}
+
+/// The form's button while a stop is up is Continue, and every shell may send
+/// exactly that: pressing it lowers the stop and asks again. A relay funded
+/// meanwhile then reaches confirm with nothing stale on it — before #424's fix
+/// the old stop rode along and blocked the confirm page.
+#[test]
+fn continue_with_the_funding_stop_up_is_its_retry_and_leaves_nothing_stale() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(unichain_empty_treasury());
+    assert!(sut.view().treasury_bootstrap.is_some());
+
+    let ops = sut.dispatch(Event::Continue);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { chain_id: UNICHAIN },
+                Op::StartTimer {
+                    tag: SendTimerTag::EstimateTimeout,
+                    ..
+                }
+            ]
+        ),
+        "the pre-check runs again: {ops:?}"
+    );
+    let view = sut.view();
+    assert!(
+        view.treasury_bootstrap.is_none(),
+        "the stop is down while the relay is asked again"
+    );
+    assert!(view.estimating_gas);
+    // The stop's watch went with it: its wait elapsing asks nothing.
+    assert!(
+        elapse_the_watch(&mut sut).is_empty(),
+        "no watch outlives its stop"
+    );
+
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
+    );
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm, "funded: on to confirm");
+    assert!(
+        view.treasury_bootstrap.is_none(),
+        "no stale funding stop on the confirm page"
+    );
+    assert!(view.can_confirm);
+}
+
+/// The same for the can't-reach stop: Continue is its retry too.
+#[test]
+fn continue_with_the_cant_reach_stop_up_is_its_retry_and_leaves_nothing_stale() {
+    let mut sut = unichain_to_the_treasury_answer();
+    assert!(sut.resolve(uncovered()).is_empty());
+    assert!(sut.view().relay_unreachable.is_some());
+    assert!(sut.view().can_continue, "the stop's retry is pressable");
+
+    sut.dispatch(Event::Continue);
+    assert!(sut.view().relay_unreachable.is_none());
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
+    );
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.relay_unreachable.is_none(), "no stale stop on confirm");
+    assert!(view.can_confirm);
+}
+
+/// …and asked again while still empty, the stop comes back — said again, never
+/// a silent no-op.
+#[test]
+fn continue_into_a_relay_still_empty_brings_the_stop_back() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(unichain_empty_treasury());
+    sut.dispatch(Event::Continue);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
+    );
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::ProbeTreasury { .. }),
+        unichain_empty_treasury(),
+    );
+    assert_only_the_watch(&ops, "the stop opens again, and watches again");
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails);
+    assert_eq!(
+        view.treasury_bootstrap.map(|stop| stop.chain_id),
+        Some(UNICHAIN)
+    );
+}
+
+/// The confirm page's gate is one predicate too. A relay stop opened by the
+/// pre-sign recheck closes it in the core — the shells used to AND that on by
+/// themselves, and not all of them did — and the slide refuses on the same
+/// predicate. The stop's own retry lowers the stop and slides.
+#[test]
+fn on_confirm_a_relay_stop_closes_the_confirm_gate_and_the_slide_refuses() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+    sut.dispatch(Event::SlideConfirm);
+    assert_only_the_watch(
+        &sut.resolve(low_float()),
+        "the funding stop opens on confirm",
+    );
+    let view = sut.view();
+    assert!(view.treasury_bootstrap.is_some());
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert!(!view.sending);
+    assert!(!view.can_confirm, "the stop is up: the slide is shut");
+    assert!(
+        sut.dispatch(Event::SlideConfirm).is_empty(),
+        "a slide from a stale frame asks for nothing"
+    );
+    let ops = sut.dispatch(Event::RetryAfterBootstrap);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 1 }]),
+        "the stop's retry slides: {ops:?}"
+    );
+}
+
+#[test]
+fn on_confirm_the_cant_reach_stop_closes_the_confirm_gate_and_the_slide_refuses() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    sut.dispatch(Event::SlideConfirm);
+    assert!(sut.resolve(uncovered()).is_empty());
+    assert!(!sut.view().can_confirm);
+    assert!(sut.dispatch(Event::SlideConfirm).is_empty());
+    let ops = sut.dispatch(Event::RetryRelayUnreachable);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 1 }]),
+        "{ops:?}"
+    );
+}
+
+/// A refused submit shuts the slide until the error panel's retry — the
+/// published gate, and the slide's own.
+#[test]
+fn a_refused_submit_shuts_the_slide_until_its_retry() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::Other { message: None },
+    });
+    assert_eq!(sut.view().tx_error, Some(SendTxErrorKey::Generic));
+    assert!(!sut.view().can_confirm);
+    assert!(sut.dispatch(Event::SlideConfirm).is_empty());
+    sut.dispatch(Event::RetryAfterError);
+    assert!(sut.view().can_confirm);
+}

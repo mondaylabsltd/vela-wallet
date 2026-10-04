@@ -2051,9 +2051,15 @@ pub struct SendView {
     pub gas_fee_token: Option<String>,
     pub amount_warning: Option<SendAmountWarning>,
     pub same_asset_fee_issue: Option<SendFeeIssueView>,
+    /// The form's button gate — the whole of it. While a relay stop is up the
+    /// button is that stop's retry, and pressing it sends [`Event::Continue`]
+    /// all the same; a shell draws this flag and adds no reason of its own
+    /// (issue 424).
     pub can_continue: bool,
-    /// The confirm slide gate: fee settled ∧ nothing re-quoting ∧ no
-    /// same-asset breach ∧ idle.
+    /// The confirm slide gate, the whole of it: fee settled ∧ nothing
+    /// re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
+    /// refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
+    /// the same predicate; a shell adds nothing to it (issue 424).
     pub can_confirm: bool,
     pub sending: bool,
     pub tx_status: SendTxStatus,
@@ -2199,7 +2205,18 @@ impl App for Send {
                 render()
             }
             Event::AddNetworkTapped { chain_id } => add_network(model, chain_id),
-            Event::Continue => handle_continue(model),
+            Event::Continue => {
+                // On the form a relay stop's button IS Continue (spec 098):
+                // pressing it asks the relay again, so the stop comes down
+                // first. Issue #424: Continue used to leave it up, and a check
+                // that then passed carried the old stop onto the confirm page.
+                // One event for the form's one button, whatever it says — no
+                // shell has to know which stop is up to press it.
+                if model.step == SendStep::EnterDetails {
+                    lower_relay_stops(model);
+                }
+                handle_continue(model)
+            }
             Event::Back => handle_back(model),
             Event::ChangeToken => change_token(model),
             Event::EditAmount => edit_amount(model),
@@ -2241,7 +2258,7 @@ impl App for Send {
                 render()
             }
             Event::RetryRelayUnreachable => {
-                model.relay_unreachable = None;
+                lower_relay_stops(model);
                 match model.step {
                     SendStep::EnterDetails => handle_continue(model),
                     SendStep::Confirm => slide_confirm(model),
@@ -2397,10 +2414,13 @@ impl App for Send {
         // `recipients`/`multi_specs`, not in `model.amount`, so they are asked
         // the same question `can_continue` asks them.
         let confirm_amount_ok = model.split_mode || model.multi_select_mode || amount_resolves;
+        // The whole gate, here and only here (issue #424): the shells used to
+        // AND their own reasons onto it — a relay stop, a signature under way,
+        // a refused submit — and did not all AND the same ones, so one client
+        // armed a slide another held. `slide_confirm` refuses on the same
+        // predicate.
         let can_confirm = stage == SendStage::Confirm
-            && model.tx == SendTxStatus::Idle
-            && !model.estimating_gas
-            && !model.fee_busy
+            && confirm_gate_open(model)
             && issue.is_none()
             && confirm_amount_ok;
         // …and the refusal is not allowed to be silent. Only on the page the
@@ -4824,6 +4844,13 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     if model.step != SendStep::Confirm {
         return Command::done();
     }
+    // The gate `can_confirm` publishes, asked again here: a disabled control
+    // is a suggestion, and a slide from a stale frame must not sign over a
+    // relay stop, a refused submit or a re-quote in flight (issue #424). A
+    // stop's own retry lowers the stop before it slides.
+    if !confirm_gate_open(model) {
+        return Command::done();
+    }
     let (Some(_), Some(account)) = (model.selected_token.as_ref(), model.account.clone()) else {
         return Command::done();
     };
@@ -5149,8 +5176,7 @@ fn cancel_signing(model: &mut Model) -> Cmd {
 }
 
 fn retry_after_bootstrap(model: &mut Model) -> Cmd {
-    model.treasury_bootstrap = None;
-    model.treasury_watch = None;
+    lower_relay_stops(model);
     // After funding the relayer, return through the step-appropriate flow
     // (`SendScreen.tsx:214-224`): enter-details re-runs the pre-confirm
     // pre-check; confirm re-runs the slide.
@@ -5797,6 +5823,34 @@ fn open_bootstrap(model: &mut Model, status: SendTreasuryStatus) -> Cmd {
     model.treasury_bootstrap = Some(status);
     model.relay_unreachable = None;
     Command::all([watch_treasury(model, chain_id), render()])
+}
+
+/// Both relay stops down, and the funding stop's watch with it — a stop being
+/// answered by asking the relay again (issue #424).
+fn lower_relay_stops(model: &mut Model) {
+    model.treasury_bootstrap = None;
+    model.treasury_watch = None;
+    model.relay_unreachable = None;
+}
+
+/// A relay stop is up: the send waits on the relay, and says so.
+fn relay_stopped(model: &Model) -> bool {
+    model.treasury_bootstrap.is_some() || model.relay_unreachable.is_some()
+}
+
+/// The confirm slide's gate, less the two figure checks (a same-asset breach
+/// and a figure that stopped resolving), which the slide answers by going back
+/// to the amount rather than by refusing. Published in `can_confirm`, and the
+/// slide refuses on it (issue #424): every reason here is already on the page
+/// — the stop's own notice, the fee row re-quoting, the receipt or the error
+/// panel — so a refusal is never silent.
+fn confirm_gate_open(model: &Model) -> bool {
+    model.tx == SendTxStatus::Idle
+        && !model.lock.busy()
+        && model.tx_error.is_none()
+        && !model.estimating_gas
+        && !model.fee_busy
+        && !relay_stopped(model)
 }
 
 /// Open the "relay can't reach this network" sheet (spec 098 §2).
