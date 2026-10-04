@@ -377,11 +377,22 @@ class OnboardingExecutor(
                 network = false,
             )
         }
+        // Issue #409: the publish is the create's last step, and these three
+        // lines split it — the challenge, the write's acceptance, and the
+        // landing (the on-chain receipt the core waits for before "Wallet
+        // created"). Debug builds only, like every VelaLog line.
+        val publishStarted = SystemClock.elapsedRealtime()
         val challenge = registry.groupChallenge(
             metadataHex = metadataHex,
             groupPublicKey = groupPublicKey,
             members = members,
             rpId = unitRpId,
+        )
+        VelaLog.event(
+            "registry.publish",
+            "challenge",
+            "members" to members.size,
+            "ms" to SystemClock.elapsedRealtime() - publishStarted,
         )
 
         val proven = members.map { member ->
@@ -444,12 +455,27 @@ class OnboardingExecutor(
             rpId = unitRpId,
         )
 
+        val acceptedAt = SystemClock.elapsedRealtime()
+        VelaLog.event(
+            "registry.publish",
+            "register",
+            "ack" to ack.status.ifEmpty { "-" },
+            "sinceStartMs" to acceptedAt - publishStarted,
+        )
+
         // `done` up front means the identical group was already on-chain —
         // idempotent by content hash, and just as landed as a fresh one.
         if (ack.status == "done") return
         val id = ack.id
             ?: throw RegistryFailure("register was accepted without a task id", network = false)
         registry.awaitTask(id)
+        val landedAt = SystemClock.elapsedRealtime()
+        VelaLog.event(
+            "registry.publish",
+            "landed",
+            "waitedMs" to landedAt - acceptedAt,
+            "totalMs" to landedAt - publishStarted,
+        )
     }
 
     // -- spec 075: the Trusted Signer as a passkey route -----------------------
