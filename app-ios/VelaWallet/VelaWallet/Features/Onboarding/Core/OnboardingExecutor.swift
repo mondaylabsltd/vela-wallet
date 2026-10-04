@@ -238,8 +238,7 @@ final class OnboardingExecutor {
             return ["type": "pending_upload_removed"]
 
         case "registry_publish":
-            try await publish(operation)
-            return ["type": "registry_published"]
+            return Self.publishedResult(taskId: try await publish(operation))
 
         case "registry_query_by_public_key":
             let status = try await registry.queryByPublicKey(
@@ -301,7 +300,11 @@ final class OnboardingExecutor {
     /// and **no prompt is raised**; that is the whole point of the interleaved
     /// create-then-confirm flow. The empty-seed path is the login re-publish: a
     /// fresh group key, and one live assertion per member that has no proof.
-    private func publish(_ operation: [String: Any]) async throws {
+    ///
+    /// Returns the registry task when the core asked to be answered on
+    /// acceptance (`answer_when_accepted` — issue #409, a one-key create) and the
+    /// group has not landed yet; `nil` once it has landed.
+    private func publish(_ operation: [String: Any]) async throws -> String? {
         let members = (operation["members"] as? [[String: Any]] ?? []).map(PublishMember.init(json:))
         guard !members.isEmpty else {
             throw RegistryFailure(message: "registry publish needs at least one member", network: false)
@@ -398,13 +401,48 @@ final class OnboardingExecutor {
             rpId: unitRpId
         )
 
-        // `done` up front means the identical group was already on-chain —
-        // idempotent by content hash, and just as landed as a fresh one.
-        if ack.status == "done" { return }
+        switch try Self.afterRegister(
+            ack, answerWhenAccepted: operation["answer_when_accepted"] as? Bool ?? false
+        ) {
+        case .landed:
+            return nil
+        // Issue #409: a one-key create is answered here, at the 202. The
+        // landing is the session's to confirm from now on.
+        case .accepted(let taskId):
+            return taskId
+        case .awaitLanding(let taskId):
+            try await registry.awaitTask(id: taskId)
+            return nil
+        }
+    }
+
+    /// What the register's answer leaves to do.
+    enum AfterRegister: Equatable {
+        /// The group has a receipt on-chain (or the identical one already had).
+        case landed
+        /// Answer the core now with this task (issue #409).
+        case accepted(String)
+        /// Poll this task until the group has landed, then answer.
+        case awaitLanding(String)
+    }
+
+    /// The one new rule of issue #409, apart from the HTTP so a test can pin
+    /// it: when the core asked to be answered on acceptance, the 202's task id
+    /// IS the answer; otherwise the landing is waited for, as it always was.
+    /// `done` up front means the identical group was already on-chain —
+    /// idempotent by content hash, and just as landed as a fresh one.
+    static func afterRegister(_ ack: RegisterAck, answerWhenAccepted: Bool) throws -> AfterRegister {
+        if ack.status == "done" { return .landed }
         guard let id = ack.id else {
             throw RegistryFailure(message: "register was accepted without a task id", network: false)
         }
-        try await registry.awaitTask(id: id)
+        return answerWhenAccepted ? .accepted(id) : .awaitLanding(id)
+    }
+
+    /// The publish's answer: accepted with its task, or published.
+    static func publishedResult(taskId: String?) -> [String: Any] {
+        if let taskId { return ["type": "registry_accepted", "task_id": taskId] }
+        return ["type": "registry_published"]
     }
 
     // MARK: - Spec 075: the Trusted Signer as a passkey route
