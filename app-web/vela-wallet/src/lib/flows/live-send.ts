@@ -1369,20 +1369,30 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 
 	if (status === 'submitted') {
 		const receipt = send.receipt;
-		const eta =
-			receipt?.submitted_at_ms != null && receipt.typical_inclusion_s != null
-				? {
-						submittedAtMs: receipt.submitted_at_ms,
-						typicalS: receipt.typical_inclusion_s,
-						typicalLine: fill(m['send.txTypicalTime'], {
-							chainName: chainName(chainId),
-							estSecs: receipt.typical_inclusion_s
-						}),
-						remainingTemplate: m['send.txRemaining'],
-						elapsedTemplate: m['send.txElapsed'],
-						slowLine: m['send.txSlowConfirm']
-					}
-				: undefined;
+		const funding = receipt?.hold_reason === 'relay_funding';
+		const typicalS = receipt?.typical_inclusion_s ?? 0;
+		// Spec 099 R6: the screen counts with the core's `landingPace`, from
+		// when the relay put it on the network — and says the relay is
+		// sending it until then. Nothing counts while the relay funds itself.
+		const eta = funding
+			? undefined
+			: {
+					opHash: send.user_op_hash ?? null,
+					waitingLine: m['send.txWaitingConfirm'],
+					sendingLine: m['send.txRelaySending'],
+					submittedAtMs: receipt?.submitted_at_ms ?? 0,
+					typicalS,
+					typicalLine:
+						typicalS > 0
+							? fill(m['send.txTypicalTime'], {
+									chainName: chainName(chainId),
+									estSecs: typicalS
+								})
+							: '',
+					remainingTemplate: m['send.txRemaining'],
+					elapsedTemplate: m['send.txElapsed'],
+					slowLine: m['send.txSlowConfirm']
+				};
 		return {
 			...model,
 			header,
@@ -1391,11 +1401,9 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			title: m['send.txSubmittedTitle'],
 			// While the relay tops up its gas it says so, instead of a wait
 			// that reads like the network's (098 follow-up).
-			captions: [
-				receipt?.hold_reason === 'relay_funding'
-					? m['send.txRelayFunding']
-					: m['send.txWaitingConfirm']
-			],
+			// The wait's own line comes with the clock (`eta`): "sending" until
+			// the relay has sent it, then "waiting for confirmation".
+			captions: funding ? [m['send.txRelayFunding']] : [],
 			eta,
 			// Spec 082 RJ16: an operation hash is named as one — never as the
 			// transaction hash it is not (there is no transaction until it lands).

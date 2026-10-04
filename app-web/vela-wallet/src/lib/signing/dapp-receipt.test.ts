@@ -37,6 +37,7 @@ const copy: DappReceiptCopy = {
 	stillConfirming: 'Not on-chain yet. Vela keeps checking — don’t send it again.',
 	unknownOutcome: 'Still unconfirmed after 24 hours.',
 	relayFunding: 'The relay is topping up its gas on this network.',
+	relaySending: 'relay sending',
 	signed: 'Signed!',
 	maybeSent: "It may have been sent. Vela keeps checking — don't send it again.",
 	closeBackground: 'Close · keep running',
@@ -226,6 +227,7 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 			submitted_at_ms: 1_000,
 			outcome: 'landing',
 			relay_tx_hash: null,
+			relay_sent_at_ms: null,
 			...over
 		};
 	}
@@ -285,7 +287,12 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 
 	it('a lost reply reads "may have been sent" before the tracker has an entry', () => {
 		expect(landingFor(undefined, OP, true)).toEqual({ kind: 'maybe_sent', opHash: OP });
-		expect(landingFor(undefined, OP, false)).toEqual({ kind: 'submitted', opHash: OP });
+		// Spec 099 R6: with no word the relay sent it, the relay is sending it.
+		expect(landingFor(undefined, OP, false)).toEqual({
+			kind: 'submitted',
+			opHash: OP,
+			sending: true
+		});
 	});
 
 	it('once the relay has it, the lost-reply caption goes: the entry’s outcome is the word (RA10)', () => {
@@ -295,7 +302,8 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 		// acknowledges, the existing Landing / StillConfirming words".
 		expect(landingFor(entry({ outcome: 'landing' }), OP, true)).toEqual({
 			kind: 'submitted',
-			opHash: OP
+			opHash: OP,
+			sending: true
 		});
 		expect(landingFor(entry({ outcome: 'still_confirming' }), OP, true)).toEqual({
 			kind: 'still_confirming',
@@ -304,7 +312,19 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 	});
 
 	it('judges the tracker entry through the core', () => {
-		expect(landingFor(entry({}), OP, false)).toEqual({ kind: 'submitted', opHash: OP });
+		expect(landingFor(entry({}), OP, false)).toEqual({
+			kind: 'submitted',
+			opHash: OP,
+			sending: true
+		});
+		// Spec 099 R6: once the relay has put it on the network, the plain wait.
+		expect(landingFor(entry({ relay_sent_at_ms: 5_000 }), OP, false)).toEqual({
+			kind: 'submitted',
+			opHash: OP
+		});
+		expect(
+			dappReceiptModel({ kind: 'submitted', opHash: OP, sending: true }, copy, explorer).captions
+		).toEqual([copy.relaySending]);
 		expect(
 			landingFor(entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' }), OP, true)
 		).toEqual({ kind: 'confirmed', opHash: OP, txHash: TX });

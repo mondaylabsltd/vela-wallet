@@ -834,6 +834,26 @@ export const FEE_REASON_KEYS = [
 	'explore.chainDown'
 ] as const;
 
+/** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
+export const CONFIRM_BLOCK_KEYS = [
+	'componentsUi.signing.confirmBlock.accountSwitching',
+	'componentsUi.signing.confirmBlock.answered',
+	'componentsUi.signing.confirmBlock.answeredRetry',
+	'componentsUi.signing.confirmBlock.reading',
+	'componentsUi.signing.confirmBlock.approvalChoice',
+	'componentsUi.signing.confirmBlock.batchUnsettled',
+	'componentsUi.signing.confirmBlock.feeMeasuring',
+	'componentsUi.signing.confirmBlock.feeFailed',
+	'componentsUi.signing.confirmBlock.feeShort'
+] as const;
+
+/** Spec 099 R8: the signer's three failures, by `SignErrorKind`. */
+export const SIGNER_REASON_KEYS = {
+	signer_unavailable: 'componentsUi.browserStatus.reason.signerUnavailable',
+	signer_not_discoverable: 'componentsUi.browserStatus.reason.signerNotDiscoverable',
+	signer_failed: 'componentsUi.browserStatus.reason.signerFailed'
+} as const;
+
 export function resolveSigningMessages(locale: Locale): SigningMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
@@ -970,6 +990,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeStale: k('send.feeStale'),
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
 		feeReasons: Object.fromEntries(FEE_REASON_KEYS.map((key) => [key, k(key)])),
+		confirmBlock: Object.fromEntries(CONFIRM_BLOCK_KEYS.map((key) => [key, k(key)])),
+		signerReasons: Object.fromEntries(
+			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
+		),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),
@@ -1020,6 +1044,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			stillConfirming: k('componentsUi.signing.stillConfirming'),
 			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
 			relayFunding: k('send.txRelayFunding'),
+			relaySending: k('send.txRelaySending'),
 			signed: k('clearSigning.alertSignedTitle'),
 			// Spec 082 RA10: a lost reply, its way out, and "not sent".
 			maybeSent: k('componentsUi.signing.maybeSent'),

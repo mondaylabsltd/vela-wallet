@@ -310,7 +310,13 @@ export interface SigningModel {
 	 * header's quiet ✕ is the refusal, and since spec 079 nothing else closes
 	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
 	 */
-	confirm: { hint: string; action: string; enabled: boolean };
+	confirm: {
+		hint: string;
+		action: string;
+		enabled: boolean;
+		/** Spec 099 R7: why the slide is shut, in the core's words. Live only. */
+		note?: string;
+	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
 	/**

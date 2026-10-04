@@ -14,10 +14,7 @@
  * that is not finished.
  */
 
-/** The ceiling: reached only by the confirmation, never by waiting. */
-const CEILING = 0.92;
-/** How sharply it eases. 1.4 puts ~70% at the typical time. */
-const EASE = 1.4;
+import { landingPace } from '$lib/core/kernels';
 
 /**
  * How much of the ring is drawn, 0–1.
@@ -28,6 +25,7 @@ const EASE = 1.4;
  */
 export function ringProgress(elapsedS: number, typicalS: number): number | undefined {
 	if (!(typicalS > 0)) return undefined;
-	const elapsed = Math.max(0, elapsedS);
-	return CEILING * (1 - Math.exp((-EASE * elapsed) / Math.max(1, typicalS)));
+	// Spec 099 R6: the curve is the core's (`tx_tracker::landing_pace`), the
+	// same on every client.
+	return landingPace(0, typicalS, Math.max(0, elapsedS) * 1000).progress ?? undefined;
 }

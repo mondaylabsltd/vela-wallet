@@ -59,6 +59,12 @@ export interface DappReceiptCopy {
 	 * the plain wait, for as long as the relay says so (098 follow-up).
 	 */
 	relayFunding: string;
+	/**
+	 * Spec 099 R6: `send.txRelaySending` — the relay has the operation and has
+	 * not put it on the network yet. Said in place of the chain's wait, and the
+	 * ring roams: no chain's clock runs over the relay's own queue.
+	 */
+	relaySending: string;
 	/** Spec 079: `clearSigning.alertSignedTitle` — a message was signed ("已签名！"). */
 	signed: string;
 	/**
@@ -86,7 +92,8 @@ export interface DappReceiptCopy {
 /** Where the transaction stands, as the tracker reports it. */
 export type DappReceiptState =
 	| { kind: 'submitting' }
-	| { kind: 'submitted'; opHash: string }
+	/** `sending`: the relay has not reported it on the network yet (spec 099 R6). */
+	| { kind: 'submitted'; opHash: string; sending?: boolean }
 	/** Spec 079: the wait window closed; still followed, at the core's slowing pace. */
 	| { kind: 'still_confirming'; opHash: string }
 	/** Spec 079: abandoned at 24 h — neither landed nor failed, and no longer asked about. */
@@ -136,7 +143,7 @@ export function dappReceiptModel(
 			return {
 				stage: 'submitted',
 				title: copy.submitted,
-				captions: [copy.confirmingHint],
+				captions: [state.sending ? copy.relaySending : copy.confirmingHint],
 				// The operation hash, not a transaction hash: there is no
 				// transaction until it lands, and labelling one as the other is
 				// how a person ends up searching an explorer for nothing.
@@ -289,7 +296,12 @@ export function landingFor(
 	// it has (RA10) — a lost reply the relay turned out to hold is no longer
 	// "don't send it again".
 	const matched = entry !== undefined && entry.user_op_hash.toLowerCase() === opHash.toLowerCase();
-	return landingFromEnding(ending, opHash, maybeSent && !matched);
+	const state = landingFromEnding(ending, opHash, maybeSent && !matched);
+	// Spec 099 R6: on its way, but not yet on the network — the relay has it.
+	if (state.kind === 'submitted' && !(matched && entry?.relay_sent_at_ms != null)) {
+		return { ...state, sending: true };
+	}
+	return state;
 }
 
 /** The tracker's entry for `opHash`, matched as the tracker keys it (lowercase). */

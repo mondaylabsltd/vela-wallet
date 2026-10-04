@@ -925,6 +925,9 @@ describe('the confirm gate is an AND', () => {
 		const model = buildSigningModel(
 			inputs({
 				sign: { ...OPEN_SIGN, request: { ...REQUEST, kind: 'personal_sign' } },
+				// The reading a message has: the core decides "no fee" from it
+				// (spec 099 R7), the same rule on every client.
+				clear: { ...DECODED, surface: 'message_sign', result: null },
 				fee: { ...QUOTED_FEE, fee: null, confirm_fee_ready: false }
 			})
 		)!;

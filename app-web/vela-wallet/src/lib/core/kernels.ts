@@ -25,6 +25,13 @@ import type { StableRef } from '$lib/core/generated/StableRef';
 import type { TokenRef } from '$lib/core/generated/TokenRef';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import type { TrackStatusAnswer } from '$lib/core/generated/TrackStatusAnswer';
+import type { ConfirmState } from '$lib/core/generated/ConfirmState';
+import type { LandingPace } from '$lib/core/generated/LandingPace';
+import type { SignView } from '$lib/core/generated/SignView';
+import type { GuardView } from '$lib/core/generated/GuardView';
+import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
+import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeTier } from '$lib/core/generated/FeeTier';
 
 export {
 	PROXY_CREATION_CODE,
@@ -786,6 +793,37 @@ export function peggedNativeUsd(symbol: string): number | null {
  */
 export function typicalInclusionSeconds(chainId: number): number {
 	return wasm.typicalInclusionSeconds(chainId);
+}
+
+/**
+ * Spec 099 R7: may the signing slide arm, and if not, why — the core's one
+ * gate (`sign_confirm::confirm_state`), the same on every client. `null`
+ * when a view does not read: the slide stays shut.
+ */
+export function signConfirmState(
+	sign: SignView,
+	guard: GuardView,
+	clear: ClearSigningView,
+	fee: FeeView | null,
+	speedTier: FeeTier | null
+): ConfirmState | null {
+	const out = wasm.signConfirmState(
+		JSON.stringify(sign),
+		JSON.stringify(guard),
+		JSON.stringify(clear),
+		fee === null ? undefined : JSON.stringify(fee),
+		speedTier ?? undefined
+	);
+	return out ? (JSON.parse(out) as ConfirmState) : null;
+}
+
+/**
+ * Spec 099 R6: the landing's countdown and ring, counted from when the relay
+ * put the bundle on the network (`TrackEntryView.relay_sent_at_ms`) — the
+ * core's one ladder. `typicalS` `0` = no usual time for this chain.
+ */
+export function landingPace(sentAtMs: number | null, typicalS: number, nowMs: number): LandingPace {
+	return JSON.parse(wasm.landingPace(sentAtMs ?? undefined, typicalS, nowMs)) as LandingPace;
 }
 
 /**

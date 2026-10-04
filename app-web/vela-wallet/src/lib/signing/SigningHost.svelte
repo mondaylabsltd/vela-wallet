@@ -36,7 +36,6 @@
 		landingFor,
 		handoffLands,
 		landingToRaise,
-		receiptProgress,
 		autoCloseAfterMs,
 		trackEntryFor,
 		type DappReceiptCopy,
@@ -47,6 +46,7 @@
 	import {
 		feeRequoteDelayMs,
 		feeRequoteTimeoutMs,
+		landingPace,
 		typicalInclusionSeconds
 	} from '$lib/core/kernels';
 	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
@@ -92,7 +92,8 @@
 	 */
 	let landing = $state<DappReceiptState | null>(null);
 	let landingChain = $state(0);
-	let landedAtMs = $state(0);
+	/** When the relay put it on the network (spec 099 R6): the ring counts from here. */
+	let relaySentAtMs = $state<number | null>(null);
 	let unsubscribeTracker: (() => void) | undefined;
 	/** This chain's usual time to land, in seconds; `0` when there is none. */
 	let landingTypicalS = $state(0);
@@ -120,7 +121,7 @@
 		// out (a lost relay reply raises the landing before the answer).
 		landingRequest = untrack(() => signRequest.view.request?.id ?? null);
 		landingChain = chain;
-		landedAtMs = Date.now();
+		relaySentAtMs = null;
 		// How long this chain usually takes, from the CORE's table — the same
 		// number the send receipt draws its ring with. `0` (a chain Vela ships
 		// no estimate for) makes the ring circle instead of filling.
@@ -143,7 +144,7 @@
 		const entry = trackEntryFor(txTrackerView().entries, opHash);
 		if (!entry && !maybeSent) return;
 		landing = landingFor(entry, opHash, maybeSent);
-		if (entry?.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
+		relaySentAtMs = entry?.relay_sent_at_ms ?? null;
 	}
 
 	/**
@@ -563,7 +564,7 @@
 				return base ? `${base}/tx/${txHash}` : null;
 			})}
 			progress={landing.kind === 'submitted'
-				? receiptProgress(landedAtMs, landingTypicalS, nowMs)
+				? (landingPace(relaySentAtMs, landingTypicalS, nowMs).progress ?? undefined)
 				: undefined}
 			ondone={closeLanding}
 		/>

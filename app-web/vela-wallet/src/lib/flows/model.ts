@@ -1018,7 +1018,18 @@ export interface SendReceiptModel {
 	 * spin. The screen owns the clock; the sentence is the corpus's.
 	 */
 	eta?: {
+		/**
+		 * Spec 099 R6: the operation the tracker follows — the screen reads
+		 * when the relay put it on the network (`relay_sent_at_ms`), and the
+		 * core's `landingPace` counts from there.
+		 */
+		opHash: string | null;
+		/** "Waiting for confirmation" — once the relay has sent it. */
+		waitingLine: string;
+		/** "Vela's relay is sending it to the network…" — before. */
+		sendingLine: string;
 		submittedAtMs: number;
+		/** `0`: no usual time for this chain — nothing counts down. */
 		typicalS: number;
 		/** "Gnosis typically confirms in ~15s" — already filled. */
 		typicalLine: string;
