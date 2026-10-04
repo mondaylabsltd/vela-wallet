@@ -482,8 +482,16 @@ class PasskeyExecutor(
                 throw failure
             }
         } else {
+            val asked = SystemClock.elapsedRealtime()
             settleAfterMint(credentialIdHex)
-            getPinned(credentialManager, options, onlyPresented(transports))
+            getPinned(credentialManager, options, onlyPresented(transports)).also {
+                // Settle + every retry + the person's own unlock, end to end.
+                VelaLog.event(
+                    "passkey.assert",
+                    "pinned get answered",
+                    "ms" to SystemClock.elapsedRealtime() - asked,
+                )
+            }
         }
 
         val credential = response.credential as? PublicKeyCredential
@@ -574,6 +582,13 @@ class PasskeyExecutor(
         if (!credentialIdHex.equals(mintedCredentialIdHex, ignoreCase = true)) return
         val since = SystemClock.elapsedRealtime() - mintedAt
         if (since in 0 until SETTLE_AFTER_CREATE_MS) {
+            // Issue #409: a wait the person sits through on the progress
+            // screen, so it is said, with its length.
+            VelaLog.event(
+                "passkey.assert",
+                "settling after mint",
+                "waitMs" to SETTLE_AFTER_CREATE_MS - since,
+            )
             delay(SETTLE_AFTER_CREATE_MS - since)
         }
     }

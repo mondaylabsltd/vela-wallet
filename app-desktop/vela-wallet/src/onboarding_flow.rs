@@ -1317,11 +1317,9 @@ fn render_done(host: &FlowHost<'_>) -> Div {
         );
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::allow_attributes)]
-    let success_body = loc.t_vars(
-        "onboarding.create.successMessage",
-        &[("count", view.keys.len() as f64)],
-    );
+    // Plural (issue #409): one key is "your key", several are "any of your N
+    // keys" — the core picks the form from the count.
+    let success_body = loc.t_count("onboarding.create.successMessage", view.keys.len());
     let on_copy = emit(&host.sink, FlowEvent::CopyAddress);
     let sink_enter = host.sink.clone();
 

@@ -12,10 +12,10 @@
  * committed `public/` asset and `initSync`'d at import (`wasm-init.server.ts`);
  * catalogs are statically imported raw, so resolution is synchronous.
  */
-import { I18n as WasmI18n } from '../../../../../rust/pkg-web/vela_core.js';
+import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-web/vela_core.js';
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
-import { FLOW_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
+import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
 import type { WalletMessages } from '$lib/wallet/messages';
 import type { ContactsMessages } from '$lib/contacts/messages';
 import { INTRO_KEYS } from '$lib/intro/slides';
@@ -88,7 +88,15 @@ export function resolveWelcomeMessages(locale: Locale): WelcomeMessages {
  */
 export function resolveFlowMessages(locale: Locale): FlowMessages {
 	activate(locale);
-	return Object.fromEntries(FLOW_KEYS.map((key) => [key, t(locale, key)])) as FlowMessages;
+	// A plural key has no bare value, so it ships as the forms THIS locale has
+	// — the core's categories for it, e.g. `_one`/`_other` in en, `_other`
+	// alone in zh, four in ru — and the screen picks one by count.
+	const plural = FLOW_PLURAL_KEYS.flatMap((key) =>
+		i18nPluralSuffixes(locale).map((suffix) => `${key}${suffix}`)
+	);
+	return Object.fromEntries(
+		[...FLOW_KEYS, ...plural].map((key) => [key, t(locale, key)])
+	) as FlowMessages;
 }
 
 /**

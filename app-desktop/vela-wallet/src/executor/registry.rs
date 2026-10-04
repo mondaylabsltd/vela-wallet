@@ -75,7 +75,7 @@ impl RegistryError {
     }
 }
 
-type Result<T> = std::result::Result<T, RegistryError>;
+pub type Result<T> = std::result::Result<T, RegistryError>;
 
 /// The configured endpoint. A `Mutex` rather than a field on the executor
 /// because the endpoint-settings surface can change it from a screen while a
@@ -943,20 +943,36 @@ struct TaskStatus {
     error: Option<String>,
 }
 
+/// How far a publish got before this shell answered.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Published {
+    /// The group has a receipt on-chain (or the identical one already had).
+    Landed,
+    /// Issue #409: the registry accepted the write and queued it under this
+    /// task; the landing was not waited for, because the core asked not to.
+    Accepted { task_id: String },
+}
+
 /// Publish a wallet's founding key set as one possession-proven group.
 ///
 /// With `seed_hex` set (the interleaved create flow) the members already carry
 /// creation-time proofs and this only closes the group — no prompts. Empty (the
 /// login re-publish) runs the legacy mechanism: fresh group key, challenges,
 /// one assertion per member.
+///
+/// `answer_when_accepted` is the core's (issue #409): a one-key create is
+/// answered at the registry's 202, and the session's landing watch waits on
+/// the task later through [`await_task`]. Otherwise the task is polled here
+/// until the group has landed, as it always was.
 pub fn publish(
     metadata_hex: &str,
     members: &[RegistryPublishMember],
     seed_hex: &str,
     group_public_key_hex: &str,
     method: vela_core::app::KeyMethod,
+    answer_when_accepted: bool,
     ceremony: &Ceremony,
-) -> Result<()> {
+) -> Result<Published> {
     if members.is_empty() {
         return Err(RegistryError::answered(
             "registry publish needs at least one member",
@@ -1039,15 +1055,41 @@ pub fn publish(
         "Register",
         WRITE_TIMEOUT,
     )?;
+    match after_register(accepted, answer_when_accepted)? {
+        AfterRegister::Answer(published) => Ok(published),
+        AfterRegister::AwaitLanding(id) => {
+            await_task(&id)?;
+            Ok(Published::Landed)
+        }
+    }
+}
+
+/// What the register's answer leaves to do.
+#[derive(Debug, PartialEq, Eq)]
+enum AfterRegister {
+    /// Answer the core now.
+    Answer(Published),
+    /// Poll this task until the group has landed, then answer.
+    AwaitLanding(String),
+}
+
+/// The one new rule of issue #409, apart from the HTTP so it can be tested:
+/// when the core asked to be answered on acceptance, the 202's task id IS the
+/// answer; otherwise the landing is waited for, as it always was.
+fn after_register(accepted: Accepted, answer_when_accepted: bool) -> Result<AfterRegister> {
     // `done` up front means the identical group was already on-chain —
     // idempotent by content hash, and just as landed as a fresh one.
     if accepted.status == "done" {
-        return Ok(());
+        return Ok(AfterRegister::Answer(Published::Landed));
     }
     let id = accepted
         .id
         .ok_or_else(|| RegistryError::answered("register was accepted without a task id"))?;
-    await_task(&id)
+    Ok(if answer_when_accepted {
+        AfterRegister::Answer(Published::Accepted { task_id: id })
+    } else {
+        AfterRegister::AwaitLanding(id)
+    })
 }
 
 /// Every member's possession proof: the one it brought from its own creation,
@@ -1145,7 +1187,10 @@ fn prove_members(
 /// A transient read failure is retried until the budget runs out: the task is
 /// already accepted, so giving up on one bad read would report a failure that
 /// did not happen.
-fn await_task(id: &str) -> Result<()> {
+///
+/// Also the session's landing watch (issue #409): the same poll, the same
+/// budget, for a one-key wallet that was entered at the registry's 202.
+pub fn await_task(id: &str) -> Result<()> {
     let deadline = Instant::now() + POLL_TIMEOUT;
     let mut last_error: Option<String> = None;
     while Instant::now() < deadline {
@@ -1328,6 +1373,41 @@ mod tests {
         assert!(status.unit_ids.contains(&10), "{:?}", status.unit_ids);
         let unit = unit.unwrap().unwrap();
         assert!(unit.members.iter().any(|m| m.public_key_hex == key));
+    }
+
+    /// Issue #409: a one-key create is answered at the registry's 202 with the
+    /// task it was queued under; everything else still waits for the landing;
+    /// and a group already on-chain is landed either way.
+    #[test]
+    fn a_publish_that_asked_is_answered_on_acceptance() {
+        let pending = |id: Option<&str>| Accepted {
+            id: id.map(str::to_owned),
+            status: "pending".to_owned(),
+        };
+        assert_eq!(
+            after_register(pending(Some("t1")), true).ok(),
+            Some(AfterRegister::Answer(Published::Accepted {
+                task_id: "t1".to_owned()
+            }))
+        );
+        assert_eq!(
+            after_register(pending(Some("t1")), false).ok(),
+            Some(AfterRegister::AwaitLanding("t1".to_owned())),
+            "a multi-key create and every re-publish wait, as before"
+        );
+        for asked in [true, false] {
+            let done = Accepted {
+                id: None,
+                status: "done".to_owned(),
+            };
+            assert_eq!(
+                after_register(done, asked).ok(),
+                Some(AfterRegister::Answer(Published::Landed))
+            );
+            // A 202 without a task is still a failure: there would be
+            // nothing for anyone to confirm the landing by.
+            assert!(after_register(pending(None), asked).is_err());
+        }
     }
 
     #[test]

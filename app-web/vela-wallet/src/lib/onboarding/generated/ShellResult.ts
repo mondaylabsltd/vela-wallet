@@ -22,7 +22,7 @@ group_public_key_hex: string, } | { "type": "member_proof_signed", proof: Regist
  * "something went wrong" alert. Absent for classified failures, whose
  * copy comes from the classification.
  */
-message: string | null, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_key_status", registered: boolean, 
+message: string | null, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_accepted", task_id: string, } | { "type": "registry_key_status", registered: boolean, 
 /**
  * The ids of the groups (Units) this key is a founding member of,
  * ascending. Empty for a registered key predating groups.

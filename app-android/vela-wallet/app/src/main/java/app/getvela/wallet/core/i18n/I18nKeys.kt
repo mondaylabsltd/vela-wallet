@@ -84,6 +84,7 @@ object I18nKeys {
         const val STATUS_COMPUTING_ADDRESS = "onboarding.create.statusComputingAddress"
         const val STATUS_SYNCING_KEY = "onboarding.create.statusSyncingKey"
         const val SUCCESS_TITLE = "onboarding.create.successTitle"
+        /** Plural (`_one`/`_other`/…): resolve with [VelaStrings.t] and a count. */
         const val SUCCESS_MESSAGE = "onboarding.create.successMessage"
         const val VERIFY_HINT = "onboarding.create.verifyHint"
         const val ENTER_WALLET_BTN = "onboarding.create.enterWalletBtn"
@@ -140,7 +141,6 @@ object I18nKeys {
         // Progress screen.
         const val PROGRESS_TITLE = "onboarding.create.progressTitle"
         const val PROGRESS_SUBTITLE = "onboarding.create.progressSubtitle"
-        const val PROGRESS_METER_LABEL = "onboarding.create.progressMeterLabel"
         const val TASK_VERIFY_KEY = "onboarding.create.taskVerifyKey"
         const val TASK_DERIVE_ADDRESS = "onboarding.create.taskDeriveAddress"
         const val TASK_WRITE_INDEX = "onboarding.create.taskWriteIndex"
@@ -151,8 +151,6 @@ object I18nKeys {
 
         // Done screen.
         const val HEADER_CREATED = "onboarding.create.headerCreated"
-        const val IDENTICON_HINT = "onboarding.create.identiconHint"
-        const val WALLET_ADDRESS_LABEL = "onboarding.create.walletAddressLabel"
 
         // Prompts (data-model 5).
         const val ALERT_ERROR_TITLE = "onboarding.create.alertErrorTitle"

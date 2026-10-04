@@ -26,6 +26,9 @@ private object PreviewStrings : VelaStrings {
     override fun t(key: String): String = sample[key] ?: key.substringAfterLast('.')
 
     override fun t(key: String, vars: Map<String, String>): String = t(key)
+
+    /** Previews carry one sample per key, so a plural key is its own sample. */
+    override fun t(key: String, count: Int): String = t(key, mapOf("count" to count.toString()))
 }
 
 @Composable

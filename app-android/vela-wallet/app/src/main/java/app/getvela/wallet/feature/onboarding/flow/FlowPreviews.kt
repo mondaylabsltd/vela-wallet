@@ -40,7 +40,7 @@ private object PreviewStrings : VelaStrings {
         I18nKeys.Create.CREATE_WALLET_BTN to "Create Wallet",
         I18nKeys.Create.STATUS_SETTING_UP_IDENTITY to "Setting up secure identity...",
         I18nKeys.Create.SUCCESS_TITLE to "Your wallet is ready!",
-        I18nKeys.Create.SUCCESS_MESSAGE to "Your address works on all {{count}} supported networks.",
+        I18nKeys.Create.SUCCESS_MESSAGE to "Any of your {{count}} keys can sign in on its own.",
         I18nKeys.Create.VERIFY_HINT to
             "Your passkey is verified and your key is synced — you're all set.",
         I18nKeys.Create.ENTER_WALLET_BTN to "Enter Wallet",
@@ -75,6 +75,9 @@ private object PreviewStrings : VelaStrings {
         vars.entries.fold(t(key)) { acc, (name, value) ->
             acc.replace("{{$name}}", value)
         }
+
+    /** Previews carry one sample per key, so a plural key is its own sample. */
+    override fun t(key: String, count: Int): String = t(key, mapOf("count" to count.toString()))
 }
 
 @Composable

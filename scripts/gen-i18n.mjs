@@ -538,8 +538,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
 //   branch (why the slide is shut), and `send.txRelaySending` (the landing
 //   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
+// 1876 (issue #409, 2026-10-04): `onboarding.create.successMessage` said "Any
+//   of your 1 keys" to a one-key wallet. It is now plural by `{{count}}` —
+//   `successMessage_{one,other}`, plus `_many` (es-MX, pt-BR, fr, it, ru) and
+//   `_few` (ru): 4 paths for the 1 they replace. The ja + en room they needed
+//   under SC-005 came from three strings no shell has drawn since the done and
+//   progress screens lost them (`create.identiconHint`, `create.walletAddressLabel`,
+//   `create.progressMeterLabel`), not from a budget move. Same branches:
+//   1779 − 1 + 4 − 3 = 1779 leaves — the count is unchanged, the set is not.
 // 1878 (099, same day): + `explore.closeOtherTabs`, `explore.closeTabsToRight`
 //   — the browser's batch close, beside `closeAllTabs`. Same branches.
+// 1878 (merge of #409 into main after 099, 2026-10-04): #409's set (1779 leaves)
+//   + 099's two batch-close keys = 1781 leaves, 97 branches.
 if (PATHS.length !== 1878) fail(`expected 1878 paths (1781 leaf + 97 branch), got ${PATHS.length}`);
 if (leafSet.size !== 1781) fail(`expected 1781 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);

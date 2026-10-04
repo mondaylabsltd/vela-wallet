@@ -118,10 +118,9 @@ fun ColumnScope.DoneScreen(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Text(
-            text = strings.t(
-                I18nKeys.Create.SUCCESS_MESSAGE,
-                mapOf("count" to keys.size.toString()),
-            ),
+            // Plural (issue #409): "Your key can sign in on its own" for one
+            // key, "Any of your 2 keys…" for several — the core picks the form.
+            text = strings.t(I18nKeys.Create.SUCCESS_MESSAGE, keys.size),
             color = colors.fgMuted,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.lg,

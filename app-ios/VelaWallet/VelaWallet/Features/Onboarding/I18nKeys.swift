@@ -94,7 +94,6 @@ enum I18nKeys {
         // Progress screen.
         static let progressTitle = "onboarding.create.progressTitle"
         static let progressSubtitle = "onboarding.create.progressSubtitle"
-        static let progressMeterLabel = "onboarding.create.progressMeterLabel"
         static let taskVerifyKey = "onboarding.create.taskVerifyKey"
         static let taskDeriveAddress = "onboarding.create.taskDeriveAddress"
         static let taskWriteIndex = "onboarding.create.taskWriteIndex"
@@ -108,9 +107,8 @@ enum I18nKeys {
 
         // Done screen.
         static let successTitle = "onboarding.create.successTitle"
+        /// Plural (`_one`/`_other`/…): resolve with `loc.t(_:count:)`.
         static let successMessage = "onboarding.create.successMessage"
-        static let identiconHint = "onboarding.create.identiconHint"
-        static let walletAddressLabel = "onboarding.create.walletAddressLabel"
         static let verifyHint = "onboarding.create.verifyHint"
         static let enterWalletBtn = "onboarding.create.enterWalletBtn"
 
@@ -252,12 +250,11 @@ enum I18nKeys {
         TrustedSigner.tunnelDown, TrustedSigner.nearby, TrustedSigner.nearbyHint,
         TrustedSigner.nearbyName, TrustedSigner.bluetoothNeeded, TrustedSigner.bluetoothOff,
         TrustedSigner.bluetoothUnsupported,
-        Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
+        Create.progressTitle, Create.progressSubtitle,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
         Create.retryUploadBtn, Create.technicalDetails,
-        Create.successTitle, Create.successMessage, Create.identiconHint,
-        Create.walletAddressLabel, Create.verifyHint, Create.enterWalletBtn,
+        Create.successTitle, Create.verifyHint, Create.enterWalletBtn,
         Create.alertErrorTitle, Create.alertNotSupportedTitle, Create.alertNotSupportedBody,
         Login.header, Login.alertNotSupportedTitle, Login.alertNotSupportedBody,
         Login.alertIncompatibleTitle, Login.alertIncompatibleBody,

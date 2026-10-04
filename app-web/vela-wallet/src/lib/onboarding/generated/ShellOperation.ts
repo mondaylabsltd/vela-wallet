@@ -98,4 +98,18 @@ signer_origin?: string | null, } | { "type": "lookup_legacy_name", credential_id
  * replays its creation-time proof and never signs live. Defaults to the
  * platform authenticator, what a shell that never sets it expects.
  */
-method: KeyMethod, } | { "type": "registry_query_by_public_key", public_key_hex: string, } | { "type": "registry_query_unit", unit_id: number, } | { "type": "probe_index_health" } | { "type": "wait", ms: number, } | { "type": "prompt", kind: PromptKind, confirmable: boolean, } | { "type": "complete_onboarding", mode: CompletionMode, };
+method: KeyMethod, 
+/**
+ * Issue 409: answer [`ShellResult::RegistryAccepted`] as soon as the
+ * registry has ACCEPTED the write — its 202, a task id: the
+ * registration is signed and queued durably server-side — instead of
+ * polling that task until the group has landed on-chain.
+ *
+ * Set only for a ONE-key wallet's create, whose key stays recoverable
+ * on-device from two signatures whatever the registry does. A
+ * multi-key wallet's address can only be rebuilt elsewhere from the
+ * on-chain group, so its create and every re-publish leave this
+ * `false` — absent on the wire, which is today's operation byte for
+ * byte — and are answered only once the group has landed.
+ */
+answer_when_accepted?: boolean, } | { "type": "registry_query_by_public_key", public_key_hex: string, } | { "type": "registry_query_unit", unit_id: number, } | { "type": "probe_index_health" } | { "type": "wait", ms: number, } | { "type": "prompt", kind: PromptKind, confirmable: boolean, } | { "type": "complete_onboarding", mode: CompletionMode, };

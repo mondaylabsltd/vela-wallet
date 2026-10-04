@@ -13,12 +13,19 @@
 //!
 //! ## Why this pump is synchronous
 //!
-//! Every session operation is a read or a write of one small local JSON file.
-//! The web client does the same work against `localStorage` on its main thread;
-//! moving it to a background task here would buy nothing measurable and would
-//! introduce the one thing this module must not have — a window in which the
-//! route is stale. The onboarding executor is the opposite case (USB, TLS, a
-//! person's finger) and runs off-thread accordingly.
+//! Every session operation but one is a read or a write of one small local
+//! JSON file. The web client does the same work against `localStorage` on its
+//! main thread; moving it to a background task here would buy nothing
+//! measurable and would introduce the one thing this module must not have — a
+//! window in which the route is stale. The onboarding executor is the opposite
+//! case (USB, TLS, a person's finger) and runs off-thread accordingly.
+//!
+//! The one is the landing watch's wait on a registry task (issue #409): a
+//! network poll of up to two minutes, which no route depends on. The pump
+//! hands it back instead of performing it, and [`run_off_thread`] performs it
+//! on the background executor and answers the core when it is done.
+
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{App, Global};
 
@@ -30,6 +37,10 @@ use crate::executor;
 
 pub struct SessionState {
     host: CoreHost<Session>,
+    /// Which machine this is. [`reboot`] builds a fresh one whose effect ids
+    /// start again at 1, so an answer performed off-thread for the OLD machine
+    /// must never be handed to the new one under a colliding id.
+    generation: u64,
     view: SessionView,
     /// A signed-in person asked for another account (spec 072): the route
     /// stays the wallet, and the window shows onboarding over it until the
@@ -50,6 +61,10 @@ pub enum AddAccount {
 
 impl Global for SessionState {}
 
+type SessionPending = crate::core_host::Pending<vela_core::app::session::SessionOperation>;
+
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
 impl SessionState {
     fn new() -> Self {
         let host = CoreHost::<Session>::new();
@@ -57,30 +72,76 @@ impl SessionState {
         Self {
             host,
             view,
+            generation: GENERATION.fetch_add(1, Ordering::Relaxed) + 1,
             adding: None,
         }
     }
 
-    /// Drain the effect queue. Every operation answers immediately, so this
-    /// runs to quiescence rather than leaving anything outstanding.
-    fn pump(
-        &mut self,
-        mut pending: Vec<crate::core_host::Pending<vela_core::app::session::SessionOperation>>,
-    ) {
+    /// Drain the effect queue. Every local operation answers immediately, so
+    /// this runs to quiescence; what would block — the landing watch's wait on
+    /// a registry task — is returned for [`run_off_thread`] instead.
+    #[must_use]
+    fn pump(&mut self, mut pending: Vec<SessionPending>) -> Vec<SessionPending> {
+        let mut blocking = Vec::new();
         while let Some(next) = pending.pop() {
+            if executor::session_blocks(&next.operation) {
+                blocking.push(next);
+                continue;
+            }
             let result = executor::perform_session(&next.operation);
             pending.extend(self.host.resolve(next.id, result));
         }
         self.view = self.host.view();
+        blocking
     }
+}
+
+/// Perform the operations a pump handed back on the background executor, and
+/// answer the machine that asked — if it is still the installed one.
+fn run_off_thread(blocking: Vec<SessionPending>, generation: u64, cx: &mut App) {
+    for next in blocking {
+        cx.spawn(async move |cx| {
+            let operation = next.operation;
+            let result = cx
+                .background_executor()
+                .spawn(async move { executor::perform_session(&operation) })
+                .await;
+            cx.update(|cx| answer(generation, next.id, result, cx));
+        })
+        .detach();
+    }
+}
+
+/// An off-thread answer, back on the main thread.
+fn answer(
+    generation: u64,
+    id: u64,
+    result: vela_core::app::session::SessionShellResult,
+    cx: &mut App,
+) {
+    let current = cx
+        .try_global::<SessionState>()
+        .map(|state| state.generation);
+    if current != Some(generation) {
+        // The machine that asked was replaced (a reboot after an erase). Its
+        // question went with it; the new machine runs its own watch.
+        return;
+    }
+    let mut state = cx.remove_global::<SessionState>();
+    let pending = state.host.resolve(id, result);
+    let blocking = state.pump(pending);
+    cx.set_global(state);
+    run_off_thread(blocking, generation, cx);
 }
 
 /// Install the session and read storage. Called once, at startup.
 pub fn boot(cx: &mut App) {
     let mut state = SessionState::new();
+    let generation = state.generation;
     let pending = state.host.dispatch(vela_core::app::session::Event::Boot);
-    state.pump(pending);
+    let blocking = state.pump(pending);
     cx.set_global(state);
+    run_off_thread(blocking, generation, cx);
 }
 
 /// The current view. Cheap to clone; screens read it per frame.
@@ -176,9 +237,11 @@ fn dispatch(event: vela_core::app::session::Event, cx: &mut App) {
         boot(cx);
     }
     let mut state = cx.remove_global::<SessionState>();
+    let generation = state.generation;
     let pending = state.host.dispatch(event);
-    state.pump(pending);
+    let blocking = state.pump(pending);
     cx.set_global(state);
+    run_off_thread(blocking, generation, cx);
 }
 
 #[cfg(test)]
@@ -230,7 +293,7 @@ mod tests {
 
             let mut state = SessionState::new();
             let pending = state.host.dispatch(Event::Boot);
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(state.view.accounts.len(), 2, "both wallets are listed");
 
             let active = state.view.active_index;
@@ -244,7 +307,7 @@ mod tests {
             let wanted = state.view.accounts[other].account.address.clone();
 
             let pending = state.host.dispatch(Event::SwitchAccount { index: other });
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(state.view.active_index, other);
             // The address is DERIVED from the active index (invariant ①), so
             // this is what every money surface will now read.
@@ -252,7 +315,7 @@ mod tests {
 
             // Switching to the row already active changes nothing.
             let pending = state.host.dispatch(Event::SwitchAccount { index: other });
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(state.view.address, wanted);
         });
     }
@@ -270,7 +333,7 @@ mod tests {
         crate::executor::storage::tests::with_temp_state("session-round-trip", || {
             let mut state = SessionState::new();
             let pending = state.host.dispatch(Event::Boot);
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(
                 state.view.allowed_route,
                 SessionRoute::Onboarding,
@@ -280,14 +343,14 @@ mod tests {
             let pending = state.host.dispatch(Event::AccountEstablished {
                 mode: CompletionMode::AddAccount { account: account() },
             });
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(state.view.allowed_route, SessionRoute::Wallet);
             assert_eq!(state.view.address, account().address);
 
             // The confirmation is the core's, and it does not open until the
             // pending-upload question has an answer.
             let pending = state.host.dispatch(Event::SignOut);
-            state.pump(pending);
+            let _ = state.pump(pending);
             let dialog = state
                 .view
                 .sign_out
@@ -305,14 +368,14 @@ mod tests {
 
             // Cancelling leaves the wallet exactly where it was.
             let pending = state.host.dispatch(Event::SignOutDismissed);
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert!(state.view.sign_out.is_none());
             assert_eq!(state.view.allowed_route, SessionRoute::Wallet);
 
             let pending = state.host.dispatch(Event::SignOut);
-            state.pump(pending);
+            let _ = state.pump(pending);
             let pending = state.host.dispatch(Event::SignOutConfirmed);
-            state.pump(pending);
+            let _ = state.pump(pending);
             assert_eq!(
                 state.view.allowed_route,
                 SessionRoute::Onboarding,
@@ -323,8 +386,104 @@ mod tests {
             // And it really left the disk, so a relaunch agrees.
             let mut relaunched = SessionState::new();
             let pending = relaunched.host.dispatch(Event::Boot);
-            relaunched.pump(pending);
+            let _ = relaunched.pump(pending);
             assert_eq!(relaunched.view.allowed_route, SessionRoute::Onboarding);
+        });
+    }
+
+    fn accepted_record(task_id: &str) -> vela_core::app::PendingUpload {
+        vela_core::app::PendingUpload {
+            id: "cred0".to_owned(),
+            name: "Everyday wallet".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            attestation_object_hex: "a0".to_owned(),
+            created_at_iso: "2026-10-04T00:00:00.000Z".to_owned(),
+            authenticator_attachment: String::new(),
+            transports: String::new(),
+            members: Vec::new(),
+            task_id: Some(task_id.to_owned()),
+        }
+    }
+
+    fn outbox_len() -> usize {
+        match crate::executor::storage::load_pending_uploads() {
+            Ok(records) => records.len(),
+            Err(_) => unreachable!("the outbox reads"),
+        }
+    }
+
+    /// Issue #409: a one-key wallet entered at the registry's 202 leaves its
+    /// record — with the task — for the session to confirm. The launch hands
+    /// the wait on that task BACK rather than polling on the main thread; once
+    /// it lands, the record goes, with no ceremony anywhere.
+    #[test]
+    fn a_landing_is_confirmed_off_the_main_thread_and_then_the_record_goes() {
+        crate::executor::storage::tests::with_temp_state("session-landing-409", || {
+            if crate::executor::storage::save_account(&account()).is_err()
+                || crate::executor::storage::save_pending_upload(&accepted_record("t1")).is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let mut state = SessionState::new();
+            let pending = state.host.dispatch(Event::Boot);
+            let blocking = state.pump(pending);
+            assert_eq!(state.view.allowed_route, SessionRoute::Wallet);
+            let [wait] = blocking.as_slice() else {
+                unreachable!(
+                    "exactly the landing wait is handed back: {}",
+                    blocking.len()
+                )
+            };
+            assert_eq!(
+                wait.operation,
+                vela_core::app::session::SessionOperation::AwaitRegistryLanding {
+                    task_id: "t1".to_owned()
+                }
+            );
+            assert_eq!(outbox_len(), 1, "nothing is removed before the answer");
+
+            // What `run_off_thread` delivers once the registry says `done`.
+            let pending = state.host.resolve(
+                wait.id,
+                vela_core::app::session::SessionShellResult::RegistryLanded,
+            );
+            assert!(state.pump(pending).is_empty());
+            assert_eq!(outbox_len(), 0, "confirmed, so the record is gone");
+        });
+    }
+
+    /// The landing failed: the record stays, and so does the sign-out warning.
+    #[test]
+    fn an_unconfirmed_landing_keeps_the_record_and_the_warning() {
+        crate::executor::storage::tests::with_temp_state("session-landing-409-failed", || {
+            if crate::executor::storage::save_account(&account()).is_err()
+                || crate::executor::storage::save_pending_upload(&accepted_record("t1")).is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let mut state = SessionState::new();
+            let pending = state.host.dispatch(Event::Boot);
+            let blocking = state.pump(pending);
+            let [wait] = blocking.as_slice() else {
+                unreachable!("the landing wait is handed back")
+            };
+            let pending = state.host.resolve(
+                wait.id,
+                vela_core::app::session::SessionShellResult::RegistryLandingUnconfirmed {
+                    message: "Register failed: reverted".to_owned(),
+                },
+            );
+            assert!(state.pump(pending).is_empty());
+            assert_eq!(outbox_len(), 1);
+
+            let pending = state.host.dispatch(Event::SignOut);
+            let _ = state.pump(pending);
+            let dialog = state
+                .view
+                .sign_out
+                .clone()
+                .unwrap_or_else(|| unreachable!("the confirmation never opened"));
+            assert!(dialog.pending_upload_warning);
         });
     }
 
@@ -336,16 +495,16 @@ mod tests {
         crate::executor::storage::tests::with_temp_state("session-pending", || {
             let mut state = SessionState::new();
             let pending = state.host.dispatch(Event::Boot);
-            state.pump(pending);
+            let _ = state.pump(pending);
             let pending = state.host.dispatch(Event::AccountEstablished {
                 mode: CompletionMode::AddAccount { account: account() },
             });
-            state.pump(pending);
+            let _ = state.pump(pending);
 
             crate::executor::storage::tests::write_pending_upload("cred0");
 
             let pending = state.host.dispatch(Event::SignOut);
-            state.pump(pending);
+            let _ = state.pump(pending);
             let dialog = state
                 .view
                 .sign_out

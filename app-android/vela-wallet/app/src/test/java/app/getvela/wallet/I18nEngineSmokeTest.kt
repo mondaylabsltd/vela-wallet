@@ -102,15 +102,12 @@ class I18nEngineSmokeTest {
         I18nKeys.Create.PROVIDER_SECURITY_KEY,
         I18nKeys.Create.PROGRESS_TITLE,
         I18nKeys.Create.PROGRESS_SUBTITLE,
-        I18nKeys.Create.PROGRESS_METER_LABEL,
         I18nKeys.Create.TASK_VERIFY_KEY,
         I18nKeys.Create.TASK_DERIVE_ADDRESS,
         I18nKeys.Create.TASK_WRITE_INDEX,
         I18nKeys.Create.SYNC_FAILED_MESSAGE,
         I18nKeys.Create.SYNC_FAILED_HINT,
         I18nKeys.Create.HEADER_CREATED,
-        I18nKeys.Create.IDENTICON_HINT,
-        I18nKeys.Create.WALLET_ADDRESS_LABEL,
         I18nKeys.Create.ALERT_ERROR_TITLE,
         I18nKeys.Create.ALERT_NOT_SUPPORTED_TITLE,
         I18nKeys.Create.ALERT_NOT_SUPPORTED_BODY,
@@ -133,7 +130,6 @@ class I18nEngineSmokeTest {
         I18nKeys.Create.STATUS_COMPUTING_ADDRESS,
         I18nKeys.Create.STATUS_SYNCING_KEY,
         I18nKeys.Create.SUCCESS_TITLE,
-        I18nKeys.Create.SUCCESS_MESSAGE,
         I18nKeys.Create.VERIFY_HINT,
         I18nKeys.Create.ENTER_WALLET_BTN,
         I18nKeys.Create.FINISH_VERIFY_BTN,
@@ -205,6 +201,52 @@ class I18nEngineSmokeTest {
             val value = runtime.t(key)
             assertNotEquals("key echoed (missing in en catalog): $key", key, value)
             assertTrue("blank translation for $key", value.isNotBlank())
+        }
+    }
+
+    /**
+     * Issue #409: the done screen's line is PLURAL, and the count reaches the
+     * core as the plural count — not as a text variable, which fills the
+     * number but picks no form (and so echoes the key now that the bare key
+     * has no value). One key reads "your key", several read "any of your N".
+     */
+    @Test
+    fun theDoneLineAgreesWithItsCount() {
+        val runtime = newRuntime()
+        runtime.initialize("en")
+        assertEquals(
+            "Your key can sign in on its own. The contract deploys with your first transaction.",
+            runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 1),
+        )
+        assertEquals(
+            "Any of your 2 keys can sign in on its own. The contract deploys with your first transaction.",
+            runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 2),
+        )
+        // What DoneScreen used to call.
+        assertEquals(
+            I18nKeys.Create.SUCCESS_MESSAGE,
+            runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, mapOf("count" to "1")),
+        )
+
+        // Russian's 2–4 is `few`, which `count == 1 ? one : other` would miss.
+        runtime.setLocale("ru")
+        assertTrue(runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 1).startsWith("Ваш ключ"))
+        assertTrue(runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 3).contains("из 3 ключей"))
+
+        // Chinese has one form for every count, so it must not say how many.
+        runtime.setLocale("zh")
+        assertEquals(
+            runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 1),
+            runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, 3),
+        )
+
+        for (tag in LocaleResolver.SUPPORTED) {
+            runtime.setLocale(tag)
+            for (keys in 1..7) {
+                val value = runtime.t(I18nKeys.Create.SUCCESS_MESSAGE, keys)
+                assertNotEquals("key echoed for $tag/$keys", I18nKeys.Create.SUCCESS_MESSAGE, value)
+                assertTrue("unfilled for $tag/$keys: $value", !value.contains("{{"))
+            }
         }
     }
 
