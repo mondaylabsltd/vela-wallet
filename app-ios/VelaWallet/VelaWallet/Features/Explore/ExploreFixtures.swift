@@ -80,7 +80,7 @@ enum ExploreFixtures {
     }
 
     private static func tabs(_ loc: Loc, selected: String) -> [TabModel] {
-        [
+        let models = [
             TabModel(id: "uniswap", title: uniswap.name, site: uniswap,
                      selected: selected == "uniswap", startPage: false),
             TabModel(id: "polymarket", title: polymarket.name, site: polymarket,
@@ -88,6 +88,12 @@ enum ExploreFixtures {
             TabModel(id: "start", title: loc.t("explore.startPage"), site: nil,
                      selected: selected == "start", startPage: true),
         ]
+        // Spec 099: the long-press menu asks the core, as the live one does.
+        let strip = models.map { tab in
+            ExploreTabWire(id: tab.id, url: tab.site.map { "https://\($0.host)" },
+                           title: tab.title, host: tab.site?.host ?? "")
+        }
+        return ExploreLive.offeringCloses(models, strip: strip)
     }
 
     /// E6's site menu, in mock order.
@@ -188,7 +194,9 @@ enum ExploreFixtures {
             tabsScreen: TabsScreenCopy(
                 title: loc.t("explore.tabs"), done: loc.t("explore.done"),
                 newTab: loc.t("explore.newTab"), closeAll: loc.t("explore.closeAllTabs"),
-                close: loc.t("explore.closeTab")
+                close: loc.t("explore.closeTab"),
+                closeOthers: loc.t("explore.closeOtherTabs"),
+                closeRight: loc.t("explore.closeTabsToRight")
             ),
             sheet: sheet,
             menus: (groupManage: groupManage(loc), siteMenu: siteMenu, connection: connectionModel),

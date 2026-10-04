@@ -6,6 +6,9 @@
 //  the start page, and the one destructive affordance — 关闭全部标签页 —
 //  kept quiet at the bottom rather than beside every card.
 //
+//  Spec 099: long-press a card for Chrome's closes — this tab, the others,
+//  the ones to its right, all of them. Which tabs each takes is the core's.
+//
 
 import SwiftUI
 
@@ -20,6 +23,10 @@ struct ExploreTabsScreen: View {
     var onClose: (String) -> Void = { _ in }
     var onNew: () -> Void = {}
     var onCloseAll: () -> Void = {}
+    /// Spec 099: a card's long-press "close other tabs" — every tab but it.
+    var onCloseOthers: (String) -> Void = { _ in }
+    /// Spec 099: a card's long-press "close tabs to the right" of it.
+    var onCloseRight: (String) -> Void = { _ in }
 
     /// Top-aligned (spec 082 RE12): a card is never centred against a
     /// taller neighbour.
@@ -47,6 +54,9 @@ struct ExploreTabsScreen: View {
                     ForEach(tabs) { tab in
                         TabCardView(tab: tab, closeLabel: copy.close,
                                     onOpen: onOpen, onClose: onClose)
+                            .contentShape(.contextMenuPreview,
+                                          RoundedRectangle(cornerRadius: Tokens.Radius.r16))
+                            .contextMenu { menu(for: tab) }
                     }
                     // The same skeleton as a card: the preview box, then a
                     // caption row — 新建标签页 whole, never squeezed into the
@@ -86,5 +96,21 @@ struct ExploreTabsScreen: View {
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
         }
         .background(theme.bgBase)
+    }
+
+    /// A card's long-press menu (spec 099): close it, then the batch closes —
+    /// the desktop's tab menu, in its order. A batch whose scope takes no tab
+    /// is not offered: no "close other tabs" with one tab, no "close tabs to
+    /// the right" on the last card.
+    @ViewBuilder private func menu(for tab: TabModel) -> some View {
+        Button { onClose(tab.id) } label: { Text(verbatim: copy.close) }
+        Divider()
+        if tab.closesOthers {
+            Button { onCloseOthers(tab.id) } label: { Text(verbatim: copy.closeOthers) }
+        }
+        if tab.closesRight {
+            Button { onCloseRight(tab.id) } label: { Text(verbatim: copy.closeRight) }
+        }
+        Button(action: onCloseAll) { Text(verbatim: copy.closeAll) }
     }
 }

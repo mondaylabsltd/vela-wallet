@@ -75,6 +75,12 @@ struct TabModel: Identifiable {
     /// Spec 079: the page as it was last seen (`WKWebView.takeSnapshot`), so
     /// two tabs can be told apart. `nil` draws the stand-in.
     var snapshot: UIImage?
+    /// Spec 099: the card's long-press menu offers "close other tabs" and
+    /// "close tabs to the right" only where the core's scope takes a tab —
+    /// never with one tab, never on the last card. Asked of the core
+    /// (`exploreTabsClosedBy`), never worked out here.
+    var closesOthers = false
+    var closesRight = false
 }
 
 /// The page inside the browser. FIXTURE CONTENT, not chrome: it stands in for
@@ -213,6 +219,10 @@ struct TabsScreenCopy {
     let newTab: String
     let closeAll: String
     let close: String
+    /// Spec 099: a card's long-press menu — close it (`close`), the others,
+    /// the ones to its right, all of them (`closeAll`).
+    let closeOthers: String
+    let closeRight: String
 }
 
 struct ExploreHomeModel {

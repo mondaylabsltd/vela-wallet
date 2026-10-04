@@ -673,3 +673,222 @@ struct SignerKindTests {
         }
     }
 }
+
+// MARK: - Close other tabs, tabs to the right, all tabs
+
+/// Chrome's batch closes. Which tabs a scope takes is the core's
+/// (`exploreTabsClosedBy`), and one `tabs_closed` closes them; these check the
+/// shell asks with the strip it has, offers only what the core says takes a
+/// tab, and lets each closed tab's page go as a single close does.
+@MainActor
+struct TabBatchCloseTests {
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    private func strip(_ ids: [String], startPage: Set<String> = []) -> [ExploreTabWire] {
+        ids.map {
+            ExploreTabWire(id: $0, url: startPage.contains($0) ? nil : "https://\($0).example",
+                           title: $0, host: startPage.contains($0) ? "" : "\($0).example")
+        }
+    }
+
+    private func closed(_ scope: ExploreTabCloseScope, _ tabs: [ExploreTabWire]) -> [String] {
+        BrowserController.tabsClosed(by: scope, strip: BrowserController.stripJSON(tabs))
+    }
+
+    /// Each scope takes the tabs the core names — in strip order, and a start
+    /// page tab (no URL) is a tab like any other.
+    @Test func eachScopeTakesTheTabsTheCoreNames() {
+        let tabs = strip(["t1", "t2", "t3", "t4"], startPage: ["t3"])
+        #expect(closed(.others(keep: "t2"), tabs) == ["t1", "t3", "t4"])
+        #expect(closed(.right(of: "t2"), tabs) == ["t3", "t4"])
+        #expect(closed(.right(of: "t4"), tabs).isEmpty, "nothing is right of the last tab")
+        #expect(closed(.all, tabs) == ["t1", "t2", "t3", "t4"])
+        #expect(closed(.others(keep: "t1"), strip(["t1"])).isEmpty, "one tab has no others")
+        #expect(closed(.others(keep: "gone"), tabs).isEmpty, "an id the strip does not carry closes nothing")
+        #expect(closed(.right(of: "gone"), tabs).isEmpty)
+        #expect(closed(.all, []).isEmpty)
+    }
+
+    /// The strip the shell hands the core is the explore view's `tabs`, as the
+    /// core reads it — a start page's missing URL included.
+    @Test func theStripReadsInTheCore() throws {
+        let json = BrowserController.stripJSON(strip(["a", "b"], startPage: ["b"]))
+        let rows = try #require(
+            try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]]
+        )
+        #expect(rows.map { $0["id"] as? String } == ["a", "b"])
+        #expect(rows[1]["url"] is NSNull)
+        #expect(exploreTabsClosedBy(tabsJson: json, scopeJson: #"{"type":"all"}"#) == #"["a","b"]"#)
+        #expect(exploreTabsClosedBy(tabsJson: "nope", scopeJson: #"{"type":"all"}"#) == nil)
+        #expect(BrowserController.tabsClosed(by: .all, strip: "nope").isEmpty,
+                "input the core cannot read closes nothing")
+    }
+
+    /// A card's long-press menu offers a batch close only where the core says
+    /// it takes a tab: no "close other tabs" with one tab, no "close tabs to
+    /// the right" on the last card.
+    @Test func theMenuOffersOnlyWhatTakesATab() {
+        func view(_ ids: [String]) -> ExploreViewWire {
+            ExploreViewWire(
+                favorites: [], groups: [], tabs: strip(ids), selectedTab: ids.first,
+                favoritesHidden: false, recentHidden: false,
+                favoritesFull: false, tabsFull: false, ready: true
+            )
+        }
+        let three = ExploreLive.tabs(explore: view(["a", "b", "c"]), loc: loc)
+        #expect(three.map(\.closesOthers) == [true, true, true])
+        #expect(three.map(\.closesRight) == [true, true, false])
+
+        let one = ExploreLive.tabs(explore: view(["a"]), loc: loc)
+        #expect(one.map(\.closesOthers) == [false])
+        #expect(one.map(\.closesRight) == [false])
+
+        // The gallery's switcher asks the same core.
+        let gallery = ExploreFixtures.buildMobileState(.e5, loc: loc).tabs
+        #expect(gallery.map(\.closesOthers) == [true, true, true])
+        #expect(gallery.map(\.closesRight) == [true, true, false])
+    }
+
+    /// The menu's words are the corpus's, never a key echoed back.
+    @Test func theMenuSaysItInTheCorpusWords() {
+        for tag in ["en", "zh"] {
+            let loc = Loc(overrideTag: tag, preferredLanguages: [])
+            let copy = ExploreFixtures.buildMobileState(.e5, loc: loc).tabsScreen
+            #expect(copy.close == loc.t("explore.closeTab"))
+            #expect(copy.closeOthers == loc.t("explore.closeOtherTabs"))
+            #expect(copy.closeRight == loc.t("explore.closeTabsToRight"))
+            #expect(copy.closeAll == loc.t("explore.closeAllTabs"))
+            for (word, key) in [
+                (copy.closeOthers, "explore.closeOtherTabs"),
+                (copy.closeRight, "explore.closeTabsToRight"),
+            ] {
+                #expect(word != key && !word.isEmpty, "`\(key)` echoed the key (\(tag))")
+            }
+        }
+    }
+
+    // MARK: Through the controller and the real core
+
+    /// Four start-page tabs (no engines), `selected` in front.
+    private func fourTabs(_ h: BrowserHarness, selected at: Int) async throws -> [String] {
+        h.browser.start()
+        for n in 1...4 {
+            h.browser.newTab()
+            await Wait.until { h.browser.explore.tabs.count == n }
+        }
+        let ids = h.browser.explore.tabs.map(\.id)
+        try #require(ids.count == 4)
+        h.browser.selectTab(ids[at])
+        await Wait.until { h.browser.explore.selectedTab == ids[at] }
+        return ids
+    }
+
+    private func close(_ h: BrowserHarness, _ scope: ExploreTabCloseScope, leaving n: Int) async {
+        h.browser.closeTabs(scope)
+        await Wait.until { h.browser.explore.tabs.count == n }
+    }
+
+    /// The event leaves the core's selection: a selection that survives
+    /// stays; a closed one moves to the nearest surviving tab on its right,
+    /// else its left; none left is the start page.
+    @Test(.timeLimit(.minutes(1)))
+    func theSelectionFollowsTheCoresRule() async throws {
+        do {
+            // Survives: stays.
+            let h = BrowserHarness()
+            let ids = try await fourTabs(h, selected: 1)
+            #expect(h.browser.closeTabs(.right(of: ids[1])) == [ids[2], ids[3]])
+            await Wait.until { h.browser.explore.tabs.count == 2 }
+            #expect(h.browser.explore.tabs.map(\.id) == [ids[0], ids[1]])
+            #expect(h.browser.explore.selectedTab == ids[1])
+        }
+        do {
+            // Closed, nothing on its right survives: the nearest on its left.
+            let h = BrowserHarness()
+            let ids = try await fourTabs(h, selected: 3)
+            await close(h, .right(of: ids[0]), leaving: 1)
+            #expect(h.browser.explore.tabs.map(\.id) == [ids[0]])
+            #expect(h.browser.explore.selectedTab == ids[0])
+        }
+        do {
+            // Closed, a survivor on its right: that one — "close other tabs"
+            // lands on the tab kept.
+            let h = BrowserHarness()
+            let ids = try await fourTabs(h, selected: 0)
+            await close(h, .others(keep: ids[2]), leaving: 1)
+            #expect(h.browser.explore.tabs.map(\.id) == [ids[2]])
+            #expect(h.browser.explore.selectedTab == ids[2])
+        }
+        do {
+            // All: nothing selected — the start page — and the write landed:
+            // a browser over the same store reads the empty strip back.
+            let h = BrowserHarness()
+            _ = try await fourTabs(h, selected: 2)
+            h.browser.closeAllTabs()
+            await Wait.until { h.browser.explore.tabs.isEmpty }
+            #expect(h.browser.explore.selectedTab == nil)
+            #expect(h.browser.closeTabs(.all).isEmpty, "nothing left: nothing sent")
+
+            let again = BrowserController(store: h.store)
+            again.start()
+            await Wait.until { again.explore.ready }
+            #expect(again.explore.tabs.isEmpty)
+        }
+    }
+
+    /// End to end on real engines: the tabs a batch close takes lose their
+    /// pages — a live one torn down, a suspended one forgotten — and the
+    /// browser machine hears `tab_closed` for each, as for a single close;
+    /// the tab kept keeps its page, and its record.
+    ///
+    /// Each tab is a real WKWebView (see `DebugModeTests` on why the limit).
+    @Test(.timeLimit(.minutes(5)))
+    func theTabsItTakesLoseTheirPages() async throws {
+        let h = BrowserHarness()
+        await h.boot()
+        h.browser.start()
+        var ids: [String] = []
+        for n in 1...3 {
+            if n > 1 {
+                h.browser.newTab()
+                await Wait.until { h.browser.explore.tabs.count == n }
+            }
+            // Port 9 refuses at once: nothing here is about the page loading.
+            h.browser.open("http://127.0.0.1:9/\(n)")
+            await Wait.until {
+                h.browser.explore.selected.map {
+                    !ids.contains($0.id) && h.browser.engineForTesting($0.id) != nil
+                } ?? false
+            }
+            let id = try #require(h.browser.explore.selectedTab)
+            ids.append(id)
+            await h.hello(id, doc: "d\(n)", origin: dapp)
+        }
+        let (a, b, c) = (ids[0], ids[1], ids[2])
+        #expect(h.browser.explore.tabs.map(\.id) == ids)
+
+        // The two background pages let go: `b` keeps its tab with no engine.
+        h.browser.memoryWarning()
+        #expect(h.browser.suspendedForTesting == [a, b])
+        #expect(h.browser.engineForTesting(c) != nil)
+        for id in ids { #expect(h.browser.dbr.tab(id) != nil, "\(id) has a record before") }
+
+        // Right of `a`: `b` (suspended) and `c` (live, in front).
+        #expect(h.browser.closeTabs(.right(of: a)) == [b, c])
+        await h.until { h.browser.explore.tabs.count == 1 && h.browser.dbr.tab(c) == nil }
+        await h.settle()
+        #expect(h.browser.explore.tabs.map(\.id) == [a])
+        #expect(h.browser.engineForTesting(c) == nil, "the live page closed with its tab")
+        #expect(!h.browser.suspendedForTesting.contains(b), "the suspended one is forgotten")
+        #expect(h.browser.dbr.tab(b) == nil, "the browser machine heard tab_closed for b")
+        #expect(h.browser.dbr.tab(c) == nil, "the browser machine heard tab_closed for c")
+
+        // The selection fell left, onto `a`: its page loads again, said.
+        #expect(h.browser.explore.selectedTab == a)
+        await Wait.until { h.browser.engineForTesting(a) != nil }
+        #expect(h.browser.reloadedTab == a)
+        #expect(h.browser.current === h.browser.engineForTesting(a))
+        #expect(h.browser.dbr.tab(a) != nil, "the tab kept keeps its record")
+    }
+}
