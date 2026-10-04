@@ -10,6 +10,8 @@
  * step that keeps them in step with the core (`fee_speed.rs`).
  */
 import { untrack } from 'svelte';
+import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
+import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -160,10 +162,24 @@ export class SpeedControl {
 		this.feeQuote.requote();
 	}
 
+	/**
+	 * The surface's own simulation of the operation answered (spec 083 fee,
+	 * issue 411): what it moves, per asset. Told to the fee in force and to
+	 * every speed's preview pricing the same calls — and again after each new
+	 * question about them, because the core forgets it on every one.
+	 */
+	balanceChanges(calls: FeeCall[], changes: FeeBalanceChange[]): void {
+		this.feeQuote.balanceChangesMeasured(calls, changes);
+		this.tierPreview.measure(calls, changes);
+	}
+
 	/** The operation ended or a new one began: the one-shot pick and the fold die with it. */
 	reset(): void {
 		this.speed.reset();
 		this.tierPreview.hide();
+		// What the last operation moved is no measurement of the next.
+		this.feeQuote.balanceChangesMeasured(null);
+		this.tierPreview.measure(null);
 	}
 
 	dispose(): void {

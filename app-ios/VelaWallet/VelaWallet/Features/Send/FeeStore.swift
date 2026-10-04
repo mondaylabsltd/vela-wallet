@@ -143,6 +143,13 @@ final class FeeStore {
     /// Bumped whenever the session in force is asked to price again, so the
     /// previews follow it.
     private var askGeneration = 0
+    /// Spec 083 fee, issue #411: what the operation moves, per asset, as the
+    /// signing sheet's own simulation measured it — with the calls it
+    /// measured (as the JSON the core reads), so it is told only to a session
+    /// pricing those very calls. The fee machine forgets it on every
+    /// `quote_requested`, so each session is told again right after each
+    /// question (the desktop's `speed_control::balance_changes`).
+    private var measured: (calls: String, changes: [[String: Any]])?
 
     /// No session has an effect in flight — the one in force, every speed
     /// preview, the speed core (`CoreDriver.isIdle`). What a test waits on
@@ -314,7 +321,53 @@ final class FeeStore {
         inForce.ask = ask
         inForce.generation = askGeneration
         inForce.send(ask.event(number: number))
+        tellMeasured(inForce)
         settleSpeed()
+    }
+
+    // MARK: - What the operation moves (spec 083 fee, issue #411)
+
+    /// The signing sheet's simulation of the operation answered: what it
+    /// moves, per asset — the coins' own `Transfer` logs and the node's trace
+    /// of native value (`SimDeltas.feeBalanceChanges`). Which fee coin can pay
+    /// is what the operation LEAVES of it; a coin the calls only name (a
+    /// router's swap path) is one the machine may pay in once this says
+    /// enough of it is left. A Uniswap swap on Polygon whose path named both
+    /// stablecoins was priced in POL, held at 0, because nobody said so.
+    ///
+    /// Kept for every question about `calls`, and told now to each session
+    /// already asked one — the session in force and every speed preview
+    /// pricing those very calls. Never call this for a simulation that could
+    /// not check or that reverted: that is no measurement.
+    func balanceChanges(calls: [[String: Any]], changes: [[String: Any]]) {
+        // Calls that cannot be written down cannot be matched: no measurement.
+        measured = Self.callsKey(calls).map { ($0, changes) }
+        let told = ([inForce!] + previews).filter { tellMeasured($0) }.count
+        VelaLog.notice(.fee, "balance changes measured changes=\(changes.count) told=\(told)")
+    }
+
+    /// Tell `session` what its operation moves, when it prices the calls that
+    /// were measured — straight after its `quote_requested`, which clears it
+    /// in the machine.
+    @discardableResult
+    private func tellMeasured(_ session: Session) -> Bool {
+        guard let measured, let ask = session.ask, let calls = Self.callsKey(ask.calls),
+              calls == measured.calls
+        else { return false }
+        session.send(CoreJSON.string([
+            "type": "balance_changes_measured",
+            "changes": measured.changes,
+        ]))
+        return true
+    }
+
+    /// The calls as one comparable text — keys sorted, so two dictionaries
+    /// holding the same call always read the same (`CoreJSON.string` keeps
+    /// whatever order the dictionary enumerates in).
+    private static func callsKey(_ calls: [[String: Any]]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: calls, options: [.sortedKeys])
+        else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// A fee coin picked for the operation in force (`nil` = the native coin),
@@ -401,8 +454,12 @@ final class FeeStore {
         speedCore.dispatch(CoreJSON.string(["type": "configure", "preferred": preferred, "number": number]))
     }
 
-    /// A send starts or ends: a new one starts at the stored default.
-    func resetSpeed() { speedCore.dispatch(CoreJSON.string(["type": "reset"])) }
+    /// A send starts or ends: a new one starts at the stored default, and
+    /// what the last operation moved is no measurement of the next.
+    func resetSpeed() {
+        measured = nil
+        speedCore.dispatch(CoreJSON.string(["type": "reset"]))
+    }
 
     /// A free upgrade is only decided while the person is still choosing.
     func speedStage(onForm: Bool) {
@@ -527,6 +584,7 @@ final class FeeStore {
             session.generation = askGeneration
             previews.append(session)
             session.send(ask.event(number: number))
+            tellMeasured(session)
         }
     }
 }

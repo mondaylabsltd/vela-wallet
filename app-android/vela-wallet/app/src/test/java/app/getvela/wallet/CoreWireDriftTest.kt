@@ -848,6 +848,8 @@ class CoreWireDriftTest {
         assertFieldsExist<FeeBundlerQuote>("FeeBundlerQuote")
         assertFieldsExist<FeeAssetQuote>("FeeAssetQuote")
         assertFieldsExist<FeeCall>("FeeCall")
+        // Issue #411: the sheet's simulation, told to the fee machine.
+        assertFieldsExist<app.getvela.wallet.feature.send.core.FeeBalanceChange>("FeeBalanceChange")
     }
 
     @Test
