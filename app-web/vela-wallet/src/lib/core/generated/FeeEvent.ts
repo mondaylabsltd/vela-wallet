@@ -2,6 +2,7 @@
 import type { FeeBalanceChange } from "./FeeBalanceChange";
 import type { FeeCall } from "./FeeCall";
 import type { FeeTier } from "./FeeTier";
+import type { NumberPreset } from "./NumberPreset";
 
 export type FeeEvent = { "type": "quote_requested", chain_id: number, account: string, deployed: boolean, public_key_available: boolean, tier: FeeTier, calls: Array<FeeCall>, 
 /**
@@ -20,4 +21,11 @@ fee_token: string | null,
  * sent to the picker to fix what the machine could have seen.
  * `#[serde(default)]`: a shell that does not send it keeps that.
  */
-auto_fee_token: boolean, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" } | { "type": "balance_changes_measured", changes: Array<FeeBalanceChange>, };
+auto_fee_token: boolean, 
+/**
+ * The person's number preset (resolved, never `auto`), in which the
+ * view writes the amounts it states itself — a coin's shortfall
+ * ([`FeeOptionView::short`], issue 408). `#[serde(default)]`: a
+ * shell that does not send it reads `1,234.56`.
+ */
+number: NumberPreset, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" } | { "type": "balance_changes_measured", changes: Array<FeeBalanceChange>, };

@@ -1507,7 +1507,9 @@
    "reasonQuote": "Tidak bisa mendapatkan harga dari relay. Mencoba lagi otomatis.",
    "reasonFeeToken": "Relay belum bisa memberi harga untuk koin ini. Mencoba lagi — atau bayar biaya dengan koin lain.",
    "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
-   "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis."
+   "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
+   "rowShort": "Perlu ~{{need}}, ada {{have}}",
+   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
   },
   "dock": {
    "receive": "Terima",

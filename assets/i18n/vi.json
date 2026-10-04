@@ -1507,7 +1507,9 @@
    "reasonQuote": "Không lấy được báo giá từ relay. Đang tự động thử lại.",
    "reasonFeeToken": "Relay hiện chưa định giá được coin này. Đang thử lại — hoặc trả phí bằng coin khác.",
    "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
-   "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại."
+   "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại.",
+   "rowShort": "Cần ~{{need}}, có {{have}}",
+   "noCoinPays": "Không token nào đủ trả phí này"
   },
   "dock": {
    "receive": "Nhận",

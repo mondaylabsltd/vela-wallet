@@ -1510,7 +1510,9 @@
    "reasonQuote": "Non è stato possibile ottenere un prezzo dal relay. Nuovo tentativo automatico.",
    "reasonFeeToken": "Il relay non riesce a quotare questa moneta per ora. Nuovo tentativo in corso, oppure paga la commissione con un'altra moneta.",
    "reasonSimulation": "Il relay non è ancora riuscito a simulare questa transazione. Nuovo tentativo automatico.",
-   "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico."
+   "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico.",
+   "rowShort": "Servono ~{{need}}, hai {{have}}",
+   "noCoinPays": "Nessun token basta per questa commissione"
   },
   "dock": {
    "receive": "Ricevi",

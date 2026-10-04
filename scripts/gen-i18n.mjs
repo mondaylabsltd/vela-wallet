@@ -538,8 +538,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `reason` branches), 9 under a new `componentsUi.signing.confirmBlock`
 //   branch (why the slide is shut), and `send.txRelaySending` (the landing
 //   before the relay has sent): 1728 + 51 = 1779 leaves, 92 + 5 = 97 branches.
-if (PATHS.length !== 1876) fail(`expected 1876 paths (1779 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1779) fail(`expected 1779 leaf paths, got ${leafSet.size}`);
+// 1878 (issue #408, 2026-10-04): + `componentsUi.gas.rowShort` — a fee coin
+//   that cannot pay says why under its greyed row, need and have in its own
+//   unit — and `componentsUi.gas.noCoinPays`, the line under the fee when not
+//   one coin on offer can pay it (it used to name the coin in force: "Insufficient
+//   ETH for gas fees" over a wallet whose USDT was short too). Same branches:
+//   1779 + 2 = 1781 leaves.
+if (PATHS.length !== 1878) fail(`expected 1878 paths (1781 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1781) fail(`expected 1781 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

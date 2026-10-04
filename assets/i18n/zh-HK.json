@@ -1468,7 +1468,9 @@
    "reasonQuote": "未能從中繼取得報價，正在自動重試。",
    "reasonFeeToken": "中繼暫時未能為這個幣報價。正在重試——亦可改用其他幣支付手續費。",
    "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
-   "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。"
+   "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。",
+   "rowShort": "需要 ~{{need}}，而家有 {{have}}",
+   "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
   },
   "dock": {
    "receive": "收款",

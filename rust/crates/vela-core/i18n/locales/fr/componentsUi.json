@@ -318,7 +318,9 @@
       "reasonQuote": "Impossible d'obtenir un prix du relais. Nouvelle tentative automatique.",
       "reasonFeeToken": "Le relais ne peut pas coter cette monnaie pour le moment. Nouvelle tentative — ou payez les frais avec une autre monnaie.",
       "reasonSimulation": "Le relais n'a pas encore pu simuler cette transaction. Nouvelle tentative automatique.",
-      "reasonQuoteHigh": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau. Nouvelle tentative automatique."
+      "reasonQuoteHigh": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau. Nouvelle tentative automatique.",
+      "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
+      "noCoinPays": "Aucun jeton ne couvre ces frais"
     },
     "dock": {
       "receive": "Recevoir",

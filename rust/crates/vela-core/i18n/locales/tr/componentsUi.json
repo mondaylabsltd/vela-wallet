@@ -318,7 +318,9 @@
       "reasonQuote": "Relay'den fiyat alınamadı. Otomatik olarak yeniden deneniyor.",
       "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
       "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
-      "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor."
+      "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
+      "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
+      "noCoinPays": "Bu ücreti karşılayan token yok"
     },
     "dock": {
       "receive": "Al",

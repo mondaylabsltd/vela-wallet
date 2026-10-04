@@ -318,7 +318,9 @@
       "reasonQuote": "Vom Relay kam kein Preis. Wird automatisch erneut versucht.",
       "reasonFeeToken": "Das Relay kann diesen Coin gerade nicht bepreisen. Wird erneut versucht – oder zahle die Gebühr mit einem anderen Coin.",
       "reasonSimulation": "Das Relay konnte diese Transaktion noch nicht testweise ausführen. Wird automatisch erneut versucht.",
-      "reasonQuoteHigh": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks. Wird automatisch erneut versucht."
+      "reasonQuoteHigh": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks. Wird automatisch erneut versucht.",
+      "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
+      "noCoinPays": "Kein Token reicht für diese Gebühr"
     },
     "dock": {
       "receive": "Empfangen",

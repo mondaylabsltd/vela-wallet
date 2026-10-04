@@ -165,6 +165,7 @@ export * from './FeeGasOutcome';
 export * from './FeeOperation';
 export * from './FeeOptionView';
 export * from './FeeShellResult';
+export * from './FeeShortfall';
 export * from './FeeSpeedEvent';
 export * from './FeeSpeedOperation';
 export * from './FeeSpeedOptionView';
