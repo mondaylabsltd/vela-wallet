@@ -26,6 +26,8 @@
  * multiplied.
  */
 import { FeeQuote, type FeeQuoteRequest } from './fee-quote.svelte';
+import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
+import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 
 /** One tier being priced, and the session pricing it. */
@@ -56,6 +58,19 @@ export class TierPreview {
 	 * amount, coin, chain or account) and not before.
 	 */
 	#stamp: string | null = null;
+
+	/**
+	 * What the operation moves, as the surface's simulation measured it (spec
+	 * 083 fee, issue 411) — told to every row, so each speed is paid in a
+	 * coin that can pay, the same coin the fee in force picked.
+	 */
+	#measured: { calls: FeeCall[]; changes: FeeBalanceChange[] } | null = null;
+
+	/** The measurement for every row pricing `calls`, now and when rows are made. `null` forgets it. */
+	measure(calls: FeeCall[] | null, changes: FeeBalanceChange[] = []): void {
+		this.#measured = calls === null ? null : { calls, changes };
+		for (const row of this.#live) row.quote.balanceChangesMeasured(calls, changes);
+	}
 
 	/** Price `request` at each of `tiers`. Idempotent for the same operation. */
 	/**
@@ -92,6 +107,10 @@ export class TierPreview {
 		this.#dispose();
 		this.#live = tiers.map((tier) => {
 			const quote = new FeeQuote();
+			// Told before it is asked, so the question carries it in (issue 411).
+			if (this.#measured) {
+				quote.balanceChangesMeasured(this.#measured.calls, this.#measured.changes);
+			}
 			// The outcome is read off the session's own view, like every other
 			// fee surface; the promise is only how the core answers.
 			void quote.requestQuote({ ...request, tier });
