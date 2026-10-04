@@ -980,6 +980,10 @@ class BrowserController(
                         httpStatus = httpStatus?.toUShort(),
                     ) ?: return@evaluateJavascript
                     lastVisits[tab] = visit
+                    // Issue #425: the site's good load titles a favourite its
+                    // host stands in for — one pinned while it had failed, or
+                    // one whose stored name (an error page's) the core reset.
+                    exploreHost.dispatch(ExploreEvent.PageLoaded(url = visit.url, title = visit.title), ExploreEvent.serializer())
                     scope.launch {
                         historyLoaded.await()
                         bhistHost.dispatch(BhistEvent.VisitRecorded(url = visit.url, title = visit.title, favicon = visit.favicon, now_ms = now()), BhistEvent.serializer())

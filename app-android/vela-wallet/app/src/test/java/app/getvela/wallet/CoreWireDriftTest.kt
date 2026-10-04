@@ -1316,8 +1316,10 @@ class CoreWireDriftTest {
     fun exploreAndHistoryWiresMatchTheMirrors() {
         assertFieldsExist<ExploreView>("ExploreView")
         assertFieldsExist<ExploreGroupView>("ExploreGroupView")
-        assertFieldsExist<ExploreDoc>("ExploreDoc")
-        assertFieldsExist<ExploreSite>("ExploreSite")
+        // Stored THROUGH these classes (issue #425): a core field missing here
+        // is dropped on every write, so they must match the mirror exactly.
+        assertFieldsExhaustive<ExploreDoc>("ExploreDoc")
+        assertFieldsExhaustive<ExploreSite>("ExploreSite")
         assertFieldsExist<ExploreGroup>("ExploreGroup")
         assertFieldsExist<ExploreTab>("ExploreTab")
         assertVariantsExhaustive<ExploreOperation>("ExploreOperation")

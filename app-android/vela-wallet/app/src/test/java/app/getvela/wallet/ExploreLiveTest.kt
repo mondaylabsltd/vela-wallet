@@ -140,6 +140,10 @@ class ExploreLiveTest {
         assertFalse("never the engine's own title", toggle.contains("state.title"))
         val visit = source.substringAfter("browserLoadVisit(").substringBefore("scope.launch")
         assertTrue("the last visit is the core's visit", visit.contains("lastVisits[tab] = visit"))
+        // Issue #425: the same visit — and only it — tells the favourites the
+        // site loaded, so a tile its host stands in for takes the site's title.
+        assertTrue(visit.contains("ExploreEvent.PageLoaded(url = visit.url, title = visit.title)"))
+        assertEquals("one place says a page loaded", 1, Regex("ExploreEvent\\.PageLoaded\\(").findAll(source).count())
     }
 
     /**
