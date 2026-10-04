@@ -30,6 +30,8 @@
     "newTab": "新分頁",
     "startPage": "起始頁",
     "closeAllTabs": "閂晒所有分頁",
+    "closeOtherTabs": "閂其他分頁",
+    "closeTabsToRight": "閂右邊分頁",
     "closeTab": "閂分頁",
     "openTabs": "開咗 {{n}} 個分頁",
     "addToFavorites": "加入收藏",

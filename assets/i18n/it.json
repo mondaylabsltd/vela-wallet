@@ -1917,6 +1917,8 @@
   "newTab": "Nuova scheda",
   "startPage": "Pagina iniziale",
   "closeAllTabs": "Chiudi tutte le schede",
+  "closeOtherTabs": "Chiudi le altre schede",
+  "closeTabsToRight": "Chiudi le schede a destra",
   "closeTab": "Chiudi scheda",
   "openTabs": "{{n}} schede aperte",
   "addToFavorites": "Aggiungi ai preferiti",

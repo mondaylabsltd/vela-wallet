@@ -207,6 +207,9 @@ pub struct TabActions {
     pub select: Vec<Option<crate::flows::panels::Click>>,
     pub close: Vec<Option<crate::flows::panels::Click>>,
     pub new_tab: Option<crate::flows::panels::Click>,
+    /// Spec 099: a right-click on a tab — its menu of closes (this tab, the
+    /// others, the ones to its right, all), at the cursor.
+    pub menu: Vec<Option<TabMenuOpen>>,
     /// Spec 082 RD1: a request is open and switching is held — every tab but
     /// the lit one, and +, are drawn at the disabled opacity. They still take
     /// clicks: a click is what brings the request forward and says why.
@@ -215,6 +218,9 @@ pub struct TabActions {
     /// tabs. `None` (the gallery) draws every tab at [`TAB_W`].
     pub scroll: Option<TabStripScroll>,
 }
+
+/// A tab's right-click: where it was pressed.
+pub type TabMenuOpen = Box<dyn Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App)>;
 
 /// How wide each tab is drawn, and whether the strip scrolls (spec 082 G54).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -435,6 +441,11 @@ pub fn tab_strip_with(
             .child(face);
         if let Some(select) = select {
             tab_el = tab_el.on_click(move |event, window, cx| select(event, window, cx));
+        }
+        if let Some(open) = actions.menu.get_mut(i).and_then(Option::take) {
+            tab_el = tab_el.on_mouse_down(gpui::MouseButton::Right, move |event, window, cx| {
+                open(event, window, cx);
+            });
         }
         row = row.child(tab_el);
         let _ = &close_label;

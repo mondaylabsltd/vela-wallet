@@ -30,6 +30,8 @@
     "newTab": "新しいタブ",
     "startPage": "スタートページ",
     "closeAllTabs": "すべてのタブを閉じる",
+    "closeOtherTabs": "他のタブを閉じる",
+    "closeTabsToRight": "右側のタブを閉じる",
     "closeTab": "タブを閉じる",
     "openTabs": "{{n}} 件のタブを表示中",
     "addToFavorites": "お気に入りに追加",

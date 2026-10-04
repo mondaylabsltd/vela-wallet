@@ -30,6 +30,8 @@
     "newTab": "Новая вкладка",
     "startPage": "Стартовая страница",
     "closeAllTabs": "Закрыть все вкладки",
+    "closeOtherTabs": "Закрыть другие вкладки",
+    "closeTabsToRight": "Закрыть вкладки справа",
     "closeTab": "Закрыть вкладку",
     "openTabs": "Открыто вкладок: {{n}}",
     "addToFavorites": "Добавить в избранное",

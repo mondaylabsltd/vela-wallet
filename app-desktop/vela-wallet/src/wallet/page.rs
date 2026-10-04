@@ -343,6 +343,9 @@ enum ContactsMenu {
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
+    /// Spec 099 — right-click on a tab: close it, the others, the ones to
+    /// its right, or all of them.
+    Tab,
 }
 
 /// The identicon, big, beside the address that drew it (078 H-02, the web's
@@ -756,6 +759,8 @@ pub struct WalletPage {
     /// its view loads on behind the one on screen, and a failure it met is
     /// there when it comes back.
     loads: std::collections::BTreeMap<String, crate::wallet::browser_host::LoadDriver>,
+    /// Spec 099: the tab a tab menu was opened over.
+    menu_tab: Option<String>,
     /// Spec 099 FR-014: per tab, the status line last put away (its Details
     /// opened, or ✕) — the line comes back only for something new.
     status_seen: std::collections::BTreeMap<String, String>,
@@ -1357,6 +1362,7 @@ impl WalletPage {
             tab_strip: explore_components::TabStripScroll::default(),
             loads: std::collections::BTreeMap::new(),
             status_seen: std::collections::BTreeMap::new(),
+            menu_tab: None,
             suspended: std::collections::BTreeSet::new(),
             reloaded_tab: None,
             bar_committed: None,
@@ -13169,6 +13175,67 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// Close several tabs at once (spec 099 — Chrome's "close other tabs",
+    /// "close tabs to the right", "close all tabs"). Which ones is the core's
+    /// (`tabs_closed_by`); each one's page goes with its view, and the core
+    /// settles what it had open, as for a single close. The selection then
+    /// follows the explore machine's rule, as it does for one.
+    fn close_browser_tabs(
+        &mut self,
+        scope: &vela_core::app::explore_sites::TabCloseScope,
+        cx: &mut Context<Self>,
+    ) {
+        let resident = resident::resident::<ExploreSites>(cx);
+        let ids = vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
+        if ids.is_empty() {
+            return;
+        }
+        crate::diag::vlog!("browser", "close tabs n={} ({scope:?})", ids.len());
+        let shown_closed = self.shown_tab.as_ref().is_some_and(|id| ids.contains(id));
+        for id in &ids {
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::close(id);
+            self.loads.remove(id);
+            self.suspended.remove(id);
+            self.status_seen.remove(id);
+            if let Some(host) = self.browser_host.clone() {
+                host.update(cx, |host, cx| host.tab_closed(id, cx));
+            }
+        }
+        resident.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::TabsClosed { ids: ids.clone() },
+                cx,
+            );
+        });
+        if shown_closed || !self.browsing {
+            if shown_closed {
+                self.load = crate::wallet::browser_host::LoadDriver::default();
+                self.shown_tab = None;
+            }
+            let view = resident.read(cx).view();
+            let next = view
+                .selected_tab
+                .as_ref()
+                .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
+                .map(|tab| (tab.id.clone(), tab.url.clone()));
+            match next {
+                Some((id, Some(url))) if self.browsing || shown_closed => {
+                    self.switch_to_tab(id, url, cx);
+                }
+                Some((id, _)) => {
+                    self.show_tab(Some(id), cx);
+                    self.browsing = false;
+                }
+                None => {
+                    self.show_tab(None, cx);
+                    self.browsing = false;
+                }
+            }
+        }
+        cx.notify();
+    }
+
     /// Every page is closed, not merely hidden (an erase): their requests are
     /// settled (4900), a sheet showing one of them closes, and the documents
     /// stop running. Hiding a webview alone would leave its page alive and
@@ -13268,6 +13335,20 @@ impl WalletPage {
                 new_tab: Some(Box::new(cx.listener(|page, _: &gpui::ClickEvent, _, cx| {
                     page.browser_go(crate::wallet::browser_host::Go::NewTab, cx);
                 })) as panels::Click),
+                // Spec 099: right-click a tab for its closes.
+                menu: ids
+                    .iter()
+                    .map(|id| {
+                        let id = id.clone();
+                        Some(Box::new(cx.listener(
+                            move |page, event: &MouseDownEvent, _, cx| {
+                                page.menu_tab = Some(id.clone());
+                                page.menu = Some((ContactsMenu::Tab, event.position, Anchor::TopLeft));
+                                cx.notify();
+                            },
+                        )) as explore_components::TabMenuOpen)
+                    })
+                    .collect(),
                 held,
                 scroll: Some(self.tab_strip.clone()),
             }
@@ -18944,6 +19025,29 @@ impl WalletPage {
                 actions
             }
 
+            // Spec 099: a tab's closes — this one, then the core's scopes.
+            ContactsMenu::Tab => {
+                use vela_core::app::explore_sites::TabCloseScope;
+                let scoped = |scope: fn(String) -> Option<TabCloseScope>| {
+                    Some(Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        if let Some(id) = this.menu_tab.take() {
+                            match scope(id.clone()) {
+                                Some(scope) => this.close_browser_tabs(&scope, cx),
+                                None => this.close_browser_tab(&id, cx),
+                            }
+                        }
+                        cx.notify();
+                    })) as contacts_components::MenuAction)
+                };
+                vec![
+                    scoped(|_| None),
+                    scoped(|keep| Some(TabCloseScope::Others { keep })),
+                    scoped(|of| Some(TabCloseScope::Right { of })),
+                    scoped(|_| Some(TabCloseScope::All)),
+                ]
+            }
+
             // A row in Recent: open it in a new tab, pin it, or forget it.
             // All three belong to a core — the tabs', the favourites' and the
             // history's — which is why this menu could be armed the day it
@@ -19087,6 +19191,7 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
+            ContactsMenu::Tab => explore_fixtures::tab_menu(&self.explore),
             // Drawn by its own card below: logos and figures, not glyphs.
             ContactsMenu::SiteNetwork => contacts_fixtures::MenuModel {
                 items: Vec::new(),

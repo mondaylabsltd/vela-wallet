@@ -366,6 +366,24 @@ pub struct NetworkPick {
 /// site forgotten rather than the whole list cleared — could not be reached at
 /// all. Three items in the order somebody wants them, with the destructive one
 /// behind the divider, exactly as the tile menu arranges its own.
+/// Spec 099: a tab's right-click — close it, then Chrome's batch closes.
+pub fn tab_menu(strings: &ExploreStrings) -> MenuModel {
+    let item = |icon, label: &SharedString| MenuItemModel {
+        icon,
+        label: label.clone(),
+        destructive: false,
+    };
+    MenuModel {
+        items: vec![
+            item(Icon::X, &strings.close_tab),
+            item(Icon::X, &strings.close_other_tabs),
+            item(Icon::ChevronRight, &strings.close_tabs_to_right),
+            item(Icon::Trash2, &strings.close_all_tabs),
+        ],
+        divider_after: Some(0),
+    }
+}
+
 pub fn recent_menu(strings: &ExploreStrings) -> MenuModel {
     MenuModel {
         items: vec![

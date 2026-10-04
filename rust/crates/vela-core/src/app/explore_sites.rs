@@ -106,6 +106,19 @@ pub struct ExploreTab {
     pub host: String,
 }
 
+/// What a batch close takes (spec 099): [`tabs_closed_by`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TabCloseScope {
+    /// Every tab but this one ("close other tabs").
+    Others { keep: String },
+    /// Every tab to the right of this one in the strip.
+    Right { of: String },
+    /// Every tab.
+    All,
+}
+
 /// The two system groups the start page always has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -253,6 +266,13 @@ pub enum Event {
     /// selected — see [`close_tab`].
     TabClosed {
         id: String,
+    },
+    /// Close several at once (spec 099, the browser's "close other tabs" /
+    /// "close tabs to the right" / "close all tabs") — the ids
+    /// [`tabs_closed_by`] names for a scope. One write; the selection follows
+    /// [`close_tabs`].
+    TabsClosed {
+        ids: Vec<String>,
     },
     #[serde(skip)]
     ShellCompleted {
@@ -545,6 +565,8 @@ impl App for ExploreSites {
 
             Event::TabClosed { id } => close_tab(model, &id),
 
+            Event::TabsClosed { ids } => close_tabs(model, &ids),
+
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
                     return Command::done();
@@ -663,6 +685,74 @@ fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
 fn used(model: &mut Model, id: String) {
     model.recent.retain(|recent| recent != &id);
     model.recent.insert(0, id);
+}
+
+/// Close several tabs in one write (spec 099).
+///
+/// A selection that survives stays. One that is closed moves to the nearest
+/// surviving tab to its RIGHT in the old strip, else to its left — the single
+/// close's rule, so "close tabs to the right" of a tab left of the selected
+/// one lands on that tab, and "close other tabs" lands on the one kept.
+/// Nothing left: nothing selected, the start page.
+fn close_tabs(model: &mut Model, ids: &[String]) -> Command<ExploreEffect, Event> {
+    if !ids.iter().any(|id| model.doc.tabs.iter().any(|tab| &tab.id == id)) {
+        return Command::done();
+    }
+    let selected = selected_or_first(&model.doc);
+    let before: Vec<String> = model.doc.tabs.iter().map(|tab| tab.id.clone()).collect();
+    model.doc.tabs.retain(|tab| !ids.contains(&tab.id));
+    model.recent.retain(|recent| !ids.contains(recent));
+    let survives = |id: &String| !ids.contains(id) && before.contains(id);
+    let selection_closed = selected.as_ref().is_some_and(|id| ids.contains(id));
+    if selection_closed {
+        let at = selected
+            .as_ref()
+            .and_then(|id| before.iter().position(|tab| tab == id))
+            .unwrap_or(0);
+        let next = before[at..]
+            .iter()
+            .find(|id| survives(id))
+            .or_else(|| before[..at].iter().rev().find(|id| survives(id)))
+            .cloned();
+        model.doc.selected_tab = next.clone();
+        if let Some(next) = next {
+            used(model, next);
+        }
+    }
+    persist(model)
+}
+
+/// Which tabs a batch close takes (spec 099) — Chrome's three, decided once
+/// for every client: every tab but `keep`; every tab right of `of` in the
+/// strip; every tab. An id the strip does not carry closes nothing.
+#[must_use]
+pub fn tabs_closed_by(tabs: &[ExploreTab], scope: &TabCloseScope) -> Vec<String> {
+    match scope {
+        TabCloseScope::Others { keep } => {
+            if !tabs.iter().any(|tab| &tab.id == keep) {
+                return Vec::new();
+            }
+            tabs.iter()
+                .filter(|tab| &tab.id != keep)
+                .map(|tab| tab.id.clone())
+                .collect()
+        }
+        TabCloseScope::Right { of } => tabs
+            .iter()
+            .position(|tab| &tab.id == of)
+            .map(|at| tabs[at + 1..].iter().map(|tab| tab.id.clone()).collect())
+            .unwrap_or_default(),
+        TabCloseScope::All => tabs.iter().map(|tab| tab.id.clone()).collect(),
+    }
+}
+
+/// [`tabs_closed_by`] over JSON (UniFFI): the strip's tabs and a
+/// [`TabCloseScope`] in, the ids out. `None` for input that does not read.
+#[must_use]
+pub fn tabs_closed_by_json(tabs_json: &str, scope_json: &str) -> Option<String> {
+    let tabs: Vec<ExploreTab> = serde_json::from_str(tabs_json).ok()?;
+    let scope: TabCloseScope = serde_json::from_str(scope_json).ok()?;
+    serde_json::to_string(&tabs_closed_by(&tabs, &scope)).ok()
 }
 
 /// The selected tab, or the first — an id nothing carries selects nothing,
