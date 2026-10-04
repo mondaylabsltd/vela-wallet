@@ -814,16 +814,28 @@ object FlowFixtures {
                 value = WalletFixtures.NAME,
                 lead = FactLead.Identicon(WalletFixtures.ADDRESS_FULL),
             ),
-            FactRowModel(
-                label = s.t(I18nKeys.Flows.TO_LABEL),
-                value = if (mode == SendFormMode.Split) {
-                    s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to "3"))
-                } else {
-                    ALICE_DISPLAY
-                },
-                lead = if (mode == SendFormMode.Split) null else FactLead.Identicon(ALICE_FULL),
-                mono = mode != SendFormMode.Split,
-            ),
+            when (mode) {
+                SendFormMode.Split -> FactRowModel(
+                    label = s.t(I18nKeys.Flows.TO_LABEL),
+                    value = s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to "3")),
+                )
+                // Issue #423: a payee the public registry names — the name
+                // beside the avatar, as From, over whose word it is and the
+                // short address, in the body face.
+                SendFormMode.Single -> FactRowModel(
+                    label = s.t(I18nKeys.Flows.TO_LABEL),
+                    value = "Alice",
+                    lead = FactLead.Identicon(ALICE_FULL),
+                    detail = "${s.t(I18nKeys.Flows.VELA_USER)} · $ALICE_DISPLAY",
+                )
+                // Nobody named them: the short address alone, in mono.
+                SendFormMode.Sweep -> FactRowModel(
+                    label = s.t(I18nKeys.Flows.TO_LABEL),
+                    value = ALICE_DISPLAY,
+                    lead = FactLead.Identicon(ALICE_FULL),
+                    mono = true,
+                )
+            },
             FactRowModel(
                 label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
                 value = NETWORKS[0].name,

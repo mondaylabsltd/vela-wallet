@@ -2378,6 +2378,86 @@ fn toggling_twice_gives_back_the_digits_that_were_typed() {
     assert_ne!(back, "1", "the remembered figure must not come back here");
 }
 
+/// Issue #421, through the machine: the figure a field holds is the one its
+/// keys spell after the core's amount rule (`l10n::amount_text`, which every
+/// shell runs in the field's change handler and writes back), so a "0" then an
+/// "8" is "8" on screen, 8 under the fiat line (`token_amount`), and 8 at
+/// Continue. "08" used to be stored, echoed as "08 ETH" and read as 8.
+#[test]
+fn a_zero_then_an_eight_is_eight_on_screen_under_it_and_at_continue() {
+    use vela_core::l10n::amount_text::{clean, Entry};
+    use vela_core::l10n::NumberPreset;
+
+    /// One key at the end of what the field shows, cleaned as the shells do.
+    fn key(sut: &mut Sut, preset: NumberPreset, key: &str) {
+        let shown = sut.view().amount;
+        let next = format!("{shown}{key}");
+        let clean = clean(&next, preset, Entry::Unknown, Some(&shown))
+            .unwrap_or_else(|| unreachable!("{next:?} is one key"));
+        sut.dispatch(Event::SetAmount { amount: clean });
+    }
+
+    for preset in [NumberPreset::CommaDot, NumberPreset::DotComma] {
+        let mut sut = boot(vec![eth("20")]);
+        select_eth(&mut sut);
+        set_recipient(&mut sut, RECIPIENT);
+        drain_form_quote(&mut sut);
+
+        key(&mut sut, preset, "0");
+        key(&mut sut, preset, "8");
+        drain_form_quote(&mut sut);
+        let view = sut.view();
+        assert_eq!(view.amount, "8", "the field holds 8, not 08");
+        assert_eq!(view.token_amount, "8", "the fiat line and the call read 8");
+        assert!(view.can_continue, "8 ETH of 20 is a send");
+
+        // A decimal mark after the zero is how 0.8 is written — and it is 0.8
+        // everywhere, under either mark the person types.
+        sut.dispatch(Event::SetAmount {
+            amount: String::new(),
+        });
+        let mark = if preset == NumberPreset::DotComma {
+            ","
+        } else {
+            "."
+        };
+        key(&mut sut, preset, "0");
+        key(&mut sut, preset, mark);
+        key(&mut sut, preset, "8");
+        drain_form_quote(&mut sut);
+        let view = sut.view();
+        assert_eq!(view.amount, "0.8");
+        assert_eq!(view.token_amount, "0.8");
+        assert!(view.can_continue);
+
+        // A mark on an empty field reads with its zero, and the next key is a
+        // decimal digit.
+        sut.dispatch(Event::SetAmount {
+            amount: String::new(),
+        });
+        key(&mut sut, preset, mark);
+        assert_eq!(sut.view().amount, "0.");
+        key(&mut sut, preset, "5");
+        drain_form_quote(&mut sut);
+        assert_eq!(sut.view().token_amount, "0.5");
+    }
+
+    // Typed in money, the zero goes the same way: $8 is 0.004 ETH at $2000,
+    // never what "08" might have been read as.
+    let mut sut = boot(vec![eth("20")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::ToggleFiatInput);
+    assert_eq!(sut.view().amount_fiat_code.as_deref(), Some("USD"));
+    key(&mut sut, NumberPreset::CommaDot, "0");
+    key(&mut sut, NumberPreset::CommaDot, "8");
+    drain_form_quote(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.amount, "8");
+    assert_eq!(view.token_amount, "0.004");
+    assert!(view.can_continue);
+}
+
 /// An unpriceable display currency closes the fiat-denominated input — and
 /// leaves everything else on the screen working.
 ///

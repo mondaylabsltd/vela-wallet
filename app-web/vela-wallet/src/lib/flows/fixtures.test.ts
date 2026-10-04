@@ -341,6 +341,29 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(sd3c.base.model.subline).toContain('$200.90');
 	});
 
+	// Issue 423: the gallery's single send pays a payee the registry names —
+	// the NAME first, beside the face; whose word it is and the short address
+	// under it; nothing in mono. The sweep keeps the unnamed case.
+	it('sd3 names its payee over the kind and the short address; sd3c shows an unnamed one', () => {
+		const sd3 = buildFlowState('sd3', zh, IDENTICON_STUB);
+		const sd3c = buildFlowState('sd3c', zh, IDENTICON_STUB);
+		if (sd3.base.kind !== 'send-confirm' || sd3c.base.kind !== 'send-confirm') {
+			throw new Error('expected both confirmations');
+		}
+		const to = sd3.base.model.facts[1];
+		expect(to.label).toBe(zh['send.toLabel']);
+		expect(to.value).toBe('Alice');
+		expect(to.value).not.toBe(zh['send.velaUser']);
+		expect(to.detail).toBe(`${zh['send.velaUser']} · 0x9F3c…21aE`);
+		expect(to.lead?.kind).toBe('identicon');
+		expect(to.mono).toBeFalsy();
+
+		const unnamed = sd3c.base.model.facts[1];
+		expect(unnamed.value).toBe('0x9F3c…21aE');
+		expect(unnamed.mono).toBe(true);
+		expect(unnamed.detail).toBeUndefined();
+	});
+
 	it('the receipt keeps one accent CTA and only for the final state', () => {
 		const stages = (['sd4a', 'sd4b', 'sd4c'] as const).map((id) => {
 			const m = buildFlowState(id, zh, IDENTICON_STUB);

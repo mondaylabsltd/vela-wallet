@@ -116,22 +116,31 @@ struct FactRowView: View {
                 .foregroundStyle(theme.fgSubtle)
                 .lineLimit(1)
             Spacer(minLength: Tokens.Space.s8)
-            lead
-            if !fact.lines.isEmpty {
-                lines
-            } else if let detail = fact.detail {
+            if fact.lines.isEmpty, let detail = fact.detail {
                 // A name over whose word it is and the address it stands for
-                // (spec 097 F): the name may be cut, the line under it never is.
+                // (spec 097 F): the name may be cut, the line under it never
+                // is. Issue #423: the face sits beside the NAME, on one line,
+                // as the From row's does, and the line under it is in the body
+                // face — beside the two-line stack the face floated between
+                // the lines, far from a short name, over a line set in mono.
                 VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
-                    value
+                    HStack(spacing: Tokens.Space.s8) {
+                        lead
+                        value
+                    }
                     Text(verbatim: detail)
-                        .monoRole(Typography.monoAddress.scaled(textScale))
+                        .typeRole(Typography.flowCaption.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                         .lineLimit(1)
                         .fixedSize()
                 }
             } else {
-                value
+                lead
+                if !fact.lines.isEmpty {
+                    lines
+                } else {
+                    value
+                }
             }
             if let copy = fact.copy {
                 Button {

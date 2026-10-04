@@ -555,9 +555,9 @@ struct TxRecordWriteTests {
 /// the wallet's own — nothing at all. A screen with no rows cannot say whether
 /// the shell answered badly or the core refused the answer, so this drives the
 /// real machine with a scripted holding and asks it.
-/// `timeLimit`: the fee quotes here run with no settle deadline (a scripted
-/// relay answers by design), so a quote that never settles is a hang, and this
-/// is what reports it (`Waits.swift`).
+/// `timeLimit`: the fee quotes here run with no settle deadline and the core's
+/// timers stopped (a scripted relay answers by design), so a quote that never
+/// settles is a hang, and this is what reports it (`Waits.swift`).
 @MainActor
 @Suite(.timeLimit(.minutes(10)))
 struct SendMachineTests {
@@ -615,7 +615,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let held = try balance()
         let nets = try networks()
 
@@ -659,7 +659,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let held = try balance()
         let nets = try networks()
         let pool = RpcPool(store: store, accounts: accounts)
@@ -709,7 +709,7 @@ struct SendMachineTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
         let signer = CountingSigner()
-        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let pool = RpcPool(store: store, accounts: accounts)
 
         let executor = SendExecutor(
@@ -763,7 +763,7 @@ struct SendMachineTests {
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
-            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil),
+            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
             metadata: TokenMetadata(store: store, pool: pool),
             accountStore: accounts,
@@ -837,7 +837,7 @@ struct SendMachineTests {
         ])
 
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
         let settled = await fees.quote(
             chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
             calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],

@@ -96,10 +96,12 @@ data class FactRowModel(
     /** Spec 093: further value lines under [value] (a dApp's balance changes, one per coin). */
     val lines: List<String> = emptyList(),
     /**
-     * Spec 097 F: a quiet mono line under the value — the short address under
-     * a payee's NAME. On the page that signs a name is a claim and the address
-     * is what is paid, so both are drawn, on two lines: a long name may be
-     * cut, the address under it is not.
+     * Spec 097 F: a quiet line under the value — whose word a payee's NAME is
+     * and the short address it stands for. On the page that signs a name is a
+     * claim and the address is what is paid, so both are drawn, on two lines:
+     * a long name may be cut, the address under it is not. Issue #423: the
+     * lead sits beside the name (the From row's line), and this line is in
+     * the body face, not mono.
      */
     val detail: String? = null,
 )

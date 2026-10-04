@@ -100,7 +100,7 @@ class SigningController(
     private var pendingHandoff: SignTrackerHandoff? = null
 
     /**
-     * Guards [pendingHandoff]: the view collector sets it and the executor's
+     * Guards [pendingHandoff]: the commit handler sets it and the executor's
      * persist callback races it, so without the lock the tracker could be
      * handed the op twice, or never (a write the other thread doesn't see).
      */
@@ -216,10 +216,49 @@ class SigningController(
         dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
     }
 
-    /** Spec 082 RJ1: a write-ahead op proven never sent — the tracker forgets it, once per value. */
+    /**
+     * Every committed sign view, in the core's order (`CoreHost.onCommit`):
+     * the tracker's withdrawal and hand-off ride the view, and each is fed
+     * the moment it appears — as iOS and the desktop read them.
+     *
+     * Not from [sign]'s collector: a `StateFlow` hands a collector scheduled
+     * late only the newest view, and the write-ahead's hand-off is replaced by
+     * the relay's within one POST: the tracker never held the op "may have
+     * been sent" before it (a flake of `DappSignMachineTest`'s transfer).
+     *
+     * The withdrawal first: when the relay answered another hash, the core
+     * takes the write-ahead op back and hands the relay's over in the same
+     * view — and here, before the effect that writes the relay's row starts.
+     */
+    private fun signCommitted(view: SignView) {
+        view.tracker_withdraw?.let(::feedWithdraw)
+        view.tracker_handoff?.let { handoff ->
+            val fresh = synchronized(handoffLock) {
+                (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
+            }
+            if (fresh) tryHandoff()
+        }
+    }
+
+    /**
+     * Spec 082 RJ1: a write-ahead op proven never sent — the tracker forgets
+     * it, once per value. Its rows are being deleted, so they are no longer
+     * on disk: a hand-off naming the same id again — the relay's row, made in
+     * the same millisecond (`dapp-<ms>-tx`) — waits for its own write, as on
+     * iOS. Counted as written, the relay's op reached the tracker before its
+     * row did (043's ordering).
+     */
     private fun feedWithdraw(withdraw: SignTrackerWithdraw) {
-        val fresh = synchronized(handoffLock) { withdrawn.add(withdraw) }
+        val fresh = synchronized(handoffLock) {
+            withdrawn.add(withdraw).also { fresh ->
+                if (fresh && pendingHandoff?.user_op_hash.equals(withdraw.user_op_hash, ignoreCase = true)) {
+                    // Never handed over, and now never will be.
+                    pendingHandoff = null
+                }
+            }
+        }
         if (!fresh) return
+        persistedRecords.removeAll(withdraw.record_ids.toSet())
         VelaLog.event("sign.tracker", "withdrawn: never sent", "op" to withdraw.user_op_hash.take(12))
         ports.trackWithdrawn(withdraw.user_op_hash, withdraw.record_ids)
     }
@@ -354,6 +393,7 @@ class SigningController(
         perform = JsonShell.perform(SignOperation.serializer(), SignShellResult.serializer(), signExecutor::perform),
         escapedFailure = JsonShell.escapedFailure(SignOperation.serializer(), SignShellResult.serializer(), fallback = SignShellResult.Responded, answer = signExecutor::neutralAnswer),
         onFault = { error -> VelaLog.failure("sign.fault", "core fault", error) },
+        onCommit = ::signCommitted,
     )
     private val clearHost: CoreHost<ClearSigningView> = CoreHost(
         bridge = ClearSigningCore().asBridge(), scope = scope, initial = ClearSigningView(), serializer = ClearSigningView.serializer(),
@@ -569,13 +609,6 @@ class SigningController(
                 // A free upgrade is decided only while the person can still
                 // choose — never under a slide that has already gone.
                 speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
-                view.tracker_handoff?.let { handoff ->
-                    val fresh = synchronized(handoffLock) {
-                        (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
-                    }
-                    if (fresh) tryHandoff()
-                }
-                view.tracker_withdraw?.let(::feedWithdraw)
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
             }
         }
