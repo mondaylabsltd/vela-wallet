@@ -69,7 +69,61 @@ enum class SignErrorKind {
     @SerialName("submit_failed") SubmitFailed,
 
     @SerialName("stale_fee_quote") StaleFeeQuote,
+
+    /** Spec 099 R8: no passkey can be used here (`FailureKind.NotSupported`). Nothing was signed. */
+    @SerialName("signer_unavailable") SignerUnavailable,
+
+    /** A passkey sign-in would never offer (`FailureKind.NotDiscoverable`). Nothing was signed. */
+    @SerialName("signer_not_discoverable") SignerNotDiscoverable,
+
+    /** The passkey prompt failed for another reason (`FailureKind.Other`); it may work the next time. */
+    @SerialName("signer_failed") SignerFailed,
 }
+
+/**
+ * Which part of the signing gate is shut (spec 099 R7) — the core's
+ * `sign_confirm::ConfirmBlock`, first that applies. The sheet draws the line
+ * the core names for it (`ConfirmState.key`), never one of its own.
+ */
+@Serializable
+enum class ConfirmBlock {
+    @SerialName("no_request") NoRequest,
+
+    @SerialName("refused") Refused,
+
+    @SerialName("in_flight") InFlight,
+
+    @SerialName("funding") Funding,
+
+    @SerialName("account_switching") AccountSwitching,
+
+    @SerialName("answered") Answered,
+
+    @SerialName("reading") Reading,
+
+    @SerialName("approval_choice") ApprovalChoice,
+
+    @SerialName("batch_unsettled") BatchUnsettled,
+
+    @SerialName("fee_measuring") FeeMeasuring,
+
+    @SerialName("fee_failed") FeeFailed,
+
+    @SerialName("fee_short") FeeShort,
+}
+
+/**
+ * The one confirm gate (spec 099 R7, `sign_confirm::confirm_state` through
+ * `signConfirmState`): whether the slide arms, which part is shut, and the
+ * line under a shut slide (`componentsUi.signing.confirmBlock.*`) — `null`
+ * where the sheet already says it its own way.
+ */
+@Serializable
+data class ConfirmState(
+    val enabled: Boolean = false,
+    val block: ConfirmBlock? = null,
+    val key: String? = null,
+)
 
 @Serializable
 enum class SignFundingPresentation {
@@ -313,9 +367,19 @@ sealed class SignSubmitOutcome {
      * "refused" sentence whatever [message] says, and the sheet never says
      * "try again".
      */
+    /**
+     * [signer] (spec 099 R8): the passkey ceremony is what failed, as the
+     * app's passkey classifier read the platform's error — the one create and
+     * login use. The core answers `signer_unavailable` / `signer_not_discoverable`
+     * / `signer_failed` from it; a cancelled ceremony is [PasskeyCancelled].
+     */
     @Serializable
     @SerialName("failed")
-    data class Failed(val message: String, val refused: Boolean = false) : SignSubmitOutcome()
+    data class Failed(
+        val message: String,
+        val refused: Boolean = false,
+        val signer: app.getvela.wallet.feature.onboarding.core.FailureKind? = null,
+    ) : SignSubmitOutcome()
 
     /** Spec 082 RB2: the asker is gone — nothing was sent, nobody is answered, nothing is recorded. */
     @Serializable
@@ -438,6 +502,8 @@ data class SignView(
     val error: SignErrorNotice? = null,
     val funding: SignFundingView? = null,
     val confirm_gate_open: Boolean = false,
+    /** Spec 099 R7: why [confirm_gate_open] is false — the first of this machine's own gates that is shut. */
+    val confirm_block: ConfirmBlock? = null,
     val reconcile_pending: Boolean = false,
     val swipe_action: SignSwipeAction = SignSwipeAction.None,
     val tracker_handoff: SignTrackerHandoff? = null,

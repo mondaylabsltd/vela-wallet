@@ -469,6 +469,19 @@ class AppContainer(private val app: Application) {
         }
     }
 
+    /** Set once [browser] exists: a memory warning has no engines to let go of before that. */
+    @Volatile
+    private var browserBuilt = false
+
+    /**
+     * The system asked for memory back (spec 099 FR-004): the browser lets go
+     * of the engines the core's plan under pressure says to. Never builds the
+     * browser to do it.
+     */
+    fun memoryPressure() {
+        if (browserBuilt) browser.memoryPressure()
+    }
+
     /** The in-app browser (spec 044, on the core's `dapp_browser` since 070): the tab engines and what they carry. */
     val browser: BrowserController by lazy {
         BrowserController(
@@ -481,6 +494,7 @@ class AppContainer(private val app: Application) {
             debuggable = BuildConfig.DEBUG,
             debugMode = preferences.view.value.debugMode.on,
         ).also { controller ->
+            browserBuilt = true
             // The core forwards one signature at a time: the four signing
             // machines are born for it, answer it, and die with it.
             controller.onForwardToSigning = { operation -> openSigning(controller, operation) }
@@ -872,6 +886,31 @@ class VelaWalletApplication : Application() {
         ParallelSpaceBinding.install(this)
         container = AppContainer(this)
         container.start()
+    }
+
+    /**
+     * Spec 099 FR-004: memory is short — the in-app browser keeps only the
+     * tab on screen and the busy ones (the core's plan under pressure).
+     * `UI_HIDDEN` is not shortage, only the app leaving the screen: a person
+     * who steps out for a moment comes back to every tab as it was.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        @Suppress("DEPRECATION")
+        val short = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW &&
+            level != android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+        if (short && ::container.isInitialized) {
+            VelaLog.event("app.memory", "trim", "level" to level)
+            container.memoryPressure()
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        if (::container.isInitialized) {
+            VelaLog.event("app.memory", "low memory")
+            container.memoryPressure()
+        }
     }
 }
 

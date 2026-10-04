@@ -257,6 +257,12 @@ data class SigningScreenModel(
     val confirmAction: String?,
     val confirmEnabled: Boolean,
     val panelTitle: String,
+    /**
+     * Spec 099 R7: why the slide is shut, one line under it — the core's
+     * `ConfirmState.key`, translated. `null` while it is armed, or where the
+     * sheet already says it its own way.
+     */
+    val confirmBlockLine: String? = null,
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
     /**

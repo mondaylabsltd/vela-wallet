@@ -47,6 +47,8 @@ import app.getvela.wallet.feature.explore.components.ExploreMetrics
 import app.getvela.wallet.feature.explore.components.ExploreSearchField
 import app.getvela.wallet.feature.explore.components.ExploreTabsScreen
 import app.getvela.wallet.feature.explore.components.BrowserNotice
+import app.getvela.wallet.feature.explore.components.BrowserStatusLine
+import app.getvela.wallet.feature.explore.components.BrowserStatusSheetContent
 import app.getvela.wallet.feature.explore.components.ChainNotice
 import app.getvela.wallet.feature.explore.components.GroupManageSheetContent
 import app.getvela.wallet.feature.explore.components.PickerOption
@@ -87,6 +89,10 @@ class ExploreCallbacks(
     val onConsent: (approved: Boolean) -> Unit = {},
     /** Spec 079: the chain notice's retry — one read of the page's chain. */
     val onChainRetry: () -> Unit = {},
+    /** Spec 099 FR-014: the status line put away (its ✕ or its Details), by what it said. */
+    val onStatusSeen: (String) -> Unit = {},
+    /** Spec 099 FR-014: the shown tab's status panel opened (`true`) or closed — the core carries its record meanwhile. */
+    val onInspector: (Boolean) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,6 +135,8 @@ fun ExploreScreen(
      * panel sat under the signing sheet after an account switch).
      */
     signingOpen: Boolean = false,
+    /** Spec 099 FR-014: the shown tab's status panel, from the core's record while it is open. */
+    inspector: BrowserInspectorModel? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -149,11 +157,14 @@ fun ExploreScreen(
     var scanning by rememberSaveable { mutableStateOf(false) }
     /** Which pick-one sheet is up over the connection panel: `"network"` or `"account"`. */
     var picker by remember { mutableStateOf<String?>(null) }
+    /** Spec 099 FR-014: the shown tab's status panel is up. */
+    var statusOpen by remember { mutableStateOf(false) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(signingOpen) {
         if (signingOpen) {
             sheet = null
             picker = null
+            statusOpen = false
         }
     }
     // Spec 070: system Back walks the page's own history first, then leaves
@@ -219,6 +230,18 @@ fun ExploreScreen(
                         busy = model.browser.chainAsking,
                         busyLabel = strings.t("explore.loadRetrying"),
                         onAction = { live?.onChainRetry?.invoke() },
+                    )
+                }
+                // Spec 099 FR-014: what the tab's layers last said, and a way into its record.
+                model.browser.status?.takeIf { live != null }?.let { status ->
+                    BrowserStatusLine(
+                        status = status,
+                        dismissLabel = strings.t("explore.close"),
+                        onDetails = {
+                            live?.onStatusSeen?.invoke(status.seen)
+                            statusOpen = true
+                        },
+                        onDismiss = { live?.onStatusSeen?.invoke(status.seen) },
                     )
                 }
                 Box(Modifier.weight(1f)) {
@@ -386,6 +409,35 @@ fun ExploreScreen(
                             onNetwork = { picker = "network" }.takeIf { networkOptions.isNotEmpty() },
                         )
                     }
+                }
+            }
+        }
+    }
+
+    if (statusOpen && live != null && view == ExploreView.Browsing) {
+        // The core carries the tab's whole record only while this is up.
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            live.onInspector(true)
+            onDispose { live.onInspector(false) }
+        }
+        val context = androidx.compose.ui.platform.LocalContext.current
+        VelaModalSheet(
+            onDismissRequest = { statusOpen = false },
+            containerColor = colors.bgBase,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                inspector?.let { record ->
+                    BrowserStatusSheetContent(
+                        model = record,
+                        closeLabel = strings.t("explore.close"),
+                        onClose = { statusOpen = false },
+                        onCopy = { report ->
+                            (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                                ?.setPrimaryClip(android.content.ClipData.newPlainText("tab status", report))
+                            android.widget.Toast.makeText(context, record.copiedLabel, android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                    )
                 }
             }
         }

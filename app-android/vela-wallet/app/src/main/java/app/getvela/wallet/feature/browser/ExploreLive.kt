@@ -157,6 +157,10 @@ object ExploreLive {
         /** Spec 079: the pool's verdicts, for the page's chain notice. */
         pool: app.getvela.wallet.feature.wallet.core.RpcPoolView = app.getvela.wallet.feature.wallet.core.RpcPoolView(),
         chainAsking: Boolean = false,
+        /** Spec 099 FR-004: the shown tab came back from a suspension and loaded again. */
+        reloaded: Boolean = false,
+        /** Spec 099 FR-014: the status line the person last put away for the shown tab. */
+        statusSeen: String? = null,
     ): ExploreScreenModel {
         val connected = tab?.connected_address != null
         val favorites = view.favorites.map { tileOf(it) }
@@ -225,6 +229,7 @@ object ExploreLive {
                     .takeIf { engine != null && tab != null && chainUnreachable(identity.chainId, pool) },
                 chainAsking = chainAsking,
                 crashed = tab?.crashed ?: false,
+                status = status(tab, reloaded, statusSeen, strings),
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,
             tabs = tabs,
@@ -258,6 +263,71 @@ object ExploreLive {
                     },
                 )
             } ?: fallback.siteMenuSheet,
+        )
+    }
+
+    /**
+     * Spec 099 FR-014: what the shown tab's status line says, if anything, in
+     * this order — it was reloaded to save memory; its page loaded and the
+     * wallet was not offered to it (the core's provider state, in its words);
+     * the latest request that ended in trouble (the core's note: its line and
+     * the method). Nothing when the person put that very line away.
+     */
+    fun status(tab: DbrTabView?, reloaded: Boolean, seen: String?, strings: VelaStrings): app.getvela.wallet.feature.explore.BrowserStatusModel? {
+        val (key, text, warning) = when {
+            reloaded -> Triple("reloaded", strings.t(app.getvela.wallet.core.i18n.I18nKeys.BrowserStatus.RELOADED), false)
+            tab == null -> return null
+            tab.page == app.getvela.wallet.feature.browser.core.DbrPageState.Ready &&
+                (tab.provider == app.getvela.wallet.feature.browser.core.DbrProviderState.InsecureOrigin ||
+                    tab.provider == app.getvela.wallet.feature.browser.core.DbrProviderState.NoHello) ->
+                Triple("provider:${tab.provider.name}", strings.t(tab.provider.key), true)
+            else -> {
+                val note = tab.last_failure ?: return null
+                Triple("${tab.failed_recent}:${note.method}:${note.reason.name}", "${strings.t(note.key)} · ${note.method}", true)
+            }
+        }
+        if (seen == key) return null
+        return app.getvela.wallet.feature.explore.BrowserStatusModel(
+            seen = key,
+            text = text,
+            warning = warning,
+            details = strings.t(app.getvela.wallet.core.i18n.I18nKeys.BrowserStatus.TITLE),
+        )
+    }
+
+    /**
+     * Spec 099 FR-014: the tab's status panel from the core's record of it
+     * (`DbrView.inspector`) — its origin, page and wallet in the core's words,
+     * and every request newest first: answered with its time, failed with the
+     * reason's line, open with an ellipsis. The copyable report is the core's.
+     */
+    fun inspector(view: app.getvela.wallet.feature.browser.core.DbrInspectorView?, strings: VelaStrings): app.getvela.wallet.feature.explore.BrowserInspectorModel? {
+        view ?: return null
+        val keys = app.getvela.wallet.core.i18n.I18nKeys.BrowserStatus
+        val rows = view.rows.asReversed().map { row ->
+            app.getvela.wallet.feature.explore.BrowserInspectorModel.Row(
+                method = row.method,
+                outcome = when (row.outcome) {
+                    app.getvela.wallet.feature.browser.core.DbrOutcome.Open -> "…"
+                    app.getvela.wallet.feature.browser.core.DbrOutcome.Answered ->
+                        row.ended_ms?.takeIf { row.started_ms > 0 && it >= row.started_ms }
+                            ?.let { ended -> "✓ ${Math.round(ended - row.started_ms)} ms" } ?: "✓"
+                    app.getvela.wallet.feature.browser.core.DbrOutcome.Failed ->
+                        row.reason?.let { strings.t(it.key) } ?: row.code?.toString().orEmpty()
+                },
+            )
+        }
+        return app.getvela.wallet.feature.explore.BrowserInspectorModel(
+            title = strings.t(keys.TITLE),
+            origin = view.origin.orEmpty(),
+            page = strings.t(view.page.key),
+            provider = strings.t(view.provider.key),
+            requestsTitle = strings.t(keys.REQUESTS),
+            rows = rows,
+            empty = strings.t(keys.NO_REQUESTS).takeIf { rows.isEmpty() },
+            copyLabel = strings.t(keys.COPY),
+            copiedLabel = strings.t(keys.COPIED),
+            report = view.report,
         )
     }
 

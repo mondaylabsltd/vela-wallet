@@ -80,13 +80,14 @@ class SendLiveTest {
     private val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val recipient = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
 
-    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD")) = SendLive.Context(
+    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD"), relaySentAtMs: Double? = null) = SendLive.Context(
         strings = strings,
         chainNames = mapOf(100 to "Gnosis", 56 to "BNB Chain"),
         explorers = mapOf(100 to "https://gnosisscan.io"),
         money = WalletLive.Money.of(currency),
         fromName = "Me",
         fromAddress = me,
+        relaySentAtMs = relaySentAtMs,
     )
 
     private val xdai = SendToken(network = "chain-100", chain_id = 100, symbol = "XDAI", balance = "0.71697", decimals = 18, token_address = null, price_usd = 1.0)
@@ -332,7 +333,10 @@ class SendLiveTest {
         )
         val b = SendLive.receipt((FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model, submitted, c)
         assertEquals(ReceiptStage.Submitted, b.stage)
-        assertTrue(b.captions.any { it.contains("Gnosis") && it.contains("5") })
+        // Spec 099 R6: not yet sent by the relay — its words, no chain time; sent, the chain's clock.
+        assertTrue(b.captions.contains(strings.t(I18nKeys.Flows.TX_RELAY_SENDING)))
+        val sent = SendLive.receipt((FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model, submitted, ctx(relaySentAtMs = 1.0))
+        assertTrue(sent.eta!!.typicalLine.contains("Gnosis") && sent.eta!!.typicalLine.contains("5"))
 
         val confirmed = submitted.copy(
             tx_hash = "0x1234567890abcdef1234567890abcdef",
@@ -501,38 +505,49 @@ class SendLiveTest {
 
     /**
      * Issue 199 (web cf2a9e17): the wait counted up from a still clock and
-     * said "almost there" six seconds into fifteen. With the relay's clock the
-     * receipt counts DOWN inside the typical time, says "almost" only past it,
-     * "slow" past twice it — and the ring eases toward full without closing.
+     * said "almost there" six seconds into fifteen. The receipt counts DOWN
+     * inside the typical time, says "almost" only past it, "slow" past twice
+     * it — and the ring eases toward full without closing.
+     *
+     * Spec 099 R6: all of that is the core's `landing_pace`, counted from when
+     * the relay SENT the operation (the tracker's `relay_sent_at_ms`), never
+     * from acceptance — before it, the relay is sending it: its words, no
+     * clock, the ring roams. The REAL core counts here.
      */
     @Test
-    fun `the submitted receipt counts the wait down and fills its ring`() {
+    fun `the submitted receipt counts the wait down from the relay's send, by the core's ladder`() {
         val drawn = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
         val submitted = SendView(
             stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Submitting, user_op_hash = "0xop",
             receipt = SendReceiptView(status = SendReceiptStatus.Submitted, amount = "0.001", usd_value = 0.0, submitted_at_ms = 1_000_000.0, typical_inclusion_s = 15),
         )
-        val live = SendLive.receipt(drawn, submitted, ctx())
+        // Accepted, not yet sent: the relay's line in place of the wait, and nothing counts.
+        val sending = SendLive.receipt(drawn, submitted, ctx())
+        assertNull("no chain clock over the relay's own queue", sending.eta)
+        assertTrue(sending.captions.contains(strings.t(I18nKeys.Flows.TX_RELAY_SENDING)))
+        assertFalse(sending.captions.contains(strings.t(I18nKeys.Flows.TX_WAITING_CONFIRM)))
+        assertFalse(sending.captions.any { it.contains("typically") })
+
+        // Sent: the chain's clock, from the send.
+        val live = SendLive.receipt(drawn, submitted, ctx(relaySentAtMs = 1_000_000.0))
         val eta = live.eta!!
+        assertEquals(1_000_000.0, eta.sentAtMs, 0.0)
+        assertTrue(live.captions.contains(strings.t(I18nKeys.Flows.TX_WAITING_CONFIRM)))
         // The typical line moves into the counted pair, not said twice.
         assertFalse(live.captions.any { it.contains("typically") })
-        assertEquals(6, eta.elapsedS(1_006_900))
-        assertEquals(0, eta.elapsedS(999_000))
-        assertEquals(listOf("Gnosis typically confirms in ~15s", "~9s remaining"), eta.lines(6))
-        assertEquals("20s elapsed — almost there", eta.lines(20)[1])
-        assertEquals(strings.t(I18nKeys.Flows.TX_SLOW_CONFIRM), eta.lines(30)[1])
-        // ~70% at the typical time, never full while waiting.
-        assertEquals(0.69f, eta.progress(15), 0.01f)
-        assertTrue(eta.progress(0) == 0f && eta.progress(10_000) < 0.93f)
-        assertTrue(eta.progress(10) < eta.progress(11))
+        assertEquals(listOf("Gnosis typically confirms in ~15s", "~9s remaining"), eta.lines(eta.pace(1_006_900)))
+        assertEquals("20s elapsed — almost there", eta.lines(eta.pace(1_020_000))[1])
+        assertEquals(strings.t(I18nKeys.Flows.TX_SLOW_CONFIRM), eta.lines(eta.pace(1_030_000))[1])
+        // ~70% at the typical time, never full while waiting — the core's curve.
+        assertEquals(0.69f, eta.pace(1_015_000).progress!!, 0.01f)
+        assertEquals(0f, eta.pace(999_000).progress!!, 0f)
+        assertTrue(eta.pace(11_000_000).progress!! < 0.93f)
+        assertTrue(eta.pace(1_010_000).progress!! < eta.pace(1_011_000).progress!!)
 
-        // Without the relay's clock there is nothing to count: the typical time, said once.
-        val noClock = submitted.copy(receipt = submitted.receipt!!.copy(submitted_at_ms = null))
-        val still = SendLive.receipt(drawn, noClock, ctx())
-        assertNull(still.eta)
-        assertTrue(still.captions.any { it.contains("Gnosis") && it.contains("15") })
-        // A custom network with no typical time: no line, no ring to fill.
-        assertNull(SendLive.receipt(drawn, submitted.copy(receipt = submitted.receipt!!.copy(typical_inclusion_s = null)), ctx()).eta)
+        // A custom network with no typical time: the ordinary wait, no line, no ring to fill.
+        val custom = SendLive.receipt(drawn, submitted.copy(receipt = submitted.receipt!!.copy(typical_inclusion_s = null)), ctx(relaySentAtMs = 1_000_000.0))
+        assertNull(custom.eta)
+        assertTrue(custom.captions.contains(strings.t(I18nKeys.Flows.TX_WAITING_CONFIRM)))
     }
 
     @Test

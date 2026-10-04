@@ -593,6 +593,134 @@ fun ChainNotice(
     }
 }
 
+/**
+ * Spec 099 FR-014: the shown tab's status, one quiet line under the address
+ * bar in the chain notice's manner — what the tab's layers last said (it
+ * reloaded to save memory, the wallet was not offered to the page, a request
+ * that ended in trouble). Details opens the tab's status panel; ✕ puts the
+ * line away until it would say something else.
+ */
+@Composable
+fun BrowserStatusLine(
+    status: app.getvela.wallet.feature.explore.BrowserStatusModel,
+    dismissLabel: String,
+    onDetails: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgBase)
+            .drawBehind {
+                val y = size.height - VelaBorder.hairline.toPx() / 2
+                drawLine(colors.borderBase, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), VelaBorder.hairline.toPx())
+            }
+            .padding(horizontal = VelaSizing.screenPaddingX, vertical = VelaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Icon(
+            if (status.warning) VelaIcons.TriangleAlert else VelaIcons.RefreshCw, null,
+            tint = if (status.warning) colors.warningBase else colors.fgSubtle,
+            modifier = Modifier.size(VelaIconSize.sm),
+        )
+        Text(text = status.text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, modifier = Modifier.weight(1f))
+        Text(
+            text = status.details,
+            color = colors.accentBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier
+                .clickable(onClick = onDetails)
+                .padding(vertical = VelaSpacing.xs),
+        )
+        Icon(
+            VelaIcons.Close, dismissLabel, tint = colors.fgSubtle,
+            modifier = Modifier
+                .size(VelaIconSize.sm)
+                .clickable(onClick = onDismiss),
+        )
+    }
+}
+
+/**
+ * Spec 099 FR-014: the tab's status panel — the page, the wallet on it, and
+ * every request the tab made with how it ended, newest first; Copy hands over
+ * the core's record, the same text a bug report carries.
+ */
+@Composable
+fun BrowserStatusSheetContent(
+    model: app.getvela.wallet.feature.explore.BrowserInspectorModel,
+    closeLabel: String,
+    onClose: () -> Unit,
+    onCopy: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier.padding(horizontal = VelaSizing.screenPaddingX),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = VelaSpacing.xl),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = model.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.xl2,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(VelaIcons.Close, closeLabel, tint = colors.fgMuted, modifier = Modifier.clickable(onClick = onClose))
+        }
+        if (model.origin.isNotBlank()) {
+            Text(text = model.origin, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(text = model.page, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        Text(text = model.provider, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        Text(
+            text = model.requestsTitle,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(top = VelaSpacing.md),
+        )
+        model.empty?.let { Text(text = it, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm) }
+        model.rows.forEach { row ->
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    text = row.method,
+                    color = colors.fgBase,
+                    fontFamily = app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(text = row.outcome, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+        }
+        Text(
+            text = model.copyLabel,
+            color = colors.accentBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier
+                .clickable { onCopy(model.report) }
+                .padding(vertical = VelaSpacing.lg),
+        )
+        Spacer(Modifier.height(VelaSpacing.xl))
+    }
+}
+
 /** The house busy mark: a small ring beside the words, in their colour. */
 @Composable
 private fun BusySpinner(color: androidx.compose.ui.graphics.Color, size: androidx.compose.ui.unit.Dp) {

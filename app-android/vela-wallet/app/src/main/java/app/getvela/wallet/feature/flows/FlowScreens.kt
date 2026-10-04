@@ -2002,14 +2002,15 @@ fun SendReceiptBody(
             delay(1000)
         }
     }
-    val elapsed = eta?.elapsedS(now) ?: 0
+    // Spec 099 R6: the line and the ring at this second are the core's.
+    val pace = eta?.pace(now)
 
     Column(modifier = modifier.fillMaxWidth()) {
         StatusHero(
             stage = model.stage,
             title = model.title,
-            captions = model.captions + (eta?.lines(elapsed) ?: emptyList()),
-            progress = if (model.stage == ReceiptStage.Submitted) eta?.progress(elapsed) else null,
+            captions = model.captions + (if (eta != null && pace != null) eta.lines(pace) else emptyList()),
+            progress = if (model.stage == ReceiptStage.Submitted) pace?.progress else null,
         )
         // The buttons live at the bottom while the status sits near the top:
         // the gap between them is where the waiting happens, and filling it

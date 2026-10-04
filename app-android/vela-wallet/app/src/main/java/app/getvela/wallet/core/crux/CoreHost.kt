@@ -55,6 +55,18 @@ class CoreHost<V : Any>(
     /** The core's current view. Never a partially-applied one. */
     val view: StateFlow<V> = _view.asStateFlow()
 
+    private val _viewJson = MutableStateFlow<String?>(null)
+
+    /**
+     * The committed view exactly as the core wrote it — for a core function
+     * that reads a whole view back (spec 099: `signConfirmState`). [view] may
+     * be a subset of it (a mirror leaves out what this client does not draw),
+     * so re-encoding [view] would hand the core less than it said. Set before
+     * [view], so whoever reads [view] finds this at least as new. `null`
+     * before the first commit.
+     */
+    val viewJson: StateFlow<String?> = _viewJson.asStateFlow()
+
     private val _commits = MutableStateFlow(0L)
 
     /**
@@ -131,11 +143,13 @@ class CoreHost<V : Any>(
      * confidently wrong, which is not.
      */
     private fun commit(viewJson: JSONObject) {
-        runCatching { Wire.json.decodeFromString(serializer, viewJson.toString()) }
+        val raw = viewJson.toString()
+        runCatching { Wire.json.decodeFromString(serializer, raw) }
             .onSuccess {
-                // In this order: the view, then what it reflects, then the
-                // wake-up. A collector woken by the commit — or anyone who
-                // reads `applied` first — never pairs a count with an older view.
+                // In this order: the raw view, the view, then what it reflects,
+                // then the wake-up. A collector woken by the commit — or anyone
+                // who reads `applied` first — never pairs a count with an older view.
+                _viewJson.value = raw
                 _view.value = it
                 viewEvents = driver.eventsApplied
                 _commits.value += 1

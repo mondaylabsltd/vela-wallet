@@ -149,7 +149,10 @@ class UserOpSpine(
         }
     } catch (failure: PasskeyFailure) {
         if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
-        other(failure.message ?: "the passkey ceremony failed")
+        // Spec 099 R8: how it failed travels on, as the app's passkey
+        // classifier read it, so the sheet and the page's record name the
+        // signer rather than "couldn't submit".
+        throw Refused(Failure.Signer(failure.kind, failure.message ?: "the passkey ceremony failed"))
     }
 
     /** The displayed fee, signed verbatim. */
@@ -160,6 +163,15 @@ class UserOpSpine(
         data object RelayerUnavailable : Failure()
         data object BundlerUnderfunded : Failure()
         data class Other(val message: String?) : Failure()
+
+        /**
+         * Spec 099 R8: the passkey ceremony failed, as the classifier create
+         * and login use read the platform's error — no passkey can be used
+         * here, one sign-in would never offer, or another failure. Never
+         * [FailureKind.Cancelled], which is [PasskeyCancelled]. Nothing was
+         * signed.
+         */
+        data class Signer(val kind: FailureKind, val message: String) : Failure()
 
         /**
          * Spec 082 RJ3: the relay refused the op — a rejection that is not

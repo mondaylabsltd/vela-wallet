@@ -32,6 +32,9 @@ import app.getvela.wallet.feature.signing.core.GuardTokenMetaView
 import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.ConfirmState
+import app.getvela.wallet.feature.send.core.FeeTier
+import kotlinx.serialization.json.jsonPrimitive
 import app.getvela.wallet.feature.signing.core.SignMethodKind
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.flows.FlowHeaderModel
@@ -75,7 +78,7 @@ object SigningLive {
         val trustedSignerNotice: String? = null,
         /** Spec 079: the chain's explorer base, for the landed receipt's link. */
         val explorerUrl: String? = null,
-        /** Spec 079: the tracker's entry for the submitted operation — its clock and its outcome. */
+        /** Spec 079: the tracker's entry for the submitted operation — its clock (spec 099: `relay_sent_at_ms`) and its outcome. */
         val track: app.getvela.wallet.feature.send.core.TrackEntryView? = null,
         /** Spec 079: the chain's usual inclusion time (the core's table), for the receipt's ring. */
         val typicalS: Int? = null,
@@ -83,6 +86,8 @@ object SigningLive {
         val trustedSignerRoute: Boolean = false,
         /** The number preset's wire name the signed deltas are written in (spec 082 RJ15). */
         val numberPreset: String = app.getvela.wallet.core.format.Formats.current.resolvedNumber().wire,
+        /** The screen's clock, ms since the epoch: the core's landing pace is read at it (spec 099 R6). */
+        val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -253,6 +258,12 @@ object SigningLive {
         sim: SigningController.SimOutcome? = null,
         /** The sheet's speed control (spec 069); `null` draws the fee alone. */
         speed: SendLive.SpeedInputs? = null,
+        /**
+         * Spec 099 R7: the core's one gate over the four views as the sheet
+         * received them ([confirmState] over their JSON). A caller holding only
+         * the decoded views gets the core's answer over those, re-encoded.
+         */
+        confirm: ConfirmState = confirmState(sign, guard, rawClear, fee, speed),
     ): SigningScreenModel {
         val s = ctx.strings
         val clear = cappedApproval(
@@ -328,7 +339,10 @@ object SigningLive {
             confirmAsButton = !refused && ctx.trustedSignerRoute,
             confirmButtonLabel = s.s("openSigner"),
             confirmAction = if (refused) null else confirmLabel(clear, s),
-            confirmEnabled = !refused && confirmEnabled(sign, guard, fee, clear, speed),
+            confirmEnabled = !refused && confirm.enabled,
+            // Spec 099 R7: a shut slide says why, in the core's line for the
+            // part that is shut — none under a refusal, which has no slide.
+            confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { s.t(it) },
             panelTitle = s.s("signatureRequest"),
             closeLabel = s.t(I18nKeys.Flow.CLOSE),
             receipt = if (refused) null else receipt(sign, blocks, ctx),
@@ -431,24 +445,55 @@ object SigningLive {
     }
 
     /**
-     * The slide opens only when the request, the guard and the fee all say it
-     * may — and the reading is in. The fee's say includes its SPEED: between a
-     * tap and that speed's own figure landing, the core's `confirm_fee_ready`
-     * is still true on the speed just left, and the slide must not sign it.
+     * May the slide arm, and if not why (spec 099 R7) — the core's one gate,
+     * `sign_confirm::confirm_state`, over the sign, guard, clear-signing and
+     * fee views exactly as the sheet received them (JSON; [feeJson] `null`
+     * with no fee session) and the speed in force. It holds every rule this
+     * sheet used to AND itself: the request's own gate, nothing in flight,
+     * the reading in (096 F7), the approval chosen, a message has no fee to
+     * wait for, another speed's figure is not this speed's (issue 681), the
+     * fee priced and its coin not short. A view that does not read keeps the
+     * slide shut — never a guess.
      */
-    fun confirmEnabled(sign: SignView, guard: GuardView, fee: FeeView, clear: ClearSigningView, speed: SendLive.SpeedInputs? = null): Boolean {
-        val feeReady = offChain(clear) || (fee.confirm_fee_ready && !ofAnotherTier(fee, speed))
-        // Spec 096 F7: and the request has been read — a slide that armed
-        // under "Loading…" signed what nobody had been shown yet.
-        val read = !clear.resolving && clear.surface != ClearSurface.Loading
-        return sign.confirm_gate_open && guard.confirm_allowed && feeReady && read && !sign.is_signing && !sign.is_submitting
+    fun confirmState(signJson: String?, guardJson: String?, clearJson: String?, feeJson: String?, speedTier: FeeTier?): ConfirmState {
+        if (signJson == null || guardJson == null || clearJson == null) return ConfirmState()
+        val tier = speedTier?.let { app.getvela.wallet.core.crux.Wire.json.encodeToJsonElement(FeeTier.serializer(), it).jsonPrimitive.content }
+        val json = uniffi.vela_core_uniffi.signConfirmState(signJson, guardJson, clearJson, feeJson, tier) ?: return ConfirmState()
+        return runCatching { app.getvela.wallet.core.crux.Wire.json.decodeFromString(ConfirmState.serializer(), json) }
+            .getOrDefault(ConfirmState())
     }
 
+    /**
+     * [confirmState] over decoded views, re-encoded — for a caller that holds
+     * no raw JSON (the gallery, a test). The live sheet passes the views as
+     * the machines wrote them: a mirror that dropped a field the core needs
+     * would keep the slide shut, never open it.
+     */
+    fun confirmState(sign: SignView, guard: GuardView, clear: ClearSigningView, fee: FeeView, speed: SendLive.SpeedInputs?): ConfirmState {
+        val wire = app.getvela.wallet.core.crux.Wire.json
+        return confirmState(
+            wire.encodeToString(SignView.serializer(), sign),
+            wire.encodeToString(GuardView.serializer(), guard),
+            wire.encodeToString(ClearSigningView.serializer(), clear),
+            wire.encodeToString(FeeView.serializer(), fee),
+            speed?.view?.tier,
+        )
+    }
+
+    /**
+     * The fee ROW's words only — a message says "no network fee" (the core's
+     * `sign_confirm::off_chain`, which no export carries yet). Whether the
+     * slide arms is [confirmState]'s, never this.
+     */
     private fun offChain(clear: ClearSigningView): Boolean =
         clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign ||
             clear.surface == ClearSurface.EthSign || clear.surface == ClearSurface.BlindTypedData
 
-    /** NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). */
+    /**
+     * The fee ROW's figure only: NEVER ANOTHER TIER'S FIGURE WEARING THIS
+     * TIER'S NAME (issue 681) — the row says "estimating" meanwhile. The gate's
+     * own copy of this rule is the core's ([confirmState]).
+     */
     private fun ofAnotherTier(fee: FeeView, speed: SendLive.SpeedInputs?): Boolean {
         val estimate = fee.fee ?: return false
         return speed != null && SendLive.offered(estimate.tier) != SendLive.offered(speed.view.tier)
@@ -484,7 +529,7 @@ object SigningLive {
         return when {
             // A refusal after the approval (the submission failed): the core's
             // reason, the sheet's own sentence for it.
-            sign.error != null && sign.error.kind != SignErrorKind.UserRejected && (sign.pending_op_hash != null || sign.error.kind == SignErrorKind.SubmitFailed) ->
+            sign.error != null && sign.error.kind != SignErrorKind.UserRejected && (sign.pending_op_hash != null || sign.error.kind in SUBMIT_FAILURES) ->
                 SendReceiptModel(
                     header = header,
                     stage = ReceiptStage.Failed,
@@ -515,32 +560,23 @@ object SigningLive {
             sign.pending_op_hash != null -> {
                 val track = ctx.track?.takeIf { it.user_op_hash.equals(sign.pending_op_hash, ignoreCase = true) }
                 val still = track?.outcome == app.getvela.wallet.feature.send.core.TrackOutcome.StillConfirming
-                val typicalLine = ctx.typicalS?.let { s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to ctx.chainName, "estSecs" to it.toString())) }
-                val submittedAt = track?.submitted_at_ms
-                val eta = if (!still && submittedAt != null && ctx.typicalS != null && typicalLine != null) {
-                    ReceiptEtaModel(
-                        submittedAtMs = submittedAt,
-                        typicalS = ctx.typicalS,
-                        typicalLine = typicalLine,
-                        remainingTemplate = s.t(I18nKeys.Flows.TX_REMAINING),
-                        elapsedTemplate = s.t(I18nKeys.Flows.TX_ELAPSED),
-                        slowLine = s.t(I18nKeys.Flows.TX_SLOW_CONFIRM),
-                    )
-                } else {
-                    null
-                }
+                // Spec 099 R6: the core's one countdown, from the relay's send.
+                val clock = landingClock(track, ctx).takeIf { !still }
                 SendReceiptModel(
                     header = header,
                     stage = ReceiptStage.Submitted,
                     title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
                     captions = listOfNotNull(
                         summary,
-                        if (still) s.s("stillConfirming") else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
-                        typicalLine.takeIf { eta == null && !still },
+                        when {
+                            still -> s.s("stillConfirming")
+                            clock?.waiting == true -> s.t(I18nKeys.Flows.TX_RELAY_SENDING)
+                            else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
+                        },
                     ),
                     cta = closeBackground,
                     ctaAccent = false,
-                    eta = eta,
+                    eta = clock?.eta,
                 )
             }
             // Spec 082 RA9: the words are the core's phase — never "waiting
@@ -574,6 +610,47 @@ object SigningLive {
             )
             else -> null
         }
+    }
+
+    /** The error kinds that end a request after its approval: the receipt's failure, not the form's. */
+    private val SUBMIT_FAILURES = setOf(
+        SignErrorKind.SubmitFailed,
+        // Spec 099 R8: the passkey failed — nothing was signed; a prompt that
+        // failed may be tried again (the core's `failure_retryable`).
+        SignErrorKind.SignerUnavailable,
+        SignErrorKind.SignerNotDiscoverable,
+        SignErrorKind.SignerFailed,
+    )
+
+    /** The landing's clock for one operation: [waiting] — the relay has not sent it; [eta] — the count, when there is one. */
+    private class LandingClock(val waiting: Boolean, val eta: ReceiptEtaModel?)
+
+    /**
+     * Spec 099 R6: the core's `landing_pace` for the tracker's entry, counted
+     * from when the relay sent the operation (`relay_sent_at_ms`) against the
+     * chain's usual time. `waiting` until the relay has sent it — its words,
+     * no chain clock, the ring roams; a clock once it has and the chain has a
+     * usual time.
+     */
+    private fun landingClock(track: app.getvela.wallet.feature.send.core.TrackEntryView?, ctx: Context): LandingClock {
+        val s = ctx.strings
+        val sentAt = track?.relay_sent_at_ms
+        val pace = app.getvela.wallet.feature.send.core.Landing.pace(sentAt, ctx.typicalS, ctx.nowMs())
+        val counting = pace.line != app.getvela.wallet.feature.send.core.LandingLine.Waiting &&
+            pace.line != app.getvela.wallet.feature.send.core.LandingLine.None
+        val eta = if (counting && sentAt != null && ctx.typicalS != null) {
+            ReceiptEtaModel(
+                sentAtMs = sentAt,
+                typicalS = ctx.typicalS,
+                typicalLine = s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to ctx.chainName, "estSecs" to ctx.typicalS.toString())),
+                remainingTemplate = s.t(I18nKeys.Flows.TX_REMAINING),
+                elapsedTemplate = s.t(I18nKeys.Flows.TX_ELAPSED),
+                slowLine = s.t(I18nKeys.Flows.TX_SLOW_CONFIRM),
+            )
+        } else {
+            null
+        }
+        return LandingClock(waiting = pace.line == app.getvela.wallet.feature.send.core.LandingLine.Waiting, eta = eta)
     }
 
     /**
@@ -689,23 +766,30 @@ object SigningLive {
                     cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
                     ctaAccent = false,
                 )
-                // The ring: it is on its way inside the chain's usual window.
-                TrackOutcome.Landing -> SendReceiptModel(
-                    header = header,
-                    stage = ReceiptStage.Submitted,
-                    title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
-                    captions = listOfNotNull(
-                        summary,
-                        when {
-                            state.fee_held -> s.t(I18nKeys.Flows.TX_HELD_FEES)
-                            // The relay holds it while it tops up its gas (098 follow-up).
-                            state.relay_funding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
-                            else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
-                        },
-                    ),
-                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
-                    ctaAccent = false,
-                )
+                // The ring: it is on its way inside the chain's usual window —
+                // counted (spec 099 R6) from when the relay sent it.
+                TrackOutcome.Landing -> {
+                    val clock = landingClock(ctx.track?.takeIf { it.user_op_hash.equals(state.user_op_hash, ignoreCase = true) }, ctx)
+                    SendReceiptModel(
+                        header = header,
+                        stage = ReceiptStage.Submitted,
+                        title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
+                        captions = listOfNotNull(
+                            summary,
+                            when {
+                                state.fee_held -> s.t(I18nKeys.Flows.TX_HELD_FEES)
+                                // The relay holds it while it tops up its gas (098 follow-up).
+                                state.relay_funding -> s.t(I18nKeys.Flows.TX_RELAY_FUNDING)
+                                clock.waiting -> s.t(I18nKeys.Flows.TX_RELAY_SENDING)
+                                else -> s.t(I18nKeys.Flows.TX_WAITING_CONFIRM)
+                            },
+                        ),
+                        cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                        ctaAccent = false,
+                        // Nothing is on the network while the relay funds itself: no clock.
+                        eta = clock.eta.takeIf { !state.relay_funding },
+                    )
+                }
                 TrackOutcome.StillConfirming, TrackOutcome.Unknown, TrackOutcome.Final -> SendReceiptModel(
                     header = header,
                     stage = ReceiptStage.Submitted,
@@ -798,8 +882,15 @@ object SigningLive {
      * `componentsUi.signing.refused` — nothing was sent, and no Retry words;
      * anything else is the plain "not submitted, try again".
      */
-    private fun failureWords(sign: SignView, s: VelaStrings): String =
-        if (sign.failure_refused) s.t(I18nKeys.Flows.SIGN_REFUSED) else s.t("send.txErrorGeneric")
+    private fun failureWords(sign: SignView, s: VelaStrings): String = when {
+        sign.failure_refused -> s.t(I18nKeys.Flows.SIGN_REFUSED)
+        // Spec 099 R8: the passkey failed — the signer is named, and how
+        // (the core's kind, from the app's own passkey classifier).
+        sign.error?.kind == SignErrorKind.SignerUnavailable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_UNAVAILABLE)
+        sign.error?.kind == SignErrorKind.SignerNotDiscoverable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_NOT_DISCOVERABLE)
+        sign.error?.kind == SignErrorKind.SignerFailed -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_FAILED)
+        else -> s.t("send.txErrorGeneric")
+    }
 
     fun blocks(clear: ClearSigningView, to: String?, dataBytes: Int, ctx: Context): List<SigningBlock> =
         blocksBySurface(clear, to, dataBytes, ctx.strings, ctx)

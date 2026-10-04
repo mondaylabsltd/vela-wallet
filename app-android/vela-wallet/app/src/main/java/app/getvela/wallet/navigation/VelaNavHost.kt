@@ -778,6 +778,11 @@ fun VelaNavHost(
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     val trustedSignerRoute by controller.trustedSignerRoute.collectAsStateWithLifecycle()
+                    // Spec 099 R7: the four views as the machines wrote them — the core's gate reads these.
+                    val signJson by controller.signJson.collectAsStateWithLifecycle()
+                    val clearJson by controller.clearJson.collectAsStateWithLifecycle()
+                    val guardJson by controller.guardJson.collectAsStateWithLifecycle()
+                    val feeJson by controller.feeJson.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -804,6 +809,9 @@ fun VelaNavHost(
                             val signingModel = app.getvela.wallet.feature.signing.SigningLive.model(
                                 drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
                                 speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
+                                confirm = remember(signJson, guardJson, clearJson, feeJson, signSpeed.tier) {
+                                    app.getvela.wallet.feature.signing.SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, signSpeed.tier)
+                                },
                             )
                             SideEffect { lastSigning = signingModel to signCtx }
                             app.getvela.wallet.feature.signing.SigningSheet(
@@ -989,7 +997,12 @@ fun VelaNavHost(
                     val explorers = remember(networks.networks) {
                         networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
+                    // Spec 099 R6: when the relay sent this send's operation — the
+                    // receipt's countdown starts there (the tracker's word).
+                    val sendRelaySentAt = sendView.user_op_hash?.let { op ->
+                        trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }?.relay_sent_at_ms
+                    }
+                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current, sendRelaySentAt) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -998,6 +1011,7 @@ fun VelaNavHost(
                             money = WalletLive.Money.of(currency),
                             fromName = session.activeName,
                             fromAddress = session.address,
+                            relaySentAtMs = sendRelaySentAt,
                         )
                         VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                         val base = when (val base = drawn.base) {
@@ -1336,6 +1350,9 @@ fun VelaNavHost(
                         val poolVerdicts by browser.poolView.collectAsStateWithLifecycle()
                         val chainAsking by browser.chainAsking.collectAsStateWithLifecycle()
                         val dapp by browser.dapp.collectAsStateWithLifecycle()
+                        // Spec 099: a tab back from a suspension, and the status lines put away.
+                        val reloadedTab by browser.reloadedTab.collectAsStateWithLifecycle()
+                        val statusSeen by browser.statusSeen.collectAsStateWithLifecycle()
                         val networks by application.container.settings.networks.collectAsStateWithLifecycle()
                         val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
                         val siteChain = tabView?.chain_id ?: app.getvela.wallet.feature.browser.core.DbrTabView("").chain_id
@@ -1346,8 +1363,14 @@ fun VelaNavHost(
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
                         )
-                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, tabView, identity, snapshots, poolVerdicts, chainAsking) {
-                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity, snapshots, poolVerdicts, chainAsking)
+                        val reloaded = reloadedTab != null && reloadedTab == exploreView.selected_tab
+                        val shownSeen = exploreView.selected_tab?.let { statusSeen[it] }
+                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, tabView, identity, snapshots, poolVerdicts, chainAsking, reloaded, shownSeen) {
+                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity, snapshots, poolVerdicts, chainAsking, reloaded, shownSeen)
+                        }
+                        // Spec 099 FR-014: the shown tab's record, while its status panel is open.
+                        val inspectorModel = remember(dapp.inspector, strings) {
+                            app.getvela.wallet.feature.browser.ExploreLive.inspector(dapp.inspector, strings)
                         }
                         val consentCard = dapp.consent?.let { c ->
                             // Secure is the core's word (a loopback test page is), not a prefix check.
@@ -1393,6 +1416,7 @@ fun VelaNavHost(
                             // core re-pins each grant and tells the pages).
                             onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },
                             signingOpen = signingController != null,
+                            inspector = inspectorModel,
                             live = app.getvela.wallet.feature.explore.ExploreCallbacks(
                                 onOpenSite = { url -> browser.open(url) },
                                 onTabOpen = { id -> browser.selectTab(id) },
@@ -1432,6 +1456,10 @@ fun VelaNavHost(
                                 onDisconnect = { browser.revoke() },
                                 onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
                                 onChainRetry = { browser.askChain(siteChain) },
+                                onStatusSeen = { seen -> exploreView.selected_tab?.let { tab -> browser.putStatusAway(tab, seen) } },
+                                onInspector = { open ->
+                                    if (open) exploreView.selected_tab?.let(browser::inspectorOpened) else browser.inspectorClosed()
+                                },
                             ),
                             consent = consentCard,
                             // Issue #273, D1 option (b): a web address opens here; an

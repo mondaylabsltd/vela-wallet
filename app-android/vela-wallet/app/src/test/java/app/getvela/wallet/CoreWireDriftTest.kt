@@ -219,6 +219,7 @@ import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -895,6 +896,9 @@ class CoreWireDriftTest {
         assertStringUnion<TrackStatus>("TrackStatus")
         assertStringUnion<TrackOutcome>("TrackOutcome")
         assertStringUnion<TrackRecordStatus>("TrackRecordStatus")
+        // Spec 099 R6: the landing's one countdown.
+        assertStringUnion<app.getvela.wallet.feature.send.core.LandingLine>("LandingLine")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.LandingPace>("LandingPace")
     }
 
     @Test
@@ -1185,6 +1189,102 @@ class CoreWireDriftTest {
         assertVariantsExist<DbrEvent>("DbrEvent")
         assertVariantFields(DbrOperation.serializer(), "DbrOperation")
         assertVariantFields(DbrEvent.serializer(), "DbrEvent")
+        assertVariantFields(DbrShellResult.serializer(), "DbrShellResult")
+        // Spec 099: the request record and its vocabulary. Every value the
+        // core can write must be named here — one it is not fails the whole
+        // browser view, every tab with it.
+        assertFieldsExist<DbrFailureNote>("DbrFailureNote")
+        assertFieldsExist<DbrRequestRow>("DbrRequestRow")
+        assertFieldsExist<DbrInspectorView>("DbrInspectorView")
+        assertStringUnion<DbrPageState>("DbrPageState")
+        assertStringUnion<DbrProviderState>("DbrProviderState")
+        assertStringUnion<DbrLayer>("DbrLayer")
+        assertStringUnion<DbrReason>("DbrReason")
+        assertStringUnion<DbrOutcome>("DbrOutcome")
+        assertStringUnion<DbrRequestClass>("DbrRequestClass")
+        assertStringUnion<DbrReadFailure>("DbrReadFailure")
+    }
+
+    /**
+     * Spec 099: the browser machine's new shapes as the core writes them — a
+     * tab's status, the inspected record, a read that timed out, the events
+     * that carry the clock and `consent_rejected`, now an object.
+     */
+    @Test
+    fun theBrowserRecordOf099Decodes() {
+        val tab = roundTrip<DbrTabView>(
+            """{"tab":"t1","origin":"https://app.example","connected_address":null,"chain_id":1,"secure":true,"crashed":false,
+               "busy":true,"page":"ready","provider":"no_hello","open_requests":1,"failed_recent":2,
+               "last_failure":{"layer":"network","reason":"timed_out","method":"eth_call","key":"componentsUi.browserStatus.reason.timedOut"}}""",
+        )
+        assertTrue(tab.busy)
+        assertEquals(DbrPageState.Ready, tab.page)
+        assertEquals(DbrProviderState.NoHello, tab.provider)
+        assertEquals(DbrFailureNote(DbrLayer.Network, DbrReason.TimedOut, "eth_call", DbrReason.TimedOut.key), tab.last_failure)
+        // A tab view from before 099 still reads, with nothing to say.
+        val old = roundTrip<DbrTabView>("""{"tab":"t1","origin":null,"connected_address":null,"chain_id":1,"secure":false,"crashed":false}""")
+        assertEquals(DbrPageState.Blank, old.page)
+        assertNull(old.last_failure)
+
+        val view = roundTrip<DbrView>(
+            """{"ready":true,"consent":null,"tabs":[],"sites":[],"signing":null,"queued_signing":0,
+               "inspector":{"tab":"t1","origin":"https://app.example","page":"loading","provider":"pending","connected":true,"chain_id":8453,
+                 "rows":[{"id":"7","method":"eth_call","class":"read","started_ms":1.0,"ended_ms":null,"outcome":"open","code":null,"layer":null,"reason":null},
+                         {"id":"8","method":"personal_sign","class":"signing","started_ms":2.0,"ended_ms":9.0,"outcome":"failed","code":-32603,"layer":"signer","reason":"signer_not_discoverable"}],
+                 "report":"Vela dApp browser — tab t1"}}""",
+        )
+        val inspector = view.inspector!!
+        assertEquals(DbrRequestClass.Read, inspector.rows[0].kind)
+        assertEquals(DbrOutcome.Failed, inspector.rows[1].outcome)
+        assertEquals(-32603L, inspector.rows[1].code)
+        assertEquals(DbrReason.SignerNotDiscoverable, inspector.rows[1].reason)
+
+        assertEquals(
+            DbrShellResult.ReadAnswered(null, now_ms = 5.0, failure = DbrReadFailure.TimedOut),
+            roundTrip<DbrShellResult>("""{"type":"read_answered","body_json":null,"now_ms":5.0,"failure":"timed_out"}"""),
+        )
+        val read = roundTrip<DbrOperation>(
+            """{"type":"read","tab":"t1","id":"1","chain_id":1,"method":"eth_call","params_json":"[]","bundler":false,"deadline_ms":30000.0}""",
+        )
+        assertEquals(30_000.0, (read as DbrOperation.Read).deadline_ms, 0.0)
+        assertEquals(DbrEvent.ConsentRejected(3.0), roundTrip<DbrEvent>("""{"type":"consent_rejected","now_ms":3.0}"""))
+        assertEquals(DbrEvent.InspectorClosed, roundTrip<DbrEvent>("""{"type":"inspector_closed"}"""))
+        assertEquals(
+            """{"type":"inspector_opened","tab":"t1"}""",
+            Wire.json.encodeToString(DbrEvent.serializer(), DbrEvent.InspectorOpened("t1")),
+        )
+        // The explore view's recency, which the engine plan keeps by.
+        assertEquals(listOf("b", "a"), roundTrip<ExploreView>("""{"tabs":[],"selected_tab":null,"ready":true,"recent_tabs":["b","a"]}""").recent_tabs)
+    }
+
+    /**
+     * Spec 099: the signing machine's new words — the gate's block in its
+     * view, the signer kinds of a failed passkey, and the outcome that
+     * carries the classifier's kind.
+     */
+    @Test
+    fun theSigningGateAndSignerKindsOf099Decode() {
+        val view = roundTrip<SignView>(
+            """{"surface":"sheet","confirm_gate_open":false,"confirm_block":"answered","failure_retryable":true,
+               "error":{"kind":"signer_failed","detail":"the passkey ceremony failed"}}""",
+        )
+        assertEquals(ConfirmBlock.Answered, view.confirm_block)
+        assertEquals(SignErrorKind.SignerFailed, view.error?.kind)
+        for (kind in listOf("signer_unavailable", "signer_not_discoverable", "signer_failed")) {
+            roundTrip<SignErrorNotice>("""{"kind":"$kind","detail":null}""")
+        }
+        assertEquals(
+            SignSubmitOutcome.Failed("x", signer = app.getvela.wallet.feature.onboarding.core.FailureKind.NotDiscoverable),
+            roundTrip<SignSubmitOutcome>("""{"type":"failed","message":"x","refused":false,"signer":"not_discoverable"}"""),
+        )
+        assertEquals(
+            ConfirmState(enabled = false, block = ConfirmBlock.FeeShort, key = "componentsUi.signing.confirmBlock.feeShort"),
+            roundTrip<ConfirmState>("""{"enabled":false,"block":"fee_short","key":"componentsUi.signing.confirmBlock.feeShort"}"""),
+        )
+        val entry = roundTrip<TrackEntryView>(
+            """{"user_op_hash":"0xaa","chain_id":42161,"record_ids":[],"status":"pending","tx_hash":null,"polling":true,"submitted_at_ms":1.0,"outcome":"landing","relay_tx_hash":null,"relay_sent_at_ms":4000.0}""",
+        )
+        assertEquals(4000.0, entry.relay_sent_at_ms!!, 0.0)
     }
 
     @Test
@@ -1258,6 +1358,11 @@ class CoreWireDriftTest {
         assertStringUnion<SignRecordStatus>("SignRecordStatus")
         assertStringUnion<SignSettledOutcome>("SignSettledOutcome")
         assertStringUnion<SignPhase>("SignPhase")
+        // Spec 099 R7/R8: the gate and the signer's kind.
+        assertStringUnion<ConfirmBlock>("ConfirmBlock")
+        assertFieldsExist<ConfirmState>("ConfirmState")
+        assertStringUnion<app.getvela.wallet.feature.onboarding.core.FailureKind>("FailureKind")
+        assertVariantFields(SignSubmitOutcome.serializer(), "SignSubmitOutcome")
         assertVariantsExhaustive<SignEnding>("SignEnding")
         assertVariantsExhaustive<SignEndingState>("SignEndingState")
         assertVariantsExist<SignEvent>("SignEvent")

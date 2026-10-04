@@ -60,6 +60,8 @@ data class ExploreView(
     val favorites_full: Boolean = false,
     val tabs_full: Boolean = false,
     val ready: Boolean = false,
+    /** Spec 099 R2: every tab id, most recently used first — what the engine plan keeps by. */
+    val recent_tabs: List<String> = emptyList(),
 )
 
 @Serializable

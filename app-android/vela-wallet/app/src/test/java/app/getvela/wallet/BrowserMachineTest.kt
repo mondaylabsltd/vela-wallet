@@ -77,9 +77,9 @@ class BrowserMachineTest {
             store,
             object : BrowserExecutor.Ports {
                 override fun deliver(tab: String, messageJson: String) { delivered += tab to JSONObject(messageJson) }
-                override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? {
+                override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): BrowserExecutor.ReadAnswer {
                     reads += "$chainId:$method:$bundler"
-                    return JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", readResult(method))
+                    return BrowserExecutor.ReadAnswer.Body(JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", readResult(method)))
                 }
                 override suspend fun userOpTxHash(chainId: Int, userOpHash: String): String? = null
                 override fun forwardToSigning(operation: DbrOperation.ForwardToSigning) { forwarded += operation }
