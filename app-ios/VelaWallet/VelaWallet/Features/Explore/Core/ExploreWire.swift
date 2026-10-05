@@ -25,7 +25,8 @@ struct ExploreSiteWire: Decodable, Equatable, Identifiable {
     let origin: String
     let url: String
     let host: String
-    /// The page's own `<title>` until somebody renames it. A rename is kept
+    /// The site's last good title, else its host — never an engine's error
+    /// page (issues #329, #425) — until somebody renames it. A rename is kept
     /// forever after — a person who named a tile meant it, and a page can
     /// change its title at will.
     let name: String

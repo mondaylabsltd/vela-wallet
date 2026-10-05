@@ -90,6 +90,7 @@ import app.getvela.wallet.feature.send.core.SendTimerTag
 import app.getvela.wallet.feature.send.core.SendToken
 import app.getvela.wallet.feature.send.core.SendTokenMeta
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTreasuryCoin
 import app.getvela.wallet.feature.send.core.SendTreasuryProbe
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
@@ -750,6 +751,8 @@ class CoreWireDriftTest {
         assertFieldsExist<SendChainInfo>("SendChainInfo")
         assertFieldsExist<SendTokenMeta>("SendTokenMeta")
         assertFieldsExist<SendTreasuryStatus>("SendTreasuryStatus")
+        // Issue #422: the stop's coin and figures are the core's, field for field.
+        assertFieldsExhaustive<SendTreasuryCoin>("SendTreasuryCoin")
         assertFieldsExist<SendQuotedFee>("SendQuotedFee")
         assertFieldsExist<SendTxRecord>("SendTxRecord")
         assertFieldsExist<SendRecipientIdentity>("SendRecipientIdentity")
@@ -1316,8 +1319,10 @@ class CoreWireDriftTest {
     fun exploreAndHistoryWiresMatchTheMirrors() {
         assertFieldsExist<ExploreView>("ExploreView")
         assertFieldsExist<ExploreGroupView>("ExploreGroupView")
-        assertFieldsExist<ExploreDoc>("ExploreDoc")
-        assertFieldsExist<ExploreSite>("ExploreSite")
+        // Stored THROUGH these classes (issue #425): a core field missing here
+        // is dropped on every write, so they must match the mirror exactly.
+        assertFieldsExhaustive<ExploreDoc>("ExploreDoc")
+        assertFieldsExhaustive<ExploreSite>("ExploreSite")
         assertFieldsExist<ExploreGroup>("ExploreGroup")
         assertFieldsExist<ExploreTab>("ExploreTab")
         assertVariantsExhaustive<ExploreOperation>("ExploreOperation")

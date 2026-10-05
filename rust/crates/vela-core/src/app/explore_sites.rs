@@ -4,8 +4,20 @@
 //! Start ─► ReadExplore ─► Loaded{doc} ─► ready mirror
 //!   FavoriteAdded ─► dedupe by ORIGIN ─┬─ known ─► refresh title/url in place
 //!                                      └─ new ─► append (cap) ─► WriteExplore
+//!   PageLoaded ─► a favourite still named by its host ─► the site's title
 //!   Group*/Tab* ─► pure edit ─► WriteExplore
 //! ```
+//!
+//! ## A favourite's name
+//!
+//! The site's last good title, or its host — never an engine's error page
+//! (issue #329: Android pinned app.uniswap.org as "网页无法打开"). Pinning
+//! takes the core's [`super::browser_load::pinned_title`]; a favourite with
+//! no title yet takes the title of the site's next good load
+//! ([`Event::PageLoaded`]); and a document from before that rule has every
+//! name nobody chose replaced by its host on hydration ([`NAME_RULE`],
+//! issue #425 — #329's fix named new favourites, and left the stored error
+//! page on the tile).
 //!
 //! ## Why this machine exists
 //!
@@ -45,6 +57,12 @@ use ts_rs::TS;
 /// the same argument the history's own cap makes.
 pub const FAVORITES_CAP: usize = 24;
 
+/// The rule a document's favourite names were made under
+/// ([`ExploreDoc::name_rule`]). `1`: pinned under
+/// [`super::browser_load::pinned_title`] — the site's last good title or its
+/// host — and titled only by a good load ([`Event::PageLoaded`]).
+pub const NAME_RULE: u32 = 1;
+
 /// Open tabs. A browser that lets a page open tabs without bound is a browser
 /// a page can wedge; this shell's tabs are opened by a PERSON, and two dozen
 /// is well past what anyone arranges on purpose.
@@ -65,9 +83,11 @@ pub struct ExploreSite {
     pub origin: String,
     pub url: String,
     pub host: String,
-    /// What the tile says. The page's own title until somebody renames it —
-    /// and a rename is kept forever after, because a person who named a tile
-    /// meant it and a page can change its `<title>` at will.
+    /// What the tile says: the site's last good title, else its host, until
+    /// somebody renames it — and a rename is kept forever after, because a
+    /// person who named a tile meant it and a page can change its `<title>`
+    /// at will. Never an engine's error page (see the module's "A
+    /// favourite's name").
     pub name: String,
     /// `true` once a person renamed it: a later visit must not overwrite it.
     pub renamed: bool,
@@ -146,6 +166,19 @@ pub struct ExploreDoc {
     /// Which system groups are hidden.
     #[serde(default)]
     pub hidden_system: Vec<ExploreSystemGroup>,
+    /// The rule the favourites' names were made under ([`NAME_RULE`]).
+    ///
+    /// Absent (`0`) in every document written before issue 425, and those
+    /// names nobody can vouch for: Android v0.9.5 named a favourite after
+    /// whatever title its WebView held — the engine's own error page
+    /// ("网页无法打开") when the site had failed to load (issue 329) — and
+    /// iOS and the desktop after the page before's. Issue 329's fix named NEW
+    /// favourites by the rule and left the stored ones as they were, so the
+    /// Xiaomi's Uniswap tile still read "网页无法打开" in v0.9.6 while the
+    /// site loaded fine. Hydration replaces every such name nobody chose
+    /// with its host; the site's next good load titles it.
+    #[serde(default)]
+    pub name_rule: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +242,17 @@ pub enum Event {
     /// site the favourites no longer have.
     FavoriteRemoved {
         origin: String,
+    },
+    /// A page loaded without failing — the core's own visit
+    /// ([`super::browser_load::visit_to_record`]: never an engine's error
+    /// page, never an HTTP error). A favourite of that site still named by
+    /// its host — no title was known when it was pinned, or its stored name
+    /// could not be trusted ([`ExploreDoc::name_rule`]) — takes this title.
+    /// A favourite with a title, or a name a person chose, keeps it: a tile
+    /// does not change its name with every page of the site.
+    PageLoaded {
+        url: String,
+        title: Option<String>,
     },
     /// A person names a tile. Empty or blank is a no-op rather than a way to
     /// erase a name into a title the site controls.
@@ -407,6 +451,24 @@ impl App for ExploreSites {
                     renamed: false,
                     added_ms: now_ms,
                 });
+                persist(model)
+            }
+
+            Event::PageLoaded { url, title } => {
+                let (Some((origin, _)), Some(title)) = (parse_web_origin(&url), non_blank(title))
+                else {
+                    return Command::done();
+                };
+                let Some(site) = model
+                    .doc
+                    .favorites
+                    .iter_mut()
+                    // The same site however the page spelled its host.
+                    .find(|site| site.origin.eq_ignore_ascii_case(&origin) && untitled(site))
+                else {
+                    return Command::done();
+                };
+                site.name = title;
                 persist(model)
             }
 
@@ -638,10 +700,41 @@ fn accept(model: &mut Model, result: ExploreShellResult) -> Command<ExploreEffec
             }
             model.recent = selected_or_first(&model.doc).into_iter().collect();
             model.phase = Phase::Ready;
-            render()
+            // The repaired names are written back once, so the next launch
+            // reads a document made under the rule.
+            if repair_names(&mut model.doc) {
+                persist(model)
+            } else {
+                render()
+            }
         }
         _ => Command::done(),
     }
+}
+
+/// [`ExploreDoc::name_rule`]: a document from before the rule has every name
+/// nobody chose replaced by its host — it may be an engine's error page, and
+/// nothing stored can tell which. A rename is the person's word and stays.
+/// `true` when a name changed, i.e. the document must be written back.
+fn repair_names(doc: &mut ExploreDoc) -> bool {
+    if doc.name_rule >= NAME_RULE {
+        return false;
+    }
+    doc.name_rule = NAME_RULE;
+    let mut changed = false;
+    for site in &mut doc.favorites {
+        if !site.renamed && !site.host.is_empty() && site.name != site.host {
+            site.name.clone_from(&site.host);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// A favourite with no title of its own yet: named by its host, and not by a
+/// person (who may have chosen the host on purpose).
+fn untitled(site: &ExploreSite) -> bool {
+    !site.renamed && site.name == site.host
 }
 
 // ---------------------------------------------------------------------------

@@ -17,4 +17,18 @@ selected_tab: string | null,
 /**
  * Which system groups are hidden.
  */
-hidden_system: Array<ExploreSystemGroup>, };
+hidden_system: Array<ExploreSystemGroup>, 
+/**
+ * The rule the favourites' names were made under ([`NAME_RULE`]).
+ *
+ * Absent (`0`) in every document written before issue 425, and those
+ * names nobody can vouch for: Android v0.9.5 named a favourite after
+ * whatever title its WebView held — the engine's own error page
+ * ("网页无法打开") when the site had failed to load (issue 329) — and
+ * iOS and the desktop after the page before's. Issue 329's fix named NEW
+ * favourites by the rule and left the stored ones as they were, so the
+ * Xiaomi's Uniswap tile still read "网页无法打开" in v0.9.6 while the
+ * site loaded fine. Hydration replaces every such name nobody chose
+ * with its host; the site's next good load titles it.
+ */
+name_rule: number, };

@@ -330,6 +330,8 @@ pub fn probe_treasury(chain_id: u32) -> SendTreasuryProbe {
         // whose relayer the operator owns. This executor reports the probe; it
         // does not judge it (vela-wallet spec 060).
         operator_served: false,
+        // Nor does it word the figures: their coin is the core's (#422).
+        coin: None,
     };
     if status.bootstrap_needed {
         SendTreasuryProbe::LowFloat { status }

@@ -22,6 +22,7 @@ import {
 	withLiveNetworksDesktop
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
+import { fill } from '$lib/wallet/messages';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
@@ -421,7 +422,13 @@ describe('the relayer bootstrap sheet', () => {
 		balance: '0',
 		floor: '100000000000000',
 		bootstrap_needed: true,
-		operator_served
+		operator_served,
+		coin: {
+			symbol: operator_served ? 'ETH' : 'USDC',
+			balance: '0',
+			floor: '0.0001',
+			suggested: '0.0001'
+		}
 	});
 
 	it('leads with telling the operator on a network Vela ships', () => {
@@ -439,17 +446,43 @@ describe('the relayer bootstrap sheet', () => {
 		expect(panel.lead).toBe(m.relayer.customLead);
 	});
 
-	it('never asks for less than 0.01 — a floor-sized top-up starts nothing', () => {
-		// The relay's float floor is 0.0001; the exact shortfall to it buys a
-		// relayer that is under the floor again after about one operation.
-		const panel = liveRelayer(status(false), m);
-		expect(panel.amountHint).toContain('0.01');
-		expect(panel.amountHint).not.toContain('0.0001');
+	// Issue 422: the coin and every figure in it are the core's. This sheet
+	// used to name the coin itself and ask for at least a flat 0.01 of it —
+	// tens of dollars of ETH, a tenth of a cent of POL — while the phones
+	// asked for the relay's shortfall. One stop now says one thing.
+	it("asks for the core's contribution, in the core's coin", () => {
+		const panel = liveRelayer(status(true), m);
+		expect(panel.amountHint).toBe(fill(m.relayer.amountHint, { amount: '0.0001', symbol: 'ETH' }));
+		expect(panel.balanceLine).toBe(
+			fill(m.relayer.balanceLine, { balance: '0', floor: '0.0001', symbol: 'ETH' })
+		);
 	});
 
-	it('asks for the real shortfall when that is the larger number', () => {
-		const panel = liveRelayer({ ...status(false), floor: '5000000000000000000' }, m);
-		expect(panel.amountHint).toContain('5');
+	it("names the stop's own chain's coin — POL on Polygon, never ETH", () => {
+		const polygon: SendTreasuryStatus = {
+			...status(true),
+			chain_id: 137,
+			coin: { symbol: 'POL', balance: '0.00004', floor: '0.0001', suggested: '0.00006' }
+		};
+		const panel = liveRelayer(polygon, m);
+		expect(panel.amountHint).toBe(fill(m.relayer.amountHint, { amount: '0.00006', symbol: 'POL' }));
+		expect(panel.amountHint).not.toContain('ETH');
+		expect(panel.balanceLine).toContain('POL');
+	});
+
+	it('keeps every digit the core gives — a small contribution is not "0"', () => {
+		const tiny: SendTreasuryStatus = {
+			...status(true),
+			coin: { symbol: 'ETH', balance: '0.0000996', floor: '0.0001', suggested: '0.0000004' }
+		};
+		expect(liveRelayer(tiny, m).amountHint).toContain('0.0000004');
+	});
+
+	it('names no amount when the core could read no figures', () => {
+		const panel = liveRelayer({ ...status(true), coin: null }, m);
+		expect(panel.amountHint).toBe('');
+		expect(panel.balanceLine).toBeUndefined();
+		expect(panel.address).toBe('0x3e59292e18417f814112f731e7163534c6d2fe3c');
 	});
 
 	it('keeps the non-refundable warning and the treasury address in both cases', () => {

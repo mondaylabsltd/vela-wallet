@@ -25,8 +25,6 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { SendRelayUnreachable } from '$lib/core/generated/SendRelayUnreachable';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { chainName } from '$lib/services/networks';
-import { chainMeta as chainInfo } from '$lib/services/chains';
-import { TEMPO_FEE_TOKEN_DECIMALS } from '$lib/services/tempo';
 import { encodeQr } from '$lib/wallet/qr';
 import { MASK } from '$lib/wallet/fixtures';
 
@@ -1386,56 +1384,23 @@ export function liveBalanceDetail(
 }
 
 /**
- * How much the treasury is short, worded in the asset's own units. The core
- * carries base units as decimal strings; a value that already has a point is
- * taken as human decimal (the older `TreasuryStatus` shape).
+ * A figure of the core's in whole coin, with the person's decimal mark — and
+ * every digit the core gave: a contribution of 0.0000004 must not read "0".
  */
-/**
- * The smallest top-up worth asking a person for, in whole native coin.
- *
- * The relay's own float floor is two orders of magnitude lower, and asking for
- * exactly the shortfall to it — 0.0001 — buys a relayer that drops back under
- * the floor after roughly one operation, so the same sheet reappears. A round
- * 0.01 is a contribution that actually starts the thing (spec 060).
- */
-const MIN_TOP_UP_SUGGESTION = '0.01';
-
-/** The larger of the real shortfall and {@link MIN_TOP_UP_SUGGESTION}. */
-function topUpSuggestion(floor: string, balance: string, decimals: number): string {
-	const shortfall = shortfallText(floor, balance, decimals);
-	const asNumber = Number(shortfall);
-	return Number.isFinite(asNumber) && asNumber > Number(MIN_TOP_UP_SUGGESTION)
-		? shortfall
-		: MIN_TOP_UP_SUGGESTION;
-}
-
-function shortfallText(floor: string, balance: string, decimals: number): string {
-	if (floor.includes('.') || balance.includes('.')) {
-		const diff = Number(floor) - Number(balance);
-		return trimBalance((Number.isFinite(diff) && diff > 0 ? diff : 0).toString());
-	}
-	let units: bigint;
-	try {
-		const f = BigInt(floor);
-		const b = BigInt(balance);
-		units = f > b ? f - b : 0n;
-	} catch {
-		units = 0n;
-	}
-	const digits = units.toString().padStart(decimals + 1, '0');
-	const whole = digits.slice(0, digits.length - decimals);
-	const frac = digits.slice(digits.length - decimals);
-	return trimBalance(decimals === 0 ? whole : `${whole}.${frac}`);
+function coinText(amount: string): string {
+	return trimBalance(amount, 18);
 }
 
 /**
  * SR4: fund this chain's relay treasury. Every figure is the send core's
- * probe (`treasury_bootstrap`); the code encodes the treasury's real address.
+ * (`treasury_bootstrap`, issue 422): the coin is the stop's own chain's,
+ * the amounts are in it, and the contribution is the relay's shortfall for
+ * that chain — none of it worked out here. The code encodes the treasury's
+ * real address.
  */
 export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): RelayerModel {
-	const pathUsd = status.asset === 'path_usd';
-	const decimals = pathUsd ? TEMPO_FEE_TOKEN_DECIMALS : 18;
-	const symbol = pathUsd ? 'pathUSD' : (chainInfo(status.chain_id)?.nativeSymbol ?? '');
+	const coin = status.coin;
+	const symbol = coin?.symbol ?? '';
 	// WHO can fix this is the core's verdict (`operator_served`), not a guess
 	// from the chain id here. On a network Vela ships the operator owns that
 	// relayer; on one the person added — a devnet, an internal chain — there
@@ -1451,10 +1416,10 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 		lead: status.operator_served ? m.relayer.operatorLead : m.relayer.customLead,
 		mark: rescueMark(status.chain_id),
 		name: chainName(status.chain_id),
-		amountHint: fill(m.relayer.amountHint, {
-			amount: topUpSuggestion(status.floor, status.balance, decimals),
-			symbol
-		}),
+		// No figures the core could read: no amount, rather than a made-up one.
+		amountHint: coin
+			? fill(m.relayer.amountHint, { amount: coinText(coin.suggested), symbol }).trim()
+			: '',
 		qrCaption: m.relayer.addressLabel,
 		addressDisplay: shortenAddress(status.address),
 		address: status.address,
@@ -1464,19 +1429,16 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 		primary: m.relayer.retryBtn,
 		// Spec 098 §4: what it has against what it needs, and that the sheet is
 		// watching — it closes by itself once somebody has funded it.
-		balanceLine: fill(m.relayer.balanceLine, {
-			balance: unitsText(status.balance, decimals),
-			floor: unitsText(status.floor, decimals),
-			symbol
-		}),
+		balanceLine: coin
+			? fill(m.relayer.balanceLine, {
+					balance: coinText(coin.balance),
+					floor: coinText(coin.floor),
+					symbol
+				}).trim()
+			: undefined,
 		watching: m.relayer.watching,
 		scanHint: m.relayer.qrLabel
 	};
-}
-
-/** A base-unit decimal string in whole coin, trimmed (a dotted value is already whole coin). */
-function unitsText(amount: string, decimals: number): string {
-	return amount.includes('.') ? trimBalance(amount) : shortfallText(amount, '0', decimals);
 }
 
 /**

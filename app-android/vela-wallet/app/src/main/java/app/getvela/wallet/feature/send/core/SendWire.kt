@@ -136,6 +136,30 @@ data class SendTreasuryStatus(
      * the person is asked to do (spec 060).
      */
     val operator_served: Boolean = false,
+    /**
+     * `balance` and `floor` in the coin they are counted in, and what the stop
+     * asks for (issue #422). The core fills it when it publishes the stop; a
+     * probe this app reports leaves it out. `null` on a published stop only
+     * when the relay's figures could not be read.
+     */
+    val coin: SendTreasuryCoin? = null,
+)
+
+/**
+ * The relay's treasury figures in the coin they are counted in (issue #422):
+ * the stop's own chain's coin, and plain whole-coin decimals the app only
+ * writes with its decimal mark. This app used to name the coin by chain NAME
+ * and said "ETH" for any name it did not know, and worked the figures out in
+ * 18 decimals itself — so a stop asked for "0.0001 ETH" on Polygon.
+ */
+@Serializable
+data class SendTreasuryCoin(
+    /** pathUSD on Tempo, else the chain's own coin; `null` = the core does not know it (never a guess). */
+    val symbol: String? = null,
+    val balance: String,
+    val floor: String,
+    /** The suggested contribution: the relay's shortfall for this chain, in its coin. */
+    val suggested: String,
 )
 
 /**

@@ -27,7 +27,7 @@ use vela_core::app::send::{
     SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
     SendOperation as Op, SendPayee, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
     SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res, SendStage,
-    SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
+    SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin,
     SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
     SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
 };
@@ -239,6 +239,8 @@ fn treasury_status() -> SendTreasuryStatus {
         // The shell never judges this; the core fills it when it publishes the
         // sheet (spec 060).
         operator_served: false,
+        // Nor this: the coin and its figures are the core's (issue #422).
+        coin: None,
     }
 }
 
@@ -6890,4 +6892,474 @@ fn a_dismissed_sheet_stops_watching() {
     let ops = elapse_the_watch(&mut sut);
     assert!(ops.is_empty(), "no probe after the sheet closed: {ops:?}");
     assert_eq!(sut.view().stage, SendStage::EnterDetails);
+}
+
+// ===========================================================================
+// Issue #422 — a relay stop belongs to its chain, and speaks its chain's coin
+// ===========================================================================
+//
+// On a Xiaomi (v0.9.6), 0.8 POL on Polygon reached confirm under "Start this
+// network's relayer … out of gas … Suggested contribution: 0.0001 ETH". The
+// relay's Polygon treasury held 56.86 POL (`bootstrapNeeded: false`, read
+// 2026-10-04), and the send went through. The stop was another chain's: an
+// ETH chain whose float the relay reports empty (balance 0, floor 0.0001 —
+// thirteen of the networks Vela ships answered that way that day). Nothing
+// but the stop's own two buttons ever cleared it, so it rode along to the
+// next coin; and the phone that drew it named its coin by a lookup that says
+// "ETH" for anything it does not know.
+
+/// Unichain: a network Vela ships, ETH its coin, and one whose relayer the
+/// relay reported empty on 2026-10-04.
+fn unichain_eth(balance: &str) -> SendToken {
+    SendToken {
+        network: "unichain".to_owned(),
+        chain_id: 130,
+        symbol: "ETH".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(2000.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// Tempo's pathUSD — the one treasury that is not counted in a native coin.
+fn tempo_path_usd(balance: &str) -> SendToken {
+    SendToken {
+        network: "tempo".to_owned(),
+        chain_id: 4217,
+        symbol: "pathUSD".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 6,
+        token_address: Some("0x20c0000000000000000000000000000000000000".to_owned()),
+        price_usd: Some(1.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// A network the person added: chain 7_777_001, its coin "DEV".
+fn devnet_coin(balance: &str) -> SendToken {
+    SendToken {
+        network: "devnet".to_owned(),
+        chain_id: 7_777_001,
+        symbol: "DEV".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: None,
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// What the relay answers for a treasury below its floor, as the shells
+/// hand it over (base units, decimal; the verdicts left to the core).
+fn short_treasury(chain_id: u32, asset: SendTreasuryAsset, balance: &str, floor: &str) -> Res {
+    Res::TreasuryProbed {
+        probe: SendTreasuryProbe::LowFloat {
+            status: SendTreasuryStatus {
+                chain_id,
+                address: "0x3e59292e18417f814112f731e7163534c6d2fe3c".to_owned(),
+                asset,
+                balance: balance.to_owned(),
+                floor: floor.to_owned(),
+                bootstrap_needed: true,
+                operator_served: false,
+                coin: None,
+            },
+        },
+    }
+}
+
+/// The relay's native floor: `0x5af3107a4000` = 10^14 base units, the same
+/// on every chain it serves (vela-relay `NATIVE_TREASURY_FLOOR`).
+const RELAY_NATIVE_FLOOR: &str = "100000000000000";
+
+/// An empty relayer on `chain_id`, exactly as the relay reported it live.
+fn empty_relayer(chain_id: u32) -> Res {
+    short_treasury(chain_id, SendTreasuryAsset::Native, "0", RELAY_NATIVE_FLOOR)
+}
+
+/// Pick `token`, address it, type `amount`, and press Continue: the estimate
+/// is answered, so the next answer is the treasury's — for `token`'s chain.
+fn continue_with(sut: &mut Sut, token: &SendToken, amount: &str) {
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: token.id(),
+    });
+    assert_eq!(
+        ops,
+        vec![Op::LoadAccountCredential {
+            account_id: "cred-1".to_owned()
+        }]
+    );
+    settle_warm_quote(sut);
+    set_recipient(sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: amount.to_owned(),
+    });
+    let ops = sut.dispatch(Event::Continue);
+    drain_form_quote(sut);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { chain_id },
+                Op::StartTimer { .. }
+            ] if *chain_id == token.chain_id
+        ),
+        "the pre-check asks about {}: {ops:?}",
+        token.chain_id
+    );
+    assert!(sut
+        .resolve(fee_ok(native_fee(token.chain_id, 1_000)))
+        .is_empty());
+}
+
+/// The pre-check's 15 s timer, which never fires in these runs.
+fn drop_the_precheck_timer(sut: &mut Sut) {
+    sut.drop_matching(|op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::EstimateTimeout,
+                ..
+            }
+        )
+    });
+}
+
+/// The stop on `chain_id` is up on the form, and is what the view publishes.
+#[track_caller]
+fn assert_stop_on(sut: &Sut, chain_id: u32) -> SendTreasuryStatus {
+    let view = sut.view();
+    assert_eq!(
+        view.stage,
+        SendStage::EnterDetails,
+        "confirm is not entered"
+    );
+    let status = view.treasury_bootstrap.expect("the treasury stop");
+    assert_eq!(status.chain_id, chain_id);
+    status
+}
+
+/// Answer the confirm page's own probes (risk, simulation) so nothing is left
+/// pending that a later step could mistake for its own.
+fn settle_confirm_probes(sut: &mut Sut, probes: Vec<Op>) {
+    for op in probes {
+        match op {
+            Op::ResolveRisk { .. } => {
+                sut.resolve_matching(
+                    |op| matches!(op, Op::ResolveRisk { .. }),
+                    Res::RiskResolved { risk: None },
+                );
+            }
+            Op::SimulateCalls { .. } => {
+                sut.resolve_matching(
+                    |op| matches!(op, Op::SimulateCalls { .. }),
+                    Res::SimResolved { sim_json: None },
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Cause one, as the Xiaomi met it: the stop on an empty chain, the token
+/// card to POL on Polygon — funded — and Polygon's confirm under no stop.
+#[test]
+fn a_stop_on_one_chain_does_not_follow_the_send_to_another_422() {
+    let mut sut = boot(vec![unichain_eth("1"), polygon_pol("5")]);
+    continue_with(&mut sut, &unichain_eth("1"), "0.1");
+    assert_only_the_watch(&sut.resolve(empty_relayer(130)), "Unichain's stop");
+    assert_stop_on(&sut, 130);
+
+    // Another coin, on another chain: the stop was about Unichain.
+    sut.dispatch(Event::ChangeToken);
+    let view = sut.view();
+    assert!(view.treasury_bootstrap.is_none(), "Unichain's stop is gone");
+    // …and so is its watch: no more asking about Unichain, and no "funded"
+    // answer from it to press Continue on a Polygon form.
+    assert!(
+        elapse_the_watch(&mut sut).is_empty(),
+        "the watch went with its stop"
+    );
+    // The first pre-check's 15 s timer never fires in this run.
+    sut.drop_matching(|op| matches!(op, Op::StartTimer { .. }));
+
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    let probes = sut.resolve(covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm, "Polygon's relayer serves");
+    assert!(
+        view.treasury_bootstrap.is_none(),
+        "no out-of-gas notice on Polygon's confirm: {:?}",
+        view.treasury_bootstrap
+    );
+    assert!(view.relay_unreachable.is_none());
+    settle_confirm_probes(&mut sut, probes);
+}
+
+/// The same through Back (the arrow, not the card), and for the other stop:
+/// a relay that cannot reach one network says nothing about the next.
+#[test]
+fn back_leaves_either_relay_stop_behind_with_its_chain_422() {
+    let mut sut = boot(vec![unichain_eth("1"), polygon_pol("5"), devnet_coin("3")]);
+
+    continue_with(&mut sut, &unichain_eth("1"), "0.1");
+    sut.resolve(empty_relayer(130));
+    assert_stop_on(&sut, 130);
+    sut.dispatch(Event::Back);
+    assert!(sut.view().treasury_bootstrap.is_none());
+    sut.drop_matching(|op| matches!(op, Op::StartTimer { .. }));
+
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    assert!(sut.resolve(uncovered()).is_empty());
+    let sheet = sut.view().relay_unreachable.expect("the can't-reach stop");
+    assert_eq!(sheet.chain_id, 7_777_001);
+    sut.dispatch(Event::Back);
+    assert!(sut.view().relay_unreachable.is_none());
+    sut.drop_matching(|op| matches!(op, Op::StartTimer { .. }));
+
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    let probes = sut.resolve(covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.treasury_bootstrap.is_none());
+    assert!(view.relay_unreachable.is_none());
+    settle_confirm_probes(&mut sut, probes);
+}
+
+/// A pre-check the relay passes is the latest word on the chain: whatever
+/// stop stood before it, confirm opens without one. (Before #422 confirm
+/// opened UNDER it, with "Confirm & Send" disabled by a stop the core had
+/// just overruled.)
+#[test]
+fn a_precheck_the_relay_passes_opens_confirm_under_no_stop_422() {
+    let mut sut = boot(vec![polygon_pol("5")]);
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    sut.resolve(empty_relayer(137));
+    assert_stop_on(&sut, 137);
+    // The person tops it up elsewhere and presses Continue on the form.
+    drop_the_precheck_timer(&mut sut);
+    let ops = sut.dispatch(Event::Continue);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { chain_id: 137 },
+                Op::StartTimer { .. }
+            ]
+        ),
+        "{ops:?}"
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(137, 1_000)),
+    );
+    let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.treasury_bootstrap.is_none());
+    assert!(
+        elapse_the_watch(&mut sut).is_empty(),
+        "nothing left watching"
+    );
+    settle_confirm_probes(&mut sut, probes);
+}
+
+/// The issue's expectation, plainly: Polygon's relayer funded → no notice,
+/// on the form or on confirm, and nothing standing in the way of the slide.
+#[test]
+fn a_funded_polygon_relayer_shows_no_notice_422() {
+    let mut sut = boot(vec![polygon_pol("5")]);
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    let probes = sut.resolve(covered());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.treasury_bootstrap.is_none());
+    assert!(view.relay_unreachable.is_none());
+    settle_confirm_probes(&mut sut, probes);
+    let view = sut.view();
+    assert!(view.can_confirm, "the slide is open");
+    // The pre-sign recheck asks about Polygon, and goes on to submit.
+    let ops = sut.dispatch(Event::SlideConfirm);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 137 }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert!(
+        matches!(ops.as_slice(), [Op::SubmitUserOp { .. }]),
+        "{ops:?}"
+    );
+    assert!(sut.view().treasury_bootstrap.is_none());
+}
+
+/// Cause two: the issue's other expectation. Polygon's relayer out of gas →
+/// the contribution is in POL, and it is Polygon's own figure — what its
+/// treasury lacks of its floor, in POL's decimals — never a constant and
+/// never another chain's.
+#[test]
+fn an_empty_polygon_relayer_asks_in_pol_for_polygons_own_shortfall_422() {
+    let mut sut = boot(vec![polygon_pol("5")]);
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    // Holding 0.00004 POL of the relay's 0.0001 POL floor.
+    sut.resolve(short_treasury(
+        137,
+        SendTreasuryAsset::Native,
+        "40000000000000",
+        RELAY_NATIVE_FLOOR,
+    ));
+    let status = assert_stop_on(&sut, 137);
+    assert!(status.operator_served, "Polygon ships with Vela");
+    assert_eq!(
+        status.coin,
+        Some(SendTreasuryCoin {
+            symbol: Some("POL".to_owned()),
+            balance: "0.00004".to_owned(),
+            floor: "0.0001".to_owned(),
+            suggested: "0.00006".to_owned(),
+        })
+    );
+
+    // The figure is the relay's for Polygon, whatever it is: a floor the
+    // relay sizes for POL is asked for in POL, digit for digit.
+    elapse_the_watch(&mut sut);
+    answer_the_watch(
+        &mut sut,
+        short_treasury(
+            137,
+            SendTreasuryAsset::Native,
+            "250000000000000000",
+            "2500000000000000000",
+        ),
+    );
+    let coin = assert_stop_on(&sut, 137).coin.expect("figures");
+    assert_eq!(coin.symbol.as_deref(), Some("POL"));
+    assert_eq!(
+        (
+            coin.balance.as_str(),
+            coin.floor.as_str(),
+            coin.suggested.as_str()
+        ),
+        ("0.25", "2.5", "2.25")
+    );
+}
+
+/// Each chain's stop names that chain's coin — the one the relay's
+/// `eth_getBalance` counts — and a chain the wallet cannot name gets no
+/// name at all, rather than "ETH".
+#[test]
+fn every_stop_names_its_own_chains_coin_and_never_guesses_422() {
+    // Unichain: ETH, from the built-in registry (the shell's network list
+    // in this run names only Ethereum and Polygon).
+    let mut sut = boot(vec![unichain_eth("1")]);
+    continue_with(&mut sut, &unichain_eth("1"), "0.1");
+    sut.resolve(empty_relayer(130));
+    let coin = assert_stop_on(&sut, 130).coin.expect("figures");
+    assert_eq!(coin.symbol.as_deref(), Some("ETH"));
+    assert_eq!(coin.suggested, "0.0001");
+    assert_eq!(coin.balance, "0");
+
+    // A network the person added: its coin from the networks the shell
+    // handed over.
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let mut networks = chains();
+    networks.push(SendChainInfo {
+        chain_id: 7_777_001,
+        network: "devnet".to_owned(),
+        native_symbol: "DEV".to_owned(),
+    });
+    let ops = sut.resolve(Res::TokensLoaded {
+        tokens: Some(vec![devnet_coin("3")]),
+        chains: networks,
+    });
+    for _ in &ops {
+        sut.resolve(Res::FeesPrewarmed);
+    }
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(empty_relayer(7_777_001));
+    let status = assert_stop_on(&sut, 7_777_001);
+    assert!(!status.operator_served, "a network the person added");
+    assert_eq!(status.coin.expect("figures").symbol.as_deref(), Some("DEV"));
+
+    // The same network unnamed by the list: the coin held there names it.
+    let mut sut = boot(vec![devnet_coin("3")]);
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(empty_relayer(7_777_001));
+    assert_eq!(
+        assert_stop_on(&sut, 7_777_001)
+            .coin
+            .expect("figures")
+            .symbol
+            .as_deref(),
+        Some("DEV")
+    );
+}
+
+/// Tempo's treasury is counted in micro-pathUSD: six decimals, not eighteen.
+#[test]
+fn a_tempo_stop_counts_path_usd_in_six_decimals_422() {
+    let mut sut = boot(vec![tempo_path_usd("10")]);
+    continue_with(&mut sut, &tempo_path_usd("10"), "1");
+    // 0.1 of the relay's 0.55 pathUSD floor.
+    sut.resolve(short_treasury(
+        4217,
+        SendTreasuryAsset::PathUsd,
+        "100000",
+        "550000",
+    ));
+    assert_eq!(
+        assert_stop_on(&sut, 4217).coin,
+        Some(SendTreasuryCoin {
+            symbol: Some("pathUSD".to_owned()),
+            balance: "0.1".to_owned(),
+            floor: "0.55".to_owned(),
+            suggested: "0.45".to_owned(),
+        })
+    );
+}
+
+/// A figure that is not a whole number of base units is not read as zero:
+/// the stop stands, and names no amount.
+#[test]
+fn an_unreadable_treasury_figure_names_no_amount_422() {
+    let mut sut = boot(vec![polygon_pol("5")]);
+    continue_with(&mut sut, &polygon_pol("5"), "0.8");
+    sut.resolve(short_treasury(
+        137,
+        SendTreasuryAsset::Native,
+        "0x0",
+        RELAY_NATIVE_FLOOR,
+    ));
+    assert_eq!(assert_stop_on(&sut, 137).coin, None);
+}
+
+/// The coin rides the published stop only: a shell's probe without it
+/// still reads (the field is the core's to fill), on every wire the four
+/// shells send.
+#[test]
+fn a_probe_without_the_coin_is_still_a_probe_422() {
+    let wire = serde_json::json!({
+        "type": "low_float",
+        "status": {
+            "chain_id": 137,
+            "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c",
+            "asset": "native",
+            "balance": "0",
+            "floor": RELAY_NATIVE_FLOOR,
+            "bootstrap_needed": true
+        }
+    });
+    let probe: SendTreasuryProbe = serde_json::from_value(wire).expect("reads");
+    let SendTreasuryProbe::LowFloat { status } = probe else {
+        panic!("a low float");
+    };
+    assert_eq!(status.coin, None);
+    assert!(!status.operator_served);
 }

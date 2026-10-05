@@ -126,6 +126,50 @@ class ExploreMachineTest {
         assertEquals("Uniswap Interface", uniffi.vela_core_uniffi.browserPinnedTitle(failedUrl, good))
     }
 
+    /**
+     * Issue #425: the Xiaomi's Uniswap favourite, pinned under v0.9.5 while the
+     * site had failed, still read "网页无法打开" in v0.9.6 — #329's fix named
+     * NEW favourites and read the stored ones as they were. Through the real
+     * machine and this store's bytes: a document from before the rule has the
+     * name nobody chose replaced by the host and written back; the site's next
+     * good load (the core's visit) names it; and a second host over the same
+     * bytes keeps that name — the rule's marker survives this client's
+     * serializer, or every launch would reset the name again.
+     */
+    @Test
+    fun `a favourite stored under an error page's title is named by its host, then by the site's next good load`() = runBlocking {
+        store.values[ExploreExecutor.KEY] = """
+            {"favorites":[{"origin":"https://app.uniswap.org","url":"https://app.uniswap.org/","host":"app.uniswap.org","name":"网页无法打开","renamed":false,"added_ms":1.759051383E12}],
+             "groups":[],"tabs":[],"selected_tab":null,"hidden_system":[]}
+        """.trimIndent()
+        val h = explore()
+        val repaired = withTimeout(10_000) { h.view.first { it.ready } }
+        assertEquals("app.uniswap.org", repaired.favorites.single().name)
+        withTimeout(10_000) {
+            while (stored()?.name_rule != 1) kotlinx.coroutines.delay(20)
+        }
+        assertEquals("app.uniswap.org", stored()!!.favorites.single().name)
+
+        // The error page is no visit, so it can name nothing.
+        assertNull(uniffi.vela_core_uniffi.browserLoadVisit("https://app.uniswap.org/", "网页无法打开", null, true, null))
+        val visit = uniffi.vela_core_uniffi.browserLoadVisit(
+            "https://app.uniswap.org/swap", "Uniswap | Trade Crypto on DeFi's Leading Exchange", null, false, null,
+        )!!
+        h.dispatch(ExploreEvent.PageLoaded(url = visit.url, title = visit.title), ExploreEvent.serializer())
+        val titled = withTimeout(10_000) { h.view.first { it.favorites.single().name != "app.uniswap.org" } }
+        assertEquals("Uniswap | Trade Crypto on DeFi's Leading Exchange", titled.favorites.single().name)
+        withTimeout(10_000) {
+            while (stored()?.favorites?.single()?.name != "Uniswap | Trade Crypto on DeFi's Leading Exchange") kotlinx.coroutines.delay(20)
+        }
+
+        // "Process death": the next launch reads the name, not the host.
+        val again = withTimeout(10_000) { explore().view.first { it.ready } }
+        assertEquals("Uniswap | Trade Crypto on DeFi's Leading Exchange", again.favorites.single().name)
+    }
+
+    private fun stored(): ExploreDoc? =
+        store.values[ExploreExecutor.KEY]?.let { runCatching { Wire.json.decodeFromString(ExploreDoc.serializer(), it) }.getOrNull() }
+
     @Test
     fun `favourites, a group and tabs survive a second host over the same store`() = runBlocking {
         val h = explore()

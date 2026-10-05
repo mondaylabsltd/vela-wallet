@@ -297,6 +297,48 @@ struct RelayClientTests {
         }
     }
 
+    /// An empty relay's answer is one the core can READ. The asset used to
+    /// go out as `["type": "native"]`; the core's `SendTreasuryAsset` is a
+    /// plain string, so it refused the whole result and the send never
+    /// showed the stop — Continue ended in the pre-check's timeout instead
+    /// (found with issue #422). Checked against the real core, which throws
+    /// on a result it cannot deserialise before it looks for the effect.
+    @Test func anEmptyRelaysAnswerIsOneTheCoreReads() async throws {
+        let port = ScriptedRelayPort()
+        port.rest["/v1/treasury/137"] = .ok([
+            "chainId": 137, "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c",
+            "asset": "native", "balance": "0x0", "floor": "0x5af3107a4000",
+            "bootstrapNeeded": true,
+        ])
+        guard case .lowFloat(let status) = await client(port).probeTreasury(chainId: 137) else {
+            Issue.record("bootstrapNeeded must read as a low float")
+            return
+        }
+        #expect(status["asset"] as? String == "native")
+        #expect(status["floor"] as? String == "100000000000000")
+        let wire = CoreJSON.string([
+            "type": "treasury_probed", "probe": ["type": "low_float", "status": status],
+        ])
+        // No such effect: answered with nothing — but only once it has read.
+        _ = try SendCore().resolveEffect(effectId: 999, resultJson: wire)
+
+        port.rest["/v1/treasury/4217"] = .ok([
+            "address": "0x3e59292e18417f814112f731e7163534c6d2fe3c", "asset": "pathUSD",
+            "balance": "0x0", "floor": "0x86470", "bootstrapNeeded": true,
+        ])
+        guard case .lowFloat(let tempo) = await client(port).probeTreasury(chainId: 4217) else {
+            Issue.record("bootstrapNeeded must read as a low float")
+            return
+        }
+        #expect(tempo["asset"] as? String == "path_usd")
+        _ = try SendCore().resolveEffect(
+            effectId: 999,
+            resultJson: CoreJSON.string([
+                "type": "treasury_probed", "probe": ["type": "low_float", "status": tempo],
+            ])
+        )
+    }
+
     /// The relay reads the chain through the endpoint THIS wallet picked.
     @Test func everyRestCallCarriesThePoolsChosenRpcUrl() async {
         let port = ScriptedRelayPort()
