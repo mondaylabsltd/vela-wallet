@@ -82,6 +82,8 @@ export interface ContactsMessages {
 	importFailBody: string;
 	/** The file is not UTF-8 or marked UTF-16 (issue 333): how to save it. */
 	importFailEncoding: string;
+	/** A file with no contacts in it (issue 430). */
+	importFailEmpty: string;
 	/** The export dialog's one line: choose a format. */
 	exportBody: string;
 	/** Template with `{{name}}` — deleting a group keeps its contacts, and says so. */
@@ -165,6 +167,7 @@ export const CONTACTS_KEYS = [
 	'contacts.importFailTitle',
 	'contacts.importFailBody',
 	'contacts.importFailEncoding',
+	'contacts.importFailEmpty',
 	'contacts.exportBody',
 	'contacts.groupDeleteBody',
 	'contacts.groupMembersLabel',

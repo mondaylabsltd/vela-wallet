@@ -275,6 +275,24 @@ struct ContactsWiringTests {
         #expect(notice.message.contains("UTF-8"))
     }
 
+    /// Issue #430: the 36-byte export — its BOM and header, no rows — is a
+    /// file with no contacts, and the core names that sentence, not "use a
+    /// JSON or CSV file".
+    @Test func aHeaderOnlyCsvSaysItHoldsNoContacts() throws {
+        let core = try loaded()
+        var headerOnly = Data([0xEF, 0xBB, 0xBF])
+        headerOnly.append(Data("address,name,note,favorite,groups".utf8))
+        #expect(headerOnly.count == 36)
+        let refused = try core.dispatch(eventJson: ContactsStore.importEvent(
+            bytes: headerOnly, filename: "vela-contacts-2026-10-04.csv", intoGroup: nil, nowMs: 1_700_000_000_000
+        ))
+        let view = try CoreJSON.decode(ContactsViewWire.self, from: try self.view(from: refused))
+        #expect(view.importFailureKey == "contacts.importFailEmpty")
+        let notice = try #require(ContactsLive.importNotice(view, loc: loc))
+        #expect(notice.message == loc.t("contacts.importFailEmpty"))
+        #expect(notice.message != loc.t("contacts.importFailBody"))
+    }
+
     /// The same names saved as UTF-16 (by its BOM) or UTF-8 land exactly —
     /// CJK, Cyrillic, an emoji — byte for byte.
     @Test func unicodeFilesImportEveryNameExactly() throws {

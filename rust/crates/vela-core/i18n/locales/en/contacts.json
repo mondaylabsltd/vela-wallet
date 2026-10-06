@@ -56,6 +56,7 @@
     "importFailTitle": "Import failed",
     "importFailBody": "Use a JSON or CSV contacts file.",
     "importFailEncoding": "Save the file as UTF-8 (Excel: CSV UTF-8) and try again.",
+    "importFailEmpty": "This file has no contacts in it.",
     "manage": "Manage",
     "sectionContacts": "Contacts",
     "countPeople": "{{count}}",

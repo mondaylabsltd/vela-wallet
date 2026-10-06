@@ -1859,6 +1859,7 @@
   "importFailTitle": "İçe aktarma başarısız",
   "importFailBody": "Bir JSON veya CSV kişi dosyası kullanın.",
   "importFailEncoding": "Dosyayı UTF-8 olarak kaydedin (Excel: CSV UTF-8) ve yeniden deneyin.",
+  "importFailEmpty": "Bu dosyada kişi yok.",
   "manage": "Yönet",
   "sectionContacts": "Kişiler",
   "countPeople": "{{count}}",

@@ -1859,6 +1859,7 @@
   "importFailTitle": "匯入失敗",
   "importFailBody": "請使用 JSON 或 CSV 聯絡人檔案。",
   "importFailEncoding": "請將檔案另存為 UTF-8（在 Excel 中選擇「CSV UTF-8」）後再試一次。",
+  "importFailEmpty": "這個檔案裡沒有聯絡人。",
   "manage": "管理",
   "sectionContacts": "聯絡人",
   "countPeople": "{{count}} 位",

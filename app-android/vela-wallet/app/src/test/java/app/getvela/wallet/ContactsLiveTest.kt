@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.wallet.core.FeedDirection
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.contacts.core.ContactRecipientView
@@ -421,10 +422,14 @@ class ContactsLiveTest {
         assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE), refused?.title)
         assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY), refused?.body)
         // Issue 333: a legacy encoding is told how to save the file.
-        val encoding = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.UnsupportedEncoding), strings, close = "关闭")
+        val encoding = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.UnsupportedEncoding, import_failure_key = I18nKeys.Contacts.IMPORT_FAIL_ENCODING), strings, close = "关闭")
         assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE), encoding?.title)
         assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_ENCODING), encoding?.body)
         assertTrue(encoding!!.body.contains("UTF-8"))
+        // Issue #430: the core names the sentence; an empty file says it holds no contacts.
+        val emptyFile = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.Empty, import_failure_key = "contacts.importFailEmpty"), strings, close = "关闭")
+        assertEquals(strings.t("contacts.importFailEmpty"), emptyFile?.body)
+        assertNotEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY), emptyFile?.body)
         assertNull(ContactsLive.importNotice(ContactsView(loaded = true), strings, close = "关闭"))
     }
 }

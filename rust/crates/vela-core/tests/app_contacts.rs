@@ -2546,3 +2546,150 @@ fn reopening_the_open_account_keeps_the_book_and_refreshes_its_history() {
     assert!(!sut.view().loaded, "another account starts from nothing");
     assert!(sut.view().contacts.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Issue #430 — the export is the book the list shows
+// ---------------------------------------------------------------------------
+
+/// The Xiaomi's book: three rows on screen, none of them saved by hand — the
+/// people sent to — and a group whose members are neither. The export wrote
+/// `saved` alone: a CSV of 36 bytes, its header and nothing else.
+fn a_book_built_from_sends() -> Sut {
+    booted(
+        vec![],
+        vec![],
+        vec![group("grp_1", "147", &[A, B])],
+        vec![
+            send(C, 1_000.0),
+            send(C, 2_000.0),
+            named_send(A, 3_000.0, "Registry Alice"),
+        ],
+    )
+}
+
+#[test]
+fn the_export_holds_every_row_the_list_shows_and_every_group_member_430() {
+    let mut sut = a_book_built_from_sends();
+    let shown = addresses(&sut.view());
+    let file = export(&mut sut, ContactExportScope::All, ContactFileFormat::Csv);
+    let lines: Vec<&str> = file.content.lines().collect();
+    assert_eq!(lines[0], "\u{feff}address,name,note,favorite,groups");
+    for row in &shown {
+        assert!(
+            lines.iter().any(|line| line.starts_with(row.as_str())),
+            "{row} is on the list, so it is in the file: {lines:?}"
+        );
+    }
+    // B is only in the group: it travels too, carrying its membership.
+    assert!(lines.contains(&format!("{B},,,,147").as_str()), "{lines:?}");
+    assert!(lines.contains(&format!("{A},,,,147").as_str()), "{lines:?}");
+    assert!(lines.contains(&format!("{C},,,,").as_str()), "{lines:?}");
+    // What an address calls itself is never written as a name it was given.
+    assert!(!file.content.contains("Registry Alice"));
+    assert_eq!(file.contacts, 3);
+
+    // The JSON backup holds the same rows.
+    let json = export(&mut sut, ContactExportScope::All, ContactFileFormat::Json);
+    assert_eq!(json.contacts, 3);
+    for row in [A, B, C] {
+        assert!(json.content.contains(row), "{row} in the JSON backup");
+    }
+}
+
+#[test]
+fn a_dismissed_recipient_stays_out_of_the_export_430() {
+    let mut sut = booted(
+        vec![],
+        vec![ContactTombstone {
+            address: C.to_owned(),
+            dismissed_at_ms: 5_000.0,
+        }],
+        vec![],
+        vec![send(C, 1_000.0), send(B, 2_000.0)],
+    );
+    let file = export(&mut sut, ContactExportScope::All, ContactFileFormat::Csv);
+    assert!(!file.content.contains(C), "deleted, and not sent to since");
+    assert!(file.content.contains(B));
+    assert_eq!(file.contacts, 1);
+}
+
+#[test]
+fn the_export_restores_its_book_and_its_group_430() {
+    let mut first = a_book_built_from_sends();
+    let file = export(&mut first, ContactExportScope::All, ContactFileFormat::Csv);
+    let mut second = booted_empty();
+    import_file(
+        &mut second,
+        file.content.as_bytes(),
+        Some(&file.filename),
+        None,
+    );
+    let view = second.view();
+    assert_eq!(view.import_failure, None);
+    let mut restored = addresses(&view);
+    restored.sort();
+    assert_eq!(restored, vec![A.to_owned(), B.to_owned(), C.to_owned()]);
+    let group = view
+        .groups
+        .iter()
+        .position(|g| g.name == "147")
+        .expect("the group comes back");
+    let mut members = member_addresses(&view, group);
+    members.sort_unstable();
+    assert_eq!(members, vec![A, B]);
+}
+
+/// A file with a header and no rows is "no contacts in this file", never "use
+/// a JSON or CSV file" — it IS one (issue #430's second half).
+#[test]
+fn a_header_only_csv_is_empty_not_a_wrong_format_430() {
+    let mut sut = booted_empty();
+    let ops = import_file(
+        &mut sut,
+        "\u{feff}address,name,note,favorite,groups",
+        Some("vela-contacts-2026-10-04.csv"),
+        None,
+    );
+    assert!(ops.is_empty(), "nothing to write: {ops:?}");
+    assert_eq!(sut.view().import_failure, Some(ContactImportFailure::Empty));
+}
+
+/// The sentence under "Import failed" is the core's (#430): an empty file says
+/// it holds no contacts; a legacy encoding says how to save; the rest say
+/// which files the book reads. Every key is in the corpus.
+#[test]
+fn each_refusal_names_its_own_sentence_430() {
+    use ContactImportFailure::*;
+    assert_eq!(Empty.key(), "contacts.importFailEmpty");
+    assert_eq!(UnsupportedEncoding.key(), "contacts.importFailEncoding");
+    for failure in [MalformedJson, NoAddressColumn, UnknownGroup] {
+        assert_eq!(failure.key(), "contacts.importFailBody");
+    }
+    let mut sut = booted_empty();
+    import_file(&mut sut, "address,name\n", Some("empty.csv"), None);
+    assert_eq!(
+        sut.view().import_failure_key.as_deref(),
+        Some("contacts.importFailEmpty")
+    );
+    // Every key resolves to a sentence of its own in every language.
+    for lang in vela_core::i18n::SUPPORTED {
+        let mut engine = vela_core::i18n::I18n::new(
+            vela_core::i18n::Catalog::embedded("en").expect("en is compiled in"),
+        )
+        .expect("en constructs");
+        if lang != "en" {
+            engine.load_catalog(vela_core::i18n::Catalog::embedded(lang).expect("compiled in"));
+        }
+        engine.change_language(lang);
+        for failure in [Empty, UnsupportedEncoding, MalformedJson] {
+            let text = engine
+                .t(failure.key(), &vela_core::i18n::Options::default())
+                .unwrap_or_default();
+            assert!(
+                !text.is_empty() && text != failure.key(),
+                "{lang}: {} echoed",
+                failure.key()
+            );
+        }
+    }
+}

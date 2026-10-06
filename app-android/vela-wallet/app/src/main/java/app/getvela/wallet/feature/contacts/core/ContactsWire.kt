@@ -30,6 +30,8 @@ data class ContactsView(
     val sections: List<ContactSection> = emptyList(),
     val last_import: ContactImportReport? = null,
     val import_failure: ContactImportFailure? = null,
+    /** The sentence for [import_failure], as a corpus key — the core's choice (issue #430). */
+    val import_failure_key: String? = null,
     val export: ContactExportFile? = null,
     val recipient: ContactRecipientView? = null,
 )

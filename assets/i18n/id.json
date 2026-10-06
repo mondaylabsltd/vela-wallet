@@ -1859,6 +1859,7 @@
   "importFailTitle": "Impor gagal",
   "importFailBody": "Gunakan berkas kontak JSON atau CSV.",
   "importFailEncoding": "Simpan berkas sebagai UTF-8 (Excel: CSV UTF-8), lalu coba lagi.",
+  "importFailEmpty": "Berkas ini tidak berisi kontak.",
   "manage": "Kelola",
   "sectionContacts": "Kontak",
   "countPeople": "{{count}}",

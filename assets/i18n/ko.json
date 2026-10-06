@@ -1859,6 +1859,7 @@
   "importFailTitle": "가져오기 실패",
   "importFailBody": "JSON 또는 CSV 연락처 파일을 사용하세요.",
   "importFailEncoding": "파일을 UTF-8(Excel: CSV UTF-8)로 저장한 뒤 다시 시도하세요.",
+  "importFailEmpty": "이 파일에는 연락처가 없습니다.",
   "manage": "관리",
   "sectionContacts": "연락처",
   "countPeople": "{{count}}명",

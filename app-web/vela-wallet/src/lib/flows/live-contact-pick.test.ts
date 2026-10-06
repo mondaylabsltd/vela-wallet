@@ -37,6 +37,7 @@ const VIEW: ContactsView = {
 	groups: [{ id: 'g1', name: 'Payroll', color: null, members: [ALICE] }],
 	last_import: null,
 	import_failure: null,
+	import_failure_key: null,
 	export: null,
 	recipient: null
 };

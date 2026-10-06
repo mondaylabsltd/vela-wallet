@@ -256,14 +256,11 @@ object ContactsLive {
 
     /** After an import (spec 045 US6): the core's report, or its refusal — one sheet, one sentence, one Close. */
     fun importNotice(view: ContactsView, strings: VelaStrings, close: String): ContactNoticeModel? {
-        view.import_failure?.let { failure ->
-            // A legacy encoding is told how to save the file (issue 333);
-            // every other refusal says which files the book reads.
-            val body = if (failure is ContactImportFailure.UnsupportedEncoding) {
-                I18nKeys.Contacts.IMPORT_FAIL_ENCODING
-            } else {
-                I18nKeys.Contacts.IMPORT_FAIL_BODY
-            }
+        view.import_failure?.let {
+            // Which sentence is the core's (issue #430): how to save a legacy
+            // encoding (333), "no contacts in this file" for an empty one,
+            // which files the book reads for the rest.
+            val body = view.import_failure_key ?: I18nKeys.Contacts.IMPORT_FAIL_BODY
             return ContactNoticeModel(
                 title = strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE),
                 body = strings.t(body),
