@@ -7406,6 +7406,9 @@ fn unichain_empty_treasury() -> Res {
                 floor: "100000000000000".to_owned(),
                 bootstrap_needed: true,
                 operator_served: false,
+                // The relay's probe names no coin; the core fills it when it
+                // publishes the stop (#432).
+                coin: None,
             },
         },
     }
