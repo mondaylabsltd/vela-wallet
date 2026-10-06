@@ -1728,7 +1728,11 @@ fun VelaNavHost(
                         else -> model.menu
                     },
                 )
-                BackHandler(enabled = openContact != null || openGroup != null || formEdit != null) {
+                // One "back" for the system gesture and the screens' ← alike:
+                // the form, then a contact, then a group. Issue #429: the ←
+                // had its own copy, which closed a contact only, so on a
+                // group's page it did nothing.
+                val contactsBack: () -> Unit = {
                     when {
                         formEdit != null -> formEdit = null
                         openContact != null -> {
@@ -1738,6 +1742,7 @@ fun VelaNavHost(
                         else -> openGroup = null
                     }
                 }
+                BackHandler(enabled = openContact != null || openGroup != null || formEdit != null) { contactsBack() }
 
                 if (exportChoice) {
                     ExportFormatSheet(
@@ -1877,10 +1882,7 @@ fun VelaNavHost(
                                 navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
                             }
                             "contacts.groupMenu" -> groupMenu = true
-                            "contacts.back" -> {
-                                    confirmingDelete = false
-                                    openContact = null
-                                }
+                            "contacts.back" -> contactsBack()
                                 "contacts.searchClear" -> query = ""
                                 else -> when {
                                     id.startsWith("contacts.member.toggle:") -> openGroup?.let { gid ->
