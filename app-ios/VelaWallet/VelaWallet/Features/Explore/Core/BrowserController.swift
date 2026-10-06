@@ -870,10 +870,24 @@ final class BrowserController {
         }
         engine.onVisited = { [weak self] url, title, favicon in
             self?.recordVisit(url: url, title: title, favicon: favicon)
+            // Issue #425: the site's good load titles a favourite its host
+            // stands in for — one pinned while it had failed, or one whose
+            // stored name (an error page's) the core reset on hydration.
+            self?.exploreCore.dispatch(Self.pageLoaded(url: url, title: title))
         }
         engine.onStateChanged = { [weak self] in self?.engineTick &+= 1 }
         engines[id] = engine
         return engine
+    }
+
+    /// The `page_loaded` event for a load the core's visit rule accepted
+    /// (`browserLoadVisit` — never the engine's error page): its address and
+    /// its title, `""` read as no title.
+    static func pageLoaded(url: String, title: String) -> String {
+        CoreJSON.string([
+            "type": "page_loaded", "url": url,
+            "title": title.isEmpty ? NSNull() : title as Any,
+        ])
     }
 
     // MARK: - The history queue

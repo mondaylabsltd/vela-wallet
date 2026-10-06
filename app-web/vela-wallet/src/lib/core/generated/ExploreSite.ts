@@ -9,9 +9,11 @@
  */
 export type ExploreSite = { origin: string, url: string, host: string, 
 /**
- * What the tile says. The page's own title until somebody renames it —
- * and a rename is kept forever after, because a person who named a tile
- * meant it and a page can change its `<title>` at will.
+ * What the tile says: the site's last good title, else its host, until
+ * somebody renames it — and a rename is kept forever after, because a
+ * person who named a tile meant it and a page can change its `<title>`
+ * at will. Never an engine's error page (see the module's "A
+ * favourite's name").
  */
 name: string, 
 /**

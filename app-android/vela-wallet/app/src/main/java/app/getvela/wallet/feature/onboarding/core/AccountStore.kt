@@ -81,6 +81,7 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
             val record = existing.optJSONObject(index) ?: continue
             if (record.optString("id") != id) kept.put(record)
         }
+        VelaLog.event("accounts", "remove fixture", "before" to existing.length(), "after" to kept.length())
         writeRaw(KEY_ACCOUNTS, kept.toString())
     }
 
@@ -131,6 +132,10 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
      * that credential becomes unfindable at sign-in.
      */
     suspend fun clearSignedInWallet() {
+        // A sign-out empties the list on purpose; said in the log so an empty
+        // list later reads as that, not as ANDROID-8 again (2026-10-04: an
+        // upsert's `before=0` could not tell the two apart).
+        VelaLog.event("accounts", "sign out", "before" to loadAccounts().length(), "after" to 0)
         store.remove(KEY_ACCOUNTS, KEY_ACTIVE_INDEX)
     }
 

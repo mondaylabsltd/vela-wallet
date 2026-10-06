@@ -44,6 +44,14 @@ data class ExploreDoc(
     val tabs: List<ExploreTab> = emptyList(),
     val selected_tab: String? = null,
     val hidden_system: List<ExploreSystemGroup> = emptyList(),
+    /**
+     * Issue #425: the rule the favourites' names were made under (the core's
+     * `NAME_RULE`). This document is stored THROUGH this class, so a field
+     * missing here is lost on every write — and a document that comes back
+     * without it reads as one from before the rule, its names reset to hosts
+     * on every launch.
+     */
+    val name_rule: Int = 0,
 )
 
 @Serializable
@@ -95,6 +103,15 @@ sealed class ExploreEvent {
     @Serializable
     @SerialName("favorite_added")
     data class FavoriteAdded(val url: String, val title: String? = null, val now_ms: Double) : ExploreEvent()
+
+    /**
+     * Issue #425: a page loaded without failing — the core's visit
+     * (`browserLoadVisit`), never the engine's error page. A favourite of that
+     * site still named by its host takes its title.
+     */
+    @Serializable
+    @SerialName("page_loaded")
+    data class PageLoaded(val url: String, val title: String? = null) : ExploreEvent()
 
     @Serializable
     @SerialName("favorite_removed")

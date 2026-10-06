@@ -2985,7 +2985,7 @@ pub fn token_amount_text_down(value: &str) -> String {
     })
 }
 
-fn with_decimal_mark(figure: String) -> String {
+pub(crate) fn with_decimal_mark(figure: String) -> String {
     let decimal = crate::executor::format_prefs::current()
         .number
         .separators()

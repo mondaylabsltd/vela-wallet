@@ -39,8 +39,8 @@ use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::send::{
     SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendNameSource, SendPayee,
-    SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken,
-    SendTreasuryAsset, SendTxStatus, SendUnitIssue, SendView,
+    SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken, SendTxStatus,
+    SendUnitIssue, SendView,
 };
 
 use crate::flows::fixtures::{
@@ -2273,7 +2273,7 @@ mod treasury_tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::send::{
-        Send as SendMachine, SendTreasuryAsset, SendTreasuryStatus, SendView,
+        Send as SendMachine, SendTreasuryAsset, SendTreasuryCoin, SendTreasuryStatus, SendView,
     };
 
     /// The relay cannot pay on this chain — and there is now a way out of
@@ -2304,6 +2304,13 @@ mod treasury_tests {
                     // Gnosis ships with Vela, so its relayer is the operator's
                     // to refill — the core says so when it publishes the sheet.
                     operator_served: true,
+                    // …and words the figures in Gnosis's own coin (#422).
+                    coin: Some(SendTreasuryCoin {
+                        symbol: Some("xDAI".to_owned()),
+                        balance: "0".to_owned(),
+                        floor: "0.02".to_owned(),
+                        suggested: "0.02".to_owned(),
+                    }),
                 }),
                 ..host.view()
             };
@@ -2332,7 +2339,7 @@ mod treasury_tests {
             // cost the facts would be a worse screen, not a kinder one.
             let detail = notice.detail.unwrap_or_default();
             assert!(detail.contains("0xTreasury"), "{detail}");
-            assert!(detail.contains("0.02"), "{detail}");
+            assert!(detail.contains("0.02 xDAI"), "{detail}");
             // ...and copies it: read off the screen it is 42 characters to retype.
             assert_eq!(
                 notice.copy,
@@ -2395,6 +2402,71 @@ mod treasury_tests {
                 // Only a network the person added is theirs to point elsewhere.
                 assert_eq!(notice.detail.is_some(), !operator_served);
             }
+        });
+    }
+
+    /// Issue #422: the stop's coin and figures are the core's. On a Xiaomi
+    /// a Polygon send was asked for "0.0001 ETH" — another chain's stop, in
+    /// a coin a name lookup guessed. This card writes what the core gives
+    /// and nothing it does not: no figures, no amount.
+    #[test]
+    fn the_treasury_stop_writes_the_cores_coin_and_nothing_it_did_not_give() {
+        crate::executor::storage::tests::with_temp_state("treasury-coin-422", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let host = CoreHost::<SendMachine>::new();
+            let polygon = |coin: Option<SendTreasuryCoin>| SendView {
+                treasury_bootstrap: Some(SendTreasuryStatus {
+                    chain_id: 137,
+                    address: "0xTreasury".to_owned(),
+                    asset: SendTreasuryAsset::Native,
+                    balance: "40000000000000".to_owned(),
+                    floor: "100000000000000".to_owned(),
+                    bootstrap_needed: true,
+                    operator_served: true,
+                    coin,
+                }),
+                ..host.view()
+            };
+            let detail_of = |view: &SendView| {
+                let inputs = SendInputs {
+                    send: view,
+                    fee: &fee,
+                    s: &s,
+                    wallet: &wallet,
+                    locale: "en-US",
+                    money: crate::wallet::live::Money::usd(),
+                    identity_name: "MultiTest",
+                    identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    speed: None,
+                    relay_sent_at_ms: None,
+                };
+                let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
+                notice.detail.unwrap_or_default().to_string()
+            };
+
+            let detail = detail_of(&polygon(Some(SendTreasuryCoin {
+                symbol: Some("POL".to_owned()),
+                balance: "0.00004".to_owned(),
+                floor: "0.0001".to_owned(),
+                suggested: "0.00006".to_owned(),
+            })));
+            assert!(
+                detail.contains(&format!("{} 0.00006 POL", s.funding_amount_label)),
+                "{detail}"
+            );
+            assert!(!detail.contains("ETH"), "{detail}");
+
+            let detail = detail_of(&polygon(None));
+            assert!(
+                detail.contains("0xTreasury"),
+                "still where to send: {detail}"
+            );
+            assert!(
+                !detail.contains(s.funding_amount_label.as_ref()),
+                "no amount nobody read: {detail}"
+            );
         });
     }
 }
@@ -2851,31 +2923,29 @@ fn build_notice(
     // The relay cannot carry anything on this chain until its float is topped
     // up. A stop, and the only one that names an address to send to.
     if let Some(treasury) = &send.treasury_bootstrap {
-        let native = treasury.asset == SendTreasuryAsset::Native;
-        let decimals = if native { 18 } else { 6 };
-        let symbol = if native {
-            native_symbol(treasury.chain_id)
-        } else {
-            "pathUSD".to_owned()
-        };
-        let units = |value: &str| value.parse::<u128>().unwrap_or(0);
-        #[allow(clippy::cast_precision_loss, reason = "displayed figures")]
-        let coin = |value: u128| trimmed(value as f64 / 10f64.powi(decimals));
-        let short = units(&treasury.floor).saturating_sub(units(&treasury.balance));
-        // Spec 098 §4: what it has against what it needs, in its own coin.
-        let balance_line = fill(
-            &fill(
+        // Every figure, and the coin it is in, is the core's (issue #422): the
+        // stop's own chain's coin, the relay's shortfall for that chain. This
+        // shell used to name the coin from the built-in list and do the
+        // arithmetic in `f64`; it now writes only the decimal mark.
+        let amount_line = treasury.coin.as_ref().map(|coin| {
+            let symbol = coin.symbol.as_deref().unwrap_or_default();
+            let mark = |figure: &str| crate::wallet::live::with_decimal_mark(figure.to_owned());
+            // Spec 098 §4: what it has against what it needs, in its own coin.
+            let balance_line = fill(
                 &fill(
-                    &s.funding_balance_line,
-                    "balance",
-                    &coin(units(&treasury.balance)),
+                    &fill(&s.funding_balance_line, "balance", &mark(&coin.balance)),
+                    "floor",
+                    &mark(&coin.floor),
                 ),
-                "floor",
-                &coin(units(&treasury.floor)),
-            ),
-            "symbol",
-            &symbol,
-        );
+                "symbol",
+                symbol,
+            );
+            format!(
+                "  ·  {} {} {symbol}\n{balance_line}",
+                s.funding_amount_label,
+                mark(&coin.suggested),
+            )
+        });
         let notice = SendNotice {
             // The way out of the stop itself. Without it the only exit from a
             // treasury that cannot pay is closing the whole journey — the core
@@ -2891,11 +2961,12 @@ fn build_notice(
             }),
             detail: Some(
                 format!(
-                    "{} {}  ·  {} {} {symbol}\n{balance_line}\n{}\n{}",
+                    "{} {}{}\n{}\n{}",
                     s.funding_address_label,
                     treasury.address,
-                    s.funding_amount_label,
-                    coin(short),
+                    // No figures the core could read: no amount, rather than
+                    // a zero nobody measured.
+                    amount_line.unwrap_or_default(),
                     s.funding_disclaimer,
                     // The core asks the relay again every 10 s and closes this
                     // once funded (spec 098 §4); "Retry" is for the impatient.

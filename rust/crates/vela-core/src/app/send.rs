@@ -68,6 +68,7 @@ use super::fee_policy::{
     encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
     reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
     FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
+    TEMPO_FEE_TOKEN_DECIMALS,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
@@ -533,6 +534,42 @@ pub struct SendTreasuryStatus {
     /// operator may have no way to hold gas there at all.
     #[serde(default)]
     pub operator_served: bool,
+    /// `balance` and `floor` in the coin they are counted in, and what the
+    /// stop asks for (issue 422). Like `operator_served`, the shell does not
+    /// send this: the core fills it when it publishes the stop. `None` on a
+    /// published stop only when the relay's figures could not be read.
+    #[serde(default)]
+    pub coin: Option<SendTreasuryCoin>,
+}
+
+/// The relay's treasury figures in the coin they are counted in (issue 422).
+///
+/// The relay reports base units of the asset the treasury pays gas with —
+/// wei of the chain's own coin, or micro-pathUSD on Tempo — and nothing else.
+/// Every shell used to turn those into words by itself: the coin's name from
+/// a lookup of its own (Android's fell back to "ETH" for any chain name it did
+/// not recognise; the others to nothing), the decimals as "18 unless
+/// pathUSD", and the amount to ask for as the shortfall — or, on the web
+/// alone, at least a flat `0.01` of whatever the coin was, which is tens of
+/// dollars of ETH and a tenth of a cent of POL. One stop, four answers. The
+/// core says it once, for the chain the stop is about.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendTreasuryCoin {
+    /// The coin the treasury pays gas with: pathUSD on Tempo, otherwise the
+    /// chain's own coin, as the wallet writes it. `None` when the wallet does
+    /// not know that chain's coin — never another chain's, never a default.
+    pub symbol: Option<String>,
+    /// What the treasury holds, in whole coin (`"0.00004"`). A plain decimal:
+    /// the shell writes the decimal mark its way and nothing else.
+    pub balance: String,
+    /// The floor the relay says it needs, in whole coin.
+    pub floor: String,
+    /// The suggested contribution (spec 098 §4): what the treasury lacks of
+    /// its floor, `floor − balance`, in whole coin — the relay's own figure
+    /// for this chain, so it is sized in this chain's coin by construction.
+    /// The stop closes by itself once the relay reports the floor reached.
+    pub suggested: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -541,6 +578,19 @@ pub struct SendTreasuryStatus {
 pub enum SendTreasuryAsset {
     Native,
     PathUsd,
+}
+
+impl SendTreasuryAsset {
+    /// The decimals of the base units the relay counts this asset in: wei of
+    /// the chain's own coin, or micro-pathUSD (vela-relay `treasury.rs`,
+    /// `TreasuryStatus::balance`).
+    #[must_use]
+    pub const fn decimals(self) -> u32 {
+        match self {
+            Self::Native => 18,
+            Self::PathUsd => TEMPO_FEE_TOKEN_DECIMALS,
+        }
+    }
 }
 
 /// `probeTreasury`'s four-way outcome (`bundler-service.ts:781-813`) — typed,
@@ -2110,6 +2160,21 @@ impl App for Send {
     type Effect = SendEffect;
 
     fn update(&self, event: Event, model: &mut Model) -> Cmd {
+        let cmd = Self::step(event, model);
+        // Whatever the event, a relay stop never outlives the chain it is
+        // about (issue #422).
+        drop_foreign_relay_stops(model);
+        cmd
+    }
+
+    fn view(&self, model: &Model) -> SendView {
+        Self::project(model)
+    }
+}
+
+impl Send {
+    /// One event, before the relay-stop guard [`App::update`] runs after it.
+    fn step(event: Event, model: &mut Model) -> Cmd {
         match event {
             Event::Open {
                 account,
@@ -2213,7 +2278,7 @@ impl App for Send {
                 // One event for the form's one button, whatever it says — no
                 // shell has to know which stop is up to press it.
                 if model.step == SendStep::EnterDetails {
-                    lower_relay_stops(model);
+                    clear_relay_stops(model);
                 }
                 handle_continue(model)
             }
@@ -2258,7 +2323,7 @@ impl App for Send {
                 render()
             }
             Event::RetryRelayUnreachable => {
-                lower_relay_stops(model);
+                clear_relay_stops(model);
                 match model.step {
                     SendStep::EnterDetails => handle_continue(model),
                     SendStep::Confirm => slide_confirm(model),
@@ -2286,7 +2351,8 @@ impl App for Send {
         }
     }
 
-    fn view(&self, model: &Model) -> SendView {
+    /// The view [`App::view`] publishes.
+    fn project(model: &Model) -> SendView {
         let locked = model.params.locked;
         let stage = if model.lock_error.is_some() {
             SendStage::LockError
@@ -2505,6 +2571,7 @@ impl App for Send {
             receipt: receipt_view(model, stage),
             treasury_bootstrap: model.treasury_bootstrap.clone().map(|mut status| {
                 status.operator_served = super::network_admin::is_builtin_chain(status.chain_id);
+                status.coin = treasury_coin(model, &status);
                 status
             }),
             relay_unreachable: model.relay_unreachable.clone().map(|mut sheet| {
@@ -4805,7 +4872,9 @@ fn precheck_settle(model: &mut Model) -> Cmd {
         // Spec 098 §2: a relay that cannot serve the chain stops the send
         // here too — before 098 it went on to the passkey and failed there.
         TreasuryAnswer::Unreachable => return open_unreachable(model),
-        TreasuryAnswer::Serves => {}
+        // The relay serves this chain (or could not be asked, which proceeds
+        // as ever): no stop stands over the confirm this opens (issue #422).
+        TreasuryAnswer::Serves => clear_relay_stops(model),
     }
     model.step = SendStep::Confirm;
     Command::all([confirm_probes(model), render()])
@@ -5176,7 +5245,7 @@ fn cancel_signing(model: &mut Model) -> Cmd {
 }
 
 fn retry_after_bootstrap(model: &mut Model) -> Cmd {
-    lower_relay_stops(model);
+    clear_relay_stops(model);
     // After funding the relayer, return through the step-appropriate flow
     // (`SendScreen.tsx:214-224`): enter-details re-runs the pre-confirm
     // pre-check; confirm re-runs the slide.
@@ -5817,20 +5886,89 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
     }
 }
 
+/// Close both relay stops, and the treasury stop's watch with them.
+fn clear_relay_stops(model: &mut Model) {
+    model.treasury_bootstrap = None;
+    model.treasury_watch = None;
+    model.relay_unreachable = None;
+}
+
+/// A relay stop is a fact about ONE chain: the relay that was asked about it
+/// has no gas there, or cannot reach it. Once the send is no longer on that
+/// chain the stop is not about this send at all, and it goes — with the watch
+/// that would keep asking about the old chain every ten seconds, and that on
+/// a "funded" answer would press Continue on whatever the form now holds.
+///
+/// Issue #422. A send on a network whose relayer was empty stopped at
+/// Continue; the person picked another coin on Polygon, whose relayer was
+/// funded; Polygon's pre-check said so and confirm opened — under the other
+/// chain's stop, out of gas, asking 0.0001 of the other chain's coin. Nothing
+/// cleared a stop but its own two buttons, so every way of leaving it (Back,
+/// the token card, a new pick in the sweep picker) carried it along. On a
+/// phone that drew the stop only on confirm (v0.9.6) the person never saw it
+/// open: Continue just "did nothing" on the first chain.
+///
+/// [`App::update`] runs this after every event, so no path that changes the
+/// coin — today's or a future one — has to remember it.
+fn drop_foreign_relay_stops(model: &mut Model) {
+    let chain = model.selected_token.as_ref().map(|token| token.chain_id);
+    let stop_chain = model
+        .treasury_bootstrap
+        .as_ref()
+        .map(|status| status.chain_id)
+        .or_else(|| model.relay_unreachable.as_ref().map(|sheet| sheet.chain_id))
+        .or_else(|| model.treasury_watch.as_ref().map(|watch| watch.chain_id));
+    if stop_chain.is_some_and(|stop| Some(stop) != chain) {
+        clear_relay_stops(model);
+    }
+}
+
+/// [`SendTreasuryStatus::coin`]: the relay's figures for this stop's chain,
+/// in that chain's coin (issue #422). `None` when either figure is not a
+/// whole number of base units — a balance nobody can read is not a zero.
+fn treasury_coin(model: &Model, status: &SendTreasuryStatus) -> Option<SendTreasuryCoin> {
+    let units = |figure: &str| figure.trim().parse::<u128>().ok();
+    let (balance, floor) = (units(&status.balance)?, units(&status.floor)?);
+    let decimals = status.asset.decimals();
+    Some(SendTreasuryCoin {
+        symbol: treasury_symbol(model, status),
+        balance: from_base_units(balance, decimals),
+        floor: from_base_units(floor, decimals),
+        // The final difference, never below nothing: a treasury at or above
+        // its floor lacks nothing.
+        suggested: from_base_units(floor.saturating_sub(balance), decimals),
+    })
+}
+
+/// The coin a treasury stop's figures are in. pathUSD on Tempo; otherwise
+/// the chain's own coin — from the networks the shell handed over (which
+/// include ones the person added), the built-in registry, or a holding of
+/// that coin, in that order. Never a guess: an unknown chain names no coin.
+fn treasury_symbol(model: &Model, status: &SendTreasuryStatus) -> Option<String> {
+    let chain_id = status.chain_id;
+    match status.asset {
+        SendTreasuryAsset::PathUsd => Some("pathUSD".to_owned()),
+        SendTreasuryAsset::Native => chain_native_symbol(model, chain_id)
+            .filter(|symbol| !symbol.trim().is_empty())
+            .map(|symbol| super::network_admin::display_native_symbol(chain_id, None, &symbol))
+            .or_else(|| super::network_admin::builtin_native_symbol(chain_id).map(str::to_owned))
+            .or_else(|| {
+                model
+                    .selected_token
+                    .iter()
+                    .chain(&model.tokens)
+                    .find(|token| token.chain_id == chain_id && token.is_native())
+                    .map(|token| token.symbol.clone())
+            }),
+    }
+}
+
 /// Open the treasury sheet and start watching the relay (spec 098 §4).
 fn open_bootstrap(model: &mut Model, status: SendTreasuryStatus) -> Cmd {
     let chain_id = status.chain_id;
     model.treasury_bootstrap = Some(status);
     model.relay_unreachable = None;
     Command::all([watch_treasury(model, chain_id), render()])
-}
-
-/// Both relay stops down, and the funding stop's watch with it — a stop being
-/// answered by asking the relay again (issue #424).
-fn lower_relay_stops(model: &mut Model) {
-    model.treasury_bootstrap = None;
-    model.treasury_watch = None;
-    model.relay_unreachable = None;
 }
 
 /// A relay stop is up: the send waits on the relay, and says so.

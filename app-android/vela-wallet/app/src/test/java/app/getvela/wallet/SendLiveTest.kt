@@ -12,6 +12,7 @@ import app.getvela.wallet.feature.send.core.SendFeeIssueView
 import app.getvela.wallet.feature.send.core.SendAmountWarning
 import app.getvela.wallet.feature.send.core.SendRelayUnreachable
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTreasuryCoin
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -884,6 +885,35 @@ class SendLiveTest {
         assertNull(SendLive.formWarning(split.copy(split_over_balance = false), ctx()))
     }
 
+    /**
+     * Issue #422, the Xiaomi's screen: a Polygon confirm under "Suggested
+     * contribution: 0.0001 ETH". The coin and the figures are the core's now —
+     * the stop's own chain's coin, the relay's shortfall for it — and this app
+     * writes them as given: POL on Polygon, never a name-lookup's "ETH"; and no
+     * figures from the core, no amount at all.
+     */
+    @Test
+    fun `the treasury stop writes the core's coin and figures, and none it did not give`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val pol = SendToken(network = "polygon", chain_id = 137, symbol = "POL", balance = "5", decimals = 18, token_address = null, price_usd = 0.11, logo_urls = emptyList(), spam = false)
+        val stop = SendTreasuryStatus(
+            chain_id = 137, address = "0x3e59292e18417f814112f731e7163534c6d2fe3c", asset = SendTreasuryAsset.Native,
+            balance = "40000000000000", floor = "100000000000000", bootstrap_needed = true, operator_served = true,
+            coin = SendTreasuryCoin(symbol = "POL", balance = "0.00004", floor = "0.0001", suggested = "0.00006"),
+        )
+        val view = SendView(stage = SendStage.Confirm, selected_token = pol, recipient = recipient, confirm_amount = "0.8", fee = fee(), can_confirm = true, treasury_bootstrap = stop)
+        val notice = SendLive.confirm(drawn, view, ctx()).notice!!
+        val hint = strings.t(I18nKeys.Flows.TREASURY_AMOUNT_HINT, mapOf("amount" to "0.00006", "symbol" to "POL"))
+        assertTrue(notice, notice.contains(hint))
+        assertTrue(notice, notice.contains(strings.t(I18nKeys.Flows.TREASURY_BALANCE_LINE, mapOf("balance" to "0.00004", "floor" to "0.0001", "symbol" to "POL"))))
+        assertFalse(notice, notice.contains("ETH"))
+
+        val unread = SendLive.confirm(drawn, view.copy(treasury_bootstrap = stop.copy(coin = null)), ctx()).notice!!
+        assertTrue(unread, unread.startsWith(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
+        assertFalse("no amount nobody read: $unread", unread.contains("0.0001"))
+        assertTrue(unread, unread.contains(strings.t(I18nKeys.Flows.TREASURY_DISCLAIMER)))
+    }
+
     @Test
     fun `half-typed text gets the placeholder identicon, a real address its own`() {
         val drawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
@@ -903,12 +933,19 @@ class SendLiveTest {
         assertFalse(confirm.ctaEnabled)
 
         val low = SendView(
+            // The core closes the gate while a relay stop is up (issue #424);
+            // the shell takes `can_confirm` as it comes.
             stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = false,
-            treasury_bootstrap = SendTreasuryStatus(chain_id = 100, address = "0x1111111111111111111111111111111111111111", asset = SendTreasuryAsset.Native, balance = "100000000000000000", floor = "1000000000000000000", bootstrap_needed = true),
+            treasury_bootstrap = SendTreasuryStatus(
+                chain_id = 100, address = "0x1111111111111111111111111111111111111111", asset = SendTreasuryAsset.Native,
+                balance = "100000000000000000", floor = "1000000000000000000", bootstrap_needed = true,
+                // The core's words for those figures, in Gnosis's coin (issue #422).
+                coin = SendTreasuryCoin(symbol = "xDAI", balance = "0.1", floor = "1", suggested = "0.9"),
+            ),
         )
         val treasury = SendLive.confirm(drawn, low, ctx())
         assertTrue(treasury.notice!!.contains(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
-        assertTrue("the hint carries the shortfall in the chain's coin", treasury.notice!!.contains("0.9"))
+        assertTrue("the hint carries the shortfall in the chain's coin", treasury.notice!!.contains("0.9 xDAI"))
         assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), treasury.noticeAction)
         assertEquals("0x1111111111111111111111111111111111111111", treasury.noticeFund?.address)
         assertFalse(treasury.ctaEnabled)

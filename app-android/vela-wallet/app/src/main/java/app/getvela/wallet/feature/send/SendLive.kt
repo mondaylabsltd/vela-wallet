@@ -58,7 +58,6 @@ import app.getvela.wallet.feature.flows.SendTokenCardModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.send.core.SendAlertKind
 import app.getvela.wallet.feature.send.core.SendAmountWarning
-import app.getvela.wallet.feature.send.core.SendTreasuryAsset
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
@@ -1199,10 +1198,6 @@ object SendLive {
             return "${s.t(I18nKeys.Flows.RELAY_UNREACHABLE_TITLE)} · $lead"
         }
         view.treasury_bootstrap?.let { status ->
-            val decimals = if (status.asset == SendTreasuryAsset.PathUsd) 6 else 18
-            val symbol = if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else nativeSymbol(status.chain_id, ctx)
-            val short = (status.floor.toBigDecimalOrNull() ?: BigDecimal.ZERO) - (status.balance.toBigDecimalOrNull() ?: BigDecimal.ZERO)
-            val hint = s.t(I18nKeys.Flows.TREASURY_AMOUNT_HINT, mapOf("amount" to fromBase(short.max(BigDecimal.ZERO).toPlainString(), decimals), "symbol" to symbol))
             // Two situations, one symptom: on a network Vela ships the operator owns that
             // relayer and telling them is the fix; on one the person added, there may be
             // nobody else who can hold gas there at all (spec 060).
@@ -1211,17 +1206,23 @@ object SendLive {
             } else {
                 s.t(I18nKeys.Flows.TREASURY_CUSTOM_LEAD)
             }
-            // Spec 098 §4: what it has against what it needs, the line that must
-            // not be missed (non-refundable, not Vela's), and that it watches.
-            val balance = s.t(
-                I18nKeys.Flows.TREASURY_BALANCE_LINE,
-                mapOf(
-                    "balance" to fromBase((status.balance.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString(), decimals),
-                    "floor" to fromBase((status.floor.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString(), decimals),
-                    "symbol" to symbol,
-                ),
-            )
-            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead $hint\n$balance\n${s.t(I18nKeys.Flows.TREASURY_DISCLAIMER)}\n${s.t(I18nKeys.Flows.TREASURY_WATCHING)}"
+            // Issue #422: the coin and every figure in it are the core's — the stop's own
+            // chain's coin, the relay's shortfall for that chain. This app used to name the
+            // coin by chain name ("ETH" for any it did not know) and work the figures out in
+            // 18 decimals, and asked a Polygon send for "0.0001 ETH". No figures the core
+            // could read: no amount, rather than one nobody measured.
+            val figures = status.coin?.let { coin ->
+                val symbol = coin.symbol.orEmpty()
+                val hint = s.t(I18nKeys.Flows.TREASURY_AMOUNT_HINT, mapOf("amount" to coinText(coin.suggested), "symbol" to symbol)).trim()
+                // Spec 098 §4: what it has against what it needs.
+                val balance = s.t(
+                    I18nKeys.Flows.TREASURY_BALANCE_LINE,
+                    mapOf("balance" to coinText(coin.balance), "floor" to coinText(coin.floor), "symbol" to symbol),
+                )
+                " $hint\n$balance"
+            }.orEmpty()
+            // …the line that must not be missed (non-refundable, not Vela's), and that it watches.
+            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead$figures\n${s.t(I18nKeys.Flows.TREASURY_DISCLAIMER)}\n${s.t(I18nKeys.Flows.TREASURY_WATCHING)}"
         }
         return null
     }
@@ -1425,6 +1426,9 @@ object SendLive {
 
     private fun nativeSymbol(chainId: Int, ctx: Context): String =
         ctx.chainNames[chainId]?.let { NATIVE_BY_NAME[it] } ?: "ETH"
+
+    /** One of the core's whole-coin figures, with the preset's decimal mark and every digit it gave. */
+    internal fun coinText(figure: String): String = Formats.current.plain(figure)
 
     /** A base-unit decimal string as a human decimal, trailing zeros dropped. */
     fun fromBase(units: String, decimals: Int): String {

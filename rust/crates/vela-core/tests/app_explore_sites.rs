@@ -10,10 +10,11 @@
 mod support;
 
 use support::DomainDriver;
+use vela_core::app::browser_load::{visit_to_record, LoadFinished};
 use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
     Event, ExploreDoc, ExploreGroup, ExploreOperation as Op, ExploreShellResult as Res,
-    ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP,
+    ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP, NAME_RULE,
 };
 
 type Sut = DomainDriver<ExploreSites>;
@@ -226,6 +227,207 @@ fn what_cannot_be_pinned() {
         })
         .is_empty());
     assert_eq!(sut.view().favorites.len(), FAVORITES_CAP);
+}
+
+// ---------------------------------------------------------------------------
+// A favourite's name — issue #425
+// ---------------------------------------------------------------------------
+
+/// The `vela.explore` document the Xiaomi carried from v0.9.5 into v0.9.6,
+/// in the shape Android's serializer writes it: app.uniswap.org pinned while
+/// it had failed to load, under the WebView's error page's title (#329) —
+/// with no `name_rule`, because no build before the fix wrote one.
+const XIAOMI_V095_DOC: &str = r#"{
+    "favorites": [
+        {"origin": "https://app.uniswap.org", "url": "https://app.uniswap.org/",
+         "host": "app.uniswap.org", "name": "网页无法打开", "renamed": false,
+         "added_ms": 1759051383000.0},
+        {"origin": "https://curve.fi", "url": "https://curve.fi/",
+         "host": "curve.fi", "name": "My stables", "renamed": true,
+         "added_ms": 1759051384000.0}
+    ],
+    "groups": [],
+    "tabs": [{"id": "t-1759051380000", "url": "https://app.uniswap.org/",
+              "title": "Uniswap Interface", "host": "app.uniswap.org"}],
+    "selected_tab": "t-1759051380000",
+    "hidden_system": []
+}"#;
+
+/// The visit a finished load is, by the core's own rule — what a shell
+/// dispatches as [`Event::PageLoaded`] (and records in Recents).
+fn page_loaded(url: &str, title: &str, failed: bool) -> Option<Event> {
+    visit_to_record(LoadFinished {
+        url: url.to_owned(),
+        title: title.to_owned(),
+        icon: None,
+        main_frame_failed: failed,
+        http_status: None,
+    })
+    .map(|visit| Event::PageLoaded {
+        url: visit.url,
+        title: visit.title,
+    })
+}
+
+/// Issue #425, the exact case: #345 (issue #329) named NEW favourites by the
+/// site's last good title or its host, and read the stored ones as they were
+/// — so the Uniswap tile pinned under v0.9.5 still read "网页无法打开" in
+/// v0.9.6, while Recents, right under it, named the site properly. A document
+/// from before the rule has every name nobody chose replaced by its host on
+/// hydration, and written back once; a person's rename stays.
+#[test]
+fn a_favourite_stored_before_the_rule_under_an_error_page_is_named_by_its_host() {
+    let stored: ExploreDoc = serde_json::from_str(XIAOMI_V095_DOC).expect("the v0.9.5 shape reads");
+    assert_eq!(
+        stored.name_rule, 0,
+        "a document from before the rule says so"
+    );
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    let doc = written(sut.resolve(Res::Loaded { doc: Some(stored) }));
+
+    let view = sut.view();
+    assert!(view.ready);
+    assert_eq!(
+        view.favorites[0].name, "app.uniswap.org",
+        "never the error page"
+    );
+    assert_eq!(
+        view.favorites[1].name, "My stables",
+        "a person's name is theirs"
+    );
+    assert_eq!(
+        doc.name_rule, NAME_RULE,
+        "written back under the rule, once"
+    );
+    assert_eq!(doc.favorites[0].name, "app.uniswap.org");
+    assert_eq!(doc.favorites[1].name, "My stables");
+    // Nothing else in the document moved.
+    assert_eq!(doc.tabs[0].title, "Uniswap Interface");
+    assert_eq!(doc.selected_tab.as_deref(), Some("t-1759051380000"));
+
+    // The next launch reads a document made under the rule: nothing to write.
+    let ready_again = ready(Some(doc));
+    assert_eq!(ready_again.view().favorites[0].name, "app.uniswap.org");
+}
+
+/// …and the site's next good load names it — "Uniswap | Trade Crypto on
+/// DeFi's…", the title Recents already showed. An engine's error page is no
+/// load (the core's visit rule), so it can never be the one that names it.
+#[test]
+fn the_sites_next_good_load_names_a_favourite_its_host_stands_in_for() {
+    let stored: ExploreDoc = serde_json::from_str(XIAOMI_V095_DOC).expect("the v0.9.5 shape reads");
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    written(sut.resolve(Res::Loaded { doc: Some(stored) }));
+
+    // The error page again: failed, or read at its chrome-error:// address.
+    assert!(page_loaded("https://app.uniswap.org/", "网页无法打开", true).is_none());
+    assert!(page_loaded("chrome-error://chromewebdata/", "网页无法打开", false).is_none());
+
+    let good = page_loaded(
+        "https://app.uniswap.org/swap",
+        "Uniswap | Trade Crypto on DeFi's Leading Exchange",
+        false,
+    )
+    .expect("a page that loaded is a visit");
+    let doc = written(sut.dispatch(good));
+    assert_eq!(
+        doc.favorites[0].name,
+        "Uniswap | Trade Crypto on DeFi's Leading Exchange"
+    );
+    assert_eq!(
+        doc.favorites[1].name, "My stables",
+        "a rename is never retitled"
+    );
+}
+
+/// A favourite named by its host — pinned while its site had failed (the
+/// core's `pinned_title` gave no title) — takes the site's title from its
+/// first good load. One with a title keeps it: a tile does not change its
+/// name with every page of the site; nor does one a person named, even with
+/// the host itself; nor does a load of another site, or one with no title.
+#[test]
+fn only_a_favourite_still_named_by_its_host_takes_a_loads_title() {
+    let mut sut = ready(None);
+    favorite(&mut sut, "https://app.uniswap.org/", None, T0);
+    favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
+    favorite(&mut sut, "https://aave.com/", None, T0);
+    written(sut.dispatch(Event::FavoriteRenamed {
+        origin: "https://aave.com".to_owned(),
+        name: "aave.com".to_owned(),
+    }));
+    assert_eq!(sut.view().favorites[0].name, "app.uniswap.org");
+
+    // Another site's load, a load with no title, a blank title: nothing.
+    for (url, title) in [
+        ("https://app.sushi.com/", Some("Sushi")),
+        ("https://app.uniswap.org/", None),
+        ("https://app.uniswap.org/", Some("   ")),
+    ] {
+        let event = Event::PageLoaded {
+            url: url.to_owned(),
+            title: title.map(str::to_owned),
+        };
+        assert!(sut.dispatch(event).is_empty(), "{url} {title:?} wrote");
+    }
+
+    // The site's own load, however the page spelled its host.
+    let doc = written(sut.dispatch(Event::PageLoaded {
+        url: "https://APP.uniswap.org/positions".to_owned(),
+        title: Some("  Uniswap Interface ".to_owned()),
+    }));
+    assert_eq!(doc.favorites[0].name, "Uniswap Interface");
+
+    // Titled now: a later page of the site does not rename it.
+    for (url, title) in [
+        ("https://app.uniswap.org/explore", "Explore | Uniswap"),
+        ("https://curve.fi/dex", "Curve DEX"),
+        ("https://aave.com/", "Aave - Open Source Liquidity Protocol"),
+    ] {
+        let event = Event::PageLoaded {
+            url: url.to_owned(),
+            title: Some(title.to_owned()),
+        };
+        assert!(sut.dispatch(event).is_empty(), "{url} renamed its tile");
+    }
+    let names: Vec<String> = sut
+        .view()
+        .favorites
+        .iter()
+        .map(|s| s.name.clone())
+        .collect();
+    assert_eq!(names, ["Uniswap Interface", "Curve", "aave.com"]);
+}
+
+/// A load before the store is known changes nothing — it is dropped like
+/// every edit, and the next one names the tile.
+#[test]
+fn a_load_before_hydration_is_dropped() {
+    let mut sut = Sut::new();
+    assert!(sut
+        .dispatch(Event::PageLoaded {
+            url: "https://app.uniswap.org/".to_owned(),
+            title: Some("Uniswap".to_owned()),
+        })
+        .is_empty());
+}
+
+/// A document written under the rule is read as it is: its names were made
+/// by `pinned_title`, so a good title is kept and nothing is written.
+#[test]
+fn a_document_made_under_the_rule_keeps_its_names() {
+    let mut sut = ready(None);
+    let doc = favorite(
+        &mut sut,
+        "https://app.uniswap.org/",
+        Some("Uniswap Interface"),
+        T0,
+    );
+    assert_eq!(doc.name_rule, NAME_RULE, "every write carries the rule");
+    let again = ready(Some(doc));
+    assert_eq!(again.view().favorites[0].name, "Uniswap Interface");
 }
 
 /// A page with no title of its own is its host, not a blank tile.

@@ -432,7 +432,10 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 								// The CORE decides whether this is a network Vela ships,
 								// and therefore whose relayer the operator owns. The shell
 								// reports the probe; it does not judge it (spec 060).
-								operator_served: false
+								operator_served: false,
+								// …nor words its figures: the coin and the amounts in it
+								// are the core's (issue 422).
+								coin: null
 							}
 						}
 					};
