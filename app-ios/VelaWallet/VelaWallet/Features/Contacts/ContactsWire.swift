@@ -160,6 +160,9 @@ struct ContactsViewWire: Decodable, Equatable {
     /// The file could not be read at all. `lastImport` and this are the two
     /// outcomes of one pick, and they are never both set.
     let importFailure: ContactImportFailureWire?
+    /// The sentence for `importFailure`, as a corpus key — the core's choice
+    /// (issue #430).
+    var importFailureKey: String? = nil
     let export: ContactExportFileWire?
     let recipient: ContactRecipientWire?
 }

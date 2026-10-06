@@ -580,6 +580,10 @@ pub struct ContactsView {
     /// Why the last `ImportFile` was refused — before anything was written.
     /// Mutually exclusive with `last_import`; both clear on `ImportAcknowledged`.
     pub import_failure: Option<ContactImportFailure>,
+    /// The sentence for `import_failure`, as a corpus key
+    /// ([`ContactImportFailure::key`]) — the core's choice, drawn as given.
+    #[serde(default)]
+    pub import_failure_key: Option<String>,
     /// The file an `ExportRequested` produced, until the shell takes it.
     pub export: Option<ContactExportFile>,
     pub recipient: Option<ContactRecipientView>,
@@ -940,6 +944,7 @@ impl App for Contacts {
                 .collect(),
             last_import: model.last_import,
             import_failure: model.import_failure,
+            import_failure_key: model.import_failure.map(|failure| failure.key().to_owned()),
             export: model.export.clone(),
             recipient: model
                 .inspected
@@ -1346,9 +1351,18 @@ fn apply_import_file(
     Ok(ops)
 }
 
-/// [`Event::ExportRequested`]: the saved book, or one group resolved to its
-/// members (an unsaved member is still a payee — it travels as its address,
-/// invariant ③). A group that no longer exists exports nothing.
+/// [`Event::ExportRequested`]: the book as the list shows it, or one group
+/// resolved to its members (an unsaved member is still a payee — it travels as
+/// its address, invariant ③). A group that no longer exists exports nothing.
+///
+/// "The book" is every row the person sees — the saved contacts AND the
+/// people sent to, merged exactly as [`App::view`] merges them — plus any
+/// group member that is neither, so a group comes back whole from a CSV
+/// (whose groups ride on its rows). Issue #430: the export wrote `saved`
+/// alone; a list built from sends exported a header and nothing else, and
+/// its own re-import was refused. A row's identity name (`resolved_name`) is
+/// never written as its name: a backup must not turn what an address calls
+/// itself into a name the person gave it.
 fn export_book(
     model: &Model,
     scope: &ContactExportScope,
@@ -1357,7 +1371,20 @@ fn export_book(
 ) -> Option<ContactExportFile> {
     let (contacts, groups, group_name): (Vec<Contact>, Vec<ContactGroup>, Option<String>) =
         match scope {
-            ContactExportScope::All => (model.saved.clone(), model.groups.clone(), None),
+            ContactExportScope::All => {
+                let mut rows = merge_contacts(
+                    &model.saved,
+                    &model.tombstones,
+                    &model.history,
+                    model.my_address.as_deref(),
+                );
+                for member in model.groups.iter().flat_map(|group| &group.members) {
+                    if !rows.iter().any(|row| row.address == *member) {
+                        rows.push(resolve_member(&model.saved, member));
+                    }
+                }
+                (rows, model.groups.clone(), None)
+            }
             ContactExportScope::Group { id } => {
                 let group = model.groups.iter().find(|g| g.id == *id)?;
                 let members = group

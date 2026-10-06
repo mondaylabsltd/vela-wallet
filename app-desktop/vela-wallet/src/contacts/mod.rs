@@ -48,6 +48,8 @@ pub struct ContactsStrings {
     pub import_fail_body: SharedString,
     /// A file in a legacy encoding: how to save it as UTF-8 (issue 333).
     pub import_fail_encoding: SharedString,
+    /// Issue #430: a file with no contacts in it.
+    pub import_fail_empty: SharedString,
     /// The add/edit sheet. 030 called this "blocked on drawn UI that does not
     /// exist" — the WORDS existed all along, and by 031 the app had a dialog
     /// idiom and a text field to put them in.
@@ -109,8 +111,11 @@ impl ContactsStrings {
         &self,
         failure: Option<ContactImportFailure>,
     ) -> (SharedString, SharedString) {
-        let body = match failure {
-            Some(ContactImportFailure::UnsupportedEncoding) => &self.import_fail_encoding,
+        // Which sentence is the core's ([`ContactImportFailure::key`], issue
+        // #430); an unreadable file keeps the general one.
+        let body = match failure.map(ContactImportFailure::key) {
+            Some("contacts.importFailEncoding") => &self.import_fail_encoding,
+            Some("contacts.importFailEmpty") => &self.import_fail_empty,
             _ => &self.import_fail_body,
         };
         (self.import_fail_title.clone(), body.clone())
@@ -143,6 +148,7 @@ impl ContactsStrings {
             import_fail_title: s("contacts.importFailTitle"),
             import_fail_body: s("contacts.importFailBody"),
             import_fail_encoding: s("contacts.importFailEncoding"),
+            import_fail_empty: s("contacts.importFailEmpty"),
             add_title: s("contacts.addTitle"),
             edit_title: s("contacts.editTitle"),
             save_to_contacts: s("contacts.saveToContacts"),
@@ -215,6 +221,7 @@ mod tests {
                 s.import_fail_encoding.as_ref(),
                 "contacts.importFailEncoding",
             ),
+            (s.import_fail_empty.as_ref(), "contacts.importFailEmpty"),
             (s.add_title.as_ref(), "contacts.addTitle"),
             (s.edit_title.as_ref(), "contacts.editTitle"),
             (s.name_label.as_ref(), "contacts.nameLabel"),
@@ -254,5 +261,9 @@ mod tests {
         ] {
             assert_eq!(s.import_refusal(other).1, s.import_fail_body);
         }
+        // Issue #430: a file with no contacts says so.
+        let (_, empty) = s.import_refusal(Some(ContactImportFailure::Empty));
+        assert_eq!(empty, s.import_fail_empty);
+        assert_ne!(empty, s.import_fail_body);
     }
 }

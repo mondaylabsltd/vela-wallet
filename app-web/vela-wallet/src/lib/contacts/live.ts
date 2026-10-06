@@ -460,12 +460,17 @@ export function importReport(
 	m: ContactsMessages
 ): { title: string; body: string } | undefined {
 	if (view.import_failure !== null) {
-		// A file in a legacy encoding is refused with how to save it (issue
-		// 333); every other refusal says which files the book reads.
-		const encoding = view.import_failure.type === 'unsupported_encoding';
+		// Which sentence is the core's (issue 430): how to save a legacy
+		// encoding (333), "no contacts in this file" for an empty one, which
+		// files the book reads for the rest.
+		const bodies: Record<string, string> = {
+			'contacts.importFailEncoding': m.importFailEncoding,
+			'contacts.importFailEmpty': m.importFailEmpty,
+			'contacts.importFailBody': m.importFailBody
+		};
 		return {
 			title: m.importFailTitle,
-			body: encoding ? m.importFailEncoding : m.importFailBody
+			body: bodies[view.import_failure_key ?? ''] ?? m.importFailBody
 		};
 	}
 	const report = view.last_import;

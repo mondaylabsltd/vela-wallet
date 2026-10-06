@@ -1869,6 +1869,7 @@
   "importFailTitle": "导入失败",
   "importFailBody": "请使用 JSON 或 CSV 通讯录文件。",
   "importFailEncoding": "请将文件另存为 UTF-8（Excel 中选择「CSV UTF-8」）后重试。",
+  "importFailEmpty": "这个文件里没有联系人。",
   "manage": "管理",
   "sectionContacts": "联系人",
   "countPeople": "{{count}} 位",

@@ -573,8 +573,11 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1880 (merge of #419 into 100, 2026-10-04): #419's 1782 leaves (main + #409,
 //   #408; #411 moved no key) + 100's net one (+ addLead, addFromSite, badRpc,
 //   − alertNotFound{Title,Body}) = 1783 leaves, 97 branches.
-if (PATHS.length !== 1880) fail(`expected 1880 paths (1783 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1783) fail(`expected 1783 leaf paths, got ${leafSet.size}`);
+// 1881 (issue #430, 2026-10-06): + `contacts.importFailEmpty` — a file with a
+//   header and no rows says it holds no contacts, not "use a JSON or CSV file".
+//   1784 leaves.
+if (PATHS.length !== 1881) fail(`expected 1881 paths (1784 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1784) fail(`expected 1784 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

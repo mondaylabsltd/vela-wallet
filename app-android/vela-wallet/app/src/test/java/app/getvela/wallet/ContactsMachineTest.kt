@@ -265,6 +265,24 @@ class ContactsMachineTest {
     }
 
     /**
+     * Issue #430, on the real core: the 36-byte export (its BOM and header,
+     * no rows) is refused as a file with no contacts, and the core names that
+     * sentence — not "use a JSON or CSV file".
+     */
+    @Test
+    fun aHeaderOnlyCsvIsRefusedAsEmptyWithItsOwnSentence() {
+        val host = host(FakeStore())
+        host.send(ContactEvent.AccountSwitched(null))
+        host.settle { it.loaded }
+        val headerOnly = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "address,name,note,favorite,groups".toByteArray()
+        assertEquals(36, headerOnly.size)
+        host.send(ContactEvent.ImportFile.of(headerOnly, filename = "vela-contacts-2026-10-04.csv", intoGroup = null, nowMs = 1_725_000_008_000.0))
+        val refused = host.settle { it.import_failure != null }
+        assertEquals(ContactImportFailure.Empty, refused.import_failure)
+        assertEquals("contacts.importFailEmpty", refused.import_failure_key)
+    }
+
+    /**
      * Issue 333, on the real core: the picked file's BYTES cross the wire as
      * 0–255 (a Kotlin `Byte` is signed, and every non-ASCII byte is ≥ 0x80),
      * a GBK CSV from Excel is refused instead of importing `jxjjx����`, and
@@ -281,6 +299,7 @@ class ContactsMachineTest {
         host.send(ContactEvent.ImportFile.of(gbk, filename = "excel.csv", intoGroup = null, nowMs = 1_725_000_005_000.0))
         val refused = host.settle { it.import_failure != null }
         assertEquals(ContactImportFailure.UnsupportedEncoding, refused.import_failure)
+        assertEquals("contacts.importFailEncoding", refused.import_failure_key)
         assertTrue("nothing was written", refused.contacts.isEmpty())
         host.send(ContactEvent.ImportAcknowledged)
         host.settle { it.import_failure == null }

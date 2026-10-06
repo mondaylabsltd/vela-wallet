@@ -47,6 +47,7 @@ const VIEW: ContactsView = {
 	groups: [{ id: 'g1', name: 'Payroll', color: null, members: [ALICE, BOB] }],
 	last_import: null,
 	import_failure: null,
+	import_failure_key: null,
 	export: null,
 	recipient: null
 };
@@ -469,9 +470,23 @@ describe('importReport', () => {
 		const refused = importReport({ ...VIEW, import_failure: { type: 'no_address_column' } }, m);
 		expect(refused).toEqual({ title: m.importFailTitle, body: m.importFailBody });
 		// Issue 333: a file in a legacy encoding is told how to save it.
-		const encoding = importReport({ ...VIEW, import_failure: { type: 'unsupported_encoding' } }, m);
+		const encoding = importReport(
+			{
+				...VIEW,
+				import_failure: { type: 'unsupported_encoding' },
+				import_failure_key: 'contacts.importFailEncoding'
+			},
+			m
+		);
 		expect(encoding).toEqual({ title: m.importFailTitle, body: m.importFailEncoding });
 		expect(m.importFailEncoding).toContain('UTF-8');
+		// Issue #430: the core names the sentence — an empty file holds no contacts.
+		const empty = importReport(
+			{ ...VIEW, import_failure: { type: 'empty' }, import_failure_key: 'contacts.importFailEmpty' },
+			m
+		);
+		expect(empty).toEqual({ title: m.importFailTitle, body: m.importFailEmpty });
+		expect(m.importFailEmpty).not.toBe(m.importFailBody);
 	});
 });
 

@@ -6852,6 +6852,7 @@ mod tests {
             }],
             last_import: None,
             import_failure: None,
+            import_failure_key: None,
             export: None,
             recipient: None,
         };

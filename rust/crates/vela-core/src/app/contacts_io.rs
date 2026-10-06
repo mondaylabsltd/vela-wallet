@@ -73,6 +73,24 @@ pub enum ContactImportFailure {
     UnsupportedEncoding,
 }
 
+impl ContactImportFailure {
+    /// The corpus key of the sentence under "Import failed": how to save the
+    /// file for a legacy encoding (issue 333), that the file holds no
+    /// contacts for an empty one (issue #430 — a header-only CSV was told to
+    /// "use a JSON or CSV file", which it was), and which files the book reads
+    /// for the rest.
+    #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::UnsupportedEncoding => "contacts.importFailEncoding",
+            Self::Empty => "contacts.importFailEmpty",
+            Self::MalformedJson | Self::NoAddressColumn | Self::UnknownGroup => {
+                "contacts.importFailBody"
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Serialize
 // ---------------------------------------------------------------------------

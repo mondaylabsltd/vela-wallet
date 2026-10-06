@@ -24,6 +24,11 @@ sections: Array<ContactSection>, groups: Array<ContactGroupView>, last_import: C
  */
 import_failure: ContactImportFailure | null, 
 /**
+ * The sentence for `import_failure`, as a corpus key
+ * ([`ContactImportFailure::key`]) — the core's choice, drawn as given.
+ */
+import_failure_key: string | null, 
+/**
  * The file an `ExportRequested` produced, until the shell takes it.
  */
 export: ContactExportFile | null, recipient: ContactRecipientView | null, };
