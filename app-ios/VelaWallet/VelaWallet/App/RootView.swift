@@ -3015,17 +3015,10 @@ struct RootView: View {
                             send.done()
                         }
                     },
-                    // While a relay stop is up the button is its retry — the
-                    // core clears the stop and re-runs the pre-check (098).
-                    onContinueSend: {
-                        if send.view?.relayUnreachable != nil {
-                            send.retryRelayUnreachable()
-                        } else if send.view?.treasuryBootstrap != nil {
-                            send.retryAfterBootstrap()
-                        } else {
-                            send.advance()
-                        }
-                    },
+                    // One event for the form's one button (issue #424): while a
+                    // relay stop is up the button is its retry, and the core
+                    // lowers the stop and runs the pre-check again (098).
+                    onContinueSend: { send.advance() },
                     onRefreshFee: { fees.refresh() },
                     onToggleSpeed: { fees.toggleSpeed() },
                     onPickSpeed: { tier in fees.pickSpeed(tier) },
@@ -3156,17 +3149,8 @@ struct RootView: View {
     private func sendCtaDisabled(_ state: FlowStateId) -> Bool {
         guard let view = send.view else { return false }
         switch state {
-        // A relay stop turns the button into its retry, which is always
-        // pressable (spec 098).
-        case .sd2, .sd2b, .sd2d:
-            return !view.canContinue && view.treasuryBootstrap == nil && view.relayUnreachable == nil
-        // Three more reasons the confirm CTA is inert, and each one now has a
-        // line on the page saying so: a depleted relayer, a submit the relay
-        // refused, and a signature already under way.
-        case .sd3, .sd3b, .sd3c:
-            return !view.canConfirm || view.sending
-                || view.treasuryBootstrap != nil || view.relayUnreachable != nil
-                || view.txError != nil
+        case .sd2, .sd2b, .sd2d: return SendLive.formCtaDisabled(view)
+        case .sd3, .sd3b, .sd3c: return SendLive.confirmCtaDisabled(view)
         default: return false
         }
     }

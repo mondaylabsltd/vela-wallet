@@ -64,6 +64,26 @@ class RelayClientTest {
         assertTrue(probe.status.bootstrap_needed)
     }
 
+    /**
+     * Issue #424: the relay's answer for Unichain on 2026-10-04, verbatim — a
+     * 200 for a treasury holding nothing. It is a stop, with the figures the
+     * form prints, never "covered" because the request succeeded.
+     */
+    @Test
+    fun `Unichain's empty treasury, as the relay answered it, is a low float with its figures`() = runBlocking {
+        port.rest["https://relay.test/v1/treasury/130"] = RestAnswer.Ok(
+            JSONObject(
+                """{"chainId":130,"address":"0x3e59292e18417f814112f731e7163534c6d2fe3c","asset":"native","balance":"0x0","floor":"0x5af3107a4000","bootstrapNeeded":true}""",
+            ),
+        )
+        val probe = relay.probeTreasury(130) as SendTreasuryProbe.LowFloat
+        assertEquals(130, probe.status.chain_id)
+        assertEquals("0x3e59292e18417f814112f731e7163534c6d2fe3c", probe.status.address)
+        assertEquals(SendTreasuryAsset.Native, probe.status.asset)
+        assertEquals("0", probe.status.balance)
+        assertEquals("100000000000000", probe.status.floor)
+    }
+
     @Test
     fun `the built-in base serves a chain the pool names no relay for`() = runBlocking {
         port.base = null
