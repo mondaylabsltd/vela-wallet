@@ -1433,6 +1433,7 @@ fun VelaNavHost(
                                     }
                                 },
                                 onGroupNew = { browser.createGroup(strings.t("explore.newGroup")) },
+                                onGroupDelete = { id -> browser.deleteGroup(id) },
                                 onSiteMenuPick = { id ->
                                     when (id) {
                                         "refresh" -> browser.reload()

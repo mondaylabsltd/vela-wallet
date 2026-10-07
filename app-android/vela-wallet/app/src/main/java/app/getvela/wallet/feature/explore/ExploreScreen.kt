@@ -81,6 +81,8 @@ class ExploreCallbacks(
     val onTabsCloseAll: () -> Unit,
     val onGroupToggle: (String, Boolean) -> Unit,
     val onGroupNew: () -> Unit,
+    /** Issue #439: a group of the person's own, deleted from Manage groups (its sites stay favourited). */
+    val onGroupDelete: (String) -> Unit = {},
     val onSiteMenuPick: (String) -> Unit,
     val onBookmark: () -> Unit,
     val onRecentClear: () -> Unit,
@@ -412,6 +414,8 @@ fun ExploreScreen(
                                 }
                             },
                             onNew = { live?.onGroupNew() },
+                            // Issue #439: the trash was drawn with no tap behind it.
+                            onDelete = { id -> live?.onGroupDelete(id) },
                         )
                     }
 
