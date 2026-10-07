@@ -22,21 +22,33 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 1
 fi
 
+# VELA_IOS_SIM_ONLY=1 (CI's simulator tests, ci.yml `ios`): the simulator slice
+# alone, in the `ci-ios` profile — no LTO, parallel codegen. The device slice and
+# `release`'s optimisation are for what ships (ios-package.yml, device runs),
+# and they were most of the slowest CI job's time. Unset: exactly as before.
+if [ "${VELA_IOS_SIM_ONLY:-0}" = 1 ]; then
+  PROFILE=ci-ios
+else
+  PROFILE=release
+fi
+
 KIT_DIR="$RUST_DIR/../app-ios/VelaCoreKit"
 
 echo "build-ios-xcframework: building the host dylib"
-cargo build --release -p vela-core-uniffi
-LIB_FILE="target/release/libvela_core_uniffi.dylib"
+cargo build --profile "$PROFILE" -p vela-core-uniffi
+LIB_FILE="target/$PROFILE/libvela_core_uniffi.dylib"
 
 echo "build-ios-xcframework: generating Swift bindings"
-cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
+cargo run --profile "$PROFILE" -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language swift --out-dir bindings/swift
 
-echo "build-ios-xcframework: building the device static library"
-cargo build --release -p vela-core-uniffi --target aarch64-apple-ios
+if [ "$PROFILE" = release ]; then
+  echo "build-ios-xcframework: building the device static library"
+  cargo build --profile "$PROFILE" -p vela-core-uniffi --target aarch64-apple-ios
+fi
 
 echo "build-ios-xcframework: building the simulator static library"
-cargo build --release -p vela-core-uniffi --target aarch64-apple-ios-sim
+cargo build --profile "$PROFILE" -p vela-core-uniffi --target aarch64-apple-ios-sim
 
 # Each xcframework slice needs its own copy of the C headers, with the
 # modulemap renamed to the clang-conventional module.modulemap.
@@ -52,12 +64,11 @@ echo "build-ios-xcframework: assembling VelaCoreFFI.xcframework"
 XCFRAMEWORK="$KIT_DIR/Artifacts/VelaCoreFFI.xcframework"
 rm -rf "$XCFRAMEWORK"
 mkdir -p "$KIT_DIR/Artifacts"
-xcodebuild -create-xcframework \
-  -library target/aarch64-apple-ios/release/libvela_core_uniffi.a \
-  -headers "$HDRS/ios" \
-  -library target/aarch64-apple-ios-sim/release/libvela_core_uniffi.a \
-  -headers "$HDRS/ios-sim" \
-  -output "$XCFRAMEWORK"
+SLICES=(-library "target/aarch64-apple-ios-sim/$PROFILE/libvela_core_uniffi.a" -headers "$HDRS/ios-sim")
+if [ "$PROFILE" = release ]; then
+  SLICES=(-library "target/aarch64-apple-ios/$PROFILE/libvela_core_uniffi.a" -headers "$HDRS/ios" "${SLICES[@]}")
+fi
+xcodebuild -create-xcframework "${SLICES[@]}" -output "$XCFRAMEWORK"
 
 echo "build-ios-xcframework: refreshing the committed Swift bindings"
 mkdir -p "$KIT_DIR/Sources/VelaCore"

@@ -28,22 +28,34 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 1
 fi
 
+# VELA_IOS_SIM_ONLY=1 (CI's simulator tests, ci.yml `ios`): the simulator slice
+# alone, in the `ci-ios` profile — no LTO, parallel codegen. The device slice and
+# `release`'s optimisation are for what ships (ios-package.yml, device runs),
+# and they were most of the slowest CI job's time. Unset: exactly as before.
+if [ "${VELA_IOS_SIM_ONLY:-0}" = 1 ]; then
+  PROFILE=ci-ios
+else
+  PROFILE=release
+fi
+
 KIT_DIR="$RUST_DIR/../app-ios/VelaDevFixturesKit"
 DEV_SWIFT_DIR="$RUST_DIR/../app-ios/VelaWallet/VelaWallet/Dev"
 
 echo "build-ios-dev-fixtures: building the host dylib"
-cargo build --release -p vela-dev-fixtures-uniffi
-LIB_FILE="target/release/libvela_dev_fixtures.dylib"
+cargo build --profile "$PROFILE" -p vela-dev-fixtures-uniffi
+LIB_FILE="target/$PROFILE/libvela_dev_fixtures.dylib"
 
 echo "build-ios-dev-fixtures: generating Swift bindings"
-cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
+cargo run --profile "$PROFILE" -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language swift --out-dir bindings/swift-dev
 
-echo "build-ios-dev-fixtures: building the device static library"
-cargo build --release -p vela-dev-fixtures-uniffi --target aarch64-apple-ios
+if [ "$PROFILE" = release ]; then
+  echo "build-ios-dev-fixtures: building the device static library"
+  cargo build --profile "$PROFILE" -p vela-dev-fixtures-uniffi --target aarch64-apple-ios
+fi
 
 echo "build-ios-dev-fixtures: building the simulator static library"
-cargo build --release -p vela-dev-fixtures-uniffi --target aarch64-apple-ios-sim
+cargo build --profile "$PROFILE" -p vela-dev-fixtures-uniffi --target aarch64-apple-ios-sim
 
 HDRS="target/xcframework-headers-dev"
 rm -rf "$HDRS"
@@ -57,12 +69,11 @@ echo "build-ios-dev-fixtures: assembling VelaDevFixturesFFI.xcframework"
 XCFRAMEWORK="$KIT_DIR/Artifacts/VelaDevFixturesFFI.xcframework"
 rm -rf "$XCFRAMEWORK"
 mkdir -p "$KIT_DIR/Artifacts"
-xcodebuild -create-xcframework \
-  -library target/aarch64-apple-ios/release/libvela_dev_fixtures.a \
-  -headers "$HDRS/ios" \
-  -library target/aarch64-apple-ios-sim/release/libvela_dev_fixtures.a \
-  -headers "$HDRS/ios-sim" \
-  -output "$XCFRAMEWORK"
+SLICES=(-library "target/aarch64-apple-ios-sim/$PROFILE/libvela_dev_fixtures.a" -headers "$HDRS/ios-sim")
+if [ "$PROFILE" = release ]; then
+  SLICES=(-library "target/aarch64-apple-ios/$PROFILE/libvela_dev_fixtures.a" -headers "$HDRS/ios" "${SLICES[@]}")
+fi
+xcodebuild -create-xcframework "${SLICES[@]}" -output "$XCFRAMEWORK"
 
 echo "build-ios-dev-fixtures: refreshing the committed Swift bindings"
 mkdir -p "$DEV_SWIFT_DIR"
