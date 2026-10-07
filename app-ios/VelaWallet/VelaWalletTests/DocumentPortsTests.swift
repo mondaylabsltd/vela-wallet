@@ -37,3 +37,18 @@ struct DocumentPortsTests {
         #expect(picked == nil)
     }
 }
+
+/// Found on the device the moment Export worked (#449): swiped away, the share
+/// sheet calls its completion handler twice, and a checked continuation
+/// resumed twice traps. The answer is given once.
+@MainActor
+struct ShareAnswerTests {
+    @Test func aSecondAnswerIsIgnored() async {
+        let completed = await withCheckedContinuation { continuation in
+            let answer = ShareAnswer(continuation)
+            answer.resume(false)
+            answer.resume(true)
+        }
+        #expect(completed == false)
+    }
+}

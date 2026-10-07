@@ -97,12 +97,24 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
 
     private var presenter: UIViewController? { presenterSource() }
 
-    /// Present `sheet`, and say whether UIKit took it. A refused presentation
-    /// leaves `presentingViewController` unset.
-    private func present(_ sheet: UIViewController, from presenter: UIViewController) -> Bool {
-        guard presenter.viewIfLoaded?.window != nil else { return false }
+    /// Present `sheet`, and call `refused` if UIKit did not take it.
+    ///
+    /// A refused presentation leaves `presentingViewController` unset. One
+    /// UIKit merely DEFERS — behind a transition still finishing — sets it a
+    /// moment later, so a sheet not yet on its presenter is given that moment
+    /// before it is called refused: answering early would hand the caller a
+    /// cancel while the sheet is rising.
+    private func present(
+        _ sheet: UIViewController,
+        from presenter: UIViewController,
+        refused: @escaping () -> Void
+    ) {
+        guard presenter.viewIfLoaded?.window != nil else { refused(); return }
         presenter.present(sheet, animated: true)
-        return sheet.presentingViewController != nil
+        guard sheet.presentingViewController == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            if sheet.presentingViewController == nil { refused() }
+        }
     }
 
     private var pickContinuation: CheckedContinuation<PickedDocument?, Never>?
@@ -120,7 +132,7 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
             )
             picker.allowsMultipleSelection = false
             picker.delegate = self
-            if !present(picker, from: presenter) { finishPick(nil) }
+            present(picker, from: presenter) { [weak self] in self?.finishPick(nil) }
         }
     }
 
@@ -130,7 +142,7 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
             saveContinuation = continuation
             let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
             picker.delegate = self
-            if !present(picker, from: presenter) { finishSave(false) }
+            present(picker, from: presenter) { [weak self] in self?.finishSave(false) }
         }
     }
 
@@ -146,12 +158,17 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
                 popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY, width: 0, height: 0)
                 popover.permittedArrowDirections = []
             }
+            let answer = ShareAnswer(continuation)
+            // Swiped away, the share sheet calls this TWICE (iOS 26: once as
+            // it dismisses, again from its `viewDidDisappear`), and a checked
+            // continuation resumed twice is a crash — found on the device the
+            // moment Export worked (issue #449). It answers once.
             sheet.completionWithItemsHandler = { _, completed, _, _ in
-                continuation.resume(returning: completed)
+                answer.resume(completed)
             }
             // A refused sheet never calls the handler above, so this is the
             // only answer it gets.
-            if !present(sheet, from: presenter) { continuation.resume(returning: false) }
+            present(sheet, from: presenter) { answer.resume(false) }
         }
     }
 
@@ -179,6 +196,21 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
     private func finishSave(_ saved: Bool) {
         saveContinuation?.resume(returning: saved)
         saveContinuation = nil
+    }
+}
+
+/// The share sheet's answer, given once whatever UIKit does: its completion
+/// handler can run twice, and a refused sheet is answered from elsewhere.
+final class ShareAnswer {
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    init(_ continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ completed: Bool) {
+        continuation?.resume(returning: completed)
+        continuation = nil
     }
 }
 
