@@ -574,18 +574,6 @@ jobs:
           # nothing before `xcodebuild test` needs the simulator; xcodebuild
           # waits for one still booting.
           nohup sh -c "xcrun simctl boot $udid && xcrun simctl bootstatus $udid" > "$RUNNER_TEMP/simulator-boot.log" 2>&1 &
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.97.1
-          targets: aarch64-apple-ios-sim
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-          # Its own cache: this job builds the `ci-ios` profile, and the key
-          # it shared with the old `release` build restored 428 MB of release
-          # artifacts it could not use — and, being an exact hit, never saved
-          # the ones it built. Both legs build the same thing, so they share it.
-          shared-key: ios-sim-ci
       # Same story as Android: `app-ios/VelaCoreKit/Artifacts/` is gitignored, so
       # the xcframework must be built before Xcode can resolve the local package.
       # macos-15 minutes bill at ten times linux, so this is the step that decides
@@ -599,9 +587,6 @@ jobs:
           # What the library is built from: the crates' sources, not their
           # tests — a PR that only touches Rust tests reuses the last build.
           key: xcframework-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-xcframework.sh') }}
-      - name: Build the xcframework
-        if: steps.xcframework.outputs.cache-hit != 'true'
-        run: ./rust/scripts/build-ios-xcframework.sh
       # The SECOND library: the parallel space's fixed keyset (spec 052 D1).
       #
       # `Dev/vela_dev_fixtures.swift` is committed and compiled by the DEBUG
@@ -618,6 +603,26 @@ jobs:
         with:
           path: app-ios/VelaDevFixturesKit/Artifacts
           key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
+      # Rust only when a library has to be built. On a hit, installing the
+      # toolchain and restoring 330 MB of target/ bought nothing and took up
+      # to 3.5 min beside the simulator's boot (#457).
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
+        with:
+          workspaces: rust
+          # Its own cache: this job builds the `ci-ios` profile, and the key
+          # it shared with the old `release` build restored 428 MB of release
+          # artifacts it could not use — and, being an exact hit, never saved
+          # the ones it built. Both legs build the same thing, so they share it.
+          shared-key: ios-sim-ci
+      - name: Build the xcframework
+        if: steps.xcframework.outputs.cache-hit != 'true'
+        run: ./rust/scripts/build-ios-xcframework.sh
       - name: Build the dev-fixtures xcframework
         if: steps.devfixtures.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-dev-fixtures.sh
