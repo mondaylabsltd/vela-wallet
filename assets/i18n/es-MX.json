@@ -1418,8 +1418,7 @@
     "approvalChoice": "Primero elige un monto de aprobación",
     "batchUnsettled": "Revisando cada llamada del lote…",
     "feeMeasuring": "Calculando la comisión de red…",
-    "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
-    "feeShort": "Esta moneda no alcanza para la comisión: elige otra"
+    "feeFailed": "No se pudo calcular la comisión: tócala para reintentar"
    }
   },
   "signingApprove": {

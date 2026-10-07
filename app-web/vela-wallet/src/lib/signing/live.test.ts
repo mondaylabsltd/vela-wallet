@@ -1476,8 +1476,27 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		]);
 	});
 
-	it('issue 408: the shut slide says no coin can pay, in the corpus words the core names', () => {
-		expect(m.confirmBlock['componentsUi.gas.noCoinPays']).toBe(m.feeNoCoinPays);
+	// Issue 438 (Android v0.9.6, the key backup on Ethereum): "No token can
+	// pay this fee" in red under the fee, and again in grey under the slide.
+	// The core's gate names no line for a short coin, because the fee says it.
+	it('issue 438: a short coin is said once — under the fee, never again under the slide', () => {
+		const nothingPays = buildSigningModel(inputs({ fee: issue408 }))!;
+		expect(nothingPays.fee).toMatchObject({ warning: m.feeNoCoinPays });
+		expect(nothingPays.confirm.enabled).toBe(false);
+		expect(nothingPays.confirm.note).toBeUndefined();
+
+		const ethShort: FeeView = {
+			...two,
+			confirm_fee_ready: false,
+			options: [
+				option({ balance: '0', insufficient: true, short: { need: '0.0021 ETH', have: '0 ETH' } }),
+				two.options[1]
+			]
+		};
+		const oneShort = buildSigningModel(inputs({ fee: ethShort }))!;
+		expect(oneShort.fee).toMatchObject({ warning: m.feeShort.replace('{{sym}}', 'ETH') });
+		expect(oneShort.confirm.enabled).toBe(false);
+		expect(oneShort.confirm.note).toBeUndefined();
 	});
 });
 

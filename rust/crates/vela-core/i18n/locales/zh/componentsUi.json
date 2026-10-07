@@ -227,8 +227,7 @@
         "approvalChoice": "请先选择授权额度",
         "batchUnsettled": "正在逐一检查这批调用…",
         "feeMeasuring": "正在计算网络费用…",
-        "feeFailed": "没能算出费用——点费用重试",
-        "feeShort": "这个币不够付手续费——换一个"
+        "feeFailed": "没能算出费用——点费用重试"
       }
     },
     "currency": {

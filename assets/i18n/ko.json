@@ -1414,8 +1414,7 @@
     "approvalChoice": "먼저 승인 금액을 고르세요",
     "batchUnsettled": "배치의 각 호출을 확인 중…",
     "feeMeasuring": "네트워크 수수료 계산 중…",
-    "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도",
-    "feeShort": "이 코인으로는 수수료가 부족합니다 — 다른 코인을 고르세요"
+    "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도"
    }
   },
   "signingApprove": {

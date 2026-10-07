@@ -1418,8 +1418,7 @@
     "approvalChoice": "Choisissez d'abord un montant d'approbation",
     "batchUnsettled": "Vérification de chaque appel du lot…",
     "feeMeasuring": "Calcul des frais de réseau…",
-    "feeFailed": "Frais incalculables — touchez-les pour réessayer",
-    "feeShort": "Pas assez de cette monnaie pour les frais — choisissez-en une autre"
+    "feeFailed": "Frais incalculables — touchez-les pour réessayer"
    }
   },
   "signingApprove": {

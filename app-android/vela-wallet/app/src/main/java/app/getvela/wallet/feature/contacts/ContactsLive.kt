@@ -282,4 +282,84 @@ object ContactsLive {
             membersLabel = fallback.membersLabel
                 .replaceFirst(Regex("\\d+"), group.members.size.toString()),
         )
+
+    // -- Issue #437: the two pick lists ---------------------------------------
+
+    /**
+     * The web's `PickList` offers its search box past six rows: below that the
+     * whole list is already on screen.
+     */
+    const val PICK_SEARCH_FROM = 7
+
+    /** A contact's place in the picked set: the core's addresses are compared without case. Group ids are kept as they are. */
+    fun pickKey(address: String): String = address.lowercase()
+
+    /**
+     * 添加成员: every contact in the book, ticked where [picked] holds it, and
+     * narrowed by [query] with the list page's own matching.
+     */
+    fun memberPick(view: ContactsView, picked: Set<String>, query: String, strings: VelaStrings): MultiPickModel {
+        val rows = view.contacts
+            .filter { matches(it, query) }
+            .map { contact ->
+                MultiPickRowModel(
+                    id = contact.address,
+                    title = displayName(contact),
+                    subtitle = shortenAddress(contact.address),
+                    identiconSeed = contact.address,
+                    picked = pickKey(contact.address) in picked,
+                )
+            }
+        return pickModel(strings.t(I18nKeys.Contacts.ADD_MEMBER), rows, view.contacts.size, query, strings)
+    }
+
+    /** 移入分组: every group, ticked where [picked] holds it. */
+    fun groupPick(view: ContactsView, picked: Set<String>, query: String, strings: VelaStrings): MultiPickModel {
+        val needle = query.trim().lowercase()
+        val rows = view.groups
+            .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
+            .map { group ->
+                MultiPickRowModel(
+                    id = group.id,
+                    title = group.name,
+                    subtitle = strings.t(I18nKeys.Contacts.GROUP_MEMBERS, mapOf("count" to group.members.size.toString())),
+                    picked = group.id in picked,
+                )
+            }
+        return pickModel(strings.t(I18nKeys.Contacts.MOVE_GROUP), rows, view.groups.size, query, strings)
+    }
+
+    private fun pickModel(title: String, rows: List<MultiPickRowModel>, total: Int, query: String, strings: VelaStrings) =
+        MultiPickModel(
+            title = title,
+            rows = rows,
+            searchPlaceholder = strings.t(I18nKeys.Contacts.SEARCH_PLACEHOLDER),
+            searchable = total >= PICK_SEARCH_FROM,
+            query = query,
+            empty = when {
+                total == 0 -> strings.t(I18nKeys.Contacts.GROUP_NO_CONTACTS)
+                rows.isEmpty() -> strings.t(I18nKeys.Contacts.NO_RESULTS, mapOf("query" to query.trim()))
+                else -> null
+            },
+            save = strings.t(I18nKeys.Contacts.SAVE),
+            cancel = strings.t(I18nKeys.Contacts.CANCEL),
+        )
+
+    /**
+     * The group's membership once 添加成员 is saved — `SetGroupMembers`
+     * replaces it outright, so this is the whole list.
+     *
+     * The sheet rules only over the rows it offered. A member it did not list
+     * (a history-derived contact from another account's book) could not have
+     * been unticked, and stays. Kept members keep their place; the newly
+     * ticked follow in the book's order. A search narrows what is SHOWN, never
+     * what is saved: a ticked row filtered out of view is still ticked.
+     */
+    fun membersAfterPick(group: ContactGroupView, view: ContactsView, picked: Set<String>): List<String> {
+        val offered = view.contacts.mapTo(HashSet()) { pickKey(it.address) }
+        val current = group.members.map { pickKey(it.address) }
+        val kept = current.filter { it !in offered || it in picked }
+        val added = view.contacts.map { pickKey(it.address) }.filter { it in picked && it !in current }
+        return (kept + added).distinct()
+    }
 }

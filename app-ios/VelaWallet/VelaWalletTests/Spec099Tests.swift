@@ -460,6 +460,8 @@ struct ConfirmGateTests {
         let short = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),
                          fee: try fee(ready: false, tier: "fast"), speed: "fast")
         #expect(short.block == "fee_short")
+        // Issue #438: the fee section says a short coin; the slide repeated it.
+        #expect(short.key == nil)
 
         // Issue 681: the figure is another speed's — not this one's to sign.
         let another = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),

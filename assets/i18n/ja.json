@@ -1414,8 +1414,7 @@
     "approvalChoice": "先に承認額を選んでください",
     "batchUnsettled": "バッチの各呼び出しを確認中…",
     "feeMeasuring": "ネットワーク手数料を計算中…",
-    "feeFailed": "手数料を計算できません。タップで再試行",
-    "feeShort": "このコインでは手数料が不足します"
+    "feeFailed": "手数料を計算できません。タップで再試行"
    }
   },
   "signingApprove": {

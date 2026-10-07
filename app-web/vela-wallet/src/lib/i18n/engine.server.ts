@@ -878,11 +878,9 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.approvalChoice',
 	'componentsUi.signing.confirmBlock.batchUnsettled',
 	'componentsUi.signing.confirmBlock.feeMeasuring',
-	'componentsUi.signing.confirmBlock.feeFailed',
-	'componentsUi.signing.confirmBlock.feeShort',
-	// Issue 408: `FeeShort` when not one coin on offer can pay — there is no
-	// other coin to pick, so the line says that instead.
-	'componentsUi.gas.noCoinPays'
+	'componentsUi.signing.confirmBlock.feeFailed'
+	// No `FeeShort` line: issue #438 — the fee section already says a short
+	// coin, and the slide said it again.
 ] as const;
 
 /** Spec 099 R8: the signer's three failures, by `SignErrorKind`. */

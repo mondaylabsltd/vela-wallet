@@ -59,6 +59,45 @@ data class MenuItemModel(
 @Immutable
 data class ActionMenuModel(val items: List<MenuItemModel>, val cancel: String)
 
+/**
+ * One tickable line of a [MultiPickModel]. [subtitle] is the short address
+ * for a person and the member count for a group; [identiconSeed] is the
+ * address when the row is a person.
+ */
+@Immutable
+data class MultiPickRowModel(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val identiconSeed: String? = null,
+    val picked: Boolean,
+)
+
+/**
+ * C10 — a tick list and one button that commits the whole list (iOS's
+ * `MultiPickSheet`, the web's `PickList`): 添加成员 (the book, the group's
+ * members ticked) and 移入分组 (the groups, the contact's ticked). Issue
+ * #437: these used to be [ActionMenuModel]s, a menu with no scroll, so a book
+ * of 59 showed the 14 that fit and the rest could not be reached.
+ */
+@Immutable
+data class MultiPickModel(
+    val title: String,
+    /** The rows the search leaves, in the core's order. */
+    val rows: List<MultiPickRowModel>,
+    val searchPlaceholder: String,
+    /** A long list gets a search box (the web's rule: past six rows). */
+    val searchable: Boolean,
+    val query: String = "",
+    /**
+     * Shown INSTEAD of the rows when there are none: "save somebody first"
+     * for an empty book, "no matches" for a search that left nothing.
+     */
+    val empty: String? = null,
+    val save: String,
+    val cancel: String,
+)
+
 /** The delete-confirmation variant of the same sheet (c2s). */
 @Immutable
 data class DeleteConfirmModel(

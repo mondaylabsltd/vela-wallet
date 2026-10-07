@@ -390,6 +390,7 @@ object I18nKeys {
 
         // Group detail.
         const val ADD_MEMBER = "contacts.addMember"
+        const val GROUP_NO_CONTACTS = "contacts.groupNoContacts"
         const val BATCH_SEND = "contacts.batchSend"
         const val BATCH_SEND_HINT = "contacts.batchSendHint"
         const val BATCH_SEND_HINT_TITLED = "contacts.batchSendHintTitled"

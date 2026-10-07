@@ -227,8 +227,7 @@
         "approvalChoice": "Scegli prima un importo di approvazione",
         "batchUnsettled": "Controllo di ogni chiamata del batch…",
         "feeMeasuring": "Calcolo della commissione di rete…",
-        "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare",
-        "feeShort": "Questa moneta non basta per la commissione: scegline un’altra"
+        "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare"
       }
     },
     "signingApprove": {

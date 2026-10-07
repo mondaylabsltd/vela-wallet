@@ -1414,8 +1414,7 @@
     "approvalChoice": "Pilih jumlah persetujuan dulu",
     "batchUnsettled": "Memeriksa setiap panggilan dalam batch…",
     "feeMeasuring": "Menghitung biaya jaringan…",
-    "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi",
-    "feeShort": "Koin ini tidak cukup untuk biaya — pilih yang lain"
+    "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi"
    }
   },
   "signingApprove": {

@@ -90,7 +90,7 @@ fun SigningHeader(
     val colors = VelaTheme.colors
     Row(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
         if (own) {
@@ -105,6 +105,10 @@ fun SigningHeader(
                 LetterAvatar(letter, tint, size = ExploreMetrics.signingAvatar)
             }
         }
+        // Issue #438: the chain's chip sits under the name, as on iOS since
+        // spec 082 RE13. Inline, the chip and the ✕ left the name ~100 dp, and
+        // "Vela Wallet" broke over two lines at the smallest system font; here
+        // the column has the whole width between the avatar and the ✕.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             // Spec 082 RE13 (G12): two lines each and never an ellipsis — the
             // end of a host is the part a spoofer controls, so it is never the
@@ -129,27 +133,29 @@ fun SigningHeader(
                     overflow = TextOverflow.Clip,
                 )
             }
-        }
-        Row(
-            modifier = Modifier
-                .height(ExploreMetrics.networkChip)
-                .background(colors.bgSunken, CircleShape)
-                .padding(horizontal = VelaSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
-        ) {
-            // The chain's logo; the drawn dot until it lands, and when there is none.
-            RemoteLogo(urls = listOfNotNull(networkLogoUrl), size = VelaSpacing.xl) {
-                Box(Modifier.size(VelaSpacing.xl), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(VelaSpacing.md).background(networkDot, CircleShape))
+            Row(
+                modifier = Modifier
+                    .padding(top = VelaSpacing.sm)
+                    .height(ExploreMetrics.networkChip)
+                    .background(colors.bgSunken, CircleShape)
+                    .padding(horizontal = VelaSpacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+            ) {
+                // The chain's logo; the drawn dot until it lands, and when there is none.
+                RemoteLogo(urls = listOfNotNull(networkLogoUrl), size = VelaSpacing.xl) {
+                    Box(Modifier.size(VelaSpacing.xl), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(VelaSpacing.md).background(networkDot, CircleShape))
+                    }
                 }
+                Text(
+                    text = networkName,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                )
             }
-            Text(
-                text = networkName,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-            )
         }
         onClose?.let { close ->
             Box(

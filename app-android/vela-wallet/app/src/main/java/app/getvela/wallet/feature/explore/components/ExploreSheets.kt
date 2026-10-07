@@ -526,6 +526,8 @@ fun GroupManageSheetContent(
     onToggle: (String) -> Unit,
     onNew: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Issue #439: a group of the person's own, deleted. Never offered for a system group. */
+    onDelete: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.padding(horizontal = VelaSizing.screenPaddingX)) {
@@ -551,10 +553,12 @@ fun GroupManageSheetContent(
 
         sheet.rows.forEach { row ->
             val isHidden = row.hidden || hidden.contains(row.id)
+            // The row's two controls are hit targets, not bare 24 dp glyphs; the
+            // row's padding gives back what their boxes add.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = VelaSpacing.xl),
+                    .padding(vertical = VelaSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
             ) {
@@ -584,14 +588,32 @@ fun GroupManageSheetContent(
                         )
                     }
                 }
-                Icon(
-                    if (isHidden) VelaIcons.EyeOff else VelaIcons.Eye,
-                    if (isHidden) showLabel else hideLabel,
-                    tint = colors.fgMuted,
-                    modifier = Modifier.clickable { onToggle(row.id) },
-                )
-                if (!row.system) {
-                    Icon(VelaIcons.Trash2, deleteLabel, tint = colors.fgMuted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(VelaSizing.hitTarget)
+                            .clickable { onToggle(row.id) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (isHidden) VelaIcons.EyeOff else VelaIcons.Eye,
+                            if (isHidden) showLabel else hideLabel,
+                            tint = colors.fgMuted,
+                        )
+                    }
+                    if (!row.system) {
+                        // Issue #439: drawn, and now answered. No confirmation —
+                        // the core keeps every site in it favourited, as on
+                        // iOS and the desktop.
+                        Box(
+                            modifier = Modifier
+                                .size(VelaSizing.hitTarget)
+                                .clickable { onDelete(row.id) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(VelaIcons.Trash2, deleteLabel, tint = colors.fgMuted)
+                        }
+                    }
                 }
             }
             Box(

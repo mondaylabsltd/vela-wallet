@@ -227,8 +227,7 @@
         "approvalChoice": "請先選擇授權額度",
         "batchUnsettled": "正在逐一檢查這批呼叫…",
         "feeMeasuring": "正在計算網路費用…",
-        "feeFailed": "沒能算出費用——點費用重試",
-        "feeShort": "這個幣不夠付手續費——換一個"
+        "feeFailed": "沒能算出費用——點費用重試"
       }
     },
     "currency": {

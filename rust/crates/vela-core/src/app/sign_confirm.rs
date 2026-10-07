@@ -13,7 +13,10 @@
 //! [`confirm_state`] is the one gate. It names the first part that is shut,
 //! in the order a person would fix them, and every client draws the
 //! [`ConfirmBlock`]'s line (`componentsUi.signing.confirmBlock.*`) under the
-//! shut slide, with the action that opens it.
+//! shut slide, with the action that opens it — unless the sheet already says
+//! it: a short fee coin is said under the fee, where the other coins are
+//! (issue #438: "No token can pay this fee" twice, red over the fee and grey
+//! under the slide).
 
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +25,7 @@ use ts_rs::TS;
 
 use super::approval_guard::{GuardSurface, GuardView};
 use super::clear_signing::{ClearSignType, ClearSigningView, ClearSurface};
-use super::fee_policy::{FeeTier, FeeView, NO_COIN_PAYS_KEY};
+use super::fee_policy::{FeeTier, FeeView};
 use super::sign_request::SignView;
 
 /// Which part of the gate is shut.
@@ -53,9 +56,13 @@ pub enum ConfirmBlock {
     FeeMeasuring,
     /// The fee could not be worked out: retry.
     FeeFailed,
-    /// The coin chosen for the fee is short: pick another — or, when no coin
-    /// on offer can pay ([`FeeView::no_coin_pays`], issue #408), the line says
-    /// that instead, since there is no other to pick.
+    /// The coin chosen for the fee is short. No line under the slide: the
+    /// fee section says it already, where the other coins are — "Insufficient
+    /// ETH for gas fees", or, when no coin on offer can pay
+    /// ([`FeeView::no_coin_pays`], issue #408), "No token can pay this fee".
+    /// Every client draws that sentence whenever this block holds (the coin in
+    /// force is then provably `insufficient`), so a second copy under the slide
+    /// only repeated it (issue #438).
     FeeShort,
 }
 
@@ -80,7 +87,8 @@ pub struct ConfirmState {
     pub block: Option<ConfirmBlock>,
     /// The line under the shut slide (`componentsUi.signing.confirmBlock.*`),
     /// or `None` where the sheet already says it in its own way (no request,
-    /// signing in progress, the funding sheet, a refusal's own panel).
+    /// signing in progress, the funding sheet, a refusal's own panel, a short
+    /// fee coin's line under the fee).
     pub key: Option<String>,
 }
 
@@ -90,7 +98,9 @@ impl ConfirmBlock {
     #[must_use]
     pub fn key(self, retryable: bool) -> Option<&'static str> {
         Some(match self {
-            Self::NoRequest | Self::Refused | Self::InFlight | Self::Funding => return None,
+            Self::NoRequest | Self::Refused | Self::InFlight | Self::Funding | Self::FeeShort => {
+                return None;
+            }
             Self::AccountSwitching => "componentsUi.signing.confirmBlock.accountSwitching",
             Self::Answered if retryable => "componentsUi.signing.confirmBlock.answeredRetry",
             Self::Answered => "componentsUi.signing.confirmBlock.answered",
@@ -99,7 +109,6 @@ impl ConfirmBlock {
             Self::BatchUnsettled => "componentsUi.signing.confirmBlock.batchUnsettled",
             Self::FeeMeasuring => "componentsUi.signing.confirmBlock.feeMeasuring",
             Self::FeeFailed => "componentsUi.signing.confirmBlock.feeFailed",
-            Self::FeeShort => "componentsUi.signing.confirmBlock.feeShort",
         })
     }
 }
@@ -190,13 +199,7 @@ pub fn confirm_state_of(
             if fee.fee.is_none() {
                 return shut(ConfirmBlock::FeeMeasuring);
             }
-            let mut state = shut(ConfirmBlock::FeeShort);
-            // Issue #408: "not enough of this coin — pick another" (as most
-            // locales say it) sends a person to a picker where nothing pays.
-            if fee.no_coin_pays {
-                state.key = Some(NO_COIN_PAYS_KEY.to_owned());
-            }
-            return state;
+            return shut(ConfirmBlock::FeeShort);
         }
     }
     ConfirmState {
