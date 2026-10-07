@@ -544,6 +544,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # Its own cache: this job builds the `ci-ios` profile, and the key
+          # it shared with the old `release` build restored 428 MB of release
+          # artifacts it could not use — and, being an exact hit, never saved
+          # the ones it built. Both legs build the same thing, so they share it.
+          shared-key: ios-sim-ci
       # Same story as Android: `app-ios/VelaCoreKit/Artifacts/` is gitignored, so
       # the xcframework must be built before Xcode can resolve the local package.
       # macos-15 minutes bill at ten times linux, so this is the step that decides
