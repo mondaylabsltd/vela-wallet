@@ -66,6 +66,8 @@ final class OnboardingModel {
     private(set) var pendingWalletPick: PendingWalletPick?
     /// Set while a card is blinking; the screen shows "touch your key".
     private(set) var usbTouch: UsbTouch?
+    /// No key plugged in yet: "insert your security key" (issue #450).
+    private(set) var pendingInsertKey: PendingInsertKey?
     /// The caBLE QR to show (the OTHER phone scans it), or nil when none is up.
     private(set) var cableQr: String?
     /// Whether that QR's phone is to create a key, or to find one (087 F02).
@@ -98,7 +100,7 @@ final class OnboardingModel {
     /// True when any app-owned onboarding prompt should be on screen. Drives the
     /// single `.sheet(isPresented:)`; the content is chosen by priority.
     var onboardingSheetPresented: Bool {
-        pendingPin != nil || pendingWalletPick != nil || usbTouch != nil
+        pendingPin != nil || pendingWalletPick != nil || usbTouch != nil || pendingInsertKey != nil
             || cableQr != nil || pending != nil || signInConnecting || showSignInMethods
     }
 
@@ -112,6 +114,8 @@ final class OnboardingModel {
             answerPin(nil)
         } else if pendingWalletPick != nil {
             answerWalletPick(nil)
+        } else if pendingInsertKey != nil {
+            answerInsertKey(false)
         } else if pending != nil {
             answerPrompt(false)
         } else if showSignInMethods {
@@ -157,6 +161,11 @@ final class OnboardingModel {
         let id = UUID()
     }
 
+    struct PendingInsertKey: Identifiable {
+        let answer: (Bool) -> Void
+        let id = UUID()
+    }
+
     func answerPin(_ pin: String?) {
         let prompt = pendingPin
         pendingPin = nil
@@ -167,6 +176,37 @@ final class OnboardingModel {
         let prompt = pendingWalletPick
         pendingWalletPick = nil
         prompt?.answer(index)
+    }
+
+    /// The key arrived (`true`), or the person closed the sheet (`false`).
+    func answerInsertKey(_ inserted: Bool) {
+        let prompt = pendingInsertKey
+        pendingInsertKey = nil
+        prompt?.answer(inserted)
+    }
+
+    /// Hold "insert your security key" up, polling `probe`, until a key
+    /// answers or the sheet is closed. Plugging the key in IS the confirm;
+    /// there is nothing to tap.
+    fileprivate func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let prompt = PendingInsertKey { continuation.resume(returning: $0) }
+            pendingInsertKey = prompt
+            Task { [weak self] in
+                while self?.pendingInsertKey?.id == prompt.id {
+                    if await probe() {
+                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(true) }
+                        return
+                    }
+                    // Not `try?`: a sleep that throws is a cancelled poll,
+                    // and a cancelled poll that kept looping would spin.
+                    do { try await Task.sleep(nanoseconds: 800_000_000) } catch {
+                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(false) }
+                        return
+                    }
+                }
+            }
+        }
     }
 
     // Set from the (nonisolated) prompts bridge; the sheet reads them.
@@ -477,5 +517,10 @@ private final class UsbPromptsBridge: SmartCardCtapCeremony.Prompts, @unchecked 
         Task { @MainActor [weak model] in
             model?.presentTouch(kind.map { OnboardingModel.UsbTouch(kind: $0, product: product) })
         }
+    }
+
+    func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool {
+        guard let model else { return false }
+        return await model.awaitKeyInsertion(probe: probe)
     }
 }

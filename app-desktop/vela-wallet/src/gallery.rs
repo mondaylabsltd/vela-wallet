@@ -441,8 +441,16 @@ fn entries() -> Vec<Entry> {
             fixture: Fixture::Sheet { kind, confirmable },
         });
     };
-    sheet("unsupported", PromptKind::NotSupportedCreate, false);
-    sheet("unsupported · login", PromptKind::NotSupportedLogin, false);
+    sheet(
+        "unsupported",
+        PromptKind::NotSupportedCreate { security_key: true },
+        false,
+    );
+    sheet(
+        "unsupported · login",
+        PromptKind::NotSupportedLogin { security_key: true },
+        false,
+    );
     sheet("not discoverable", PromptKind::NotDiscoverable, false);
     sheet("incompatible", PromptKind::IncompatibleCreate, false);
     sheet("incompatible · login", PromptKind::IncompatibleLogin, false);

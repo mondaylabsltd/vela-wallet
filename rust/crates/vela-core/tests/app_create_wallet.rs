@@ -1555,3 +1555,36 @@ fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
         "{kind:?}"
     );
 }
+
+/// Issue #450 — a security key this device could not use, while creating,
+/// is the key's problem; a passkey on this device keeps the old sheet.
+#[test]
+fn a_security_key_that_cannot_register_is_not_blamed_on_biometrics() {
+    let prompt_after = |method: KeyMethod| {
+        let mut sut = registered("Ann");
+        sut.dispatch(Event::AddKey {
+            name: "Key".to_owned(),
+            method,
+        });
+        match sut
+            .resolve(ShellResult::PasskeyFailed {
+                kind: FailureKind::NotSupported,
+                message: None,
+            })
+            .as_slice()
+        {
+            [ShellOperation::Prompt { kind, .. }] => kind.clone(),
+            other => panic!("expected one prompt, got {other:?}"),
+        }
+    };
+    assert_eq!(
+        prompt_after(KeyMethod::SecurityKey),
+        PromptKind::NotSupportedCreate { security_key: true }
+    );
+    assert_eq!(
+        prompt_after(KeyMethod::Platform),
+        PromptKind::NotSupportedCreate {
+            security_key: false
+        }
+    );
+}

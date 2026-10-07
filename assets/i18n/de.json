@@ -731,7 +731,7 @@
    "locationNeededBody": "Android braucht die Standortdienste, um Bluetooth-Geräte in der Nähe zu finden. Vela liest deine Position nie aus.",
    "openLocationSettings": "Systemeinstellungen öffnen und Standort einschalten",
    "insertKeyTitle": "Sicherheitsschlüssel einstecken",
-   "insertKeyBody": "Stecke deinen FIDO2-Sicherheitsschlüssel in den USB-Anschluss dieses Telefons — sobald er erkannt wird, geht es automatisch weiter.",
+   "insertKeyBody": "Stecke deinen FIDO2-Sicherheitsschlüssel in den USB-Anschluss dieses Geräts — sobald er erkannt wird, geht es automatisch weiter.",
    "otgOffHint": "Der OTG-Schalter dieses Telefons scheint aus zu sein — manche Telefone schalten ihn automatisch ab. Aktiviere OTG in den Systemeinstellungen und stecke den Schlüssel erneut ein.",
    "touchRemoteTitle": "Sieh auf dein Telefon",
    "touchRemoteBody": "Folge den Schritten auf deinem Gerät",
@@ -743,7 +743,9 @@
    "copied": "Kopiert",
    "close": "Schließen",
    "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut.",
-   "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut."
+   "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut.",
+   "keyUnavailableTitle": "Sicherheitsschlüssel nicht verfügbar",
+   "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg."
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",

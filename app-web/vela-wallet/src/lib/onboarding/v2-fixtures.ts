@@ -331,8 +331,16 @@ export const CREATE_FIXTURES: CreateFixture[] = [
  * a shell that is handed a classification; it is not a state the core emits.
  */
 export const PROMPT_FIXTURES: { code: string; label: string; kind: PromptKind }[] = [
-	{ code: 'E1', label: 'No passkey support (create)', kind: { type: 'not_supported_create' } },
-	{ code: 'E2', label: 'No passkey support (sign-in)', kind: { type: 'not_supported_login' } },
+	{
+		code: 'E1',
+		label: 'No passkey support (create)',
+		kind: { type: 'not_supported_create', security_key: false }
+	},
+	{
+		code: 'E2',
+		label: 'No passkey support (sign-in)',
+		kind: { type: 'not_supported_login', security_key: false }
+	},
 	{ code: 'E3', label: 'No usable passkey on this device', kind: { type: 'not_discoverable' } },
 	{ code: 'E4', label: 'Incompatible provider (create)', kind: { type: 'incompatible_create' } },
 	{ code: 'E5', label: 'Incompatible provider (sign-in)', kind: { type: 'incompatible_login' } },

@@ -35,8 +35,11 @@ struct CableWatchdogTests {
     /// main actor can stall for tens of seconds, so any fixed or deadline
     /// sleep raced the watchdog's own 20 ms one and lost (twice: 400 ms, then
     /// a 10 s deadline in a test that ran 48 s). The time limit is the
-    /// backstop for a watchdog that never fires at all.
-    @Test(.timeLimit(.minutes(1)))
+    /// backstop for a watchdog that never fires at all — and the fire needs
+    /// the main actor, which other suites can hold for over a minute on that
+    /// runner (60 s was exceeded on main and on #455), so the backstop is
+    /// generous: it is not what the test measures.
+    @Test(.timeLimit(.minutes(5)))
     func aWatchdogLeftRunningFiresOnce() async {
         let fired = Fired()
         await withCheckedContinuation { (expired: CheckedContinuation<Void, Never>) in

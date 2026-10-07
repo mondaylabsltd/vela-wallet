@@ -17,6 +17,12 @@
 //  UIKit: a delegate that simply stops being called leaves a `Task` suspended
 //  forever, and the screen waits for something that will never arrive.
 //
+//  The same goes for a sheet UIKit REFUSES to present — from a controller on
+//  its way out, or one no longer in a window. The refusal is a console line
+//  and nothing else: no delegate, no completion. So every presentation checks
+//  it was taken and answers `nil`/`false` at once when it was not (issue
+//  #449: Export did nothing, and the next tap waited on the last).
+//
 //  Contract: `specs/054-ios-send-contacts-parity/research.md` D1.
 //
 
@@ -68,9 +74,18 @@ enum DocumentTypes {
 @MainActor
 final class UIKitDocumentPorts: NSObject, DocumentPorts {
 
+    /// Where the sheets present from: the key window's top controller in the
+    /// app, a controller of its own in a test.
+    private let presenterSource: () -> UIViewController?
+
+    init(presenter: @escaping () -> UIViewController? = UIKitDocumentPorts.keyWindowTopmost) {
+        presenterSource = presenter
+        super.init()
+    }
+
     /// The window the sheets present from — the same resolution the passkey
     /// ceremony already performs, reused rather than rewritten.
-    private var presenter: UIViewController? {
+    static func keyWindowTopmost() -> UIViewController? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive }?
@@ -78,6 +93,28 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
             .first { $0.isKeyWindow }?
             .rootViewController?
             .topmost
+    }
+
+    private var presenter: UIViewController? { presenterSource() }
+
+    /// Present `sheet`, and call `refused` if UIKit did not take it.
+    ///
+    /// A refused presentation leaves `presentingViewController` unset. One
+    /// UIKit merely DEFERS — behind a transition still finishing — sets it a
+    /// moment later, so a sheet not yet on its presenter is given that moment
+    /// before it is called refused: answering early would hand the caller a
+    /// cancel while the sheet is rising.
+    private func present(
+        _ sheet: UIViewController,
+        from presenter: UIViewController,
+        refused: @escaping () -> Void
+    ) {
+        guard presenter.viewIfLoaded?.window != nil else { refused(); return }
+        presenter.present(sheet, animated: true)
+        guard sheet.presentingViewController == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            if sheet.presentingViewController == nil { refused() }
+        }
     }
 
     private var pickContinuation: CheckedContinuation<PickedDocument?, Never>?
@@ -95,7 +132,7 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
             )
             picker.allowsMultipleSelection = false
             picker.delegate = self
-            presenter.present(picker, animated: true)
+            present(picker, from: presenter) { [weak self] in self?.finishPick(nil) }
         }
     }
 
@@ -105,7 +142,7 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
             saveContinuation = continuation
             let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
             picker.delegate = self
-            presenter.present(picker, animated: true)
+            present(picker, from: presenter) { [weak self] in self?.finishSave(false) }
         }
     }
 
@@ -113,13 +150,25 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
         guard let presenter, let url = write(name: name, bytes: bytes) else { return false }
         return await withCheckedContinuation { continuation in
             let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-            // iPhone-only, so no popover anchor is needed. On an iPad this
-            // would crash without one, and this app is a phone app — said
-            // here so a future iPad build finds the reason.
-            sheet.completionWithItemsHandler = { _, completed, _, _ in
-                continuation.resume(returning: completed)
+            // The app is iPhone-only, and an iPad runs it with the phone's
+            // sheet — but an iPad-idiom build would raise this as a popover,
+            // which throws without an anchor. The bottom edge, arrowless.
+            if let popover = sheet.popoverPresentationController, let view = presenter.view {
+                popover.sourceView = view
+                popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
             }
-            presenter.present(sheet, animated: true)
+            let answer = ShareAnswer(continuation)
+            // Swiped away, the share sheet calls this TWICE (iOS 26: once as
+            // it dismisses, again from its `viewDidDisappear`), and a checked
+            // continuation resumed twice is a crash — found on the device the
+            // moment Export worked (issue #449). It answers once.
+            sheet.completionWithItemsHandler = { _, completed, _, _ in
+                answer.resume(completed)
+            }
+            // A refused sheet never calls the handler above, so this is the
+            // only answer it gets.
+            present(sheet, from: presenter) { answer.resume(false) }
         }
     }
 
@@ -147,6 +196,21 @@ final class UIKitDocumentPorts: NSObject, DocumentPorts {
     private func finishSave(_ saved: Bool) {
         saveContinuation?.resume(returning: saved)
         saveContinuation = nil
+    }
+}
+
+/// The share sheet's answer, given once whatever UIKit does: its completion
+/// handler can run twice, and a refused sheet is answered from elsewhere.
+final class ShareAnswer {
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    init(_ continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ completed: Bool) {
+        continuation?.resume(returning: completed)
+        continuation = nil
     }
 }
 
@@ -187,7 +251,11 @@ extension UIViewController {
     ///
     /// Shared with the photo picker (spec 055): two platform sheets asking the
     /// same question of the view hierarchy should not answer it twice.
+    ///
+    /// A controller already on its way out is not "on top": presenting from
+    /// it is refused (issue #449), so the one it sits on answers instead.
     var topmost: UIViewController {
-        presentedViewController?.topmost ?? self
+        guard let next = presentedViewController, !next.isBeingDismissed else { return self }
+        return next.topmost
     }
 }

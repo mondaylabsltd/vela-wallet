@@ -205,6 +205,19 @@ export type PromptCopy = {
 export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 	switch (kind.type) {
 		case 'not_supported_create':
+		case 'not_supported_login':
+			// Issue #450: a security key this device could not use is about the
+			// key, never "biometric authentication is not available".
+			if (kind.security_key) {
+				return {
+					title: t('onboarding.common.keyUnavailableTitle'),
+					message: t('onboarding.common.keyUnavailableBody')
+				};
+			}
+			break;
+	}
+	switch (kind.type) {
+		case 'not_supported_create':
 			return {
 				title: t('onboarding.create.alertNotSupportedTitle'),
 				message: t('onboarding.create.alertNotSupportedBody')
