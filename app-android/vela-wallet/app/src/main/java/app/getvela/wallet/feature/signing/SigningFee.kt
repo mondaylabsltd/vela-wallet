@@ -87,13 +87,17 @@ private fun SigningFeeBody(
                 .clip(RoundedCornerShape(VelaRadius.lg))
                 .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg)),
         ) {
+            // Issue #438: a gap the label and the figure always keep (the iOS
+            // row's 8). `SpaceBetween` had none to give once a long figure
+            // filled the row: "Network fee~0.00783 ETH · ≈CN¥141.11". The
+            // figure takes what the label leaves, and wraps at its end.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = fee.tappable, onClick = onFee)
                     .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
             ) {
                 Text(
                     text = fee.label,
@@ -102,14 +106,17 @@ private fun SigningFeeBody(
                     fontSize = VelaTextSize.base,
                 )
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+                    horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md, Alignment.End),
                 ) {
                     Text(
                         text = fee.value,
                         color = colors.fgBase,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.base,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     if (fee.chevron) {
                         Icon(
