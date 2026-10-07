@@ -4,7 +4,7 @@
  * A question or notice for the user. One variant per existing `showAlert` call
  * site; `RecoverOffer` is the only one whose answer changes the flow.
  */
-export type PromptKind = { "type": "not_supported_create" } | { "type": "not_supported_login" } | { "type": "not_discoverable" } | { "type": "incompatible_create" } | { "type": "incompatible_login" } | { "type": "create_failed", detail: string, 
+export type PromptKind = { "type": "not_supported_create", security_key: boolean, } | { "type": "not_supported_login", security_key: boolean, } | { "type": "not_discoverable" } | { "type": "incompatible_create" } | { "type": "incompatible_login" } | { "type": "create_failed", detail: string, 
 /**
  * The link to the other device failed, not the authenticator
  * ([`crate::cable::conn::is_link_failure`]): the sheet says to scan

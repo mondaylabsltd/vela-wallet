@@ -400,7 +400,10 @@ enum ContactsFixtures {
             },
             emptyText: loc.t("contacts.groupNoContacts"),
             save: loc.t("contacts.save"),
-            cancel: loc.t("contacts.cancel")
+            cancel: loc.t("contacts.cancel"),
+            // Eight rows: past the six the live sheet searches from (#445), so
+            // the drawing carries the same field the wired screen does.
+            search: ContactsLive.pickSearch(loc: loc, rows: roster.count)
         )
     }
 

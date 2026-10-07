@@ -137,7 +137,7 @@ data class PromptCopy(
     val confirmable: Boolean get() = confirmLabel != null
 }
 
-fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = when (kind.type) {
+fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavailableCopy(kind, strings) ?: when (kind.type) {
     "not_supported_create" -> PromptCopy(
         title = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_TITLE),
         message = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_BODY),
@@ -189,3 +189,18 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = when (kind.
     // in Rust and not here, say so loudly rather than showing an empty sheet.
     else -> error("unhandled prompt kind: ${kind.type}")
 }
+
+/**
+ * Issue #450: a security key this device could not use is about the KEY —
+ * "biometric authentication is not available" sent a person holding a YubiKey
+ * off to look for a fingerprint setting. The core says which (`security_key`).
+ */
+private fun keyUnavailableCopy(kind: PromptKind, strings: VelaStrings): PromptCopy? =
+    if (kind.securityKey && (kind.type == "not_supported_create" || kind.type == "not_supported_login")) {
+        PromptCopy(
+            title = strings.t(I18nKeys.Flow.KEY_UNAVAILABLE_TITLE),
+            message = strings.t(I18nKeys.Flow.KEY_UNAVAILABLE_BODY),
+        )
+    } else {
+        null
+    }

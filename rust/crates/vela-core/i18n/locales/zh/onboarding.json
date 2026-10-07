@@ -115,7 +115,7 @@
       "locationNeededBody": "安卓查找附近的蓝牙设备时需要开启定位服务。Vela 不会读取你的位置。",
       "openLocationSettings": "前往系统设置开启定位",
       "insertKeyTitle": "插入安全密钥",
-      "insertKeyBody": "把 FIDO2 安全密钥插到手机的 USB 接口，检测到后会自动继续。",
+      "insertKeyBody": "把 FIDO2 安全密钥插到这台设备的 USB 接口，检测到后会自动继续。",
       "otgOffHint": "手机的 OTG 开关可能已关闭——部分手机会自动关闭它。请到系统设置开启 OTG 后重新插入。",
       "touchRemoteTitle": "查看你的手机",
       "touchRemoteBody": "在你的设备上按提示继续操作",
@@ -127,7 +127,9 @@
       "copied": "已复制",
       "close": "关闭",
       "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。",
-      "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。"
+      "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。",
+      "keyUnavailableTitle": "无法使用安全密钥",
+      "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。"
     },
     "create": {
       "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",

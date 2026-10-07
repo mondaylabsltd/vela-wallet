@@ -1098,7 +1098,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 model.status = Some(StatusKey::SettingUpIdentity);
                 request(model, ShellOperation::GenerateGroupKey)
             } else {
-                fail_to_form(model, PromptKind::NotSupportedCreate, None)
+                // Before any key is chosen: the device, not a route.
+                fail_to_form(
+                    model,
+                    PromptKind::NotSupportedCreate {
+                        security_key: false,
+                    },
+                    None,
+                )
             }
         }
 
@@ -1201,7 +1208,10 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             // fine here but never appear at sign-in or sync for recovery. Stop
             // now — nothing has been persisted (issue #1).
             FailureKind::NotDiscoverable => fail_registration(model, PromptKind::NotDiscoverable),
-            FailureKind::NotSupported => fail_registration(model, PromptKind::NotSupportedCreate),
+            FailureKind::NotSupported => {
+                let method = model.registering_method;
+                fail_registration(model, PromptKind::not_supported_create(method))
+            }
             FailureKind::Other => {
                 let method = model.registering_method;
                 fail_registration(

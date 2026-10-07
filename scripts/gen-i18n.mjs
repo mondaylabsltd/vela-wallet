@@ -591,8 +591,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   sign-in or create whose link to the other device failed (the core's
 //   `PromptKind::{SignInFailed,CreateFailed}.phone_link`) says to scan again,
 //   where it used to say to set up Face ID. 1789 leaves, 99 branches.
-if (PATHS.length !== 1888) fail(`expected 1888 paths (1789 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1789) fail(`expected 1789 leaf paths, got ${leafSet.size}`);
+// 1890 (issue #450, 2026-10-07): + `onboarding.common.keyUnavailable{Title,Body}`
+//   — a security key this device could not use is said as the key's problem
+//   (the core's `PromptKind::NotSupported{Create,Login}.security_key`), where
+//   it said "biometric authentication is not available". 1791 leaves, 99
+//   branches.
+if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -731,7 +731,7 @@
    "locationNeededBody": "Android cần dịch vụ vị trí để tìm thiết bị Bluetooth ở gần. Vela không bao giờ đọc vị trí của bạn.",
    "openLocationSettings": "Mở cài đặt hệ thống để bật vị trí",
    "insertKeyTitle": "Cắm khóa bảo mật của bạn",
-   "insertKeyBody": "Cắm khóa bảo mật FIDO2 vào cổng USB của điện thoại này — sẽ tự động tiếp tục khi nhận diện được.",
+   "insertKeyBody": "Cắm khóa bảo mật FIDO2 vào cổng USB của thiết bị này — sẽ tự động tiếp tục khi nhận diện được.",
    "otgOffHint": "Công tắc OTG của điện thoại này có vẻ đang tắt — một số điện thoại tự tắt nó. Hãy bật OTG trong cài đặt hệ thống rồi cắm lại khóa.",
    "touchRemoteTitle": "Kiểm tra điện thoại của bạn",
    "touchRemoteBody": "Làm theo các bước trên thiết bị của bạn",
@@ -743,7 +743,9 @@
    "copied": "Đã sao chép",
    "close": "Đóng",
    "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại.",
-   "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã."
+   "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã.",
+   "keyUnavailableTitle": "Không dùng được khóa bảo mật",
+   "keyUnavailableBody": "Thiết bị này không dùng được khóa bảo mật. Hãy thử một khóa bảo mật FIDO2 khác, hoặc chọn cách khác để tiếp tục."
   },
   "create": {
    "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",

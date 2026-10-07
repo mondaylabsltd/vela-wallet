@@ -38,6 +38,9 @@ struct GroupDetailScreen: View {
 
     /// Whether the ⋯ menu is up. The picker's presence is the core's answer.
     @State private var menuShown = false
+    /// Import and export open a SYSTEM sheet, which UIKit will not present from
+    /// the menu while it leaves — so they run once it has gone (issue #449).
+    @State private var afterDismiss: (() -> Void)?
 
     private enum Presented {
         case menu(ActionMenuModel)
@@ -82,7 +85,11 @@ struct GroupDetailScreen: View {
         .sheet(isPresented: Binding(
             get: { presented != nil },
             set: { if !$0 { dismissSheet() } }
-        )) {
+        ), onDismiss: {
+            let action = afterDismiss
+            afterDismiss = nil
+            action?()
+        }) {
             switch presented {
             case .menu(let sheet):
                 ActionMenuSheet(
@@ -97,8 +104,8 @@ struct GroupDetailScreen: View {
                             onDeleteGroup()
                         } else if let index = sheet.items.firstIndex(where: { $0.id == item.id }) {
                             if index == 0 { onRenameGroup?() }
-                            if index == 1 { onImportIntoGroup() }
-                            if index == 2 { onExportGroup() }
+                            if index == 1 { afterDismiss = onImportIntoGroup }
+                            if index == 2 { afterDismiss = onExportGroup }
                         }
                     },
                     onCancel: { menuShown = false }

@@ -254,6 +254,45 @@ struct UsbTouchSheet: View {
     }
 }
 
+/// "Insert your security key" — up while the ceremony polls for one (issue
+/// #450). A missing key is a waitable state, not an error: the sheet closes
+/// ITSELF the moment the key answers, so plugging it in is the whole gesture.
+/// Close is a cancel.
+struct UsbInsertKeySheet: View {
+    @Environment(\.theme) private var theme
+    let loc: Loc
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: Tokens.Space.s16) {
+            Image(systemName: "key.horizontal")
+                .font(.system(size: 44, weight: .regular))
+                .foregroundStyle(theme.accentBase)
+                .symbolEffect(.pulse, options: .repeating)
+
+            Text(loc.t(I18nKeys.Flow.insertKeyTitle))
+                .typeRole(Typography.title)
+                .foregroundStyle(theme.fgBase)
+                .multilineTextAlignment(.center)
+
+            Text(loc.t(I18nKeys.Flow.insertKeyBody))
+                .typeRole(Typography.body)
+                .foregroundStyle(theme.fgMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VelaButton(title: loc.t(I18nKeys.Flow.close), kind: .secondary) { onCancel() }
+                .padding(.top, Tokens.Space.s8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Tokens.Layout.screenPaddingX)
+        .padding(.vertical, Tokens.Space.s32)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(theme.bgRaised)
+    }
+}
+
 /// The brief "connecting…" state that keeps the single bottom sheet up between
 /// the person picking a method and the first ceremony prompt arriving — so the
 /// sheet never dismisses and re-presents (the nesting bug), it only swaps

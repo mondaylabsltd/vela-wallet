@@ -40,6 +40,9 @@ final class SmartCardCtapCeremony {
         /// The key is blinking. `kind` is "presence" / "fingerprint" /
         /// "select"; `nil` clears the prompt.
         func touchWaiting(kind: String?, product: String)
+        /// No key present: "insert your security key" until `probe` finds one
+        /// (`true`) or the person closes the sheet (`false`).
+        func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool
     }
 
     private let prompts: Prompts
@@ -51,12 +54,7 @@ final class SmartCardCtapCeremony {
     /// Is a card/reader with a valid card present for this path to use?
     func deviceAvailable() async -> Bool {
         guard let manager = TKSmartCardSlotManager.default else { return false }
-        for name in manager.slotNames {
-            if let slot = await manager.getSlot(withName: name), slot.state == .validCard {
-                return true
-            }
-        }
-        return false
+        return await Self.firstValidCard(manager) != nil
     }
 
     func register(name: String, excludeCredentialIds: [String]) async throws -> Registration {
@@ -95,7 +93,30 @@ final class SmartCardCtapCeremony {
                 message: "Smart-card access is unavailable (missing entitlement or unsupported device)."
             )
         }
-        let (card, slotName) = try await firstValidCard(manager)
+        var found = await Self.firstValidCard(manager)
+        if found == nil {
+            // No key is a WAITABLE state, not a diagnosis: the person is
+            // holding the key they are about to plug in. Failing here said
+            // "Biometric authentication is not available on this device" — a
+            // sentence about the wrong subject entirely (issue #450, iPad; the
+            // same thing Android fixed on 2026-08-28). The sheet polls;
+            // plugging the key in continues the ceremony by itself, closing
+            // the sheet is a cancel.
+            let inserted = await prompts.awaitKeyInsertion {
+                await Self.firstValidCard(manager) != nil
+            }
+            guard inserted else {
+                throw PasskeyFailure(kind: .cancelled, message: "No key was inserted")
+            }
+            found = await Self.firstValidCard(manager)
+        }
+        guard let found else {
+            throw PasskeyFailure(
+                kind: .notSupported,
+                message: "No security key is present. Plug in a USB-C security key and try again."
+            )
+        }
+        let (card, slotName) = (found.card, found.slot)
         guard try await card.beginSession() else {
             throw PasskeyFailure(kind: .other, message: "Could not open a session with the security key.")
         }
@@ -122,19 +143,18 @@ final class SmartCardCtapCeremony {
         }
     }
 
-    private func firstValidCard(
+    /// The first slot holding a card that answers, or `nil` when no key is
+    /// plugged in.
+    private static func firstValidCard(
         _ manager: TKSmartCardSlotManager
-    ) async throws -> (TKSmartCard, String) {
+    ) async -> (card: TKSmartCard, slot: String)? {
         for name in manager.slotNames {
             guard let slot = await manager.getSlot(withName: name), slot.state == .validCard,
                   let card = slot.makeSmartCard()
             else { continue }
             return (card, name)
         }
-        throw PasskeyFailure(
-            kind: .notSupported,
-            message: "No security key is present. Plug in a USB-C security key and try again."
-        )
+        return nil
     }
 }
 
