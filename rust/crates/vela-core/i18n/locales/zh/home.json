@@ -65,6 +65,11 @@
     "a11yShowBalance": "显示余额",
     "a11ySwitchAccount": "账户 {{name}}。切换账户",
     "a11yOpenSettings": "设置",
-    "balanceDetailUpdatedLabel": "已更新"
+    "balanceDetailUpdatedLabel": "已更新",
+    "getApp": {
+      "title": "在手机上使用 Vela",
+      "body": "Vela 也有 iPhone 和 Android 应用。",
+      "scanHint": "用手机相机扫描"
+    }
   }
 }

@@ -93,6 +93,10 @@
    "title": "피드백",
    "subtitle": "버그 신고 또는 의견 보내기"
   },
+  "analytics": {
+   "title": "익명 사용 통계 공유",
+   "subtitle": "어떤 화면을 열고 어떤 단계를 마쳤는지만 — 주소, 금액, 이름은 절대 포함하지 않습니다."
+  },
   "about": {
    "title": "정보",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "잔액 표시",
   "a11ySwitchAccount": "{{name}} 계정. 계정 전환",
   "a11yOpenSettings": "설정",
-  "balanceDetailUpdatedLabel": "업데이트됨"
+  "balanceDetailUpdatedLabel": "업데이트됨",
+  "getApp": {
+   "title": "휴대폰에서도 Vela를",
+   "body": "Vela는 iPhone과 Android 앱으로도 있습니다.",
+   "scanHint": "휴대폰 카메라로 스캔하세요"
+  }
  },
  "send": {
   "filterStable": "스테이블코인",

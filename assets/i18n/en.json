@@ -93,6 +93,10 @@
    "title": "Send feedback",
    "subtitle": "Report a bug or share an idea"
   },
+  "analytics": {
+   "title": "Share anonymous usage statistics",
+   "subtitle": "Which screens open and which steps finish — never addresses, amounts or names."
+  },
   "about": {
    "title": "About",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "Show balance",
   "a11ySwitchAccount": "Account {{name}}. Switch account",
   "a11yOpenSettings": "Settings",
-  "balanceDetailUpdatedLabel": "Updated"
+  "balanceDetailUpdatedLabel": "Updated",
+  "getApp": {
+   "title": "Get Vela on your phone",
+   "body": "Vela is also an app for iPhone and Android.",
+   "scanHint": "Scan with your phone's camera"
+  }
  },
  "send": {
   "selectTokenTitle": "Select Token",

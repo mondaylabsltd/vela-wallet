@@ -65,6 +65,11 @@
     "a11yShowBalance": "Mostrar saldo",
     "a11ySwitchAccount": "Conta {{name}}. Trocar de conta",
     "a11yOpenSettings": "Configurações",
-    "balanceDetailUpdatedLabel": "Atualizado"
+    "balanceDetailUpdatedLabel": "Atualizado",
+    "getApp": {
+      "title": "Tenha o Vela no celular",
+      "body": "O Vela também é um app para iPhone e Android.",
+      "scanHint": "Escaneie com a câmera do celular"
+    }
   }
 }

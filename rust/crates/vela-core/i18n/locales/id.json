@@ -93,6 +93,10 @@
       "title": "Kirim masukan",
       "subtitle": "Laporkan bug atau bagikan ide"
     },
+    "analytics": {
+      "title": "Bagikan statistik penggunaan anonim",
+      "subtitle": "Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, atau nama."
+    },
     "about": {
       "title": "Tentang",
       "subtitle": "Vela Wallet v{{version}}"

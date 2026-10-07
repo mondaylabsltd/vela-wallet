@@ -93,6 +93,10 @@
       "title": "フィードバック",
       "subtitle": "不具合の報告やご提案"
     },
+    "analytics": {
+      "title": "匿名の利用統計を共有",
+      "subtitle": "開いた画面と完了した手順だけ — アドレス、金額、名前は含みません。"
+    },
     "about": {
       "title": "このアプリについて",
       "subtitle": "Vela Wallet v{{version}}"

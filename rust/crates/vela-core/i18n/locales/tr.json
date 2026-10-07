@@ -93,6 +93,10 @@
       "title": "Geri bildirim gönder",
       "subtitle": "Hata bildirin veya fikir paylaşın"
     },
+    "analytics": {
+      "title": "Anonim kullanım istatistiklerini paylaş",
+      "subtitle": "Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar veya isim yok."
+    },
     "about": {
       "title": "Hakkında",
       "subtitle": "Vela Wallet v{{version}}"

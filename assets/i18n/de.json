@@ -93,6 +93,10 @@
    "title": "Feedback senden",
    "subtitle": "Fehler melden oder Idee teilen"
   },
+  "analytics": {
+   "title": "Anonyme Nutzungsstatistik teilen",
+   "subtitle": "Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge oder Namen."
+  },
   "about": {
    "title": "Über",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "Guthaben anzeigen",
   "a11ySwitchAccount": "Konto {{name}}. Konto wechseln",
   "a11yOpenSettings": "Einstellungen",
-  "balanceDetailUpdatedLabel": "Aktualisiert"
+  "balanceDetailUpdatedLabel": "Aktualisiert",
+  "getApp": {
+   "title": "Vela auf dem Smartphone",
+   "body": "Vela gibt es auch als App für iPhone und Android.",
+   "scanHint": "Mit der Smartphone-Kamera scannen"
+  }
  },
  "send": {
   "filterStable": "Stablecoins",

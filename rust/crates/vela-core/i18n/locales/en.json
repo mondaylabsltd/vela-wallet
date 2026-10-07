@@ -93,6 +93,10 @@
       "title": "Send feedback",
       "subtitle": "Report a bug or share an idea"
     },
+    "analytics": {
+      "title": "Share anonymous usage statistics",
+      "subtitle": "Which screens open and which steps finish — never addresses, amounts or names."
+    },
     "about": {
       "title": "About",
       "subtitle": "Vela Wallet v{{version}}"

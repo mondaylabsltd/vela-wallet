@@ -65,6 +65,11 @@
     "a11yShowBalance": "Tampilkan saldo",
     "a11ySwitchAccount": "Akun {{name}}. Ganti akun",
     "a11yOpenSettings": "Pengaturan",
-    "balanceDetailUpdatedLabel": "Diperbarui"
+    "balanceDetailUpdatedLabel": "Diperbarui",
+    "getApp": {
+      "title": "Pakai Vela di ponsel",
+      "body": "Vela juga tersedia sebagai aplikasi iPhone dan Android.",
+      "scanHint": "Pindai dengan kamera ponsel"
+    }
   }
 }

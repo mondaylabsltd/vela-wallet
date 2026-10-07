@@ -93,6 +93,10 @@
       "title": "Feedback senden",
       "subtitle": "Fehler melden oder Idee teilen"
     },
+    "analytics": {
+      "title": "Anonyme Nutzungsstatistik teilen",
+      "subtitle": "Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge oder Namen."
+    },
     "about": {
       "title": "Über",
       "subtitle": "Vela Wallet v{{version}}"

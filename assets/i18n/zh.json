@@ -93,6 +93,10 @@
    "title": "反馈",
    "subtitle": "报告问题或提出建议"
   },
+  "analytics": {
+   "title": "共享匿名使用统计",
+   "subtitle": "只统计打开了哪些页面、完成了哪些步骤——绝不包含地址、金额或名称。"
+  },
   "about": {
    "title": "关于",
    "subtitle": "Vela 钱包 v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "显示余额",
   "a11ySwitchAccount": "账户 {{name}}。切换账户",
   "a11yOpenSettings": "设置",
-  "balanceDetailUpdatedLabel": "已更新"
+  "balanceDetailUpdatedLabel": "已更新",
+  "getApp": {
+   "title": "在手机上使用 Vela",
+   "body": "Vela 也有 iPhone 和 Android 应用。",
+   "scanHint": "用手机相机扫描"
+  }
  },
  "send": {
   "selectTokenTitle": "选择代币",

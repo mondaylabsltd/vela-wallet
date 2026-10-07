@@ -93,6 +93,10 @@
    "title": "フィードバック",
    "subtitle": "不具合の報告やご提案"
   },
+  "analytics": {
+   "title": "匿名の利用統計を共有",
+   "subtitle": "開いた画面と完了した手順だけ — アドレス、金額、名前は含みません。"
+  },
   "about": {
    "title": "このアプリについて",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "残高を表示",
   "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
   "a11yOpenSettings": "設定",
-  "balanceDetailUpdatedLabel": "更新済み"
+  "balanceDetailUpdatedLabel": "更新済み",
+  "getApp": {
+   "title": "スマートフォンでも Vela を",
+   "body": "Vela には iPhone と Android のアプリもあります。",
+   "scanHint": "スマートフォンのカメラでスキャン"
+  }
  },
  "send": {
   "filterStable": "ステーブルコイン",
