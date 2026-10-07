@@ -163,16 +163,7 @@ final class L2capCableConn: NSObject, CableConn {
         // the other phone): a stream that never delivers would otherwise pin
         // the Rust thread forever. The watchdog fails ALL pending reads; a
         // frame that arrives first cancels it via the normal resume path.
-        let watchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 130_000_000_000)
-            // Load-bearing: cancelling a sleeping Task makes the sleep THROW
-            // IMMEDIATELY, and `try?` swallows that — without this check the
-            // "cancelled" watchdog fell through and killed the connection the
-            // instant a frame arrived. That was the whole BLE-only failure:
-            // msg2 read fine, the deferred cancel fired the watchdog, and the
-            // very next read found the channel "closed" (device-found
-            // 2026-08-28, two-sided logs, 51ms from success to teardown).
-            guard !Task.isCancelled else { return }
+        let watchdog = CableWatchdog.start(after: CableWatchdog.ceremonyBudget) { [weak self] in
             guard let self, !self.closed else { return }
             self.fail(CableConnError.timeout)
         }
@@ -270,7 +261,14 @@ final class WebSocketCableConn: NSObject, CableConn {
     static func connect(url: URL, timeoutMs: Int) async throws -> WebSocketCableConn {
         let c = WebSocketCableConn()
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = TimeInterval(timeoutMs) / 1000
+        // The connect deadline is the open watchdog below. A request timeout as
+        // short would also bound the idle wait for the phone's answer, which is
+        // the person approving there — the ceremony's budget, as Android's
+        // `readTimeout(0)` leaves it (issue #446).
+        cfg.timeoutIntervalForRequest = max(
+            TimeInterval(timeoutMs) / 1000,
+            TimeInterval(CableWatchdog.ceremonyBudget) / 1_000_000_000
+        )
         // delegateQueue = .main so the delegate callbacks land on the MainActor.
         c.session = URLSession.vela(cfg, delegate: c, delegateQueue: .main)
         c.task = c.session.webSocketTask(with: url, protocols: [subprotocol])
@@ -313,8 +311,13 @@ final class WebSocketCableConn: NSObject, CableConn {
         // Cancelling the task fails the pending receive; the flag tells a
         // deliberate timeout apart from an ordinary socket error.
         let timedOut = OSAllocatedUnfairLock(initialState: false)
-        let watchdog = Task { @MainActor [task] in
-            try? await Task.sleep(nanoseconds: 130_000_000_000)
+        // Issue #446: this watchdog was the BLE one's twin WITHOUT its guard —
+        // the deferred cancel below threw it out of its sleep, `try?` swallowed
+        // that, and it cancelled the socket the moment noise message 2 had been
+        // read. Every phone sign-in over the tunnel then failed on the next
+        // read with NSURLErrorCancelled (-999). One helper now carries the
+        // guard for both channels.
+        let watchdog = CableWatchdog.start(after: CableWatchdog.ceremonyBudget) { [task] in
             timedOut.withLock { $0 = true }
             task?.cancel()
         }

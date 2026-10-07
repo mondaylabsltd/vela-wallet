@@ -339,7 +339,11 @@ export const PROMPT_FIXTURES: { code: string; label: string; kind: PromptKind }[
 	{
 		code: 'E6',
 		label: 'Creation failed — the platform’s own words',
-		kind: { type: 'create_failed', detail: 'Register failed: 503 Service Unavailable' }
+		kind: {
+			type: 'create_failed',
+			detail: 'Register failed: 503 Service Unavailable',
+			phone_link: false
+		}
 	},
 	{
 		code: 'E7',
@@ -352,7 +356,8 @@ export const PROMPT_FIXTURES: { code: string; label: string; kind: PromptKind }[
 		label: 'Sign-in failed',
 		kind: {
 			type: 'sign_in_failed',
-			detail: 'NotAllowedError: The operation either timed out or was not allowed.'
+			detail: 'NotAllowedError: The operation either timed out or was not allowed.',
+			phone_link: false
 		}
 	}
 ];

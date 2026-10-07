@@ -126,7 +126,8 @@
       "copyAddress": "Sao chép địa chỉ",
       "copied": "Đã sao chép",
       "close": "Đóng",
-      "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại."
+      "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại.",
+      "phoneLinkFailed": "Thiết bị kia không kết nối được, hoặc kết nối bị ngắt trước khi hoàn tất. Hãy giữ cả hai thiết bị trực tuyến và ở gần nhau, rồi quét lại mã."
     },
     "create": {
       "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",

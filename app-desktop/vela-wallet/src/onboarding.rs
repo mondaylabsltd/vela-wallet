@@ -1226,11 +1226,7 @@ impl Render for OnboardingPage {
         {
             self.prompt = Some((
                 Machine::Login,
-                Prompt::new(
-                    vela_core::app::PromptKind::CreateFailed { detail },
-                    false,
-                    0,
-                ),
+                Prompt::new(vela_core::app::PromptKind::create_failed(detail), false, 0),
             ));
         }
         let tiling = frame_tiling(window);

@@ -19573,7 +19573,7 @@ impl Render for WalletPage {
             && let Some(detail) = crate::panic_report::take()
         {
             self.crash = Some(crate::outcome::Prompt::new(
-                vela_core::app::PromptKind::CreateFailed { detail },
+                vela_core::app::PromptKind::create_failed(detail),
                 false,
                 0,
             ));

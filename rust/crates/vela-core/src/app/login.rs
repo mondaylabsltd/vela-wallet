@@ -335,7 +335,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             }
         }
         (Stage::LoadingAccounts, ShellResult::StorageFailed { message }) => {
-            idle_with_prompt(model, PromptKind::SignInFailed { detail: message })
+            idle_with_prompt(model, PromptKind::sign_in_failed(message))
         }
 
         // -- recovery ----------------------------------------------------------
@@ -451,9 +451,9 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 // address. Nothing is persisted on a guess.
                 None => idle_with_prompt(
                     model,
-                    PromptKind::SignInFailed {
-                        detail: "registry group does not match its address".to_owned(),
-                    },
+                    PromptKind::sign_in_failed(
+                        "registry group does not match its address".to_owned(),
+                    ),
                 ),
             }
         }
@@ -461,7 +461,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         // wallet's address CANNOT be derived from one key, so entering with a
         // single-key guess would fund the wrong Safe — surface the failure.
         (Stage::FetchingUnit, ShellResult::IndexFailed { message, .. }) => {
-            idle_with_prompt(model, PromptKind::SignInFailed { detail: message })
+            idle_with_prompt(model, PromptKind::sign_in_failed(message))
         }
 
         // -- name resolution (v1-era wallets) ----------------------------------
@@ -518,7 +518,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             if let Some(active_index) = model.entering.take() {
                 return complete_known(model, active_index);
             }
-            idle_with_prompt(model, PromptKind::SignInFailed { detail: message })
+            idle_with_prompt(model, PromptKind::sign_in_failed(message))
         }
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
 
@@ -532,9 +532,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             FailureKind::NotSupported => idle_with_prompt(model, PromptKind::NotSupportedLogin),
             _ => idle_with_prompt(
                 model,
-                PromptKind::SignInFailed {
-                    detail: message.unwrap_or_default(),
-                },
+                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method),
             ),
         },
 

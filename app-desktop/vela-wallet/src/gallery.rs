@@ -450,44 +450,34 @@ fn entries() -> Vec<Entry> {
     sheet("recover failed", PromptKind::RecoverFailed, false);
     sheet(
         "create failed · unknown",
-        PromptKind::CreateFailed {
-            detail: "the security key returned no pinUvAuthToken".to_owned(),
-        },
+        PromptKind::create_failed("the security key returned no pinUvAuthToken".to_owned()),
         false,
     );
     sheet(
         "create failed · network",
-        PromptKind::CreateFailed {
-            detail: "Register failed: connection refused".to_owned(),
-        },
+        PromptKind::create_failed("Register failed: connection refused".to_owned()),
         false,
     );
     sheet(
         "create failed · server",
-        PromptKind::CreateFailed {
-            detail: "Register failed: http status: 503".to_owned(),
-        },
+        PromptKind::create_failed("Register failed: http status: 503".to_owned()),
         false,
     );
     sheet(
         "create failed · timeout",
-        PromptKind::CreateFailed {
-            detail: "Register timed out after 120s".to_owned(),
-        },
+        PromptKind::create_failed("Register timed out after 120s".to_owned()),
         false,
     );
     sheet(
         "create failed · no key",
-        PromptKind::CreateFailed {
-            detail: "No security key is plugged in. Insert one and try again.".to_owned(),
-        },
+        PromptKind::create_failed(
+            "No security key is plugged in. Insert one and try again.".to_owned(),
+        ),
         false,
     );
     sheet(
         "sign-in failed",
-        PromptKind::SignInFailed {
-            detail: "the security key holds no Vela passkey".to_owned(),
-        },
+        PromptKind::sign_in_failed("the security key holds no Vela passkey".to_owned()),
         false,
     );
     out

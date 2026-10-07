@@ -60,13 +60,34 @@ describe('a ceremony Chrome refused for limited site access', () => {
 		const { promptCopy } = await import('./copy');
 		const { SITE_ACCESS_WITHHELD } = await import('./passkey');
 		const t = (key: string) => key;
-		expect(promptCopy({ type: 'create_failed', detail: SITE_ACCESS_WITHHELD }, t).message).toBe(
-			'onboarding.common.siteAccessBody'
-		);
-		expect(promptCopy({ type: 'sign_in_failed', detail: SITE_ACCESS_WITHHELD }, t).message).toBe(
-			'onboarding.common.siteAccessBody'
-		);
+		expect(
+			promptCopy({ type: 'create_failed', detail: SITE_ACCESS_WITHHELD, phone_link: false }, t)
+				.message
+		).toBe('onboarding.common.siteAccessBody');
+		expect(
+			promptCopy({ type: 'sign_in_failed', detail: SITE_ACCESS_WITHHELD, phone_link: false }, t)
+				.message
+		).toBe('onboarding.common.siteAccessBody');
 		// Anything else still carries the platform's own words, for the report.
-		expect(promptCopy({ type: 'create_failed', detail: 'boom' }, t).message).toBe('boom');
+		expect(
+			promptCopy({ type: 'create_failed', detail: 'boom', phone_link: false }, t).message
+		).toBe('boom');
+	});
+});
+
+/**
+ * Issue #446 — a ceremony that ran over the phone link and failed is said as
+ * the link's failure, never "set up Face ID here": the core sets `phone_link`.
+ */
+describe('a failed phone ceremony', () => {
+	it('reads as the dropped link on both prompts', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string) => key;
+		expect(promptCopy({ type: 'create_failed', detail: 'x', phone_link: true }, t).message).toBe(
+			'onboarding.common.phoneLinkFailed'
+		);
+		expect(promptCopy({ type: 'sign_in_failed', detail: 'x', phone_link: true }, t).message).toBe(
+			'onboarding.common.phoneLinkFailed'
+		);
 	});
 });

@@ -745,7 +745,8 @@
    "copyAddress": "Copiar endereço",
    "copied": "Copiado",
    "close": "Fechar",
-   "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo."
+   "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo.",
+   "phoneLinkFailed": "Seu outro dispositivo não se conectou, ou a conexão caiu antes de terminar. Mantenha os dois dispositivos online e próximos e escaneie o código de novo."
   },
   "create": {
    "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",

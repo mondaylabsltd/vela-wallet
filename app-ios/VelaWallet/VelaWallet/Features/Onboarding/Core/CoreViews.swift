@@ -214,17 +214,22 @@ struct SessionView: Decodable, Equatable {
 struct PromptKind: Equatable, Identifiable {
     let type: String
     let detail: String?
+    /// The core's verdict that the link to the other device failed, not the
+    /// authenticator (issue #446): the sheet says to scan again.
+    let phoneLink: Bool
 
     var id: String { detail.map { "\(type)|\($0)" } ?? type }
 
-    init(type: String, detail: String? = nil) {
+    init(type: String, detail: String? = nil, phoneLink: Bool = false) {
         self.type = type
         self.detail = detail
+        self.phoneLink = phoneLink
     }
 
     init(json: [String: Any]) {
         self.type = json["type"] as? String ?? ""
         self.detail = json["detail"] as? String
+        self.phoneLink = json["phone_link"] as? Bool ?? false
     }
 }
 
