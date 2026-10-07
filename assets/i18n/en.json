@@ -738,7 +738,7 @@
    "locationNeededBody": "Android needs Location services to find nearby Bluetooth devices. Vela never reads your position.",
    "openLocationSettings": "Open system settings to turn on Location",
    "insertKeyTitle": "Insert your security key",
-   "insertKeyBody": "Plug your FIDO2 security key into this device's USB port — it continues automatically once detected.",
+   "insertKeyBody": "Plug your FIDO2 security key into this device's USB port — it continues once detected.",
    "otgOffHint": "This phone's OTG switch looks off — some phones switch it off automatically. Turn on OTG in system settings, then plug the key back in.",
    "touchRemoteTitle": "Check your phone",
    "touchRemoteBody": "Follow the steps on your device",
@@ -750,9 +750,9 @@
    "copied": "Copied",
    "close": "Close",
    "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
-   "phoneLinkFailed": "Your other device didn't connect, or the connection dropped before it finished. Keep both devices online and close together, then scan the code again.",
-   "keyUnavailableTitle": "Security key not available",
-   "keyUnavailableBody": "This device couldn't use the security key. Try a different FIDO2 security key, or choose another way to continue."
+   "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
+   "keyUnavailableTitle": "Security key unavailable",
+   "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
