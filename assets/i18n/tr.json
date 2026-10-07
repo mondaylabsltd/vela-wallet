@@ -731,7 +731,7 @@
    "locationNeededBody": "Android, yakındaki Bluetooth cihazlarını bulmak için konum hizmetlerine ihtiyaç duyar. Vela konumunu asla okumaz.",
    "openLocationSettings": "Konumu açmak için sistem ayarlarına git",
    "insertKeyTitle": "Güvenlik anahtarını tak",
-   "insertKeyBody": "FIDO2 güvenlik anahtarını bu telefonun USB girişine tak — algılanınca otomatik devam eder.",
+   "insertKeyBody": "FIDO2 güvenlik anahtarını bu cihazın USB girişine tak — algılanınca otomatik devam eder.",
    "otgOffHint": "Bu telefonun OTG anahtarı kapalı görünüyor — bazı telefonlar onu kendiliğinden kapatır. Sistem ayarlarından OTG'yi açıp anahtarı yeniden tak.",
    "touchRemoteTitle": "Telefonuna bak",
    "touchRemoteBody": "Cihazındaki adımları izle",
@@ -743,7 +743,9 @@
    "copied": "Kopyalandı",
    "close": "Kapat",
    "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin.",
-   "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın."
+   "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
+   "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
+   "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."
   },
   "create": {
    "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",

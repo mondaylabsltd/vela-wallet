@@ -91,3 +91,22 @@ describe('a failed phone ceremony', () => {
 		);
 	});
 });
+
+/**
+ * Issue #450 — a security key this device could not use is about the key;
+ * the core sets `security_key`. A passkey route keeps the biometrics sheet.
+ */
+describe('a security key that cannot run', () => {
+	it('is said as the key, on both prompts', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string) => key;
+		for (const type of ['not_supported_create', 'not_supported_login'] as const) {
+			const copy = promptCopy({ type, security_key: true }, t);
+			expect(copy.title).toBe('onboarding.common.keyUnavailableTitle');
+			expect(copy.message).toBe('onboarding.common.keyUnavailableBody');
+		}
+		expect(promptCopy({ type: 'not_supported_login', security_key: false }, t).message).toBe(
+			'onboarding.login.alertNotSupportedBody'
+		);
+	});
+});

@@ -164,6 +164,13 @@ enum I18nKeys {
         /// Issue #446: the link to the other device failed (the core's `phone_link`).
         static let phoneLinkFailed = "onboarding.common.phoneLinkFailed"
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
+        /// Issue #450: no key plugged in yet — the ceremony waits for one.
+        static let insertKeyTitle = "onboarding.common.insertKeyTitle"
+        static let insertKeyBody = "onboarding.common.insertKeyBody"
+        /// Issue #450: a security-key route this device could not use (the
+        /// core's `security_key` on a not-supported prompt).
+        static let keyUnavailableTitle = "onboarding.common.keyUnavailableTitle"
+        static let keyUnavailableBody = "onboarding.common.keyUnavailableBody"
     }
 
     /// Spec 088 FR-004: a page another app asked to open — the host is data,
@@ -268,6 +275,7 @@ enum I18nKeys {
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
         Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,
+        Flow.insertKeyTitle, Flow.insertKeyBody, Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
         Settings.sectionPasskeyIndex, Settings.endpointUrlLabel, Settings.passkeyHint,
         Settings.resetToDefault, Settings.warningText,
     ]

@@ -731,7 +731,7 @@
    "locationNeededBody": "Android memerlukan layanan lokasi untuk menemukan perangkat Bluetooth di sekitar. Vela tidak pernah membaca posisi Anda.",
    "openLocationSettings": "Buka pengaturan sistem untuk menyalakan lokasi",
    "insertKeyTitle": "Colokkan kunci keamanan Anda",
-   "insertKeyBody": "Colokkan kunci keamanan FIDO2 ke port USB ponsel ini — proses berlanjut otomatis begitu terdeteksi.",
+   "insertKeyBody": "Colokkan kunci keamanan FIDO2 ke port USB perangkat ini — proses berlanjut otomatis begitu terdeteksi.",
    "otgOffHint": "Sakelar OTG ponsel ini tampaknya mati — sebagian ponsel mematikannya secara otomatis. Nyalakan OTG di pengaturan sistem, lalu colokkan kembali kuncinya.",
    "touchRemoteTitle": "Periksa ponsel Anda",
    "touchRemoteBody": "Ikuti langkah-langkah di perangkat Anda",
@@ -743,7 +743,9 @@
    "copied": "Disalin",
    "close": "Tutup",
    "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi.",
-   "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi."
+   "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
+   "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
+   "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."
   },
   "create": {
    "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",

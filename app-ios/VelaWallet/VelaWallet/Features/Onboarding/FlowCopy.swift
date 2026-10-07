@@ -159,7 +159,16 @@ struct PromptCopy: Equatable {
 }
 
 func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
-    switch kind.type {
+    // Issue #450: a security key this device could not use is about the key —
+    // "biometric authentication is not available" sent an iPad owner holding
+    // a YubiKey off to look for Face ID.
+    if kind.securityKey, kind.type == "not_supported_create" || kind.type == "not_supported_login" {
+        return PromptCopy(
+            title: loc.t(I18nKeys.Flow.keyUnavailableTitle),
+            message: loc.t(I18nKeys.Flow.keyUnavailableBody)
+        )
+    }
+    return switch kind.type {
     case "not_supported_create":
         PromptCopy(
             title: loc.t(I18nKeys.Create.alertNotSupportedTitle),

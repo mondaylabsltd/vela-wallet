@@ -3830,6 +3830,9 @@ struct RootView: View {
         } else if let touch = onboarding.usbTouch {
             UsbTouchSheet(loc: loc, touch: touch)
                 .themed(scheme)
+        } else if onboarding.pendingInsertKey != nil {
+            UsbInsertKeySheet(loc: loc, onCancel: { onboarding.answerInsertKey(false) })
+                .themed(scheme)
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.

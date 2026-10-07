@@ -253,6 +253,9 @@ object I18nKeys {
         const val OPEN_LOCATION_SETTINGS = "onboarding.common.openLocationSettings"
         const val INSERT_KEY_TITLE = "onboarding.common.insertKeyTitle"
         const val INSERT_KEY_BODY = "onboarding.common.insertKeyBody"
+        /** Issue #450: a security key this device could not use. */
+        const val KEY_UNAVAILABLE_TITLE = "onboarding.common.keyUnavailableTitle"
+        const val KEY_UNAVAILABLE_BODY = "onboarding.common.keyUnavailableBody"
         const val OTG_OFF_HINT = "onboarding.common.otgOffHint"
         const val TOUCH_REMOTE_TITLE = "onboarding.common.touchRemoteTitle"
         const val TOUCH_REMOTE_BODY = "onboarding.common.touchRemoteBody"
