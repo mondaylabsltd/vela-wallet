@@ -21,6 +21,7 @@ import app.getvela.wallet.feature.contacts.components.GroupMenuSheet
 import app.getvela.wallet.feature.contacts.components.GroupEditSheet
 import app.getvela.wallet.feature.contacts.components.GroupDeleteConfirmSheet
 import app.getvela.wallet.feature.contacts.components.ContactQrSheet
+import app.getvela.wallet.feature.contacts.components.MultiPickSheet
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.Gallery
@@ -112,9 +113,6 @@ import app.getvela.wallet.feature.contacts.ContactsFixtures
 import app.getvela.wallet.feature.contacts.ContactsLive
 import app.getvela.wallet.feature.contacts.ContactsRoute
 import app.getvela.wallet.feature.contacts.core.ContactSaveInput
-import app.getvela.wallet.feature.contacts.MenuItemModel
-import app.getvela.wallet.feature.contacts.ContactsIcon
-import app.getvela.wallet.feature.contacts.ActionMenuModel
 import app.getvela.wallet.feature.contacts.ContactsScreenState
 import app.getvela.wallet.feature.contacts.gallery.ContactsGalleryScreen
 import app.getvela.wallet.feature.onboarding.OnboardingIntent
@@ -1602,8 +1600,12 @@ fun VelaNavHost(
                 var formName by rememberSaveable { mutableStateOf("") }
                 var formAddress by rememberSaveable { mutableStateOf("") }
                 var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
-                var memberPicker by rememberSaveable { mutableStateOf(false) }
-                var groupPicker by rememberSaveable { mutableStateOf(false) }
+                // Issue #437: the two pick lists hold their ticks until 保存 —
+                // `null` is closed. 添加成员's are addresses (ContactsLive.pickKey),
+                // 移入分组's are group ids.
+                var memberPick by remember { mutableStateOf<Set<String>?>(null) }
+                var groupPick by remember { mutableStateOf<Set<String>?>(null) }
+                var pickQuery by remember { mutableStateOf("") }
                 var openContact by rememberSaveable { mutableStateOf<String?>(null) }
 
                 // Read the book for THIS account: the core keys history-derived
@@ -1701,33 +1703,16 @@ fun VelaNavHost(
                 }
                 val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
                 val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
-                val menuCancel = remember(strings) { ContactsFixtures.addMenu(strings).cancel }
                 val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
                 val shown = model.copy(
                     groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
                     form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
                     notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
-                    menu = when {
-                        // The group's member picker: the whole book, ticked where it is
-                        // in the group; a tap adds (AddGroupMembers) or removes (RemoveGroupMember).
-                        memberPicker && group != null -> ActionMenuModel(
-                            items = book.contacts.map { c ->
-                                val member = group.members.any { it.address == c.address }
-                                MenuItemModel(id = "contacts.member.toggle:" + c.address, icon = ContactsIcon.AddContact, label = (if (member) "✓ " else "") + ContactsLive.displayName(c))
-                            },
-                            cancel = menuCancel,
-                        )
-                        // The contact's groups: every group, ticked when it holds this person.
-                        groupPicker && selected != null -> ActionMenuModel(
-                            items = book.groups.map { g ->
-                                val member = g.members.any { it.address == selected.address }
-                                MenuItemModel(id = "contacts.group.toggle:" + g.id, icon = ContactsIcon.MoveGroup, label = if (member) "✓ " + g.name else g.name)
-                            },
-                            cancel = menuCancel,
-                        )
-                        else -> model.menu
-                    },
                 )
+                // A pick list belongs to the page that opened it: leaving the
+                // group or the contact closes it unsaved.
+                LaunchedEffect(openGroup) { memberPick = null }
+                LaunchedEffect(openContact) { groupPick = null }
                 // One "back" for the system gesture and the screens' ← alike:
                 // the form, then a contact, then a group. Issue #429: the ←
                 // had its own copy, which closed a contact only, so on a
@@ -1804,6 +1789,42 @@ fun VelaNavHost(
                         onDismiss = { confirmingGroupDelete = false },
                     )
                 }
+                // Issue #437: 添加成员 — the whole book, the group's members
+                // ticked; 保存 sets the membership in one event.
+                val memberTicks = memberPick
+                if (memberTicks != null && group != null) {
+                    MultiPickSheet(
+                        model = ContactsLive.memberPick(book, memberTicks, pickQuery, strings),
+                        onToggle = { address ->
+                            val key = ContactsLive.pickKey(address)
+                            memberPick = memberPick?.let { ticks -> if (key in ticks) ticks - key else ticks + key }
+                        },
+                        onQueryChange = { pickQuery = it },
+                        onSave = {
+                            contacts.setGroupMembers(group.id, ContactsLive.membersAfterPick(group, book, memberTicks))
+                            haptic(VelaHaptic.Select)
+                            memberPick = null
+                        },
+                        onDismiss = { memberPick = null },
+                    )
+                }
+                // 移入分组 — every group, the ones holding this contact ticked.
+                val groupTicks = groupPick
+                if (groupTicks != null && selected != null) {
+                    MultiPickSheet(
+                        model = ContactsLive.groupPick(book, groupTicks, pickQuery, strings),
+                        onToggle = { id ->
+                            groupPick = groupPick?.let { ticks -> if (id in ticks) ticks - id else ticks + id }
+                        },
+                        onQueryChange = { pickQuery = it },
+                        onSave = {
+                            contacts.setContactGroups(selected.address, book.groups.map { it.id }.filter { it in groupTicks })
+                            haptic(VelaHaptic.Select)
+                            groupPick = null
+                        },
+                        onDismiss = { groupPick = null },
+                    )
+                }
                 ContactsRoute(
                     model = shown,
                     actions = ContactsActions(
@@ -1840,8 +1861,18 @@ fun VelaNavHost(
                                 }
                                 "contacts.notice.close" -> contacts.acknowledgeImport()
                                 // Groups, both ways.
-                                "contacts.addMember" -> memberPicker = true
-                                "contacts.moveGroup", "contacts.sectionGroups" -> groupPicker = true
+                                // Issue #437: a scrolling, searchable tick list — the
+                                // menu it replaces could not scroll past one screen.
+                                "contacts.addMember" -> group?.let { g ->
+                                    pickQuery = ""
+                                    memberPick = g.members.mapTo(HashSet()) { ContactsLive.pickKey(it.address) }
+                                }
+                                "contacts.moveGroup", "contacts.sectionGroups" -> selected?.let { contact ->
+                                    pickQuery = ""
+                                    groupPick = book.groups
+                                        .filter { g -> g.members.any { it.address.equals(contact.address, ignoreCase = true) } }
+                                        .mapTo(HashSet()) { it.id }
+                                }
                                 "contacts.deleteContact" -> confirmingDelete = true
                                 "contacts.delete" -> selected?.let { contact ->
                                     contacts.delete(contact.address)
@@ -1885,22 +1916,10 @@ fun VelaNavHost(
                             "contacts.back" -> contactsBack()
                                 "contacts.searchClear" -> query = ""
                                 else -> when {
-                                    id.startsWith("contacts.member.toggle:") -> openGroup?.let { gid ->
-                                        val address = id.removePrefix("contacts.member.toggle:")
-                                        val member = group?.members?.any { it.address == address } == true
-                                        if (member) contacts.removeGroupMember(gid, address) else contacts.addGroupMembers(gid, listOf(address))
-                                        memberPicker = false
-                                    }
                                     id.startsWith("contacts.swipeSend:") -> openSendTo(id.removePrefix("contacts.swipeSend:"))
                                     id.startsWith("contacts.swipeDelete:") -> {
                                         openContact = id.removePrefix("contacts.swipeDelete:")
                                         confirmingDelete = true
-                                    }
-                                    id.startsWith("contacts.group.toggle:") -> selected?.let { contact ->
-                                        val gid = id.removePrefix("contacts.group.toggle:")
-                                        val current = book.groups.filter { g -> g.members.any { it.address == contact.address } }.map { it.id }
-                                        contacts.setContactGroups(contact.address, if (gid in current) current - gid else current + gid)
-                                        groupPicker = false
                                     }
                                     else -> Unit
                                 }
@@ -1914,8 +1933,6 @@ fun VelaNavHost(
                         onDismissMenu = {
                             menuOpen = false
                             confirmingDelete = false
-                            memberPicker = false
-                            groupPicker = false
                         },
                         onTab = selectFromPushed,
                     ),

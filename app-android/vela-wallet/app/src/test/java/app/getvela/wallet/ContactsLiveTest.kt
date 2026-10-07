@@ -432,4 +432,93 @@ class ContactsLiveTest {
         assertNotEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY), emptyFile?.body)
         assertNull(ContactsLive.importNotice(ContactsView(loaded = true), strings, close = "关闭"))
     }
+
+    // -- Issue #437: the pick lists ---------------------------------------------
+
+    /** 59 contacts, as the reporter's imported CSV: every one of them is a row. */
+    private fun bookOf(n: Int, groups: List<ContactGroupView> = emptyList()): ContactsView =
+        book(
+            *(1..n).map { i -> contact("0x" + i.toString(16).padStart(40, '0'), "Person $i") }.toTypedArray(),
+            groups = groups,
+        )
+
+    @Test
+    fun `add member offers the whole book, however long, ticked where the group holds it`() {
+        val view = bookOf(59)
+        val ticks = setOf(ContactsLive.pickKey(view.contacts[4].address))
+        val pick = ContactsLive.memberPick(view, ticks, query = "", strings = strings)
+
+        assertEquals(59, pick.rows.size)
+        assertEquals(view.contacts.map { it.address }, pick.rows.map { it.id })
+        assertEquals(listOf(view.contacts[4].address), pick.rows.filter { it.picked }.map { it.id })
+        assertEquals(strings.t(I18nKeys.Contacts.ADD_MEMBER), pick.title)
+        assertTrue("a long book gets a search box", pick.searchable)
+        assertNull(pick.empty)
+    }
+
+    @Test
+    fun `a short book has no search box, and an empty one says to save somebody first`() {
+        assertFalse(ContactsLive.memberPick(bookOf(6), emptySet(), "", strings).searchable)
+        assertTrue(ContactsLive.memberPick(bookOf(7), emptySet(), "", strings).searchable)
+        val empty = ContactsLive.memberPick(bookOf(0), emptySet(), "", strings)
+        assertTrue(empty.rows.isEmpty())
+        assertEquals(strings.t(I18nKeys.Contacts.GROUP_NO_CONTACTS), empty.empty)
+    }
+
+    @Test
+    fun `the pick list searches as the list page does, and says when nothing matches`() {
+        val view = book(
+            contact(ALICE, "Alice"),
+            contact(BOB, null, resolved = "bob.eth"),
+            contact(CAROL, "Carol"),
+        )
+        assertEquals(listOf(ALICE), ContactsLive.memberPick(view, emptySet(), "ali", strings).rows.map { it.id })
+        assertEquals(listOf(BOB), ContactsLive.memberPick(view, emptySet(), "bob.eth", strings).rows.map { it.id })
+        assertEquals(listOf(CAROL), ContactsLive.memberPick(view, emptySet(), CAROL.drop(30), strings).rows.map { it.id })
+        val none = ContactsLive.memberPick(view, emptySet(), "  zed ", strings)
+        assertTrue(none.rows.isEmpty())
+        assertEquals(strings.t(I18nKeys.Contacts.NO_RESULTS, mapOf("query" to "zed")), none.empty)
+    }
+
+    @Test
+    fun `saving keeps the members the sheet never offered, and a search hides rows without unticking them`() {
+        val stranger = "0x" + "e".repeat(40)
+        val view = book(contact(ALICE, "Alice"), contact(BOB, "Bob"), contact(CAROL, "Carol"))
+        // Bob is in; the stranger is a member the book does not list (another
+        // account's history), so the sheet cannot have unticked them.
+        val group = ContactGroupView(id = "g1", name = "Team", members = listOf(contact(BOB, "Bob"), contact(stranger)))
+        val ticks = setOf(ContactsLive.pickKey(CAROL), ContactsLive.pickKey(ALICE))
+
+        assertEquals(
+            listOf(stranger, ALICE, CAROL).map(ContactsLive::pickKey),
+            ContactsLive.membersAfterPick(group, view, ticks),
+        )
+        // Unticking everything offered leaves only what was never offered.
+        assertEquals(listOf(stranger), ContactsLive.membersAfterPick(group, view, emptySet()))
+        // The search narrows the rows, never the ticks.
+        assertEquals(
+            listOf(CAROL),
+            ContactsLive.memberPick(view, ticks, "carol", strings).rows.map { it.id },
+        )
+        assertEquals(
+            listOf(ALICE, CAROL).map(ContactsLive::pickKey),
+            ContactsLive.membersAfterPick(group.copy(members = emptyList()), view, ticks),
+        )
+    }
+
+    @Test
+    fun `move to group offers every group with its member count, ticked where it holds the contact`() {
+        val groups = listOf(
+            ContactGroupView(id = "G-Family", name = "Family", members = listOf(contact(ALICE, "Alice"))),
+            ContactGroupView(id = "g-work", name = "Work", members = listOf(contact(BOB), contact(CAROL))),
+        )
+        val pick = ContactsLive.groupPick(book(contact(ALICE, "Alice"), groups = groups), setOf("G-Family"), "", strings)
+
+        assertEquals(listOf("G-Family", "g-work"), pick.rows.map { it.id })
+        assertEquals(listOf(true, false), pick.rows.map { it.picked })
+        assertEquals(strings.t(I18nKeys.Contacts.GROUP_MEMBERS, mapOf("count" to "2")), pick.rows[1].subtitle)
+        assertNull("a group row has no identicon", pick.rows[0].identiconSeed)
+        assertEquals(strings.t(I18nKeys.Contacts.MOVE_GROUP), pick.title)
+        assertEquals(listOf("g-work"), ContactsLive.groupPick(book(groups = groups), emptySet(), "wor", strings).rows.map { it.id })
+    }
 }
