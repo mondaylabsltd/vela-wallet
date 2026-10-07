@@ -501,12 +501,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The unit suite in two shards on two machines (app-ios/scripts/
-        # ios-test-shards.mjs): it is bound by one main thread, not by cores,
-        # so only a second process helps. Two, not more: a free organisation
-        # runs five macOS jobs at once, and rust-macos and the packaging
-        # workflows share them.
-        suite: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ios-ui')) && '["unit-1","unit-2","ui"]' || '["unit-1","unit-2"]') }}
+        # One unit leg. Its ~1260 tests run in about a minute here (13 s on a
+        # laptop); the leg's time is the build, which a second machine would
+        # only repeat. #457 tried two shards: under a minute saved, for a
+        # second of the five macOS runners a free organisation gets.
+        suite: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ios-ui')) && '["unit","ui"]' || '["unit"]') }}
     env:
       # The simulator slice alone, built for build time (`ci-ios` profile): the
       # tests run on the simulator, and `release`'s LTO + size optimisation
@@ -637,15 +636,12 @@ jobs:
       - name: Build and test
         working-directory: app-ios/VelaWallet
         run: |
-          # This leg's tests: the UI suite, or one shard of the unit suite
-          # (the last shard also runs anything the shard list does not name).
-          SUITE="${{ matrix.suite }}"
-          if [ "$SUITE" = ui ]; then
+          # This leg's tests: the UI suite, or everything else.
+          if [ "${{ matrix.suite }}" = ui ]; then
             TESTS=-only-testing:VelaWalletUITests
           else
-            TESTS=$(node ../scripts/ios-test-shards.mjs "${SUITE#unit-}" 2 | tr '\n' ' ')
+            TESTS=-skip-testing:VelaWalletUITests
           fi
-          echo "$SUITE runs: ${TESTS:0:300}…"
           # No index store: nothing here searches the code, and building one
           # costs compile time.
           set -o pipefail
@@ -658,14 +654,13 @@ jobs:
             $TESTS \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
-          # A shard whose filter selected nothing passes as green with zero
-          # tests. Each unit shard holds hundreds; under a hundred is a broken
-          # split, not a light day.
-          if [ "$SUITE" != ui ]; then
+          # A filter that selects nothing passes green with zero tests. The
+          # unit leg holds over a thousand; under a hundred is a broken filter.
+          if [ "${{ matrix.suite }}" = unit ]; then
             ran=$(grep -oE 'Test run with [0-9]+ tests' "$RUNNER_TEMP/xcodebuild.log" | tail -1 | grep -oE '[0-9]+' || true)
-            echo "$SUITE ran ${ran:-0} tests"
+            echo "unit ran ${ran:-0} tests"
             if [ "${ran:-0}" -lt 100 ]; then
-              echo "::error::$SUITE ran ${ran:-0} Swift tests — its shard filter selected (almost) nothing. See app-ios/scripts/ios-test-shards.mjs."
+              echo "::error::the unit leg ran ${ran:-0} Swift tests; its filter selected (almost) nothing."
               exit 1
             fi
           fi
@@ -687,7 +682,7 @@ jobs:
       # iOS 17.5 simulator locally (087 results, F33).
       - name: Nothing the iOS 17 runtime lacks
         # The app's binaries are the same in both legs; checked once.
-        if: matrix.suite == 'unit-1'
+        if: matrix.suite == 'unit'
         run: |
           node app-ios/scripts/check-ios17-function-metadata.mjs --self-test
           node app-ios/scripts/check-ios17-function-metadata.mjs "$RUNNER_TEMP/dd/Build/Products"
