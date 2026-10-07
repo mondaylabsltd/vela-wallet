@@ -92,3 +92,14 @@ hex-literal = "1"
 lto = true
 opt-level = "z"
 codegen-units = 1
+
+# CI's iOS simulator tests only (ci.yml `ios`, via VELA_IOS_SIM_ONLY=1 in
+# rust/scripts/build-ios-xcframework.sh). The same code, built for build time:
+# `release`'s whole-program LTO, single codegen unit and size optimisation made
+# this the longest step of the slowest CI job. Never used for anything shipped —
+# ios-package.yml and every release build keep `release`.
+[profile.ci-ios]
+inherits = "release"
+lto = false
+codegen-units = 16
+opt-level = 1

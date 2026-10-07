@@ -485,8 +485,27 @@ jobs:
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild
 
+  # Two legs in parallel, each on its own runner (a public repository's macOS
+  # minutes are not billed): the unit suite (~8 min) and the UI suite (~10 min)
+  # used to run one after the other behind one build, and made this the job
+  # every PR waited ~35 minutes for. Neither leg is a required check.
   ios:
+    name: ios (${{ matrix.suite }})
     runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            only: -skip-testing:VelaWalletUITests
+          - suite: ui
+            only: -only-testing:VelaWalletUITests
+    env:
+      # The simulator slice alone, built for build time (`ci-ios` profile): the
+      # tests run on the simulator, and `release`'s LTO + size optimisation
+      # were the longest step here. What ships still builds `release`
+      # (ios-package.yml), so nothing that reaches a person changes.
+      VELA_IOS_SIM_ONLY: '1'
     steps:
       - uses: actions/checkout@v4
       # The image's DEFAULT Xcode is not the one this source compiles under.
@@ -521,10 +540,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.97.1
-          targets: aarch64-apple-ios-sim,aarch64-apple-ios
+          targets: aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # Its own cache: this job builds the `ci-ios` profile, and the key
+          # it shared with the old `release` build restored 428 MB of release
+          # artifacts it could not use — and, being an exact hit, never saved
+          # the ones it built. Both legs build the same thing, so they share it.
+          shared-key: ios-sim-ci
       # Same story as Android: `app-ios/VelaCoreKit/Artifacts/` is gitignored, so
       # the xcframework must be built before Xcode can resolve the local package.
       # macos-15 minutes bill at ten times linux, so this is the step that decides
@@ -535,7 +559,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: app-ios/VelaCoreKit/Artifacts
-          key: xcframework-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock') }}
+          key: xcframework-sim-ci-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-xcframework.sh') }}
       - name: Build the xcframework
         if: steps.xcframework.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-xcframework.sh
@@ -554,7 +578,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: app-ios/VelaDevFixturesKit/Artifacts
-          key: devfixtures-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock') }}
+          key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
       - name: Build the dev-fixtures xcframework
         if: steps.devfixtures.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-dev-fixtures.sh
@@ -592,12 +616,16 @@ jobs:
       - name: Build and test
         working-directory: app-ios/VelaWallet
         run: |
+          # `${{ matrix.only }}` picks this leg's suite. No index store: nothing
+          # here searches the code, and building one costs compile time.
           xcodebuild test \
             -project VelaWallet.xcodeproj \
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
-            CODE_SIGNING_ALLOWED=NO
+            ${{ matrix.only }} \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
       # The suite above runs on the NEWEST runtime, and the deployment target is
       # iOS 17.4. 087 F33: Swift 6.2 builds `nonisolated(nonsending)` function
       # metadata with an iOS 18 runtime entry point it weak-links with no
@@ -615,6 +643,8 @@ jobs:
       # this toolchain. Before a TestFlight build, also run VelaWalletTests on an
       # iOS 17.5 simulator locally (087 results, F33).
       - name: Nothing the iOS 17 runtime lacks
+        # The app's binaries are the same in both legs; checked once.
+        if: matrix.suite == 'unit'
         run: |
           node app-ios/scripts/check-ios17-function-metadata.mjs --self-test
           node app-ios/scripts/check-ios17-function-metadata.mjs "$RUNNER_TEMP/dd/Build/Products"
