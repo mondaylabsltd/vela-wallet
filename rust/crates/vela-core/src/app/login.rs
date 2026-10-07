@@ -295,7 +295,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                     },
                 )
             } else {
-                idle_with_prompt(model, PromptKind::NotSupportedLogin)
+                idle_with_prompt(model, PromptKind::not_supported_login(model.method))
             }
         }
 
@@ -529,7 +529,9 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 model.stage = Stage::Idle;
                 render()
             }
-            FailureKind::NotSupported => idle_with_prompt(model, PromptKind::NotSupportedLogin),
+            FailureKind::NotSupported => {
+                idle_with_prompt(model, PromptKind::not_supported_login(model.method))
+            }
             _ => idle_with_prompt(
                 model,
                 PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method),

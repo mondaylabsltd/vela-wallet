@@ -1382,3 +1382,47 @@ fn the_sign_in_records_where_the_key_answered_from() {
         other => panic!("expected the record re-saved, got {other:?}"),
     }
 }
+
+/// Issue #450 — a security key this device could not use is said as the
+/// key's problem. "Biometric authentication is not available on this device"
+/// sent an iPad owner holding a YubiKey off to look for Face ID.
+#[test]
+fn a_security_key_that_cannot_run_is_not_blamed_on_biometrics() {
+    let prompt_after = |method: KeyMethod| {
+        let mut sut = mounted();
+        sut.dispatch(Event::SignIn { method });
+        sut.resolve(ShellResult::PasskeySupport { supported: true });
+        let next = sut.resolve(ShellResult::PasskeyFailed {
+            kind: FailureKind::NotSupported,
+            message: Some("Smart-card access is unavailable".to_owned()),
+        });
+        match next.as_slice() {
+            [ShellOperation::Prompt { kind, .. }] => kind.clone(),
+            other => panic!("expected one prompt, got {other:?}"),
+        }
+    };
+    assert_eq!(
+        prompt_after(KeyMethod::SecurityKey),
+        PromptKind::NotSupportedLogin { security_key: true }
+    );
+    assert_eq!(
+        prompt_after(KeyMethod::Platform),
+        PromptKind::NotSupportedLogin {
+            security_key: false
+        },
+        "a passkey on this device keeps the biometrics sheet"
+    );
+}
+
+/// The flag is additive: a not-supported prompt from a core that predates it
+/// still reads, as the device's.
+#[test]
+fn a_not_supported_prompt_without_the_flag_still_decodes() {
+    let kind: PromptKind = serde_json::from_str(r#"{"type":"not_supported_login"}"#).unwrap();
+    assert_eq!(
+        kind,
+        PromptKind::NotSupportedLogin {
+            security_key: false
+        }
+    );
+}

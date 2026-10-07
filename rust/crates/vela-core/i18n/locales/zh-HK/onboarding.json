@@ -115,7 +115,7 @@
       "locationNeededBody": "Android 搵附近嘅藍牙裝置要開定位服務。Vela 唔會讀取你嘅位置。",
       "openLocationSettings": "前往系統設定開啟定位",
       "insertKeyTitle": "插入安全鎖匙",
-      "insertKeyBody": "將 FIDO2 安全鎖匙插入手機嘅 USB 插口，偵測到就會自動繼續。",
+      "insertKeyBody": "將 FIDO2 安全鎖匙插入呢部裝置嘅 USB 插口，偵測到就會自動繼續。",
       "otgOffHint": "手機嘅 OTG 開關可能閂咗——有啲手機會自動閂佢。請去系統設定開返 OTG，再插返鎖匙。",
       "touchRemoteTitle": "睇下你部手機",
       "touchRemoteBody": "喺你部裝置上面跟住指示做",
@@ -127,7 +127,9 @@
       "copied": "已複製",
       "close": "關閉",
       "siteAccessBody": "網站存取權受咗限制。撳頂部嘅「允許存取」，然後再試一次。",
-      "phoneLinkFailed": "另一部裝置沒有連上，或連線在完成前中斷了。請讓兩部裝置保持連網並彼此靠近，然後重新掃描代碼。"
+      "phoneLinkFailed": "另一部裝置沒有連上，或連線在完成前中斷了。請讓兩部裝置保持連網並彼此靠近，然後重新掃描代碼。",
+      "keyUnavailableTitle": "無法使用安全鎖匙",
+      "keyUnavailableBody": "呢部裝置用唔到呢條安全鎖匙。請換另一條 FIDO2 安全鎖匙，或者揀另一個方法繼續。"
     },
     "create": {
       "accountNameHint": "此名稱會連同你的公鑰一起儲存於鏈上，以便跨裝置登入。",

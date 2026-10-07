@@ -53,6 +53,11 @@ struct ContactsScreen: View {
     /// presence is the core's answer and needs no flag of its own.
     @State private var menuShown = false
     @State private var confirming: ContactModel?
+    /// A row that opens a SYSTEM sheet — import's file picker, export's share
+    /// sheet — runs once the menu has finished leaving. UIKit will not present
+    /// from a sheet on its way out: the share sheet never appeared, its answer
+    /// never came, and the menu stayed up (issue #449).
+    @State private var afterDismiss: (() -> Void)?
 
     /// What the one sheet is showing. The form outranks the menu: a form is
     /// open because somebody chose something in the menu.
@@ -99,7 +104,11 @@ struct ContactsScreen: View {
         .sheet(isPresented: Binding(
             get: { presented != nil },
             set: { if !$0 { dismissSheet() } }
-        )) {
+        ), onDismiss: {
+            let action = afterDismiss
+            afterDismiss = nil
+            action?()
+        }) {
             switch presented {
             case .menu(let menu):
                 ActionMenuSheet(model: menu, onItem: { item in confirm(item) },
@@ -169,8 +178,8 @@ struct ContactsScreen: View {
         else { return }
         switch index {
         case 0: onAdd()
-        case 1: onImport()
-        default: onExport()
+        case 1: afterDismiss = onImport
+        default: afterDismiss = onExport
         }
     }
 

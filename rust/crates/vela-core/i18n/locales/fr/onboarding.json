@@ -115,7 +115,7 @@
       "locationNeededBody": "Android a besoin des services de localisation pour trouver les appareils Bluetooth à proximité. Vela ne lit jamais votre position.",
       "openLocationSettings": "Ouvrir les réglages système pour activer la localisation",
       "insertKeyTitle": "Insérez votre clé de sécurité",
-      "insertKeyBody": "Branchez votre clé de sécurité FIDO2 sur le port USB de ce téléphone — la suite est automatique dès qu'elle est détectée.",
+      "insertKeyBody": "Branchez votre clé de sécurité FIDO2 sur le port USB de cet appareil — la suite est automatique dès qu'elle est détectée.",
       "otgOffHint": "L'interrupteur OTG de ce téléphone semble désactivé — certains téléphones le coupent automatiquement. Activez l'OTG dans les réglages système, puis rebranchez la clé.",
       "touchRemoteTitle": "Regardez votre téléphone",
       "touchRemoteBody": "Suivez les étapes sur votre appareil",
@@ -127,7 +127,9 @@
       "copied": "Copié",
       "close": "Fermer",
       "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez.",
-      "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code."
+      "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code.",
+      "keyUnavailableTitle": "Clé de sécurité indisponible",
+      "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer."
     },
     "create": {
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",

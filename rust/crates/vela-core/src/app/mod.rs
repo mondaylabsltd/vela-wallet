@@ -695,8 +695,20 @@ pub enum StatusKey {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum PromptKind {
-    NotSupportedCreate,
-    NotSupportedLogin,
+    /// This device cannot run the ceremony. `security_key`: the route was a
+    /// security key (issue #450), so the sheet talks about the KEY — "no
+    /// biometric authentication" sent an iPad owner holding a YubiKey off to
+    /// look for Face ID. `#[serde(default)]`: a reader that predates it reads
+    /// `false`.
+    NotSupportedCreate {
+        #[serde(default)]
+        security_key: bool,
+    },
+    /// As [`PromptKind::NotSupportedCreate`], at sign-in.
+    NotSupportedLogin {
+        #[serde(default)]
+        security_key: bool,
+    },
     NotDiscoverable,
     IncompatibleCreate,
     IncompatibleLogin,
@@ -745,6 +757,22 @@ impl PromptKind {
         let phone_link =
             method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
         Self::CreateFailed { detail, phone_link }
+    }
+
+    /// A create ceremony `method` could not run here (issue #450).
+    #[must_use]
+    pub fn not_supported_create(method: KeyMethod) -> Self {
+        Self::NotSupportedCreate {
+            security_key: method == KeyMethod::SecurityKey,
+        }
+    }
+
+    /// A sign-in ceremony `method` could not run here (issue #450).
+    #[must_use]
+    pub fn not_supported_login(method: KeyMethod) -> Self {
+        Self::NotSupportedLogin {
+            security_key: method == KeyMethod::SecurityKey,
+        }
     }
 
     /// [`PromptKind::sign_in_failed`] for a ceremony run with `method`, as

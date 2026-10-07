@@ -290,10 +290,17 @@ data class PromptKind(
     val detail: String?,
     /** The core's verdict that the link to the other device failed, not the authenticator (issue #446). */
     val phoneLink: Boolean = false,
+    /** The core's verdict that a not-supported ceremony was a security key's (issue #450). */
+    val securityKey: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): PromptKind =
-            PromptKind(json.getString("type"), json.nullableString("detail"), json.optBoolean("phone_link", false))
+            PromptKind(
+                json.getString("type"),
+                json.nullableString("detail"),
+                json.optBoolean("phone_link", false),
+                json.optBoolean("security_key", false),
+            )
     }
 }
 

@@ -211,7 +211,11 @@ impl OutcomeKind {
     /// a sentence, never a path.
     pub fn for_prompt(kind: &PromptKind) -> Self {
         match kind {
-            PromptKind::NotSupportedCreate | PromptKind::NotSupportedLogin => Self::Unsupported,
+            // Every route a desktop has is a security key, so `security_key`
+            // changes nothing here: the sheet already talks about the key.
+            PromptKind::NotSupportedCreate { .. } | PromptKind::NotSupportedLogin { .. } => {
+                Self::Unsupported
+            }
             PromptKind::NotDiscoverable => Self::NotDiscoverable,
             PromptKind::IncompatibleCreate | PromptKind::IncompatibleLogin => Self::Incompatible,
             PromptKind::RecoverOffer => Self::RecoverOffer,
@@ -533,7 +537,7 @@ mod tests {
     #[test]
     fn a_missing_key_prompt_lands_on_unsupported() {
         assert_eq!(
-            OutcomeKind::for_prompt(&PromptKind::NotSupportedCreate),
+            OutcomeKind::for_prompt(&PromptKind::NotSupportedCreate { security_key: true }),
             OutcomeKind::Unsupported
         );
     }
