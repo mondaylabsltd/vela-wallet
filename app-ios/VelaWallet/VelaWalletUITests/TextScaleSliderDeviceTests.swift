@@ -32,13 +32,13 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         attach(app.screenshot(), named: "slider-at-rest")
 
         // To the small end, then across to the large end — by dragging.
-        drag(slider, from: 0.9, to: 0.02)
+        drag(slider, from: 0.9, to: -0.2)
         XCTAssertEqual(slider.value as? String, "1", "a drag to the small end did not reach the smallest size")
         let small = walletHeadingHeight(in: app)
         openSettings(in: app)
         slider = self.slider(in: app)
 
-        drag(slider, from: 0.1, to: 0.98)
+        drag(slider, from: 0.1, to: 1.2)
         settle(1)
         attach(app.screenshot(), named: "slider-dragged-large")
         XCTAssertEqual(slider.value as? String, "6", "a drag to the large end did not reach the largest size")
@@ -91,7 +91,7 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         let heading = app.staticTexts["外观"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 8), "Settings has no 外观 heading")
 
-        stays(slider, "the smallest size") { drag(slider, from: 0.9, to: 0.02) }
+        stays(slider, "the smallest size") { drag(slider, from: 0.9, to: -0.2) }
         XCTAssertEqual(slider.value as? String, "1", "a drag to the small end did not reach the smallest size")
         let small = heading.frame.height
         attach(app.screenshot(), named: "settings-at-smallest")
@@ -99,7 +99,7 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         // Everything above the slider grows by ~230pt between these two
         // sizes. Before `TextScaleAnchor` that carried the slider down behind
         // the tab bar, where the put-back tap below landed on 通讯录.
-        stays(slider, "the largest size") { drag(slider, from: 0.1, to: 0.98) }
+        stays(slider, "the largest size") { drag(slider, from: 0.1, to: 1.2) }
         XCTAssertEqual(slider.value as? String, "6", "a drag to the large end did not reach the largest size")
         let large = heading.frame.height
         attach(app.screenshot(), named: "settings-at-largest")
@@ -215,6 +215,10 @@ final class TextScaleSliderDeviceTests: XCTestCase {
 
     /// A finger put down at one fraction of the slider's width and dragged to
     /// another — the whole row, the two A glyphs included.
+    /// A drag "to an end" goes PAST it (`to` < 0 or > 1): the slider clamps to
+    /// its last stop. Aimed at 2% / 98% it landed one stop short on CI — the
+    /// page grows (or shrinks) its text while the finger moves, the row lays
+    /// out again under it, and 98% of the old frame is no longer the end.
     private func drag(_ slider: XCUIElement, from: CGFloat, to: CGFloat) {
         let start = slider.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
         let end = slider.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5))
