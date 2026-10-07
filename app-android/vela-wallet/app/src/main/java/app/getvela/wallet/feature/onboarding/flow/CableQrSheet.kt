@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -46,10 +49,15 @@ fun CableQrSheet(payload: String, chooser: KeyChooser) {
         // there is nothing to answer here; the person acts on the other phone.
         onDismissRequest = {},
         containerColor = colors.bgRaised,
+        // Issue #447: the sheet's one job is this code. Opened half-way, its
+        // lower part ran off the screen until somebody thought to drag it up.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // A short or landscape screen can still be shorter than the code.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = VelaSpacing.xl2)
                 .padding(bottom = VelaSpacing.xl3),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
