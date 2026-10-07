@@ -587,8 +587,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   body, scanHint} — the "Get Vela on your phone" card, off until the store
 //   links exist). "App Store" and "Google Play" are product names, not prose,
 //   and stay out of the corpus. 1788 leaves, 99 branches.
-if (PATHS.length !== 1887) fail(`expected 1887 paths (1788 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1788) fail(`expected 1788 leaf paths, got ${leafSet.size}`);
+// 1888 (issue #446, 2026-10-07): + `onboarding.common.phoneLinkFailed` — a
+//   sign-in or create whose link to the other device failed (the core's
+//   `PromptKind::{SignInFailed,CreateFailed}.phone_link`) says to scan again,
+//   where it used to say to set up Face ID. 1789 leaves, 99 branches.
+if (PATHS.length !== 1888) fail(`expected 1888 paths (1789 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1789) fail(`expected 1789 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

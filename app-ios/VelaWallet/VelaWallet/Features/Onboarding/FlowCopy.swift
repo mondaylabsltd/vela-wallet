@@ -189,7 +189,12 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     // bug report, and inventing friendlier text here would lose the detail that
     // makes the report worth filing.
     case "create_failed":
-        PromptCopy(title: loc.t(I18nKeys.Create.alertErrorTitle), message: kind.detail ?? "")
+        PromptCopy(
+            title: loc.t(I18nKeys.Create.alertErrorTitle),
+            // Issue #446: the link to the other device failed — the core says
+            // which; its raw words stay in the bug report, not on the sheet.
+            message: kind.phoneLink ? loc.t(I18nKeys.Flow.phoneLinkFailed) : kind.detail ?? ""
+        )
     case "recover_offer":
         PromptCopy(
             title: loc.t(I18nKeys.Login.recoverOfferTitle),
@@ -205,7 +210,10 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     case "sign_in_failed":
         PromptCopy(
             title: loc.t(I18nKeys.Login.alertSignInFailedTitle),
-            message: loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
+            // Issue #446: not "set up Face ID" when it was the phone link.
+            message: kind.phoneLink
+                ? loc.t(I18nKeys.Flow.phoneLinkFailed)
+                : loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
         )
     default:
         // Cannot happen while the core and this file agree. Rather than showing

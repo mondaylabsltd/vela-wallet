@@ -460,27 +460,21 @@ struct StatusHeroView: View {
             .fill(discFill)
             .frame(width: WalletFlowGeometry.statusHero, height: WalletFlowGeometry.statusHero)
             .overlay { mark }
+            // Issue #444: a submitted disc breathes, so the wait reads as
+            // progress rather than a frozen screen (the web's and Android's).
+            .modifier(StatusBreath(active: stage == .submitted && !reduceMotion))
     }
 
+    /// Issue #444: "submitted" always wears the ring — filling as the chain's
+    /// usual time passes, and CIRCLING when there is no estimate for the
+    /// chain (a dApp's transaction on the in-app browser had none, and the
+    /// screen was a still clock). The confirmation closes it, green.
     @ViewBuilder private var ring: some View {
-        if let progress {
-            ZStack {
-                if stage != .confirmed {
-                    Circle().stroke(theme.borderBase, lineWidth: WalletFlowGeometry.statusRingStroke)
-                }
-                Circle()
-                    .trim(from: 0, to: stage == .confirmed ? 1 : min(1, max(0, progress)))
-                    .stroke(
-                        stage == .confirmed ? theme.successBase : theme.accentBase,
-                        style: StrokeStyle(lineWidth: WalletFlowGeometry.statusRingStroke, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    // One second per step, linear: the screen ticks once a second.
-                    .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
-            }
-            // Clears the disc rather than outlining it (the web's --space-md gutter).
-            .padding(-Tokens.Space.s12)
-            .accessibilityHidden(true)
+        if stage == .submitted || stage == .confirmed || progress != nil {
+            StatusRing(stage: stage, progress: progress)
+                // Clears the disc rather than outlining it (the web's --space-md gutter).
+                .padding(-Tokens.Space.s12)
+                .accessibilityHidden(true)
         }
     }
 
@@ -519,6 +513,79 @@ struct StatusHeroView: View {
         case .submitting, .submitted: theme.bgSunken
         case .confirmed: theme.successSoft
         case .failed: theme.errorSoft
+        }
+    }
+}
+
+/// The receipt's ring: the fraction of the chain's usual time, or — submitted
+/// with no estimate — a quarter arc circling once per
+/// `WalletFlowGeometry.statusRoamPeriod`.
+private struct StatusRing: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var turned = false
+
+    let stage: ReceiptStage
+    let progress: Double?
+
+    private var roaming: Bool { stage == .submitted && progress == nil }
+
+    var body: some View {
+        ZStack {
+            if stage != .confirmed {
+                Circle().stroke(theme.borderBase, lineWidth: WalletFlowGeometry.statusRingStroke)
+            }
+            Circle()
+                .trim(from: 0, to: drawn)
+                .stroke(
+                    stage == .confirmed ? theme.successBase : theme.accentBase,
+                    style: StrokeStyle(lineWidth: WalletFlowGeometry.statusRingStroke, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                // One second per step, linear: the screen ticks once a second.
+                .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
+                .rotationEffect(.degrees(roaming && turned ? 360 : 0))
+        }
+        .onAppear(perform: roam)
+        .onChange(of: roaming) { _, _ in roam() }
+    }
+
+    private var drawn: Double {
+        if stage == .confirmed { return 1 }
+        return min(1, max(0, progress ?? WalletFlowGeometry.statusRoamArc))
+    }
+
+    private func roam() {
+        guard roaming, !reduceMotion else {
+            turned = false
+            return
+        }
+        withAnimation(.linear(duration: WalletFlowGeometry.statusRoamPeriod).repeatForever(autoreverses: false)) {
+            turned = true
+        }
+    }
+}
+
+/// The submitted disc's breath: a slow scale to
+/// `WalletFlowGeometry.statusBreatheScale` and back, while `active`.
+private struct StatusBreath: ViewModifier {
+    let active: Bool
+    @State private var inhaled = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(active && inhaled ? WalletFlowGeometry.statusBreatheScale : 1)
+            .onAppear(perform: breathe)
+            .onChange(of: active) { _, _ in breathe() }
+    }
+
+    private func breathe() {
+        guard active else {
+            inhaled = false
+            return
+        }
+        withAnimation(.easeInOut(duration: WalletFlowGeometry.statusBreathePeriod).repeatForever(autoreverses: true)) {
+            inhaled = true
         }
     }
 }

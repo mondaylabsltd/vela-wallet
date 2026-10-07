@@ -981,14 +981,7 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
     // credential material would otherwise mint an undeployable address.
     let address = match super::address_from_public_key_hexes(&hexes) {
         Ok(address) => address,
-        Err(error) => {
-            return fail_to_add_keys(
-                model,
-                PromptKind::CreateFailed {
-                    detail: error.to_string(),
-                },
-            )
-        }
+        Err(error) => return fail_to_add_keys(model, PromptKind::create_failed(error.to_string())),
     };
 
     // The wallet's creation moment is the first key's mint time — no clock
@@ -1132,7 +1125,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             render()
         }
         (Stage::GeneratingGroupKey, ShellResult::StorageFailed { message }) => {
-            fail_to_form(model, PromptKind::CreateFailed { detail: message }, None)
+            fail_to_form(model, PromptKind::create_failed(message), None)
         }
 
         // -- registration ----------------------------------------------------
@@ -1153,9 +1146,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                     Err(error) => {
                         return fail_registration(
                             model,
-                            PromptKind::CreateFailed {
-                                detail: error.to_string(),
-                            },
+                            PromptKind::create_failed(error.to_string()),
                         )
                     }
                 };
@@ -1166,10 +1157,9 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             {
                 return fail_registration(
                     model,
-                    PromptKind::CreateFailed {
-                        detail: "this authenticator already holds one of this wallet's keys"
-                            .to_owned(),
-                    },
+                    PromptKind::create_failed(
+                        "this authenticator already holds one of this wallet's keys".to_owned(),
+                    ),
                 );
             }
             // The attestation is best-effort: a passkey with no
@@ -1212,12 +1202,13 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             // now — nothing has been persisted (issue #1).
             FailureKind::NotDiscoverable => fail_registration(model, PromptKind::NotDiscoverable),
             FailureKind::NotSupported => fail_registration(model, PromptKind::NotSupportedCreate),
-            FailureKind::Other => fail_registration(
-                model,
-                PromptKind::CreateFailed {
-                    detail: message.unwrap_or_default(),
-                },
-            ),
+            FailureKind::Other => {
+                let method = model.registering_method;
+                fail_registration(
+                    model,
+                    PromptKind::create_failed_via(message.unwrap_or_default(), method),
+                )
+            }
         },
 
         // -- creation-time membership confirmation ----------------------------
@@ -1232,6 +1223,10 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             render()
         }
         (Stage::SigningKey, ShellResult::PasskeyFailed { kind, message }) => {
+            let method = model
+                .signing_index
+                .and_then(|index| model.drafts.get(index))
+                .map(|draft| draft.method);
             model.signing_index = None;
             match kind {
                 // The key stays drafted, just unconfirmed — its row offers a
@@ -1243,8 +1238,11 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 }
                 _ => fail_to_add_keys(
                     model,
-                    PromptKind::CreateFailed {
-                        detail: message.unwrap_or_default(),
+                    match method {
+                        Some(method) => {
+                            PromptKind::create_failed_via(message.unwrap_or_default(), method)
+                        }
+                        None => PromptKind::create_failed(message.unwrap_or_default()),
                     },
                 ),
             }
@@ -1252,13 +1250,13 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         // The member-mode challenge could not be fetched (index/network).
         (Stage::SigningKey, ShellResult::IndexFailed { message, .. }) => {
             model.signing_index = None;
-            fail_to_add_keys(model, PromptKind::CreateFailed { detail: message })
+            fail_to_add_keys(model, PromptKind::create_failed(message))
         }
 
         // -- pending record --------------------------------------------------
         (Stage::SavingPending, ShellResult::PendingUploadSaved) => begin_publish(model),
         (Stage::SavingPending, ShellResult::StorageFailed { message }) => {
-            fail_to_form(model, PromptKind::CreateFailed { detail: message }, None)
+            fail_to_form(model, PromptKind::create_failed(message), None)
         }
 
         // -- registry publish (option B: publish before entering) ------------
@@ -1316,7 +1314,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             render()
         }
         (Stage::Saving, ShellResult::StorageFailed { message }) => {
-            fail_to_form(model, PromptKind::CreateFailed { detail: message }, None)
+            fail_to_form(model, PromptKind::create_failed(message), None)
         }
 
         // -- handover ---------------------------------------------------------

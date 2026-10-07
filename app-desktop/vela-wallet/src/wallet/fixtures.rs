@@ -133,6 +133,9 @@ pub struct BalanceModel {
     pub decimals: Option<SharedString>,
     pub live: Option<SharedString>,
     pub status: Option<(StatusKind, SharedString)>,
+    /// Issue #443: when the figure was last read — "Updated 2m" — drawn
+    /// beside the control that reads it again. `None`: never read yet.
+    pub updated: Option<SharedString>,
 }
 
 pub const MASK: &str = "••••";
@@ -148,6 +151,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
         decimals: Some("28".into()),
         live: None,
         status: None,
+        updated: None,
     }
 }
 
@@ -209,6 +213,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: Some("00".into()),
             live: Some(s.live_indicator.clone()),
             status: None,
+            updated: None,
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -218,6 +223,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: None,
             live: None,
             status: None,
+            updated: None,
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -227,6 +233,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: None,
             live: None,
             status: None,
+            updated: None,
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -236,6 +243,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: Some("46".into()),
             live: None,
             status: Some((StatusKind::Warning, s.balance_unpriced.clone())),
+            updated: None,
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -245,6 +253,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: Some("28".into()),
             live: None,
             status: Some((StatusKind::Refreshing, s.balance_stale.clone())),
+            updated: None,
         },
     ]
 }

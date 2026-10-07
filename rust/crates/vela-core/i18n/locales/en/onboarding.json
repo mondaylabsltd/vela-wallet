@@ -126,7 +126,8 @@
       "copyAddress": "Copy address",
       "copied": "Copied",
       "close": "Close",
-      "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again."
+      "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
+      "phoneLinkFailed": "Your other device didn't connect, or the connection dropped before it finished. Keep both devices online and close together, then scan the code again."
     },
     "create": {
       "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",

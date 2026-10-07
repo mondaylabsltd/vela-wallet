@@ -127,6 +127,20 @@ sealed class TrustOperation {
         val contracts: List<String> = emptyList(),
     ) : TrustOperation()
 
+    /**
+     * Issue #443: the logs the wallet ITSELF emitted with [topic] — the Safe's
+     * `SafeReceived`, its record of native money paid to it.
+     */
+    @Serializable
+    @SerialName("rpc_get_safe_received_logs")
+    data class RpcGetSafeReceivedLogs(
+        val address: String,
+        val chain_id: Int,
+        val from_block: String,
+        val to_block: String,
+        val topic: String,
+    ) : TrustOperation()
+
     @Serializable
     @SerialName("rpc_get_block_by_number")
     data class RpcGetBlockByNumber(
@@ -170,6 +184,15 @@ sealed class TrustShellResult {
     @Serializable
     @SerialName("logs")
     data class Logs(
+        val address: String,
+        val chain_id: Int,
+        val outcome: TrustLogsOutcome,
+    ) : TrustShellResult()
+
+    /** The answer to [TrustOperation.RpcGetSafeReceivedLogs] (issue #443). */
+    @Serializable
+    @SerialName("safe_received_logs")
+    data class SafeReceivedLogs(
         val address: String,
         val chain_id: Int,
         val outcome: TrustLogsOutcome,

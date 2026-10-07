@@ -783,7 +783,58 @@ pub fn get_logs_range_cap(error: &RpcErrorInfo) -> Option<f64> {
             }
         }
     }
+    // A span written as its bounds — "eth_getLogs is limited to 0 - 50
+    // blocks range" (a Gnosis endpoint, 2026-10-07). The first number is the
+    // lower bound, 0, which read as "no number"; the incoming scan then
+    // retried a window barely narrower, was refused again, and never found a
+    // receipt on that chain (issue #443). The upper bound is the span.
+    if let Some(upper) = range_upper_bound(&msg) {
+        return Some(upper);
+    }
     Some(0.0)
+}
+
+/// The `M` of the first `N - M` in `msg` (hyphen or en dash, spaces either
+/// side optional) when it is a positive number; `None` otherwise.
+fn range_upper_bound(msg: &str) -> Option<f64> {
+    let chars: Vec<char> = msg.chars().collect();
+    let digits_at = |mut i: usize| -> (String, usize) {
+        let mut out = String::new();
+        while let Some(c) = chars.get(i) {
+            if c.is_ascii_digit() || *c == ',' || *c == '_' {
+                out.push(*c);
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        (out, i)
+    };
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let (_, mut j) = digits_at(i);
+        while chars.get(j).is_some_and(|c| c.is_whitespace()) {
+            j += 1;
+        }
+        if chars.get(j).is_some_and(|c| *c == '-' || *c == '–') {
+            j += 1;
+            while chars.get(j).is_some_and(|c| c.is_whitespace()) {
+                j += 1;
+            }
+            let (upper, _) = digits_at(j);
+            let cleaned: String = upper.chars().filter(char::is_ascii_digit).collect();
+            return cleaned
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite() && *n > 0.0);
+        }
+        i = j.max(i + 1);
+    }
+    None
 }
 
 /// Methods a healthy node may simply not offer (spec 082 RG7). A JSON error

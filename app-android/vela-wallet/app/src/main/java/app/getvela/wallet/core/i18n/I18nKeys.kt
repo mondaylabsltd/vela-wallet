@@ -234,6 +234,8 @@ object I18nKeys {
         const val INCOMPATIBLE_TITLE = "onboarding.common.incompatibleTitle"
         const val INCOMPATIBLE_BODY = "onboarding.common.incompatibleBody"
         const val NOT_DISCOVERABLE_TITLE = "onboarding.common.notDiscoverableTitle"
+        /** Issue #446: the link to the other device failed (the core's `phone_link`). */
+        const val PHONE_LINK_FAILED = "onboarding.common.phoneLinkFailed"
         const val NOT_DISCOVERABLE_BODY = "onboarding.common.notDiscoverableBody"
         const val NOT_FOUND_TITLE = "onboarding.common.notFoundTitle"
         const val NOT_FOUND_BODY = "onboarding.common.notFoundBody"

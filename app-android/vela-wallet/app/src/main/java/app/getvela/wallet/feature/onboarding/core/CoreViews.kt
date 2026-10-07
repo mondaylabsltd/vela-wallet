@@ -285,10 +285,15 @@ data class SessionView(
  * it is forwarded verbatim: it goes into the bug report, and prettifying it here
  * would lose the only part worth filing.
  */
-data class PromptKind(val type: String, val detail: String?) {
+data class PromptKind(
+    val type: String,
+    val detail: String?,
+    /** The core's verdict that the link to the other device failed, not the authenticator (issue #446). */
+    val phoneLink: Boolean = false,
+) {
     companion object {
         fun from(json: JSONObject): PromptKind =
-            PromptKind(json.getString("type"), json.nullableString("detail"))
+            PromptKind(json.getString("type"), json.nullableString("detail"), json.optBoolean("phone_link", false))
     }
 }
 

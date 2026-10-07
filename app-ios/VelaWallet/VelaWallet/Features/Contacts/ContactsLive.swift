@@ -258,7 +258,8 @@ enum ContactsLive {
                     },
                     emptyText: loc.t("contacts.groupNoContacts"),
                     save: loc.t("contacts.save"),
-                    cancel: loc.t("contacts.cancel")
+                    cancel: loc.t("contacts.cancel"),
+                    search: pickSearch(loc: loc, rows: view.groups.count)
                 )
             },
             textScale: 1
@@ -387,10 +388,22 @@ enum ContactsLive {
                     },
                     emptyText: loc.t("contacts.groupNoContacts"),
                     save: loc.t("contacts.save"),
-                    cancel: loc.t("contacts.cancel")
+                    cancel: loc.t("contacts.cancel"),
+                    search: pickSearch(loc: loc, rows: view.contacts.count)
                 )
             },
             textScale: 1
+        )
+    }
+
+    /// Issue #445: the pick lists' search box, past six rows — the web's
+    /// `PickList` and Android's rule, so a book of 59 is searched, not scrolled.
+    static func pickSearch(loc: Loc, rows: Int) -> MultiPickSearch? {
+        guard rows > 6 else { return nil }
+        return MultiPickSearch(
+            placeholder: loc.t("contacts.searchPlaceholder"),
+            clearLabel: loc.t("contacts.cancel"),
+            noMatch: { query in loc.t("contacts.noResults", vars: ["query": query]) }
         )
     }
 

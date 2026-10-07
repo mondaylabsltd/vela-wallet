@@ -10,7 +10,7 @@ mod support;
 use support::{Driver, NOW};
 use vela_core::app::create_wallet::{CreateStage, CreateWallet, Event, SubmitLabel, ACK_COUNT};
 use vela_core::app::shell::{ShellOperation, ShellResult};
-use vela_core::app::{FailureKind, KeyMethod, StatusKey};
+use vela_core::app::{FailureKind, KeyMethod, PromptKind, StatusKey};
 
 const CRED: &str = "credential-1";
 
@@ -1477,4 +1477,81 @@ fn a_multi_key_wallet_is_never_entered_on_an_accepted_ack() {
             ..
         }]
     ));
+}
+
+/// Issue #446 — a phone (hybrid) ceremony that fails is the link's failure,
+/// whatever the platform called it: the fingerprint is on the OTHER device,
+/// so the prompt must not tell the person to set up Face ID here. Both the
+/// registration and the membership confirmation that follows it.
+#[test]
+fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
+    let prompt_of = |next: &[ShellOperation]| match next {
+        [ShellOperation::Prompt { kind, .. }] => kind.clone(),
+        other => panic!("expected one prompt, got {other:?}"),
+    };
+    let unanswered = || ShellResult::PasskeyFailed {
+        kind: FailureKind::Other,
+        message: Some("No phone answered the code.".to_owned()),
+    };
+
+    // Registration over the phone.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Phone".to_owned(),
+        method: KeyMethod::Hybrid,
+    });
+    let kind = prompt_of(&sut.resolve(unanswered()));
+    assert!(
+        matches!(
+            kind,
+            PromptKind::CreateFailed {
+                phone_link: true,
+                ..
+            }
+        ),
+        "{kind:?}"
+    );
+
+    // The confirmation of a key made on the phone.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Phone".to_owned(),
+        method: KeyMethod::Hybrid,
+    });
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration: support::second_registration(CRED2),
+        now_iso: NOW.to_owned(),
+    });
+    let kind = prompt_of(&sut.resolve(unanswered()));
+    assert!(
+        matches!(
+            kind,
+            PromptKind::CreateFailed {
+                phone_link: true,
+                ..
+            }
+        ),
+        "{kind:?}"
+    );
+
+    // A key on THIS device keeps the old sheet.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Laptop".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    let kind = prompt_of(&sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Other,
+        message: Some("The operation couldn't be completed.".to_owned()),
+    }));
+    assert!(
+        matches!(
+            kind,
+            PromptKind::CreateFailed {
+                phone_link: false,
+                ..
+            }
+        ),
+        "{kind:?}"
+    );
 }

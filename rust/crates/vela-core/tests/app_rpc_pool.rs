@@ -379,6 +379,38 @@ fn rate_limit_signal_codes_and_messages() {
 }
 
 /// `getLogsRangeCap` vectors, including the greedy-number quirk.
+/// Issue #443: a span written as its bounds. A Gnosis endpoint answers
+/// "eth_getLogs is limited to 0 - 50 blocks range"; the first number is the
+/// lower bound, and reading it as "no number" kept the incoming scan from
+/// ever narrowing enough to be served.
+#[test]
+fn a_span_written_as_its_bounds_is_the_upper_bound() {
+    assert_eq!(
+        get_logs_range_cap(&err(
+            Some(-32602),
+            "eth_getLogs is limited to 0 - 50 blocks range"
+        )),
+        Some(50.0)
+    );
+    assert_eq!(
+        get_logs_range_cap(&err(None, "block range limited to 0-2,000")),
+        Some(2_000.0)
+    );
+    // A stated span keeps winning over a bounds pair after it.
+    assert_eq!(
+        get_logs_range_cap(&err(
+            None,
+            "block range too large, max 500 (requested 1 - 9000)"
+        )),
+        Some(500.0)
+    );
+    // No upper bound to read: still "capped, halve".
+    assert_eq!(
+        get_logs_range_cap(&err(None, "eth_getLogs is limited to 0 blocks range")),
+        Some(0.0)
+    );
+}
+
 #[test]
 fn get_logs_range_cap_vectors() {
     // Not a range error at all.

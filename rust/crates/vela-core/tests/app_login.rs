@@ -413,6 +413,84 @@ fn a_cancelled_ceremony_is_silent() {
     assert!(!sut.view().busy);
 }
 
+/// Issue #446: an iPad's sign-in with a phone failed because the tunnel was
+/// cancelled under it, and the sheet said to set up Face ID. A failure of the
+/// link to the other device — as `cable::conn` words it — is flagged so the
+/// sheet says to scan again; an authenticator's own failure is not.
+#[test]
+fn a_failed_link_to_the_phone_is_not_blamed_on_biometrics() {
+    let prompt_after = |method: KeyMethod, message: &str| {
+        let mut sut = mounted();
+        sut.dispatch(Event::SignIn { method });
+        sut.resolve(ShellResult::PasskeySupport { supported: true });
+        let next = sut.resolve(ShellResult::PasskeyFailed {
+            kind: FailureKind::Other,
+            message: Some(message.to_owned()),
+        });
+        match next.as_slice() {
+            [ShellOperation::Prompt { kind, .. }] => kind.clone(),
+            other => panic!("expected one prompt, got {other:?}"),
+        }
+    };
+    let phone_link = |kind: &PromptKind| {
+        matches!(
+            kind,
+            PromptKind::SignInFailed {
+                phone_link: true,
+                ..
+            }
+        )
+    };
+    let tunnel = prompt_after(
+        KeyMethod::Hybrid,
+        "caBLE transport: Error Domain=NSURLErrorDomain Code=-999 \"cancelled\"",
+    );
+    assert!(
+        phone_link(&tunnel),
+        "the tunnel's failure is the link's: {tunnel:?}"
+    );
+    let handshake = prompt_after(KeyMethod::Hybrid, "caBLE Noise failure: BadMac");
+    assert!(phone_link(&handshake), "{handshake:?}");
+    // The platform's own words for a phone that never answered (Android's
+    // HybridCeremony timeout): still the link's — the fingerprint is on the
+    // OTHER device, so "set up Face ID here" is wrong (issue #446).
+    let unanswered = prompt_after(
+        KeyMethod::Hybrid,
+        "No phone answered the code. Scan it with the other device and try again.",
+    );
+    assert!(phone_link(&unanswered), "{unanswered:?}");
+    // A passkey on THIS device keeps the old sheet.
+    let local = prompt_after(KeyMethod::Platform, "The operation couldn't be completed.");
+    assert!(
+        matches!(
+            local,
+            PromptKind::SignInFailed {
+                phone_link: false,
+                ..
+            }
+        ),
+        "an authenticator's failure keeps the old sheet: {local:?}"
+    );
+}
+
+/// The flag is additive: a prompt from a core that predates it still reads.
+#[test]
+fn a_sign_in_failure_without_the_flag_still_decodes() {
+    let kind: PromptKind =
+        serde_json::from_str(r#"{"type":"sign_in_failed","detail":"x"}"#).unwrap();
+    assert!(matches!(
+        kind,
+        PromptKind::SignInFailed {
+            phone_link: false,
+            ..
+        }
+    ));
+    assert!(vela_core::cable::conn::is_link_failure(
+        "caBLE transport: closed"
+    ));
+    assert!(!vela_core::cable::conn::is_link_failure("transport: caBLE"));
+}
+
 // Resolution no longer performs a credential-id index query, so the old
 // "transport failure surfaces settings" and "server error is reported"
 // branches at resolution time no longer exist. Endpoint reachability is now
