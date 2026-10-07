@@ -11,7 +11,7 @@
 	 * exactly the moment a person committed to creating a wallet. The Welcome
 	 * page that hosts it never loads it.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import FlowShell from './FlowShell.svelte';
 	import { RAIL_STEPS, type RailSlot } from './rail';
 	import NameScreen from './NameScreen.svelte';
@@ -30,6 +30,8 @@
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
+	import { track, type AnalyticsEventProps } from '$lib/analytics';
+	import { analyticsMethod } from '$lib/analytics/methods';
 
 	interface Props {
 		strings: (key: string, params?: Record<string, string | number>) => string;
@@ -41,9 +43,55 @@
 		complete: (mode: CompletionMode) => Promise<void>;
 		/** Leaving the flow entirely (back from the first step). */
 		onExit: () => void;
+		/** Drawn on the done screen, under the keys (the app suggestion). */
+		doneAside?: Snippet;
 	}
 
-	let { strings, privacyUrl, termsUrl, prompt, complete, onExit }: Props = $props();
+	let { strings, privacyUrl, termsUrl, prompt, complete, onExit, doneAside }: Props = $props();
+
+	/**
+	 * Usage statistics (`$lib/analytics`): the attempt starts at the first key
+	 * minted, completes when the core says the wallet is real, and fails on a
+	 * dismissed prompt, a publish that did not land, or a refusal — each named
+	 * by kind and by the method of the key that was being made, never by more.
+	 */
+	let keyMethod: KeyMethod | null = null;
+	let createStarted = false;
+	let createDone = false;
+	const failed = (reason: AnalyticsEventProps<'wallet_create_failed'>['reason']) =>
+		track('wallet_create_failed', { method: analyticsMethod(keyMethod), reason });
+
+	function noteView(prev: CreateView | null, next: CreateView): void {
+		if (!createDone && next.stage === 'created') {
+			createDone = true;
+			track('wallet_create_completed', {
+				method: analyticsMethod(next.keys[0]?.method ?? keyMethod)
+			});
+			return;
+		}
+		if (next.stage === 'sync_failed' && prev?.stage !== 'sync_failed') failed('network');
+		if (
+			next.status !== prev?.status &&
+			(next.status === 'setup_cancelled' || next.status === 'verify_cancelled')
+		)
+			failed('cancelled');
+	}
+
+	function notePrompt(kind: PromptKind): void {
+		if (kind.type === 'create_failed') failed('error');
+		else if (kind.type === 'not_supported_create' || kind.type === 'incompatible_create')
+			failed('unsupported');
+		else if (kind.type === 'not_discoverable') failed('not_found');
+	}
+
+	function addKey(method: KeyMethod): void {
+		keyMethod = method;
+		if (!createStarted) {
+			createStarted = true;
+			track('wallet_create_started', { method: analyticsMethod(method) });
+		}
+		send({ type: 'add_key', name: '', method });
+	}
 
 	/** The founding-set cap, mirroring the core's `MAX_MULTI_KEYS`. */
 	const MAX_KEYS = 7;
@@ -58,9 +106,22 @@
 			.then(() => {
 				if (disposed) return;
 				session = createCreateWalletSession({
-					onView: (next) => (view = next),
-					deps: { prompt, complete },
-					onError: (error) => (fatal = error instanceof Error ? error.message : String(error))
+					onView: (next) => {
+						const prev = view;
+						view = next;
+						noteView(prev, next);
+					},
+					deps: {
+						prompt: (kind, confirmable) => {
+							notePrompt(kind);
+							return prompt(kind, confirmable);
+						},
+						complete
+					},
+					onError: (error) => {
+						fatal = error instanceof Error ? error.message : String(error);
+						failed('error');
+					}
 				});
 				session.start({ type: 'start' });
 				// Spec 075: a key minted on the Trusted Signer page belongs to THAT
@@ -186,7 +247,7 @@
 			addMethods={view.add_methods}
 			addBlocked={view.add_blocked}
 			{strings}
-			onAddKey={(method: KeyMethod) => send({ type: 'add_key', name: '', method })}
+			onAddKey={addKey}
 			onConfirmKey={(index) => send({ type: 'confirm_key', index })}
 			onRemoveKey={(index) => send({ type: 'remove_key', index })}
 			onFinish={() => send({ type: 'finish_keys' })}
@@ -208,6 +269,7 @@
 			keys={view.keys}
 			{strings}
 			onEnter={() => send({ type: 'enter_wallet' })}
+			aside={doneAside}
 		/>
 	{/if}
 </FlowShell>

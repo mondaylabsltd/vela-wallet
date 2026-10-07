@@ -40,5 +40,10 @@ export type SettingsPrefEvent =
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }
+	/**
+	 * "Share anonymous usage statistics" switched (web wallet and extension
+	 * only — no core: the phone and desktop apps carry no analytics).
+	 */
+	| { kind: 'analytics'; on: boolean }
 	/** The destructive one, confirmed. */
 	| { kind: 'erase' };

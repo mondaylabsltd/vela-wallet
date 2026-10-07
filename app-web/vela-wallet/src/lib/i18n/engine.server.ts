@@ -26,6 +26,7 @@ import type { ExtensionMessages } from '$lib/extension/messages';
 import type { SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
+import type { AppPromptMessages } from '$lib/app-prompt/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
 const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
@@ -107,6 +108,23 @@ export function resolveFlowMessages(locale: Locale): FlowMessages {
 export function resolveIntroMessages(locale: Locale): Readonly<Record<string, string>> {
 	activate(locale);
 	return Object.fromEntries(INTRO_KEYS.map((key) => [key, t(locale, key)]));
+}
+
+/**
+ * The "Get Vela on your phone" prompt (the wallet home and the creation
+ * screen). The two store names are product names, not prose: the corpus has
+ * no key for them and should not.
+ */
+export function resolveAppPromptMessages(locale: Locale): AppPromptMessages {
+	activate(locale);
+	return {
+		title: t(locale, 'home.getApp.title'),
+		body: t(locale, 'home.getApp.body'),
+		scanHint: t(locale, 'home.getApp.scanHint'),
+		close: t(locale, 'onboarding.common.close'),
+		appStore: 'App Store',
+		googlePlay: 'Google Play'
+	};
 }
 
 /** The serializable strings the wallet screens render (spec 015, research.md D3). */
@@ -335,6 +353,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		},
 		contacts: k('componentsUi.mainNav.contacts'),
 		feedback: { title: k('settings.feedback.title'), subtitle: k('settings.feedback.subtitle') },
+		analytics: {
+			title: k('settings.analytics.title'),
+			subtitle: k('settings.analytics.subtitle')
+		},
 		appearance: {
 			themeTitle: k('settings.appearance.themeTitle'),
 			themeLight: k('settings.appearance.themeLight'),

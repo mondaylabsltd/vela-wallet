@@ -20,7 +20,7 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -115,6 +115,9 @@
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
 	import { startTxTracker, trackSubmitted } from '$lib/wallet/core/tracker-resident';
+	import { track } from '$lib/analytics';
+	import { watchSendOutcome } from '$lib/analytics/send-outcome';
+	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
@@ -627,7 +630,7 @@
 		contactsBook.dispatch({ type: 'history_changed' });
 		// The tracker owns the receipt from the moment the op is accepted; the
 		// send core only hears the verdict back (invariant ⑥'s ordering half).
-		setSendTrackerSink((handoff) =>
+		setSendTrackerSink((handoff) => {
 			trackSubmitted(
 				handoff.userOpHash,
 				handoff.recordIds,
@@ -640,13 +643,19 @@
 					}),
 				handoff.maybeSent,
 				handoff.submitBlock
-			)
-		);
+			);
+			// Usage statistics: the op is with the relay; the tracker says how it ends.
+			track('send_submitted', { chain: handoff.chainId });
+			watchSendOutcome(handoff.userOpHash, handoff.chainId);
+		});
 		startTxTracker();
 		const account = identity.address;
 		const credentialId = session.view.accounts[session.view.active_index]?.account.id ?? '';
 		sendSession = createSendSession({
-			onView: (view) => (sendView = view),
+			onView: (view) => {
+				noteSendFailure(sendView, view);
+				sendView = view;
+			},
 			onError: (error) => console.error('[send] core fault:', error),
 			ports: {
 				tokensPartial: () => {},
@@ -707,6 +716,27 @@
 			},
 			display: { code: currency.view.code, rate: currency.view.rate, fiat_decimals: 2 }
 		});
+		track('send_opened');
+	}
+
+	/**
+	 * A send that failed before the relay took it, for usage statistics: the
+	 * confirm screen's error, or a passkey prompt dismissed (signing → idle
+	 * with no error). After the relay took it, the tracker decides
+	 * (`watchSendOutcome`).
+	 */
+	function noteSendFailure(prev: SendView | null, next: SendView): void {
+		if (prev === null || prev.tx_status === next.tx_status) return;
+		const chain = next.selected_token?.chain_id ?? next.multi_chain_id ?? undefined;
+		if (next.tx_status === 'error') {
+			track('send_failed', { chain, reason: next.tx_error === 'bundler_fund' ? 'relay' : 'error' });
+		} else if (
+			prev.tx_status === 'signing' &&
+			next.tx_status === 'idle' &&
+			next.tx_error === null
+		) {
+			track('send_failed', { chain, reason: 'cancelled' });
+		}
 	}
 
 	function closeSend(): void {
@@ -1362,6 +1392,17 @@
 		(flowState !== undefined && flowState.startsWith('r')) ||
 			(desktopFlow !== undefined && desktopFlow.startsWith('dr'))
 	);
+	/** A code is on screen: a network's (R2/DR2) or a held token's (R3/DR3). */
+	const receiveCodeShown = $derived(
+		flowState === 'r2' || flowState === 'r3' || desktopFlow === 'dr2' || desktopFlow === 'dr3'
+	);
+	// Usage statistics: each opening of Receive, and each time a code comes up.
+	$effect(() => {
+		if (receiving) untrack(() => track('receive_opened'));
+	});
+	$effect(() => {
+		if (receiveCodeShown) untrack(() => track('receive_qr_shown'));
+	});
 	$effect(() => {
 		const address = identity?.address;
 		if (!receiving || address === undefined) return;
@@ -1930,6 +1971,12 @@
 	/>
 {/snippet}
 
+<!-- "Get Vela on your phone" — draws nothing until the store links exist
+     (`$lib/app-prompt/config.ts`), and never again once closed. -->
+{#snippet appPrompt()}
+	<AppPrompt placement="home" messages={data.appPrompt} />
+{/snippet}
+
 {#if identity}
 	{#if wide.current}
 		<div class="desktop-shell">
@@ -1939,6 +1986,7 @@
 			     past `--layout-frameMax` the two drifted apart. -->
 			<WalletDesktop
 				model={liveDesktop}
+				banner={appPrompt}
 				column={shownDesktopFlow !== undefined && shownDesktopFlow !== 'ds1'
 					? flowColumn
 					: undefined}
@@ -2041,6 +2089,7 @@
 			{:else}
 				<WalletHome
 					model={liveHome}
+					banner={appPrompt}
 					destinations={WEB_DESTINATIONS}
 					onselect={select}
 					onaccounts={() => (switching = true)}

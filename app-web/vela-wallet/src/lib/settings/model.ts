@@ -488,6 +488,14 @@ export interface KeyValueRowModel {
 	href?: string;
 }
 
+/** A settings row that is a switch (`ui/SwitchRow.svelte`). */
+export interface SwitchRowModel {
+	id: string;
+	title: string;
+	subtitle: string;
+	on: boolean;
+}
+
 export interface AboutModel {
 	title: string;
 	tagline: string;

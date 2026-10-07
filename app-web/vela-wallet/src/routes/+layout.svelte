@@ -29,7 +29,7 @@
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
 	import { localeOfPath } from '$lib/i18n/locales';
-	import { SITE_ORIGIN } from '$lib/site';
+	import { trackPageview } from '$lib/analytics';
 
 	let { children } = $props();
 
@@ -55,21 +55,13 @@
 	afterNavigate(() => normalizePackagedUrl());
 
 	/**
-	 * Page analytics: Rybbit, the cookieless counter getvela.app uses
-	 * (`tj.appsdata.org`, site 51bb55d72d55), declared in the privacy policy.
-	 * Only on the hosted wallet itself — never in the extension, whose build
-	 * drops this (MV3 refuses remote code, and so does the store), and never
-	 * on a local, preview or e2e origin, which would write test runs into the
-	 * production account and hold `networkidle` open.
+	 * A page view per navigation — the first-party sender (`$lib/analytics`),
+	 * declared in the privacy policy. It names the ROUTE, never the address
+	 * bar: no query string, no fragment, no identifier in the path. It sends
+	 * only from the hosted wallet and the packaged extension, never under
+	 * automation, and never once Settings → About has it switched off.
 	 */
-	onMount(() => {
-		if (__VELA_EXTENSION__ || location.origin !== SITE_ORIGIN) return;
-		const script = document.createElement('script');
-		script.src = 'https://tj.appsdata.org/api/script.js';
-		script.dataset.siteId = '51bb55d72d55';
-		script.defer = true;
-		document.head.appendChild(script);
-	});
+	afterNavigate(({ to }) => trackPageview(to?.route.id ?? null));
 
 	/**
 	 * The locale this document is in — from its path, not `page.params`, which

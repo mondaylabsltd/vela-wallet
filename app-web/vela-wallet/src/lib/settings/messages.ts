@@ -27,6 +27,8 @@ export interface SettingsMessages {
 	account: { switch: string; contactsSubtitle: string };
 	contacts: string;
 	feedback: { title: string; subtitle: string };
+	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
+	analytics: { title: string; subtitle: string };
 	appearance: {
 		themeTitle: string;
 		themeLight: string;
@@ -505,6 +507,8 @@ export const SETTINGS_KEYS = [
 	'settings.account.contactsSubtitle',
 	'settings.feedback.title',
 	'settings.feedback.subtitle',
+	'settings.analytics.title',
+	'settings.analytics.subtitle',
 	'settings.appearance.themeTitle',
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',

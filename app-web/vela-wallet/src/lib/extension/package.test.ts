@@ -122,6 +122,19 @@ describe('the manifest', () => {
 		expect(existsSync(join(APP_ROOT, 'extension', manifest.side_panel.default_path))).toBe(true);
 	});
 
+	it('lets its pages reach the usage-statistics endpoint, and run nothing remote', () => {
+		// The wallet's own sender (`$lib/analytics`) POSTs to Rybbit from the
+		// extension's pages. Rybbit's CORS answer does not name
+		// `chrome-extension:` origins, so it is the host permission for every
+		// site that exempts those pages from CORS; and the pages' CSP sets no
+		// `connect-src`, so the request is not refused before it leaves. Its
+		// `script-src` admits only the package itself: nothing remote runs.
+		expect(manifest.host_permissions).toContain('*://*/*');
+		const csp: string = manifest.content_security_policy?.extension_pages ?? '';
+		expect(csp).not.toMatch(/connect-src|default-src/);
+		expect(csp).toMatch(/script-src 'self'(?: 'wasm-unsafe-eval')?;/);
+	});
+
 	it('wears the wallet mark, at every size Chrome asks for', () => {
 		// The mark is docs/design/icon/app-icon.svg, rendered; without `icons` Chrome
 		// shows a grey puzzle piece for the whole product.
@@ -214,6 +227,24 @@ describe.each([
 			expect(existsSync(join(dist, script)), script).toBe(true);
 			expect(readFileSync(join(dist, page), 'utf8')).toContain(`<script src="${script}"></script>`);
 		}
+	});
+
+	it('carries the usage-statistics sender, and no remote script (MV3, the Web Store)', () => {
+		// The analytics host appears exactly as the endpoint the first-party
+		// sender POSTs to — never as a script some page loads.
+		const mentions = files(dist)
+			.filter((file) => /\.(js|html|json)$/.test(file))
+			.flatMap((file) =>
+				[...readFileSync(join(dist, file), 'utf8').matchAll(/[\w:/.-]*appsdata[\w:/.-]*/g)].map(
+					(match) => match[0]
+				)
+			);
+		expect(mentions.length, 'the sender is in the package').toBeGreaterThan(0);
+		expect(new Set(mentions)).toEqual(new Set(['https://tj.appsdata.org/api/track']));
+		const remote = built.filter((path) =>
+			/<script[^>]*\ssrc=["']?(?:https?:)?\/\//.test(readFileSync(path, 'utf8'))
+		);
+		expect(remote, 'pages that load a script from elsewhere').toEqual([]);
 	});
 
 	it('declares the version the source manifest does', () => {

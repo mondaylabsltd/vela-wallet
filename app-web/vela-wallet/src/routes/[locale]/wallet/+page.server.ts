@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import {
+	resolveAppPromptMessages,
 	resolveRequestMessages,
 	resolveSettingsMessages,
 	resolveSigningMessages,
@@ -85,6 +86,8 @@ export const load: PageServerLoad = ({ params }) => {
 		// requests over the wallet, so it carries the consent card's words. They
 		// are the in-app browser's connect copy (spec 022) — one corpus, which is
 		// why the panel and the request window cannot word it differently.
-		requestMessages: resolveRequestMessages(locale)
+		requestMessages: resolveRequestMessages(locale),
+		// "Get Vela on your phone" (off until the store links exist).
+		appPrompt: resolveAppPromptMessages(locale)
 	};
 };

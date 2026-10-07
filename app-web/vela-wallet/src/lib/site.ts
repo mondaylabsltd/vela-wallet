@@ -1,8 +1,9 @@
 /**
  * Canonical production origin for absolute URLs (hreflang/canonical need
- * fully-qualified hrefs at prerender time).
+ * fully-qualified hrefs at prerender time), and the one origin the hosted
+ * build reports usage analytics from (`$lib/analytics/gate.ts`).
  *
- * PROVISIONAL — the web app's production domain is a pending founder decision
- * (delivery report, open decisions). One constant so the switch is one line.
+ * The web wallet is served at `wallet.getvela.app` — the host the iOS and
+ * Android pay-link parsers and the repository README already name.
  */
-export const SITE_ORIGIN = 'https://app.getvela.app';
+export const SITE_ORIGIN = 'https://wallet.getvela.app';
