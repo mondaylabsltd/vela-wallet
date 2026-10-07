@@ -124,7 +124,15 @@ final class IssueFixesDeviceTests: XCTestCase {
     /// Leave the code UNSCANNED while this runs — a phone that answers it
     /// signs that wallet in (the success path, which this test does not
     /// wait for).
-    func testAPhoneThatNeverAnswersIsSaidAsTheLink() {
+    func testAPhoneThatNeverAnswersIsSaidAsTheLink() throws {
+        // A phone scan needs the device's own Bluetooth and a 90 s wait; a
+        // simulator answers neither honestly.
+        #if targetEnvironment(simulator)
+        let simulator = true
+        #else
+        let simulator = false
+        #endif
+        try XCTSkipIf(simulator, "the phone-link sheet is looked at on a real device")
         let app = launch(page: nil)
         toSignInMethods(app)
         tap(element(labelled: "手机或平板", in: app))
@@ -139,7 +147,10 @@ final class IssueFixesDeviceTests: XCTestCase {
             app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "面容")).firstMatch.exists,
             "the sheet still talks about Face ID"
         )
-        tap(element(labelled: "关闭", in: app))
+        // Put the sheet away if it is still up; the sentence above is the
+        // finding, the close is only tidying.
+        let close = element(labelled: "关闭", in: app)
+        if close.waitForExistence(timeout: 3) { close.tap() }
         settle(1.5)
         app.terminate()
     }
