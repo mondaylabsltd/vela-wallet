@@ -237,7 +237,12 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				title: t('onboarding.create.alertErrorTitle'),
 				// Except the one refusal a person can undo in one click (spec 094 S2).
 				message:
-					kind.detail === SITE_ACCESS_WITHHELD ? t('onboarding.common.siteAccessBody') : kind.detail
+					kind.detail === SITE_ACCESS_WITHHELD
+						? t('onboarding.common.siteAccessBody')
+						: // Issue #446: the link to the other device failed — the core says which.
+							kind.phone_link
+							? t('onboarding.common.phoneLinkFailed')
+							: kind.detail
 			};
 		case 'recover_offer':
 			return {
@@ -263,7 +268,10 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 						? t('onboarding.login.alertSelectorUnresponsive')
 						: kind.detail === SITE_ACCESS_WITHHELD
 							? t('onboarding.common.siteAccessBody')
-							: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+							: // Issue #446: not "set up Face ID" when it was the phone link.
+								kind.phone_link
+								? t('onboarding.common.phoneLinkFailed')
+								: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

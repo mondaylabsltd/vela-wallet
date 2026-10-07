@@ -161,6 +161,8 @@ enum I18nKeys {
         static let confirmInPrompt = "onboarding.common.confirmInPrompt"
         static let editIndexEndpoint = "onboarding.common.editIndexEndpoint"
         static let notDiscoverableTitle = "onboarding.common.notDiscoverableTitle"
+        /// Issue #446: the link to the other device failed (the core's `phone_link`).
+        static let phoneLinkFailed = "onboarding.common.phoneLinkFailed"
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
     }
 
@@ -265,7 +267,7 @@ enum I18nKeys {
         Login.recoverFailedTitle, Login.recoverFailedBody,
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
-        Flow.notDiscoverableTitle, Flow.notDiscoverableBody,
+        Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,
         Settings.sectionPasskeyIndex, Settings.endpointUrlLabel, Settings.passkeyHint,
         Settings.resetToDefault, Settings.warningText,
     ]

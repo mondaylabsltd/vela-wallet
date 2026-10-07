@@ -69,6 +69,39 @@ fn rpc(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
         .map(|body| body.get("result").cloned().unwrap_or(Value::Null))
 }
 
+/// One `eth_getLogs`, classified as the core reads it: the logs, a span the
+/// endpoint capped (0 = capped, number unknown → the core narrows
+/// conservatively), or a failure.
+fn logs_outcome(chain_id: u32, filter: &Value) -> TrustLogsOutcome {
+    match pool::call(chain_id, "eth_getLogs", json!([filter])) {
+        Ok(body) => TrustLogsOutcome::Ok {
+            logs: body
+                .get("result")
+                .and_then(Value::as_array)
+                .map(|logs| logs.iter().filter_map(to_raw_log).collect())
+                .unwrap_or_default(),
+        },
+        // The pool already parsed the endpoint's wording. A cap it
+        // could not put a number to arrives as 0, which the core reads
+        // as "narrow conservatively".
+        Err(PoolError::RangeCap { max_span, .. }) => TrustLogsOutcome::RangeCapped {
+            cap: if max_span.is_finite() && max_span > 0.0 {
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "a block span the endpoint stated"
+                )]
+                {
+                    max_span as u32
+                }
+            } else {
+                0
+            },
+        },
+        Err(PoolError::Failed { .. } | PoolError::Unavailable) => TrustLogsOutcome::Failed,
+    }
+}
+
 /// One raw log, as the core reads it. A log missing the fields that identify it
 /// is dropped rather than defaulted: an entry with no transaction hash cannot
 /// be de-duped, and a receipt that cannot be de-duped is a row that reappears.
@@ -425,37 +458,33 @@ fn perform(operation: &TrustOperation) -> TrustShellResult {
                 // precisely the spam channel the allowlist exists to close.
                 "address": contracts,
             });
-            let outcome = match pool::call(*chain_id, "eth_getLogs", json!([filter])) {
-                Ok(body) => TrustLogsOutcome::Ok {
-                    logs: body
-                        .get("result")
-                        .and_then(Value::as_array)
-                        .map(|logs| logs.iter().filter_map(to_raw_log).collect())
-                        .unwrap_or_default(),
-                },
-                // The pool already parsed the endpoint's wording. A cap it
-                // could not put a number to arrives as 0, which the core reads
-                // as "narrow conservatively".
-                Err(PoolError::RangeCap { max_span, .. }) => TrustLogsOutcome::RangeCapped {
-                    cap: if max_span.is_finite() && max_span > 0.0 {
-                        #[allow(
-                            clippy::cast_possible_truncation,
-                            clippy::cast_sign_loss,
-                            reason = "a block span the endpoint stated"
-                        )]
-                        {
-                            max_span as u32
-                        }
-                    } else {
-                        0
-                    },
-                },
-                Err(PoolError::Failed { .. } | PoolError::Unavailable) => TrustLogsOutcome::Failed,
-            };
             TrustShellResult::Logs {
                 address: address.clone(),
                 chain_id: *chain_id,
-                outcome,
+                outcome: logs_outcome(*chain_id, &filter),
+            }
+        }
+
+        // Issue #443: the logs the wallet ITSELF emitted with one topic — the
+        // Safe's `SafeReceived`, its record of native money paid to it. The
+        // core re-checks every one; this only asks.
+        TrustOperation::RpcGetSafeReceivedLogs {
+            address,
+            chain_id,
+            from_block,
+            to_block,
+            topic,
+        } => {
+            let filter = json!({
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "topics": [topic],
+                "address": address,
+            });
+            TrustShellResult::SafeReceivedLogs {
+                address: address.clone(),
+                chain_id: *chain_id,
+                outcome: logs_outcome(*chain_id, &filter),
             }
         }
 
@@ -754,6 +783,54 @@ mod tests {
                 assert_eq!(transfer.chain_id, 100);
             }
         });
+    }
+
+    /// Issue #443, live: native xDAI paid to a deployed Safe — no `Transfer`
+    /// log, only the Safe's own `SafeReceived` — comes back from THIS
+    /// executor's query and the core reads it as a native incoming transfer.
+    /// A fixed, real payment (0.05 xDAI to a Gnosis Safe), so the proof does
+    /// not depend on a stranger paying a Safe in the last hundred blocks; the
+    /// sliding window around it is the core's, pinned in its own tests.
+    #[test]
+    #[ignore = "reads a fixed Gnosis payment from a public RPC"]
+    fn a_known_native_payment_to_a_safe_comes_back_through_the_executor() {
+        const SAFE: &str = "0xEfB56b650206996c749D08f09c276ECF4e2C83c6";
+        const TX: &str = "0x9dbe7579da595f0ea26352c5337e7532796e8b7b9c072b252c03e52d58047c79";
+        let block = rpc(100, "eth_getTransactionReceipt", json!([TX]))
+            .ok()
+            .and_then(|receipt| receipt.get("blockNumber").cloned())
+            .and_then(|n| n.as_str().map(str::to_owned))
+            .and_then(|h| u64::from_str_radix(h.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_else(|| unreachable!("Gnosis did not return the receipt"));
+        let answer = perform(&TrustOperation::RpcGetSafeReceivedLogs {
+            address: SAFE.to_lowercase(),
+            chain_id: 100,
+            from_block: format!("0x{:x}", block.saturating_sub(40)),
+            to_block: format!("0x{block:x}"),
+            topic: vela_core::app::token_trust::SAFE_RECEIVED_TOPIC.to_owned(),
+        });
+        let TrustShellResult::SafeReceivedLogs {
+            chain_id: 100,
+            outcome: TrustLogsOutcome::Ok { logs },
+            ..
+        } = answer
+        else {
+            unreachable!("the executor did not answer with logs: {answer:?}")
+        };
+        println!("  {} SafeReceived log(s) around block {block}", logs.len());
+        let merged = vela_core::app::token_trust::merge_safe_received(Vec::new(), &logs, SAFE);
+        let transfers = vela_core::app::token_trust::decode_transfer_logs(&merged, SAFE, 100);
+        let paid = transfers
+            .iter()
+            .find(|t| t.tx_hash.eq_ignore_ascii_case(TX))
+            .unwrap_or_else(|| unreachable!("{TX} is not among {transfers:?}"));
+        println!("    {paid:?}");
+        assert_eq!(paid.value, 50_000_000_000_000_000);
+        assert_eq!(paid.block_number, block);
+        assert!(
+            paid.is_native && paid.token.is_none(),
+            "native money, not a token: {paid:?}"
+        );
     }
 
     /// Every requested address is answered, and a token that answered only half

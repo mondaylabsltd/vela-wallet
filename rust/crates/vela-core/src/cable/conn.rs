@@ -52,16 +52,31 @@ const MSG_SHUTDOWN: u8 = 0x00;
 /// caBLE (see `cbor`).
 const GET_INFO_COMMAND: u8 = 0x04;
 
+/// How this module words a failure of the link to the other device — the
+/// tunnel or BLE channel, and the handshake over it — as opposed to the
+/// authenticator's answer. [`is_link_failure`] reads them back.
+const TRANSPORT_FAILURE: &str = "caBLE transport: ";
+const NOISE_FAILURE: &str = "caBLE Noise failure: ";
+
 fn to_cable_error(error: NoiseError) -> CableError {
-    CableError::Other(format!("caBLE Noise failure: {error:?}"))
+    CableError::Other(format!("{NOISE_FAILURE}{error:?}"))
 }
 
 fn port_to_cable_error(error: PortError) -> CableError {
     match error {
         PortError::TimedOut => CableError::TimedOut,
         PortError::WouldBlock => CableError::TimedOut,
-        PortError::Io(detail) => CableError::Other(format!("caBLE transport: {detail}")),
+        PortError::Io(detail) => CableError::Other(format!("{TRANSPORT_FAILURE}{detail}")),
     }
+}
+
+/// Whether a ceremony's failure detail is the link to the other device
+/// failing rather than the authenticator: the sign-in and create sheets then
+/// say to scan again, not to set up Face ID (issue #446, where an iPad's
+/// tunnel was cancelled under it and the sheet blamed biometrics).
+#[must_use]
+pub fn is_link_failure(detail: &str) -> bool {
+    detail.starts_with(TRANSPORT_FAILURE) || detail.starts_with(NOISE_FAILURE)
 }
 
 /// A connected caBLE session: the handshake is done, the transport cipher is

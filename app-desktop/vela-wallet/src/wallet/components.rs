@@ -415,6 +415,8 @@ pub fn balance_display(
     model: &BalanceModel,
     on_toggle: Option<BalanceToggle>,
     on_status: Option<BalanceToggle>,
+    // Issue #443: read the balances and the incoming scan again, now.
+    on_refresh: Option<BalanceToggle>,
 ) -> Div {
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
@@ -570,6 +572,35 @@ pub fn balance_display(
                 .into_any_element(),
             None => line.into_any_element(),
         });
+    }
+
+    // Issue #443: the hero's own refresh — the glyph and when the figure was
+    // last read ("Updated 2m"). A deposit made from another device had no
+    // sign here until the ten-minute poll or a restart; now the person can
+    // ask, and can see how fresh what they are looking at is. Quiet, like
+    // the status line: subtle ink, fuller on hover.
+    if let Some(on_refresh) = on_refresh {
+        let mut refresh = div()
+            .id("balance-refresh")
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .py(px(4.))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_subtle)
+            .cursor_pointer()
+            .hover(|el| el.text_color(theme.fg_muted))
+            .child(icon_img(
+                icons,
+                Icon::RefreshCw,
+                false,
+                theme.fg_subtle,
+                14.,
+            ));
+        if let Some(updated) = model.updated.clone() {
+            refresh = refresh.child(updated);
+        }
+        root = root.child(div().flex().child(refresh.on_click(on_refresh)));
     }
 
     root

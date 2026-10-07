@@ -700,10 +700,61 @@ pub enum PromptKind {
     NotDiscoverable,
     IncompatibleCreate,
     IncompatibleLogin,
-    CreateFailed { detail: String },
+    CreateFailed {
+        detail: String,
+        /// The link to the other device failed, not the authenticator
+        /// ([`crate::cable::conn::is_link_failure`]): the sheet says to scan
+        /// again (issue #446). `#[serde(default)]`: a reader that predates it
+        /// reads `false`.
+        #[serde(default)]
+        phone_link: bool,
+    },
     RecoverOffer,
     RecoverFailed,
-    SignInFailed { detail: String },
+    SignInFailed {
+        detail: String,
+        /// As [`PromptKind::CreateFailed`]'s.
+        #[serde(default)]
+        phone_link: bool,
+    },
+}
+
+impl PromptKind {
+    /// A failed create, classified: the detail is the platform's (or the
+    /// core's own) words, kept for the technical details.
+    #[must_use]
+    pub fn create_failed(detail: String) -> Self {
+        let phone_link = crate::cable::conn::is_link_failure(&detail);
+        Self::CreateFailed { detail, phone_link }
+    }
+
+    /// A failed sign-in, classified as [`PromptKind::create_failed`].
+    #[must_use]
+    pub fn sign_in_failed(detail: String) -> Self {
+        let phone_link = crate::cable::conn::is_link_failure(&detail);
+        Self::SignInFailed { detail, phone_link }
+    }
+
+    /// [`PromptKind::create_failed`] for a CEREMONY run with `method`. A
+    /// phone (hybrid) ceremony's failure is the link's by definition — the
+    /// person's Face ID or fingerprint is on the OTHER device — whatever the
+    /// platform's words: "No phone answered the code" timed out on Android
+    /// and still said to set up Face ID here (issue #446).
+    #[must_use]
+    pub fn create_failed_via(detail: String, method: KeyMethod) -> Self {
+        let phone_link =
+            method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
+        Self::CreateFailed { detail, phone_link }
+    }
+
+    /// [`PromptKind::sign_in_failed`] for a ceremony run with `method`, as
+    /// [`PromptKind::create_failed_via`].
+    #[must_use]
+    pub fn sign_in_failed_via(detail: String, method: KeyMethod) -> Self {
+        let phone_link =
+            method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
+        Self::SignInFailed { detail, phone_link }
+    }
 }
 
 // ---------------------------------------------------------------------------

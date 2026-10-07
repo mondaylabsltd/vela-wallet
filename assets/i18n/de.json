@@ -742,7 +742,8 @@
    "copyAddress": "Adresse kopieren",
    "copied": "Kopiert",
    "close": "Schließen",
-   "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut."
+   "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut.",
+   "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut."
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",

@@ -261,6 +261,36 @@ class IncomingScanTest {
         assertTrue(record.id.startsWith("137-0xabc123-"))
     }
 
+    /**
+     * Issue #443: native money paid to a deployed Safe emits no `Transfer`
+     * log — only the wallet's own `SafeReceived(sender, value)`. 0.0001 xDAI
+     * arrived on a desktop and Activity stayed empty after a restart; the
+     * scan now asks for the wallet's own log and stores it as native.
+     */
+    @Test
+    fun `native money announced only by the wallet's SafeReceived is stored`() = runBlocking {
+        val received = JSONObject()
+            .put("address", wallet)
+            .put(
+                "topics",
+                JSONArray()
+                    .put("0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d")
+                    .put(topic(sender)),
+            )
+            .put("data", "0x" + 7_000_000_000_000_000L.toString(16).padStart(64, '0'))
+            .put("transactionHash", "0xdef456")
+            .put("blockNumber", "0x3e0")
+            .put("logIndex", "0x2")
+        val harness = harness(listOf(received))
+
+        assertEquals(1, harness.scan.runOnce(wallet))
+
+        val record = storedRecords(harness).single()
+        assertEquals("POL", record.symbol)
+        assertEquals(sender, record.from.lowercase())
+        assertTrue(record.id.startsWith("137-0xdef456-"))
+    }
+
     @Test
     fun `the same receipt seen twice is stored once`() = runBlocking {
         // The Activity surface polls every ten seconds and the scan windows

@@ -43,6 +43,12 @@ class TrustExecutor(
             outcome = getLogs(operation),
         )
 
+        is TrustOperation.RpcGetSafeReceivedLogs -> TrustShellResult.SafeReceivedLogs(
+            address = operation.address,
+            chain_id = operation.chain_id,
+            outcome = getSafeReceivedLogs(operation),
+        )
+
         is TrustOperation.RpcGetBlockByNumber -> blockTimestamp(operation)
 
         is TrustOperation.MulticallErc20Meta -> TrustShellResult.ErcMeta(
@@ -69,6 +75,8 @@ class TrustExecutor(
             TrustShellResult.BlockNumber(operation.address, operation.chain_id, null)
         is TrustOperation.RpcGetLogs ->
             TrustShellResult.Logs(operation.address, operation.chain_id, TrustLogsOutcome.Failed)
+        is TrustOperation.RpcGetSafeReceivedLogs ->
+            TrustShellResult.SafeReceivedLogs(operation.address, operation.chain_id, TrustLogsOutcome.Failed)
         is TrustOperation.RpcGetBlockByNumber -> TrustShellResult.BlockTimestamp(
             address = operation.address,
             chain_id = operation.chain_id,
@@ -111,7 +119,25 @@ class TrustExecutor(
             filter.put("address", JSONArray(operation.contracts))
         }
 
-        return when (val answer = pool.call(operation.chain_id, "eth_getLogs", listOf(filter))) {
+        return logsOutcome(operation.chain_id, filter)
+    }
+
+    /**
+     * Issue #443: the logs the wallet itself emitted with one topic — the
+     * Safe's `SafeReceived`. The core re-checks every one; this only asks.
+     */
+    private suspend fun getSafeReceivedLogs(operation: TrustOperation.RpcGetSafeReceivedLogs): TrustLogsOutcome {
+        val filter = JSONObject()
+            .put("fromBlock", operation.from_block)
+            .put("toBlock", operation.to_block)
+            .put("topics", JSONArray().put(operation.topic))
+            .put("address", operation.address)
+        return logsOutcome(operation.chain_id, filter)
+    }
+
+    /** One `eth_getLogs`, classified as the core reads it. */
+    private suspend fun logsOutcome(chainId: Int, filter: JSONObject): TrustLogsOutcome {
+        return when (val answer = pool.call(chainId, "eth_getLogs", listOf(filter))) {
             is RpcResult.Body -> {
                 val logs = answer.json.optJSONArray("result")
                     ?: return TrustLogsOutcome.Failed

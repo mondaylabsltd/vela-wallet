@@ -36,6 +36,31 @@ struct MultiPickModel {
     let emptyText: String
     let save: String
     let cancel: String
+    /// The search box, for a list long enough to need one (`ContactsLive`
+    /// offers it past six rows — the web's and Android's rule); `nil` draws none.
+    var search: MultiPickSearch? = nil
+}
+
+extension MultiPickModel {
+    /// The rows a query leaves — matched on the name, the short address and
+    /// the full one (a contact's id is its address). No search box, or an
+    /// empty query: every row.
+    func rows(matching query: String) -> [MultiPickRowModel] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard search != nil, !needle.isEmpty else { return rows }
+        return rows.filter { row in
+            "\(row.title)\n\(row.subtitle)\n\(row.id)".lowercased().contains(needle)
+        }
+    }
+}
+
+/// Issue #445: a book of 59 could only be scrolled through on iOS while
+/// Android's sheet could be searched. What the box needs to draw itself.
+struct MultiPickSearch {
+    let placeholder: String
+    let clearLabel: String
+    /// "No matches for “{{query}}”", with the query filled in.
+    let noMatch: (String) -> String
 }
 
 struct MultiPickSheet: View {
@@ -46,6 +71,14 @@ struct MultiPickSheet: View {
     var onToggle: (String) -> Void = { _ in }
     var onSave: () -> Void = {}
     var onCancel: () -> Void = {}
+
+    /// The search narrows what is SHOWN, never what is ticked: the ticks are
+    /// the host's, keyed by id, so a ticked row filtered out stays ticked.
+    @State private var query = ""
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var shownRows: [MultiPickRowModel] { model.rows(matching: query) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
@@ -60,16 +93,36 @@ struct MultiPickSheet: View {
                 .foregroundStyle(theme.fgBase)
                 .padding(.top, Tokens.Space.s20)
 
+            if let search = model.search, !model.rows.isEmpty {
+                ContactsSearchField(
+                    model: ContactsSearchModel(
+                        placeholder: search.placeholder,
+                        query: query.isEmpty ? nil : query,
+                        clearLabel: search.clearLabel
+                    ),
+                    onClear: { query = "" },
+                    text: $query
+                )
+                .padding(.top, Tokens.Space.s12)
+            }
+
             if model.rows.isEmpty {
                 Text(verbatim: model.emptyText)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, Tokens.Space.s24)
+            } else if let search = model.search, shownRows.isEmpty {
+                Text(verbatim: search.noMatch(trimmedQuery))
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Tokens.Space.s24)
             } else {
                 ScrollView {
                     VStack(spacing: Tokens.Space.s0) {
-                        ForEach(model.rows) { row in
+                        ForEach(shownRows) { row in
                             Button { onToggle(row.id) } label: {
                                 pickRow(row)
                             }

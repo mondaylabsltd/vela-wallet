@@ -126,7 +126,8 @@
       "copyAddress": "Copier l'adresse",
       "copied": "Copié",
       "close": "Fermer",
-      "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez."
+      "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez.",
+      "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code."
     },
     "create": {
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",

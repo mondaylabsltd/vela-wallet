@@ -109,6 +109,9 @@ pub enum OutcomeKind {
     RecoverOffer,
     RecoverFailed,
     SignInFailed,
+    /// The link to the other device failed, not the authenticator — the
+    /// core's `phone_link` (issue #446): scan again, not "set up Face ID".
+    PhoneLink,
 }
 
 /// The copy and the badge for one outcome. No actions: see the module note.
@@ -186,6 +189,11 @@ impl OutcomeKind {
                 loc.t("onboarding.login.alertSignInFailedTitle"),
                 loc.t("onboarding.login.signInFailedBody"),
             ),
+            Self::PhoneLink => (
+                BadgeVariant::Error,
+                loc.t("onboarding.common.unknownTitle"),
+                loc.t("onboarding.common.phoneLinkFailed"),
+            ),
         };
 
         OutcomeSpec {
@@ -208,8 +216,14 @@ impl OutcomeKind {
             PromptKind::IncompatibleCreate | PromptKind::IncompatibleLogin => Self::Incompatible,
             PromptKind::RecoverOffer => Self::RecoverOffer,
             PromptKind::RecoverFailed => Self::RecoverFailed,
-            PromptKind::CreateFailed { detail } => refine(detail, Self::Unknown),
-            PromptKind::SignInFailed { detail } => refine(detail, Self::SignInFailed),
+            PromptKind::CreateFailed {
+                phone_link: true, ..
+            }
+            | PromptKind::SignInFailed {
+                phone_link: true, ..
+            } => Self::PhoneLink,
+            PromptKind::CreateFailed { detail, .. } => refine(detail, Self::Unknown),
+            PromptKind::SignInFailed { detail, .. } => refine(detail, Self::SignInFailed),
         }
     }
 }
@@ -276,7 +290,7 @@ impl Prompt {
         // The two prompts that carry the platform's own words are the two whose
         // detail belongs in the disclosure rather than in the body.
         let details = match &kind {
-            PromptKind::CreateFailed { detail } | PromptKind::SignInFailed { detail } => {
+            PromptKind::CreateFailed { detail, .. } | PromptKind::SignInFailed { detail, .. } => {
                 Some(detail.clone())
             }
             _ => None,

@@ -214,6 +214,14 @@ export function getLogsRangeCap(error: RPCResponse['error']): number | null {
 		else if (m[2] === 'm') n *= 1_000_000;
 		if (Number.isFinite(n) && n > 0) return n;
 	}
+	// A span written as its bounds — "eth_getLogs is limited to 0 - 50 blocks
+	// range": the first number is the lower bound, 0; the upper bound is the
+	// span (issue 443, the core's `range_upper_bound`).
+	const bounds = msg.match(/\d[\d,_]*\s*[-–]\s*(\d[\d,_]*)/);
+	if (bounds) {
+		const upper = parseInt(bounds[1].replace(/[,_]/g, ''), 10);
+		if (Number.isFinite(upper) && upper > 0) return upper;
+	}
 	return 0;
 }
 

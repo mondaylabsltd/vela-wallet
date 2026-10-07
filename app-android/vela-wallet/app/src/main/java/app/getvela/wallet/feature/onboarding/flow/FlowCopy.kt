@@ -163,7 +163,8 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = when (kind.
     // makes the report worth filing.
     "create_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Create.ALERT_ERROR_TITLE),
-        message = kind.detail.orEmpty(),
+        // Issue #446: the link to the other device failed — the core says which.
+        message = if (kind.phoneLink) strings.t(I18nKeys.Flow.PHONE_LINK_FAILED) else kind.detail.orEmpty(),
     )
     "recover_offer" -> PromptCopy(
         title = strings.t(I18nKeys.Login.RECOVER_OFFER_TITLE),
@@ -177,10 +178,12 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = when (kind.
     )
     "sign_in_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Login.SIGN_IN_FAILED_TITLE),
-        message = strings.t(
-            I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY,
-            mapOf("message" to kind.detail.orEmpty()),
-        ),
+        // Issue #446: not "set up Face ID" when it was the phone link.
+        message = if (kind.phoneLink) {
+            strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
+        } else {
+            strings.t(I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY, mapOf("message" to kind.detail.orEmpty()))
+        },
     )
     // Cannot happen while the core and this file agree; if a variant was added
     // in Rust and not here, say so loudly rather than showing an empty sheet.

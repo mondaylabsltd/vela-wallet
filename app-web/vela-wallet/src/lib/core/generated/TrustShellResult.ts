@@ -11,7 +11,7 @@ export type TrustShellResult = { "type": "block_number", address: string, chain_
 /**
  * `eth_blockNumber` hex, or `None` on RPC failure.
  */
-block_hex: string | null, } | { "type": "logs", address: string, chain_id: number, outcome: TrustLogsOutcome, } | { "type": "block_timestamp", address: string, chain_id: number, block_number: number, 
+block_hex: string | null, } | { "type": "safe_received_logs", address: string, chain_id: number, outcome: TrustLogsOutcome, } | { "type": "logs", address: string, chain_id: number, outcome: TrustLogsOutcome, } | { "type": "block_timestamp", address: string, chain_id: number, block_number: number, 
 /**
  * Unix seconds from the block header, or `None` when the lookup
  * failed — the transfer then falls back to "now".

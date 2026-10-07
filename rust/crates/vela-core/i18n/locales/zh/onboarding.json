@@ -126,7 +126,8 @@
       "copyAddress": "复制地址",
       "copied": "已复制",
       "close": "关闭",
-      "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。"
+      "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。",
+      "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。"
     },
     "create": {
       "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",

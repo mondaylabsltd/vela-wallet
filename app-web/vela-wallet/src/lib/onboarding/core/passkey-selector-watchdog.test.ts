@@ -85,7 +85,10 @@ describe('dead passkey selector', () => {
 
 	it('is shown in the shell’s words, not as a marker', () => {
 		const t = (key: string) => key;
-		const copy = promptCopy({ type: 'sign_in_failed', detail: SELECTOR_UNRESPONSIVE }, t);
+		const copy = promptCopy(
+			{ type: 'sign_in_failed', detail: SELECTOR_UNRESPONSIVE, phone_link: false },
+			t
+		);
 		expect(copy.message).toBe('onboarding.login.alertSelectorUnresponsive');
 	});
 });
