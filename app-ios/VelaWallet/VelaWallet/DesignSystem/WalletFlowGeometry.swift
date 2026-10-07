@@ -37,6 +37,14 @@ enum WalletFlowGeometry {
     static let statusSpinnerStroke: CGFloat = 3
     /// The waiting ring OUTSIDE the disc (issue 199, the web's 2.5 in 104).
     static let statusRingStroke: CGFloat = 2.5
+    /// Issue #444: a submitted transaction with no time estimate still MOVES —
+    /// a quarter arc circling the disc once per period, the disc breathing to
+    /// this scale (the web's `roam`/`breathe`, Android's `receiptWait`).
+    static let statusRoamPeriod: TimeInterval = 2.4
+    static let statusBreathePeriod: TimeInterval = 1.2
+    static let statusBreatheScale: CGFloat = 1.04
+    /// The arc drawn while circling: a quarter of the ring.
+    static let statusRoamArc: Double = 0.25
 
     /// The receive network-row chain badge, measured 40 in R1. Larger than
     /// the 32 token icon because this row IS the network, not a token that
