@@ -39,6 +39,12 @@ private enum BProbe {
     }
 }
 
+/// Opt-in, because they need the Mac: the pages on 127.0.0.1:8000–8002 and the
+/// open internet (badssl.com). Without them every load waits out its timeout,
+/// and CI spent seven minutes of its slowest leg on probes that assert nothing:
+/// `TEST_RUNNER_VELA_PROBES_083=1 xcodebuild test … -only-testing:VelaWalletTests/Probes083Browser`
+private let probesRequested = ProcessInfo.processInfo.environment["VELA_PROBES_083"] != nil
+
 @MainActor
 private func pause(_ seconds: Double) async {
     try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
@@ -148,7 +154,7 @@ private let baseHTML = """
 """
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .enabled(if: probesRequested, "set TEST_RUNNER_VELA_PROBES_083=1 with the Mac's pages on 127.0.0.1:8000–8002"))
 struct Probes083Browser {
 
     private func eval(_ engine: BrowserEngine, _ js: String, frame: WKFrameInfo? = nil) async -> String {
@@ -412,7 +418,7 @@ struct Probes083Browser {
 
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .enabled(if: probesRequested, "set TEST_RUNNER_VELA_PROBES_083=1 — 22 s of watching a retry, asserting nothing"))
 struct Probes083Panels {
 
     /// The panel's words and the retry schedule on a REAL refused connection
