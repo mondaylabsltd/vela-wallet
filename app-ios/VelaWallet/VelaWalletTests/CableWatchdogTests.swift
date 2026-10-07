@@ -9,6 +9,7 @@
 //  And the sheet then told the person to set up Face ID.
 //
 
+import Foundation
 import Testing
 @testable import VelaWallet
 
@@ -33,7 +34,17 @@ struct CableWatchdogTests {
     @Test func aWatchdogLeftRunningFiresOnce() async throws {
         let fired = Fired()
         CableWatchdog.start(after: 20_000_000) { fired.count += 1 }
-        try await Task.sleep(nanoseconds: 400_000_000)
+        // Wait FOR the fire, not a fixed while: on a loaded CI runner the main
+        // actor can be busy long enough that a 400 ms sleep wakes before the
+        // watchdog's own 20 ms one has even started — the test then reads 0
+        // and blames the watchdog for the runner's queue.
+        let deadline = Date().addingTimeInterval(10)
+        while fired.count == 0, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(fired.count == 1)
+        // And only once.
+        try await Task.sleep(nanoseconds: 100_000_000)
         #expect(fired.count == 1)
     }
 
