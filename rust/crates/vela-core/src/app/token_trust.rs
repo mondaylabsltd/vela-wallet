@@ -39,8 +39,10 @@
 //! - ③ an ERC-20 whose metadata can't resolve never reaches the feed — the
 //!   18-decimals fallback would record a 6-decimals stablecoin as "+0 tokens"
 //!   (`activity.ts:408-415`).
-//! - ④ at most TWO `eth_getLogs` per chain per poll: probe + one capped
-//!   retry, never a fan-out (`transfer-monitor.ts:96-118`).
+//! - ④ at most TWO `eth_getLogs` per chain per poll for transfers: probe +
+//!   one capped retry, never a fan-out (`transfer-monitor.ts:96-118`); then
+//!   ONE more for the wallet's own `SafeReceived` over the span that answered
+//!   (issue #443) — native money, which emits no `Transfer`.
 //! - ⑤ auto-add's data source is never a simulation log (`token-autoadd.ts:5-14`).
 //! - ⑥ asymmetric sim trust: SENT renders whenever metadata resolves (a real
 //!   token emits its own log, so an outflow can't be understated); RECEIVED
@@ -78,6 +80,14 @@ use ts_rs::TS;
 /// keccak256("Transfer(address,address,uint256)") (`transfer-monitor.ts:31`).
 pub const TRANSFER_TOPIC: &str =
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/// keccak256("SafeReceived(address,uint256)") — Safe v1.4.1's `receive()`:
+/// the wallet's OWN log for every native coin paid to it, sender indexed,
+/// value in `data`. A plain coin transfer emits no `Transfer` log on most
+/// chains (Gnosis has no EIP-7708), so this is how a deployed wallet sees
+/// native money arrive (issue #443: 0.0001 xDAI received, Activity empty).
+pub const SAFE_RECEIVED_TOPIC: &str =
+    "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
 
 /// Contract-address sentinels marking a log as a *native* (EIP-7708) transfer
 /// (`transfer-monitor.ts:38-42`). Everything else is treated as ERC-20.
@@ -203,6 +213,17 @@ pub enum TrustOperation {
         recipient_topic: String,
         contracts: Vec<String>,
     },
+    /// `eth_getLogs` for logs EMITTED BY `address` (the wallet itself) with
+    /// `topics[0] = topic` — the Safe's `SafeReceived` ([`SAFE_RECEIVED_TOPIC`]).
+    /// Answered with [`TrustShellResult::SafeReceivedLogs`], classified as
+    /// `RpcGetLogs`' outcome is.
+    RpcGetSafeReceivedLogs {
+        address: String,
+        chain_id: u32,
+        from_block: String,
+        to_block: String,
+        topic: String,
+    },
     /// `eth_getBlockByNumber(block, false)` — timestamp only.
     RpcGetBlockByNumber {
         address: String,
@@ -253,6 +274,12 @@ pub enum TrustShellResult {
         chain_id: u32,
         /// `eth_blockNumber` hex, or `None` on RPC failure.
         block_hex: Option<String>,
+    },
+    /// The answer to [`TrustOperation::RpcGetSafeReceivedLogs`].
+    SafeReceivedLogs {
+        address: String,
+        chain_id: u32,
+        outcome: TrustLogsOutcome,
     },
     Logs {
         address: String,
@@ -414,6 +441,53 @@ fn registry_meta(chain_id: u32, token: &str) -> Option<TrustTokenMeta> {
         symbol: known.symbol.to_owned(),
         decimals: known.decimals,
     })
+}
+
+/// Issue #443 — the wallet's own `SafeReceived` logs, as the native transfers
+/// they are, joined to the transfer logs. Never trusts the RPC's filter
+/// (invariant ①): a log is taken only when THIS wallet emitted it, its topic
+/// is [`SAFE_RECEIVED_TOPIC`] and it names exactly one sender. It is rewritten
+/// into the shape [`decode_transfer_logs`] reads — a `Transfer(sender →
+/// wallet)` from a native sentinel — so everything after (netting, rows,
+/// timestamps, de-duplication) is the same path. A chain that ALSO emits an
+/// EIP-7708 native `Transfer` for the same payment keeps that one: the
+/// receipt is counted once.
+pub fn merge_safe_received(
+    mut logs: Vec<TrustRawLog>,
+    received: &[TrustRawLog],
+    wallet: &str,
+) -> Vec<TrustRawLog> {
+    let wallet_topic = address_topic(wallet);
+    let native_seen: BTreeSet<(String, String)> = logs
+        .iter()
+        .filter(|log| is_native_log_address(&log.address))
+        .map(|log| (log.transaction_hash.to_lowercase(), log.data.to_lowercase()))
+        .collect();
+    for log in received {
+        if !log.address.eq_ignore_ascii_case(wallet)
+            || log.topics.len() != 2
+            || !log.topics[0].eq_ignore_ascii_case(SAFE_RECEIVED_TOPIC)
+        {
+            continue;
+        }
+        let key = (log.transaction_hash.to_lowercase(), log.data.to_lowercase());
+        if native_seen.contains(&key) {
+            continue;
+        }
+        logs.push(TrustRawLog {
+            address: NATIVE_LOG_ADDRESSES[2].to_owned(),
+            topics: vec![
+                TRANSFER_TOPIC.to_owned(),
+                log.topics[1].clone(),
+                wallet_topic.clone(),
+            ],
+            data: log.data.clone(),
+            transaction_hash: log.transaction_hash.clone(),
+            block_number: log.block_number.clone(),
+            log_index: log.log_index.clone(),
+        });
+    }
+    logs
 }
 
 /// Decision chain 1 — log → transfer acceptance (`decodeTransferLogs`,
@@ -759,7 +833,15 @@ enum ChainPhase {
         latest: u64,
     },
     /// The one capped retry is out — a second cap ends the chain (④).
-    Retry,
+    Retry {
+        from: u64,
+        latest: u64,
+    },
+    /// The transfer logs are in; the wallet's own `SafeReceived` over the
+    /// same span is out (issue #443).
+    SafeReceived {
+        transfer_logs: Vec<TrustRawLog>,
+    },
     Timestamps {
         transfers: Vec<TrustTransfer>,
         pending: BTreeSet<u64>,
@@ -1139,6 +1221,16 @@ fn accept(
             }
             on_logs(model, chain_id, outcome)
         }
+        TrustShellResult::SafeReceivedLogs {
+            address,
+            chain_id,
+            outcome,
+        } => {
+            if attempt != model.attempt || model.address.as_deref() != Some(address.as_str()) {
+                return Command::done();
+            }
+            on_safe_received(model, chain_id, outcome)
+        }
         TrustShellResult::BlockTimestamp {
             address,
             chain_id,
@@ -1260,66 +1352,117 @@ fn on_logs(
         return Command::done();
     };
     match (&entry.phase, outcome) {
-        (ChainPhase::Probe { .. } | ChainPhase::Retry, TrustLogsOutcome::Ok { logs }) => {
-            let address = model.address.clone().unwrap_or_default();
-            let transfers = decode_transfer_logs(&logs, &address, chain_id);
-            if transfers.is_empty() {
-                model.scan.remove(&chain_id);
-                return render();
-            }
-            // Distinct blocks in first-seen order, capped at 25; the rest
-            // fall back to now (`resolveTimestamps`).
-            let mut blocks: Vec<u64> = Vec::new();
-            for t in &transfers {
-                if !blocks.contains(&t.block_number) {
-                    blocks.push(t.block_number);
-                }
-            }
-            blocks.truncate(TIMESTAMP_BLOCK_CAP);
-            let attempt = model.attempt;
-            let mut commands = Vec::new();
-            for block in &blocks {
-                commands.push(shell_request(
-                    attempt,
-                    TrustOperation::RpcGetBlockByNumber {
-                        address: address.clone(),
-                        chain_id,
-                        block: format!("0x{block:x}"),
-                    },
-                ));
-            }
+        (ChainPhase::Probe { .. } | ChainPhase::Retry { .. }, TrustLogsOutcome::Ok { logs }) => {
+            // Issue #443: the same span, for the wallet's own `SafeReceived`.
+            let (from, latest) = match entry.phase {
+                ChainPhase::Probe { latest } => (latest.saturating_sub(LIVE_SCAN_BLOCKS), latest),
+                ChainPhase::Retry { from, latest } => (from, latest),
+                _ => unreachable!("matched above"),
+            };
             if let Some(entry) = model.scan.get_mut(&chain_id) {
-                entry.phase = ChainPhase::Timestamps {
-                    transfers,
-                    pending: blocks.iter().copied().collect(),
-                    resolved: BTreeMap::new(),
-                    fallback_sec: 0.0,
+                entry.phase = ChainPhase::SafeReceived {
+                    transfer_logs: logs,
                 };
             }
-            commands.push(render());
-            Command::all(commands)
+            let op = safe_received_op(model, chain_id, from, latest);
+            Command::all([op, render()])
         }
         (ChainPhase::Probe { latest }, TrustLogsOutcome::RangeCapped { cap }) => {
             // Span cap: retry ONCE for just the most-recent span — never a
-            // chunked fan-out (invariant ④). `cap > 0 ? cap : 100`.
+            // chunked fan-out (invariant ④). A cap with no usable number
+            // HALVES the window, as `get_logs_range_cap` promises its callers:
+            // retrying 100 after a 101-block refusal was refused again, and
+            // the chain found nothing on such an endpoint (issue #443).
             let latest = *latest;
-            let span = if cap > 0 { u64::from(cap) } else { 100 };
+            let span = if cap > 0 {
+                u64::from(cap)
+            } else {
+                LIVE_SCAN_BLOCKS / 2
+            };
             let from = latest.saturating_sub(span.saturating_sub(1));
             if let Some(entry) = model.scan.get_mut(&chain_id) {
-                entry.phase = ChainPhase::Retry;
+                entry.phase = ChainPhase::Retry { from, latest };
             }
             let op = get_logs_op(model, chain_id, from, latest);
             Command::all([op, render()])
         }
         // A second cap, or any hard failure: this chain yields nothing this
         // tick — windows overlap, the next poll retries.
-        (ChainPhase::Retry, TrustLogsOutcome::RangeCapped { .. })
-        | (ChainPhase::Probe { .. } | ChainPhase::Retry, TrustLogsOutcome::Failed) => {
+        (ChainPhase::Retry { .. }, TrustLogsOutcome::RangeCapped { .. })
+        | (ChainPhase::Probe { .. } | ChainPhase::Retry { .. }, TrustLogsOutcome::Failed) => {
             model.scan.remove(&chain_id);
             render()
         }
         _ => Command::done(),
     }
+}
+
+/// Issue #443: the wallet's own `SafeReceived` logs join the transfer logs as
+/// native receipts. A span the endpoint will not serve for this query, or a
+/// failure, costs only the native receipts — the transfers still land.
+fn on_safe_received(
+    model: &mut Model,
+    chain_id: u32,
+    outcome: TrustLogsOutcome,
+) -> Command<TrustEffect, Event> {
+    let Some(entry) = model.scan.get_mut(&chain_id) else {
+        return Command::done();
+    };
+    let ChainPhase::SafeReceived { transfer_logs } = &mut entry.phase else {
+        return Command::done();
+    };
+    let mut logs = std::mem::take(transfer_logs);
+    if let TrustLogsOutcome::Ok { logs: received } = outcome {
+        let address = model.address.clone().unwrap_or_default();
+        logs = merge_safe_received(logs, &received, &address);
+    }
+    begin_timestamps(model, chain_id, &logs)
+}
+
+/// The logs' transfers, on to their blocks' timestamps — or the chain is done
+/// when none is this wallet's.
+fn begin_timestamps(
+    model: &mut Model,
+    chain_id: u32,
+    logs: &[TrustRawLog],
+) -> Command<TrustEffect, Event> {
+    let address = model.address.clone().unwrap_or_default();
+    let transfers = decode_transfer_logs(logs, &address, chain_id);
+    if transfers.is_empty() {
+        model.scan.remove(&chain_id);
+        return render();
+    }
+    // Distinct blocks in first-seen order, capped at 25; the rest
+    // fall back to now (`resolveTimestamps`).
+    let mut blocks: Vec<u64> = Vec::new();
+    for t in &transfers {
+        if !blocks.contains(&t.block_number) {
+            blocks.push(t.block_number);
+        }
+    }
+    blocks.truncate(TIMESTAMP_BLOCK_CAP);
+    let attempt = model.attempt;
+    let mut commands = Vec::new();
+    for block in &blocks {
+        commands.push(shell_request(
+            attempt,
+            TrustOperation::RpcGetBlockByNumber {
+                address: address.clone(),
+                chain_id,
+                block: format!("0x{block:x}"),
+            },
+        ));
+    }
+    if let Some(entry) = model.scan.get_mut(&chain_id) {
+        entry.phase = ChainPhase::Timestamps {
+            transfers,
+            pending: blocks.iter().copied().collect(),
+            resolved: BTreeMap::new(),
+            fallback_sec: 0.0,
+        };
+    }
+    commands.push(render());
+    Command::all(commands)
 }
 
 fn on_block_timestamp(
@@ -1364,7 +1507,7 @@ fn on_block_timestamp(
         resolved,
         fallback_sec,
         ..
-    } = std::mem::replace(&mut entry.phase, ChainPhase::Retry)
+    } = std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
     else {
         return Command::done();
     };
@@ -1516,7 +1659,7 @@ fn on_meta(
                 resolved,
                 fallback_sec,
                 ..
-            } = std::mem::replace(&mut entry.phase, ChainPhase::Retry)
+            } = std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
             {
                 finalize_chain(model, id, transfers, &resolved, fallback_sec);
             }
@@ -1812,6 +1955,24 @@ fn get_logs_op(model: &Model, chain_id: u32, from: u64, to: u64) -> Command<Trus
             to_block: format!("0x{to:x}"),
             recipient_topic: address_topic(&address),
             contracts,
+        },
+    )
+}
+
+fn safe_received_op(
+    model: &Model,
+    chain_id: u32,
+    from: u64,
+    to: u64,
+) -> Command<TrustEffect, Event> {
+    shell_request(
+        model.attempt,
+        TrustOperation::RpcGetSafeReceivedLogs {
+            address: model.address.clone().unwrap_or_default(),
+            chain_id,
+            from_block: format!("0x{from:x}"),
+            to_block: format!("0x{to:x}"),
+            topic: SAFE_RECEIVED_TOPIC.to_owned(),
         },
     )
 }

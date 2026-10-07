@@ -81,6 +81,26 @@ impl Loc {
             .into()
     }
 
+    /// The core's compact relative time — "now", "2m", "3h", a weekday, a
+    /// date — for an instant in epoch milliseconds, in this machine's zone and
+    /// the person's date format (issue #443's "Updated {{ago}}").
+    pub fn relative_time(&self, at_ms: f64, now_ms: f64) -> SharedString {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "epoch milliseconds, well inside i64"
+        )]
+        let (at_sec, now) = ((at_ms / 1000.0).floor() as i64, now_ms as i64);
+        self.engine
+            .format_relative_time(
+                at_sec,
+                now,
+                crate::executor::local_utc_offset_minutes(),
+                crate::executor::format_prefs::current().date,
+            )
+            .unwrap_or_default()
+            .into()
+    }
+
     /// `t` with numeric interpolation variables (`{{seconds}}`, `{{count}}`,
     /// `{{current}}/{{total}}` — spec 014 flow copy). Numbers only and no
     /// `count` plural option: interpolation stays a pure text substitution,

@@ -21,6 +21,7 @@ use vela_core::app::token_trust::{
     TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res, TrustSimJudgment,
     TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
 };
+use vela_core::app::token_trust::{merge_safe_received, SAFE_RECEIVED_TOPIC};
 
 type Sut = DomainDriver<TokenTrust>;
 
@@ -153,6 +154,25 @@ fn logs_ok(chain_id: u32, logs: Vec<TrustRawLog>) -> Res {
         chain_id,
         outcome: TrustLogsOutcome::Ok { logs },
     }
+}
+
+fn safe_received_ok(chain_id: u32, logs: Vec<TrustRawLog>) -> Res {
+    Res::SafeReceivedLogs {
+        address: WALLET_LC.to_owned(),
+        chain_id,
+        outcome: TrustLogsOutcome::Ok { logs },
+    }
+}
+
+/// The transfer logs, then the wallet's own `SafeReceived` over the same span
+/// (issue #443) answered with none — what the scan asks for next.
+fn logs_round(sut: &mut Sut, chain_id: u32, logs: Vec<TrustRawLog>) -> Vec<Op> {
+    let ops = sut.resolve(logs_ok(chain_id, logs));
+    assert!(
+        matches!(ops.as_slice(), [Op::RpcGetSafeReceivedLogs { topic, .. }] if topic == SAFE_RECEIVED_TOPIC),
+        "after the transfer logs, the wallet's own SafeReceived: {ops:?}"
+    );
+    sut.resolve(safe_received_ok(chain_id, vec![]))
 }
 
 fn timestamp(chain_id: u32, block: u64, sec: Option<f64>) -> Res {
@@ -673,13 +693,14 @@ fn fake_recipient_from_malicious_endpoint_never_reaches_feed() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    let ops = sut.resolve(logs_ok(
+    let ops = logs_round(
+        &mut sut,
         1,
         vec![
             raw_log(NATIVE_SENTINEL, PEER, ATTACKER, 1_000_000, "0xbad", 999, 0),
             raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xgood", 999, 1),
         ],
-    ));
+    );
     assert_eq!(ops.len(), 1, "one distinct block to timestamp");
     sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
 
@@ -739,7 +760,8 @@ fn range_cap_retries_once_and_never_fans_out() {
     assert!(!sut.view().scanning);
     assert!(sut.outstanding().is_empty());
 
-    // A cap with no parsable number stays conservative: 100 blocks.
+    // A cap with no parsable number HALVES the window — 50 blocks. Retrying
+    // 100 after a 101-block refusal was refused again (issue #443).
     sut.dispatch(Event::PollRequested {
         address: WALLET.to_owned(),
     });
@@ -753,7 +775,7 @@ fn range_cap_retries_once_and_never_fans_out() {
         outcome: TrustLogsOutcome::RangeCapped { cap: 0 },
     });
     match &ops[0] {
-        Op::RpcGetLogs { from_block, .. } => assert_eq!(from_block, "0x385"), // 901
+        Op::RpcGetLogs { from_block, .. } => assert_eq!(from_block, "0x3b7"), // 951
         other => panic!("expected the capped retry, got {other:?}"),
     }
 }
@@ -815,13 +837,14 @@ fn timestamps_come_from_blocks_with_now_fallback() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    let ops = sut.resolve(logs_ok(
+    let ops = logs_round(
+        &mut sut,
         1,
         vec![
             raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1),
             raw_log(NATIVE_SENTINEL, PEER, WALLET, 6, "0xb", 998, 0),
         ],
-    ));
+    );
     assert_eq!(
         ops,
         vec![
@@ -869,7 +892,7 @@ fn unresolvable_metadata_withholds_the_erc20_but_not_native() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    sut.resolve(logs_ok(1, logs.clone()));
+    logs_round(&mut sut, 1, logs.clone());
     let ops = sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
     assert_eq!(
         ops,
@@ -899,7 +922,7 @@ fn unresolvable_metadata_withholds_the_erc20_but_not_native() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    let ops = sut.resolve(logs_ok(1, logs));
+    let ops = logs_round(&mut sut, 1, logs);
     sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
     assert!(
         !sut.outstanding()
@@ -925,10 +948,11 @@ fn resolved_metadata_admits_the_erc20_with_symbol_and_decimals() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    sut.resolve(logs_ok(
+    logs_round(
+        &mut sut,
         1,
         vec![raw_log(STABLE, PEER, WALLET, 1_230_000, "0xa", 999, 0)],
-    ));
+    );
     sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
     sut.resolve(Res::ErcMeta {
         chain_id: 1,
@@ -958,10 +982,11 @@ fn feed_sorts_newest_first_and_dedupes_across_overlapping_polls() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1000));
-    sut.resolve(logs_ok(
+    logs_round(
+        &mut sut,
         1,
         vec![older.clone(), newer_low.clone(), newer_high.clone()],
-    ));
+    );
     sut.resolve(timestamp(1, 998, Some(1.0)));
     sut.resolve(timestamp(1, 999, Some(2.0)));
     let view = sut.view();
@@ -977,7 +1002,7 @@ fn feed_sorts_newest_first_and_dedupes_across_overlapping_polls() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1001));
-    sut.resolve(logs_ok(1, vec![newer_high]));
+    logs_round(&mut sut, 1, vec![newer_high]);
     sut.resolve(timestamp(1, 999, Some(2.0)));
     assert_eq!(
         sut.view().incoming.len(),
@@ -1640,4 +1665,157 @@ fn admission_survives_an_account_switch() {
         }],
         "invalidation targets the receipt's account, not the active one"
     );
+}
+
+// ===========================================================================
+// Issue #443 — native money arriving at a deployed Safe (`SafeReceived`)
+// ===========================================================================
+
+/// A real Gnosis log: Safe 0xefb5…83c6 was paid 0.05 xDAI by 0xe91d…a97d
+/// (WXDAI unwrapping — a contract sender, which no balance-diff guess sees).
+const SAFE: &str = "0xEfB56b650206996c749D08f09c276ECF4e2C83c6";
+
+fn safe_received_log(emitter: &str, topic0: &str, tx: &str, index: u64) -> TrustRawLog {
+    TrustRawLog {
+        address: emitter.to_owned(),
+        topics: vec![
+            topic0.to_owned(),
+            "0x000000000000000000000000e91d153e0b41518a2ce8dd3d7944fa863463a97d".to_owned(),
+        ],
+        data: "0x00000000000000000000000000000000000000000000000000b1a2bc2ec50000".to_owned(),
+        transaction_hash: tx.to_owned(),
+        block_number: Some("0x2e60cab".to_owned()),
+        log_index: Some(format!("0x{index:x}")),
+    }
+}
+
+#[test]
+fn a_safes_own_received_log_is_a_native_receipt() {
+    let tx = "0x9dbe7579da595f0ea26352c5337e7532796e8b7b9c072b252c03e52d58047c79";
+    let logs = merge_safe_received(
+        vec![],
+        &[safe_received_log(SAFE, SAFE_RECEIVED_TOPIC, tx, 6)],
+        SAFE,
+    );
+    let transfers = decode_transfer_logs(&logs, SAFE, 100);
+    assert_eq!(transfers.len(), 1);
+    let t = &transfers[0];
+    assert!(t.is_native, "xDAI, not a token: {t:?}");
+    assert_eq!(
+        t.from.to_lowercase(),
+        "0xe91d153e0b41518a2ce8dd3d7944fa863463a97d"
+    );
+    assert_eq!(t.value, 50_000_000_000_000_000);
+    assert_eq!(t.block_number, 0x2e60cab);
+}
+
+#[test]
+fn only_this_wallets_own_received_log_is_believed() {
+    // Invariant ①: the RPC's filter is never trusted. Another contract's
+    // SafeReceived, or this wallet's log with another topic, is no receipt.
+    let stranger = "0x1111111111111111111111111111111111111111";
+    let logs = merge_safe_received(
+        vec![],
+        &[
+            safe_received_log(stranger, SAFE_RECEIVED_TOPIC, "0xaa", 1),
+            safe_received_log(SAFE, TRANSFER_TOPIC, "0xbb", 2),
+        ],
+        SAFE,
+    );
+    assert!(decode_transfer_logs(&logs, SAFE, 100).is_empty());
+}
+
+#[test]
+fn a_payment_also_said_as_eip_7708_is_counted_once() {
+    let tx = "0xcc";
+    let eip7708 = TrustRawLog {
+        address: NATIVE_LOG_ADDRESSES[0].to_owned(),
+        topics: vec![
+            TRANSFER_TOPIC.to_owned(),
+            "0x000000000000000000000000e91d153e0b41518a2ce8dd3d7944fa863463a97d".to_owned(),
+            address_topic(SAFE),
+        ],
+        data: "0x00000000000000000000000000000000000000000000000000b1a2bc2ec50000".to_owned(),
+        transaction_hash: tx.to_owned(),
+        block_number: Some("0x2e60cab".to_owned()),
+        log_index: Some("0x1".to_owned()),
+    };
+    let logs = merge_safe_received(
+        vec![eip7708],
+        &[safe_received_log(SAFE, SAFE_RECEIVED_TOPIC, tx, 6)],
+        SAFE,
+    );
+    assert_eq!(decode_transfer_logs(&logs, SAFE, 100).len(), 1);
+}
+
+/// The machine: a deposit no `Transfer` log announces reaches the feed.
+#[test]
+fn native_money_found_only_by_safe_received_reaches_the_feed() {
+    let mut sut = booted(vec![100]);
+    sut.dispatch(Event::PollRequested {
+        address: WALLET.to_owned(),
+    });
+    sut.resolve(Res::CustomTokens {
+        tokens: Some(vec![]),
+    });
+    sut.resolve(block_number(100, 0x2e60cb0));
+    let ops = sut.resolve(logs_ok(100, vec![]));
+    let [Op::RpcGetSafeReceivedLogs {
+        address,
+        from_block,
+        to_block,
+        topic,
+        ..
+    }] = ops.as_slice()
+    else {
+        panic!("an empty transfer span still asks for SafeReceived: {ops:?}");
+    };
+    assert_eq!(address, WALLET_LC);
+    assert_eq!(topic, SAFE_RECEIVED_TOPIC);
+    assert_eq!(
+        (from_block.as_str(), to_block.as_str()),
+        ("0x2e60c4c", "0x2e60cb0"),
+        "the same span the transfers were read over"
+    );
+    let mut log = safe_received_log(WALLET, SAFE_RECEIVED_TOPIC, "0xdd", 3);
+    log.block_number = Some("0x2e60cab".to_owned());
+    let ops = sut.resolve(safe_received_ok(100, vec![log]));
+    assert!(
+        matches!(ops.as_slice(), [Op::RpcGetBlockByNumber { .. }]),
+        "{ops:?}"
+    );
+    sut.resolve(timestamp(100, 0x2e60cab, Some(1_791_000_000.0)));
+
+    let view = sut.view();
+    assert_eq!(view.incoming.len(), 1);
+    assert!(view.incoming[0].is_native);
+    assert_eq!(view.incoming[0].value, "50000000000000000");
+}
+
+/// A SafeReceived query the endpoint fails costs only the native receipts.
+#[test]
+fn a_failed_safe_received_query_still_lands_the_transfers() {
+    let mut sut = booted(vec![1]);
+    sut.dispatch(Event::PollRequested {
+        address: WALLET.to_owned(),
+    });
+    sut.resolve(Res::CustomTokens {
+        tokens: Some(vec![]),
+    });
+    sut.resolve(block_number(1, 1000));
+    sut.resolve(logs_ok(
+        1,
+        vec![raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xgood", 999, 1)],
+    ));
+    let ops = sut.resolve(Res::SafeReceivedLogs {
+        address: WALLET_LC.to_owned(),
+        chain_id: 1,
+        outcome: TrustLogsOutcome::Failed,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::RpcGetBlockByNumber { .. }]),
+        "{ops:?}"
+    );
+    sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
+    assert_eq!(sut.view().incoming.len(), 1);
 }

@@ -40,6 +40,7 @@ final class TokenTrustExecutor {
     static let operations = [
         "rpc_block_number",
         "rpc_get_logs",
+        "rpc_get_safe_received_logs",
         "rpc_get_block_by_number",
         "multicall_erc20_meta",
         "read_custom_tokens",
@@ -81,6 +82,21 @@ final class TokenTrustExecutor {
 
         case "rpc_get_logs":
             return await getLogs(operation, address: address, chainId: chainId)
+
+        case "rpc_get_safe_received_logs":
+            // Issue #443: the logs the wallet ITSELF emitted with one topic —
+            // the Safe's `SafeReceived`, its record of native money paid to
+            // it. The core re-checks every one; this only asks.
+            let filter: [String: Any] = [
+                "fromBlock": operation["from_block"] as? String ?? "0x0",
+                "toBlock": operation["to_block"] as? String ?? "latest",
+                "topics": [operation["topic"] as? String ?? ""],
+                "address": address,
+            ]
+            return CoreJSON.string([
+                "type": "safe_received_logs", "address": address, "chain_id": chainId,
+                "outcome": await logsOutcome(filter: filter, chainId: chainId),
+            ])
 
         case "rpc_get_block_by_number":
             let block = operation["block"] as? String ?? ""
@@ -163,6 +179,14 @@ final class TokenTrustExecutor {
         let contracts = operation["contracts"] as? [String] ?? []
         if !contracts.isEmpty { filter["address"] = contracts }
 
+        return CoreJSON.string([
+            "type": "logs", "address": address, "chain_id": chainId,
+            "outcome": await logsOutcome(filter: filter, chainId: chainId),
+        ])
+    }
+
+    /// One `eth_getLogs`, classified as the core reads it.
+    private func logsOutcome(filter: [String: Any], chainId: Int) async -> [String: Any] {
         // `kind` is the pool's endpoint CLASS — `rpc` or `bundler`, the two
         // tiers it scores separately. It is not a label for the method, and
         // passing one ("logs") faults the core, which is how this line was
@@ -188,9 +212,7 @@ final class TokenTrustExecutor {
             // strength of an error, which the core would then believe.
             result = ["type": "failed"]
         }
-        return CoreJSON.string([
-            "type": "logs", "address": address, "chain_id": chainId, "outcome": result,
-        ])
+        return result
     }
 
     // MARK: - Wire translation

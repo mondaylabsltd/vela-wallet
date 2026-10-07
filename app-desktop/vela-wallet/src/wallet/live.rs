@@ -125,6 +125,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             decimals: None,
             live: None,
             status: None,
+            updated: None,
         };
     }
 
@@ -144,6 +145,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             status: view
                 .unreachable
                 .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
+            updated: None,
         };
     };
 
@@ -194,6 +196,8 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             && view.tokens.is_empty())
         .then(|| s.live_indicator.clone()),
         status,
+        // Filled by the page, which holds the clock and the language (#443).
+        updated: None,
     }
 }
 

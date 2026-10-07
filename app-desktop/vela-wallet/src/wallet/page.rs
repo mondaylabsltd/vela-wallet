@@ -4003,6 +4003,17 @@ impl WalletPage {
                             }))
                                 as crate::wallet::components::BalanceToggle
                         }),
+                        // Issue #443: read everything again, now — the balances
+                        // and the incoming scan, as coming back to the window
+                        // does. There was no way to ask; the next look was up to
+                        // ten minutes away.
+                        self.identity.is_some().then(|| {
+                            Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::executor::balance_dashboard::refresh(cx);
+                                crate::executor::activity_feed::focus_tick(cx);
+                            })
+                                as crate::wallet::components::BalanceToggle
+                        }),
                     ))
                     .child(
                         div()
@@ -4789,7 +4800,18 @@ impl WalletPage {
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
         let money = self.money(cx);
-        wallet_live::balance(&view, &self.strings, &self.locale, &money)
+        let mut model = wallet_live::balance(&view, &self.strings, &self.locale, &money);
+        // Issue #443: when the figure was last read — "Updated 2m" — beside
+        // the control that reads it again. A deposit sent from another
+        // device gave no sign of when the hero would next look.
+        model.updated = view.last_refreshed_at_ms.map(|at| {
+            SharedString::from(crate::wallet::fill(
+                &self.strings.last_updated,
+                "ago",
+                &self.loc.relative_time(at, crate::executor::now_ms()),
+            ))
+        });
+        model
     }
 
     /// The group rail: the person's own groups, or the mocks'.
@@ -8154,7 +8176,14 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
-            balances = balances.child(balance_display(theme, &mut self.icons, model, None, None));
+            balances = balances.child(balance_display(
+                theme,
+                &mut self.icons,
+                model,
+                None,
+                None,
+                None,
+            ));
         }
 
         let mut rows = div().flex().flex_col();

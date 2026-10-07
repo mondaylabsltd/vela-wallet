@@ -38,6 +38,7 @@ import type { CustomToken } from '$lib/services/tokens-model';
 import type { TrustCustomToken } from '$lib/core/generated/TrustCustomToken';
 import type { TrustMetaEntry } from '$lib/core/generated/TrustMetaEntry';
 import type { TrustRawLog } from '$lib/core/generated/TrustRawLog';
+import type { TrustLogsOutcome } from '$lib/core/generated/TrustLogsOutcome';
 import type { TrustShellResult } from '$lib/core/generated/TrustShellResult';
 import type { TrustEffect } from './token-trust-types';
 
@@ -107,6 +108,23 @@ function fromWireToken(token: TrustCustomToken): CustomToken {
 	};
 }
 
+/** One `eth_getLogs`, classified as the core reads it. */
+async function logsOutcome(
+	filter: Record<string, unknown>,
+	chainId: number
+): Promise<TrustLogsOutcome> {
+	const res = await poolRpcCall('eth_getLogs', [filter], chainId);
+	if (res?.error) {
+		const cap = getLogsRangeCap(res.error);
+		// ① the ONLY wording→axis mapping in the machine.
+		return cap === null ? { type: 'failed' } : { type: 'range_capped', cap };
+	}
+	return {
+		type: 'ok',
+		logs: (Array.isArray(res?.result) ? res.result : []).map(toWireLog)
+	};
+}
+
 export async function executeTokenTrustOperation(effect: TrustEffect): Promise<TrustShellResult> {
 	const operation = effect.operation;
 	switch (operation.type) {
@@ -132,25 +150,29 @@ export async function executeTokenTrustOperation(effect: TrustEffect): Promise<T
 			// address restriction" in the JSON-RPC filter, so it is omitted rather
 			// than sent as `[]` (which every endpoint reads as "match nothing").
 			if (operation.contracts.length > 0) filter.address = operation.contracts;
-			const res = await poolRpcCall('eth_getLogs', [filter], operation.chain_id);
-			if (res?.error) {
-				const cap = getLogsRangeCap(res.error);
-				return {
-					type: 'logs',
-					address: operation.address,
-					chain_id: operation.chain_id,
-					// ① the ONLY wording→axis mapping in the machine.
-					outcome: cap === null ? { type: 'failed' } : { type: 'range_capped', cap }
-				};
-			}
 			return {
 				type: 'logs',
 				address: operation.address,
 				chain_id: operation.chain_id,
-				outcome: {
-					type: 'ok',
-					logs: (Array.isArray(res?.result) ? res.result : []).map(toWireLog)
-				}
+				outcome: await logsOutcome(filter, operation.chain_id)
+			};
+		}
+
+		// Issue #443: the logs the wallet ITSELF emitted with one topic — the
+		// Safe's `SafeReceived`, its record of native money paid to it. The core
+		// re-checks every one; this only asks.
+		case 'rpc_get_safe_received_logs': {
+			const filter = {
+				fromBlock: operation.from_block,
+				toBlock: operation.to_block,
+				topics: [operation.topic],
+				address: operation.address
+			};
+			return {
+				type: 'safe_received_logs',
+				address: operation.address,
+				chain_id: operation.chain_id,
+				outcome: await logsOutcome(filter, operation.chain_id)
 			};
 		}
 
@@ -228,6 +250,14 @@ export function tokenTrustOperationFailure(effect: TrustEffect, error: unknown):
 			// be the non-range arm — `scanRecentTransfers`' `throw` → `catch { [] }`.
 			return {
 				type: 'logs',
+				address: operation.address,
+				chain_id: operation.chain_id,
+				outcome: { type: 'failed' }
+			};
+		case 'rpc_get_safe_received_logs':
+			// The same: a failure costs only the native receipts (issue #443).
+			return {
+				type: 'safe_received_logs',
 				address: operation.address,
 				chain_id: operation.chain_id,
 				outcome: { type: 'failed' }

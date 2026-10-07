@@ -6,7 +6,7 @@
  * quietly untrue.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { collectBundlerUrls, NEVER_BANNED } from './rpc-pool-endpoints';
+import { collectBundlerUrls, getLogsRangeCap, NEVER_BANNED } from './rpc-pool-endpoints';
 import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
 
 const local = new Map<string, string>();
@@ -71,5 +71,26 @@ describe("a custom chain's bundler", () => {
 			{ url: 'https://my-own-bundler.example/31337', source: 'user' },
 			{ url: 'https://my-relay.example/31337', source: 'builtin' }
 		]);
+	});
+});
+
+describe('getLogsRangeCap — a span written as its bounds (issue #443)', () => {
+	it('reads the upper bound, not the lower 0', () => {
+		expect(
+			getLogsRangeCap({ code: -32602, message: 'eth_getLogs is limited to 0 - 50 blocks range' })
+		).toBe(50);
+		expect(getLogsRangeCap({ code: -32000, message: 'block range limited to 0-2,000' })).toBe(2000);
+	});
+
+	it('keeps a stated span first, and halves when there is no upper bound', () => {
+		expect(
+			getLogsRangeCap({
+				code: -32000,
+				message: 'block range too large, max 500 (requested 1 - 9000)'
+			})
+		).toBe(500);
+		expect(
+			getLogsRangeCap({ code: -32000, message: 'eth_getLogs is limited to 0 blocks range' })
+		).toBe(0);
 	});
 });

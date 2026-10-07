@@ -41,6 +41,8 @@ pub struct WalletStrings {
     pub total_balance: SharedString,
     pub live_indicator: SharedString,
     pub balance_stale: SharedString,
+    /// Issue #443: "Updated {{ago}}" beside the hero's refresh control.
+    pub last_updated: SharedString,
     /// Nothing could be read and nothing is known (spec 038): the network
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
@@ -172,6 +174,7 @@ impl WalletStrings {
             total_balance: s("home.totalBalance"),
             live_indicator: s("home.liveIndicator"),
             balance_stale: s("home.balanceStale"),
+            last_updated: s("home.lastUpdated"),
             balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
             unreachable_one: raw("assets.unreachableOne"),
