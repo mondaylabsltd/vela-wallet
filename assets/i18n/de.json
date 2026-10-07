@@ -1414,8 +1414,7 @@
     "approvalChoice": "Wähle zuerst einen Freigabebetrag",
     "batchUnsettled": "Jeder Aufruf im Batch wird geprüft…",
     "feeMeasuring": "Netzwerkgebühr wird berechnet…",
-    "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
-    "feeShort": "Dieser Coin reicht nicht für die Gebühr — wähle einen anderen"
+    "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen"
    }
   },
   "signingApprove": {

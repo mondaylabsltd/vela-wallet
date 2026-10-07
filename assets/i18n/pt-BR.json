@@ -1418,8 +1418,7 @@
     "approvalChoice": "Escolha primeiro um valor de aprovação",
     "batchUnsettled": "Verificando cada chamada do lote…",
     "feeMeasuring": "Calculando a taxa de rede…",
-    "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
-    "feeShort": "Esta moeda não cobre a taxa — escolha outra"
+    "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo"
    }
   },
   "signingApprove": {

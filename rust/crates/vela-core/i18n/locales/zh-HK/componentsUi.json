@@ -227,8 +227,7 @@
         "approvalChoice": "請先揀授權額度",
         "batchUnsettled": "正在逐一檢查呢批調用…",
         "feeMeasuring": "正在計算網絡費用…",
-        "feeFailed": "計唔到費用——撳費用重試",
-        "feeShort": "呢個幣唔夠畀手續費——換一個"
+        "feeFailed": "計唔到費用——撳費用重試"
       }
     },
     "currency": {

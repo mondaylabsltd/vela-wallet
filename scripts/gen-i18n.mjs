@@ -576,8 +576,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1881 (issue #430, 2026-10-06): + `contacts.importFailEmpty` — a file with a
 //   header and no rows says it holds no contacts, not "use a JSON or CSV file".
 //   1784 leaves.
-if (PATHS.length !== 1881) fail(`expected 1881 paths (1784 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1784) fail(`expected 1784 leaf paths, got ${leafSet.size}`);
+// 1880 (issue #438, 2026-10-07): − `componentsUi.signing.confirmBlock.feeShort`
+//   — a short fee coin is said under the fee ("Insufficient ETH for gas fees",
+//   or `componentsUi.gas.noCoinPays`), and the slide said it a second time;
+//   `ConfirmBlock::FeeShort` now names no line, so no client draws this one.
+//   Same branches: 1783 leaves.
+if (PATHS.length !== 1880) fail(`expected 1880 paths (1783 leaf + 97 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1783) fail(`expected 1783 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

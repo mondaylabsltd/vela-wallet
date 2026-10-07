@@ -1466,8 +1466,7 @@
     "approvalChoice": "Choose an approval amount first",
     "batchUnsettled": "Checking each call in this batch…",
     "feeMeasuring": "Working out the network fee…",
-    "feeFailed": "Couldn't work out the fee. Tap it to retry",
-    "feeShort": "Not enough of this coin for the fee"
+    "feeFailed": "Couldn't work out the fee. Tap it to retry"
    }
   },
   "currency": {

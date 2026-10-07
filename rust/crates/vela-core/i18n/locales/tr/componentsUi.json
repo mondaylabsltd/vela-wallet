@@ -227,8 +227,7 @@
         "approvalChoice": "Önce bir onay miktarı seçin",
         "batchUnsettled": "Toplu işlemdeki her çağrı kontrol ediliyor…",
         "feeMeasuring": "Ağ ücreti hesaplanıyor…",
-        "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
-        "feeShort": "Bu coin ücret için yetmiyor — başka birini seçin"
+        "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun"
       }
     },
     "signingApprove": {

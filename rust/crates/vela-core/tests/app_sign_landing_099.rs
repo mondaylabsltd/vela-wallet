@@ -123,16 +123,15 @@ fn the_fee_says_which() {
         "priced, not ready"
     );
 
-    // Issue #408: short, and so is every other coin — the line says no coin
-    // can pay, not "pick another".
-    assert_eq!(
-        confirm_state(&input).key.as_deref(),
-        Some("componentsUi.signing.confirmBlock.feeShort")
-    );
+    // Issue #438: a short coin is said under the fee ("Insufficient ETH for
+    // gas fees"; issue #408's "No token can pay this fee" when no coin on
+    // offer can), so the slide carries no second copy of it — either way.
+    assert_eq!(confirm_state(&input).key, None);
     input.fee.as_mut().unwrap().no_coin_pays = true;
     let state = confirm_state(&input);
+    assert!(!state.enabled);
     assert_eq!(state.block, Some(ConfirmBlock::FeeShort));
-    assert_eq!(state.key.as_deref(), Some("componentsUi.gas.noCoinPays"));
+    assert_eq!(state.key, None);
     input.fee.as_mut().unwrap().no_coin_pays = false;
 
     let fee = input.fee.as_mut().unwrap();

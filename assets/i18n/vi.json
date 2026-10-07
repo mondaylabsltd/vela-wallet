@@ -1414,8 +1414,7 @@
     "approvalChoice": "Hãy chọn hạn mức phê duyệt trước",
     "batchUnsettled": "Đang kiểm tra từng lệnh gọi trong lô…",
     "feeMeasuring": "Đang tính phí mạng…",
-    "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
-    "feeShort": "Coin này không đủ trả phí — hãy chọn coin khác"
+    "feeFailed": "Không tính được phí — chạm vào phí để thử lại"
    }
   },
   "signingApprove": {

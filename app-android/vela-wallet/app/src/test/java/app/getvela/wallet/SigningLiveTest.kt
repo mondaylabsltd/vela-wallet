@@ -832,6 +832,47 @@ class SigningLiveTest {
         assertFalse(open.options[1].disabled)
     }
 
+    /**
+     * Issue #438 (v0.9.6, the same key backup): "No token can pay this fee"
+     * in red under the fee and again in grey under the slide. The core's gate
+     * names no line for a short coin — the fee section says it, where the
+     * other coins are — so the slide stays shut with nothing repeated under it.
+     */
+    @Test
+    fun `issue 438 - a short coin is said under the fee and not again under the slide`() {
+        val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val read = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction)
+        val nothingPays = FeeView(
+            fee = estimate(FeeAssetView.Native, "1333800000000000"),
+            options = listOf(
+                eth.copy(amount = "1333800000000000", short = FeeShortfall("0.001334 ETH", "0 ETH")),
+                usdt.copy(balance = "754189", amount = "3583610", insufficient = true, short = FeeShortfall("3.58361 USDT", "0.754189 USDT")),
+            ),
+            confirm_fee_ready = false,
+            no_coin_pays = true,
+        )
+        val model = SigningLive.model(drawn, request(params), sign, read, GuardView(), nothingPays, ctx)
+        assertFalse(model.confirmEnabled)
+        assertEquals("No token can pay this fee", (model.fee as FeeModel.OnChain).warning)
+        assertNull(model.confirmBlockLine)
+
+        // One coin short and another able: still said once, under the fee.
+        val ethShort = FeeView(
+            fee = estimate(FeeAssetView.Native, "400000000000000"),
+            options = listOf(eth.copy(short = FeeShortfall("0.0004 ETH", "0 ETH")), usdt),
+            confirm_fee_ready = false,
+        )
+        val oneShort = SigningLive.model(drawn, request(params), sign, read, GuardView(), ethShort, ctx)
+        assertFalse(oneShort.confirmEnabled)
+        assertEquals(strings.t("send.warnInsufficientGas", mapOf("sym" to "ETH")), (oneShort.fee as FeeModel.OnChain).warning)
+        assertNull(oneShort.confirmBlockLine)
+
+        // A fee still being measured has no line under the fee, so the slide says why.
+        val measuring = SigningLive.model(drawn, request(params), sign, read, GuardView(), FeeView(busy = true), ctx)
+        assertEquals(strings.t("componentsUi.signing.confirmBlock.feeMeasuring"), measuring.confirmBlockLine)
+    }
+
     /** While the fee is re-measured, nothing is settled: the line waits, as the gate does. */
     @Test
     fun `issue 408 - no coin pays is not said of a figure being re-measured`() {

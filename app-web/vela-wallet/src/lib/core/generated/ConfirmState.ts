@@ -9,6 +9,7 @@ block: ConfirmBlock | null,
 /**
  * The line under the shut slide (`componentsUi.signing.confirmBlock.*`),
  * or `None` where the sheet already says it in its own way (no request,
- * signing in progress, the funding sheet, a refusal's own panel).
+ * signing in progress, the funding sheet, a refusal's own panel, a short
+ * fee coin's line under the fee).
  */
 key: string | null, };
