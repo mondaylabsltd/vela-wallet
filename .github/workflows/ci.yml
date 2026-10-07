@@ -543,37 +543,6 @@ jobs:
             echo "::error::Swift $major.$minor is too old: app-ios needs 6.2 for \`nonisolated deinit\` (spec 058). The newest Xcode on this image is $newest — bump \`runs-on\` to an image that ships Xcode 26 or later."
             exit 1
           fi
-      # The destination is RESOLVED, not spelled. Two traps, both hit while
-      # writing this job:
-      #   - `name=iPhone 16` is ambiguous the moment a machine has that device
-      #     under two runtimes, and xcodebuild answers by printing every
-      #     simulator it knows rather than picking one.
-      #   - `OS=latest` does not mean "newest runtime that has this device"; it
-      #     means the newest runtime, which may not offer that device at all.
-      # Asking simctl for a device that actually exists sidesteps both.
-      - name: Resolve a simulator that actually exists
-        id: sim
-        run: |
-          udid=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)["devices"]
-          best=None
-          for runtime, devices in d.items():
-              if "iOS" not in runtime: continue
-              ver=tuple(int(x) for x in runtime.split(".iOS-")[-1].split("-"))
-              for dev in devices:
-                  if dev.get("isAvailable") and dev["name"].startswith("iPhone"):
-                      if best is None or ver > best[0]: best=(ver, dev["udid"], dev["name"], runtime)
-          if best is None: sys.exit("no available iPhone simulator")
-          print(best[1])
-          print(f"using {best[2]} on {best[3]}", file=sys.stderr)
-          ')
-          echo "udid=$udid" >> "$GITHUB_OUTPUT"
-          # Boot it now, in the background. A cold boot is most of the 131 s
-          # of silence between the last link and the first test (#457), and
-          # nothing before `xcodebuild test` needs the simulator; xcodebuild
-          # waits for one still booting.
-          nohup sh -c "xcrun simctl boot $udid && xcrun simctl bootstatus $udid" > "$RUNNER_TEMP/simulator-boot.log" 2>&1 &
       # Same story as Android: `app-ios/VelaCoreKit/Artifacts/` is gitignored, so
       # the xcframework must be built before Xcode can resolve the local package.
       # macos-15 minutes bill at ten times linux, so this is the step that decides
@@ -603,9 +572,8 @@ jobs:
         with:
           path: app-ios/VelaDevFixturesKit/Artifacts
           key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
-      # Rust only when a library has to be built. On a hit, installing the
-      # toolchain and restoring 330 MB of target/ bought nothing and took up
-      # to 3.5 min beside the simulator's boot (#457).
+      # Rust only when a library has to be built: on a hit nothing below runs
+      # cargo, and the toolchain plus 330 MB of target/ cost ~40 s for nothing.
       - uses: dtolnay/rust-toolchain@stable
         if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
         with:
@@ -626,13 +594,32 @@ jobs:
       - name: Build the dev-fixtures xcframework
         if: steps.devfixtures.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-dev-fixtures.sh
-      # Lottie's clone was 30 s of every leg: the packages are pinned, so keep
-      # the checkouts.
-      - name: Cache the Swift packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/spm
-          key: spm-${{ hashFiles('app-ios/VelaWallet/VelaWallet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      # The destination is RESOLVED, not spelled. Two traps, both hit while
+      # writing this job:
+      #   - `name=iPhone 16` is ambiguous the moment a machine has that device
+      #     under two runtimes, and xcodebuild answers by printing every
+      #     simulator it knows rather than picking one.
+      #   - `OS=latest` does not mean "newest runtime that has this device"; it
+      #     means the newest runtime, which may not offer that device at all.
+      # Asking simctl for a device that actually exists sidesteps both.
+      - name: Resolve a simulator that actually exists
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for runtime, devices in d.items():
+              if "iOS" not in runtime: continue
+              ver=tuple(int(x) for x in runtime.split(".iOS-")[-1].split("-"))
+              for dev in devices:
+                  if dev.get("isAvailable") and dev["name"].startswith("iPhone"):
+                      if best is None or ver > best[0]: best=(ver, dev["udid"], dev["name"], runtime)
+          if best is None: sys.exit("no available iPhone simulator")
+          print(best[1])
+          print(f"using {best[2]} on {best[3]}", file=sys.stderr)
+          ')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
       # NOTE on reading this job's output: the XCTest reporter prints
       # "Executed 0 tests" here and it is NOT a failure. VelaWalletTests uses
       # Swift Testing (`@Test`), which reports on its own line — "Test run with
@@ -655,7 +642,6 @@ jobs:
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             $TESTS \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
