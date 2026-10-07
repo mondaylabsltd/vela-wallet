@@ -170,12 +170,22 @@
 				screen also loads the site's icon from the site itself.
 			</li>
 			<li>
-				<strong>Analytics, in the web app only</strong> (<code>app.getvela.app</code>) — Rybbit, the
-				cookieless tool the website uses, served from <code>tj.appsdata.org</code>, counts which
-				pages are viewed. It records a page's path, never what follows it in the address (where a
-				payment link carries a recipient and an amount), and not the links you open. It sets no
-				cookies, and we don't use it for advertising or share it. The mobile and desktop apps and
-				the browser extension don't include it.
+				<strong>Usage statistics, in the web wallet and the browser extension</strong> (not the
+				iPhone, Android or desktop apps) — sent to Rybbit, the cookieless analytics tool the website
+				uses, at
+				<code>tj.appsdata.org</code>, by the wallet's own code: no outside script runs in it. What
+				is sent: which screen is open, as its path with anything that could identify you masked;
+				named moments such as "wallet created", "send confirmed" or "network added", with only
+				coarse details — the network's chain ID, which kind of passkey, whether it worked or why
+				not; the campaign tags of the link you arrived by (<code>utm_source</code> and the like,
+				never any other part of the address — a payment link's recipient and amount stay out); your
+				screen size, your browser's language and the domain of the site that linked you there. Never
+				your addresses, amounts, transaction hashes, contact names or ENS names. Like any web
+				request it reaches Rybbit with your IP address and browser type, which it uses to count
+				visits and tell countries and devices apart. It sets no cookies and stores no identifier on
+				your device, and we don't use it for advertising or share it.
+				<strong>Settings → About → Share anonymous usage statistics</strong> turns it off on that browser,
+				and from then on nothing is sent.
 			</li>
 		</ul>
 	</section>
@@ -234,7 +244,8 @@
 				<strong>Analytics:</strong> we use Rybbit, a cookieless analytics tool, served from
 				<code>tj.appsdata.org</code>, to count page views and clicks on some buttons and which
 				sections of the home page are viewed. It sets no cookies and we don't use it for advertising
-				or share it.
+				or share it. Links from the website to the web wallet and to the app stores carry campaign
+				tags that name the website and the button, so a visit can be counted as coming from here.
 			</li>
 			<li>
 				<strong>Fonts:</strong> pages load fonts from Google Fonts, so Google receives your IP address
@@ -284,6 +295,12 @@
 			<li>
 				<strong>Feedback</strong> sent from the extension works as described under Bug reports. Its device
 				details also include counts of the extension's own errors, never site names.
+			</li>
+			<li>
+				<strong>Usage statistics</strong> — the extension's wallet reports which of its screens are opened
+				and how its steps end, as described under Third parties the apps contact directly, including whether
+				you approved or declined a site's request (by kind and network, never the site, the message or
+				the transaction). Settings → About turns it off.
 			</li>
 		</ul>
 		<p>

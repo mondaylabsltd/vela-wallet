@@ -60,6 +60,7 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { fill } from '$lib/wallet/messages';
 	import { encodeQr } from '$lib/wallet/qr';
+	import { track } from '$lib/analytics';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -267,9 +268,18 @@
 	$effect(() => {
 		const file = view?.export;
 		if (file === undefined || file === null) return;
-		void saveTextFile(file.filename, file.content, file.mime).then(() =>
-			contacts.dispatch({ type: 'export_taken' })
-		);
+		void saveTextFile(file.filename, file.content, file.mime).then(() => {
+			contacts.dispatch({ type: 'export_taken' });
+			track('contacts_exported');
+		});
+	});
+
+	/** Usage statistics: an import counts when the core reports one (until acknowledged). */
+	let importReported = false;
+	$effect(() => {
+		const landed = view?.last_import !== null && view?.last_import !== undefined;
+		if (landed && !importReported) track('contacts_imported');
+		importReported = landed;
 	});
 
 	async function importBook(intoGroup: string | undefined): Promise<void> {
@@ -553,6 +563,8 @@
 	}
 
 	function saveContact(draft: { name: string; address: string }): void {
+		// A new entry — the add form, or a recent payee saved for the first time.
+		if (sheet.kind === 'add' || (sheet.kind === 'edit' && sheet.unsaved)) track('contact_added');
 		contacts.dispatch({
 			type: 'save',
 			input: {

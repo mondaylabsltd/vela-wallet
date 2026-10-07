@@ -93,6 +93,10 @@
    "title": "Enviar comentarios",
    "subtitle": "Reporta un error o comparte una idea"
   },
+  "analytics": {
+   "title": "Compartir estadísticas de uso anónimas",
+   "subtitle": "Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos ni nombres."
+  },
   "about": {
    "title": "Acerca de",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "Mostrar saldo",
   "a11ySwitchAccount": "Cuenta {{name}}. Cambiar de cuenta",
   "a11yOpenSettings": "Ajustes",
-  "balanceDetailUpdatedLabel": "Actualizado"
+  "balanceDetailUpdatedLabel": "Actualizado",
+  "getApp": {
+   "title": "Lleva Vela en tu teléfono",
+   "body": "Vela también es una app para iPhone y Android.",
+   "scanHint": "Escanea con la cámara de tu teléfono"
+  }
  },
  "send": {
   "filterStable": "Estables",

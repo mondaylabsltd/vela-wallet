@@ -11,6 +11,7 @@
 	 * it, so what the person memorises here is what every other client will
 	 * draw.
 	 */
+	import type { Snippet } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import PasskeyProviderMark from './PasskeyProviderMark.svelte';
 	import { keyBadge, providerLineFor } from '$lib/onboarding/core/copy';
@@ -25,9 +26,11 @@
 		keys: CreateKeyRow[];
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onEnter: () => void;
+		/** Under the keys: the one-time "Get Vela on your phone" suggestion. */
+		aside?: Snippet;
 	}
 
-	let { address, walletName, keys, strings, onEnter }: Props = $props();
+	let { address, walletName, keys, strings, onEnter, aside }: Props = $props();
 
 	/** "Copied" stands in for the address, then the address comes back. */
 	let copied = $state(false);
@@ -125,6 +128,8 @@
 			</li>
 		{/each}
 	</ul>
+
+	{#if aside}{@render aside()}{/if}
 
 	<div class="spacer"></div>
 

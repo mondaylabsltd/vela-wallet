@@ -93,6 +93,10 @@
    "title": "意見回饋",
    "subtitle": "回報問題或提供建議"
   },
+  "analytics": {
+   "title": "分享匿名使用統計",
+   "subtitle": "只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額或名稱。"
+  },
   "about": {
    "title": "關於",
    "subtitle": "Vela Wallet v{{version}}"
@@ -251,7 +255,12 @@
   "a11yShowBalance": "顯示餘額",
   "a11ySwitchAccount": "帳戶 {{name}}。切換帳戶",
   "a11yOpenSettings": "設定",
-  "balanceDetailUpdatedLabel": "已更新"
+  "balanceDetailUpdatedLabel": "已更新",
+  "getApp": {
+   "title": "在手機上使用 Vela",
+   "body": "Vela 也有 iPhone 與 Android App。",
+   "scanHint": "用手機相機掃描"
+  }
  },
  "send": {
   "filterStable": "穩定幣",

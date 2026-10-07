@@ -581,9 +581,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   or `componentsUi.gas.noCoinPays`), and the slide said it a second time;
 //   `ConfirmBlock::FeeShort` now names no line, so no client draws this one.
 //   Same branches: 1783 leaves.
-if (PATHS.length !== 1880) fail(`expected 1880 paths (1783 leaf + 97 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1783) fail(`expected 1783 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 97) fail(`expected 97 branch paths, got ${branchSet.size}`);
+// 1887 (web analytics + app prompt, 2026-10-07): + the `settings.analytics`
+//   branch ({title, subtitle} — the web wallet's and extension's "Share
+//   anonymous usage statistics" switch) and the `home.getApp` branch ({title,
+//   body, scanHint} — the "Get Vela on your phone" card, off until the store
+//   links exist). "App Store" and "Google Play" are product names, not prose,
+//   and stay out of the corpus. 1788 leaves, 99 branches.
+if (PATHS.length !== 1887) fail(`expected 1887 paths (1788 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1788) fail(`expected 1788 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -13,6 +13,7 @@
 		type PlatformId
 	} from '$lib/downloads/platforms';
 	import { pathFor } from '$lib/i18n/locales';
+	import { rybbitEvent, storeLinks, webWalletLink } from '$lib/app-links';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import type { PageData } from './$types';
 
@@ -47,7 +48,14 @@
 	// work ("scan with another phone", a security key).
 	const BUILD_FROM_SOURCE =
 		'https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/ARCHITECTURE.md#a-phone-app-you-built-yourself';
-	const WEB_WALLET = 'https://wallet.getvela.app/';
+	// The wallet reads these campaign tags into its own statistics, so a visit
+	// sent from here is followed into it (`$lib/app-links`).
+	const WEB_WALLET_LOCATION = 'get-started-web';
+	const WEB_WALLET = webWalletLink(WEB_WALLET_LOCATION);
+	// The phone stores, tagged as this page's; empty — "coming soon" — until
+	// the listings are live.
+	const STORES_LOCATION = 'get-started';
+	const phoneStores = storeLinks(STORES_LOCATION);
 
 	const fill = (s: string, vars: Record<string, string | number>) =>
 		s.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? ''));
@@ -256,6 +264,7 @@
 				<p>{m.getStarted.platforms.web.blurb}</p>
 			</div>
 			<div class="actions">
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- another origin: the web wallet -->
 				<a
 					class="btn btn-primary"
 					href={WEB_WALLET}
@@ -263,9 +272,11 @@
 					rel="noopener"
 					data-rybbit-event="cta_click"
 					data-rybbit-prop-location="get-started-web"
+					onclick={() => rybbitEvent('web_wallet_open', { location: WEB_WALLET_LOCATION })}
 				>
 					{m.getStarted.platforms.web.action}
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</div>
 		</li>
 
@@ -415,10 +426,28 @@
 				<p>{m.getStarted.platforms.mobile.blurb}</p>
 			</div>
 			<div class="actions">
-				<span class="store">
-					<span class="store-name">{m.getStarted.platforms.mobile.stores}</span>
-					<span class="tag tag-soon">{m.getStarted.comingSoon}</span>
-				</span>
+				{#if phoneStores.length > 0}
+					{#each phoneStores as entry (entry.store)}
+						<!-- eslint-disable svelte/no-navigation-without-resolve -- a store listing -->
+						<a
+							class="btn btn-secondary"
+							href={entry.url}
+							target="_blank"
+							rel="noopener"
+							data-rybbit-event="store_click"
+							data-rybbit-prop-store={entry.store}
+							data-rybbit-prop-location={STORES_LOCATION}
+						>
+							{entry.store === 'app_store' ? 'App Store' : 'Google Play'}
+						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
+					{/each}
+				{:else}
+					<span class="store">
+						<span class="store-name">{m.getStarted.platforms.mobile.stores}</span>
+						<span class="tag tag-soon">{m.getStarted.comingSoon}</span>
+					</span>
+				{/if}
 				<a
 					class="github"
 					href={BUILD_FROM_SOURCE}

@@ -65,6 +65,11 @@
     "a11yShowBalance": "잔액 표시",
     "a11ySwitchAccount": "{{name}} 계정. 계정 전환",
     "a11yOpenSettings": "설정",
-    "balanceDetailUpdatedLabel": "업데이트됨"
+    "balanceDetailUpdatedLabel": "업데이트됨",
+    "getApp": {
+      "title": "휴대폰에서도 Vela를",
+      "body": "Vela는 iPhone과 Android 앱으로도 있습니다.",
+      "scanHint": "휴대폰 카메라로 스캔하세요"
+    }
   }
 }

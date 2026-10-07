@@ -65,6 +65,11 @@
     "a11yShowBalance": "Показать баланс",
     "a11ySwitchAccount": "Аккаунт {{name}}. Сменить аккаунт",
     "a11yOpenSettings": "Настройки",
-    "balanceDetailUpdatedLabel": "Обновлено"
+    "balanceDetailUpdatedLabel": "Обновлено",
+    "getApp": {
+      "title": "Vela на телефоне",
+      "body": "Vela есть и в виде приложения для iPhone и Android.",
+      "scanHint": "Отсканируйте камерой телефона"
+    }
   }
 }

@@ -14,6 +14,7 @@
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
+	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralTemplate } from '$lib/i18n/plural';
@@ -72,7 +73,12 @@
 		{prompt}
 		{complete}
 		onExit={() => goto(home)}
-	/>
+	>
+		{#snippet doneAside()}
+			<!-- Once per device, and nothing until the store links exist. -->
+			<AppPrompt placement="create_done" messages={data.appPrompt} />
+		{/snippet}
+	</CreateFlow>
 </main>
 
 <!-- Spec 075: a founding key can be minted on the Trusted Signer's page. The

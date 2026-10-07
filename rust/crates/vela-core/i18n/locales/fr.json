@@ -93,6 +93,10 @@
       "title": "Envoyer un commentaire",
       "subtitle": "Signaler un bug ou proposer une idée"
     },
+    "analytics": {
+      "title": "Partager des statistiques d'utilisation anonymes",
+      "subtitle": "Seulement les écrans ouverts et les étapes terminées — jamais d'adresses, de montants ni de noms."
+    },
     "about": {
       "title": "À propos",
       "subtitle": "Vela Wallet v{{version}}"

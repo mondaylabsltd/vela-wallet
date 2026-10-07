@@ -65,6 +65,11 @@
     "a11yShowBalance": "Show balance",
     "a11ySwitchAccount": "Account {{name}}. Switch account",
     "a11yOpenSettings": "Settings",
-    "balanceDetailUpdatedLabel": "Updated"
+    "balanceDetailUpdatedLabel": "Updated",
+    "getApp": {
+      "title": "Get Vela on your phone",
+      "body": "Vela is also an app for iPhone and Android.",
+      "scanHint": "Scan with your phone's camera"
+    }
   }
 }

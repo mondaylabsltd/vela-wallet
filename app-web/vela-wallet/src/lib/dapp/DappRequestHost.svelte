@@ -56,6 +56,8 @@
 	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
 	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
 	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
+	import { track } from '$lib/analytics';
+	import { dappRequestKind } from '$lib/analytics/dapp';
 
 	interface Props {
 		/**
@@ -298,6 +300,11 @@
 				owing = null;
 				signingTransport = null;
 				void answerRequest(incoming.rid, error ? { error } : { result }, opHash);
+				// Usage statistics: the person's answer, by request kind and chain
+				// — never the site, the message or the transaction.
+				const answered = { kind: dappRequestKind(incoming.method), chain: chainId || undefined };
+				if (!error) track('dapp_request_approved', answered);
+				else if (error.code === 4001) track('dapp_request_rejected', answered);
 				// A request the CORE refuses outright is answered the moment it
 				// arrives — so the page never hangs — but the sheet is still
 				// explaining WHY; the person's dismissal is what leaves (081).
@@ -375,6 +382,7 @@
 		addingChain = null;
 		busy = false;
 		if (outcome.type === 'added') {
+			track('dapp_request_approved', { kind: 'add_network', chain });
 			await publishExtChains();
 			await answerRequest(id, { result: null });
 		} else {
@@ -382,6 +390,7 @@
 				code: 4001,
 				message: 'User rejected the request'
 			};
+			if (error.code === 4001) track('dapp_request_rejected', { kind: 'add_network', chain });
 			await answerRequest(id, { error });
 		}
 		request = null;
@@ -473,6 +482,7 @@
 		const current = request;
 		try {
 			await approve(current, facts, chainId, () => claimFor(current.rid, 'approve'));
+			track('dapp_connect_approved', { chain: chainId || undefined });
 			owing = null;
 			stage = { kind: 'done' };
 			request = null;
@@ -494,6 +504,7 @@
 	async function onCancel(): Promise<void> {
 		if (busy) return;
 		busy = true;
+		if (stage.kind === 'consent') track('dapp_connect_rejected', { chain: chainId || undefined });
 		const rid = owing;
 		owing = null;
 		// The card goes BEFORE the answer is awaited: the worker hands the next

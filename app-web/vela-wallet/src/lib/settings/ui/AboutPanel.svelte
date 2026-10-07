@@ -4,17 +4,25 @@
 	 * inventory and the three outbound links. Every value here is a fact about
 	 * the running app, which is why the whole panel is key/value rows.
 	 */
-	import type { AboutModel } from '../model';
+	import type { AboutModel, SwitchRowModel } from '../model';
 	import BrandMark from '$lib/ui/BrandMark.svelte';
 	import KeyValueRow from './KeyValueRow.svelte';
+	import SwitchRow from './SwitchRow.svelte';
 
 	interface Props {
 		panel: AboutModel;
 		/** Desktop lays the mark beside the tagline; the phone stacks them. */
 		layout?: 'stacked' | 'inline';
+		/**
+		 * "Share anonymous usage statistics" — the web wallet's and the
+		 * extension's, under the privacy policy that describes it. Absent in
+		 * the gallery.
+		 */
+		analytics?: SwitchRowModel;
+		onanalytics?: (on: boolean) => void;
 	}
 
-	let { panel, layout = 'stacked' }: Props = $props();
+	let { panel, layout = 'stacked', analytics, onanalytics }: Props = $props();
 
 	// The mark is drawn INTO the circle the mock shows, so it is sized to
 	// fit it rather than to fill it. A prop, not CSS — BrandMark writes width
@@ -41,6 +49,10 @@
 {#each panel.links as row (row.label)}
 	<KeyValueRow {row} />
 {/each}
+
+{#if analytics !== undefined}
+	<div class="privacy"><SwitchRow row={analytics} onchange={onanalytics} /></div>
+{/if}
 
 <p class="footer">{panel.footer}</p>
 
@@ -91,6 +103,12 @@
 		margin: var(--space-3xl) 0 var(--space-md);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	/* Its own group under the links: a hairline above, as between rows. */
+	.privacy {
+		margin-top: var(--space-xl);
+		border-top: var(--border-hairline) solid var(--color-border-base);
 	}
 
 	.footer {

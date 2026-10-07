@@ -65,6 +65,11 @@
     "a11yShowBalance": "Afficher le solde",
     "a11ySwitchAccount": "Compte {{name}}. Changer de compte",
     "a11yOpenSettings": "Réglages",
-    "balanceDetailUpdatedLabel": "À jour"
+    "balanceDetailUpdatedLabel": "À jour",
+    "getApp": {
+      "title": "Vela sur votre téléphone",
+      "body": "Vela existe aussi en application pour iPhone et Android.",
+      "scanHint": "Scannez avec l'appareil photo de votre téléphone"
+    }
   }
 }

@@ -93,6 +93,10 @@
       "title": "피드백",
       "subtitle": "버그 신고 또는 의견 보내기"
     },
+    "analytics": {
+      "title": "익명 사용 통계 공유",
+      "subtitle": "어떤 화면을 열고 어떤 단계를 마쳤는지만 — 주소, 금액, 이름은 절대 포함하지 않습니다."
+    },
     "about": {
       "title": "정보",
       "subtitle": "Vela Wallet v{{version}}"

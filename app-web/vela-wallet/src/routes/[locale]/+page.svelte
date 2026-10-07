@@ -49,6 +49,8 @@
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
 	import type { LoginView } from '$lib/onboarding/generated/LoginView';
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
+	import { track, type AnalyticsEventProps } from '$lib/analytics';
+	import { analyticsMethod } from '$lib/analytics/methods';
 
 	let { data }: PageProps = $props();
 
@@ -134,12 +136,39 @@
 	const transportFailed = $derived(loginView?.transport_failed ?? false);
 
 	function prompt(kind: PromptKind): Promise<boolean> {
+		if (kind.type === 'sign_in_failed' || kind.type === 'recover_failed') signInEnded('error');
+		else if (kind.type === 'not_supported_login' || kind.type === 'incompatible_login')
+			signInEnded('unsupported');
 		return new Promise((settle) => {
 			pending = { copy: promptCopy(kind, strings), resolve: settle };
 		});
 	}
 
+	/**
+	 * Usage statistics (`$lib/analytics`): one attempt per press of a method,
+	 * ended by the wallet opening, a refusal the core words as a prompt, or —
+	 * the one way out with no prompt — the passkey sheet closed (the core goes
+	 * idle and says nothing). The method is the key the person reached for.
+	 */
+	let signInMethod: KeyMethod | null = null;
+	let signInOpen = false;
+	function signInEnded(reason: AnalyticsEventProps<'sign_in_failed'>['reason']): void {
+		if (!signInOpen) return;
+		signInOpen = false;
+		track('sign_in_failed', { method: analyticsMethod(signInMethod), reason });
+	}
+	function noteLoginView(prev: LoginView | null, next: LoginView): void {
+		// The prompt a refusal raises is requested in the same step that goes
+		// idle; it reaches `prompt` before this timer fires, and closes the
+		// attempt first.
+		if (prev?.busy === true && !next.busy) setTimeout(() => signInEnded('cancelled'), 0);
+	}
+
 	async function complete(mode: CompletionMode): Promise<void> {
+		if (signInOpen) {
+			signInOpen = false;
+			track('sign_in_completed', { method: analyticsMethod(signInMethod) });
+		}
 		await session.boot();
 		session.accountEstablished(mode);
 		// Signing in ends where the wallet is, not back on the page that
@@ -160,16 +189,24 @@
 			if (!login) {
 				await loadOnboardingCore();
 				login = createLoginSession({
-					onView: (next) => (loginView = next),
+					onView: (next) => {
+						const prev = loginView;
+						loginView = next;
+						noteLoginView(prev, next);
+					},
 					deps: { prompt, complete },
 					onError: (error) => {
 						console.error('[login] core fault:', error);
 						storageFault = error instanceof Error ? error.message : String(error);
 						starting = false;
+						signInEnded('error');
 					}
 				});
 				login.start({ type: 'start' });
 			}
+			signInMethod = method;
+			signInOpen = true;
+			track('sign_in_started', { method: analyticsMethod(method) });
 			login.dispatch({ type: 'sign_in', method });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never

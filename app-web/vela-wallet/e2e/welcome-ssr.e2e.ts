@@ -295,8 +295,8 @@ for (const locale of ['en', 'zh'] as const) {
 			'property="og:type" content="website"',
 			'property="og:title"',
 			'property="og:description"',
-			`property="og:url" content="https://app.getvela.app/${locale}"`,
-			'property="og:image" content="https://app.getvela.app/og-image.png"',
+			`property="og:url" content="https://wallet.getvela.app/${locale}"`,
+			'property="og:image" content="https://wallet.getvela.app/og-image.png"',
 			'property="og:image:width" content="1200"',
 			'name="twitter:card" content="summary_large_image"',
 			'name="twitter:image"'

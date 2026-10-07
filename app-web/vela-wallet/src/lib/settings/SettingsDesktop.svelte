@@ -22,7 +22,8 @@
 		FeedbackResult,
 		SettingsDesktopModel,
 		SettingsOverlayId,
-		SettingsPageId
+		SettingsPageId,
+		SwitchRowModel
 	} from './model';
 	import type { SidebarModel } from '$lib/wallet/model';
 	import Button from '$lib/ui/Button.svelte';
@@ -61,6 +62,11 @@
 		onnetevent?: OnNetEvent;
 		/** A preference control was used (spec 028 T433). Absent = gallery. */
 		onprefevent?: (event: SettingsPrefEvent) => void;
+		/**
+		 * "Share anonymous usage statistics" (About), with its live state.
+		 * Absent in the gallery.
+		 */
+		analytics?: SwitchRowModel;
 		/** The sidebar's network filter was used. Absent in the gallery. */
 		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 		/**
@@ -98,6 +104,7 @@
 		onsignout,
 		onnetevent,
 		onprefevent,
+		analytics,
 		onchainselect,
 		onaccountselect,
 		onaccountcreate,
@@ -418,7 +425,12 @@
 					{/each}
 				</div>
 			{:else if page === 'about'}
-				<AboutPanel panel={model.about} layout="inline" />
+				<AboutPanel
+					panel={model.about}
+					layout="inline"
+					{analytics}
+					onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+				/>
 			{/if}
 		</div>
 	</main>

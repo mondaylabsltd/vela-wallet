@@ -65,6 +65,11 @@
     "a11yShowBalance": "残高を表示",
     "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
     "a11yOpenSettings": "設定",
-    "balanceDetailUpdatedLabel": "更新済み"
+    "balanceDetailUpdatedLabel": "更新済み",
+    "getApp": {
+      "title": "スマートフォンでも Vela を",
+      "body": "Vela には iPhone と Android のアプリもあります。",
+      "scanHint": "スマートフォンのカメラでスキャン"
+    }
   }
 }

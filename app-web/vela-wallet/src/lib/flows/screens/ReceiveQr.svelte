@@ -14,6 +14,7 @@
 	import QRCard from '../ui/QRCard.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import { copyText } from '$lib/services/clipboard';
+	import { track } from '$lib/analytics';
 	import { saveShareImage } from '../share-image';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { ReceiveQrModel } from '../model';
@@ -53,6 +54,8 @@
 				? model.account.lines.join('')
 				: (model.contract?.copyValue ?? model.contract?.value ?? '')
 		);
+		// A drawn card (the gallery) has no code; only a live copy counts.
+		if (what === 'address' && model.code !== undefined) track('receive_address_copied');
 		copied = what;
 		clearTimeout(timer);
 		timer = setTimeout(() => (copied = null), 150);

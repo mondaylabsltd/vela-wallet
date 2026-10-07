@@ -93,6 +93,10 @@
       "title": "意見回饋",
       "subtitle": "回報問題或提供建議"
     },
+    "analytics": {
+      "title": "分享匿名使用統計",
+      "subtitle": "只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額或名稱。"
+    },
     "about": {
       "title": "關於",
       "subtitle": "Vela Wallet v{{version}}"

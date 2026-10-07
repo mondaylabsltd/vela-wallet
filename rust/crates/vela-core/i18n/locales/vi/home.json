@@ -65,6 +65,11 @@
     "a11yShowBalance": "Hiện số dư",
     "a11ySwitchAccount": "Tài khoản {{name}}. Chuyển tài khoản",
     "a11yOpenSettings": "Cài đặt",
-    "balanceDetailUpdatedLabel": "Đã cập nhật"
+    "balanceDetailUpdatedLabel": "Đã cập nhật",
+    "getApp": {
+      "title": "Dùng Vela trên điện thoại",
+      "body": "Vela cũng có ứng dụng cho iPhone và Android.",
+      "scanHint": "Quét bằng camera điện thoại"
+    }
   }
 }

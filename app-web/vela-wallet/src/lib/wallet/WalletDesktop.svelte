@@ -58,6 +58,8 @@
 		 * mount point, whichever of the two is showing.
 		 */
 		column?: Snippet;
+		/** A card at the top of the content, above the balance (the app prompt). Live only. */
+		banner?: Snippet;
 	}
 
 	let {
@@ -71,7 +73,8 @@
 		onassetclose,
 		onactivity,
 		onstatus,
-		column
+		column,
+		banner
 	}: Props = $props();
 
 	// The third column replaces the mobile bottom sheet (research.md D5).
@@ -90,6 +93,9 @@
 
 	<main>
 		<div class="content">
+			{#if banner}
+				<div class="banner">{@render banner()}</div>
+			{/if}
 			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
 
 			<!-- Everything two-ended lives inside one measure (issue 195): the
@@ -240,6 +246,10 @@
 		padding: var(--space-4xl) var(--space-4xl) var(--space-4xl) var(--space-3xl);
 		display: flex;
 		flex-direction: column;
+	}
+
+	.banner {
+		padding-block-end: var(--space-2xl);
 	}
 
 	/* Not scaled with the text size: a larger size fills the row from both

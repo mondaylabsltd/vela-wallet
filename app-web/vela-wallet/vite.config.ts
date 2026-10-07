@@ -101,8 +101,9 @@ export default defineConfig({
 	define: {
 		__VELA_VERSION__: JSON.stringify(BUILD.version),
 		__VELA_COMMIT__: JSON.stringify(BUILD.commit),
-		// The extension build drops what only the hosted site may carry (the
-		// analytics script): MV3 refuses remote code, and so does the store.
+		// Which build this is: usage analytics report from the hosted wallet's
+		// own origin in one, and only from `chrome-extension:` pages in the
+		// other (`$lib/analytics/gate.ts`).
 		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET)
 	},
 	resolve: {

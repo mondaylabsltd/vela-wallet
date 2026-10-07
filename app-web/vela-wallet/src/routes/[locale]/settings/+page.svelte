@@ -48,6 +48,8 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
+	import { track } from '$lib/analytics';
+	import { analyticsConsent } from '$lib/analytics/consent.svelte';
 	import {
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -178,6 +180,7 @@
 		void signPreference.boot();
 		void balance.boot();
 		preferences.boot();
+		analyticsConsent.boot();
 		void refreshGrants();
 		void refreshStorage();
 		void loadCurrencyCodes().then((codes) => (currencyCodes = codes));
@@ -356,7 +359,11 @@
 				signRequest.syncNetworks();
 				signRequest.syncAccounts();
 				const outcome = await startEthereumBackup(account);
-				if (outcome.kind === 'requested') await outcome.settled;
+				if (outcome.kind === 'requested') {
+					track('backup_keys_started');
+					const settled = await outcome.settled;
+					if (settled.kind === 'submitted') track('backup_keys_done');
+				}
 			} finally {
 				backupOpening = false;
 				backupAsked += 1;
@@ -381,7 +388,10 @@
 		switch (event.kind) {
 			case 'theme': {
 				const choice = themeFromSegment(event.id);
-				if (choice !== undefined) preferences.setTheme(choice);
+				if (choice !== undefined) {
+					preferences.setTheme(choice);
+					track('setting_theme_changed', { theme: choice });
+				}
 				return;
 			}
 			case 'language': {
@@ -390,6 +400,9 @@
 				const chosen = event.id === 'system' ? 'auto' : event.id;
 				preferences.setLanguage(chosen);
 				const target = chosen === 'auto' ? data.locale : chosen;
+				// Before the navigation: the page is about to become another locale's.
+				const locale = SUPPORTED_LOCALES.find((code) => code === target);
+				if (locale !== undefined) track('setting_language_changed', { locale });
 				if (target !== data.locale && SUPPORTED_LOCALES.includes(target as Locale)) {
 					void goto(resolve('/[locale]/settings', { locale: target as Locale }));
 				}
@@ -410,7 +423,7 @@
 			case 'currency':
 				// One of the two preferences with a core behind it: the committed
 				// pair reaches every money surface through `display_currency`.
-				currency.choose(event.id);
+				chooseCurrency(event.id);
 				return;
 			case 'fee-speed':
 				// The other (spec 068). The core validates the name — an id this
@@ -418,6 +431,7 @@
 				// storage and, later, the relay (which answers -32602).
 				if (event.id === 'fast' || event.id === 'standard' || event.id === 'slow') {
 					feeTierPreference.choose(event.id);
+					track('setting_fee_speed_changed', { speed: event.id });
 				}
 				return;
 			// Spec 071: the Trusted Signer's page. The core refuses an address it
@@ -428,10 +442,19 @@
 			case 'signer-page-reset':
 				signPreference.resetSignerUrl();
 				return;
+			case 'analytics':
+				analyticsConsent.set(event.on);
+				return;
 			case 'erase':
 				void erase();
 				return;
 		}
+	}
+
+	/** Both layouts' currency pick (the phone's sheet reports it on its own callback). */
+	function chooseCurrency(code: string): void {
+		currency.choose(code);
+		track('setting_currency_changed', { currency: code });
 	}
 
 	/**
@@ -541,6 +564,14 @@
 	const net = $derived(networkAdmin.view);
 	const m = $derived(data.settingsMessages);
 
+	/** "Share anonymous usage statistics", under About — its live state. */
+	const analyticsRow = $derived({
+		id: 'settings-analytics',
+		title: m.analytics.title,
+		subtitle: m.analytics.subtitle,
+		on: analyticsConsent.enabled
+	});
+
 	/** Fixture base → identity overlay → live network sections (research D7). */
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
@@ -600,6 +631,29 @@
 	});
 
 	/**
+	 * Usage statistics for the network editor, counted when the core says the
+	 * change HELD: an add when the ledger names the chain it added, an RPC
+	 * when the chain-id check let it be written (never on a refusal).
+	 */
+	let addingChain: number | null = null;
+	let rpcEdited: number | null = null;
+	let rpcSaving = $state<number | null>(null);
+	$effect(() => {
+		const landed = net.last_added_chain_id;
+		if (addingChain === null || landed !== addingChain) return;
+		addingChain = null;
+		track('network_added', { chain: landed });
+	});
+	$effect(() => {
+		const chain = rpcSaving;
+		if (chain === null) return;
+		const row = net.networks.find((candidate) => candidate.chain_id === chain);
+		if (row?.rpc_save_deferred === true) return;
+		rpcSaving = null;
+		if (row !== undefined && row.rpc_chain_mismatch === null) track('network_rpc_set', { chain });
+	});
+
+	/**
 	 * The one translation table: what the person did → what the core is told.
 	 * No decisions — the core refuses, coalesces, or persists as its rules say.
 	 */
@@ -613,24 +667,32 @@
 					networkAdmin.dispatch({ type: 'override_expanded', chain_id: chainId });
 				return;
 			}
-			case 'delete-network':
+			case 'delete-network': {
+				const chain = chainOf(event.id);
 				networkAdmin.dispatch({ type: 'delete_confirmed', id: event.id });
+				if (chain !== undefined) track('network_removed', { chain });
 				return;
+			}
 			case 'detail-field': {
 				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
-				if (chainId !== undefined)
+				if (chainId !== undefined) {
 					networkAdmin.dispatch({
 						type: 'override_field_edited',
 						chain_id: chainId,
 						field: event.field,
 						value: event.value
 					});
+					if (event.field === 'rpc') rpcEdited = chainId;
+				}
 				return;
 			}
 			case 'detail-blur': {
 				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
-				if (chainId !== undefined)
+				if (chainId !== undefined) {
 					networkAdmin.dispatch({ type: 'override_blurred', chain_id: chainId });
+					if (event.field === 'rpc' && rpcEdited === chainId) rpcSaving = chainId;
+					rpcEdited = null;
+				}
 				return;
 			}
 			case 'open-add':
@@ -650,6 +712,7 @@
 				networkAdmin.dispatch({ type: 'custom_rpc_edited', value: event.value });
 				return;
 			case 'confirm-add':
+				addingChain = net.wizard.chain_info?.chain_id ?? null;
 				networkAdmin.dispatch({ type: 'add_confirmed', now_iso: new Date().toISOString() });
 				return;
 			case 'recheck': {
@@ -729,6 +792,7 @@
 				onsignout={signOut}
 				onnetevent={onNetEvent}
 				onprefevent={onPrefEvent}
+				analytics={analyticsRow}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
@@ -752,9 +816,10 @@
 				onselecttab={selectTab}
 				onsignout={signOut}
 				onnetevent={onNetEvent}
-				oncurrencyselect={(code) => currency.choose(code)}
+				oncurrencyselect={chooseCurrency}
 				onstorageclear={clearRow}
 				onprefevent={onPrefEvent}
+				analytics={analyticsRow}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}

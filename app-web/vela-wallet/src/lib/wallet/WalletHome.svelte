@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { ActivityRowModel, AssetRowModel, WalletHomeModel } from './model';
 	import { UTILITY_ICONS } from './icons';
 	import ActionButtonRow from './ui/ActionButtonRow.svelte';
@@ -37,6 +38,8 @@
 		onactivity?: (row: ActivityRowModel) => void;
 		/** An asset row was tapped (live): which one, before the token screen opens. */
 		onasset?: (row: AssetRowModel) => void;
+		/** A card at the top of the home, under the header (the app prompt). Live only. */
+		banner?: Snippet;
 	}
 
 	let {
@@ -48,7 +51,8 @@
 		onbalancetoggle,
 		onactivity,
 		onasset,
-		onstatus
+		onstatus,
+		banner
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -66,6 +70,10 @@
 		<header class="top">
 			<WalletHeader header={model.header} onclick={onaccounts} />
 		</header>
+
+		{#if banner}
+			<div class="banner">{@render banner()}</div>
+		{/if}
 
 		<div class="balance">
 			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
@@ -183,6 +191,10 @@
 
 	.balance {
 		padding-block: var(--space-md) var(--space-2xl);
+	}
+
+	.banner {
+		padding-block-end: var(--space-md);
 	}
 
 	.day {

@@ -24,7 +24,8 @@
 		FeedbackResult,
 		SettingsHomeModel,
 		SettingsOverlayId,
-		SettingsPageId
+		SettingsPageId,
+		SwitchRowModel
 	} from './model';
 	import type { SettingsPrefEvent } from './pref-events';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
@@ -81,6 +82,11 @@
 		 */
 		onprefevent?: (event: SettingsPrefEvent) => void;
 		/**
+		 * "Share anonymous usage statistics" (About), with its live state.
+		 * Absent in the gallery.
+		 */
+		analytics?: SwitchRowModel;
+		/**
 		 * The account switcher (spec 028 Phase 8). A row is picked by its
 		 * POSITION in the sheet — the session's own order — and the two buttons
 		 * leave for the create and sign-in journeys. Absent in the gallery.
@@ -128,6 +134,7 @@
 		oncurrencyselect,
 		onstorageclear,
 		onprefevent,
+		analytics,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
@@ -470,7 +477,11 @@
 						onclearcaches={() => (overlay = 'clear-caches')}
 					/>
 				{:else if page === 'about'}
-					<AboutPanel panel={model.about} />
+					<AboutPanel
+						panel={model.about}
+						{analytics}
+						onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+					/>
 				{/if}
 			{/if}
 		</div>
