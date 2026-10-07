@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 3 October 2026</p>
+	<p class="updated">Last updated: 7 October 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -168,6 +168,14 @@
 			<li>
 				<strong>dApp sites</strong> you connect to — see your wallet address once you connect; the signing
 				screen also loads the site's icon from the site itself.
+			</li>
+			<li>
+				<strong>Analytics, in the web app only</strong> (<code>app.getvela.app</code>) — Rybbit, the
+				cookieless tool the website uses, served from <code>tj.appsdata.org</code>, counts which
+				pages are viewed. It records a page's path, never what follows it in the address (where a
+				payment link carries a recipient and an amount), and not the links you open. It sets no
+				cookies, and we don't use it for advertising or share it. The mobile and desktop apps and
+				the browser extension don't include it.
 			</li>
 		</ul>
 	</section>

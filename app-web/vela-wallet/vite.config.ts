@@ -100,7 +100,10 @@ const BUILD = buildIdentity();
 export default defineConfig({
 	define: {
 		__VELA_VERSION__: JSON.stringify(BUILD.version),
-		__VELA_COMMIT__: JSON.stringify(BUILD.commit)
+		__VELA_COMMIT__: JSON.stringify(BUILD.commit),
+		// The extension build drops what only the hosted site may carry (the
+		// analytics script): MV3 refuses remote code, and so does the store.
+		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET)
 	},
 	resolve: {
 		alias: { $animations: LAUNCH_ANIMATIONS }
