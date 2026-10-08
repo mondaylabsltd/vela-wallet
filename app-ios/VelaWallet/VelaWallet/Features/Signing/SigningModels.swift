@@ -30,17 +30,15 @@ enum SigningStateId: String, CaseIterable, Identifiable {
 /// Semantic weight. `accent` is the intent sentence; the rest colour warnings.
 enum SigningTone { case neutral, accent, success, caution, danger }
 
-struct TokenMark {
-    let letter: String
-    let tint: Color
-}
-
 struct AmountLine {
     /// Rendered ahead of the value and coloured with it: "−", "+", or "".
     let sign: String
     let value: String
     let symbol: String
-    var token: TokenMark?
+    /// The coin's token mark — its logo over its letters, the send flow's
+    /// in-line mark, by the core's rule. It was a first letter on a brand-
+    /// coloured disc, so USDC and USDT were both "U".
+    var token: TokenMarkModel?
     var fiat: String?
     /// "支付" / "最少收到" / "存入资产" — the line's own small label.
     var caption: String?
@@ -140,7 +138,9 @@ struct TechIdentity: Identifiable {
     let role: String
     let name: String
     let address: String
-    var mark: TokenMark?
+    /// What stands beside it, as on a fact row: a token's mark, or a
+    /// person's identicon from their address — never a letter.
+    var lead: FactLead?
 }
 
 struct TechModel {

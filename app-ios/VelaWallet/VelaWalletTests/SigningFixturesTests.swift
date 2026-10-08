@@ -208,4 +208,57 @@ struct SigningFixturesTests {
         #expect(!model(.cs1).techOpen)
         #expect(model(.cs29).tech.identities.count == 2)
     }
+
+    // MARK: - Coins wear the token mark (DESIGN L, S4)
+
+    /// Every drawn amount line names its coin with the coin's token mark,
+    /// lettered from the very ticker the line prints — never a first letter
+    /// on a brand disc, which drew USDC and USDT as the same "U". A coin the
+    /// drawings give a contract for carries its logo candidates; spWETH,
+    /// which they give none, gets no guessed logo.
+    @Test func everyAmountLinesCoinWearsItsOwnTokenMark() {
+        var lines: [AmountLine] = []
+        for state in SigningStateId.allCases {
+            for block in model(state).blocks {
+                switch block {
+                case .amount(let line, _, _): lines.append(line)
+                case .swap(let pay, let receive): lines += [pay, receive]
+                default: break
+                }
+            }
+        }
+        let marked = lines.filter { $0.token != nil }
+        #expect(!marked.isEmpty, "no drawn amount line wears a mark")
+        for line in marked {
+            guard let mark = line.token else { continue }
+            #expect(mark.glyph == String(line.symbol.prefix(3)).uppercased(),
+                    "\(line.symbol) drawn as \(mark.glyph)")
+            if line.symbol == "spWETH" {
+                #expect(mark.logoURLs.isEmpty, "a guessed logo for a coin with no contract")
+            } else {
+                #expect(!mark.logoURLs.isEmpty, "\(line.symbol) has no logo to try")
+            }
+        }
+        let usdc = marked.first { $0.symbol == "USDC" }?.token
+        let usdt = marked.first { $0.symbol == "USDT" }?.token
+        #expect(usdc?.logoURLs.first != nil && usdc?.logoURLs.first != usdt?.logoURLs.first,
+                "USDC and USDT wear the same picture")
+    }
+
+    /// The technical details' identities: the token wears its mark, the
+    /// person their identicon from their address — not a letter.
+    @Test func theTechnicalIdentitiesWearAMarkOrAFace() {
+        let identities = model(.cs1).tech.identities
+        #expect(!identities.isEmpty)
+        for identity in identities {
+            switch identity.lead {
+            case .token(let mark)?:
+                #expect(!mark.logoURLs.isEmpty)
+            case .identicon(let seed)?:
+                #expect(seed == identity.address)
+            default:
+                Issue.record("\(identity.name) wears nothing")
+            }
+        }
+    }
 }

@@ -30,8 +30,6 @@ enum ExploreGeometry {
     /// dApp avatar in the signing header and the chip beside it (mock CS1).
     static let signingAvatar: CGFloat = 36
     static let networkChip: CGFloat = 26
-    /// The token mark beside a hero amount.
-    static let tokenMark: CGFloat = 22
     /// The sail on the empty start page (mock E1).
     static let emptyMark: CGFloat = 56
     /// The identicon in the signer row and the account chip.
@@ -56,13 +54,6 @@ enum BrandPalette {
     static let morpho = TokenColor(argb: 0xFF2E_5BFF).color
     static let safe = TokenColor(argb: 0xFF12_FF80).color
     static let unknown = TokenColor(argb: 0xFF6E_6B62).color
-
-    static let usdc = TokenColor(argb: 0xFF27_75CA).color
-    static let eth = TokenColor(argb: 0xFF62_7EEA).color
-    static let weth = TokenColor(argb: 0xFF8A_92B2).color
-    static let spweth = TokenColor(argb: 0xFF4C_6FFF).color
-    static let usdt = TokenColor(argb: 0xFF26_A17B).color
-    static let contact = TokenColor(argb: 0xFFE8_572A).color
 
     /// The page a stand-in dApp draws inside the browser (spec 022 §2). Its
     /// palette is the SITE's, so it lives beside the other content colours

@@ -222,9 +222,10 @@ struct SigningAmountView: View {
                     .foregroundStyle(line.tone == .neutral ? theme.fgBase : line.tone.color(theme))
                     .minimumScaleFactor(WalletGeometry.heroMinScale)
                     .lineLimit(1)
+                // The coin's token mark (a coin wears `token_mark`): its
+                // logo over its letters, the in-line mark every shell draws.
                 if let token = line.token {
-                    LetterAvatarView(letter: token.letter, tint: token.tint,
-                                     size: ExploreGeometry.tokenMark)
+                    InlineTokenMark(mark: token)
                 }
                 Text(verbatim: line.symbol)
                     .typeRole(Typography.rowTitle.scaled(textScale))

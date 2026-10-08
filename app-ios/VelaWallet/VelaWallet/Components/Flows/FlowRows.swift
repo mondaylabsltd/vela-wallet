@@ -224,6 +224,9 @@ struct InlineTokenMark: View {
     @Environment(\.theme) private var theme
 
     let mark: TokenMarkModel
+    /// A hairline round the drawn disc, for a mark on a grey (`bg.sunken`)
+    /// card, where the disc is the card's own colour.
+    var ring = false
 
     var body: some View {
         RemoteLogoView(urls: mark.logoURLs, size: WalletFlowGeometry.inlineMark) {
@@ -236,6 +239,11 @@ struct InlineTokenMark: View {
                         .minimumScaleFactor(WalletGeometry.heroMinScale)
                         .lineLimit(1)
                         .padding(.horizontal, Tokens.Space.s2)
+                }
+                .overlay {
+                    if ring {
+                        Circle().strokeBorder(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
+                    }
                 }
         }
         .accessibilityHidden(true)

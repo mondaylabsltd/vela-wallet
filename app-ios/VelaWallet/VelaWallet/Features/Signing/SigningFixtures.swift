@@ -21,14 +21,22 @@ enum SigningFixtures {
     static let network = (name: "Ethereum", dot: ChainPalette.ethereum)
     static let feeValue = "~0.0021 ETH ≈ $5.40"
 
-    /// Token marks: brand content, exactly like the wallet's chain colours.
+    /// The coins as the drawings name them: each one's token mark on
+    /// Ethereum, by the core's rule — its logo over its letters, as a live
+    /// line would wear it (the glyph alone where no logo loads). Each by its
+    /// mainnet contract; spWETH, which the drawings name no contract for, is
+    /// one the rule cannot place, so it gets no guessed logo.
     enum Mark {
-        static let usdc = TokenMark(letter: "U", tint: BrandPalette.usdc)
-        static let eth = TokenMark(letter: "E", tint: BrandPalette.eth)
-        static let weth = TokenMark(letter: "W", tint: BrandPalette.weth)
-        static let spweth = TokenMark(letter: "S", tint: BrandPalette.spweth)
-        static let usdt = TokenMark(letter: "T", tint: BrandPalette.usdt)
-        static let contact = TokenMark(letter: "A", tint: BrandPalette.contact)
+        static let usdc = coin("USDC", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+        static let eth = coin("ETH", nil)
+        static let weth = coin("WETH", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+        static let spweth = coin("spWETH", "")
+        static let usdt = coin("USDT", "0xdac17f958d2ee523a2206206994597c13d831ec7")
+
+        private static func coin(_ symbol: String, _ contract: String?) -> TokenMarkModel {
+            TokenMarkModel.of(chainId: 1, symbol: symbol, tokenAddress: contract,
+                              color: network.dot)
+        }
     }
 
     /// dApps as the signing header draws them.
@@ -113,9 +121,9 @@ enum SigningFixtures {
             ],
             identities: [
                 TechIdentity(role: t(loc, "techIdentityToken"), name: "USD Coin",
-                             address: Addr.usdcFull, mark: Mark.usdc),
+                             address: Addr.usdcFull, lead: .token(Mark.usdc)),
                 TechIdentity(role: t(loc, "techIdentityRecipient"), name: "Alice Chen",
-                             address: Addr.aliceFull, mark: Mark.contact),
+                             address: Addr.aliceFull, lead: .identicon(Addr.aliceFull)),
             ],
             simResult: SigningRow(label: t(loc, "simResultLabel"),
                                   value: "−1,000 USDC · \(t(loc, "balanceMatchesHero"))"),
