@@ -640,23 +640,7 @@ impl SigningHost {
             cx,
         );
 
-        self.dispatch_sign(
-            SignEvent::RequestArrived {
-                id: request.id.clone(),
-                method: request.method.clone(),
-                params_json: request.params_json.clone(),
-                origin: request.origin.clone(),
-                transport_id: request.transport_id.clone(),
-                dedicated_transport: true,
-                per_request_chain: Some(request.chain_id),
-                dapp: None,
-                granted_address: request.granted_address.clone(),
-                requested_address: None,
-                request_ts_ms: None,
-                now_ms: now,
-            },
-            cx,
-        );
+        self.dispatch_sign(arrival_of(request, now), cx);
 
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder.
@@ -1742,6 +1726,31 @@ fn approved_changes(
     (!unavailable && !sim.is_empty()).then(|| sim.to_vec())
 }
 
+/// The request, as the signing machine is told it arrived.
+///
+/// `first_party` is the ONE place this shell says a request is the wallet's
+/// own: it rode [`WALLET_TRANSPORT`], which only the wallet's own code (the
+/// key backup) ever opens a column on. It is the transport's fact, never the
+/// reading's — any site can submit the same registry calldata, and that site
+/// keeps its header.
+fn arrival_of(request: &IncomingRequest, now_ms: f64) -> SignEvent {
+    SignEvent::RequestArrived {
+        id: request.id.clone(),
+        method: request.method.clone(),
+        params_json: request.params_json.clone(),
+        origin: request.origin.clone(),
+        transport_id: request.transport_id.clone(),
+        dedicated_transport: true,
+        per_request_chain: Some(request.chain_id),
+        dapp: None,
+        granted_address: request.granted_address.clone(),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms,
+        first_party: request.transport_id == WALLET_TRANSPORT,
+    }
+}
+
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
 /// nobody could read — a lone call's (or a one-call batch's, drawn as that
 /// call). A longer batch names each call's own in its `ClearBatchCall`.
@@ -1972,6 +1981,48 @@ mod tests {
             !runs_unseen(true, false, true, false),
             "the page left and nothing runs: nothing to record, nobody to answer"
         );
+    }
+
+    /// The wallet's own request is the only first-party one, and the core
+    /// hears so from the transport it rode — a site submitting the very same
+    /// registry call over the browser is still a site.
+    #[test]
+    fn only_the_wallets_own_transport_arrives_first_party() {
+        let wallet = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let request = |transport: &str| IncomingRequest {
+            id: format!("{transport}-1"),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: format!(
+                r#"[{{"from":"{wallet}","to":"{}","value":"0x0","data":"0xabcdef"}}]"#,
+                vela_core::registry_backup::REGISTRY
+            ),
+            origin: "https://getvela.app".to_owned(),
+            transport_id: transport.to_owned(),
+            chain_id: 1,
+            granted_address: None,
+        };
+        for (transport, own) in [(WALLET_TRANSPORT, true), (BROWSER_TRANSPORT, false)] {
+            let mut sign = CoreHost::<SignRequest>::new();
+            sign.dispatch(SignEvent::NetworksChanged { chain_ids: vec![1] });
+            sign.dispatch(SignEvent::AccountsChanged {
+                accounts: vec![SignAccountRef {
+                    address: wallet.to_owned(),
+                    credential_id: "cred0".to_owned(),
+                }],
+                active_index: 0,
+            });
+            let arrival = arrival_of(&request(transport), 1_000.0);
+            let SignEvent::RequestArrived { first_party, .. } = &arrival else {
+                unreachable!("an arrival is a RequestArrived")
+            };
+            assert_eq!(*first_party, own, "{transport}");
+            sign.dispatch(arrival);
+            assert_eq!(
+                sign.view().request.map(|request| request.first_party),
+                Some(own),
+                "{transport}: the sheet reads what the shell said"
+            );
+        }
     }
 
     /// The requoter against a relay that is down until `up_at` and then
@@ -2378,6 +2429,7 @@ mod tests {
             requested_address: None,
             request_ts_ms: None,
             now_ms: 1_000.0,
+            first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),
@@ -3072,6 +3124,7 @@ mod approve_tests {
             requested_address: None,
             request_ts_ms: None,
             now_ms: 0.0,
+            first_party: false,
         });
         let signing = sign.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),

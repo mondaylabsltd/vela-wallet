@@ -2746,6 +2746,7 @@ mod tests {
                 requested_address: None,
                 request_ts_ms: None,
                 now_ms: 1_000.0,
+                first_party: false,
             });
             let ops = sign.dispatch(SignEvent::ApproveTapped {
                 opts: SignApproveOpts::default(),
