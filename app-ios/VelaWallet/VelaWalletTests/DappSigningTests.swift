@@ -1505,14 +1505,16 @@ struct SigningLiveTests {
             Issue.record("an open list with three coins is drawn")
             return
         }
-        let base = Marks.base.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        // Whichever endpoint this host adopted (the built-in one when none
+        // is stored), the paths are the rule's.
         #expect(list.options.map(\.mark.ticker) == ["ETH", "USDC", "USDT"])
-        #expect(list.options[0].mark.logoURLs == ["\(base)/chainlogos/eip155-1.png"])
+        #expect(list.options[0].mark.logoURLs == [Marks.chainLogoURL(1)].compactMap { $0 })
+        #expect(list.options[0].mark.logoURLs.first?.hasSuffix("/chainlogos/eip155-1.png") == true)
         #expect(list.options[0].mark.badgeHidden, "ETH on Ethereum: the badge would repeat the coin")
-        #expect(list.options[1].mark.logoURLs.first
-                == "\(base)/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png")
-        #expect(list.options[2].mark.logoURLs.first
-                == "\(base)/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png")
+        #expect(list.options[1].mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png") == true)
+        #expect(list.options[2].mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png") == true)
         #expect(list.options.allSatisfy { mark in
             !mark.mark.logoURLs.contains { $0.contains("eip155-0") }
         })

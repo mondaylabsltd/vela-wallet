@@ -63,10 +63,18 @@ struct TokenMarkModel {
     var badgeLogoURL: String?
     /// ETH on Ethereum: the badge would repeat the token, so there is none.
     var badgeHidden: Bool = false
+    /// The letters the core chose for a mark it answered (`MarkView.glyph`).
+    /// `nil` on a drawn mark, which letters itself from the ticker.
+    var coreGlyph: String?
+
+    /// The letters drawn in the circle, under any logo: the core's, else the
+    /// ticker's first three upper-cased — the same rule, for the gallery's
+    /// marks that never asked the core.
+    var glyph: String { coreGlyph ?? String(ticker.prefix(3)).uppercased() }
 
     /// The mark for one holding — glyph, logo candidates and badge in one
     /// place, so a caller cannot fill three of the four and draw a mark that
-    /// disagrees with itself.
+    /// disagrees with itself. The core decides all of it (`Marks.token`).
     static func of(
         chainId: Int,
         symbol: String,
@@ -74,25 +82,27 @@ struct TokenMarkModel {
         color: Color,
         named: [String] = []
     ) -> TokenMarkModel {
-        let mark = Marks.token(chainId: chainId, symbol: symbol,
-                               tokenAddress: tokenAddress, named: named)
-        return TokenMarkModel(
-            ticker: symbol,
-            badgeColor: color,
-            logoURLs: mark.logoURLs,
-            badgeLogoURL: mark.badgeLogoURL,
-            badgeHidden: mark.badgeHidden
-        )
+        from(Marks.token(chainId: chainId, symbol: symbol,
+                         tokenAddress: tokenAddress, named: named),
+             ticker: symbol, color: color)
     }
 
-    /// A NETWORK by itself — its own logo, no badge.
+    /// A NETWORK by itself — its own logo, no badge (the kind rule: a network
+    /// row never wears its coin's logo).
     static func chain(chainId: Int, symbol: String, color: Color) -> TokenMarkModel {
+        from(Marks.chain(chainId: chainId, nativeSymbol: symbol), ticker: symbol, color: color)
+    }
+
+    /// The core's answer as the model the views draw. The badge is drawn
+    /// exactly when the core names its chain, over `color` — that chain's dot.
+    static func from(_ mark: MarkView, ticker: String, color: Color) -> TokenMarkModel {
         TokenMarkModel(
-            ticker: symbol,
+            ticker: ticker,
             badgeColor: color,
-            logoURLs: [Marks.chainLogoURL(chainId)].compactMap { $0 },
-            badgeLogoURL: nil,
-            badgeHidden: true
+            logoURLs: mark.logoUrls,
+            badgeLogoURL: mark.badgeLogoUrl,
+            badgeHidden: mark.badgeChainId == nil,
+            coreGlyph: mark.glyph
         )
     }
 }

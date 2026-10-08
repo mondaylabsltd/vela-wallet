@@ -345,6 +345,9 @@ struct RootView: View {
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
+        // The logos come from the person's chain-data endpoint, and follow it
+        // the moment Settings saves a new one — it used to take a relaunch.
+        settingsStore.onEndpointsWritten = { endpoints in Marks.adopt(endpoints) }
         _settings = State(initialValue: settingsStore)
         // ONE Trusted Signer for the whole app (spec 075). It is a passkey
         // route now, not only a way to sign: onboarding's ceremonies and the
@@ -548,8 +551,8 @@ struct RootView: View {
         // 058 nothing read `vela.language` at all.
         loc.apply(prefs.language)
         // Which chain-data endpoint the logos come from (058). The person's
-        // own endpoint wins; the default is what every other read uses, so a
-        // wallet that can fetch balances can fetch the pictures beside them.
+        // own endpoint wins; an empty one is the built-in endpoint, as the
+        // core reads it. Settings' saves re-adopt it (`onEndpointsWritten`).
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)

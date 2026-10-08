@@ -39,7 +39,10 @@ struct TokenIconView: View {
                 Circle()
                     .fill(theme.bgRaised)
                     .overlay {
-                        Text(verbatim: String(ticker.prefix(3)).uppercased())
+                        // The core's letters where it answered (058's
+                        // rule, now `MarkView.glyph`), the ticker's first
+                        // three otherwise.
+                        Text(verbatim: mark?.glyph ?? String(ticker.prefix(3)).uppercased())
                             .typeRole(Typography.tokenGlyph)
                             .foregroundStyle(theme.fgBase)
                     }
