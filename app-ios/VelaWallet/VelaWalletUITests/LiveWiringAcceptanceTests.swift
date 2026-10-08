@@ -218,6 +218,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// `WalletFixtures` and would still be on screen if the wiring came
     /// undone. The screenshot is what the number itself is for.
     func testHomeShowsRealMoneyRatherThanTheFixtureTotal() throws {
+        try skipOnDeviceForSeededAccount()
         let app = XCUIApplication()
         // This launch is NOT in the parallel space.
         //
@@ -276,6 +277,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// down: tap a real transfer, read somebody else's. The discriminator is
     /// `至 hold on` — a recipient that exists only in `WalletFlowFixtures`.
     func testHistoryAndItsTransactionAreTheAccountsOwn() throws {
+        try skipOnDeviceForSeededAccount()
         let app = XCUIApplication()
         // This launch is NOT in the parallel space.
         //
@@ -329,6 +331,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// a phone up to a camera. Both assertions are absences for that reason —
     /// the fixture address must be gone from both screens.
     func testReceiveShowsTheSignedInAddressAndARealCode() throws {
+        try skipOnDeviceForSeededAccount()
         let app = XCUIApplication()
         // This launch is NOT in the parallel space.
         //
@@ -378,6 +381,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// be somebody else's address in a stranger's chat — so this drives the
     /// whole path including the system's permission prompt.
     func testSavingTheReceiveCardReachesTheAlbum() throws {
+        try skipOnDeviceForSeededAccount()
         let app = XCUIApplication()
         // This launch is NOT in the parallel space.
         //
@@ -432,6 +436,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// the chain's own answer, and the save round-trips through storage — the
     /// 已添加 chip is recomputed by the core from what it read back.
     func testAddingATokenByContractFindsItAndKeepsIt() throws {
+        try skipOnDeviceForSeededAccount()
         let app = XCUIApplication()
         // This launch is NOT in the parallel space.
         //

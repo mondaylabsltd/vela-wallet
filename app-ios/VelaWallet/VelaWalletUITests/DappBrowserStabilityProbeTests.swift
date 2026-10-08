@@ -10,7 +10,10 @@
 //  the evidence the fix is checked against.
 //
 //  Parallel space, so nothing here needs a finger. The one transaction it may
-//  send is the harness's Send dust from the fixture Safe.
+//  send is the harness's Send dust from the fixture Safe — real money on
+//  Gnosis, so it is confirmed only in a build with `-DVELA_LIVE_SEND`, the
+//  opt-in BrowserAcceptanceTests' dust uses. Without it the sheet is
+//  photographed and closed by its ✕: a device run never spends.
 //
 
 import XCTest
@@ -140,8 +143,12 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         app.webViews.buttons["Send dust"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 6)
         record(app, "08-send-sheet")
+        #if VELA_LIVE_SEND
         confirm(app)
         frames(app, "09-after-send", count: 24, every: 1.5)
+        #else
+        XCTContext.runActivity(named: "Send dust not confirmed: build with -DVELA_LIVE_SEND to spend") { _ in }
+        #endif
         // Spec 079: the ✕ is the one way out; the scrim no longer closes it.
         let close = app.buttons["关闭"].firstMatch
         if close.exists, close.isHittable {
