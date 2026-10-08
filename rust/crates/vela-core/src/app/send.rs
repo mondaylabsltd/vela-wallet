@@ -1426,14 +1426,28 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
-    /// The fee card's coin in force changed — `FeeView.fee_token`, verbatim
-    /// (`None` = the chain's own coin). Mirrored by the same bridge as
-    /// [`Event::FeeBusyChanged`]: sent whenever it differs from what this
-    /// send session was last told (a freshly opened one has been told
-    /// nothing). It names the fee row's coin while no estimate is in hand
-    /// ([`SendView::fee_coin`]) — when nobody chose, the fee machine picks a
-    /// coin that can pay, and a quote that then fails leaves that coin in
-    /// force with no estimate to say so. It prices and signs nothing.
+    /// The fee card's coin in force — `FeeView.fee_token`, verbatim (`None` =
+    /// the chain's own coin). It names the fee row's coin while no estimate
+    /// is in hand ([`SendView::fee_coin`]) — when nobody chose, the fee
+    /// machine picks a coin that can pay, and a quote that then fails leaves
+    /// that coin in force with no estimate to say so. It prices and signs
+    /// nothing.
+    ///
+    /// This machine files the word against the form's chain AT THE MOMENT it
+    /// is said (a contract is an address on ONE chain), and DROPS it while
+    /// the form has no chain yet. So every shell's bridge — the same one that
+    /// mirrors [`Event::FeeBusyChanged`] — keeps one rule:
+    ///
+    /// - it speaks only while the fee session prices the form's own chain:
+    ///   the chain of the session's last question equals the form's chain
+    ///   (the selected token's, else the sweep's), both known;
+    /// - it dedupes on the pair (chain id, token): it sends whenever that
+    ///   pair differs from what this send journey was last told — so a coin
+    ///   first seen before the form had a chain, or while the session still
+    ///   priced the network just left, is told once the form is on the
+    ///   priced chain, and the same coin is told again for a new chain;
+    /// - a fresh journey has been told nothing: its first word always goes,
+    ///   `None` included.
     FeeTokenChanged {
         fee_token: Option<String>,
     },
@@ -2184,7 +2198,8 @@ pub struct SendView {
     ///    change with the speed; the fee machine's `keep_quote_coin` keeps a
     ///    quote on screen in the coin in force);
     /// 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
-    ///    [`Event::FeeTokenChanged`]), else the person's pick on this form;
+    ///    [`Event::FeeTokenChanged`] under its bridge rule, and only when it
+    ///    was said about this chain), else the person's pick on this form;
     ///    named by the form's holdings;
     /// 3. the chain's own coin;
     ///

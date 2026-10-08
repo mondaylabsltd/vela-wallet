@@ -191,7 +191,8 @@ fee: FeeEstimateView | null, gas_fee_token: string | null,
  *    change with the speed; the fee machine's `keep_quote_coin` keeps a
  *    quote on screen in the coin in force);
  * 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
- *    [`Event::FeeTokenChanged`]), else the person's pick on this form;
+ *    [`Event::FeeTokenChanged`] under its bridge rule, and only when it
+ *    was said about this chain), else the person's pick on this form;
  *    named by the form's holdings;
  * 3. the chain's own coin;
  *
