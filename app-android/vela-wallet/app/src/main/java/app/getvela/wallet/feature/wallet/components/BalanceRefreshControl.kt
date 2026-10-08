@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -52,6 +54,11 @@ import app.getvela.wallet.feature.wallet.BalanceRefreshModel
  * the finger that tapped it. Quiet ink like the status line — a figure that
  * is fresh is the normal case.
  *
+ * **Always named.** Turning or read, the words on screen name it ("Updating…",
+ * "Updated 2m"). Before any read has settled it is the glyph alone, so it
+ * carries [BalanceRefreshModel.idleLabel] ("Refresh balance") — never a bare
+ * "Button", and never "Updating…" over a control at rest.
+ *
  * [onRefresh] `null` (the gallery) draws the control and accepts no tap.
  */
 @Composable
@@ -69,6 +76,7 @@ fun BalanceRefreshControl(
             .heightIn(min = VelaSizing.controlSm)
             .clip(RoundedCornerShape(VelaRadius.md))
             .clickable(enabled = onRefresh != null && !spinning, role = Role.Button) { onRefresh?.invoke() }
+            .semantics { if (!spinning && model.updated == null) contentDescription = model.idleLabel }
             .padding(end = VelaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),

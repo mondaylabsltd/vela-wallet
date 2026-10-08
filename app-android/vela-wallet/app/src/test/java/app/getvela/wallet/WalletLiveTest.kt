@@ -21,6 +21,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -416,6 +417,10 @@ class WalletLiveTest {
         assertEquals(BalanceStateKind.Loading, first.state)
         assertNull(first.status)
         assertNull(first.refresh?.updated)
+        // The glyph alone still has a name, and it is not "Updating…": that
+        // would be read over a control at rest (C7).
+        assertEquals("Refresh balance", first.refresh?.idleLabel)
+        assertNotEquals(first.refresh?.updating, first.refresh?.idleLabel)
 
         // Hidden figures keep the control: it reads, it shows no number.
         val hidden = home(BalanceView(display_total_usd = 4.5, hidden = true, last_refreshed_at_ms = now.toDouble()), now = now).balance
