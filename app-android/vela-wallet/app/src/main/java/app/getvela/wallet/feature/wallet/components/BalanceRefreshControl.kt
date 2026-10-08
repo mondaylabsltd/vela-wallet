@@ -33,6 +33,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -140,5 +141,9 @@ private fun Label(text: String, shown: Boolean) {
 const val BALANCE_REFRESH_TEST_TAG = "balance-refresh"
 private const val TEST_TAG = BALANCE_REFRESH_TEST_TAG
 
-/** One calm turn — the fee card's refresh turns at the same pace. */
-private const val TURN_MS = 1200
+/**
+ * One turn at the web/iOS pace (motion slow × 2 = 800 ms; the desktop's
+ * spinner turns at it too), so a press reads the same on every shell. The fee
+ * card's refresh turns at the same pace.
+ */
+private const val TURN_MS = VelaMotion.durationSlow * 2
