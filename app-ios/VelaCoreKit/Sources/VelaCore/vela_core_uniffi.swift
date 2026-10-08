@@ -8019,6 +8019,98 @@ public func FfiConverterTypeLanguageState_lower(_ value: LanguageState) -> RustB
 
 
 /**
+ * What a circle standing for a token or a network wears
+ * (`vela_core::app::remote_mark::MarkView`): draw `glyph`, then the first of
+ * `logo_urls` that loads over it; the corner badge only when
+ * `badge_chain_id` is set (its dot, `badge_logo_url` over it).
+ */
+public struct MarkView: Equatable, Hashable {
+    /**
+     * The ticker's first three characters, upper-cased: always drawn.
+     */
+    public var glyph: String
+    /**
+     * Logo candidates, best first. Empty = the glyph alone.
+     */
+    public var logoUrls: [String]
+    /**
+     * The chain the badge names; `None` = no badge.
+     */
+    public var badgeChainId: UInt32?
+    /**
+     * The badge chain's logo; `None` whenever there is no badge.
+     */
+    public var badgeLogoUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The ticker's first three characters, upper-cased: always drawn.
+         */glyph: String, 
+        /**
+         * Logo candidates, best first. Empty = the glyph alone.
+         */logoUrls: [String], 
+        /**
+         * The chain the badge names; `None` = no badge.
+         */badgeChainId: UInt32?, 
+        /**
+         * The badge chain's logo; `None` whenever there is no badge.
+         */badgeLogoUrl: String?) {
+        self.glyph = glyph
+        self.logoUrls = logoUrls
+        self.badgeChainId = badgeChainId
+        self.badgeLogoUrl = badgeLogoUrl
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MarkView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMarkView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MarkView {
+        return
+            try MarkView(
+                glyph: FfiConverterString.read(from: &buf), 
+                logoUrls: FfiConverterSequenceString.read(from: &buf), 
+                badgeChainId: FfiConverterOptionUInt32.read(from: &buf), 
+                badgeLogoUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MarkView, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.glyph, into: &buf)
+        FfiConverterSequenceString.write(value.logoUrls, into: &buf)
+        FfiConverterOptionUInt32.write(value.badgeChainId, into: &buf)
+        FfiConverterOptionString.write(value.badgeLogoUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkView_lift(_ buf: RustBuffer) throws -> MarkView {
+    return try FfiConverterTypeMarkView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkView_lower(_ value: MarkView) -> RustBuffer {
+    return FfiConverterTypeMarkView.lower(value)
+}
+
+
+/**
  * One call inside an `aggregate3` batch.
  */
 public struct Multicall3Call: Equatable, Hashable {
@@ -13315,6 +13407,35 @@ public func canonicalizeSignature(sig: String)throws  -> String  {
     )
 })
 }
+/**
+ * `{base}/chainlogos/eip155-{chain_id}.png` on the person's chain-data
+ * endpoint ("" = the built-in one); `None` for chain 0, which names no
+ * network.
+ */
+public func chainLogoUrl(ethereumDataUrl: String, chainId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_chain_logo_url(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * A NETWORK drawn as itself (`remote_mark::chain_mark`): network rows and
+ * facts, chain-locking notices, receive rows, the QR centre, chips. Its own
+ * logo, never a badge.
+ */
+public func chainMark(ethereumDataUrl: String, chainId: UInt32, nativeSymbol: String) -> MarkView  {
+    return try!  FfiConverterTypeMarkView_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_chain_mark(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(nativeSymbol),uniffiCallStatus
+    )
+})
+}
 public func checksumAddress(addressHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -14631,6 +14752,25 @@ public func toQuantity(value: String)throws  -> String  {
 })
 }
 /**
+ * A COIN's mark (`remote_mark::token_mark`): `ethereum_data_url` is the
+ * person's chain-data endpoint ("" = the built-in one), `token_address`
+ * `None` for the chain's native coin, `named` the logo URLs an index already
+ * gave (tried first). A native coin wears its home chain's logo, and its
+ * badge is hidden on that chain.
+ */
+public func tokenMark(ethereumDataUrl: String, chainId: UInt32, symbol: String, tokenAddress: String?, named: [String]) -> MarkView  {
+    return try!  FfiConverterTypeMarkView_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_token_mark(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(symbol),
+        FfiConverterOptionString.lower(tokenAddress),
+        FfiConverterSequenceString.lower(named),uniffiCallStatus
+    )
+})
+}
+/**
  * The ONE document a typed-data request is read as — what a sheet decodes,
  * the same bytes [`sign_message_hash`] covers. `None` when the request is
  * not a valid typed-data request (the core refuses it at arrival). The audit
@@ -15716,6 +15856,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_canonicalize_signature() != 18808) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_chain_logo_url() != 40193) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_chain_mark() != 38157) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_checksum_address() != 58505) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16023,6 +16169,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_quantity() != 54875) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_token_mark() != 53788) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
