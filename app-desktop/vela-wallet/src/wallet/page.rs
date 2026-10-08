@@ -19491,6 +19491,8 @@ impl Render for WalletPage {
             self.address_selected = false;
         }
 
+        // The app's report left unsent: the person's own comes back.
+        self.settle_relay_report_visit();
         // The column was closed under a live send: its machines go with it.
         if self.panel != PanelId::Flow && self.send_host.is_some() {
             self.let_send_go(cx);
