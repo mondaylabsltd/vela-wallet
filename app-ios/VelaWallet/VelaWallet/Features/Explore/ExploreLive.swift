@@ -230,12 +230,13 @@ enum ExploreLive {
     }
 
     /// The section around its rows: `explore.openTabs` counting EVERY tab,
-    /// start pages included — the switcher's number, and the bar's box — and
-    /// `explore.tabs` for the switcher. `nil` with no rows.
+    /// start pages included — the switcher's number, and the bar's box — in
+    /// the plural form that count takes ("1 tab open"), and `explore.tabs`
+    /// for the switcher. `nil` with no rows.
     static func resumeSection(rows: [ResumeTabModel], tabCount: Int, loc: Loc) -> ResumeSectionModel? {
         guard !rows.isEmpty else { return nil }
         return ResumeSectionModel(
-            title: loc.t("explore.openTabs", vars: ["n": String(tabCount)]),
+            title: loc.t("explore.openTabs", count: tabCount),
             action: loc.t("explore.tabs"),
             tabs: rows
         )

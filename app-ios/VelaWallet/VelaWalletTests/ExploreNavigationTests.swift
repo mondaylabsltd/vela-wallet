@@ -266,7 +266,10 @@ struct ExploreNavigationTests {
         view.resumable = [view.tabs[1], view.tabs[0]]
         let section = try #require(ExploreLive.resume(explore: view, history: .empty, loc: loc))
         #expect(section.title == "3 tabs open")
-        #expect(section.title == loc.t("explore.openTabs", vars: ["n": "3"]))
+        #expect(section.title == loc.t("explore.openTabs", count: 3))
+        // A plural: one tab is "1 tab open", never "1 tabs open".
+        let one = try #require(ExploreLive.resumeSection(rows: section.tabs, tabCount: 1, loc: loc))
+        #expect(one.title == "1 tab open")
         #expect(section.action == loc.t("explore.tabs"))
         #expect(section.tabs.map(\.id) == ["b", "a"], "never re-sorted here")
         #expect(section.tabs.map(\.site.host) == ["polymarket.com", "app.uniswap.org"])

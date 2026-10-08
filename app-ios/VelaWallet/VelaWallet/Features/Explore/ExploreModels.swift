@@ -311,7 +311,7 @@ struct ResumeSectionModel {
         box = Box(title: title, action: action, tabs: tabs)
     }
 
-    /// `explore.openTabs`, filled with the number of open tabs.
+    /// `explore.openTabs_*`, the form for the number of open tabs, filled with it.
     var title: String { box.title }
     /// `explore.tabs`.
     var action: String { box.action }

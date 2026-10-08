@@ -84,7 +84,7 @@ struct ExploreFixturesTests {
         let e2 = ExploreFixtures.buildMobileState(.e2, loc: loc)
         let resume = try #require(e2.resume, "E2 has open tabs with pages: the section shows")
         #expect(e2.tabs.count == 4)
-        #expect(resume.title == loc.t("explore.openTabs", vars: ["n": "4"]))
+        #expect(resume.title == loc.t("explore.openTabs", count: 4))
         #expect(resume.title == "已打开 4 个标签页")
         #expect(resume.action == loc.t("explore.tabs"))
         #expect(resume.tabs.map(\.id) == ["uniswap", "polymarket", "aave"])
