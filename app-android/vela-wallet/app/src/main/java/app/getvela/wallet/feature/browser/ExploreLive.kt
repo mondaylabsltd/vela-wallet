@@ -187,7 +187,7 @@ object ExploreLive {
         val shownOrigin = bar?.url?.takeIf { it.isNotBlank() }?.let { uniffi.vela_core_uniffi.dappOriginOf(it) } ?: engine?.origin ?: tab?.origin
         val bookmarked = shownOrigin != null && view.favorites.any { it.origin == shownOrigin }
         return fallback.copy(
-            tabCountLabel = tabs.size.takeIf { it > 0 }?.toString(),
+            resume = resume(view, strings),
             // No CTA: there is no curated list behind "browse", and a button
             // that goes nowhere is worse than none (spec 070).
             empty = if (populated) null else ExploreEmptyCopy(strings.t("explore.startTitle"), strings.t("explore.startHint"), ""),
@@ -251,13 +251,48 @@ object ExploreLive {
                     // site that is connected.
                     items = fallback.siteMenuSheet.items.mapNotNull { item ->
                         when (item.id) {
-                            "favorite" -> if (bookmarked) item.copy(label = strings.t("explore.removeFromFavorites")) else item
+                            // Greyed, never hidden: the rows under it keep their places.
+                            "forward" -> item.copy(enabled = e.canForward)
+                            // While a load runs the row stops it (iOS spec 082 RE5).
+                            "refresh" -> if (e.loading) item.copy(id = STOP, icon = app.getvela.wallet.core.designsystem.components.VelaIcons.Close, label = strings.t("connect.dapp.stop")) else item
+                            "favorite" -> if (bookmarked) item.copy(icon = app.getvela.wallet.core.designsystem.components.VelaIcons.StarFilled, label = strings.t("explore.removeFromFavorites")) else item
                             "disconnect" -> item.takeIf { connected }
                             else -> item
                         }
                     },
                 )
             } ?: fallback.siteMenuSheet,
+        )
+    }
+
+    /** The site menu's refresh row while a load runs (iOS spec 082 RE5): it stops the load. */
+    const val STOP = "stop"
+
+    /**
+     * The home's resume section (spec 099 navigation) from the core's
+     * `resumable` — its rows, order and cap are the core's, never re-sorted or
+     * re-capped here. Drawn only while some tab has a page; the header's n is
+     * every tab, start pages included (`tabs.count`, the switcher's number).
+     * A row names the tab by the core's label rule, the recents' own
+     * (`browserSiteLabel`), and its id is the TAB's: a tap resumes it.
+     */
+    fun resume(view: ExploreView, strings: VelaStrings): app.getvela.wallet.feature.explore.ResumeSection? {
+        if (!view.ready || view.resumable.isEmpty()) return null
+        return app.getvela.wallet.feature.explore.ResumeSection(
+            title = strings.t("explore.openTabs", mapOf("n" to view.tabs.size.toString())),
+            action = strings.t("explore.tabs"),
+            tabs = view.resumable.map { tab ->
+                val label = uniffi.vela_core_uniffi.browserSiteLabel(tab.title, tab.host)
+                SiteModel(
+                    id = tab.id,
+                    name = label.name,
+                    host = tab.host,
+                    letter = letterOf(tab.host),
+                    tint = tintOf(tab.host),
+                    subtitle = label.hostLine.orEmpty(),
+                    iconUrls = tab.url?.let(::iconsOf).orEmpty(),
+                )
+            },
         )
     }
 

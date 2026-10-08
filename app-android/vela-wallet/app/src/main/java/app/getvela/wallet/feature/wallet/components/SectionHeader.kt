@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -16,6 +17,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 
@@ -33,6 +35,11 @@ fun SectionHeader(
     modifier: Modifier = Modifier,
     showChevron: Boolean = true,
     onAction: () -> Unit = {},
+    /**
+     * Spec 099 navigation: the action is a control of its own (the resume
+     * section's 标签页 ›, which opens the switcher) and takes a full 44 target.
+     */
+    actionHitTarget: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -48,7 +55,9 @@ fun SectionHeader(
         )
         Spacer(modifier = Modifier.weight(1f))
         Row(
-            modifier = Modifier.clickable(onClick = onAction),
+            modifier = Modifier
+                .let { if (actionHitTarget) it.defaultMinSize(minHeight = VelaSizing.hitTarget) else it }
+                .clickable(onClick = onAction),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
         ) {

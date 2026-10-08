@@ -236,6 +236,8 @@ fun VelaNavHost(
     settingsDark: Boolean? = null,
     /** The signing gallery's first state (`vela.signingState`, debug builds). */
     signingState: String? = null,
+    /** The explore gallery's state (`vela.exploreState`, debug builds): E1–E7, E2 when unnamed. */
+    exploreState: String? = null,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -251,6 +253,21 @@ fun VelaNavHost(
     // rotation for the same reason the flow stack does.
     var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
 
+    // Spec 099 navigation: what brought 探索 up — the core's `explore_landing`
+    // question — counted per visit, so a re-tap or a page opened from outside
+    // starts the screen again from the core's landing, and kept stable for the
+    // visit (a PageOpened is asked only once its open is in the view).
+    var exploreEntry by rememberSaveable { mutableStateOf(app.getvela.wallet.feature.browser.core.ExploreEntry.Section) }
+    var exploreVisit by rememberSaveable { mutableIntStateOf(0) }
+    /** The tab whose request waited on the person as 探索 was entered (`browser_waiting_tab`) — kept for the visit. */
+    var exploreWaiting by rememberSaveable { mutableStateOf<String?>(null) }
+    val enterExplore: (app.getvela.wallet.feature.browser.core.ExploreEntry) -> Unit = { entry ->
+        exploreEntry = entry
+        exploreWaiting = application.container.browser.waitingTab()
+        exploreVisit += 1
+        section = VelaTab.Explore
+    }
+
     /**
      * A tab tapped on a route pushed over the wallet (通讯录, 设置). The two
      * sections are reached by leaving the route; the other pushed route is
@@ -265,8 +282,13 @@ fun VelaNavHost(
      */
     val selectFromPushed: (VelaTab) -> Unit = { tab ->
         when (tab) {
-            VelaTab.Wallet, VelaTab.Explore -> {
+            VelaTab.Wallet -> {
                 section = tab
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+            }
+            // From another section: 探索 lands on its home (spec 099 navigation).
+            VelaTab.Explore -> {
+                enterExplore(app.getvela.wallet.feature.browser.core.ExploreEntry.Section)
                 navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
             }
             VelaTab.Contacts -> navController.swapOverWallet(VelaDestinations.CONTACTS)
@@ -729,11 +751,13 @@ fun VelaNavHost(
                         },
                     )
                 }
-                // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
+                // Spec 044: a page opened from outside 探索 (a deep link, the
+                // external-page sheet, a scan, the dev seam) shows itself — the
+                // core's landing for a page opened (spec 099 navigation).
                 val browserOpenRequested by application.container.browser.openRequested.collectAsStateWithLifecycle()
                 LaunchedEffect(browserOpenRequested) {
                     if (browserOpenRequested) {
-                        section = VelaTab.Explore
+                        enterExplore(app.getvela.wallet.feature.browser.core.ExploreEntry.PageOpened)
                         application.container.browser.openRequested.value = false
                     }
                 }
@@ -1383,7 +1407,13 @@ fun VelaNavHost(
                             // to change your language logged you out instead. That
                             // regression must not come back through this `when`.
                             VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
-                            VelaTab.Explore -> section = VelaTab.Explore
+                            // Spec 099 navigation: from 钱包, 探索 lands on its home;
+                            // again while it is up (browsing a page), it goes home
+                            // with the tab kept alive — the core's landing either way.
+                            VelaTab.Explore -> enterExplore(
+                                if (section == VelaTab.Explore) app.getvela.wallet.feature.browser.core.ExploreEntry.Reselect
+                                else app.getvela.wallet.feature.browser.core.ExploreEntry.Section,
+                            )
                             VelaTab.Wallet -> section = VelaTab.Wallet
                             // 通讯录 refused to navigate for a good reason: it
                             // would have shown a signed-in person six strangers.
@@ -1452,6 +1482,29 @@ fun VelaNavHost(
                             }
                         }
                         val pageUrl = engineState.url
+                        // Spec 099 navigation: where this visit lands — the core's
+                        // rule, re-read as its view changes until it settles, then
+                        // kept for the visit; acted on once (the tab it names is
+                        // asked for; landing home asks for none).
+                        val coreLanding = remember(exploreView, exploreEntry, exploreWaiting) {
+                            app.getvela.wallet.feature.browser.core.BrowserTabs.landing(exploreView, exploreEntry, exploreWaiting)
+                        }
+                        var settledLanding by remember { mutableStateOf<Pair<Int, app.getvela.wallet.feature.browser.core.ExploreLanding>?>(null) }
+                        val exploreLanding = settledLanding?.takeIf { it.first == exploreVisit }?.second ?: coreLanding
+                        LaunchedEffect(exploreVisit, coreLanding, exploreView.ready) {
+                            if (settledLanding?.first == exploreVisit) return@LaunchedEffect
+                            // The controller's view as it is NOW: the composed copy can
+                            // be a frame behind an open that just landed, and a landing
+                            // read from it would name the page that was there before.
+                            val current = browser.explore.value
+                            if (!current.ready) return@LaunchedEffect
+                            val landing = app.getvela.wallet.feature.browser.core.BrowserTabs.landing(current, exploreEntry, exploreWaiting)
+                            settledLanding = exploreVisit to landing
+                            when (landing) {
+                                is app.getvela.wallet.feature.browser.core.ExploreLanding.Tab -> browser.selectTab(landing.id)
+                                app.getvela.wallet.feature.browser.core.ExploreLanding.Home -> browser.landedHome()
+                            }
+                        }
                         ExploreScreen(
                             model = liveModel,
                             // The drawn CS12 sheet belongs to the demo page, which a
@@ -1460,8 +1513,17 @@ fun VelaNavHost(
                             signing = null,
                             onSelectTab = select,
                             page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
-                            initialView = if (engine != null || tabView?.crashed == true) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
+                            landing = when (exploreLanding) {
+                                is app.getvela.wallet.feature.browser.core.ExploreLanding.Tab -> app.getvela.wallet.feature.explore.ExploreView.Browsing
+                                app.getvela.wallet.feature.browser.core.ExploreLanding.Home -> app.getvela.wallet.feature.explore.ExploreView.Start
+                            },
+                            visit = exploreVisit,
+                            // Typed on the home: an address, never over a live dApp.
                             onOpenUrl = { browser.open(it) },
+                            // Typed into the bar of the page on screen: that page's tab.
+                            onOpenInPage = { browser.open(it, onPage = true) },
+                            // A scanned web address is a page handed in: 探索 lands on it.
+                            onOpenScanned = { browser.open(it, fromOutside = true) },
                             onClosePage = { browser.close() },
                             onPageBack = { browser.back() },
                             onPageForward = { browser.forward() },
@@ -1483,7 +1545,9 @@ fun VelaNavHost(
                             signingOpen = signingController != null,
                             inspector = inspectorModel,
                             live = app.getvela.wallet.feature.explore.ExploreCallbacks(
-                                onOpenSite = { url -> browser.open(url) },
+                                // A favourite or a recent dApp is a SITE: a tab already
+                                // on it is resumed rather than opened twice.
+                                onOpenSite = { url -> browser.open(url, kind = app.getvela.wallet.feature.browser.core.ExploreOpenKind.Site) },
                                 onTabOpen = { id -> browser.selectTab(id) },
                                 onTabClose = { id -> browser.closeTab(id) },
                                 onTabNew = { browser.newTab() },
@@ -1506,8 +1570,8 @@ fun VelaNavHost(
                                 onSiteMenuPick = { id ->
                                     when (id) {
                                         "refresh" -> browser.reload()
+                                        app.getvela.wallet.feature.browser.ExploreLive.STOP -> browser.stop()
                                         "favorite" -> browser.toggleFavorite()
-                                        "close" -> browser.close()
                                         "disconnect" -> browser.revoke()
                                         "share" -> if (pageUrl.isNotBlank()) {
                                             val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, pageUrl)
@@ -1541,6 +1605,7 @@ fun VelaNavHost(
                                         app.getvela.wallet.feature.explore.AddNetworkAction.Retry -> settingsController.dappAddRetried()
                                     }
                                 },
+                                litTab = { onPage -> app.getvela.wallet.feature.browser.core.BrowserTabs.litTab(exploreView, exploreView.selected_tab, onPage) },
                                 onChainSetupTool = {
                                     runCatching {
                                         context.startActivity(
@@ -1657,7 +1722,8 @@ fun VelaNavHost(
             composable(VelaDestinations.EXPLORE) {
                 val strings = LocalVelaStrings.current
                 val model = remember(strings) {
-                    ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+                    val state = ExploreScreenState.entries.firstOrNull { it.name.equals(exploreState, ignoreCase = true) } ?: ExploreScreenState.E2
+                    ExploreFixtures.buildState(state, strings)
                 }
                 val signing = remember(strings) {
                     SigningFixtures.build(SigningScreenState.CS12, strings)

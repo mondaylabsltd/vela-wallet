@@ -257,6 +257,14 @@ class MainActivity : ComponentActivity() {
     private fun signingState(): String? = LaunchExtras.honoured("vela.signingState", intent?.getStringExtra("vela.signingState"))
 
     /**
+     * The explore gallery's state pin (E1–E7, the web boards'), the same family:
+     *
+     *   adb shell am start -n app.getvela.wallet/.MainActivity \
+     *     --es vela.startDestination explore --es vela.exploreState E4
+     */
+    private fun exploreState(): String? = LaunchExtras.honoured("vela.exploreState", intent?.getStringExtra("vela.exploreState"))
+
+    /**
      * The notification's door (spec 043 phase 4): a send's verdict landed while
      * the app was away; open the wallet on that row.
      */
@@ -447,6 +455,7 @@ class MainActivity : ComponentActivity() {
                                     settingsState = settingsState(),
                                     settingsDark = settingsDark(),
                                     signingState = signingState(),
+                                    exploreState = exploreState(),
                                 )
                             }
 
