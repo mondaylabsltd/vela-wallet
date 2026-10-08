@@ -132,17 +132,10 @@ final class ParallelSpaceDeviceTests: XCTestCase {
     /// those decisions get read from.
     func testTheBrowserLoadsUniswap() {
         let app = launch(openUrl: "https://app.uniswap.org/")
-        XCTAssertTrue(app.buttons["收款"].waitForExistence(timeout: 40),
-                      "the wallet never opened")
-        // `VELA_URL` loads the page into a TAB; it does not change which tab
-        // the person is looking at, so the harness has to walk over to it —
-        // found here, with a screenshot of the wallet home labelled uniswap.
-        // The tab bar is at the bottom of the window; tapping the button by
-        // its own coordinate is what survives a label that matches more than
-        // one element.
-        let explore = app.buttons["探索"].firstMatch
-        XCTAssertTrue(explore.waitForExistence(timeout: 8), "no 探索 tab")
-        explore.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // `VELA_URL` is a page opened from outside (DESIGN N): Explore lands
+        // ON it, with the app's tab bar under the page. 探索 is not tapped —
+        // while a page is up it is the way back to the Explore home.
+        landOnThePage(app)
         settle(3)
         attach(app.screenshot(), named: "space-explore-tab")
         // The browser tab takes the page's own time; give it the same patience
@@ -171,10 +164,7 @@ final class ParallelSpaceDeviceTests: XCTestCase {
     /// one renders and Uniswap does not, the finding is about Uniswap.
     func testTheBrowserLoadsAPlainPage() {
         let app = launch(openUrl: "https://example.com/")
-        XCTAssertTrue(app.buttons["收款"].waitForExistence(timeout: 40))
-        let explore = app.buttons["探索"].firstMatch
-        XCTAssertTrue(explore.waitForExistence(timeout: 8))
-        explore.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        landOnThePage(app)
         settle(10)
         attach(app.screenshot(), named: "space-plain-page")
         app.terminate()
@@ -263,6 +253,21 @@ final class ParallelSpaceDeviceTests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
         app.launch()
         return app
+    }
+
+    /// A launch URL lands on its page with the tab bar under it; should the
+    /// app open elsewhere, 探索 and the home's resume row bring it back.
+    private func landOnThePage(_ app: XCUIApplication) {
+        XCTAssertTrue(app.buttons["钱包"].waitForExistence(timeout: 40), "the wallet never opened")
+        if app.buttons["explore.bar.back"].waitForExistence(timeout: 20) { return }
+        // The tab bar is at the bottom of the window; tapping the button by
+        // its own coordinate is what survives a label that matches more than
+        // one element.
+        let explore = app.buttons["探索"].firstMatch
+        explore.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let row = app.buttons.matching(identifier: "explore.resume.row").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the launch URL's tab is not on the Explore home")
+        row.tap()
     }
 
     private func settle(_ seconds: TimeInterval) {
