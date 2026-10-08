@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "Details ansehen",
     "lastUpdated": "Aktualisiert {{ago}}",
     "updating": "Wird aktualisiert …",
+    "refreshBalance": "Guthaben aktualisieren",
     "tabActivity": "Aktivität",
     "tabAssets": "Assets",
     "tabConnections": "Verbindungen",

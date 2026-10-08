@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "Ver detalhes",
     "lastUpdated": "Atualizado {{ago}}",
     "updating": "Atualizando…",
+    "refreshBalance": "Atualizar saldo",
     "tabActivity": "Atividade",
     "tabAssets": "Ativos",
     "tabConnections": "Conexões",

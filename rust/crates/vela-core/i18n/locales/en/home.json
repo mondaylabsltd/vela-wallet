@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "View details",
     "lastUpdated": "Updated {{ago}}",
     "updating": "Updating…",
+    "refreshBalance": "Refresh balance",
     "rescanButton": "Re-scan",
     "rescanTitle": "Re-scan recent activity",
     "rescanSubtitle": "Missing a payment? Re-query the blockchain directly for recent transfers.",

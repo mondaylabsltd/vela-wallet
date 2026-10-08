@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "查看详情",
     "lastUpdated": "上次更新 · {{ago}}",
     "updating": "更新中…",
+    "refreshBalance": "刷新余额",
     "rescanButton": "重新扫描",
     "rescanTitle": "重新扫描近期活动",
     "rescanSubtitle": "没收到某笔款项？直接向区块链重新查询近期转账。",
