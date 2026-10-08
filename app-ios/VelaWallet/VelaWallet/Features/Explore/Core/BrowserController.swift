@@ -338,23 +338,48 @@ final class BrowserController {
     /// address bar the same way. Waits for the mirror: a mutation dispatched
     /// before hydration is dropped by the core, which is how a deep link used
     /// to open nothing at all.
-    func open(_ text: String) {
+    ///
+    /// WHICH tab it goes into is the core's (`browserOpenTarget`, DESIGN N):
+    /// the page's own tab only when its address bar was used (`onPage`);
+    /// from the home or from outside, the selected start-page tab or a NEW
+    /// tab — never over a live dApp. Until 2026-10 this navigated the
+    /// selected tab whatever it held, so a site opened from the home
+    /// replaced the dApp the person had left there. A picked site (`.site`)
+    /// that a tab is already on comes back as it was left.
+    func open(_ text: String, kind: ExploreOpenKind = .address, onPage: Bool = false) {
         guard let url = dappBrowserInput(text: text) else { return }
         pageWanted = true
         whenReady { [weak self] in
             guard let self else { return }
-            if let selected = explore.selected {
+            let shown = onPage ? explore.selectedTab : nil
+            var target = Self.openTarget(view: explore, shown: shown, onPage: onPage, url: url, kind: kind)
+            // A full strip takes no new tab: the core drops `tab_opened`, and
+            // an open that does nothing is a dead control. Until the core's
+            // rule answers for a full strip, the page goes where the desktop
+            // puts it then — the tab in front.
+            if target == .newTab, explore.tabsFull, let selected = explore.selectedTab {
+                VelaLog.notice(.browser, "open: strip full, loads in tab=\(selected)")
+                target = .load(selected)
+            }
+            switch target {
+            case .load(let id):
+                if explore.selectedTab != id {
+                    exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
+                }
                 exploreCore.dispatch(CoreJSON.string([
-                    "type": "tab_navigated", "id": selected.id, "url": url, "title": NSNull(),
+                    "type": "tab_navigated", "id": id, "url": url, "title": NSNull(),
                 ]))
                 // An engine already showing a page is told directly; a start
                 // page gets its engine from `reconcile`, which loads the URL.
-                engines[selected.id]?.load(url)
-                return
+                engines[id]?.load(url)
+            case .resume(let id):
+                VelaLog.notice(.browser, "open resumes tab=\(id)")
+                selectTab(id)
+            case .newTab:
+                exploreCore.dispatch(CoreJSON.string([
+                    "type": "tab_opened", "url": url, "title": NSNull(), "now_ms": now(),
+                ]))
             }
-            exploreCore.dispatch(CoreJSON.string([
-                "type": "tab_opened", "url": url, "title": NSNull(), "now_ms": now(),
-            ]))
         }
     }
 
@@ -362,17 +387,79 @@ final class BrowserController {
     ///
     /// A favourite's `url` can be deeper than its origin, because that is
     /// where the person actually works. Recents carry the exact URL for the
-    /// same reason.
+    /// same reason. Either is a SITE to the core: a tab already on it is
+    /// brought back rather than loaded over.
     func openSite(id: String) {
         if let pinned = explore.favorites.first(where: { $0.origin == id }) {
-            open(pinned.url)
+            open(pinned.url, kind: .site)
             return
         }
         if let visited = history.entries.first(where: { $0.origin == id }) {
-            open(visited.url)
+            open(visited.url, kind: .site)
             return
         }
-        open(id)
+        open(id, kind: .site)
+    }
+
+    // MARK: - Where Explore lands, and where an opened site goes (DESIGN N)
+
+    /// What Explore shows for `entry`, now — the core's `exploreLanding`
+    /// over this strip and the tab whose request waits on the person.
+    func landing(_ entry: ExploreEntry) -> ExploreLanding {
+        Self.landing(view: explore, entry: entry, waiting: waitingTab)
+    }
+
+    /// The tab whose request is in front of the person — the consent, the
+    /// signature or the add-network sheet, in the core's order
+    /// (`browserWaitingTab`).
+    var waitingTab: String? { Self.waitingTab(dbr) }
+
+    /// The tab to mark as "this tab" (`browserLitTab`): the one in front
+    /// while its page shows; over the home, only a selected start page — a
+    /// dApp left for the wallet waits unlit.
+    func litTab(onPage: Bool) -> String? {
+        Self.litTab(view: explore, shown: onPage ? explore.selectedTab : nil, onPage: onPage)
+    }
+
+    /// The core's landing rule. Home for anything it cannot read: the home
+    /// closes and loads nothing, so it is the side to fall on.
+    static func landing(view: ExploreViewWire, entry: ExploreEntry, waiting: String?) -> ExploreLanding {
+        guard let json = exploreLanding(viewJson: view.stripJSON, entry: entry.rawValue, waiting: waiting),
+              let answer = try? CoreJSON.object(json),
+              answer["type"] as? String == "tab", let id = answer["id"] as? String
+        else { return .home }
+        return .tab(id)
+    }
+
+    /// The core's open rule. A new tab for anything it cannot read: that
+    /// replaces nothing.
+    static func openTarget(
+        view: ExploreViewWire, shown: String?, onPage: Bool, url: String, kind: ExploreOpenKind
+    ) -> ExploreOpenTarget {
+        guard let json = browserOpenTarget(
+                viewJson: view.stripJSON, shown: shown, onPage: onPage, url: url, kind: kind.rawValue
+              ),
+              let answer = try? CoreJSON.object(json)
+        else { return .newTab }
+        switch (answer["type"] as? String, answer["id"] as? String) {
+        case ("load", let id?): return .load(id)
+        case ("resume", let id?): return .resume(id)
+        default: return .newTab
+        }
+    }
+
+    static func litTab(view: ExploreViewWire, shown: String?, onPage: Bool) -> String? {
+        browserLitTab(viewJson: view.stripJSON, shown: shown, onPage: onPage)
+    }
+
+    /// `browserWaitingTab` over the three sheets' tabs — all the rule reads
+    /// of the browser machine's view.
+    static func waitingTab(_ dbr: DbrViewWire) -> String? {
+        var sheets: [String: Any] = [:]
+        if let consent = dbr.consent { sheets["consent"] = ["tab": consent.tab] }
+        if let signing = dbr.signing { sheets["signing"] = ["tab": signing.tab] }
+        if let adding = dbr.addingNetwork { sheets["adding_network"] = ["tab": adding.tab] }
+        return browserWaitingTab(dappViewJson: CoreJSON.string(sheets))
     }
 
     func newTab() {

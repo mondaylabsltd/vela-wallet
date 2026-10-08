@@ -220,6 +220,16 @@ struct RootView: View {
     /// launch that names a page (`VELA_URL`) starts where that page opens, so
     /// a device pass can reach it through Web Inspector without a tap.
     @State private var section: WalletSection = PageOverride.browserURL == nil ? .wallet : .explore
+    /// How the current Explore visit began (DESIGN N) — the core's landing
+    /// question, stable for the visit: 探索 from another section or again
+    /// while browsing lands on the home with every tab kept; a page opened
+    /// from outside (the external-page sheet, a launch URL) lands on it.
+    @State private var exploreVisit = ExploreVisit(
+        entry: PageOverride.browserURL == nil ? .section : .pageOpened
+    )
+    /// The debug launch URL is opened once per run — not on every visit to
+    /// 探索, where each open would now be a new tab.
+    @State private var launchURLOpened = false
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
     /// The add/edit form, while it is open. `nil` means no form — the presence
@@ -732,7 +742,10 @@ struct RootView: View {
             set: { if $0 == nil { browser.answerExternal(false) } }
         )) { page in
             ExternalPageSheet(loc: loc, page: page) { open in
-                if browser.answerExternal(open) { section = .explore }
+                if browser.answerExternal(open) {
+                    exploreVisit.enter(.pageOpened)
+                    section = .explore
+                }
             }
             .themed(scheme)
         }
@@ -1406,7 +1419,8 @@ struct RootView: View {
                         addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
                         onAddNetworkApprove: { settings.dappAddApproved() },
                         onAddNetworkRetry: { settings.dappAddRetried() },
-                        onAddNetworkDismiss: { settings.dappAddDeclined() }
+                        onAddNetworkDismiss: { settings.dappAddDeclined() },
+                        visit: exploreVisit
                     )
                     .onChange(of: signing?.closed) { _, closed in
                         // The page has its answer and the core cleared the
@@ -1491,7 +1505,10 @@ struct RootView: View {
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
                         // else chose is a browser nobody should install.
-                        if let url = PageOverride.browserURL { browser.open(url) }
+                        if let url = PageOverride.browserURL, !launchURLOpened {
+                            launchURLOpened = true
+                            browser.open(url)
+                        }
                     }
                 }
             }
@@ -1895,7 +1912,12 @@ struct RootView: View {
         case .settings: section = .settings
         case .wallet: section = .wallet
         case .contacts: section = .contacts
-        case .explore: section = .explore
+        case .explore:
+            // DESIGN N: from another section, Explore lands on its home; 探索
+            // again while it is up is the way home from a page. Either way
+            // the tabs stay alive — the core's `exploreLanding` decides.
+            exploreVisit.enter(section == .explore ? .reselect : .section)
+            section = .explore
         }
     }
 

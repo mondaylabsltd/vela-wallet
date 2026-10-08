@@ -746,10 +746,11 @@ struct TabBatchCloseTests {
         #expect(one.map(\.closesOthers) == [false])
         #expect(one.map(\.closesRight) == [false])
 
-        // The gallery's switcher asks the same core.
+        // The gallery's switcher asks the same core (DESIGN N's board strip:
+        // three sites and the start page).
         let gallery = ExploreFixtures.buildMobileState(.e5, loc: loc).tabs
-        #expect(gallery.map(\.closesOthers) == [true, true, true])
-        #expect(gallery.map(\.closesRight) == [true, true, false])
+        #expect(gallery.map(\.closesOthers) == [true, true, true, true])
+        #expect(gallery.map(\.closesRight) == [true, true, true, false])
     }
 
     /// The menu's words are the corpus's, never a key echoed back.
