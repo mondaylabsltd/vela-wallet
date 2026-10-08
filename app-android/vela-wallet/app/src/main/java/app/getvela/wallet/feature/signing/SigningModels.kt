@@ -18,6 +18,15 @@ enum class SigningScreenState {
     CS1, CS2, CS3, CS4, CS5, CS6, CS7, CS8, CS9, CS10, CS11,
     CS12, CS13, CS14, CS15, CS16, CS17, CS18, CS19, CS20, CS21, CS22,
     CS23, CS24, CS25, CS26, CS27, CS28, CS29, CS30, CS31, CS32, CS33,
+
+    /**
+     * The wallet's own request (the key backup to Ethereum, the core's
+     * `first_party`): no requester header, its intent and the ✕ in one row,
+     * the rows Network / Address / Public keys, the speed control open with
+     * a tier still measuring. The canon's cs34/cs35 (a cap being typed) are
+     * not drawn on this platform yet; the number stays the canon's.
+     */
+    CS36,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */

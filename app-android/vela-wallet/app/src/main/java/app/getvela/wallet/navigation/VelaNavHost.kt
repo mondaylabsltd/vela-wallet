@@ -200,6 +200,9 @@ object VelaDestinations {
     const val SETTINGS = "settings"
     const val SETTINGS_GALLERY = "settings-gallery"
 
+    /** The signing sheet's state gallery (spec 022's CS canon, and the wallet's own backup). */
+    const val SIGNING_GALLERY = "signing-gallery"
+
     /** Routes the `vela.startDestination` intent extra may select. */
     val ALL = setOf(
         WELCOME,
@@ -213,6 +216,7 @@ object VelaDestinations {
         FLOWS_GALLERY,
         SETTINGS,
         SETTINGS_GALLERY,
+        SIGNING_GALLERY,
     )
 }
 
@@ -225,6 +229,8 @@ fun VelaNavHost(
     startFlowState: String? = null,
     settingsState: String? = null,
     settingsDark: Boolean? = null,
+    /** The signing gallery's first state (`vela.signingState`, debug builds). */
+    signingState: String? = null,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -2303,6 +2309,13 @@ fun VelaNavHost(
             composable(VelaDestinations.FLOWS_GALLERY) {
                 FlowGalleryScreen(systemDarkTheme = darkTheme, initialState = startFlowState)
             }
+
+            composable(VelaDestinations.SIGNING_GALLERY) {
+                app.getvela.wallet.feature.signing.gallery.SigningGalleryScreen(
+                    systemDarkTheme = darkTheme,
+                    initialState = signingState,
+                )
+            }
         }
     }
     identiconViewer?.let { seed ->
@@ -2548,6 +2561,7 @@ internal val DEVELOPER_ROUTES = setOf(
     VelaDestinations.EXPLORE,
     VelaDestinations.FLOWS_GALLERY,
     VelaDestinations.SETTINGS_GALLERY,
+    VelaDestinations.SIGNING_GALLERY,
     VelaDestinations.IMPORT,
 )
 

@@ -3,6 +3,9 @@ package app.getvela.wallet.feature.signing
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.explore.ExploreFixtures
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.flows.FeeSpeedModel
+import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.WalletFixtures
 
@@ -156,6 +159,53 @@ object SigningFixtures {
         confirmEnabled = confirmEnabled,
         panelTitle = sg("signatureRequest"),
     )
+
+    /**
+     * CS36: the wallet's own key backup, as the live sheet draws it — no
+     * requester to name, so the header is the intent and the ✕; the core's
+     * rows (network first); "Technical details" with no contract name; the
+     * fee's speed control open, the slow tier still measuring, its gas-bid
+     * line held so nothing moves when it lands; the confirm says the intent.
+     */
+    private fun VelaStrings.ownBackup(): SigningScreenModel {
+        val intent = sg("intentBackUpPublicKeys")
+        return model(
+            SigningScreenState.CS36, listOf("", "", ""), Dapp.unknownTint,
+            blocks = listOf(
+                SigningBlock.Rows(
+                    listOf(
+                        SigningRow(sg("labelNetwork"), NETWORK),
+                        SigningRow(sg("labelAddress"), WalletFixtures.ADDRESS_DISPLAY, mono = true),
+                        SigningRow(sg("labelPublicKeys"), "3"),
+                    ),
+                ),
+            ),
+            confirmAction = intent,
+            tech = tech(
+                functionLabel = sg("techFunction"),
+                signature = intent,
+                simResult = SigningRow(sg("simResultLabel"), sg("simResultNoChange")),
+            ),
+            fee = FeeModel.OnChain(
+                t("componentsUi.gas.networkFee"), "~0.00093 ETH ≈ $2.40",
+                refreshLabel = t(I18nKeys.Flows.FEE_REFRESH),
+                speed = FeeSpeedModel(
+                    label = t(I18nKeys.Flows.FEE_SPEED_LABEL),
+                    value = t(I18nKeys.Flows.GAS_TIER_STANDARD),
+                    open = true,
+                    onceNote = t(I18nKeys.Flows.FEE_SPEED_ONCE),
+                    gasPriceLabel = t(I18nKeys.Flows.GAS_PRICE_LABEL),
+                    gasPriceLine = true,
+                    options = listOf(
+                        FeeSpeedOptionModel("fast", t(I18nKeys.Flows.GAS_TIER_FAST), "0.0012 ETH ≈ $3.10", "2.4 ~ 2.9 gwei"),
+                        FeeSpeedOptionModel("standard", t(I18nKeys.Flows.GAS_TIER_STANDARD), "0.00093 ETH ≈ $2.40", "1.8 ~ 2.1 gwei", selected = true),
+                        // Still measuring: "…", and its bid line held unseen.
+                        FeeSpeedOptionModel("slow", t(I18nKeys.Flows.GAS_TIER_SLOW), "…"),
+                    ),
+                ),
+            ),
+        ).copy(dappOwn = true, headline = intent)
+    }
 
     // --- The catalogue --------------------------------------------------------
 
@@ -902,6 +952,8 @@ object SigningFixtures {
                 ),
                 confirmAction = sg("confirmLabel"),
             )
+
+            SigningScreenState.CS36 -> ownBackup()
 
             SigningScreenState.CS32 -> model(
                 state, unknownDapp, Dapp.unknownTint,

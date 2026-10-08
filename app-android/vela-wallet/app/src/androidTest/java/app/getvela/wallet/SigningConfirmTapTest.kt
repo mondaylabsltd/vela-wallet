@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -92,6 +93,24 @@ class SigningConfirmTapTest {
         compose.waitForIdle()
         assertEquals(0, confirms)
         compose.onNodeWithText(reason).assertExists()
+    }
+
+    /**
+     * The wallet's own request (CS36, the key backup): one header row — its
+     * intent and the ✕ — no "Vela Wallet", no network chip (the network is
+     * said once, by its row), and the ✕ still closes: it is the only exit.
+     */
+    @Test
+    fun theWalletsOwnRequestIsOneHeaderRowAndItsCloseStillCloses() {
+        val model = SigningFixtures.build(SigningScreenState.CS36, strings)
+        var closes = 0
+        show(model, onClose = { closes++ }) {}
+        compose.onAllNodesWithText(model.headline!!).assertCountEquals(2) // the title, and the confirm
+        compose.onAllNodesWithText("Vela Wallet").assertCountEquals(0)
+        compose.onAllNodesWithText("Ethereum").assertCountEquals(1)
+        compose.onNodeWithContentDescription(model.closeLabel).performClick()
+        compose.waitForIdle()
+        assertEquals(1, closes)
     }
 
     @Test

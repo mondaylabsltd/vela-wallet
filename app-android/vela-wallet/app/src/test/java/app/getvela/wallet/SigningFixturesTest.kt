@@ -95,14 +95,46 @@ class SigningFixturesTest {
     }
 
     @Test
-    fun allThirtyThreeScenariosBuild() {
-        assertEquals(33, SigningScreenState.entries.size)
+    fun everyScenarioBuilds() {
+        // The 33 of the canon, and CS36 — the wallet's own backup.
+        assertEquals(34, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
             assertTrue("$state has no blocks", model.blocks.isNotEmpty())
-            assertTrue("$state opens without an intent", model.blocks.first() is SigningBlock.Intent)
+            // A site's sheet opens on its intent; the wallet's own says it as
+            // the header's title, and not again below.
+            if (model.dappOwn) {
+                assertTrue("$state has no headline", model.headline?.isNotBlank() == true)
+                assertTrue("$state repeats its intent", model.blocks.none { it is SigningBlock.Intent })
+            } else {
+                assertTrue("$state opens without an intent", model.blocks.first() is SigningBlock.Intent)
+            }
         }
+    }
+
+    /**
+     * CS36 is the live backup sheet's look: no requester named, the core's
+     * rows network first, no contract name on the technical details, the
+     * confirm saying the intent, and a tier still measuring keeps its bid line.
+     */
+    @Test
+    fun cs36IsTheWalletsOwnBackup() {
+        val zh = zhStrings()
+        val model = SigningFixtures.build(SigningScreenState.CS36, zh)
+        assertTrue(model.dappOwn)
+        assertEquals("" to "", model.dappName to model.dappHost)
+        assertEquals(zh.t("componentsUi.signing.intentBackUpPublicKeys"), model.headline)
+        assertEquals(model.headline, model.confirmAction)
+        val rows = (model.blocks.single() as SigningBlock.Rows).rows.map { it.label }
+        assertEquals(
+            listOf("labelNetwork", "labelAddress", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
+            rows,
+        )
+        assertEquals(null, model.tech.summary)
+        val speed = (model.fee as FeeModel.OnChain).speed!!
+        assertTrue(speed.open && speed.gasPriceLine)
+        assertTrue("a tier still measuring", speed.options.any { it.gasPrice == null })
     }
 
     @Test
