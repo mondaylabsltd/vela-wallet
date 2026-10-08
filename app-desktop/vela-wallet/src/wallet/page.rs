@@ -1171,6 +1171,12 @@ impl WalletPage {
         if gallery && let Some(tab) = GalleryTab::from_gallery_env() {
             page.select_tab(tab, window);
         }
+        // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
+        // there is no live request on this route, and no way to click to one.
+        if gallery && let Some(state) = signing_fixtures::from_env() {
+            page.signing_state = state;
+            page.panel = PanelId::Signing;
+        }
         page
     }
 

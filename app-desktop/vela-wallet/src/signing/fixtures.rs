@@ -10,6 +10,8 @@
 
 use gpui::{Hsla, SharedString, rgb};
 
+use vela_core::app::clear_signing::ClearTerm;
+
 use super::{SigningStrings, Tone, fill};
 use crate::explore::fixtures as explore_fixtures;
 use crate::wallet::fixtures::{ADDRESS_FULL, WALLET_NAME, chain_ethereum};
@@ -222,14 +224,29 @@ pub const DESKTOP_STATES: [&str; 10] = [
     dead_code,
     reason = "cross-platform scenario inventory (data-model.md §3)"
 )]
-pub const ALL_STATES: [&str; 35] = [
+pub const ALL_STATES: [&str; 36] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
     // Spec 032 phase 39: the state nobody had drawn — a cap being TYPED, and
     // the same field with the core refusing what is in it.
     "cs34", "cs35",
+    // The wallet asking itself: the key backup to Ethereum, first-party —
+    // no requester header, the intent as the headline, the network as the
+    // first row, the confirm saying the intent.
+    "cs36",
 ];
+
+/// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
+/// `VELA_PAGE=gallery`, the window opens with the signing column on that
+/// drawing. Same env-pin family as `VELA_FLOW` and `VELA_GALLERY_TAB`: a
+/// screenshot pass cannot click its way to a request nobody raised.
+pub fn from_env() -> Option<&'static str> {
+    let want = crate::dev_env::var!("VELA_SIGNING_STATE")?;
+    ALL_STATES
+        .into_iter()
+        .find(|state| state.eq_ignore_ascii_case(want.trim()))
+}
 
 fn mark(letter: &'static str, hex: u32) -> Mark {
     (letter.into(), rgb(hex).into())
@@ -237,12 +254,16 @@ fn mark(letter: &'static str, hex: u32) -> Mark {
 
 /// A fee coin's mark as the drawings show it: the ticker glyph and the
 /// chain's badge colour, with no logos — the documented fallback, so the
-/// gallery never reaches the network.
+/// gallery never reaches the network. The badge is hidden where the live
+/// mark hides it, on the chain's own coin (ETH on Ethereum).
 fn fee_mark(ticker: &'static str) -> crate::flows::fixtures::TokenMark {
     crate::flows::fixtures::TokenMark {
         ticker: ticker.into(),
         badge: chain_ethereum(),
-        logos: crate::marks::Logos::default(),
+        logos: crate::marks::Logos {
+            badge_hidden: ticker == "ETH",
+            ..crate::marks::Logos::default()
+        },
     }
 }
 
@@ -677,6 +698,41 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 &s.intent_approve,
             );
             m.confirm_enabled = false;
+            m
+        }
+
+        // The wallet's own key backup to Ethereum, as the live column draws
+        // the core's reading of it (a test holds the two together): the
+        // intent leads as the headline, then Network / Address / Public keys,
+        // each in the core's words; the confirm says the intent.
+        "cs36" => {
+            let term = |term: ClearTerm| s.terms.get(&term).cloned().unwrap_or_default();
+            let intent = term(ClearTerm::IntentBackUpPublicKeys);
+            let mut m = base(
+                s,
+                "cs36",
+                Dapp {
+                    name: "Vela Wallet",
+                    host: "",
+                    letter: "V",
+                    tint: unknown_tint(),
+                },
+                vec![
+                    // Success: the core grades the backup safe — the
+                    // headline still draws it in the base ink.
+                    Block::Intent {
+                        text: intent.clone(),
+                        tone: Tone::Success,
+                    },
+                    Block::Rows(vec![
+                        row(term(ClearTerm::LabelNetwork), "Ethereum"),
+                        mono_row(term(ClearTerm::LabelAddress), "0x88cCA0…266894"),
+                        row(term(ClearTerm::LabelPublicKeys), "3"),
+                    ]),
+                ],
+                &intent,
+            );
+            m.first_party = true;
             m
         }
 
@@ -1742,6 +1798,12 @@ mod tests {
             &s.intent_safe,
             &s.intent_sign_in,
         ];
+        let backup = s
+            .terms
+            .get(&ClearTerm::IntentBackUpPublicKeys)
+            .cloned()
+            .unwrap_or_default();
+        let verbs: Vec<&SharedString> = verbs.into_iter().chain([&backup]).collect();
         for state in ALL_STATES {
             let model = build(state, &s);
             assert!(

@@ -2196,6 +2196,44 @@ mod tests {
         assert_eq!(confirm_label(&clear, &s), s.confirm_plain);
     }
 
+    /// The gallery's cs36 is the live column's backup, not a drawing of what
+    /// somebody remembered: the real core's reading, localized and built as
+    /// the column builds it, draws the same blocks — the headline intent, then
+    /// Network / Address / Public keys with the same values, tones and faces —
+    /// and the same confirm, in English and in Chinese.
+    #[test]
+    fn the_drawn_backup_is_the_live_backup() {
+        fn shape(blocks: &[Block]) -> Vec<String> {
+            blocks
+                .iter()
+                .map(|block| match block {
+                    Block::Intent { text, tone } => format!("intent {text} {tone:?}"),
+                    Block::Rows(rows) => rows
+                        .iter()
+                        .map(|(label, value, tone, mono)| {
+                            format!("row {label}={value} {tone:?} mono={mono}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" | "),
+                    Block::Party { label, name, .. } => format!("party {label} {name}"),
+                    Block::Sentence { text, .. } => format!("sentence {text}"),
+                    Block::Warning { text, .. } => format!("warning {text}"),
+                    Block::Positive(text) => format!("positive {text}"),
+                    _ => "another block".to_owned(),
+                })
+                .collect()
+        }
+        for lang in ["en", "zh"] {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language(lang));
+            let reading = registry_backup_reading(1);
+            let live = blocks(&localized_terms(&reading, &s), &RequestFacts::default(), &s);
+            let drawn = crate::signing::fixtures::build("cs36", &s);
+            assert_eq!(shape(&drawn.blocks), shape(&live), "{lang}");
+            assert_eq!(drawn.confirm_label, confirm_label(&reading, &s), "{lang}");
+            assert!(drawn.first_party, "the wallet's own request");
+        }
+    }
+
     /// "Technical details" names the contract it folds — but not on the
     /// wallet's own request, where "· Vela passkey registry" names a contract
     /// to somebody who asked nobody. The same reading from a site keeps it:
