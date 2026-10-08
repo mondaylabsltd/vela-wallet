@@ -197,7 +197,9 @@ object SendLive {
         // also why the list is empty.
         val requestNotice = view.request_chain_id?.let { chainId ->
             SendNoticeModel(
-                mark = WalletLive.mark(chainId, nativeSymbol(chainId, ctx), null),
+                // A notice that locks a NETWORK wears the network's own mark
+                // (the kind rule): Base's logo, not its coin's (Ethereum's).
+                mark = WalletLive.chainMark(chainId, nativeSymbol(chainId, ctx)),
                 text = s.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
             )
         }
@@ -225,7 +227,7 @@ object SendLive {
             empty = empty,
             notice = requestNotice ?: chain?.let {
                 SendNoticeModel(
-                    mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
+                    mark = WalletLive.chainMark(it, nativeSymbol(it, ctx)),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
                 )
             },
@@ -1083,7 +1085,10 @@ object SendLive {
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
                     value = chain,
-                    lead = token?.let { FactLead.Token(WalletLive.mark(it.chain_id.toInt(), it.symbol, it.token_address, it.logo_urls)) },
+                    // The network row wears the NETWORK's mark (the kind
+                    // rule), as web and desktop do: it wore the coin's, so a
+                    // USDC send on Gnosis showed USDC's logo beside "Gnosis".
+                    lead = token?.let { FactLead.Token(WalletLive.chainMark(it.chain_id, nativeSymbol(it.chain_id, ctx))) },
                 ),
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.EST_FEE),

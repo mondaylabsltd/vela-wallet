@@ -869,6 +869,43 @@ class SendLiveTest {
     }
 
     /**
+     * The kind rule: the confirm page's 网络 row and a notice that locks a
+     * network name a NETWORK, so they wear its own logo, never a coin's. The
+     * row wore the token's mark (USDC's logo beside "Gnosis"), and the
+     * notices wore the network's coin's (Ethereum's logo for Base).
+     */
+    @Test
+    fun `a network row and a network's notice wear the network's own logo`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val usdc = xdai.copy(symbol = "USDC", token_address = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83")
+            val sd3 = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+            fun networkLead(token: SendToken): app.getvela.wallet.feature.flows.TokenMarkModel {
+                val view = SendView(stage = SendStage.Confirm, selected_token = token, recipient = recipient, confirm_amount = "1", fee = fee())
+                val row = SendLive.confirm(sd3, view, ctx()).facts.first { it.label == strings.t(I18nKeys.Flows.DETAIL_CHAIN) }
+                return (row.lead as app.getvela.wallet.feature.flows.FactLead.Token).mark
+            }
+            val gnosis = networkLead(usdc)
+            assertEquals(listOf("https://data.example/chainlogos/eip155-100.png"), gnosis.logoUrls)
+            assertTrue(gnosis.badgeHidden)
+            val eth = SendToken(network = "chain-8453", chain_id = 8453, symbol = "ETH", balance = "1", decimals = 18, token_address = null, price_usd = null)
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), networkLead(eth).logoUrls)
+            // The coin itself still wears its home chain's logo, with Base's badge.
+            val hero = SendLive.confirm(sd3, SendView(stage = SendStage.Confirm, selected_token = eth, recipient = recipient, confirm_amount = "1", fee = fee()), ctx()).mark!!
+            assertEquals(listOf("https://data.example/chainlogos/eip155-1.png"), hero.logoUrls)
+            assertEquals("https://data.example/chainlogos/eip155-8453.png", hero.badgeLogoUrl)
+
+            val sd1 = (FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick).model
+            val scanned = SendLive.pick(sd1, SendView(tokens = listOf(eth), request_chain_id = 8453), ctx()).notice!!.mark
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), scanned.logoUrls)
+            val sweep = SendLive.pick(sd1, SendView(tokens = listOf(eth), multi_chain_id = 8453), ctx(), sweepPicking = true).notice!!.mark
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), sweep.logoUrls)
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
+    /**
      * Issue #312: a code that named a network. The core lists only that
      * network's holdings; the picker says which network ("BNB Chain payments
      * only"), and a home filter left on another network does not hide them.

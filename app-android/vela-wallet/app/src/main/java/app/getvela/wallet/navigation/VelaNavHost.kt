@@ -2738,7 +2738,10 @@ private fun liveFlow(
         // about the wrong payment and one about the right payment look equally
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
-            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency))?.let(FlowSheet::TxDetail)
+            FlowLive.txDetail(
+                sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency),
+                nativeSymbols = networks.networks.associate { it.chain_id.toInt() to it.native_symbol },
+            )?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(
             fallback = sheet.model,
             view = balances,
