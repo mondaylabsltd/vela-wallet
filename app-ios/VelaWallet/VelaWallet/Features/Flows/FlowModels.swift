@@ -441,7 +441,9 @@ struct FilterChipModel: Identifiable {
 }
 
 struct SendNoticeModel {
-    let mark: TokenMarkModel
+    /// The network the notice is about, in its own mark — `nil` for a notice
+    /// that names no network (a blank disc said nothing).
+    let mark: TokenMarkModel?
     let text: String
 }
 

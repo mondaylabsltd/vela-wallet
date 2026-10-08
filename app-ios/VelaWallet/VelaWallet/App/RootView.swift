@@ -2498,7 +2498,7 @@ struct RootView: View {
                 model.base = .sendPick(
                     SendLive.pick(
                         view, on: pick, picking: sweepPicking,
-                        classFilter: sendClassFilter, loc: loc
+                        classFilter: sendClassFilter, loc: loc, networks: walletNetworks
                     )
                 )
             }
@@ -2520,7 +2520,8 @@ struct RootView: View {
             if case .sendConfirm(let confirm) = model.base {
                 var live = SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
-                    display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
+                    display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed,
+                    networks: walletNetworks
                 )
                 // The Trusted Signer's ending (spec 071): the core heard a
                 // cancelled ceremony and kept the confirmation up; this says

@@ -91,7 +91,7 @@ enum SendLive {
 
     static func pick(
         _ view: SendViewWire, on model: SendPickModel, picking: Bool = false,
-        classFilter: String = "all", loc: Loc
+        classFilter: String = "all", loc: Loc, networks: WalletNetworks = .builtin
     ) -> SendPickModel {
         // Which class of token is on screen. The CORE lists every holding —
         // which subset a person is looking at is a render decision, like the
@@ -121,21 +121,20 @@ enum SendLive {
             //
             // The core's own `添加该网络` affordance has no drawn home on this
             // client; recorded in results rather than invented.
-            notice: lockNotice(view, loc: loc) ?? requestNotice(view, loc: loc)
-                ?? (picking && view.multiChainId != nil
-                ? SendNoticeModel(
-                    mark: model.notice?.mark
-                        ?? TokenMarkModel(
-                            ticker: "",
-                            badgeColor: chainColor(view.multiChainId ?? 0)
-                        ),
-                    text: loc.t("send.multiSendSummary", vars: [
-                        "n": String(view.multiSelectedIds.count),
-                        "chain": view.multiChainId
-                            .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
-                    ])
-                )
-                : nil),
+            notice: lockNotice(view, loc: loc, networks: networks)
+                ?? requestNotice(view, loc: loc, networks: networks)
+                ?? (picking ? view.multiChainId.map { chainId in
+                    SendNoticeModel(
+                        // The chain the sweep is locked to, in the network's
+                        // own mark (the kind rule) — never the drawing's
+                        // Ethereum, never a blank disc.
+                        mark: networkMark(chainId, networks: networks),
+                        text: loc.t("send.multiSendSummary", vars: [
+                            "n": String(view.multiSelectedIds.count),
+                            "chain": networks.meta(chainId)?.displayName ?? "",
+                        ])
+                    )
+                } : nil),
             rows: shown.map(assetRow),
             selection: picking ? SendSelectionModel(
                 selected: shown.map { view.multiSelectedIds.contains($0.id) },
@@ -168,17 +167,27 @@ enum SendLive {
     /// Issue #312: the network a scanned code named, in the receive card's own
     /// words ("BNB Chain payments only"). Above an empty list it is also why
     /// the list is empty.
-    static func requestNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+    static func requestNotice(
+        _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> SendNoticeModel? {
         guard let chainId = view.requestChainId else { return nil }
-        let meta = ChainCatalog.meta(chainId)
         return SendNoticeModel(
-            mark: TokenMarkModel.chain(
-                chainId: chainId, symbol: meta?.nativeSymbol ?? "", color: chainColor(chainId)
-            ),
+            mark: networkMark(chainId, networks: networks),
             text: loc.t("receive.shareCardNetworkNote", vars: [
-                "network": meta?.displayName ?? "Chain \(chainId)",
+                "network": networks.meta(chainId)?.displayName ?? "Chain \(chainId)",
             ])
         )
+    }
+
+    /// A NETWORK in a line of text — a notice that locks a chain, the
+    /// confirm's Network row: its own logo over its coin's letters, never a
+    /// badge, never its coin's logo (the kind rule: ETH on Base is Base's
+    /// logo here). `nil` for a chain the wallet cannot name, which has no
+    /// letters to fall back on — no mark rather than an empty disc.
+    static func networkMark(_ chainId: Int, networks: WalletNetworks) -> TokenMarkModel? {
+        guard let chain = networks.meta(chainId) else { return nil }
+        return TokenMarkModel.chain(chainId: chainId, symbol: chain.nativeSymbol,
+                                    color: chainColor(chainId))
     }
 
     /// Issue #332: the picker's "To" line — the recipient the core already
@@ -290,17 +299,24 @@ enum SendLive {
     /// `lock_error` is a field the core has always computed and this client was
     /// not reading: a code for a chain the wallet does not have put the send
     /// flow into a stage with nothing drawn on it at all.
-    static func lockNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+    ///
+    /// A notice about a NETWORK wears that network's mark — when the wallet
+    /// can name it; a code for a chain it does not have gets none. One about
+    /// a token, or about an add-network attempt, names no network and wears
+    /// no mark: these were an empty grey disc.
+    static func lockNotice(
+        _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> SendNoticeModel? {
         switch view.lockError {
         case .network(let chainId):
             return SendNoticeModel(
-                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(chainId)),
+                mark: networkMark(chainId, networks: networks),
                 text: "\(loc.t("send.lock.netTitle")) · "
                     + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)])
             )
         case .token:
             return SendNoticeModel(
-                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                mark: nil,
                 text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
             )
         case nil:
@@ -308,20 +324,11 @@ enum SendLive {
             // person asked for something and it did not happen.
             switch view.addNetworkMsg {
             case .netNotFound:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netNotFound")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotFound"))
             case .netNotCompatible:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netNotCompatible")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotCompatible"))
             case .netAddError:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netAddError")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netAddError"))
             case nil:
                 return nil
             }
@@ -914,17 +921,23 @@ enum SendLive {
         on model: SendConfirmModel,
         loc: Loc,
         fee: FeeViewWire? = nil,
-        speed: FeeSpeedViewWire? = nil
+        speed: FeeSpeedViewWire? = nil,
+        networks: WalletNetworks = .builtin
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
         let symbol = token?.symbol ?? ""
-        let chain = token.map { ChainCatalog.meta($0.chainId)?.displayName ?? $0.network } ?? ""
+        let chain = token.map { networks.meta($0.chainId)?.displayName ?? $0.network } ?? ""
+        // The network the signature moves money on: a sweep's locked chain,
+        // else the token's. Never 0.
+        let networkChainId = (view.multiSelectMode ? view.multiChainId : nil) ?? token?.chainId
 
         var facts = [
+            // Who pays, with the face every other shell draws beside it.
             FactRowModel(
                 label: model.facts.first?.label ?? "",
-                value: from.name ?? AddressText.short(from.address)
+                value: from.name ?? AddressText.short(from.address),
+                lead: isAddress(from.address) ? .identicon(from.address) : nil
             ),
             // Who is paid, as the core names them (spec 097 F): a single send
             // and a sweep alike. A split's has no one payee and goes below.
@@ -933,9 +946,12 @@ enum SendLive {
                 address: view.recipient.trimmingCharacters(in: .whitespaces),
                 payee: singlePayee(view), loc: loc
             ),
+            // The NETWORK, in the network's own mark (the kind rule): "Base"
+            // beside Base's logo, whatever coin is sent on it.
             FactRowModel(
                 label: model.facts.count > 2 ? model.facts[2].label : "",
-                value: chain
+                value: networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain,
+                lead: networkChainId.flatMap { networkMark($0, networks: networks) }.map { .token($0) }
             ),
             FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
