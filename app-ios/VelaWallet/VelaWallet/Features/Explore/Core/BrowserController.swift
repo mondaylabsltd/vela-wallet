@@ -345,22 +345,18 @@ final class BrowserController {
     /// tab — never over a live dApp. Until 2026-10 this navigated the
     /// selected tab whatever it held, so a site opened from the home
     /// replaced the dApp the person had left there. A picked site (`.site`)
-    /// that a tab is already on comes back as it was left.
+    /// that a tab is already on comes back as it was left. A full strip
+    /// (24 tabs) has no room for a new one, and the core then answers the
+    /// selected tab.
     func open(_ text: String, kind: ExploreOpenKind = .address, onPage: Bool = false) {
         guard let url = dappBrowserInput(text: text) else { return }
         pageWanted = true
         whenReady { [weak self] in
             guard let self else { return }
             let shown = onPage ? explore.selectedTab : nil
-            var target = Self.openTarget(view: explore, shown: shown, onPage: onPage, url: url, kind: kind)
-            // A full strip takes no new tab: the core drops `tab_opened`, and
-            // an open that does nothing is a dead control. Until the core's
-            // rule answers for a full strip, the page goes where the desktop
-            // puts it then — the tab in front.
-            if target == .newTab, explore.tabsFull, let selected = explore.selectedTab {
-                VelaLog.notice(.browser, "open: strip full, loads in tab=\(selected)")
-                target = .load(selected)
-            }
+            // A full strip is the core's too: it never answers a new tab
+            // the explore machine would drop, but the selected tab.
+            let target = Self.openTarget(view: explore, shown: shown, onPage: onPage, url: url, kind: kind)
             switch target {
             case .load(let id):
                 if explore.selectedTab != id {

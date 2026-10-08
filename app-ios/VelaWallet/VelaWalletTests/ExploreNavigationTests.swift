@@ -210,8 +210,34 @@ struct ExploreNavigationTests {
     }
 
     /// A full strip takes no new tab (the core drops `tab_opened` at its
-    /// cap): an open from the home then loads in the tab in front, as the
-    /// desktop does, rather than doing nothing at all.
+    /// cap), so the core's open target answers the selected tab: an open
+    /// from the home loads there, as the desktop does, rather than doing
+    /// nothing at all. The shell has no rule of its own for it.
+    @Test func aFullStripIsAnsweredWithTheSelectedTab() {
+        func strip(tabs count: Int) -> ExploreViewWire {
+            var view = ExploreViewWire(
+                favorites: [], tabs: (1...count).map { tab("t\($0)", "https://site\($0).example/") },
+                selectedTab: "t3", favoritesHidden: false, recentHidden: false,
+                favoritesFull: false, tabsFull: count >= 24, ready: true
+            )
+            view.recentTabs = ["t3"]
+            return view
+        }
+        let full = strip(tabs: 24)
+        for kind in [ExploreOpenKind.address, .site] {
+            #expect(BrowserController.openTarget(view: full, shown: nil, onPage: false,
+                                                 url: "https://late.example/", kind: kind) == .load("t3"))
+        }
+        // A picked site already in the strip still comes back as it was left.
+        #expect(BrowserController.openTarget(view: full, shown: nil, onPage: false,
+                                             url: "https://site7.example/", kind: .site) == .resume("t7"))
+        // One short of the cap: a new tab, as ever.
+        #expect(BrowserController.openTarget(view: strip(tabs: 23), shown: nil, onPage: false,
+                                             url: "https://late.example/", kind: .address) == .newTab)
+    }
+
+    /// The same, end to end through the controller and the real explore
+    /// machine: the open lands in the selected tab of a full strip.
     @Test(.timeLimit(.minutes(5)))
     func aFullStripStillOpens() async throws {
         let tabs: [[String: Any]] = (1...24).map { n in
