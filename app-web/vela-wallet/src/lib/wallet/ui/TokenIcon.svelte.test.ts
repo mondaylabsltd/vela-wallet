@@ -9,6 +9,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import '$lib/tokens/tokens.css';
+// The global base: every box is border-box, so a ring sits inside its size.
+import '../../../app.css';
 import { hasFailed, resetLogoCacheForTests } from '$lib/services/logo-cache';
 import TokenIcon from './TokenIcon.svelte';
 
@@ -63,5 +66,22 @@ describe('TokenIcon', () => {
 			props: { ticker: 'eth', badgeColor: '#000', logoUrls: [LOADS], badgeHidden: true }
 		});
 		expect(own.container.querySelector('.badge')).toBeNull();
+	});
+
+	// The badge ruling every shell draws to (2026-10-08): a chain badge that
+	// carries a logo is 16 across, its 1.5 ring inside that — the phones moved
+	// up from 12 to match. A smaller badge was a logo nobody could read.
+	it('draws a logo badge 16 across in a 1.5 ring, on every shell the same', () => {
+		const screen = render(TokenIcon, {
+			props: { ticker: 'usdc', badgeColor: '#000', logoUrls: [LOADS], badgeLogoUrl: LOADS }
+		});
+		const badge = screen.container.querySelector<HTMLElement>('.badge.with-logo')!;
+		expect(badge.getBoundingClientRect().width).toBe(16);
+		expect(badge.getBoundingClientRect().height).toBe(16);
+		// The ring is the emphasis border; at 1x the browser snaps 1.5 to a
+		// whole pixel, so the token is what is pinned, and that it is drawn.
+		const ring = getComputedStyle(document.documentElement).getPropertyValue('--border-emphasis');
+		expect(ring.trim()).toBe('1.5px');
+		expect(parseFloat(getComputedStyle(badge).borderTopWidth)).toBeGreaterThan(0);
 	});
 });
