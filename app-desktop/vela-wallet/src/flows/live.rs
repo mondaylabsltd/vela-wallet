@@ -384,7 +384,7 @@ pub fn tx_detail(
             detail: None,
         });
     }
-    facts.push(network_fact(item.chain_id, &item.symbol, s));
+    facts.push(network_fact(item.chain_id, s));
     facts.push(FactRow {
         label: s.detail_date.clone(),
         value: SharedString::from(stamp(item.timestamp, s, locale)),
@@ -503,7 +503,7 @@ fn dapp_detail(
         facts: dapp
             .facts
             .iter()
-            .map(|fact| dapp_fact(fact, item, dapp, s, wallet, hidden, locale))
+            .map(|fact| dapp_fact(fact, dapp, s, wallet, hidden, locale))
             .collect(),
         technical: (!dapp.technical.is_empty()).then(|| crate::flows::fixtures::Technical {
             toggle: s.detail_technical.clone(),
@@ -519,7 +519,6 @@ fn dapp_detail(
 /// the reader's words and format.
 fn dapp_fact(
     fact: &FeedFact,
-    item: &FeedItem,
     dapp: &FeedDapp,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
@@ -538,7 +537,7 @@ fn dapp_fact(
     };
     match fact {
         FeedFact::Site { site } => plain(&s.detail_app, SharedString::from(site.clone())),
-        FeedFact::Network { chain_id } => network_fact(*chain_id, &item.symbol, s),
+        FeedFact::Network { chain_id } => network_fact(*chain_id, s),
         // Who got the money (spec 082 RJ16): a plain send's recipient, or the
         // one a token transfer names — never the token contract it was called
         // on. The core names them as the row does.
@@ -659,23 +658,16 @@ fn hash_fact(label: &SharedString, hash: &str) -> FactRow {
     }
 }
 
-/// The network a record is on, wearing the row's coin — or, when the row has
-/// none (a dApp call that moved no coin, a signature, a multi-token sweep),
-/// the chain's own rather than an empty mark (083 H2 review).
-fn network_fact(chain_id: u32, symbol: &str, s: &FlowStrings) -> FactRow {
-    let coin = if symbol.is_empty() {
-        native_symbol(chain_id)
-    } else {
-        symbol.to_owned()
-    };
+/// The network a record is on, wearing the NETWORK's mark: its own logo over
+/// its coin's letters, never a badge (the core's kind rule). It used to wear
+/// the record's coin, and the native coin's home-chain rule put Ethereum's
+/// logo beside "Base" on every ETH sent there; the coin is the amount's, not
+/// the network's.
+fn network_fact(chain_id: u32, s: &FlowStrings) -> FactRow {
     FactRow {
         label: s.detail_chain.clone(),
         value: SharedString::from(chain_name(chain_id)),
-        lead: FactLead::Token(TokenMark {
-            ticker: SharedString::from(coin.clone()),
-            badge: tint(chain_id),
-            logos: crate::marks::token_logos(chain_id, &coin, None, &[]),
-        }),
+        lead: FactLead::Token(network_mark(chain_id)),
         mono: false,
         copy: None,
         note: None,
@@ -779,7 +771,7 @@ pub fn technical_lines(
                 }
             }
             // Nothing here is a balance: hashes and names, never masked.
-            other => TechnicalLine::Fact(dapp_fact(other, item, dapp, s, wallet, false, locale)),
+            other => TechnicalLine::Fact(dapp_fact(other, dapp, s, wallet, false, locale)),
         })
         .collect()
 }
@@ -952,10 +944,13 @@ pub fn add_network_tab(
     };
     use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
 
+    // A network being added is drawn as itself (the core's kind rule): its
+    // own logo, no badge. The native coin's rule put Ethereum's logo on every
+    // ETH L2 the wizard found. Chain 0 — nothing resolved yet — asks for none.
     let mark_of = |chain_id: u32, symbol: &str| TokenMark {
         ticker: SharedString::from(symbol.to_owned()),
         badge: tint(chain_id),
-        logos: crate::marks::token_logos(chain_id, symbol, None, &[]),
+        logos: crate::marks::chain_logos(chain_id),
     };
     let facts = |chain_id: u32, symbol: &str| {
         vec![
@@ -1436,11 +1431,31 @@ fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
     }
 }
 
-fn native_symbol(chain_id: u32) -> String {
-    BUILTIN_CHAINS
+/// A network's own coin: the built-in's, or the one the person gave a network
+/// they added (`receivable_chains` reads the same list). Empty only for a
+/// chain the wallet does not know.
+pub(crate) fn native_symbol(chain_id: u32) -> String {
+    if let Some(chain) = BUILTIN_CHAINS
         .iter()
         .find(|chain| chain.chain_id == chain_id)
-        .map_or_else(String::new, |chain| chain.native_symbol.to_owned())
+    {
+        return chain.native_symbol.to_owned();
+    }
+    receivable_chains()
+        .into_iter()
+        .find(|(id, _)| *id == chain_id)
+        .map_or_else(String::new, |(_, symbol)| symbol)
+}
+
+/// A NETWORK drawn as itself — a network row or fact, a notice that locks a
+/// chain, the add-network wizard: its own logo over its coin's letters, and
+/// never a badge (the core's `chain_mark`).
+pub(crate) fn network_mark(chain_id: u32) -> TokenMark {
+    TokenMark {
+        ticker: SharedString::from(native_symbol(chain_id)),
+        badge: tint(chain_id),
+        logos: crate::marks::chain_logos(chain_id),
+    }
 }
 
 /// A token figure held as a float (a fee in its coin, a parsed balance), on
@@ -3609,11 +3624,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         FactRow {
             label: s.detail_chain.clone(),
             value: chain_name(chain_id).into(),
-            lead: FactLead::Token(TokenMark {
-                ticker: native_symbol(chain_id).into(),
-                badge: tint(chain_id),
-                logos: crate::marks::chain_logos(chain_id),
-            }),
+            lead: FactLead::Token(network_mark(chain_id)),
             mono: false,
             copy: None,
             note: None,
@@ -5607,6 +5618,138 @@ mod tests {
         }
     }
 
+    /// The wizard draws a network being added as itself (the core's kind
+    /// rule): Base wears Base's own logo and no badge — the native coin's rule
+    /// put Ethereum's logo on every ETH L2 it found — and a card whose chain
+    /// has not resolved yet asks the endpoint for nothing (never chain 0).
+    #[test]
+    fn the_native_tab_wears_each_networks_own_logo() {
+        crate::executor::storage::tests::with_temp_state("flows-wizard-marks", || {
+            use crate::flows::fixtures::AddTokenResult;
+            use vela_core::app::network_admin::{NetChainIndexEntry, NetWizardPhase};
+            let s = strings();
+            let mut wizard = CoreHost::<vela_core::app::network_admin::NetworkAdmin>::new()
+                .view()
+                .wizard;
+            wizard.phase = NetWizardPhase::Suggested;
+            wizard.suggestions = vec![NetChainIndexEntry {
+                chain_id: 8453,
+                name: "Base".to_owned(),
+                short_name: "base".to_owned(),
+                native_currency_symbol: "ETH".to_owned(),
+                has_logo: true,
+            }];
+            match add_network_tab(&wizard, "base", None, &s).result {
+                AddTokenResult::Suggestions(rows) => {
+                    let mark = &rows[0].mark;
+                    assert_eq!(mark.ticker.as_ref(), "ETH");
+                    assert_eq!(
+                        mark.logos.logo_urls,
+                        vec![SharedString::from(
+                            "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+                        )]
+                    );
+                    assert!(mark.logos.badge_hidden && mark.logos.badge_logo.is_none());
+                }
+                _ => unreachable!("a match is offered"),
+            }
+
+            wizard.suggestions.clear();
+            wizard.phase = NetWizardPhase::Resolving;
+            wizard.chain_info = None;
+            match add_network_tab(&wizard, "base", None, &s).result {
+                AddTokenResult::Network { mark, .. } => {
+                    assert!(mark.logos.logo_urls.is_empty(), "nothing asked of chain 0");
+                    assert!(mark.logos.badge_hidden);
+                }
+                _ => unreachable!("a resolving card"),
+            }
+        });
+    }
+
+    /// The kind rule on the detail page: ETH sent on Base is a BASE record,
+    /// so its network line wears Base's own logo, no badge — not Ethereum's,
+    /// which the coin's rule gives the coin. On the person's endpoint, read
+    /// when the row is built.
+    #[test]
+    fn the_network_line_wears_the_networks_logo_not_the_coins() {
+        crate::executor::storage::tests::with_temp_state("flows-network-fact", || {
+            use vela_core::app::activity_feed::FeedTxRecord;
+            let record = |endpoint: &str| {
+                let _ = crate::executor::storage::write_value(
+                    crate::executor::storage::KEY_SERVICE_ENDPOINTS,
+                    serde_json::json!({ "ethereumDataURL": endpoint }),
+                );
+                FeedTxRecord {
+                    id: "base-eth".to_owned(),
+                    user_op_hash: String::new(),
+                    tx_hash: "0xbeef".to_owned(),
+                    from: "0xme".to_owned(),
+                    to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+                    to_name: None,
+                    value: "0.01".to_owned(),
+                    symbol: "ETH".to_owned(),
+                    decimals: 18,
+                    logo_urls: None,
+                    chain_id: 8453,
+                    timestamp: 1_756_000_000.0,
+                    day_start_ms: 0.0,
+                    status: FeedTxStatus::Confirmed,
+                    kind: None,
+                    usd: None,
+                    dapp_url: None,
+                    intent: None,
+                    balance_changes: None,
+                    calldata: None,
+                    call_data: None,
+                    summary: None,
+                    settlement: None,
+                }
+            };
+            let (s, w) = (strings(), wallet_strings());
+            for (endpoint, logo) in [
+                (
+                    "",
+                    "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png",
+                ),
+                (
+                    "https://data.example/",
+                    "https://data.example/chainlogos/eip155-8453.png",
+                ),
+            ] {
+                let view = crate::wallet::fixtures::core_feed(vec![record(endpoint)]);
+                let detail = tx_detail(
+                    &view,
+                    "base-eth",
+                    &s,
+                    &w,
+                    false,
+                    "en-US",
+                    crate::wallet::live::Money::usd(),
+                )
+                .unwrap_or_else(|| unreachable!("the row exists"));
+                let network = detail
+                    .facts
+                    .iter()
+                    .find(|fact| fact.label == s.detail_chain)
+                    .unwrap_or_else(|| unreachable!("the detail names its network"));
+                assert_eq!(network.value.as_ref(), "Base");
+                match &network.lead {
+                    FactLead::Token(mark) => {
+                        assert_eq!(mark.ticker.as_ref(), "ETH");
+                        assert_eq!(
+                            mark.logos.logo_urls,
+                            vec![SharedString::from(logo)],
+                            "{endpoint:?}"
+                        );
+                        assert!(mark.logos.badge_hidden, "a network wears no badge");
+                    }
+                    _ => unreachable!("the network line leads with the network's mark"),
+                }
+            }
+        });
+    }
+
     /// A transaction's detail, and the row order the listeners are bound in.
     /// Spec 082 RG2 (T072), spec 093: a dApp's transaction opens under its
     /// row's own title, with the status the core gave its row and, first,
@@ -6059,10 +6202,15 @@ mod tests {
             detail.facts[2].copy.as_deref(),
             Some("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad")
         );
-        // The network line wears the row's coin.
+        // The network line wears the NETWORK's mark (the core's kind rule):
+        // Ethereum's own logo over its coin's letters, no badge — never the
+        // swapped coin's.
         match &detail.facts[1].lead {
-            FactLead::Token(mark) => assert_eq!(mark.ticker.as_ref(), "USDC"),
-            _ => unreachable!("the network line leads with a coin"),
+            FactLead::Token(mark) => {
+                assert_eq!(mark.ticker.as_ref(), "ETH");
+                assert_eq!(mark.logos, crate::marks::chain_logos(1));
+            }
+            _ => unreachable!("the network line leads with the network's mark"),
         }
         assert!(detail.explorer_url.as_ref().is_some_and(|url| {
             url.ends_with("0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f")

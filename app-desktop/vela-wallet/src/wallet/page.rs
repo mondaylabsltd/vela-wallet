@@ -1575,6 +1575,7 @@ impl WalletPage {
         }
         let lines = flow_fixtures::address_lines(&identity.address);
         let network = crate::flows::live::chain_name(self.receive_chain);
+        let network_mark = flows_live::network_mark(self.receive_chain);
         Some(ShareCardFacts {
             headline: self.flow_strings.share_card_headline.to_string(),
             payload: pay.qr_value.clone(),
@@ -1591,11 +1592,15 @@ impl WalletPage {
             // The NETWORK's mark in the code's centre, token or not: the card
             // says which network may pay, and one card serves every asset on
             // it (founder, 2026-08-15). The letters only show when the logo
-            // cannot be fetched.
-            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
-            network_tint: flows_live::chain_tint(self.receive_chain),
-            network_logo_url: crate::marks::chain_logo_url(self.receive_chain)
-                .map(|url| url.to_string()),
+            // cannot be fetched, and they are the screen's own centre's — the
+            // network's coin ("XDA" for Gnosis), not its name's first three.
+            network_ticker: crate::marks::glyph(&network_mark.ticker).to_string(),
+            network_tint: network_mark.badge,
+            network_logo_url: network_mark
+                .logos
+                .logo_urls
+                .first()
+                .map(ToString::to_string),
             // "Vela Wallet", as the web's card signs itself.
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
