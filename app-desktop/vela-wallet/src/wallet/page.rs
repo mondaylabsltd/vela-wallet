@@ -199,6 +199,31 @@ fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
     }
 }
 
+/// What becomes of a send parked under "Report this" (issue 466) once the
+/// person is somewhere new.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParkedSend {
+    /// Still in Settings, where the report is: the send waits, unseen.
+    Keep,
+    /// Back on the wallet with no other column open: the send is on screen
+    /// again as it was left — recipient, amount, the stop.
+    Resume,
+    /// Anywhere else: the switch closes the send, as any switch does.
+    Drop,
+}
+
+/// [`ParkedSend`] for where the person is now. The web swaps the same sheet's
+/// body and the phones lay the report over the flow; on desktop the reporter
+/// is a Settings page, so the send is parked the way RJ18 hides a signing
+/// column — and the way back to the wallet is the way back to it.
+fn parked_send_after(section: Section, panel: PanelId) -> ParkedSend {
+    match (section, panel) {
+        (Section::Settings, _) => ParkedSend::Keep,
+        (Section::Wallet, PanelId::None | PanelId::Flow) => ParkedSend::Resume,
+        _ => ParkedSend::Drop,
+    }
+}
+
 /// Whether a request's ending that arrives now is kept (RJ18): the column is
 /// on screen, or only hidden by a switch of section. One the person closed
 /// opens for nothing.
@@ -711,6 +736,9 @@ pub struct WalletPage {
     /// Spec 082 RJ18: the signing column was left for another section, not
     /// closed — its ending is kept, and shown again when Explore returns.
     signing_hidden: bool,
+    /// Issue 466: "Report this" left the send column for Settings →
+    /// Feedback with the send parked, not closed ([`parked_send_after`]).
+    send_parked: bool,
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
@@ -1402,6 +1430,7 @@ impl WalletPage {
             dapp_landing: None,
             dapp_landing_seq: 0,
             signing_hidden: false,
+            send_parked: false,
             signing_last: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
@@ -6081,6 +6110,7 @@ impl WalletPage {
     /// column does, and its answer is what records the payment and hands it
     /// to the tracker, so the machines run on, unseen, until it is in.
     fn let_send_go(&mut self, cx: &mut Context<Self>) {
+        self.send_parked = false;
         let Some(host) = self.send_host.take() else {
             return;
         };
@@ -6103,6 +6133,8 @@ impl WalletPage {
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
+        // A new send replaces one parked under a report.
+        self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
             // A column that ran on unseen goes once its submit is in.
             page.send_background
@@ -19493,8 +19525,21 @@ impl Render for WalletPage {
 
         // The app's report left unsent: the person's own comes back.
         self.settle_relay_report_visit();
+        // A send parked under that report: back with the wallet, kept while
+        // the person is in Settings, closed by any other switch.
+        if self.send_parked {
+            match parked_send_after(self.section, self.panel) {
+                _ if self.send_host.is_none() => self.send_parked = false,
+                ParkedSend::Keep => {}
+                ParkedSend::Resume => {
+                    self.panel = PanelId::Flow;
+                    self.send_parked = false;
+                }
+                ParkedSend::Drop => self.send_parked = false,
+            }
+        }
         // The column was closed under a live send: its machines go with it.
-        if self.panel != PanelId::Flow && self.send_host.is_some() {
+        if self.panel != PanelId::Flow && self.send_host.is_some() && !self.send_parked {
             self.let_send_go(cx);
             self.send_fee_picker = false;
         }
@@ -19976,6 +20021,46 @@ mod tests {
         // Closed by the person (✕, Done): nothing comes back.
         assert!(!keeps_ending(PanelId::None, false));
         assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Issue 466: "Report this" parks the send under Settings → Feedback.
+    /// The way back to the wallet is the way back to it — recipient, amount
+    /// and the stop as they were — and any other switch closes it as a
+    /// switch always has.
+    #[test]
+    fn a_send_parked_under_a_report_comes_back_with_the_wallet_only() {
+        // On the report (and anywhere in Settings): it waits.
+        assert_eq!(
+            parked_send_after(Section::Settings, PanelId::None),
+            ParkedSend::Keep
+        );
+        // 钱包 from the sidebar (no column), or 完成 on the filed report.
+        let panel = panel_after_switch(Section::Wallet, false);
+        assert_eq!(
+            parked_send_after(Section::Wallet, panel),
+            ParkedSend::Resume
+        );
+        // Any other section: gone.
+        for destination in [Section::Contacts, Section::Explore] {
+            let panel = panel_after_switch(destination, false);
+            assert_eq!(
+                parked_send_after(destination, panel),
+                ParkedSend::Drop,
+                "{destination:?}"
+            );
+        }
+        // Back on the wallet with another column opened over it — a receipt,
+        // a receive: that column is what the person went for.
+        assert_eq!(
+            parked_send_after(Section::Wallet, PanelId::Receive),
+            ParkedSend::Drop
+        );
+        // A signing column RJ18 brings back with Explore does not bring the
+        // send with it.
+        assert_eq!(
+            parked_send_after(Section::Explore, panel_after_switch(Section::Explore, true)),
+            ParkedSend::Drop
+        );
     }
 
     /// Spec 097 E: the Connection column speaks of a real connection or of

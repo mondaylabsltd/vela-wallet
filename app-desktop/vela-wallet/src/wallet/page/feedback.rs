@@ -907,6 +907,13 @@ impl WalletPage {
         let draft = &mut self.feedback;
         if let Some(steps_open) = draft.report.end_visit() {
             draft.steps_open = steps_open;
+            // …and a send parked under it is where 完成 lands: back on the
+            // stop the report was about, as the web's sheet returns to it.
+            if self.send_parked && self.send_host.is_some() {
+                self.section = Section::Wallet;
+                self.panel = PanelId::None;
+                self.menu = None;
+            }
         } else {
             draft.report.what.clear();
             draft.report.steps.clear();
@@ -945,12 +952,14 @@ impl WalletPage {
     /// endings — opened on the core's report as it stood at the press, filed
     /// under the core's area and key. A page, not a second sheet over the
     /// send: the desktop's reporter is a Settings page, and going there is a
-    /// section switch like any other, so the send column goes as it does on
-    /// any switch (the stop is what stopped it). The words can be edited; the
-    /// key stays the core's so every report of this outage stays one issue —
-    /// until its title line is rewritten, when it is the person's own. What
-    /// the person had on the form is set aside, and comes back once this
-    /// report is filed and put away, or left unsent.
+    /// section switch. The send column leaves the screen but the send is
+    /// parked, not closed: the way back to the wallet (or 完成 on the filed
+    /// report) returns to it with the recipient and amount as they were, and
+    /// any other switch closes it, as a switch always has. The words can be
+    /// edited; the key stays the core's so every report of this outage stays
+    /// one issue — until its title line is rewritten, when it is the
+    /// person's own. What the person had on the form is set aside, and comes
+    /// back once this report is filed and put away, or left unsent.
     ///
     /// A report still going is left alone: the page opens on its progress,
     /// and pressing Report again once it ends starts this one.
@@ -985,6 +994,9 @@ impl WalletPage {
         self.settings_page = SettingsPage::Feedback;
         self.settings_dialog = None;
         self.settings_probed_panel = None;
+        // The send waits under the report rather than going with the column
+        // (`parked_send_after`).
+        self.send_parked = self.send_host.is_some();
         self.panel = PanelId::None;
         self.menu = None;
         cx.notify();
