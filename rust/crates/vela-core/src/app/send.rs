@@ -1363,20 +1363,24 @@ pub enum Event {
         recipients: Vec<SendRecipientDraft>,
     },
     /// `target` = the split row the picker fills; `None` = the single-mode
-    /// recipient field.
+    /// recipient field, or — in a split — the first row with no address,
+    /// else a new row.
     OpenContactPicker {
         target: Option<String>,
     },
     CloseContactPicker,
-    /// The contact picker chose an address.
+    /// The contact picker chose an address. It lands where
+    /// [`Event::OpenContactPicker`]'s `target` says; a shell never adds a
+    /// blank row of its own to aim a split's pick.
     PickedAddress {
         address: String,
     },
     OpenScanner,
     CloseScanner,
-    /// A scan, parsed by the shell. Routing (`SendScreen.tsx:181-203`): a
-    /// targeted split row takes ONLY the address (invariant ⑬); a full
-    /// request re-locks the whole flow; anything else fills the recipient.
+    /// A scan, parsed by the shell. Routing (`SendScreen.tsx:181-203`): in a
+    /// split, ONLY the address, into the row a pick would take (invariant
+    /// ⑬); a full request re-locks the whole flow; anything else fills the
+    /// recipient.
     ScanResolved {
         scan: SendScan,
     },
@@ -4201,19 +4205,52 @@ fn recipients_changed(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
 /// way `seed_split` does for a whole group. Leaving the sheet up after the
 /// person chose would make the shell dispatch a second event to say what the
 /// first one already meant (spec 028 US5).
+///
+/// Which row, in a split: the one the picker was opened for; with no row
+/// named (a split's "from contacts" opens the picker for the split as a
+/// whole), the first row with no address yet, else a new row at the end. The
+/// single form's recipient is hidden while a split is up, and a pick that
+/// went there was a person the screen never showed and the send never paid.
+/// The split's cap holds: with every one of its rows taken, nothing is added.
 fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
     model.show_contact_picker = false;
-    match model.picker_target.clone() {
-        Some(target) => {
-            for row in &mut model.recipients {
-                if row.id == target {
-                    row.address = address.clone();
-                }
-            }
-            render()
-        }
-        None => hand_in_recipient(model, address),
+    if !model.split_mode {
+        return hand_in_recipient(model, address);
     }
+    let named = model
+        .picker_target
+        .as_ref()
+        .and_then(|target| model.recipients.iter().position(|row| &row.id == target));
+    let slot = named.or_else(|| {
+        model
+            .recipients
+            .iter()
+            .position(|row| row.address.trim().is_empty())
+    });
+    match slot {
+        Some(index) => {
+            if let Some(row) = model.recipients.get_mut(index) {
+                // A row's name is the person's word for whoever its address
+                // was (a group member, a list's name column); another address
+                // is somebody else.
+                if row.address.trim() != address.trim() {
+                    row.name = None;
+                }
+                row.address = address;
+            }
+        }
+        None if model.recipients.len() < BATCH_MAX_RECIPIENTS => {
+            let id = make_recipient_id(model);
+            model.recipients.push(SendRecipientDraft {
+                id,
+                address,
+                amount: String::new(),
+                name: None,
+            });
+        }
+        None => {}
+    }
+    render()
 }
 
 /// A recipient that arrived from outside the field — a scan, a pick from the
@@ -4238,9 +4275,12 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
     // filled (issue #270), on every shell. The targeted path below closes it
     // through `apply_picked_address`; a re-lock reopens the flow either way.
     model.show_contact_picker = false;
-    // Per-row scan in split mode — just the address; a full-request re-lock
-    // would blow away the other recipients (invariant ⑬).
-    if model.picker_target.is_some() {
+    // A scan in split mode — just the address, into the row it was for or
+    // the row a pick would take; a full-request re-lock would blow away the
+    // other recipients (invariant ⑬). The picker's scan row is a pick, so a
+    // split's targetless picker scans into the split, never into the hidden
+    // single recipient.
+    if model.split_mode {
         let address = match scan {
             SendScan::Request { recipient, .. } => recipient,
             SendScan::Text { data } => data,

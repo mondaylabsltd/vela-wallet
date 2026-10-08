@@ -4641,6 +4641,233 @@ fn a_pick_from_the_book_fills_the_recipient_and_closes_the_picker() {
         .any(|r| r.id == second && r.address == RECIPIENT_B));
 }
 
+const RECIPIENT_C: &str = "0xdddddddddddddddddddddddddddddddddddddddd";
+
+fn split_row(id: &str, address: &str, amount: &str, name: Option<&str>) -> SendRecipientDraft {
+    SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: name.map(str::to_owned),
+    }
+}
+
+/// A split's "from contacts" opens the book for the split, not for a row:
+/// the pick fills the first row with no address yet — never the single
+/// form's recipient, which a split hides and never pays (Android's 从通讯录
+/// did exactly that; the web and iOS each added a row of their own to aim
+/// it).
+#[test]
+fn a_targetless_pick_in_a_split_fills_the_first_row_with_no_address() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetRecipient {
+        recipient: RECIPIENT.to_owned(),
+    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    sut.dispatch(Event::EnterSplitMode);
+    let before = sut.view().recipients;
+    assert_eq!(
+        before.len(),
+        2,
+        "the split opens as [the recipient, a blank]"
+    );
+
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker, "the pick closes the picker");
+    assert!(view.split_mode);
+    assert_eq!(
+        view.recipients.len(),
+        2,
+        "no row is added while one is free"
+    );
+    assert_eq!(view.recipients[0], before[0], "the first row is untouched");
+    assert_eq!(view.recipients[1].id, before[1].id);
+    assert_eq!(view.recipients[1].address, RECIPIENT_B);
+    assert_eq!(
+        view.recipient, RECIPIENT,
+        "the hidden single recipient is not where a split's pick goes"
+    );
+
+    // A row with a figure but no address is the free one: it is waiting
+    // for its person, and it keeps its figure.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", "  ", "0.25", None),
+            split_row("rcpt_3", "", "", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[1].address, RECIPIENT_C);
+    assert_eq!(rows[1].amount, "0.25", "its figure stays");
+    assert_eq!(rows[2].address, "", "only the first free row is taken");
+}
+
+/// With every row taken, a targetless pick is a new row at the end — fresh
+/// id, no figure yet — and at the split's cap, nothing (invariant ⑩).
+#[test]
+fn a_targetless_pick_in_a_full_split_adds_a_row_up_to_the_cap() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", RECIPIENT_B, "", Some("Bea")),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipients.len(), 3);
+    assert_eq!(
+        view.recipients[0],
+        split_row("rcpt_1", RECIPIENT, "0.5", None)
+    );
+    assert_eq!(
+        view.recipients[1],
+        split_row("rcpt_2", RECIPIENT_B, "", Some("Bea"))
+    );
+    let added = &view.recipients[2];
+    assert_eq!(added.address, RECIPIENT_C);
+    assert_eq!(added.amount, "");
+    assert_eq!(added.name, None);
+    assert!(added.id.starts_with("rcpt_"), "{}", added.id);
+    assert!(
+        view.recipients[..2].iter().all(|row| row.id != added.id),
+        "a new row is a new id"
+    );
+
+    let full: Vec<SendRecipientDraft> = (0..BATCH_MAX_RECIPIENTS)
+        .map(|i| split_row(&format!("row_{i}"), &format!("0x{:040x}", i + 1), "1", None))
+        .collect();
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: full.clone(),
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipients, full, "⑩: never a sixty-first row");
+}
+
+/// A pick for a row that has gone since the picker opened is not lost: it
+/// takes the row a targetless pick would. And a pick that changes a row's
+/// address takes its name with it — the name was the old person's.
+#[test]
+fn a_split_pick_never_lands_nowhere_and_never_keeps_a_strangers_name() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", Some("Ann")),
+            split_row("rcpt_2", "", "", None),
+            split_row("rcpt_3", RECIPIENT_C, "", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_9".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[1].address, RECIPIENT_B, "the free row, not nowhere");
+
+    // The same person picked again for their own row keeps their name.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT.to_owned(),
+    });
+    assert_eq!(sut.view().recipients[0].name.as_deref(), Some("Ann"));
+
+    // Somebody else picked for it does not wear it.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows[0].address, RECIPIENT_C);
+    assert_eq!(rows[0].name, None);
+    assert_eq!(
+        rows[0].amount, "0.5",
+        "the figure is the row's, not the name's"
+    );
+}
+
+/// The picker's scan row is a pick (issue #270), and a split's targetless
+/// picker scans into the split: only the address, into the first free row —
+/// a full request does not re-lock the flow over the rows (invariant ⑬),
+/// and nothing goes to the hidden single recipient.
+#[test]
+fn a_scan_from_a_splits_targetless_picker_lands_in_the_split() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", "", "0.25", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    let ops = sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Request {
+            recipient: RECIPIENT_B.to_owned(),
+            chain_id: Some(1),
+            token_address: Some(USDC.to_owned()),
+            amount_base_units: Some("123".to_owned()),
+        },
+    });
+    assert!(ops.is_empty(), "no re-lock: {ops:?}");
+    let view = sut.view();
+    assert!(view.split_mode);
+    assert!(!view.locked);
+    assert!(!view.show_scanner);
+    assert!(!view.show_contact_picker);
+    assert_eq!(
+        view.recipients[0],
+        split_row("rcpt_1", RECIPIENT, "0.5", None)
+    );
+    assert_eq!(view.recipients[1].address, RECIPIENT_B);
+    assert_eq!(view.recipients[1].amount, "0.25");
+    assert_ne!(view.recipient, RECIPIENT_B);
+
+    // A plain address with every row taken: a new row.
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT_C.to_owned(),
+        },
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[2].address, RECIPIENT_C);
+}
+
 #[test]
 fn an_untargeted_full_request_relocks_the_whole_flow() {
     let mut sut = boot(vec![eth("2"), usdc("5")]);
