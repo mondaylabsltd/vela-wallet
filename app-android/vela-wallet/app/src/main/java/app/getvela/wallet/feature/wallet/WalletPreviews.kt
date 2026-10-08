@@ -30,7 +30,7 @@ private object WalletPreviewStrings : VelaStrings {
         I18nKeys.Wallet.A11Y_SHOW_BALANCE to "显示余额",
         I18nKeys.Wallet.SECTION_ACTIVITY to "活动",
         I18nKeys.Wallet.EMPTY_NO_ACTIVITY to "暂无交易记录",
-        I18nKeys.Wallet.EMPTY_ACTIVITY_SUBTITLE to "收款将实时显示在这里。",
+        I18nKeys.Wallet.EMPTY_ACTIVITY_SUBTITLE to "你发出的交易会显示在这里，收到的钱会计入余额。",
         I18nKeys.Wallet.SECTION_ASSETS to "资产",
         I18nKeys.Wallet.ASSETS_ADD to "添加",
         I18nKeys.Wallet.ASSETS_EMPTY_TITLE to "存入您的第一笔资产",

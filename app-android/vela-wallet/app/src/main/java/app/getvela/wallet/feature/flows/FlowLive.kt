@@ -243,6 +243,8 @@ object FlowLive {
         explorers: Map<Int, String> = emptyMap(),
         /** Spec 049: the display currency; without one the fiat line is dollars, said so. */
         money: WalletLive.Money? = null,
+        /** Each network's own coin (`native_symbol`), which letters its mark under the logo. */
+        nativeSymbols: Map<Int, String> = emptyMap(),
     ): TxDetailModel? {
         val item = feed.rows
             .filterIsInstance<FeedRow.Item>()
@@ -250,7 +252,7 @@ object FlowLive {
             .firstOrNull { it.id == id }
             ?: return null
         // Spec 093: a dApp's transaction or signature opens to the core's facts.
-        item.dapp?.let { dapp -> return dappDetail(fallback, item, dapp, strings, chainNames, explorers, money) }
+        item.dapp?.let { dapp -> return dappDetail(fallback, item, dapp, strings, chainNames, explorers, money, nativeSymbols) }
 
         val received = item.direction == FeedDirection.In
         val amount = Formats.current.plain(
@@ -285,13 +287,7 @@ object FlowLive {
                     copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
                 ),
             )
-            add(
-                FactRowModel(
-                    label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
-                    value = chainNames[item.chain_id] ?: item.chain_id.toString(),
-                    lead = FactLead.Token(WalletLive.mark(item.chain_id, item.symbol, null)),
-                ),
-            )
+            add(networkFact(item.chain_id, strings, chainNames, nativeSymbols))
             // Spec 082 RG2: a dApp's transaction says which site asked for it.
             item.site?.takeIf { dapp && it.isNotBlank() }?.let { site ->
                 add(FactRowModel(label = strings.t(I18nKeys.Flows.REQUESTED_BY), value = site))
@@ -360,6 +356,7 @@ object FlowLive {
         chainNames: Map<Int, String>,
         explorers: Map<Int, String>,
         money: WalletLive.Money?,
+        nativeSymbols: Map<Int, String>,
     ): TxDetailModel {
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
         val allowance = dapp.allowance?.takeIf { item.value == null }
@@ -392,7 +389,7 @@ object FlowLive {
             received = if (leadsWithBack) null else back,
             // Spec 097 N7: only a price the core knows — unknown is not "$0.00".
             fiat = if (item.priced && !leadsWithBack) "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value))) else "",
-            facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames) },
+            facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames, nativeSymbols) },
             technical = TxTechnicalModel(
                 title = strings.t(I18nKeys.Flows.TECHNICAL),
                 lines = dapp.technical.mapNotNull { technicalLine(it, item, strings) },
@@ -419,17 +416,25 @@ object FlowLive {
         FeedTxStatus.Unknown -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_UNKNOWN), StatusTone.Info)
     }
 
+    /**
+     * The 网络 fact of a record: the network's name beside the NETWORK's own
+     * mark (the kind rule). It wore the transfer's coin's mark, so ETH sent
+     * on Base showed Ethereum's logo beside "Base". Lettered with the
+     * network's coin, else its name, when the logo cannot load.
+     */
+    private fun networkFact(chainId: Int, strings: VelaStrings, chainNames: Map<Int, String>, nativeSymbols: Map<Int, String>): FactRowModel {
+        val name = chainNames[chainId] ?: chainId.toString()
+        return FactRowModel(
+            label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
+            value = name,
+            lead = FactLead.Token(WalletLive.chainMark(chainId, nativeSymbols[chainId] ?: name)),
+        )
+    }
+
     /** One of the core's detail facts, labelled and formatted. */
-    private fun dappFact(fact: FeedFact, item: FeedItem, dapp: FeedDapp, strings: VelaStrings, chainNames: Map<Int, String>): FactRowModel? = when (fact) {
+    private fun dappFact(fact: FeedFact, item: FeedItem, dapp: FeedDapp, strings: VelaStrings, chainNames: Map<Int, String>, nativeSymbols: Map<Int, String>): FactRowModel? = when (fact) {
         is FeedFact.Site -> FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_APP), value = fact.site)
-        is FeedFact.Network -> {
-            val name = chainNames[fact.chain_id] ?: fact.chain_id.toString()
-            FactRowModel(
-                label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
-                value = name,
-                lead = FactLead.Token(WalletLive.chainMark(fact.chain_id, name)),
-            )
-        }
+        is FeedFact.Network -> networkFact(fact.chain_id, strings, chainNames, nativeSymbols)
         // 083 F3 review: the noun "Contract" — the call's target is not somebody it paid.
         is FeedFact.Contract -> party(strings.t(I18nKeys.Flows.DAPP_CONTRACT), fact.address, fact.name, strings)
         is FeedFact.Recipient -> party(strings.t(I18nKeys.Flows.DETAIL_TO), fact.address, fact.name, strings)

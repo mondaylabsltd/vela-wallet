@@ -41,11 +41,14 @@ sealed interface TileModel {
     data class Add(val label: String) : TileModel
 }
 
-/** `Favorites` and `Recent` are system groups: hideable, never deletable. */
-enum class GroupKind { Favorites, Recent, Custom }
+/**
+ * `Favorites` and `Recent` are the start page's only groups (issue #465):
+ * hideable, never deletable.
+ */
+enum class GroupKind { Favorites, Recent }
 
 /** The trailing affordance on a group's header row. */
-enum class GroupAction { Edit, Clear, Menu }
+enum class GroupAction { Edit, Clear }
 
 @Immutable
 data class GroupModel(
@@ -174,9 +177,8 @@ data class SiteMenuItem(
 data class GroupManageRow(
     val id: String,
     val title: String,
-    /** "8 个网站" / "2 · 已隐藏" — resolved by the fixture layer. */
+    /** "8 个网站" — resolved by the fixture layer; Recent dApps has none. */
     val meta: String?,
-    val system: Boolean,
     val hidden: Boolean = false,
 )
 
@@ -249,10 +251,10 @@ enum class AddNetworkAction { Approve, Decline, Retry }
 
 @Immutable
 sealed interface ExploreSheet {
+    /** Issue #465: exactly two rows, Favorites and Recent dApps, each with an eye. */
     data class GroupManage(
         val title: String,
         val rows: List<GroupManageRow>,
-        val newGroup: String,
     ) : ExploreSheet
 
     data class SiteMenu(

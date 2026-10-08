@@ -23,9 +23,9 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Founder review 2026-09-19, on the native sheets: the wallet's own request
- * wears the wallet's mark and name, a site gets its own icon with its initial
- * as the fallback, the chip carries the chain's logo. Where the passkey is was
+ * Founder review 2026-09-19, on the native sheets: a site gets its own icon
+ * with its initial as the fallback, the chip carries the chain's logo; the
+ * wallet's own request (2026-10-08) names no requester at all. Where the passkey is was
  * said at sign-in (founder, 2026-09-26): the sheet asks nothing about it.
  */
 class SigningHeaderAndRouteTest {
@@ -37,22 +37,40 @@ class SigningHeaderAndRouteTest {
     private val params = """[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x1"}]"""
     private val clear = ClearSigningView(resolving = false, resolved = true, result = null, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
 
-    private fun model(origin: String, transport: String, ctx: SigningLive.Context) = SigningLive.model(
+    private fun model(origin: String, transport: String, ctx: SigningLive.Context, firstParty: Boolean = false) = SigningLive.model(
         drawn,
         IncomingRequest("r1", "eth_sendTransaction", params, origin, transport, 1),
-        SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, origin, null, 1, null), confirm_gate_open = true),
+        SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, origin, null, 1, null, first_party = firstParty),
+            confirm_gate_open = true,
+        ),
         clear, GuardView(), FeeView(confirm_fee_ready = true), ctx,
     )
 
     private fun ctx() =
         SigningLive.Context(strings, "Ethereum", Color.Red, "ETH", "Mine", "0x88cCA0EeDbF2C4426110bbFc998F048689266894", chainId = 1)
 
+    /**
+     * The wallet's own request (the core's `first_party`) names no requester —
+     * no mark, no "Vela Wallet", no chip: its header is its intent and the ✕,
+     * and the intent is not said again below. Only the core's word makes it
+     * so: a page on the wallet's own origin, sending the same request, is a page.
+     */
     @Test
     fun `the wallet's own request is not a site`() {
-        val own = model("https://getvela.app", SigningLive.WALLET_TRANSPORT, ctx())
+        val own = model("https://getvela.app", SigningLive.WALLET_TRANSPORT, ctx(), firstParty = true)
         assertTrue(own.dappOwn)
-        assertEquals("Vela Wallet" to "", own.dappName to own.dappHost)
+        assertEquals("" to "", own.dappName to own.dappHost)
         assertTrue(own.dappIconUrls.isEmpty())
+        assertEquals(strings.t("componentsUi.signing.intentContractCall"), own.headline)
+        assertTrue(own.blocks.none { it is app.getvela.wallet.feature.signing.SigningBlock.Intent })
+
+        val page = model("https://getvela.app", "tab-1", ctx())
+        assertFalse(page.dappOwn)
+        assertEquals(null, page.headline)
+        assertEquals("getvela.app", page.dappName)
+        assertTrue(page.blocks.first() is app.getvela.wallet.feature.signing.SigningBlock.Intent)
     }
 
     @Test

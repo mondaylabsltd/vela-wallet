@@ -53,7 +53,8 @@ class WalletLiveTest {
         feed: FeedView = FeedView(),
         currency: CurrencyView = CurrencyView(code = "USD"),
         chainFilter: Int? = null,
-    ) = WalletLive.home(base(), view, feed, currency, strings, chains, chainFilter = chainFilter)
+        now: Long = System.currentTimeMillis(),
+    ) = WalletLive.home(base(), view, feed, currency, strings, chains, now = now, chainFilter = chainFilter)
 
     private fun token(
         symbol: String,
@@ -371,13 +372,75 @@ class WalletLiveTest {
         assertEquals("Can't reach 2 networks right now", two?.text)
 
         val limited = home(
-            BalanceView(display_total_usd = 4.5, refreshing = true, failed_chain_ids = listOf(137), rate_limited_chain_ids = listOf(137)),
+            BalanceView(
+                display_total_usd = 4.5,
+                notice = app.getvela.wallet.feature.wallet.core.BalanceNotice.StillUpdating,
+                failed_chain_ids = listOf(137),
+                rate_limited_chain_ids = listOf(137),
+            ),
         ).balance.status
         assertEquals(BalanceStatusKind.Refreshing, limited?.kind)
 
         val unpriced = home(BalanceView(display_total_usd = 4.5, notice = app.getvela.wallet.feature.wallet.core.BalanceNotice.Unpriced)).balance.status
         assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.BALANCE_UNPRICED), unpriced?.text)
         assertNull(home(BalanceView(display_total_usd = 4.5)).balance.status)
+    }
+
+    /**
+     * Issue 462: a refresh the person asked for is the control's to show — it
+     * turns and says "Updating…" — and never a status line. When it was one,
+     * every tap pushed "Some balances are still updating." in above the
+     * control, and the control slid out from under the finger.
+     */
+    @Test
+    fun `a refresh the person asked for adds no status line, the control says so`() {
+        val now = 1_800_000_000_000L
+        val idle = home(BalanceView(display_total_usd = 4.5, last_refreshed_at_ms = (now - 125_000L).toDouble()), now = now).balance
+        assertNull(idle.status)
+        assertEquals("Updated 2m", idle.refresh?.updated)
+        assertEquals("Updating…", idle.refresh?.updating)
+        assertFalse(idle.refresh!!.refreshing)
+
+        val pulling = home(
+            BalanceView(display_total_usd = 4.5, refreshing = true, last_refreshed_at_ms = (now - 125_000L).toDouble()),
+            now = now,
+        ).balance
+        assertNull("the refresh draws no line above the control", pulling.status)
+        assertTrue(pulling.refresh!!.refreshing)
+        // The label beside it stays the last settle's until the round settles.
+        assertEquals("Updated 2m", pulling.refresh?.updated)
+
+        // Nothing read yet: the glyph alone, and no line either — a skeleton
+        // with a refresh out is still a skeleton.
+        val first = home(BalanceView(refreshing = true), now = now).balance
+        assertEquals(BalanceStateKind.Loading, first.state)
+        assertNull(first.status)
+        assertNull(first.refresh?.updated)
+
+        // Hidden figures keep the control: it reads, it shows no number.
+        val hidden = home(BalanceView(display_total_usd = 4.5, hidden = true, last_refreshed_at_ms = now.toDouble()), now = now).balance
+        assertEquals(BalanceStateKind.Hidden, hidden.state)
+        assertEquals("Updated now", hidden.refresh?.updated)
+    }
+
+    /** The label ages in the core's words: under 45 s is "now", then minutes, then hours. */
+    @Test
+    fun `the updated label ages in the cores relative words`() {
+        val now = 1_800_000_000_000L
+        fun label(agoMs: Long) = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - agoMs).toDouble()), strings, now).updated
+        assertEquals("Updated now", label(0))
+        assertEquals("Updated now", label(44_000))
+        assertEquals("Updated 1m", label(45_000))
+        assertEquals("Updated 2m", label(125_000))
+        assertEquals("Updated 3m", label(150_000))
+        assertEquals("Updated 59m", label(3_540_000))
+        assertEquals("Updated 1h", label(3_600_000))
+        assertEquals("Updated 3h", label(3 * 3_600_000L + 10 * 60_000L))
+        // A clock behind the settle (read before it landed) is "now", never negative.
+        assertEquals("Updated now", label(-5_000))
+        // Past a day: the person's own date format.
+        val old = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - 3 * 86_400_000L).toDouble()), strings, now).updated
+        assertEquals("Updated " + Formats.current.date(now - 3 * 86_400_000L), old)
     }
 
     // -- the feed ------------------------------------------------------------

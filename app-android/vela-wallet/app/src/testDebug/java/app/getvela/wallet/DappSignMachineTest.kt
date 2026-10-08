@@ -403,7 +403,7 @@ class DappSignMachineTest {
 
     /**
      * Spec 096 F8: a failure that sent nothing is tried again from the sheet —
-     * the request goes back to review, still unanswered, and the second slide
+     * the request goes back to review, still unanswered, and the second confirm
      * is answered with the transaction like any other.
      */
     @Test
@@ -427,7 +427,7 @@ class DappSignMachineTest {
         val answered = answers.filter { it.first == "tab-1/r1" }
         assertEquals("exactly one answer", 1, answered.size)
         assertEquals("0xtx", answered.single().second.getString("result"))
-        assertEquals("signed twice: once per slide", 2, signs)
+        assertEquals("signed twice: once per confirm", 2, signs)
     }
 
     /**

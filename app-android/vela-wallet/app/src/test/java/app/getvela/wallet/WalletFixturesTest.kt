@@ -112,6 +112,23 @@ class WalletFixturesTest {
         assertEquals("$1,383", model.balance.integer)
     }
 
+    /**
+     * Issue 462: every home draws the refresh control under the total — read
+     * two minutes ago in the zh corpus's words, or (H3, nothing read yet) the
+     * glyph alone. Never turning: the turning one is the component board's.
+     */
+    @Test
+    fun everyHomeDrawsTheRefreshControl() {
+        val strings = zhStrings()
+        for (state in WalletScreenState.entries) {
+            val refresh = WalletFixtures.buildMobileState(state, strings).balance.refresh
+            assertEquals("$state", "更新中…", refresh?.updating)
+            assertEquals("$state", false, refresh?.refreshing)
+            val expected = if (state == WalletScreenState.H3) null else "上次更新 · 2分钟前"
+            assertEquals("$state", expected, refresh?.updated)
+        }
+    }
+
     @Test
     fun extremeStatesUseTheLongFixtures() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H7, zhStrings())

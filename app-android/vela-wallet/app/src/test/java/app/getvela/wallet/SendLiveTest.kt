@@ -187,6 +187,94 @@ class SendLiveTest {
     }
 
     /**
+     * Issue #466: each relay stop offers "Report this" — on the form and on
+     * confirm — exactly while the core has a report to file
+     * (`relay_report`: a stop up on a network Vela ships). A network the
+     * person added has no operator to tell, and no button.
+     */
+    @Test
+    fun `a relay stop offers its report exactly while the core has one`() {
+        val formDrawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
+        val confirmDrawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val report = app.getvela.wallet.feature.send.core.SendRelayReport(
+            what = "Relayer out of gas on Unichain (130)\nTreasury 0x3e59292e18417f814112f731e7163534c6d2fe3c. Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH).",
+            steps = "1. Send ETH on Unichain (130).\n2. Press Continue.",
+            area = "Send",
+            fingerprint = "relay-gas-130",
+        )
+        val empty = SendTreasuryStatus(
+            chain_id = 130, address = "0x3e59292e18417f814112f731e7163534c6d2fe3c", asset = SendTreasuryAsset.Native,
+            balance = "0", floor = "100000000000000", bootstrap_needed = true, operator_served = true,
+        )
+        val form = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient, amount = "0.1", fee = fee(), can_continue = true)
+
+        val gas = form.copy(treasury_bootstrap = empty, relay_report = report)
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.reportBtn"), SendLive.form(formDrawn, gas, FeeView(), ctx()).report)
+        assertEquals(
+            strings.t("componentsUi.treasuryBootstrap.reportBtn"),
+            SendLive.confirm(confirmDrawn, gas.copy(stage = SendStage.Confirm, can_confirm = false), ctx()).noticeReport,
+        )
+
+        val unreachable = form.copy(
+            relay_unreachable = SendRelayUnreachable(chain_id = 130, operator_served = true),
+            relay_report = report.copy(fingerprint = "relay-unreachable-130"),
+        )
+        assertEquals(strings.t("componentsUi.relayUnreachable.reportBtn"), SendLive.form(formDrawn, unreachable, FeeView(), ctx()).report)
+        assertEquals(
+            strings.t("componentsUi.relayUnreachable.reportBtn"),
+            SendLive.confirm(confirmDrawn, unreachable.copy(stage = SendStage.Confirm), ctx()).noticeReport,
+        )
+
+        // A stop the core has no report for (a network the person added): no button.
+        val custom = form.copy(relay_unreachable = SendRelayUnreachable(chain_id = 1337, operator_served = false))
+        assertNull(SendLive.form(formDrawn, custom, FeeView(), ctx()).report)
+        assertNull(SendLive.confirm(confirmDrawn, custom.copy(stage = SendStage.Confirm), ctx()).noticeReport)
+        // No stop, no button.
+        assertNull(SendLive.form(formDrawn, form, FeeView(), ctx()).report)
+    }
+
+    /**
+     * Issue #466: what "Report this" files. The sheet opens with the core's
+     * words; whatever the person leaves in the boxes is sent, under the
+     * core's area and fingerprint — the same marker on every platform and
+     * version, so one outage is one issue. The treasury address is the
+     * operator's and rides in `what`; the device lines stay the five facts.
+     */
+    @Test
+    fun `a relay report files the cores words under the cores area and fingerprint`() {
+        val report = app.getvela.wallet.feature.send.core.SendRelayReport(
+            what = "Relayer out of gas on Unichain (130)\nTreasury 0x3e59292e18417f814112f731e7163534c6d2fe3c. Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH).",
+            steps = "1. Send ETH on Unichain (130).\n2. Press Continue.",
+            area = "Send",
+            fingerprint = "relay-gas-130",
+        )
+        val seed = app.getvela.wallet.feature.send.RelayReport.seed(report)
+        assertEquals(report.what, seed.what)
+        assertEquals(report.steps, seed.steps)
+
+        val labels = app.getvela.wallet.feature.settings.SettingsLive.feedbackLabels(strings)
+        val facts = app.getvela.wallet.core.diagnostics.BugReport.DeviceFacts(
+            version = "0.9.7", commit = "abc1234", platform = "Android 14", language = "en", unreachable = emptyList(), failures = emptyList(),
+        )
+        val payload = app.getvela.wallet.feature.send.RelayReport.payload(report, seed.what + "\nSeen twice today.", seed.steps, labels, facts)
+        assertEquals("Send", payload.area)
+        assertEquals("relay-gas-130", payload.fingerprint)
+        assertTrue("the person's own words are kept", payload.what.endsWith("Seen twice today."))
+        assertTrue("the operator's treasury rides in what", payload.what.contains("0x3e59292e18417f814112f731e7163534c6d2fe3c"))
+        assertFalse("the device lines carry no address", payload.environment.contains("0x"))
+        // The same outage reported again — other words, another build — is the same issue.
+        val again = app.getvela.wallet.feature.send.RelayReport.payload(report, "Still stuck.", "", labels, facts.copy(version = "0.9.8"))
+        assertEquals(payload.fingerprint, again.fingerprint)
+        // The fallback road carries it too: the prefilled form, area and all.
+        val url = app.getvela.wallet.core.diagnostics.BugReportUrl.prefilled(payload)
+        assertTrue(url, url.contains("area=Send"))
+        assertTrue(url, url.contains("Relayer+out+of+gas+on+Unichain"))
+        // A settings report keeps the word-derived marker.
+        val plain = app.getvela.wallet.core.diagnostics.BugReport.build("Hello", "", "Other (explain above)", labels, facts)
+        assertEquals(app.getvela.wallet.core.diagnostics.BugReport.fingerprintOf("Hello", "Other (explain above)", "0.9.7"), plain.fingerprint)
+    }
+
+    /**
      * Issue #424: both buttons are the core's gates and nothing else. The
      * shell used to OR the relay stops onto `can_continue` and AND them (and a
      * signature under way, and a refused submit) onto `can_confirm` — its own
@@ -603,11 +691,44 @@ class SendLiveTest {
                 FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "5000000", recipient = "0x2", usd_balance = "5", amount = "2100", selected = false),
             ),
         )
-        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        val live = SendLive.feeSheet(drawn.model, fee, SendView(selected_token = xdai), ctx())
         assertEquals(listOf("XDAI", "USDC"), live.rows.map { it.symbol })
         assertTrue(live.rows[0].selected)
         assertTrue(live.rows[1].fee.contains("0.0021") && live.rows[1].fee.contains("USDC"))
         assertTrue(live.rows[0].balanceLabel.contains("0.71697"))
+    }
+
+    /**
+     * The fee coins' marks are on the send's chain while the fee is still
+     * being measured (or failed): no estimate made every row ask for
+     * `eip155-0` and draw letters over a neutral dot.
+     */
+    @Test
+    fun `the fee sheet never asks for chain 0`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2F, strings).sheet as FlowSheet.FeeToken
+            val usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+            val measuring = FeeView(
+                fee = null,
+                options = listOf(
+                    FeeOptionView(symbol = "XDAI", contract = null, decimals = 18, balance = "1", recipient = "0x2", usd_balance = "1", selected = true),
+                    FeeOptionView(symbol = "USDC", contract = usdc, decimals = 6, balance = "1", recipient = "0x2", usd_balance = "1"),
+                ),
+            )
+            val rows = SendLive.feeSheet(drawn.model, measuring, SendView(selected_token = xdai), ctx()).rows
+            assertEquals(listOf("https://data.example/chainlogos/eip155-100.png"), rows[0].mark.logoUrls)
+            assertTrue(rows[1].mark.logoUrls.all { it.startsWith("https://data.example/assets/eip155-100/") })
+            assertEquals("https://data.example/chainlogos/eip155-100.png", rows[1].mark.badgeLogoUrl)
+            assertTrue(rows.none { row -> (row.mark.logoUrls + listOfNotNull(row.mark.badgeLogoUrl)).any { "eip155-0" in it } })
+            // A sweep's coins are on the sweep's chain.
+            val sweep = SendView(multi_select_mode = true, multi_chain_id = 56)
+            assertEquals(56, SendLive.feeSheetChain(measuring, sweep))
+            // Nothing picked and nothing measured: still a chain, never 0.
+            assertEquals(1, SendLive.feeSheetChain(measuring, SendView()))
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
     }
 
     /** Issue 211: a coin the core judged unable to pay is dimmed and says why, not drawn like the rest. */
@@ -621,7 +742,7 @@ class SendLiveTest {
                 FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "0", recipient = "0x2", usd_balance = "0", amount = "2100", insufficient = true),
             ),
         )
-        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        val live = SendLive.feeSheet(drawn.model, fee, SendView(selected_token = xdai), ctx())
         assertFalse(live.rows[0].insufficient)
         assertTrue(live.rows[1].insufficient)
         assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "USDC")), live.rows[1].insufficientNote)
@@ -778,6 +899,43 @@ class SendLiveTest {
         // Nobody held, no line; text that is not an address gets no artwork.
         assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx()).recipient)
         assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = "hello"), ctx()).recipient?.lead)
+    }
+
+    /**
+     * The kind rule: the confirm page's 网络 row and a notice that locks a
+     * network name a NETWORK, so they wear its own logo, never a coin's. The
+     * row wore the token's mark (USDC's logo beside "Gnosis"), and the
+     * notices wore the network's coin's (Ethereum's logo for Base).
+     */
+    @Test
+    fun `a network row and a network's notice wear the network's own logo`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val usdc = xdai.copy(symbol = "USDC", token_address = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83")
+            val sd3 = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+            fun networkLead(token: SendToken): app.getvela.wallet.feature.flows.TokenMarkModel {
+                val view = SendView(stage = SendStage.Confirm, selected_token = token, recipient = recipient, confirm_amount = "1", fee = fee())
+                val row = SendLive.confirm(sd3, view, ctx()).facts.first { it.label == strings.t(I18nKeys.Flows.DETAIL_CHAIN) }
+                return (row.lead as app.getvela.wallet.feature.flows.FactLead.Token).mark
+            }
+            val gnosis = networkLead(usdc)
+            assertEquals(listOf("https://data.example/chainlogos/eip155-100.png"), gnosis.logoUrls)
+            assertTrue(gnosis.badgeHidden)
+            val eth = SendToken(network = "chain-8453", chain_id = 8453, symbol = "ETH", balance = "1", decimals = 18, token_address = null, price_usd = null)
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), networkLead(eth).logoUrls)
+            // The coin itself still wears its home chain's logo, with Base's badge.
+            val hero = SendLive.confirm(sd3, SendView(stage = SendStage.Confirm, selected_token = eth, recipient = recipient, confirm_amount = "1", fee = fee()), ctx()).mark!!
+            assertEquals(listOf("https://data.example/chainlogos/eip155-1.png"), hero.logoUrls)
+            assertEquals("https://data.example/chainlogos/eip155-8453.png", hero.badgeLogoUrl)
+
+            val sd1 = (FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick).model
+            val scanned = SendLive.pick(sd1, SendView(tokens = listOf(eth), request_chain_id = 8453), ctx()).notice!!.mark
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), scanned.logoUrls)
+            val sweep = SendLive.pick(sd1, SendView(tokens = listOf(eth), multi_chain_id = 8453), ctx(), sweepPicking = true).notice!!.mark
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), sweep.logoUrls)
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
     }
 
     /**
@@ -1229,6 +1387,63 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), live.recipient!!.note)
         assertEquals(recipient, live.recipient!!.raw)
         assertTrue(live.ctaEnabled)
+        // Issue #468: the sweep's one recipient has both doors too.
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), live.recipient!!.scanLabel)
+    }
+
+    /**
+     * Issue #467: a picked contact is named by ADDRESS. The sheet's rows carry
+     * the person's full address, in the core's order; the tap sends that
+     * address, so a book the core re-sorts between drawing and tapping (a
+     * favourite, a fresh send, an ENS name arriving) can never pay the
+     * person who slid into the tapped row's place.
+     */
+    @Test
+    fun `the contact sheet names each person by address, in the core's order`() {
+        val sheet = (FlowFixtures.build(FlowState.SD2E, strings).sheet as app.getvela.wallet.feature.flows.FlowSheet.ContactPick).model
+        val bob = "0x2222222222222222222222222222222222222222"
+        val alice = "0x1111111111111111111111111111111111111111"
+        val book = app.getvela.wallet.feature.contacts.core.ContactsView(
+            loaded = true,
+            contacts = listOf(
+                app.getvela.wallet.feature.contacts.core.Contact(address = bob, name = "Bob"),
+                app.getvela.wallet.feature.contacts.core.Contact(address = alice, resolved_name = "alice.eth"),
+            ),
+        )
+        val rows = SendLive.contactSheet(sheet, book).contacts
+        assertEquals(listOf(bob, alice), rows.map { it.address })
+        assertEquals(listOf("Bob", "alice.eth"), rows.map { it.name })
+        // The book re-sorted (alice became a favourite): each row still says who it is.
+        val resorted = SendLive.contactSheet(sheet, book.copy(contacts = book.contacts.reversed())).contacts
+        assertEquals(alice, resorted.first { it.name == "alice.eth" }.address)
+        assertEquals(bob, resorted.first { it.name == "Bob" }.address)
+        // The drawn picker's people are addressed too.
+        assertTrue(sheet.contacts.all { it.address.startsWith("0x") && it.address.length == 42 })
+    }
+
+    /**
+     * Issue #468: the recipient row has the QR door beside the person on all
+     * four shells. Android's was null — written before its scanner existed —
+     * so the one platform with the scanner wired had nothing to tap. The
+     * gallery's single form draws the same two doors as the live one.
+     */
+    @Test
+    fun `the recipient row has the scan door, live and drawn`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), drawn.model.recipient!!.scanLabel)
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA), drawn.model.recipient!!.pickLabel)
+
+        val live = SendLive.form(
+            drawn.model,
+            SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient),
+            FeeView(),
+            ctx(),
+        ).recipient!!
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), live.scanLabel)
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA), live.pickLabel)
+        // An empty field has its doors too: scanning is how it gets filled.
+        val empty = SendLive.form(drawn.model, SendView(stage = SendStage.EnterDetails, selected_token = xdai), FeeView(), ctx()).recipient!!
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), empty.scanLabel)
     }
 
     // -- Spec 045 US3: the batch sheet ---------------------------------------

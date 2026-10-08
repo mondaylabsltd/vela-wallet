@@ -499,10 +499,11 @@ data class FeeRowModel(
 data class FeeSpeedOptionModel(
     /** The wire tier — `fast` / `standard` / `slow`. */
     val id: String,
-    /** The SPEED — 超快 / 标准 / 较慢 — never a number. */
+    /**
+     * The SPEED — 超快 / 标准 / 较慢 — never a number. What it buys is not said
+     * per payment (its price and bid are); Settings' default speed says it.
+     */
     val label: String,
-    /** What that speed buys, one line under the name. */
-    val detail: String,
     /** This option's OWN fee, or the "…" / "—" standing in for it. */
     val value: String,
     /** Its gas bid as a range, already formatted by the core over the set. */
@@ -604,6 +605,11 @@ data class SendFormModel(
     val warning: String? = null,
     /** Spec 098 §4: the treasury stop's address, drawn under [warning]. */
     val fund: FundAddressModel? = null,
+    /**
+     * Issue #466: a relay stop's "Report this" — present only while the core
+     * has a report for it (`SendView.relay_report`, a network Vela ships).
+     */
+    val report: String? = null,
     /** A split's dark Continue, explained: which recipient still needs what. */
     val hint: String? = null,
     /** Split only: "Use 0.5 ETH for the empty rows" — one typed figure into every row that has none. */
@@ -624,6 +630,14 @@ data class ContactEntryModel(
     val group: String? = null,
     val addressDisplay: String,
     val identiconSeed: String,
+    /**
+     * Issue #467: which person this row IS — the full address the pick sends.
+     * A tap used to send the row's POSITION, looked up again in the book at
+     * tap time; the core re-sorts the book (favourites, recency, display
+     * names that change as ENS and registry names resolve), so a reorder
+     * between drawing and tapping paid the neighbour.
+     */
+    val address: String = identiconSeed,
 )
 
 @Immutable
@@ -760,6 +774,8 @@ data class SendConfirmModel(
     val notice: String? = null,
     /** Spec 098 §4: the treasury stop's address, drawn under [notice]. */
     val noticeFund: FundAddressModel? = null,
+    /** Issue #466: the stop's "Report this", as on the form ([SendFormModel.report]). */
+    val noticeReport: String? = null,
     val noticeAction: String? = null,
     /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
     val noticeSecondary: String? = null,

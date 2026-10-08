@@ -303,6 +303,17 @@ object I18nKeys {
         const val NO_PRICE = "home.balanceDetailNoPrice"
         const val A11Y_HIDE_BALANCE = "home.a11yHideBalance"
         const val A11Y_SHOW_BALANCE = "home.a11yShowBalance"
+        /**
+         * Issue 462: the hero's refresh control — "Updated {{ago}}" when idle
+         * (`ago` is [TIME_NOW] / [TIME_MINUTES_SHORT] / [TIME_HOURS_SHORT], the
+         * core's relative-time words), "Updating…" while a refresh the person
+         * asked for is out.
+         */
+        const val LAST_UPDATED = "home.lastUpdated"
+        const val UPDATING = "home.updating"
+        const val TIME_NOW = "time.now"
+        const val TIME_MINUTES_SHORT = "time.minutesShort"
+        const val TIME_HOURS_SHORT = "time.hoursShort"
 
         // Sections & empty states.
         const val SECTION_ACTIVITY = "home.tabActivity"
@@ -603,6 +614,9 @@ object I18nKeys {
         const val RELAY_UNREACHABLE_HINT = "componentsUi.relayUnreachable.settingsHint"
         const val RELAY_UNREACHABLE_RETRY = "componentsUi.relayUnreachable.retryBtn"
         const val RELAY_UNREACHABLE_CLOSE = "componentsUi.relayUnreachable.closeBtn"
+        // Issue #466: each relay stop's "Report this" — the in-app report, seeded with the core's.
+        const val TREASURY_REPORT = "componentsUi.treasuryBootstrap.reportBtn"
+        const val RELAY_UNREACHABLE_REPORT = "componentsUi.relayUnreachable.reportBtn"
         const val ADD_NATIVE_ALIAS_TITLE = "addToken.nativeAliasTitle"
         const val ADD_NATIVE_ALIAS_MESSAGE = "addToken.nativeAliasMessage"
         const val ADD_NET_SEARCH_LABEL = "addToken.netSearchLabel"

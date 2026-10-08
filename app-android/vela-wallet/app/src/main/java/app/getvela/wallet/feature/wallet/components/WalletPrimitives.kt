@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.marks.RemoteLogo
+import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
@@ -45,6 +46,17 @@ internal object WalletMetrics {
     /** Badge ring: badge dot + 2dp ring on each side (space.sm 4 total). */
     val badgeRingSize: Dp = badgeDotSize + VelaSpacing.sm
 
+    /**
+     * A badge that carries a chain's logo is a size a logo can be read at
+     * (078 H-09), the same on all four shells: 16 across (icon.base) with a
+     * 1.5 ring (border.emphasis) in the page colour — the web's
+     * `.badge.with-logo` and the desktop's, which are 16 wide ring included.
+     */
+    val badgeLogoRingSize: Dp = VelaIconSize.base
+
+    /** The logo inside that ring, and the dot it falls back to: 16 − 2 × 1.5 = 13. */
+    val badgeLogoSize: Dp = badgeLogoRingSize - VelaBorder.emphasis * 2
+
     /** 14dp pill dots (icon.sm). */
     val pillDotSize: Dp = VelaIconSize.sm
 
@@ -68,19 +80,27 @@ internal fun ChainDot(color: Color?, size: Dp, modifier: Modifier = Modifier) {
 /**
  * Bottom-end chain badge over a row circle: the dot sits on a ring of the
  * screen background so it reads as an overlay (mock H1 row icons).
+ *
+ * With a logo it is the four shells' one badge — 16 with a 1.5 ring, the
+ * logo (and the dot while it loads, or when it cannot) filling the inside;
+ * it was a 12 logo in a 2 ring here, a quarter smaller than on the web and
+ * the desktop. A bare dot (a gallery's, which names no endpoint) keeps the
+ * mock's 12 in its 2 ring.
  */
 @Composable
 internal fun ChainBadge(color: Color, modifier: Modifier = Modifier, logoUrl: String? = null) {
+    val ring = if (logoUrl != null) WalletMetrics.badgeLogoRingSize else WalletMetrics.badgeRingSize
+    val inside = if (logoUrl != null) WalletMetrics.badgeLogoSize else WalletMetrics.badgeDotSize
     Box(
         modifier = modifier
-            .size(WalletMetrics.badgeRingSize)
+            .size(ring)
             .background(VelaTheme.colors.bgBase, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         // Spec 047: the chain's logo when the chain-data endpoint has one; the
         // coloured dot stays the fallback.
-        RemoteLogo(urls = listOfNotNull(logoUrl), size = WalletMetrics.badgeDotSize) {
-            ChainDot(color = color, size = WalletMetrics.badgeDotSize)
+        RemoteLogo(urls = listOfNotNull(logoUrl), size = inside) {
+            ChainDot(color = color, size = inside)
         }
     }
 }

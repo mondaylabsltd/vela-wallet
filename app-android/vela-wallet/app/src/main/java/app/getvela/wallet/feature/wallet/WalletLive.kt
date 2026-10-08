@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.wallet
 
 import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.RelativeTime
 import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
 import app.getvela.wallet.feature.settings.AccountsSheetRowModel
 import app.getvela.wallet.feature.settings.AccountsSheetModel
@@ -86,7 +87,7 @@ object WalletLive {
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         val groups = activity(feed, strings, now, chainNames)
         return fallback.copy(
-            balance = balance(fallback.balance, view, strings, money, chainNames),
+            balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
@@ -417,7 +418,9 @@ object WalletLive {
                 state = BalanceStateKind.Loading,
                 integer = null,
                 decimals = null,
-                status = fallback.status?.takeIf { view.refreshing },
+                // A refresh the person asked for is the control's to show
+                // (issue 462), never a line pushed in above it.
+                status = null,
             )
         }
 
@@ -449,21 +452,42 @@ object WalletLive {
      * The one line under the hero, most actionable first (the web's
      * `liveBalance`): the networks the wallet cannot reach (spec 092 — every
      * one, held or not; a rate limit heals on its own and is never listed),
-     * said without "RPC" — the line opens their list. Then the refresh (or the
-     * cached figure standing in for the live one), then the core's notice.
+     * said without "RPC" — the line opens their list. Then the cached figure
+     * standing in for the live one, then the core's notice.
+     *
+     * A refresh the person asked for (`view.refreshing`) is NOT a reason for
+     * this line (issue 462): the control under it turns and says "Updating…"
+     * instead. When it was one, every tap inserted "Some balances are still
+     * updating." above the control and pushed it out from under the finger.
      */
     internal fun balanceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
         val unreachable = unreachableLine(view, strings, chainNames)
         return when {
             unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
-            view.refreshing || onCache || view.notice == BalanceNotice.StillUpdating ->
+            onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
             view.notice == BalanceNotice.Unpriced ->
                 BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
             else -> null
         }
     }
+
+    /**
+     * The hero's refresh control (issue 462): when the figure was last read —
+     * "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+     * words — and whether a refresh the person asked for is out. [now] is the
+     * caller's clock; the screen re-reads it at least every 30 s, so the label
+     * ages while it is on screen.
+     */
+    fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
+        BalanceRefreshModel(
+            updated = view.last_refreshed_at_ms?.let { at ->
+                strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
+            },
+            updating = strings.t(I18nKeys.Wallet.UPDATING),
+            refreshing = view.refreshing,
+        )
 
     /**
      * The line over the networks the wallet cannot reach (spec 092) — the
@@ -499,25 +523,28 @@ object WalletLive {
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
-    ): AssetRowModel = AssetRowModel(
-        id = holdingId(token.chain_id, token.token_address),
-        ticker = token.symbol,
-        // The chain, falling back to the token's own name only when this
-        // device has no row for the chain — never a blank line.
-        chain = chainNames[token.chain_id] ?: token.name,
-        badgeColor = badgeColour(token.chain_id),
-        logoUrls = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).logoUrls,
-        badgeLogoUrl = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeLogoUrl,
-        badgeHidden = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeHidden,
-        // The ONE token-amount rule (spec 078): Send's picker, token card,
-        // confirm and receipt call the same function on the same holding.
-        balance = "${tokenAmountText(token.balance)} ${token.symbol}",
-        fiat = token.price_usd?.let { price ->
-            val value = money.convert(amountAsDouble(token.balance) * price)
-            AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
-        } ?: AssetFiatModel.NoPrice("—"),
-        masked = false,
-    )
+    ): AssetRowModel {
+        val mark = mark(token.chain_id, token.symbol, token.token_address)
+        return AssetRowModel(
+            id = holdingId(token.chain_id, token.token_address),
+            ticker = token.symbol,
+            // The chain, falling back to the token's own name only when this
+            // device has no row for the chain — never a blank line.
+            chain = chainNames[token.chain_id] ?: token.name,
+            badgeColor = mark.badgeColor,
+            logoUrls = mark.logoUrls,
+            badgeLogoUrl = mark.badgeLogoUrl,
+            badgeHidden = mark.badgeHidden,
+            // The ONE token-amount rule (spec 078): Send's picker, token card,
+            // confirm and receipt call the same function on the same holding.
+            balance = "${tokenAmountText(token.balance)} ${token.symbol}",
+            fiat = token.price_usd?.let { price ->
+                val value = money.convert(amountAsDouble(token.balance) * price)
+                AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
+            } ?: AssetFiatModel.NoPrice("—"),
+            masked = false,
+        )
+    }
 
     private fun amountAsDouble(balance: String): Double = balance.toDoubleOrNull() ?: 0.0
 
@@ -575,23 +602,36 @@ object WalletLive {
     }
 
     /**
-     * Spec 047: every token mark on the phone — the drawn colour plus the
-     * web's logo rules (`tokenMarkFor`): the coin's chain logo for a native
-     * coin, the asset entry for a token, the badge hidden when it would repeat.
+     * Every COIN's mark on the phone: the core's answer (`Marks.tokenMark`:
+     * the coin's home-chain logo for a native coin, the asset entry for a
+     * token, no badge where it would repeat the coin) in this shell's colours.
+     * [tokenAddress] is `null` for the chain's own coin.
      */
-    fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel {
-        val m = Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls)
-        return TokenMarkModel(symbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
-    }
+    fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel =
+        markModel(symbol, chainId, Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls))
 
     /**
-     * A network by itself (the web's `chainMark`): the chain's own logo, no
-     * badge — the mark of "anything on this network", never of its coin.
+     * Every NETWORK's mark (the kind rule): a network row or fact, a notice
+     * that locks a chain, the QR centre. The chain's own logo over its coin's
+     * letters, never a badge, and never the coin's home chain — ETH sent on
+     * Base is Base's logo here.
      */
-    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel {
-        val m = Marks.chainMark(chainId)
-        return TokenMarkModel(nativeSymbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
-    }
+    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel =
+        markModel(nativeSymbol, chainId, Marks.chainMark(chainId, nativeSymbol))
+
+    /**
+     * The core's mark in this shell's model. The badge is drawn exactly when
+     * the core names its chain; its dot is that chain's colour.
+     * [ticker] stays what the caller named (the QR centre letters it in
+     * full); the circle draws its first three letters, as the core's glyph.
+     */
+    private fun markModel(ticker: String, chainId: Int, mark: uniffi.vela_core_uniffi.MarkView): TokenMarkModel = TokenMarkModel(
+        ticker = ticker,
+        badgeColor = badgeColour(mark.badgeChainId?.toInt() ?: chainId),
+        logoUrls = mark.logoUrls,
+        badgeLogoUrl = mark.badgeLogoUrl,
+        badgeHidden = mark.badgeChainId == null,
+    )
 
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
 

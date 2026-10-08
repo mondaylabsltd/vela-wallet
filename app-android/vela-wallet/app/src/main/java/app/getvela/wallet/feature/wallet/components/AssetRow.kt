@@ -58,6 +58,12 @@ fun TokenIcon(
      * only the box clips a three-letter ticker out of it.
      */
     inline: Boolean = false,
+    /**
+     * A hairline ring round the drawn disc, for a mark that sits on a grey
+     * (`bg.sunken`) card, where the disc is the card's own colour and its
+     * letters would float. A ticker-less disc always has it.
+     */
+    ring: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     val circle = if (inline) VelaIconSize.xl else WalletMetrics.avatarSize
@@ -72,11 +78,11 @@ fun TokenIcon(
                     // No ticker = no coin yet (a fee still being measured): a
                     // hairline ring, so the empty disc still reads as a place
                     // on a raised card in dark (design review, 078 round 3).
-                    .then(if (ticker.isEmpty()) Modifier.border(VelaBorder.hairline, colors.borderStrong, CircleShape) else Modifier),
+                    .then(if (ticker.isEmpty() || ring) Modifier.border(VelaBorder.hairline, colors.borderStrong, CircleShape) else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = ticker.take(3).uppercase(),
+                    text = tokenGlyph(ticker),
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.bold,
@@ -96,9 +102,17 @@ fun TokenIcon(
     }
 }
 
+/**
+ * The letters a mark's circle draws: the core's `MarkView.glyph` rule, the
+ * ticker's first three characters upper-cased ("USD" for USDC). Drawn here
+ * from the ticker so a fixture without a core answer letters the same way;
+ * `MarksTest` holds it to the core's vectors.
+ */
+internal fun tokenGlyph(ticker: String): String = ticker.take(3).uppercase()
+
 /** The same icon from a flow's mark model. */
 @Composable
-fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boolean = false) = TokenIcon(
+fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boolean = false, ring: Boolean = false) = TokenIcon(
     ticker = mark.ticker,
     badgeColor = mark.badgeColor,
     modifier = modifier,
@@ -106,6 +120,7 @@ fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boole
     badgeLogoUrl = mark.badgeLogoUrl,
     badgeHidden = mark.badgeHidden,
     inline = inline,
+    ring = ring,
 )
 
 /**

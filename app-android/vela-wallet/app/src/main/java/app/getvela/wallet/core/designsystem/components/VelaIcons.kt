@@ -674,7 +674,7 @@ object VelaIcons {
     // path, not a remembered lucide one: a mis-recalled star draws a shape
     // nobody can name.
 
-    /** lucide arrow-right — the browser's Forward, and the slide-to-confirm knob. */
+    /** lucide arrow-right — the browser's Forward. */
     val ArrowRight: ImageVector by lazy {
         strokeIcon("VelaArrowRight", "M5 12h14", "m12 5 7 7-7 7")
     }
@@ -738,19 +738,6 @@ object VelaIcons {
             "M15 3h6v6",
             "M10 14 21 3",
             "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
-        )
-    }
-
-    /** lucide grip-vertical — the drag handle on a reorderable group row. */
-    val GripVertical: ImageVector by lazy {
-        fillIcon(
-            "VelaGripVertical",
-            "M10 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M10 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M10 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
         )
     }
 }
