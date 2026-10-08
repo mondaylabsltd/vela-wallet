@@ -192,6 +192,13 @@ const DISPATCH = {
       bottom: indexOf('bottom', p.bottom),
     };
   },
+  // --- marks (app::remote_mark): the object the wasm hands back IS the
+  // surface under test, so it is compared as returned (null, not undefined,
+  // for an absent badge — what the generated MarkView.ts promises).
+  token_mark: (i) =>
+    wasm.tokenMark(i.ethereum_data_url, i.chain_id, i.symbol, i.token_address, i.named),
+  chain_mark: (i) => wasm.chainMark(i.ethereum_data_url, i.chain_id, i.native_symbol),
+  chain_logo_url: (i) => wasm.chainLogoUrl(i.ethereum_data_url, i.chain_id) ?? null,
   recover_public_key_from_assertions: (i) => {
     const key = wasm.recoverPublicKeyFromAssertions(
       bytes(i.a.authenticator_data), bytes(i.a.client_data_json), bytes(i.a.signature_der),
@@ -250,6 +257,7 @@ const REQUIRED_SUITES = [
   'i18n-plural-legacy',
   'identicon',
   'identicon-bulk',
+  'marks',
   'primitives',
   'safe',
   // `safe` before `safe-multi`: a prefix sorts before its extension.

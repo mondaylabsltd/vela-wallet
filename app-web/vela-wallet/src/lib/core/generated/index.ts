@@ -221,6 +221,7 @@ export * from './KeyMethod';
 export * from './LandingLine';
 export * from './LandingPace';
 export * from './LastKnown';
+export * from './MarkView';
 export * from './MtokCustomToken';
 export * from './MtokEvent';
 export * from './MtokFound';
