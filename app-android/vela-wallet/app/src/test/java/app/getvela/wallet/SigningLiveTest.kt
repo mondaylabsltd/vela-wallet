@@ -347,9 +347,9 @@ class SigningLiveTest {
         assertEquals("USDC", cards[0].rows.single { it.label == interacting }.value)
     }
 
-    /** F7: every machine says yes and the request is still being read — the slide stays shut, under "Loading…". */
+    /** F7: every machine says yes and the request is still being read — the confirm stays shut, under "Loading…". */
     @Test
-    fun `the slide waits for the reading (096 F7)`() {
+    fun `the confirm waits for the reading (096 F7)`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val reading = ClearSigningView(resolving = true, surface = ClearSurface.Loading)
@@ -392,7 +392,7 @@ class SigningLiveTest {
     }
 
     @Test
-    fun `the slide waits for the guard and the fee, and a contract call with bytes stays blind`() {
+    fun `the confirm waits for the guard and the fee, and a contract call with bytes stays blind`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.Confirm)
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
@@ -481,7 +481,7 @@ class SigningLiveTest {
     }
 
     @Test
-    fun `a speed just picked says estimating, and the slide waits for its own figure (issue 681)`() {
+    fun `a speed just picked says estimating, and the confirm waits for its own figure (issue 681)`() {
         val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
         val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
@@ -490,8 +490,8 @@ class SigningLiveTest {
         val picked = SendLive.SpeedInputs(FeeSpeedView(tier = FeeTier.Slow, picked = true)) { null }
         val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), left, ctx, speed = picked)
         assertEquals(strings.t("componentsUi.gas.estimating"), (model.fee as FeeModel.OnChain).value)
-        assertFalse("the slide never signs the speed walked away from", model.confirmEnabled)
-        // Its own figure lands: the row and the slide follow.
+        assertFalse("the confirm never signs the speed walked away from", model.confirmEnabled)
+        // Its own figure lands: the row and the confirm follow.
         val landed = FeeView(fee = estimate(FeeTier.Slow, "1000000000000000"), confirm_fee_ready = true)
         val settled = SigningLive.model(drawn, request(params), sign, clear, GuardView(), landed, ctx, speed = picked)
         assertTrue((settled.fee as FeeModel.OnChain).value.startsWith("~0.001 XDAI"))
@@ -922,12 +922,12 @@ class SigningLiveTest {
 
     /**
      * Issue #438 (v0.9.6, the same key backup): "No token can pay this fee"
-     * in red under the fee and again in grey under the slide. The core's gate
+     * in red under the fee and again in grey under the confirm. The core's gate
      * names no line for a short coin — the fee section says it, where the
-     * other coins are — so the slide stays shut with nothing repeated under it.
+     * other coins are — so the confirm stays shut with nothing repeated under it.
      */
     @Test
-    fun `issue 438 - a short coin is said under the fee and not again under the slide`() {
+    fun `issue 438 - a short coin is said under the fee and not again under the confirm`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val read = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction)
@@ -956,7 +956,7 @@ class SigningLiveTest {
         assertEquals(strings.t("send.warnInsufficientGas", mapOf("sym" to "ETH")), (oneShort.fee as FeeModel.OnChain).warning)
         assertNull(oneShort.confirmBlockLine)
 
-        // A fee still being measured has no line under the fee, so the slide says why.
+        // A fee still being measured has no line under the fee, so the confirm says why.
         val measuring = SigningLive.model(drawn, request(params), sign, read, GuardView(), FeeView(busy = true), ctx)
         assertEquals(strings.t("componentsUi.signing.confirmBlock.feeMeasuring"), measuring.confirmBlockLine)
     }

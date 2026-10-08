@@ -66,11 +66,6 @@ internal object ExploreMetrics {
     /** dApp avatar in the signing header, and the chip beside it (mock CS1).  */
     val signingAvatar: Dp = VelaSizing.controlSm
     val networkChip: Dp = VelaSpacing.xl3 + VelaSpacing.xs
-    /** Slide-to-confirm: 342×56 track, 48 knob (mock CS1, row y=770). */
-    val slideTrack: Dp = VelaSizing.emptyStateCircle
-    val slideKnob: Dp = VelaSpacing.xl5
-    /** Fraction of the track the knob must cross to commit (SPEC 动效). */
-    const val SLIDE_COMMIT = 0.88f
     /** The token mark beside a hero amount, and the identicon in a chip. */
     val tokenMark: Dp = VelaSpacing.xl2 + VelaSpacing.xs
     val chipAvatar: Dp = VelaIconSize.base

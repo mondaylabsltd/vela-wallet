@@ -33,7 +33,7 @@ import app.getvela.wallet.feature.wallet.components.WalletMetrics
 
 /**
  * The fee row, and its expanded fee-token selector (mock CS33) — the last thing
- * between the request and the slide. Under the row, inside the same card, the
+ * between the request and the confirm. Under the row, inside the same card, the
  * speed control the send form draws (spec 069).
  */
 @Composable
@@ -56,7 +56,7 @@ fun SigningFee(
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
             SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed, onRefresh)
-            // Issue #262: the reason the slide below is shut, said where the fix is.
+            // Issue #262: the reason the confirm below is shut, said where the fix is.
             fee.warning?.let {
                 Text(
                     text = it,

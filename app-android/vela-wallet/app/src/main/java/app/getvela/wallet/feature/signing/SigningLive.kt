@@ -52,7 +52,7 @@ import app.getvela.wallet.feature.send.core.TrackOutcome
  * desktop's `signing/live.rs`). The drawn model keeps only its labels; the
  * dApp is the HOST (guessing a pretty name from a domain is exactly the
  * counterfeit route), the blocks are the core's reading, the fee is the
- * fee policy's, the slide opens only when all three machines say so.
+ * fee policy's, the confirm opens only when all three machines say so.
  */
 object SigningLive {
     data class Context(
@@ -317,19 +317,17 @@ object SigningLive {
             techOpen = false,
             // No fee and no confirm control under a refusal: a fee for a
             // transaction nobody will send is a number about nothing, and a
-            // dead "Slide to confirm" reads as an option somebody merely
-            // failed to use.
+            // dead confirm reads as an option somebody merely failed to use.
             fee = if (refused) null else feeModel(clear, fee, ctx, speed),
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
-            confirmHint = if (refused) null else s.s("slideToConfirm"),
             confirmAsButton = !refused && ctx.trustedSignerRoute,
             confirmButtonLabel = s.s("openSigner"),
             confirmAction = if (refused) null else confirmLabel(clear, s),
             confirmEnabled = !refused && confirm.enabled,
-            // Spec 099 R7: a shut slide says why, in the core's line for the
-            // part that is shut — none under a refusal, which has no slide.
+            // Spec 099 R7: a shut confirm says why, in the core's line for the
+            // part that is shut — none under a refusal, which has no confirm.
             confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { s.t(it) },
             panelTitle = s.s("signatureRequest"),
             closeLabel = s.t(I18nKeys.Flow.CLOSE),
@@ -433,7 +431,7 @@ object SigningLive {
     }
 
     /**
-     * May the slide arm, and if not why (spec 099 R7) — the core's one gate,
+     * May the confirm arm, and if not why (spec 099 R7) — the core's one gate,
      * `sign_confirm::confirm_state`, over the sign, guard, clear-signing and
      * fee views exactly as the sheet received them (JSON; [feeJson] `null`
      * with no fee session) and the speed in force. It holds every rule this
@@ -441,7 +439,7 @@ object SigningLive {
      * the reading in (096 F7), the approval chosen, a message has no fee to
      * wait for, another speed's figure is not this speed's (issue 681), the
      * fee priced and its coin not short. A view that does not read keeps the
-     * slide shut — never a guess.
+     * confirm shut — never a guess.
      */
     fun confirmState(signJson: String?, guardJson: String?, clearJson: String?, feeJson: String?, speedTier: FeeTier?): ConfirmState {
         if (signJson == null || guardJson == null || clearJson == null) return ConfirmState()
@@ -455,7 +453,7 @@ object SigningLive {
      * [confirmState] over decoded views, re-encoded — for a caller that holds
      * no raw JSON (the gallery, a test). The live sheet passes the views as
      * the machines wrote them: a mirror that dropped a field the core needs
-     * would keep the slide shut, never open it.
+     * would keep the confirm shut, never open it.
      */
     fun confirmState(sign: SignView, guard: GuardView, clear: ClearSigningView, fee: FeeView, speed: SendLive.SpeedInputs?): ConfirmState {
         val wire = app.getvela.wallet.core.crux.Wire.json
@@ -471,7 +469,7 @@ object SigningLive {
     /**
      * The fee ROW's words only — a message says "no network fee" (the core's
      * `sign_confirm::off_chain`, which no export carries yet). Whether the
-     * slide arms is [confirmState]'s, never this.
+     * confirm arms is [confirmState]'s, never this.
      */
     private fun offChain(clear: ClearSigningView): Boolean =
         clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign ||
@@ -1224,7 +1222,7 @@ object SigningLive {
     /** The fee list's id for the chain's own coin (the web's `'native'`). */
     const val NATIVE_FEE_ID = "native"
 
-    /** The slide's verb: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
+    /** The confirm's words, the action alone: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
     fun confirmLabel(clear: ClearSigningView, s: VelaStrings): String = when (val confirm = clear.confirm) {
         ClearConfirm.Sign -> s.s("signLabel")
         ClearConfirm.Confirm -> s.s("confirmLabel")

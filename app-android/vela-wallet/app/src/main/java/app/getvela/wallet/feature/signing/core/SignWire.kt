@@ -114,8 +114,8 @@ enum class ConfirmBlock {
 
 /**
  * The one confirm gate (spec 099 R7, `sign_confirm::confirm_state` through
- * `signConfirmState`): whether the slide arms, which part is shut, and the
- * line under a shut slide (`componentsUi.signing.confirmBlock.*`) — `null`
+ * `signConfirmState`): whether the confirm arms, which part is shut, and the
+ * line under a shut confirm (`componentsUi.signing.confirmBlock.*`) — `null`
  * where the sheet already says it its own way.
  */
 @Serializable

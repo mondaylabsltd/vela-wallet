@@ -912,7 +912,7 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
 
 /**
  * The Trusted Signer's page is open (spec 071): what to do there, a way back to
- * it (a tab closed by mistake), and a way out. It stands where the slide was —
+ * it (a tab closed by mistake), and a way out. It stands where the confirm was —
  * the signature is being made on the page, not here.
  */
 @Composable

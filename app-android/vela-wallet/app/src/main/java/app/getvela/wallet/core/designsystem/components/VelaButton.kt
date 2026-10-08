@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -180,6 +181,10 @@ internal fun VelaButtonSurface(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled && !loading,
+                // Said as a button by TalkBack (issue #461: the signing sheet's
+                // confirm became this button, and the slide it replaced was
+                // announced as one).
+                role = Role.Button,
                 // The press is answered in the same instant it lands, even when
                 // what it started (a system passkey sheet, a network call) is
                 // several hundred ms from showing itself.

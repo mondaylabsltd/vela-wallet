@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.signing
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -43,13 +45,19 @@ import app.getvela.wallet.feature.signing.components.SigningSentence
 import app.getvela.wallet.feature.signing.components.SigningSwapPair
 import app.getvela.wallet.feature.signing.components.SigningWarning
 import app.getvela.wallet.feature.signing.components.SignerRow
-import app.getvela.wallet.feature.signing.components.SlideToConfirm
 import app.getvela.wallet.feature.signing.components.TechDetails
+
+/** The signing sheet's confirm (issue #461) — the stable hook UI tests tap. */
+const val CONFIRM_TAG = "signing-confirm"
+
+/** The Trusted Signer account's "continue to the signing page" in the confirm's place (spec 079). */
+const val OPEN_SIGNER_TAG = "signing-open-signer"
 
 /**
  * The signing sheet (spec 022): the universal block renderer plus a fixed
- * footer — technical details → fee → signer → slide — over the page that asked
- * for the signature, so the site you are dealing with never leaves the screen.
+ * footer — technical details → fee → signer → confirm — over the page that
+ * asked for the signature, so the site you are dealing with never leaves the
+ * screen.
  *
  * The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
  * 明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
@@ -237,28 +245,27 @@ fun SigningSheetContent(
         // cannot. The last draws NOTHING — spec 081: a refused request offers
         // no confirm control at all, not a disabled one, because the wallet
         // never offered it.
-        val hint = model.confirmHint
         val action = model.confirmAction
         if (waiting != null) {
             TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
-        } else if (hint != null && action != null && model.confirmAsButton) {
-            // Spec 079: one slide per signature — the page's own.
-            app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
-                text = model.confirmButtonLabel,
+        } else if (action != null) {
+            // Issue #461: a tap, like the Send screen's Confirm — the same
+            // button, saying the action alone ("确认兑换", "签名", "备份公钥").
+            // Shut (dimmed) only while the core says so; once approved, the
+            // receipt takes the form's place, so busy never looks shut. An
+            // account whose key is behind the Trusted Signer goes to its page
+            // instead (spec 079), whose own confirmation is the consent.
+            VelaPrimaryButton(
+                text = if (model.confirmAsButton) model.confirmButtonLabel else action,
                 onClick = onConfirm,
                 enabled = model.confirmEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else if (hint != null && action != null) {
-            SlideToConfirm(
-                hint = hint,
-                action = action,
-                enabled = model.confirmEnabled,
-                onConfirm = onConfirm,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(if (model.confirmAsButton) OPEN_SIGNER_TAG else CONFIRM_TAG),
             )
         }
-        // Spec 099 R7: a shut slide never sits there without a reason.
-        if (waiting == null && hint != null && action != null && !model.confirmEnabled) {
+        // Spec 099 R7: a shut confirm never sits there without a reason.
+        if (waiting == null && action != null && !model.confirmEnabled) {
             model.confirmBlockLine?.let { line ->
                 Text(
                     text = line,

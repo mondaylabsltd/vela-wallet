@@ -198,7 +198,7 @@ sealed interface FeeModel {
         /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
         val tappable: Boolean = false,
         /**
-         * Issue #262: why the slide is shut — the paying coin is not there;
+         * Issue #262: why the confirm is shut — the paying coin is not there;
          * issue #408: or no coin on offer can pay, said as that.
          */
         val warning: String? = null,
@@ -218,7 +218,7 @@ sealed interface FeeModel {
 
 /**
  * The Trusted Signer's page is open (spec 071): the sheet says so instead of
- * offering the slide, with a way back to the page and a way out.
+ * offering the confirm, with a way back to the page and a way out.
  */
 @Immutable
 data class TrustedSignerWaitModel(
@@ -254,7 +254,7 @@ data class SigningScreenModel(
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
     val networkLogoUrl: String? = null,
-    /** Spec 071: the Trusted Signer is open; the slide gives way to this. */
+    /** Spec 071: the Trusted Signer is open; the confirm gives way to this. */
     val trustedSignerWait: TrustedSignerWaitModel? = null,
     /** Spec 071: why the last Trusted Signer attempt did not sign. */
     val trustedSignerNotice: String? = null,
@@ -268,19 +268,20 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The slide. There is no reject BUTTON anywhere in this vocabulary; the
-     * header's ✕ is the explicit refusal, and since spec 079 nothing else
-     * closes the sheet (owner ruling: no swipe, scrim or Back rejection).
+     * The confirm's words — the action alone ("确认兑换", "签名", "备份公钥"),
+     * on a tap button (issue #461: the Send screen's Confirm, not a slide).
+     * There is no reject BUTTON anywhere in this vocabulary; the header's ✕ is
+     * the explicit refusal, and since spec 079 nothing else closes the sheet
+     * (owner ruling: no swipe, scrim or Back rejection).
      *
-     * `null` under a refusal: a dead slide reads as an option somebody merely
-     * failed to use, rather than one the wallet never offered.
+     * `null` under a refusal: a dead confirm reads as an option somebody
+     * merely failed to use, rather than one the wallet never offered.
      */
-    val confirmHint: String?,
     val confirmAction: String?,
     val confirmEnabled: Boolean,
     val panelTitle: String,
     /**
-     * Spec 099 R7: why the slide is shut, one line under it — the core's
+     * Spec 099 R7: why the confirm is shut, one line under it — the core's
      * `ConfirmState.key`, translated. `null` while it is armed, or where the
      * sheet already says it its own way.
      */

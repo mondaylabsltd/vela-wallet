@@ -577,7 +577,7 @@ class SigningController(
             }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
-            // otherwise the slide stays shut with no way to open it.
+            // otherwise the confirm stays shut with no way to open it.
             scope.launch {
                 fee.collect { fee ->
                     val view = signHost.view.value

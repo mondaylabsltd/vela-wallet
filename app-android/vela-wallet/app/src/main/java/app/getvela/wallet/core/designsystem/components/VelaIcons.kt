@@ -674,7 +674,7 @@ object VelaIcons {
     // path, not a remembered lucide one: a mis-recalled star draws a shape
     // nobody can name.
 
-    /** lucide arrow-right — the browser's Forward, and the slide-to-confirm knob. */
+    /** lucide arrow-right — the browser's Forward. */
     val ArrowRight: ImageVector by lazy {
         strokeIcon("VelaArrowRight", "M5 12h14", "m12 5 7 7-7 7")
     }

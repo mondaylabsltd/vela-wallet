@@ -17,10 +17,10 @@ import org.junit.Test
 /**
  * Spec 022 gates for the signing layer.
  *
- * Two of these are product contracts rather than style checks — the slide is
- * the only confirmation, and an unlimited approval can never be confirmed as
- * requested — so they are asserted here: a later refactor has to break a test
- * to break the promise.
+ * Two of these are product contracts rather than style checks — the confirm
+ * is the only confirmation and says what it confirms, and an unlimited
+ * approval can never be confirmed as requested — so they are asserted here: a
+ * later refactor has to break a test to break the promise.
  *
  * The echo check is Android-specific and load-bearing: `t()` returns the key on
  * a miss, so a typo in one of 33 scenarios ships as
@@ -89,7 +89,7 @@ class SigningFixturesTest {
             // the off-chain case that shows the row with nothing in it.
             FeeModel.Hidden, null -> Unit
         }
-        model.confirmHint?.let { out += it }
+        model.headline?.let { out += it }
         model.confirmAction?.let { out += it }
         return out
     }
@@ -119,15 +119,23 @@ class SigningFixturesTest {
         }
     }
 
+    /**
+     * Issue #461: a tap confirms, and the button says the action alone —
+     * "确认兑换", "签名", "全部授权" — never "Slide to confirm · …", whose words
+     * left the corpus with the slide.
+     */
     @Test
-    fun theSlideIsTheOnlyConfirmationAndAlwaysSaysWhatFor() {
+    fun theConfirmIsTheOnlyConfirmationAndSaysWhatFor() {
         val zh = zhStrings()
+        val slideWords = listOf("Slide", "滑动")
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zh)
-            // Every DRAWN state offers the slide; the refusal state has no
+            // Every DRAWN state offers the confirm; the refusal state has no
             // fixture, because it is reached from the core, not the gallery.
-            assertTrue("$state has no slide hint", model.confirmHint?.isNotBlank() == true)
-            assertTrue("$state has no slide action", model.confirmAction?.isNotBlank() == true)
+            val action = model.confirmAction
+            assertTrue("$state has no confirm", action?.isNotBlank() == true)
+            assertFalse("$state still says the slide: $action", slideWords.any { action!!.contains(it) })
+            assertFalse("$state confirms with a key: $action", action!!.startsWith("componentsUi."))
         }
     }
 

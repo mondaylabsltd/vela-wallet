@@ -14,7 +14,7 @@ import app.getvela.wallet.core.diagnostics.VelaLog
  *
  * - [Press]   a button under the finger (the founder's rule: press = deformation + haptic),
  *             and a tab that switches the destination (founder, 2026-09-26)
- * - [Detent]  a slider step crossed, a picker snapping, the signing slider's threshold
+ * - [Detent]  a slider step crossed, a picker snapping
  * - [Select]  a selection that takes effect: a switch, a filter, a network / fee-token /
  *             account pick, a favourite, a copy
  * - [Success] / [Reject]  an outcome the core decided

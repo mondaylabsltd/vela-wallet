@@ -152,7 +152,6 @@ object SigningFixtures {
         signerLabel = sg("signingAccount"),
         signerName = WalletFixtures.NAME,
         signerSeed = WalletFixtures.ADDRESS_FULL,
-        confirmHint = sg("slideToConfirm"),
         confirmAction = confirmAction,
         confirmEnabled = confirmEnabled,
         panelTitle = sg("signatureRequest"),
