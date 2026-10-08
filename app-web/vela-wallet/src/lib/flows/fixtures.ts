@@ -744,7 +744,6 @@ function sendForm(
 			{
 				id: 'fast',
 				label: m['send.gasTier.fast'],
-				detail: m['send.gasTierHintFast'],
 				value: '0.0021 ETH',
 				valueFiat: '≈ $0.55',
 				gasPrice: '0.0576 ~ 0.154 gwei',
@@ -753,7 +752,6 @@ function sendForm(
 			{
 				id: 'standard',
 				label: m['send.gasTier.standard'],
-				detail: m['send.gasTierHintStandard'],
 				value: '0.0013 ETH',
 				valueFiat: '≈ $0.33',
 				gasPrice: '0.054 ~ 0.102 gwei',
@@ -762,7 +760,6 @@ function sendForm(
 			{
 				id: 'slow',
 				label: m['send.gasTier.slow'],
-				detail: m['send.gasTierHintSlow'],
 				value: '0.0010 ETH',
 				valueFiat: '≈ $0.25',
 				gasPrice: '0.0528 ~ 0.0768 gwei',

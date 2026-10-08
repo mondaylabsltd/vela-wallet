@@ -1056,11 +1056,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 				fast: k('send.gasTier.fast'),
 				standard: k('send.gasTier.standard'),
 				slow: k('send.gasTier.slow')
-			},
-			hints: {
-				fast: k('send.gasTierHintFast'),
-				standard: k('send.gasTierHintStandard'),
-				slow: k('send.gasTierHintSlow')
 			}
 		},
 		feeEstimated: k('componentsUi.signing.feeEstimated'),

@@ -71,6 +71,8 @@ describe('the three fee tiers read as one speed scale', () => {
 		expect(new Set(names).size, `${locale}: ${names.join(' / ')}`).toBe(3);
 	});
 
+	// The descriptions live on in the Settings default-speed sheet, which has
+	// no fee or gas bid to say it; the per-transaction picker draws none.
 	it.each(SUPPORTED_LOCALES)('%s describes what each speed buys', (locale) => {
 		const names = NAMES.map((key) => rawResolve(locale, key));
 		const hints = HINTS.map((key) => rawResolve(locale, key));

@@ -749,14 +749,15 @@ describe('the speed under the fee', () => {
 		expect(fee.speed?.open).toBe(false);
 	});
 
-	it('opens onto three speeds, each with what it buys', () => {
+	it('opens onto three speeds, each its name and its own fee — no description', () => {
 		const model = buildSigningModel(
 			inputs({ speed: { view: speedView('fast', undefined, true), feeOptions: () => [] } })
 		);
 		const fee = model?.fee;
 		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
 		expect(fee.speed?.options.map((option) => option.id)).toEqual(['fast', 'standard', 'slow']);
-		expect(fee.speed?.options[2].detail).toBe(m.speed.hints.slow);
+		expect(fee.speed?.options[2].label).toBe(m.speed.names.slow);
+		expect(fee.speed?.options[2]).not.toHaveProperty('detail');
 		// The option in force is this sheet's own fee.
 		expect(fee.speed?.options[0].value).toBe('0.0021 ETH');
 	});

@@ -25,7 +25,6 @@ const SPEED: FeeSpeedModel = {
 		{
 			id: 'fast',
 			label: 'Fast',
-			detail: 'First to confirm, even when the network is busy',
 			value: '0.0021 ETH',
 			valueFiat: '≈ $6.30',
 			gasPrice: '300 gwei',
@@ -34,7 +33,6 @@ const SPEED: FeeSpeedModel = {
 		{
 			id: 'standard',
 			label: 'Standard',
-			detail: 'Balanced for everyday transfers',
 			value: '0.0013 ETH',
 			valueFiat: '≈ $3.90',
 			gasPrice: '282 gwei',
@@ -43,7 +41,6 @@ const SPEED: FeeSpeedModel = {
 		{
 			id: 'slow',
 			label: 'Slow',
-			detail: 'Lowest fee, if you can wait',
 			value: '0.001 ETH',
 			valueFiat: '≈ $3.00',
 			gasPrice: '270 gwei',
@@ -73,18 +70,16 @@ const settle = async () => {
 const gasOf = (option: HTMLElement) => option.querySelector('.gas-value')?.textContent?.trim();
 
 /**
- * One option of the picker, laid out whole (078 round 2): line 1 is the name
- * and the money, line 2 the description and the gas bid — the reason under
- * the name, the bid under the money — the tick in its own column. Nothing
- * spills, the money and the bid are each one unbroken line, and the name is
- * read whole.
+ * One option of the picker, laid out whole: line 1 is the name and the money,
+ * line 2 the gas bid alone, under the money — the tick in its own column.
+ * Nothing spills, the money and the bid are each one unbroken line, and the
+ * name is read whole.
  */
 const twoLines = (option: HTMLElement) => {
 	const box = (selector: string) =>
 		(option.querySelector(selector) as HTMLElement).getBoundingClientRect();
 	const name = box('.name');
 	const values = box('.values');
-	const detail = box('.detail');
 	const gas = box('.gas');
 	const gasValue = option.querySelector('.gas-value') as HTMLElement;
 	const line = parseFloat(getComputedStyle(gasValue).lineHeight) || gasValue.offsetHeight;
@@ -92,18 +87,15 @@ const twoLines = (option: HTMLElement) => {
 	// Line 1: the money beside the name, on one line.
 	expect(values.top, label).toBeLessThan(name.bottom);
 	expect(values.height, label).toBeLessThan(values.width);
-	// Line 2: under line 1, the reason starting where the name starts…
-	expect(detail.top, label).toBeGreaterThanOrEqual(name.bottom - 1);
-	expect(Math.abs(detail.left - name.left), label).toBeLessThanOrEqual(1);
-	// …and the bid under the money, whole, ending on the money's right edge.
+	// Line 2: the bid under the money, whole, ending on the money's right edge.
 	expect(gas.top, label).toBeGreaterThanOrEqual(values.bottom - 1);
 	expect(gasValue.getBoundingClientRect().height, label).toBeLessThan(line * 1.5);
 	expect(
 		Math.abs(gasValue.getBoundingClientRect().right - values.right),
 		label
 	).toBeLessThanOrEqual(1);
-	// The reason never runs under the bid.
-	if (gas.top < detail.bottom) expect(detail.right, label).toBeLessThanOrEqual(gas.left + 1);
+	// No sentence under the name.
+	expect(option.querySelector('.detail'), label).toBeNull();
 	// Nothing spills, and the name is whole.
 	expect(option.scrollWidth).toBeLessThanOrEqual(Math.ceil(option.getBoundingClientRect().width));
 	const nameEl = option.querySelector('.name') as HTMLElement;
@@ -146,30 +138,27 @@ describe('FeeSpeedRow', () => {
 		expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 	});
 
-	// The owner's ruling, drawn: the NAME is the speed, and the advantage that
-	// used to be smuggled into it ("Economy" under a "Speed" heading) is a line
-	// of its own underneath. A model test cannot see this — it stays green over
-	// a component that never renders the line.
-	it('shows every option WITH the line that says what that speed buys', async () => {
+	// The owner's call (2026-10-08): the per-transaction picker says what each
+	// speed buys with its own fee and gas bid, not with a sentence under the
+	// name. Each option is its name, its money and its bid — nothing else.
+	it('draws no description under the names: each option is its name, fee and bid', async () => {
 		const { options } = await drawn({ open: true });
-		expect(options.map((o) => o.querySelector('.detail')?.textContent)).toEqual([
-			'First to confirm, even when the network is busy',
-			'Balanced for everyday transfers',
-			'Lowest fee, if you can wait'
-		]);
+		for (const [i, option] of options.entries()) {
+			expect(option.querySelector('.detail')).toBeNull();
+			const { label, value, valueFiat, gasPrice } = SPEED.options[i];
+			expect(option.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+				`${label} ${value} ${valueFiat} ${SPEED.gasPriceLabel} ${gasPrice}`
+			);
+		}
 	});
 
-	// 078 round 2, at the narrowest phone: two lines, not three. The reason is
-	// line 2 under the name, the bid shares that line under the money, and
-	// there is no longer an empty half-line under every name.
-	it('puts the description and the gas bid on ONE second line at 320px', async () => {
+	// At the narrowest phone: two lines, and the second is the bid alone.
+	it('is two lines at 320px — the name and the fee, then the bid under the fee', async () => {
 		const { options } = await drawn({ open: true });
 		for (const option of options) {
 			twoLines(option);
-			const detail = (option.querySelector('.detail') as HTMLElement).getBoundingClientRect();
-			const gas = (option.querySelector('.gas') as HTMLElement).getBoundingClientRect();
-			// The bid sits on the reason's FIRST line — the same line, not a third.
-			expect(gas.top, option.textContent ?? '').toBeLessThan(detail.top + detail.height / 2);
+			const sub = option.querySelector('.sub') as HTMLElement;
+			expect(sub.children).toHaveLength(1);
 		}
 	});
 
@@ -299,9 +288,8 @@ describe('FeeSpeedRow', () => {
 	 * The option keeps ONE height while its tier re-measures. The line used
 	 * to be unmounted whenever a tier had no settled figure, so on every open,
 	 * tap and refresh two rows lost a line and grew it back — the picker
-	 * visibly jumped. Since 078 round 2 the bid shares line 2 with the
-	 * description, so a blank bid would also hand the description room to
-	 * re-wrap into: the slot is held at the width it last had.
+	 * visibly jumped. The bid is now all of line 2, so the line is held open,
+	 * a figure's height, with nothing in it.
 	 */
 	it('holds the bid’s room while a tier re-measures, so nothing jumps', async () => {
 		const screen = render(FeeSpeedRow, { props: { speed: { ...SPEED, open: true } } });
@@ -361,15 +349,15 @@ describe('FeeSpeedRow', () => {
 	 * widens it to five digits — `0.00099999 ~ 0.0029999 gwei`, 27 characters
 	 * (a cap is at most 3 × its bid, so no gwei-sized set writes longer).
 	 * Under the longest label and beside the longest tier names it stays on
-	 * ONE line under the money, the money does not wrap, the description is
-	 * never run under it, and nothing spills out of the 320px — nor out of
+	 * ONE line under the money, the money does not wrap, and nothing spills
+	 * out of the 320px — nor out of
 	 * the 272px an option really gets on a 320px phone (measured in the send
 	 * form, once the page's gutters are taken). No row wraps its money under
 	 * its name, and the NAME, the thing being chosen, is not elided: while the
 	 * range sat in the money's column it took its width from the name, and at
 	 * 272px "Стандартно" dropped its fee to a second line on that row alone.
 	 */
-	it('fits the widest range on one line at 320px and 272px, beside or above the description', async () => {
+	it('fits the widest range on one line at 320px and 272px', async () => {
 		const names = ['Быстро', 'Стандартно', 'Медленно'];
 		// The core's own strings for the widest set it can draw — five digits on
 		// both ends of every row (pinned in `app_fee_speed.rs`,

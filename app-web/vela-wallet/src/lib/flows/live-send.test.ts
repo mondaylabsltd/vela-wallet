@@ -1757,21 +1757,15 @@ describe('the folded speed control (spec 068)', () => {
 		expect(model.speed?.options.some((o) => o.id === 'rapid')).toBe(false);
 	});
 
-	// …and the advantage the name no longer carries, one line per option. This
-	// is what makes the slow tier a choice rather than a defect, so a row that
-	// lost it would quietly undo the rename above.
-	it('gives every option the line that says what that speed buys', () => {
+	// …and no sentence under each name (the owner's call, 2026-10-08): what a
+	// speed buys is its own fee and gas bid, beside it. The descriptions are
+	// the Settings default-speed sheet's, which shows neither figure.
+	it('gives no option a description — its fee and bid say what it buys', () => {
 		const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
-		expect(model.speed?.options.map((o) => o.detail)).toEqual([
-			m['send.gasTierHintFast'],
-			m['send.gasTierHintStandard'],
-			m['send.gasTierHintSlow']
-		]);
-		expect(model.speed?.options.map((o) => o.detail)).toEqual([
-			'First to confirm, even when the network is busy',
-			'Balanced for everyday transfers',
-			'Lowest fee, if you can wait'
-		]);
+		for (const option of model.speed?.options ?? []) {
+			expect(option).not.toHaveProperty('detail');
+		}
+		expect(Object.keys(m)).not.toContain('send.gasTierHintFast');
 	});
 
 	// Each option's figure is its OWN quote's — never one number scaled into
