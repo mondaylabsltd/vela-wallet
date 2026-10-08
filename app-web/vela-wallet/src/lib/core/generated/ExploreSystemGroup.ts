@@ -2,6 +2,6 @@
 
 /**
  * The two sections the start page always has. They can be hidden, never
- * deleted — the only groups there are (issue #465).
+ * deleted — the only groups there are (issue 465).
  */
 export type ExploreSystemGroup = "favorites" | "recent";

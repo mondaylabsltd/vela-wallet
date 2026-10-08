@@ -33,7 +33,7 @@ hidden: boolean,
  * "↻ Updated <ago>" control — both send `force: true, pull: true`)
  * until that round settles or errors; reset by an account switch. The
  * polls and focus refreshes (`pull: false`) never set it. While it
- * holds, the control spins and reads `home.updating` (issue #462); the
+ * holds, the control spins and reads `home.updating` (issue 462); the
  * 650 ms minimum spin is the shell's to hold.
  */
 refreshing: boolean, 

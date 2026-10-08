@@ -6,7 +6,7 @@ import type { ExploreTab } from "./ExploreTab";
 /**
  * The stored document, whole.
  *
- * A document from before issue #465 may also carry `groups` (custom groups,
+ * A document from before issue 465 may also carry `groups` (custom groups,
  * each a list of favourite origins). It is not read — no
  * `deny_unknown_fields` — and the next write leaves it out; the favourites
  * those groups listed are all still here.

@@ -130,7 +130,7 @@ pub enum TabCloseScope {
 }
 
 /// The two sections the start page always has. They can be hidden, never
-/// deleted — the only groups there are (issue #465).
+/// deleted — the only groups there are (issue 465).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -141,7 +141,7 @@ pub enum ExploreSystemGroup {
 
 /// The stored document, whole.
 ///
-/// A document from before issue #465 may also carry `groups` (custom groups,
+/// A document from before issue 465 may also carry `groups` (custom groups,
 /// each a list of favourite origins). It is not read — no
 /// `deny_unknown_fields` — and the next write leaves it out; the favourites
 /// those groups listed are all still here.
