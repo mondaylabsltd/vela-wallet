@@ -16,15 +16,13 @@ use super::{SigningStrings, Tone, fill};
 use crate::explore::fixtures as explore_fixtures;
 use crate::wallet::fixtures::{ADDRESS_FULL, WALLET_NAME, chain_ethereum};
 
-/// A token's mark: its letter and its brand colour (content, not tokens).
-pub type Mark = (SharedString, Hsla);
-
 #[derive(Clone)]
 pub struct AmountLine {
     pub sign: SharedString,
     pub value: SharedString,
     pub symbol: SharedString,
-    pub token: Option<Mark>,
+    /// The coin's token mark, drawn beside the figure.
+    pub token: Option<crate::flows::fixtures::TokenMark>,
     pub fiat: Option<SharedString>,
     pub caption: Option<SharedString>,
     pub tone: Tone,
@@ -248,8 +246,18 @@ pub fn from_env() -> Option<&'static str> {
         .find(|state| state.eq_ignore_ascii_case(want.trim()))
 }
 
-fn mark(letter: &'static str, hex: u32) -> Mark {
-    (letter.into(), rgb(hex).into())
+/// A coin on an amount line as the drawings show it: its token mark on
+/// Ethereum, by the core's rule — its logo over its glyph, as a live line
+/// would wear it (the gallery's network rows fetch their logos the same way;
+/// offline, the glyph is what stays). `contract` is the coin's mainnet
+/// contract, `None` for ETH; a coin the drawings do not name one for is a
+/// contract the rule cannot place, so it gets no guessed logo.
+fn coin(ticker: &'static str, contract: Option<&str>) -> crate::flows::fixtures::TokenMark {
+    crate::flows::fixtures::TokenMark {
+        ticker: ticker.into(),
+        badge: chain_ethereum(),
+        logos: crate::marks::token_logos(1, ticker, contract, &[]),
+    }
 }
 
 /// A fee coin's mark as the drawings show it: the ticker glyph and the
@@ -271,7 +279,7 @@ fn amount(
     sign: &'static str,
     value: &'static str,
     symbol: &'static str,
-    token: Mark,
+    token: crate::flows::fixtures::TokenMark,
     tone: Tone,
 ) -> AmountLine {
     AmountLine {
@@ -376,11 +384,11 @@ const ADDRESS_DISPLAY: &str = "0x14fB1f…D1eA5c";
 
 #[allow(clippy::too_many_lines, reason = "33 scenarios, one arm each")]
 pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
-    let usdc = mark("U", 0x2775ca);
-    let eth = mark("E", 0x627eea);
-    let weth = mark("W", 0x8a92b2);
-    let spweth = mark("S", 0x4c6fff);
-    let usdt = mark("T", 0x26a17b);
+    let usdc = coin("USDC", Some("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"));
+    let eth = coin("ETH", None);
+    let weth = coin("WETH", Some("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"));
+    let spweth = coin("spWETH", Some(""));
+    let usdt = coin("USDT", Some("0xdac17f958d2ee523a2206206994597c13d831ec7"));
 
     let uniswap = || Dapp {
         name: "Uniswap",
@@ -1813,6 +1821,30 @@ mod tests {
             );
         }
         assert_eq!(build("cs11", &s).confirm_label, s.confirm_swap);
+    }
+
+    /// The kind rule on the amount lines: a coin beside a figure wears its
+    /// own token mark, lettered from the same ticker the line names — never
+    /// a one-letter disc that could stand for two coins.
+    #[test]
+    fn every_amount_line_wears_its_own_coins_mark() {
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let mut seen = 0;
+        for state in ALL_STATES {
+            for block in build(state, &s).blocks {
+                let lines = match block {
+                    Block::Amount { line, .. } => vec![line],
+                    Block::Swap { pay, receive } => vec![pay, receive],
+                    _ => Vec::new(),
+                };
+                for line in lines {
+                    let Some(mark) = line.token else { continue };
+                    seen += 1;
+                    assert_eq!(mark.ticker, line.symbol, "{state}");
+                }
+            }
+        }
+        assert!(seen > 0, "the drawings draw coins beside their figures");
     }
 
     /// Unlimited kept as asked, asserted rather than trusted (2026-09-26):

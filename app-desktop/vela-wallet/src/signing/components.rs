@@ -278,8 +278,11 @@ fn block_inner(
                     .text_color(ink)
                     .child(SharedString::from(format!("{}{}", line.sign, line.value))),
             );
+            // The coin's token mark (the core's kind rule: a coin wears
+            // `token_mark`) — its logo over its glyph, the inline mark every
+            // shell draws at 26 — not a one-letter disc in a brand colour.
             if let Some(mark) = &line.token {
-                value_row = value_row.child(letter_avatar(mark.0.clone(), mark.1, 22.));
+                value_row = value_row.child(crate::flows::components::inline_mark(theme, mark));
             }
             col = col.child(
                 value_row.child(
