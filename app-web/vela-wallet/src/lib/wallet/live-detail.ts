@@ -12,6 +12,7 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
+import type { FeedBatchTransfer } from '$lib/core/generated/FeedBatchTransfer';
 import type { FeedDappOperation } from '$lib/core/generated/FeedDappOperation';
 import type { FeedFact } from '$lib/core/generated/FeedFact';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
@@ -27,15 +28,16 @@ import type {
 	FlowScreenModel,
 	FlowStateId,
 	StatusChipModel,
+	TokenMarkModel,
 	TxDetailModel,
 	TxTechnicalRow
 } from '$lib/flows/model';
+import { chainMark, tokenMarkFor } from '$lib/flows/marks';
 import { dappRequestDisplay } from '$lib/core/kernels';
-import { chainMeta } from '$lib/services/chains';
 import { formatDate, formatTime } from '$lib/services/locale-format';
-import { chainName, explorerTxURL } from '$lib/services/networks';
+import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
-import { chainColor, MASK } from './fixtures';
+import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
 import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
 import { fill, type WalletMessages } from './messages';
@@ -161,20 +163,29 @@ function whenMs(item: FeedItem): number {
 	return item.timestamp < 1e12 ? item.timestamp * 1000 : item.timestamp;
 }
 
-/** The chain fact, with its mark — a transfer's and a dApp record's alike. */
+/**
+ * The chain fact, with its mark — a transfer's and a dApp record's alike. It
+ * names a NETWORK, so it wears the network's own logo (`chain_mark`), as the
+ * confirm page's does: never the coin's, which for ETH sent on Base would
+ * put Ethereum's logo beside "Base".
+ */
 function chainFact(chainId: number, m: WalletFlowMessages): FactRowModel {
-	const chain = chainMeta(chainId);
 	return {
 		label: m['componentsTx.detail.labelChain'],
 		value: chainName(chainId),
-		lead: {
-			kind: 'token',
-			mark: {
-				ticker: chain?.iconLabel ?? chainName(chainId).slice(0, 3).toUpperCase(),
-				badgeColor: chainColor(chainId)
-			}
-		}
+		lead: { kind: 'token', mark: chainMark(chainId) }
 	};
+}
+
+/**
+ * A swept coin's mark. The record named its logos when it was written (none
+ * on a phone's) but not its contract, so the core can add candidates only for
+ * the chain's own coin; a token it cannot place keeps the logos it named, then
+ * its glyph — never a logo guessed from its ticker.
+ */
+function sweptCoinMark(chainId: number, transfer: FeedBatchTransfer): TokenMarkModel {
+	const own = transfer.symbol.toUpperCase() === nativeSymbol(chainId).toUpperCase();
+	return tokenMarkFor(chainId, transfer.symbol, own ? null : '', transfer.logo_urls ?? []);
 }
 
 /** When it happened, in the home's day words and the person's time preset. */
@@ -485,12 +496,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
 							}
 						: {
-								lead: {
-									ticker: transfer.symbol,
-									badgeColor: chainColor(item.chain_id),
-									logoUrls: transfer.logo_urls ?? undefined,
-									badgeHidden: true
-								},
+								lead: sweptCoinMark(item.chain_id, transfer),
 								label: transfer.symbol,
 								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
 							}
