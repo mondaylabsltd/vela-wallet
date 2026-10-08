@@ -592,8 +592,12 @@ pub fn balance_display(
     root
 }
 
-/// How long the refresh glyph takes to turn once, and in how many frames.
-const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(1000);
+/// How long the refresh glyph takes to turn once, and in how many frames:
+/// motion slow × 2 (`motion.durationSlow`, 400 ms) — the web's and iOS's
+/// pace, and the spinner's (`spinner.rs` REVOLUTION). At 1000 ms a quick
+/// refresh, held the 650 ms minimum, turned 0.65 of a revolution here and 0.8
+/// there: the same press, looking different on each platform.
+const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(800);
 const REFRESH_FRAMES: u32 = 36;
 
 /// What the refresh control says: "Updating…" while it turns (issue 462),
