@@ -4701,7 +4701,7 @@ export function signAnswered(payload_json) {
 /**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
- * May the signing slide arm, and if not why (spec 099 R7) — the one gate
+ * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
  * every client reads: the four views' JSON, the speed in force, a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
  * @param {string} sign_json
