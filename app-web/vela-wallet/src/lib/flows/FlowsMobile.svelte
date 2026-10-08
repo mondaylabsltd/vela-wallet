@@ -87,7 +87,8 @@
 		pickGroup?(index: number): void;
 		/**
 		 * The split rows (spec 028 Phase 10): a row typed into, the book opened
-		 * for one row — or for a NEW row when `index` is null — and the
+		 * for one row — or for the split as a whole when `index` is null, where
+		 * the core puts the pick in the first empty row or a new one — and the
 		 * picker's class chips.
 		 */
 		recipientRowChanged?(index: number, patch: { address?: string; amount?: string }): void;
@@ -262,7 +263,7 @@
 				onchangeToken={send ? () => send.changeToken() : undefined}
 				onrecipientAction={(id) => {
 					// The split form's three pills (Phase 10): a blank row, the book
-					// into a new row, the importer sheet. Live, the first two are the
+					// into the split, the importer sheet. Live, the first two are the
 					// session's; the gallery keeps the drawn navigation.
 					if (id === 'add' && send) send.addRecipient();
 					else if (id === 'contacts' && send?.pickContactFor) send.pickContactFor(null);
