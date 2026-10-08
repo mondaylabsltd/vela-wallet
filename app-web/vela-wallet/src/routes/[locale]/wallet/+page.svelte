@@ -952,11 +952,10 @@
 						}
 						sendSession?.dispatch({ type: 'open_contact_picker', target });
 					},
-					pickContact: (index: number) => {
-						const contact = contactsView?.contacts[index];
-						if (contact)
-							sendSession?.dispatch({ type: 'picked_address', address: contact.address });
-					},
+					// The person the tapped row was drawn for, by address (issue 467) —
+					// never a place in the book, which re-sorts while names resolve.
+					pickContact: (address: string) =>
+						sendSession?.dispatch({ type: 'picked_address', address }),
 					pickGroup: (index: number) => {
 						const group = contactsView?.groups[index];
 						if (group) seedGroup(group);

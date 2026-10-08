@@ -6,6 +6,11 @@
 	 * already in the book, but the ones that don't are the ones where a person
 	 * is holding a phone in one hand and an address in the other — so the
 	 * escape hatch is the first thing, not the last.
+	 *
+	 * A row answers with its ADDRESS (issue 467), never its place: the book
+	 * re-sorts by favourite, recency and name while names resolve, so the
+	 * row at a place when the list was drawn can be somebody else's by the
+	 * time the tap is handled — and this is who gets the money.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -17,7 +22,8 @@
 		model: ContactPickModel;
 		onscan?: () => void;
 		ongroup?: (index: number) => void;
-		onselect?: (index: number) => void;
+		/** The person tapped, by the address the row was drawn for. */
+		onselect?: (address: string) => void;
 	}
 
 	let { model, onscan, ongroup, onselect }: Props = $props();
@@ -26,14 +32,12 @@
 
 	const shown = $derived(
 		query.trim() === ''
-			? model.contacts.map((contact, index) => ({ contact, index }))
-			: model.contacts
-					.map((contact, index) => ({ contact, index }))
-					.filter(({ contact }) =>
-						`${contact.name} ${contact.addressDisplay}`
-							.toLowerCase()
-							.includes(query.trim().toLowerCase())
-					)
+			? model.contacts
+			: model.contacts.filter((contact) =>
+					`${contact.name} ${contact.addressDisplay}`
+						.toLowerCase()
+						.includes(query.trim().toLowerCase())
+				)
 	);
 </script>
 
@@ -67,8 +71,9 @@
 
 	<p class="section">{model.contactsTitle}</p>
 	<ul>
-		{#each shown as entry (entry.index)}
-			<li><ContactPickRow contact={entry.contact} onselect={() => onselect?.(entry.index)} /></li>
+		<!-- Keyed by address: a row keeps its person when the book re-sorts. -->
+		{#each shown as contact (contact.addressFull)}
+			<li><ContactPickRow {contact} onselect={() => onselect?.(contact.addressFull)} /></li>
 		{/each}
 	</ul>
 </div>

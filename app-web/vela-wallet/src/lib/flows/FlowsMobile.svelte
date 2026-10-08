@@ -78,7 +78,12 @@
 		refreshFee?(): void;
 		toggleSpeed?(): void;
 		pickSpeed?(id: string): void;
-		pickContact?(index: number): void;
+		/**
+		 * One person from the book, by ADDRESS (issue 467): the book re-sorts
+		 * while names resolve, and a place in the list can be somebody else
+		 * by the time the tap lands.
+		 */
+		pickContact?(address: string): void;
 		pickGroup?(index: number): void;
 		/**
 		 * The split rows (spec 028 Phase 10): a row typed into, the book opened
@@ -363,7 +368,7 @@
 				<ContactPick
 					model={sheet.model}
 					onscan={() => go('scan')}
-					onselect={send?.pickContact ? (i) => send.pickContact?.(i) : undefined}
+					onselect={send?.pickContact ? (address) => send.pickContact?.(address) : undefined}
 					ongroup={send?.pickGroup ? (i) => send.pickGroup?.(i) : undefined}
 				/>
 			</BottomSheet>
