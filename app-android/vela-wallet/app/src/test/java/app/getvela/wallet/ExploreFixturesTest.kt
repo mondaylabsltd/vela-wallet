@@ -99,7 +99,7 @@ class ExploreFixturesTest {
         val zh = zhStrings()
         val e2 = ExploreFixtures.buildState(ExploreScreenState.E2, zh)
         val resume = e2.resume!!
-        assertEquals(zh.t("explore.openTabs", mapOf("n" to "4")), resume.title)
+        assertEquals(zh.t("explore.openTabs", 4), resume.title)
         assertEquals("已打开 4 个标签页", resume.title)
         assertEquals(zh.t("explore.tabs"), resume.action)
         assertEquals(listOf("uniswap", "polymarket", "aave"), resume.tabs.map { it.id })

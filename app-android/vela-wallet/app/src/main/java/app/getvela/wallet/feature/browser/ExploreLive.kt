@@ -279,7 +279,7 @@ object ExploreLive {
     fun resume(view: ExploreView, strings: VelaStrings): app.getvela.wallet.feature.explore.ResumeSection? {
         if (!view.ready || view.resumable.isEmpty()) return null
         return app.getvela.wallet.feature.explore.ResumeSection(
-            title = strings.t("explore.openTabs", mapOf("n" to view.tabs.size.toString())),
+            title = strings.t("explore.openTabs", view.tabs.size),
             action = strings.t("explore.tabs"),
             tabs = view.resumable.map { tab ->
                 val label = uniffi.vela_core_uniffi.browserSiteLabel(tab.title, tab.host)

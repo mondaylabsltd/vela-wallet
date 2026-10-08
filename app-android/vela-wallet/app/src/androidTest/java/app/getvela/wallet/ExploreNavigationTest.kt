@@ -101,7 +101,7 @@ class ExploreNavigationTest {
         }
     }
 
-    private val openTabs get() = strings.t("explore.openTabs", mapOf("n" to "4"))
+    private val openTabs get() = strings.t("explore.openTabs", 4)
 
     @Test
     fun aPageHasOneTopBarAndTheAppTabBarUnderIt() {

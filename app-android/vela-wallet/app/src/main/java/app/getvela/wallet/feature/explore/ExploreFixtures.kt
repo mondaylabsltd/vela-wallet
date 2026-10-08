@@ -108,7 +108,7 @@ object ExploreFixtures {
         val withPage = strip.mapNotNull { tab -> tab.site?.takeUnless { tab.startPage }?.let { it.copy(id = tab.id, name = tab.title, subtitle = it.host) } }
         if (withPage.isEmpty()) return null
         return ResumeSection(
-            title = s.t("explore.openTabs", mapOf("n" to strip.size.toString())),
+            title = s.t("explore.openTabs", strip.size),
             action = s.t("explore.tabs"),
             tabs = withPage.take(RESUME_SHOWN),
         )

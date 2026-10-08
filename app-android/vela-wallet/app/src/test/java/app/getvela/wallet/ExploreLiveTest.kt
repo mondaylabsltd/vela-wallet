@@ -400,7 +400,10 @@ class ExploreLiveTest {
             ready = true,
         )
         val resume = ExploreLive.home(fallback, view, BhistView(), null, strings).resume!!
-        assertEquals(strings.t("explore.openTabs", mapOf("n" to "3")), resume.title)
+        assertEquals(strings.t("explore.openTabs", 3), resume.title)
+        // A plural (explore.openTabs_one/_other): three tabs, and one is "1 tab open".
+        assertEquals("3 tabs open", resume.title)
+        assertEquals("1 tab open", strings.t("explore.openTabs", 1))
         assertEquals(strings.t("explore.tabs"), resume.action)
         assertEquals(listOf("t2", "t1"), resume.tabs.map { it.id })
         assertEquals("an untitled tab is said once, by its host", "polymarket.com", resume.tabs[0].name)
