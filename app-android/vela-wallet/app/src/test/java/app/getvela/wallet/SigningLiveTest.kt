@@ -472,6 +472,11 @@ class SigningLiveTest {
         assertEquals("…", control.options[1].value)
         assertTrue(control.options[2].value, control.options[2].value.startsWith("0.001 XDAI"))
         assertEquals("1 ~ 2 gwei", control.options[0].gasPrice)
+        // What each speed buys is Settings' to say, not this payment's: the
+        // options carry their price and bid, never the tier's description.
+        listOf(I18nKeys.Flows.GAS_TIER_HINT_FAST, I18nKeys.Flows.GAS_TIER_HINT_STANDARD, I18nKeys.Flows.GAS_TIER_HINT_SLOW).forEach { key ->
+            assertFalse("$key on the per-payment picker", control.toString().contains(strings.t(key)))
+        }
         assertTrue(model.confirmEnabled)
     }
 

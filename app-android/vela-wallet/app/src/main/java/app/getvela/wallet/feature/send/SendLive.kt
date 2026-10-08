@@ -836,14 +836,6 @@ object SendLive {
         },
     )
 
-    private fun tierHint(tier: FeeTier, s: VelaStrings): String = s.t(
-        when (offered(tier)) {
-            FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_HINT_STANDARD
-            FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_HINT_SLOW
-            else -> I18nKeys.Flows.GAS_TIER_HINT_FAST
-        },
-    )
-
     /**
      * The folded speed control (spec 068), drawn from the `fee_speed` core's
      * view (spec 069). Every figure is that tier's OWN settled quote, echoed
@@ -880,7 +872,6 @@ object SendLive {
                 FeeSpeedOptionModel(
                     id = option.tier.name.lowercase(),
                     label = tierName(option.tier, s),
-                    detail = tierHint(option.tier, s),
                     // "measuring" while this tier's own quote is out, "—" when
                     // there is none to be had.
                     value = when {

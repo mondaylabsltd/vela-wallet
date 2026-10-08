@@ -499,10 +499,11 @@ data class FeeRowModel(
 data class FeeSpeedOptionModel(
     /** The wire tier — `fast` / `standard` / `slow`. */
     val id: String,
-    /** The SPEED — 超快 / 标准 / 较慢 — never a number. */
+    /**
+     * The SPEED — 超快 / 标准 / 较慢 — never a number. What it buys is not said
+     * per payment (its price and bid are); Settings' default speed says it.
+     */
     val label: String,
-    /** What that speed buys, one line under the name. */
-    val detail: String,
     /** This option's OWN fee, or the "…" / "—" standing in for it. */
     val value: String,
     /** Its gas bid as a range, already formatted by the core over the set. */

@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -1309,8 +1310,10 @@ internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (()
  * Folded: the word and the tier in force — THEIR default, never a hardcoded
  * one. Opened: the one-shot promise first (a person about to change one
  * payment needs to know every later one is untouched), then three options —
- * name, its own fee, its gas bid, what it buys, a tick — or, on a network with
- * one speed, that one statement instead.
+ * name, its own fee, its gas bid, a tick — or, on a network with one speed,
+ * that one statement instead. What each speed buys is not repeated here: the
+ * price and the bid are this payment's answer, and the words belong to
+ * Settings' default speed, which shows neither.
  */
 @Composable
 fun FeeSpeedControl(
@@ -1358,9 +1361,8 @@ fun FeeSpeedControl(
             return@Column
         }
         SpeedNote(speed.onceNote)
-        // Two lines, not three (spec 078 round 2): [name ……… fee] over
-        // [what it buys ……… its gas bid]. The third line left a hole under
-        // the name. Chosen = the text colour, semibold, and a ✓ in its own
+        // Two lines (spec 078 round 2): [name ……… fee] over [……… its gas
+        // bid]. Chosen = the text colour, semibold, and a ✓ in its own
         // column — never the accent, which on this screen means "moves money".
         val lineOne = VelaTextSize.base * VelaLeading.normal
         val lineOneDp = with(LocalDensity.current) { lineOne.toDp() }
@@ -1402,34 +1404,30 @@ fun FeeSpeedControl(
                             )
                         },
                     )
-                    Row(verticalAlignment = Alignment.Top) {
-                        // The description gives way first: squeezed, it wraps
-                        // under itself — the gas bid is never cut.
+                    // Line two is the gas bid alone, trailing under the fee.
+                    // Named, because an unnamed "3,244 wei" under a fee reads
+                    // as a second charge. The UI font with tabular digits, so
+                    // the three bids line up — not a monospace face for the
+                    // whole string. While a tier is still measuring its bid is
+                    // not in: the same line, unseen and unread, holds its
+                    // place, so no option grows or shrinks as figures land (the
+                    // description that used to hold it is gone — what a speed
+                    // buys is said where the default is chosen, in Settings).
+                    if (speed.gasPriceLine) {
+                        val bid = option.gasPrice
                         Text(
-                            text = option.detail,
+                            text = if (bid != null) "${speed.gasPriceLabel}  $bid" else speed.gasPriceLabel,
                             color = colors.fgSubtle,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.sm,
                             lineHeight = VelaTextSize.sm * VelaLeading.normal,
-                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .then(if (bid == null) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
                         )
-                        // Named, because an unnamed "3,244 wei" under a fee
-                        // reads as a second charge. The UI font with tabular
-                        // digits, so the three bids line up — not a monospace
-                        // face for the whole string.
-                        if (speed.gasPriceLine && option.gasPrice != null) {
-                            Spacer(modifier = Modifier.width(VelaSpacing.md))
-                            Text(
-                                text = "${speed.gasPriceLabel}  ${option.gasPrice}",
-                                color = colors.fgSubtle,
-                                fontFamily = VelaFontFamily,
-                                fontSize = VelaTextSize.sm,
-                                lineHeight = VelaTextSize.sm * VelaLeading.normal,
-                                style = TextStyle(fontFeatureSettings = "tnum"),
-                                maxLines = 1,
-                                softWrap = false,
-                            )
-                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
