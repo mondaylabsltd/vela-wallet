@@ -544,10 +544,11 @@ pub struct FeeRow {
 /// One option of the speed control (spec 068).
 #[derive(Clone)]
 pub struct FeeSpeedOption {
-    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number. Nothing says what
+    /// it buys here: the fee beside it and the gas bid under it already do,
+    /// for this transaction (the Settings default-speed sheet, which has no
+    /// figures, keeps the descriptions).
     pub label: SharedString,
-    /// What that speed buys, one line under the name.
-    pub detail: SharedString,
     /// This option's OWN fee, or the "…" / "—" standing in for it.
     pub value: SharedString,
     /// Its gas bid as a range, already formatted by the core over the set.

@@ -512,7 +512,9 @@ pub struct FlowStrings {
     pub gas_tier_fast: SharedString,
     pub gas_tier_standard: SharedString,
     pub gas_tier_slow: SharedString,
-    /// …and what each one buys, the line under the name.
+    /// …and what each one buys — said only by the Settings default-speed
+    /// sheet, which has no fee or gas bid to say it. The picker for one
+    /// transaction shows those figures instead.
     pub gas_tier_hint_fast: SharedString,
     pub gas_tier_hint_standard: SharedString,
     pub gas_tier_hint_slow: SharedString,

@@ -1436,15 +1436,6 @@ fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
     }
 }
 
-/// …and what it buys, the line under the name.
-fn tier_hint(s: &FlowStrings, tier: FeeTier) -> SharedString {
-    match tier {
-        FeeTier::Standard => s.gas_tier_hint_standard.clone(),
-        FeeTier::Slow => s.gas_tier_hint_slow.clone(),
-        FeeTier::Fast | FeeTier::Rapid => s.gas_tier_hint_fast.clone(),
-    }
-}
-
 fn native_symbol(chain_id: u32) -> String {
     BUILTIN_CHAINS
         .iter()
@@ -1712,7 +1703,6 @@ pub fn speed_model(
                 };
                 FeeSpeedOption {
                     label: tier_name(s, option.tier),
-                    detail: tier_hint(s, option.tier),
                     value,
                     gas_price: option.gas_price.clone().map(SharedString::from),
                     selected: option.selected,
@@ -7125,8 +7115,9 @@ mod speed_tests {
         assert!(none.is_none(), "no sessions behind it, no control");
     }
 
-    /// Open, three options fastest first, each its own fee, its gas bid from
-    /// the core, and the line on what it buys.
+    /// Open, three options fastest first, each its own fee and its gas bid
+    /// from the core — and nothing on what a speed buys: in the picker for
+    /// one transaction the figures say it (the type has no such field).
     #[test]
     fn open_every_option_shows_its_own_figures() {
         let (s, wallet) = strings();
@@ -7160,7 +7151,6 @@ mod speed_tests {
                 Some("1,937 ~ 4,500 wei".to_owned()),
             ]
         );
-        assert_eq!(model.options[2].detail, s.gas_tier_hint_slow);
         assert!(model.options[0].selected);
         assert!(
             model
