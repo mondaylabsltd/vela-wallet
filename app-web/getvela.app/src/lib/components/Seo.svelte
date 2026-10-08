@@ -56,7 +56,7 @@
 				? `${domain}/api/og?type=article&title=${encodeURIComponent(title)}${
 						author ? `&author=${encodeURIComponent(author)}` : ''
 					}${published ? `&date=${encodeURIComponent(published)}` : ''}`
-				: `${domain}/getvela-app-preview.png`)
+				: `${domain}/getvela-app-preview2.png`)
 	);
 
 	// Serialize JSON-LD, escaping `<` so the value can never break out of the

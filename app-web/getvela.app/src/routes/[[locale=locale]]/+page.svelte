@@ -313,7 +313,7 @@
 	<meta name="description" content={m.home.meta.description} />
 	<meta property="og:title" content={m.home.meta.ogTitle} />
 	<meta property="og:description" content={m.home.meta.ogDescription} />
-	<meta property="og:image" content="https://getvela.app/getvela-app-preview.png" />
+	<meta property="og:image" content="https://getvela.app/getvela-app-preview2.png" />
 	<meta property="og:url" content="{seoConfig.domain}{pathFor(data.locale, '/')}" />
 	<meta property="og:locale" content={LOCALES[data.locale].ogLocale} />
 	<link rel="canonical" href="{seoConfig.domain}{pathFor(data.locale, '/')}" />
@@ -325,7 +325,7 @@
 	{/each}
 	<link rel="alternate" hreflang="x-default" href="{seoConfig.domain}/" />
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:image" content="https://getvela.app/getvela-app-preview.png" />
+	<meta name="twitter:image" content="https://getvela.app/getvela-app-preview2.png" />
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html structuredDataHtml}
 </svelte:head>
