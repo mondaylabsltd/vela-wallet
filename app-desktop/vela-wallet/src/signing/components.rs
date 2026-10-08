@@ -904,17 +904,24 @@ pub fn fee(
             value,
             selector,
             warning,
+            warning_held,
             tappable,
             refresh,
             refreshing,
             stale_note,
         } => {
             // Said under the row, in the error colour: why the confirm is shut.
+            // Held while the fee is measured again, the last words keep the
+            // line's height and are not said.
             let warning = warning.clone().map(|text| {
                 div()
                     .px(px(16.))
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.error_base)
+                    .text_color(if *warning_held {
+                        gpui::transparent_black()
+                    } else {
+                        theme.error_base
+                    })
                     .child(text)
             });
             let Some((title, options)) = selector else {

@@ -739,6 +739,10 @@ pub struct WalletPage {
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
+    /// The signing column's lines held through a fee measurement, for the
+    /// request whose id is beside them ([`signing_live::HeldLines`]).
+    #[cfg(not(target_os = "linux"))]
+    signing_held: Option<(String, signing_live::HeldLines)>,
     /// A request the person closed after approving it (spec 079 FR-002): its
     /// machines keep running, unseen, until the core answers the page — the
     /// close refused nothing, so the answer must still get out.
@@ -1429,6 +1433,8 @@ impl WalletPage {
             signing_hidden: false,
             send_parked: false,
             signing_last: None,
+            #[cfg(not(target_os = "linux"))]
+            signing_held: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
             contacts_query: String::new(),
@@ -16673,6 +16679,9 @@ impl WalletPage {
         let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
+        // The confirm's note line, held for a live request (`HeldLines::note`):
+        // its words, and whether they are said now.
+        let mut held_note: Option<Option<(SharedString, bool)>> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
@@ -16806,7 +16815,7 @@ impl WalletPage {
             let speed_tier = Some(host.speed_view().tier);
             // The top-up's "check again" and a refusal's absent confirm are
             // the column's own; only the request reads the signing gate.
-            let confirm = signing_live::column_confirm(kind, &self.signing, || {
+            let mut confirm = signing_live::column_confirm(kind, &self.signing, || {
                 let mut fee_model = signing_live::fee_model(
                     &host.clear_view,
                     fee,
@@ -16842,6 +16851,39 @@ impl WalletPage {
                         .map(|key| gpui::SharedString::from(self.loc.t(key).to_string())),
                 }
             });
+            // Nothing moves while a figure is measured — a refresh, a speed
+            // switch, the 30 s re-quote: the shortfall under the fee row and
+            // the confirm's note keep their lines, holding the last words
+            // invisibly while they have nothing to say.
+            if kind == signing_live::ColumnKind::Request {
+                let id = host
+                    .view
+                    .request
+                    .as_ref()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_default();
+                if self
+                    .signing_held
+                    .as_ref()
+                    .is_none_or(|(held, _)| *held != id)
+                {
+                    self.signing_held = Some((id, signing_live::HeldLines::default()));
+                }
+                if let Some((_, held)) = self.signing_held.as_mut() {
+                    let measuring = fee.busy
+                        || host.fee_measuring()
+                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    signing_live::hold_fee_warning(&mut confirm.fee, held, measuring);
+                    held_note = Some(
+                        held.note(
+                            confirm
+                                .note
+                                .clone()
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                        ),
+                    );
+                }
+            }
             model.fee = confirm.fee;
             model.confirm_label = confirm.label;
             model.confirm_enabled = confirm.enabled;
@@ -17326,16 +17368,27 @@ impl WalletPage {
                     )
                 }
             }))
-            // Spec 099 R7: a shut confirm says why, in the core's words.
+            // Spec 099 R7: a shut confirm says why, in the core's words — in
+            // a line that, once said, stays with its last words invisible
+            // while there is nothing to say, so the next measurement's note
+            // fills it rather than growing the column.
             .children(
-                model
-                    .confirm_note
-                    .clone()
-                    .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
-                    .map(|note| {
+                held_note
+                    .unwrap_or_else(|| {
+                        model
+                            .confirm_note
+                            .clone()
+                            .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
+                            .map(|note| (note, true))
+                    })
+                    .map(|(note, said)| {
                         div()
                             .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
+                            .text_color(if said {
+                                theme.fg_subtle
+                            } else {
+                                gpui::transparent_black()
+                            })
                             .child(note)
                     }),
             );

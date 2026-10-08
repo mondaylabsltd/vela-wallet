@@ -160,6 +160,74 @@ pub fn column_confirm(
     }
 }
 
+/// The lines that come and go with a fee measurement, held for one request
+/// so the column never moves while one is out — on every refresh, speed
+/// switch and 30 s re-quote. The Android device showed its sheet jumping
+/// about 33 px each time, and the web 29. Here the column is top-anchored,
+/// so the lines moved what is below them: the core says "no coin can pay"
+/// only of a settled figure, so on each re-quote the shortfall under the fee
+/// row went (or turned into "Insufficient ETH", or into nothing once a
+/// refresh dropped its readings) and the signer row and the confirm rode up
+/// under the pointer, then back down; and the confirm's note — "Working out
+/// the network fee…" — came and went at the column's end, which moves the
+/// whole column when it is scrolled to its end. The web's rule, line for
+/// line (its `FeeRow` and `SigningBody`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HeldLines {
+    /// The fee row's warning the settled sheet last drew.
+    warning: Option<SharedString>,
+    /// The confirm's note as last said.
+    note: Option<SharedString>,
+}
+
+impl HeldLines {
+    /// The fee row's warning to draw, and whether it is held — drawn
+    /// invisibly, keeping its line's height — rather than said. While the
+    /// fee is measured again the verdict is about the last quote, so it is
+    /// not said: the line holds the last settled words, and nothing the busy
+    /// view falls to is said in its place. Settled, what is drawn is the
+    /// truth — a fee that lands with nothing to say lets the line go — and is
+    /// what is held next.
+    pub fn warning(
+        &mut self,
+        measuring: bool,
+        drawn: Option<SharedString>,
+    ) -> (Option<SharedString>, bool) {
+        if measuring {
+            (self.warning.clone(), self.warning.is_some())
+        } else {
+            self.warning.clone_from(&drawn);
+            (drawn, false)
+        }
+    }
+
+    /// The confirm's note line: the note said now, or — once one has been
+    /// said for this request — the last words, held invisibly while the
+    /// gate has nothing to say (`false`), so the next measurement's note
+    /// fills the line rather than growing the column.
+    pub fn note(&mut self, said: Option<SharedString>) -> Option<(SharedString, bool)> {
+        match said {
+            Some(note) => {
+                self.note = Some(note.clone());
+                Some((note, true))
+            }
+            None => self.note.clone().map(|note| (note, false)),
+        }
+    }
+}
+
+/// [`HeldLines::warning`] on the fee row, where it has one.
+pub fn hold_fee_warning(model: &mut FeeModel, held: &mut HeldLines, measuring: bool) {
+    if let FeeModel::OnChain {
+        warning,
+        warning_held,
+        ..
+    } = model
+    {
+        (*warning, *warning_held) = held.warning(measuring, warning.take());
+    }
+}
+
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681) — the
 /// core's rule.
 #[must_use]
@@ -1893,6 +1961,7 @@ pub fn fee_model(
             .or(refused)
             .or_else(|| spent_fee_coin_warning(fee, s))
             .or(reason),
+        warning_held: false,
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -4542,6 +4611,107 @@ mod fee_tests {
                 "the request's chain is the badge"
             );
         });
+    }
+
+    /// Nothing moves while a figure is measured (the Android device's jump
+    /// on every refresh, speed switch and 30 s re-quote; the web's rule).
+    /// The core says "no coin can pay" only of a settled figure, so the line
+    /// went with every re-quote and the signer row and the confirm rode up
+    /// under it. Held, it keeps its line through the measurement — its last
+    /// words, drawn invisibly, since the verdict is about the last quote —
+    /// and a fee that lands with nothing to say takes it away.
+    #[test]
+    fn the_shortfall_and_the_note_hold_their_lines_while_a_figure_is_measured() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| {
+            fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            )
+        };
+        let line = |model: &FeeModel| match model {
+            FeeModel::OnChain {
+                warning,
+                warning_held,
+                ..
+            } => (warning.clone(), *warning_held),
+            _ => unreachable!("an on-chain row"),
+        };
+        let no_coin = Some(s.fee_no_coin_pays.clone());
+        let mut settled = quoted(vec![option("ETH", None, true, true)], false);
+        settled.no_coin_pays = true;
+        // What the core says while a re-quote is out: busy, and no verdict —
+        // the row falls to another line ("Insufficient ETH")…
+        let mut measuring = settled.clone();
+        measuring.busy = true;
+        measuring.no_coin_pays = false;
+        assert_ne!(
+            line(&row(&measuring)).0,
+            no_coin,
+            "the busy view's line is not the settled one"
+        );
+        // …or, a refresh that dropped its readings or a speed not yet
+        // priced, to none at all.
+        let mut unpriced = measuring.clone();
+        unpriced.fee = None;
+        assert_eq!(line(&row(&unpriced)).0, None);
+
+        let mut held = HeldLines::default();
+        // The first measurement has nothing to hold, and says nothing.
+        let mut drawn = row(&measuring);
+        hold_fee_warning(&mut drawn, &mut held, true);
+        assert_eq!(line(&drawn), (None, false));
+        let mut drawn = row(&settled);
+        hold_fee_warning(&mut drawn, &mut held, false);
+        assert_eq!(line(&drawn), (no_coin.clone(), false), "said");
+        for during in [&measuring, &unpriced, &measuring] {
+            let mut drawn = row(during);
+            hold_fee_warning(&mut drawn, &mut held, true);
+            assert_eq!(
+                line(&drawn),
+                (no_coin.clone(), true),
+                "the settled words keep the line, held and not said"
+            );
+            let mut drawn = row(&settled);
+            hold_fee_warning(&mut drawn, &mut held, false);
+            assert_eq!(line(&drawn), (no_coin.clone(), false));
+        }
+        // The fee lands and the coin can pay: the line goes, for real…
+        let paid = quoted(vec![option("ETH", None, false, true)], true);
+        let mut drawn = row(&paid);
+        hold_fee_warning(&mut drawn, &mut held, false);
+        assert_eq!(line(&drawn), (None, false));
+        // …and the next measurement has nothing to hold.
+        let mut drawn = row(&measuring);
+        hold_fee_warning(&mut drawn, &mut held, true);
+        assert_eq!(line(&drawn), (None, false), "nothing to hold once it went");
+
+        // The confirm's note: no line until one has been said; then its
+        // last words keep the line, invisibly, while the gate is open.
+        let measuring_note = SharedString::from("Working out the network fee…");
+        let mut held = HeldLines::default();
+        assert_eq!(held.note(None), None, "a sheet that never had a note");
+        assert_eq!(
+            held.note(Some(measuring_note.clone())),
+            Some((measuring_note.clone(), true))
+        );
+        assert_eq!(
+            held.note(None),
+            Some((measuring_note.clone(), false)),
+            "landed: the line stays, its words held"
+        );
+        assert_eq!(
+            held.note(Some(measuring_note.clone())),
+            Some((measuring_note, true))
+        );
     }
 
     /// Issue #408, as reported: 0 ETH and 0.754189 USDT against ~0.001334 ETH
