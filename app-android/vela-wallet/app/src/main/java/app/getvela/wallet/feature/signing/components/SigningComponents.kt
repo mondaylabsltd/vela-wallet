@@ -400,9 +400,13 @@ fun SigningParty(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            // The name takes the room the badge leaves, and wraps in it: an
+            // unweighted name ("1inch Aggregation Router · 1inch Network")
+            // took the whole row and squeezed 已验证 into a column of one
+            // character per line.
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(
                     text = name,
                     color = colors.fgBase,
@@ -433,6 +437,8 @@ fun SigningParty(
                     color = ink,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier
                         .background(fill, RoundedCornerShape(VelaRadius.sm))
                         .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs),
