@@ -2307,7 +2307,7 @@ struct RootView: View {
         guard let token = wallet.balance?.tokens[safe: assetRow] else { return }
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
-        let network = ChainCatalog.meta(token.chainId)?.displayName ?? String(token.chainId)
+        let network = walletNetworks.meta(token.chainId)?.displayName ?? String(token.chainId)
         startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
@@ -2402,7 +2402,23 @@ struct RootView: View {
         }
         return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
                                 feedRead: activity.hasRead, on: base, loc: loc,
-                                now: Date(), spinning: wallet.spin.spinning)
+                                now: Date(), spinning: wallet.spin.spinning,
+                                networks: walletNetworks)
+    }
+
+    /// The networks this wallet has, as the core lists them — the built-ins
+    /// and the person's own (the catalogue until the networks machine has
+    /// read its stores). Every list and name a screen draws from comes from
+    /// here, and every receive row's index is an index into its `chains`.
+    private var walletNetworks: WalletNetworks {
+        WalletNetworks(settings.networkAdmin?.networks)
+    }
+
+    /// The receive list's row `receiveNetwork`, from the same list it was
+    /// drawn from.
+    private var receiveChain: ChainMeta? {
+        let chains = walletNetworks.chains
+        return chains.indices.contains(receiveNetwork) ? chains[receiveNetwork] : nil
     }
 
     /// How often the home re-reads the clock, so "Updated 2m" ages (issue 462).
@@ -2421,7 +2437,8 @@ struct RootView: View {
         // is not embarrassing but dangerous: money sent to the drawn address is
         // money gone.
         if case .receive(let list) = model.base {
-            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc))
+            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc,
+                                                        networks: walletNetworks))
         }
         if case .receiveQr(let qr)? = model.sheet {
             // R2 is a NETWORK's code and R3 is one ASSET's. The state is the
@@ -2431,9 +2448,7 @@ struct RootView: View {
             let asset = state == .r3 ? paymentRequest.view?.asset : nil
             model.sheet = .receiveQr(FlowsLive.receiveQr(
                 address, name: session.view.activeName,
-                chain: asset.flatMap { ChainCatalog.meta($0.chainId) }
-                    ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
-                        ? ChainCatalog.chains[receiveNetwork] : nil),
+                chain: asset.flatMap { walletNetworks.meta($0.chainId) } ?? receiveChain,
                 asset: asset,
                 pay: paymentRequest.view,
                 on: qr, loc: loc
@@ -2442,7 +2457,7 @@ struct RootView: View {
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
                 balance, currency: settings.currency, selected: chainFilter,
-                on: assets, loc: loc
+                on: assets, loc: loc, networks: walletNetworks
             ))
         }
         // The history screen the home's 全部 opens — the same feed, not a
@@ -2450,7 +2465,7 @@ struct RootView: View {
         if case .history(let history) = model.base, let feed = activity.feed {
             model.base = .history(FlowsLive.history(
                 feed, selected: chainFilter, on: history, loc: loc,
-                hidden: wallet.balance?.hidden ?? false
+                hidden: wallet.balance?.hidden ?? false, networks: walletNetworks
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -2461,7 +2476,8 @@ struct RootView: View {
                 on: detail, loc: loc,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
-                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) }
+                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
+                networks: walletNetworks
             ))
         }
         if case .tokenDetail(let detail)? = model.sheet,
@@ -2470,7 +2486,7 @@ struct RootView: View {
                 balance.tokens[assetRow],
                 feed: activity.feed,
                 display: WalletLive.Display.from(settings.currency),
-                on: detail, loc: loc
+                on: detail, loc: loc, networks: walletNetworks
             ))
         }
         // The send journey. SD1's rows are the holdings the balance machine
@@ -2719,10 +2735,11 @@ struct RootView: View {
     private func chainSheet(for state: FlowStateId) -> ChainSheetModel? {
         let assetStates: Set<FlowStateId> = [.t1, .t2, .t3, .t3b, .t4, .t5, .t5b]
         if assetStates.contains(state), let balance = wallet.balance {
-            return FlowsLive.assetChainSheet(balance, selected: chainFilter, loc: loc)
+            return FlowsLive.assetChainSheet(balance, selected: chainFilter, loc: loc,
+                                             networks: walletNetworks)
         }
         return activity.feed.map {
-            FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
+            FlowsLive.chainSheet($0, selected: chainFilter, loc: loc, networks: walletNetworks)
         }
     }
 
@@ -2949,9 +2966,9 @@ struct RootView: View {
     private func signingContext(chain: Int, live: SigningController?) -> SigningLive.Context {
         SigningLive.Context(
             loc: loc,
-            chainName: ChainCatalog.meta(chain)?.displayName ?? String(chain),
+            chainName: walletNetworks.meta(chain)?.displayName ?? String(chain),
             chainDot: SettingsLive.chainColor(chain),
-            nativeSymbol: ChainCatalog.meta(chain)?.nativeSymbol ?? "",
+            nativeSymbol: walletNetworks.meta(chain)?.nativeSymbol ?? "",
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
@@ -3017,7 +3034,7 @@ struct RootView: View {
                         // A network row asks to be paid in that chain's OWN
                         // coin. Telling the machine keeps the sheet's mark and
                         // the machine's asset from disagreeing.
-                        guard let chain = ChainCatalog.chains[safe: index] else { return }
+                        guard let chain = walletNetworks.chains[safe: index] else { return }
                         paymentRequest.pickAsset(
                             chainId: chain.chainId,
                             tokenAddress: nil,
@@ -3279,9 +3296,7 @@ struct RootView: View {
         let card = FlowsLive.shareCard(
             session.view.address,
             name: session.view.activeName,
-            chain: pay.flatMap { ChainCatalog.meta($0.asset.chainId) }
-                ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
-                    ? ChainCatalog.chains[receiveNetwork] : nil),
+            chain: pay.flatMap { walletNetworks.meta($0.asset.chainId) } ?? receiveChain,
             pay: pay,
             on: drawnShareCard,
             loc: loc
@@ -3359,8 +3374,7 @@ struct RootView: View {
                 ?? ExplorerLinks.address(chainId: token.chainId, session.view.address,
                                          store: shelf)
         case .r2, .r3:
-            let chainId = ChainCatalog.chains.indices.contains(receiveNetwork)
-                ? ChainCatalog.chains[receiveNetwork].chainId : 0
+            guard let chainId = receiveChain?.chainId else { return nil }
             return ExplorerLinks.address(chainId: chainId, session.view.address, store: shelf)
         case .sd4a, .sd4b, .sd4c:
             // The send receipt. The chain is the token's, never the wallet's

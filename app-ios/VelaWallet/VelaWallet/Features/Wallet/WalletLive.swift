@@ -77,13 +77,14 @@ enum WalletLive {
         on model: WalletHomeModel,
         loc: Loc,
         now: Date = Date(),
-        spinning: Bool? = nil
+        spinning: Bool? = nil,
+        networks: WalletNetworks = .builtin
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency)
         copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
         copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
-        copy.assetRows = assetRows(view, display: display)
+        copy.assetRows = assetRows(view, display: display, networks: networks)
         copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
         if let feed {
             copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
@@ -280,11 +281,18 @@ enum WalletLive {
     ///
     /// Invisible until the balance was real — with a fixture there was nothing
     /// to duplicate.
-    static func assetRows(_ view: BalanceViewWire, display: Display = .usd) -> [AssetRowModel] {
+    ///
+    /// The chain is named from the wallet's networks, the person's own
+    /// included — a token on a network they added had a blank chain line.
+    static func assetRows(
+        _ view: BalanceViewWire,
+        display: Display = .usd,
+        networks: WalletNetworks = .builtin
+    ) -> [AssetRowModel] {
         view.tokens.map { token in
             AssetRowModel(
                 ticker: token.symbol,
-                chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
+                chain: networks.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
                 // The one token-amount rule every shell prints (spec 078,
                 // `tokenAmountText`): the core's ladder, so this row, the Send
