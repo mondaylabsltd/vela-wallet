@@ -52,6 +52,66 @@ struct BrowserMemoryTests {
         #expect((doc?["favorites"] as? [[String: Any]])?.count == 1)
     }
 
+    /// Issue #465: a document saved before custom groups went — one that
+    /// listed a favourite, an empty "New group" a phone made — loads through
+    /// this store with every favourite and the hidden Recent; the view this
+    /// build decodes has no groups, Manage groups is the two sections, and
+    /// the next write leaves `groups` out of the store.
+    @Test func aDocumentFromBeforeIssue465KeepsEveryFavouriteAndLosesItsGroups() async throws {
+        let store = freshStore("explore-pre-465")
+        store.writeObject(ExploreExecutor.key, [
+            "favorites": [
+                ["origin": "https://curve.fi", "url": "https://curve.fi/", "host": "curve.fi",
+                 "name": "Curve", "renamed": false, "added_ms": 1_759_051_384_000],
+                ["origin": "https://polymarket.com", "url": "https://polymarket.com/",
+                 "host": "polymarket.com", "name": "Polymarket", "renamed": false,
+                 "added_ms": 1_759_051_385_000],
+            ],
+            "groups": [
+                ["id": "g-1759051390000", "name": "Trading",
+                 "members": ["https://curve.fi"], "hidden": false, "created_ms": 1_759_051_390_000],
+                ["id": "g-1759051391000", "name": "New group", "members": [String](),
+                 "hidden": true, "created_ms": 1_759_051_391_000],
+            ],
+            "tabs": [[String: Any]](),
+            "selected_tab": NSNull(),
+            "hidden_system": ["recent"],
+            "name_rule": 1,
+        ])
+        let executor = ExploreExecutor(store: store)
+        let core = ExploreSitesCore()
+
+        func operation(_ result: String, _ type: String) throws -> (id: UInt64, op: [String: Any]) {
+            let effects = try CoreJSON.object(result)["effects"] as? [[String: Any]] ?? []
+            let effect = try #require(effects.first { ($0["operation"] as? [String: Any])?["type"] as? String == type })
+            return (try #require((effect["id"] as? NSNumber)?.uint64Value),
+                    try #require(effect["operation"] as? [String: Any]))
+        }
+
+        let read = try operation(try core.dispatch(eventJson: CoreJSON.string(["type": "start"])), "read_explore")
+        let loaded = try core.resolveEffect(effectId: read.id, resultJson: await executor.perform(read.op))
+        let view = try CoreJSON.decode(
+            ExploreViewWire.self, from: try CoreJSON.object(loaded)["view"] as? [String: Any] ?? [:]
+        )
+        #expect(view.ready)
+        #expect(view.favorites.map(\.origin) == ["https://curve.fi", "https://polymarket.com"])
+        #expect(view.recentHidden, "a hidden section stays hidden")
+        #expect(!view.favoritesHidden)
+        guard case .groupManage(_, let rows) = ExploreLive.groupManage(explore: view, loc: loc()) else {
+            Issue.record("Manage groups is not the group sheet"); return
+        }
+        #expect(rows.map(\.id) == ["favorites", "recent"])
+
+        let renamed = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "favorite_renamed", "origin": "https://curve.fi", "name": "Stables",
+        ]))
+        _ = await executor.perform(try operation(renamed, "write_explore").op)
+        let stored = store.readObject(ExploreExecutor.key)
+        #expect(stored["groups"] == nil, "the next write drops the groups")
+        #expect((stored["favorites"] as? [[String: Any]])?.count == 2, "every favourite is kept")
+        #expect(stored["hidden_system"] as? [String] == ["recent"])
+    }
+
     /// Clearing **deletes the key**. "Cleared" and "empty" are different facts
     /// on disk, and the other three clients read this document.
     @Test func clearingHistoryRemovesTheKeyRatherThanWritingAnEmptyList() async {
@@ -87,7 +147,6 @@ struct BrowserMemoryTests {
 
     private func view(
         favorites: [ExploreSiteWire] = [],
-        groups: [ExploreGroupWire] = [],
         tabs: [ExploreTabWire] = [],
         selected: String? = nil,
         favoritesHidden: Bool = false,
@@ -95,7 +154,7 @@ struct BrowserMemoryTests {
         favoritesFull: Bool = false
     ) -> ExploreViewWire {
         ExploreViewWire(
-            favorites: favorites, groups: groups, tabs: tabs, selectedTab: selected,
+            favorites: favorites, tabs: tabs, selectedTab: selected,
             favoritesHidden: favoritesHidden, recentHidden: recentHidden,
             favoritesFull: favoritesFull, tabsFull: false, ready: true
         )
@@ -106,19 +165,14 @@ struct BrowserMemoryTests {
                        favicon: "", lastVisitedMs: 1_757_000_000_000)
     }
 
-    /// Recents come first, and a hidden system group draws nothing while
-    /// keeping everything.
-    @Test func recentsLeadAndAHiddenSystemGroupDrawsNothing() {
+    /// Recent is the one section under Favorites (issue #465: no custom
+    /// groups), and hidden it draws nothing while keeping everything.
+    @Test func recentIsTheOnlySectionAndHiddenItDrawsNothing() {
         let history = BhistViewWire(entries: [entry("https://app.aave.com", "app.aave.com", title: "Aave")])
 
-        let shown = ExploreLive.groups(
-            explore: view(groups: [ExploreGroupWire(
-                id: "trading", name: "Trading", hidden: false,
-                sites: [site("https://curve.fi", "curve.fi")]
-            )]),
-            history: history, loc: loc()
-        )
-        #expect(shown.map(\.id) == ["recent", "trading"])
+        let shown = ExploreLive.groups(explore: view(), history: history, loc: loc())
+        #expect(shown.map(\.id) == ["recent"])
+        #expect(shown.first?.sites.map(\.host) == ["app.aave.com"])
 
         let hidden = ExploreLive.groups(
             explore: view(recentHidden: true), history: history, loc: loc()

@@ -46,7 +46,7 @@ enum LucideGlyph: String {
     // and the corpus never got them, so `Explore` and `Signing` did not build.
     case arrowLeft, arrowRight, arrowDown
     case eye
-    case lock, star, share2, power, externalLink, gripVertical
+    case lock, star, share2, power, externalLink
     /// lucide `lock-open` — a page NOT on https (spec 079: the lock alone
     /// says it, in the warning colour, with no words beside it).
     case lockOpen
@@ -185,8 +185,6 @@ enum LucideGlyph: String {
             return ##"<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>"##
         case .externalLink:
             return ##"<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>"##
-        case .gripVertical:
-            return ##"<circle cx="8.5" cy="5.5" r="1.5" fill="#FFFFFF" stroke="none"/><circle cx="8.5" cy="12" r="1.5" fill="#FFFFFF" stroke="none"/><circle cx="8.5" cy="18.5" r="1.5" fill="#FFFFFF" stroke="none"/><circle cx="15.5" cy="5.5" r="1.5" fill="#FFFFFF" stroke="none"/><circle cx="15.5" cy="12" r="1.5" fill="#FFFFFF" stroke="none"/><circle cx="15.5" cy="18.5" r="1.5" fill="#FFFFFF" stroke="none"/>"##
         case .chevronLeft:
             return ##"<path d="m15 18-6-6 6-6"/>"##
         case .globe:

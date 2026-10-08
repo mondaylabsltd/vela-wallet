@@ -37,7 +37,7 @@ struct EnginePlanTests {
 
     private func explore(_ ids: [String], selected: String?, recent: [String]) -> ExploreViewWire {
         var view = ExploreViewWire(
-            favorites: [], groups: [],
+            favorites: [],
             tabs: ids.map { ExploreTabWire(id: $0, url: "https://\($0).example", title: $0, host: "\($0).example") },
             selectedTab: selected, favoritesHidden: false, recentHidden: false,
             favoritesFull: false, tabsFull: false, ready: true
@@ -733,7 +733,7 @@ struct TabBatchCloseTests {
     @Test func theMenuOffersOnlyWhatTakesATab() {
         func view(_ ids: [String]) -> ExploreViewWire {
             ExploreViewWire(
-                favorites: [], groups: [], tabs: strip(ids), selectedTab: ids.first,
+                favorites: [], tabs: strip(ids), selectedTab: ids.first,
                 favoritesHidden: false, recentHidden: false,
                 favoritesFull: false, tabsFull: false, ready: true
             )
