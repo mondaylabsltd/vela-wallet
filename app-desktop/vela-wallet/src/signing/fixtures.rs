@@ -152,8 +152,8 @@ pub enum FeeModel {
         /// choose"); only the drawing kept the chevron. Android's `tappable`
         /// and the web's are the same flag, same rule.
         tappable: bool,
-        /// Under the row, in the error colour: why the slide is shut when
-        /// the coin the fee was quoted in cannot pay it (issue #262) — or,
+        /// Under the row, in the error colour: why the confirm is shut
+        /// when the coin the fee was quoted in cannot pay it (issue #262) — or,
         /// spec 079, that the service could not be reached and the wallet
         /// will ask again by itself.
         warning: Option<SharedString>,
@@ -198,7 +198,7 @@ pub struct SigningModel {
     /// vocabulary: closing the column is the rejection.
     pub confirm_label: SharedString,
     pub confirm_enabled: bool,
-    /// Why the slide is shut, in the core's words (spec 099 R7) — under it,
+    /// Why the confirm is shut, in the core's words (spec 099 R7) — under it,
     /// so a dead control is never without its reason.
     pub confirm_note: Option<SharedString>,
     /// The third column's heading. The panel scaffold takes it from the page,
@@ -330,7 +330,7 @@ fn base(
         signer_label: s.signing_account.clone(),
         signer_name: WALLET_NAME.into(),
         signer_seed: ADDRESS_FULL.into(),
-        confirm_label: format!("{} · {}", s.slide_to_confirm, confirm_action).into(),
+        confirm_label: confirm_action.clone(),
         confirm_enabled: true,
         confirm_note: None,
         panel_title: s.panel_title.clone(),
@@ -589,7 +589,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
         // The typed cap. cs5 is where this starts — an unlimited request kept
         // on its Requested chip — and this is what the card becomes once
         // somebody picks Custom: the field under the chips, the big number
-        // above counting what has been typed, and the slide shut while the
+        // above counting what has been typed, and the confirm shut while the
         // typed amount is not one.
         "cs34" => {
             let mut m = base(
@@ -629,14 +629,14 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 ],
                 &s.intent_approve,
             );
-            // A finite cap is a cap: the slide may arm.
+            // A finite cap is a cap: the confirm may arm.
             m.confirm_enabled = true;
             m
         }
 
         // The same field with something in it the core will not take. The
         // number above falls back to what is still true — the request is
-        // unlimited — and the slide is shut, because a cap nobody could parse
+        // unlimited — and the confirm is shut, because a cap nobody could parse
         // is not a cap.
         "cs35" => {
             let mut m = base(
@@ -1706,7 +1706,7 @@ mod tests {
     use crate::loc::Loc;
 
     /// Every scenario builds, and none of them ships an empty confirm label —
-    /// the slide is the only way to say yes, so it must always say what to.
+    /// the confirm is the only way to say yes, so it must always say what to.
     #[test]
     fn every_scenario_builds() {
         let strings = SigningStrings::resolve(&Loc::from_env());
@@ -1715,14 +1715,46 @@ mod tests {
             assert!(!model.blocks.is_empty(), "{state} has no blocks");
             assert!(
                 !model.confirm_label.is_empty(),
-                "{state} has no slide label"
+                "{state} has no confirm label"
             );
             assert!(!model.dapp_name.is_empty(), "{state} has no dApp name");
         }
     }
 
+    /// Issue #461: every drawn confirm is a tap that says the action alone —
+    /// the scenario's own verb, with no "Slide to confirm ·" before it.
+    #[test]
+    fn every_drawn_confirm_says_the_action_alone() {
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let verbs = [
+            &s.confirm_send,
+            &s.confirm_swap,
+            &s.confirm_deposit,
+            &s.confirm_withdraw,
+            &s.confirm_plain,
+            &s.sign_label,
+            &s.intent_approve,
+            &s.intent_approve_all,
+            &s.intent_revoke,
+            &s.intent_transfer_nft,
+            &s.intent_deploy,
+            &s.intent_permit,
+            &s.intent_safe,
+            &s.intent_sign_in,
+        ];
+        for state in ALL_STATES {
+            let model = build(state, &s);
+            assert!(
+                verbs.contains(&&model.confirm_label),
+                "{state}: `{}` is not one action's words",
+                model.confirm_label
+            );
+        }
+        assert_eq!(build("cs11", &s).confirm_label, s.confirm_swap);
+    }
+
     /// Unlimited kept as asked, asserted rather than trusted (2026-09-26):
-    /// CS5 opens on its requested chip, says the danger, and may be slid.
+    /// CS5 opens on its requested chip, says the danger, and may be confirmed.
     #[test]
     fn unlimited_approval_is_kept_as_requested_and_said() {
         let strings = SigningStrings::resolve(&Loc::from_env());

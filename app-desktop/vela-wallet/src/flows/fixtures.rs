@@ -815,7 +815,7 @@ pub struct SendConfirm {
     /// (`confirm_probes`), so the form never has it to show. Live only;
     /// `None` on a split.
     pub recipient_tag: Option<SharedString>,
-    /// Live only: why the slide is disarmed, when something disarmed it.
+    /// Live only: why the confirm is disarmed, when something disarmed it.
     pub notice: Option<SendNotice>,
     pub cta: SharedString,
     /// The core's `can_confirm`, plus signing / submitting.

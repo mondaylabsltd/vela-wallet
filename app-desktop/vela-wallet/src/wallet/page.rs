@@ -9299,7 +9299,7 @@ impl WalletPage {
         // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
         // once, so the column can be LOOKED at — there is no way to click this
         // app from a shell. A zero-value call to
-        // itself on Gnosis; nothing is signed unless somebody slides.
+        // itself on Gnosis; nothing is signed unless somebody confirms.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
         if crate::dev_env::flag!("VELA_SIGN_PROBE") {
             self.open_backup_signing(
@@ -15463,7 +15463,6 @@ impl WalletPage {
         // A new request opens closed: the last one's decision to look at the
         // bytes is not this one's.
         self.signing_advanced_open = false;
-        crate::signing::components::reset_slide();
         // The same question, once, for a request the core answered before
         // any observation fires — a refusal on arrival.
         self.signing_host_changed(&host, tab.as_deref(), cx);
@@ -16541,8 +16540,8 @@ impl WalletPage {
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
         // Spec 079 US7: this account signs on the Trusted Signer's page, whose
-        // own slide is the consent — the column offers a button that goes
-        // there, not a second slide.
+        // own control is the consent — the column offers a button that goes
+        // there, not a second confirm.
         let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
@@ -16576,10 +16575,10 @@ impl WalletPage {
             if host.view.surface == vela_core::app::sign_request::SignSurface::Funding {
                 model.blocks = signing_live::funding_blocks(&host.view, &self.signing);
                 model.confirm_label = self.signing.funding_check_now.clone();
-                // Armed on its own terms: this slide is not a signature, it is
-                // "I have sent it, look again". The three-machine AND governs
-                // signing, and applying it here would leave the only way out
-                // of a top-up shut.
+                // Armed on its own terms: this button is not a signature, it
+                // is "I have sent it, look again". The three-machine AND
+                // governs signing, and applying it here would leave the only
+                // way out of a top-up shut.
                 model.confirm_enabled = true;
                 funding = true;
                 // The header and the fee card belong to the request, not to
@@ -16746,8 +16745,10 @@ impl WalletPage {
         let _ = cx;
 
         // Spec 079: once approved, the column is the send receipt — the form,
-        // its fee and its dimmed slide are gone from the first frame after the
+        // its fee and its confirm are gone from the first frame after the
         // approval, not when the core closes the sheet ninety seconds later.
+        // That is also why the confirm is never drawn busy or faded after
+        // the tap: there is no frame left to draw it in.
         // What the column was about is kept for the ending.
         #[cfg(not(target_os = "linux"))]
         if self.signing_host.is_some() && !funding && !refused {
@@ -16783,9 +16784,9 @@ impl WalletPage {
             }
         }
 
-        // Passed ONLY when the three machines agreed. A shut slide that still
-        // carried an action would be a control the core said no to, waiting
-        // for a click to say yes.
+        // Passed ONLY when the three machines agreed. A shut confirm that
+        // still carried an action would be a control the core said no to,
+        // waiting for a click to say yes.
         #[cfg(not(target_os = "linux"))]
         let confirm_action: Option<panels::Click> =
             (model.confirm_enabled && self.signing_host.is_some()).then(|| {
@@ -17168,29 +17169,36 @@ impl WalletPage {
                 &model.signer_seed,
             ))
             .children((!model.confirm_label.is_empty()).then(|| {
-                if signs_on_page && !funding {
-                    // One slide per signature (owner, spec 079 ruling 9): the
-                    // page's. This button sends the same approval the slide
-                    // did, and the page asks for the consent.
+                if funding {
+                    // The top-up's "check again": a plain button, not a
+                    // confirm — nothing is signed by it.
+                    signing_components::funding_check_button(
+                        theme,
+                        model.confirm_label.clone(),
+                        confirm_action,
+                    )
+                } else if signs_on_page {
+                    // One consent per signature (owner, spec 079 ruling 9):
+                    // the page's. This button sends the same approval the
+                    // confirm does, and the page asks for the consent.
                     signing_components::open_signer_button(
                         theme,
                         self.signing.open_signer.clone(),
                         model.confirm_enabled,
                         confirm_action,
                     )
-                    .into_any_element()
                 } else {
-                    signing_components::slide_to_confirm(
+                    // A tap (issue #461), never a drag: the send Confirm's own
+                    // button, saying the action alone.
+                    signing_components::confirm_button(
                         theme,
-                        &mut self.icons,
                         model.confirm_label.clone(),
                         model.confirm_enabled,
                         confirm_action,
                     )
-                    .into_any_element()
                 }
             }))
-            // Spec 099 R7: a shut slide says why, in the core's words.
+            // Spec 099 R7: a shut confirm says why, in the core's words.
             .children(
                 model
                     .confirm_note

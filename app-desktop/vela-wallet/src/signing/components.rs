@@ -16,12 +16,13 @@ use crate::theme::{self, Theme};
 use crate::wallet::components::{icon_img, openable_identicon};
 
 use super::Tone;
-use super::fixtures::{Block, FeeModel, SigningModel};
+use super::fixtures::{Block, ChipState, FeeModel, SigningModel};
 use crate::explore::components::letter_avatar;
 
-/// Slide-to-confirm geometry, measured off CS1 (342×56 track, 48 knob).
-pub const SLIDE_H: f32 = 56.;
-pub const SLIDE_KNOB: f32 = 48.;
+/// The confirm's element id — the stable hook a test finds it by, whatever
+/// its words say ("Confirm swap", "Sign", "备份公钥", …) and whether or not
+/// the core has armed it.
+pub const CONFIRM_ID: &str = "signing-confirm";
 
 /// Where a fee coin's shortfall reason starts: past the row's padding (8),
 /// the coin's mark (the wallet row icon, 40) and the gap (12) — under the
@@ -206,7 +207,7 @@ pub fn headline(theme: &Theme, text: SharedString, tone: Tone) -> Div {
 ///
 /// The chips are a control, not a picture, and only when a machine is behind
 /// them: `actions` carries one per chip, in the order the block lists them.
-/// Passing none draws exactly what the gallery draws — the same rule the slide
+/// Passing none draws exactly what the gallery draws — the same rule the confirm
 /// follows (spec 032 phase 21), and what keeps the 33 drawn scenarios
 /// pixel-identical after the editor went live.
 pub fn block_with_actions(
@@ -905,7 +906,7 @@ pub fn fee(
             refreshing,
             stale_note,
         } => {
-            // Said under the row, in the error colour: why the slide is shut.
+            // Said under the row, in the error colour: why the confirm is shut.
             let warning = warning.clone().map(|text| {
                 div()
                     .px(px(16.))
@@ -1156,192 +1157,66 @@ pub fn signer_row(
         )
 }
 
-/// The one way to confirm (spec 022 §4). There is no reject button beside it:
-/// closing the column IS the rejection, so the only deliberate act here is the
-/// affirmative one.
-/// The confirm. `action` is `None` for the mocks — a drawn slide that answers
-/// to nothing — and `Some` for a live request. It is only ever passed when
-/// `enabled`, so a shut slide cannot be fired by a click that lands on it.
-pub fn slide_to_confirm(
+/// The one way to confirm (spec 022 §4) — a tap since issue #461: the send
+/// Confirm's own primary button ([`cta_button`]), full width, its label the
+/// action alone ("Confirm swap", "Sign", "Approve", "备份公钥", …). There is
+/// no reject button beside it: closing the column IS the rejection, so the
+/// only deliberate act here is the affirmative one.
+///
+/// `action` is `None` for the drawings — a button that answers to nothing —
+/// and is only ever passed when the core's confirm state is enabled; a shut
+/// button is drawn shut, with the core's note under it. It is never drawn
+/// busy: the approval replaces the form with the receipt in the same frame
+/// (spec 079), so there is no moment for a faded button to read as a refusal.
+///
+/// [`cta_button`]: crate::flows::panels::cta_button
+pub fn confirm_button(
     theme: &Theme,
-    icons: &mut IconCache,
     label: SharedString,
     enabled: bool,
     action: Option<crate::flows::panels::Click>,
-) -> gpui::Stateful<Div> {
-    // The web's `SlideToConfirm`: the knob is DRAGGED and commits only past
-    // 88% of its travel; let go short and it goes back. It was a click
-    // anywhere on the track — a signature one mis-tap away, under a label
-    // that said "slide". There is no reject button beside it: closing the
-    // column IS the rejection, so this is the one deliberate act here.
-    let armed = enabled && action.is_some();
-    let progress = SLIDE.with_borrow(|slide| if armed { slide.progress } else { 0. });
-    let travel = SLIDE.with_borrow(|slide| slide.travel());
-    let action = std::rc::Rc::new(action);
-    let knob_x = 4. + progress * travel;
-    div()
-        .id("signing-confirm")
-        .relative()
-        .overflow_hidden()
-        .h(px(SLIDE_H))
-        .rounded_full()
-        .bg(theme.bg_sunken)
-        .flex()
-        .items_center()
-        .when(!enabled, |el| el.opacity(0.45))
-        .when(armed, |el| el.cursor_pointer())
-        // Where the track is, measured as it paints: the travel is its width
-        // less the knob and its padding (48 + 4 + 4), as the web's `W − 56`.
-        .child(
-            gpui::canvas(
-                |bounds, _, _| SLIDE.with_borrow_mut(|slide| slide.bounds = Some(bounds)),
-                |_, _, _, _| {},
-            )
-            .absolute()
-            .size_full(),
-        )
-        // The fill follows the knob (`--color-accent-soft`).
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .top_0()
-                .bottom_0()
-                .w(px(knob_x + SLIDE_KNOB))
-                .bg(theme.accent_soft),
-        )
-        .child(
-            div()
-                .flex_1()
-                .text_center()
-                .text_size(theme::text_row_title())
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme.fg_muted)
-                // The label fades as the knob crosses it.
-                .opacity(1. - progress)
-                .child(label),
-        )
-        .child(
-            div()
-                .absolute()
-                .left(px(knob_x))
-                .w(px(SLIDE_KNOB))
-                .h(px(SLIDE_KNOB))
-                .rounded_full()
-                .bg(theme.accent)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(icon_img(
-                    icons,
-                    Icon::ArrowRight,
-                    false,
-                    theme.fg_inverse,
-                    20.,
-                )),
-        )
-        .on_mouse_down(gpui::MouseButton::Left, move |_, window, _| {
-            if armed {
-                SLIDE.with_borrow_mut(|slide| slide.dragging = !slide.done);
-                window.refresh();
-            }
-        })
-        .on_mouse_move(move |event, window, _| {
-            let moved = SLIDE.with_borrow_mut(|slide| {
-                let (true, Some(bounds)) = (slide.dragging, slide.bounds) else {
-                    return false;
-                };
-                let x = f32::from(event.position.x - bounds.left()) - 28.;
-                slide.progress = (x / slide.travel()).clamp(0., 1.);
-                true
-            });
-            if moved {
-                window.refresh();
-            }
-        })
-        .on_mouse_up(gpui::MouseButton::Left, {
-            let action = action.clone();
-            move |_, window, cx| release(&action, window, cx)
-        })
-        .on_mouse_up_out(gpui::MouseButton::Left, move |_, window, cx| {
-            release(&action, window, cx);
-        })
+) -> Div {
+    crate::flows::panels::cta_button(CONFIRM_ID, theme, label, armed(enabled), action)
 }
 
 /// The confirm when the account signs on the Trusted Signer's page (spec 079
-/// US7): a primary button that goes there — the page's own slide is the one
-/// consent, so a slide here would be a second. Armed on the same terms as the
-/// slide: `action` is only ever passed when the three machines agreed.
+/// US7): the same button, saying it goes there — the page asks for the one
+/// consent. Armed on the same terms: `action` is only ever passed when the
+/// three machines agreed.
 pub fn open_signer_button(
     theme: &Theme,
     label: SharedString,
     enabled: bool,
     action: Option<crate::flows::panels::Click>,
 ) -> Div {
-    let armed = enabled && action.is_some();
-    let button = crate::flows::components::accent_button(theme, label)
-        .rounded_full()
-        .when(!armed, |el| el.opacity(0.45));
-    crate::flows::panels::clickable("signing-open-signer", action.filter(|_| armed), button)
+    crate::flows::panels::cta_button("signing-open-signer", theme, label, armed(enabled), action)
 }
 
-/// The slide's state. One confirm is on screen at a time, and a new request
-/// starts it over ([`reset_slide`]).
-#[derive(Default)]
-struct Slide {
-    progress: f32,
-    dragging: bool,
-    done: bool,
-    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+/// The gas top-up's one action, "check again" (`treasuryBootstrap.retryBtn`):
+/// a plain button, armed on its own terms — it is not a signature, it is
+/// "I have sent it, look again", and the only way out of a top-up.
+pub fn funding_check_button(
+    theme: &Theme,
+    label: SharedString,
+    action: Option<crate::flows::panels::Click>,
+) -> Div {
+    crate::flows::panels::cta_button(
+        "signing-funding-check",
+        theme,
+        label,
+        crate::flows::fixtures::CtaState::Enabled,
+        action,
+    )
 }
 
-impl Slide {
-    fn travel(&self) -> f32 {
-        self.bounds
-            .map_or(1., |bounds| (f32::from(bounds.size.width) - 56.).max(1.))
+/// A confirm the core armed is enabled; one it shut is drawn shut.
+fn armed(enabled: bool) -> crate::flows::fixtures::CtaState {
+    if enabled {
+        crate::flows::fixtures::CtaState::Enabled
+    } else {
+        crate::flows::fixtures::CtaState::Disabled
     }
 }
-
-thread_local! {
-    static SLIDE: std::cell::RefCell<Slide> = std::cell::RefCell::new(Slide::default());
-}
-
-/// Past this share of its travel the knob commits (the web's `COMMIT`).
-const SLIDE_COMMIT: f32 = 0.88;
-
-/// Let go: past the mark it confirms, once; short of it the knob goes home.
-fn release(
-    action: &std::rc::Rc<Option<crate::flows::panels::Click>>,
-    window: &mut gpui::Window,
-    cx: &mut gpui::App,
-) {
-    let commit = SLIDE.with_borrow_mut(|slide| {
-        if !slide.dragging {
-            return false;
-        }
-        slide.dragging = false;
-        if slide.progress >= SLIDE_COMMIT {
-            slide.progress = 1.;
-            slide.done = true;
-            true
-        } else {
-            slide.progress = 0.;
-            false
-        }
-    });
-    if commit && let Some(action) = action.as_ref() {
-        action(&gpui::ClickEvent::default(), window, cx);
-    }
-    window.refresh();
-}
-
-/// A new request's slide starts at rest — the last one's committed knob is
-/// not this one's.
-pub fn reset_slide() {
-    SLIDE.with_borrow_mut(|slide| *slide = Slide::default());
-}
-
-use super::fixtures::ChipState;
 
 #[cfg(test)]
 mod tests {
@@ -1349,6 +1224,13 @@ mod tests {
     use crate::loc::Loc;
     use crate::signing::SigningStrings;
     use crate::theme::ThemeMode;
+
+    /// Issue #461: the confirm is found by its id, whatever its words say —
+    /// the same hook the web (`data-testid`), iOS and Android carry.
+    #[test]
+    fn the_confirm_keeps_its_stable_hook() {
+        assert_eq!(CONFIRM_ID, "signing-confirm");
+    }
 
     /// The wallet's own request draws no requester header — no app mark, no
     /// "Vela Wallet", no network chip — on the form and on its receipt; the

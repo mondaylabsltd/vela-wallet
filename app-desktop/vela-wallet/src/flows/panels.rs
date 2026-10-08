@@ -1599,48 +1599,57 @@ fn notice_card(
     if any { card.child(row) } else { card }
 }
 
-/// The panel's CTA in the state the core put it in. A shut button is drawn
-/// shut and answers to nothing; a busy one keeps its accent — busy is not
-/// disabled, and a person who pressed once should see the press took.
-fn cta_button(
+/// The panel's CTA in the state the core put it in — the wallet's one
+/// primary button: the send Confirm, and the signing column's confirm
+/// (issue #461). A shut button is drawn shut and answers to nothing; a busy
+/// one keeps its accent — busy is not disabled, and a person who pressed
+/// once should see the press took.
+///
+/// `id` rides every state, so a test finds the control by it whether it is
+/// armed, shut or busy, and whatever its words say; only an enabled button
+/// with an action takes the click and the pointer.
+pub(crate) fn cta_button(
     id: &'static str,
     theme: &Theme,
     label: SharedString,
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
-    let button = accent_button(theme, label.clone());
-    match state {
-        CtaState::Enabled => clickable(id, action, button),
+    let face = match state {
+        CtaState::Enabled => accent_button(theme, label),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
         // the width but not shown, a spinner where they were — busy is a
         // wait, not a refusal, and a faded button read as one.
-        CtaState::Busy => clickable(
-            id,
-            None,
-            div()
-                .relative()
-                .child(button.text_color(gpui::transparent_black()))
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(crate::ui::spinner(
-                            gpui::Hsla::from(gpui::rgb(0xffffff)),
-                            px(20.),
-                            px(1.5),
-                        )),
-                ),
-        ),
+        CtaState::Busy => div()
+            .relative()
+            .child(accent_button(theme, label).text_color(gpui::transparent_black()))
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(crate::ui::spinner(
+                        gpui::Hsla::from(gpui::rgb(0xffffff)),
+                        px(20.),
+                        px(1.5),
+                    )),
+            ),
         // The fill fades and the label stays white, as the web's button
         // fades as one layer (078 T066) — see `disabled_accent_button`.
-        CtaState::Disabled => clickable(id, None, disabled_accent_button(theme, label)),
-    }
+        CtaState::Disabled => disabled_accent_button(theme, label),
+    };
+    let control = div().id(id).child(face);
+    let control = match action.filter(|_| state == CtaState::Enabled) {
+        Some(action) => control
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => control,
+    };
+    div().flex().flex_col().child(control)
 }
 
 /// A bordered pill for a secondary action — the recipient-row actions and,

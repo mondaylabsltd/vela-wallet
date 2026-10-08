@@ -82,8 +82,6 @@ pub struct Theme {
     /// field, the scanner's tools. `border_card` could not stand in for it —
     /// in dark it IS the raised colour, so every outline vanished.
     pub border_strong: Hsla,
-    /// The web's `--color-accent-soft`: the slide-to-confirm fill.
-    pub accent_soft: Hsla,
     pub outline_strong: Hsla,
     pub divider: Hsla,
     /// The 1 px edge between content column and action panel.
@@ -165,7 +163,6 @@ impl Theme {
             accent_active: c(0xbf421c),
             border_card: c(0xecebe4),
             border_strong: c(0xd8d6ce),
-            accent_soft: c(0xfff0eb),
             outline_strong: c(0x554b46),
             divider: c(0xecebe4),
             panel_edge: c(0xecebe4),
@@ -215,7 +212,6 @@ impl Theme {
             // no edge where the web's have one (078 X-01).
             border_card: c(0x2c2c28),
             border_strong: c(0x3e3e38),
-            accent_soft: c(0x2c1a12),
             outline_strong: c(0x554b46),
             divider: c(0x2c2c28),
             panel_edge: c(0x1e1e1b),

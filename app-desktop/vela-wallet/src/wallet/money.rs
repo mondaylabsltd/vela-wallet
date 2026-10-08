@@ -951,7 +951,7 @@ impl SendHost {
     }
 
     /// The card's re-quotes, mirrored into the send machine: `busy` flips
-    /// disarm the confirm slide, and a settled estimate replaces the one it
+    /// disarm the confirm, and a settled estimate replaces the one it
     /// pre-checked with (`GasFeeCard.onBusyChange` / `onFeeUpdate`).
     fn sync_fee_to_send(&mut self, cx: &mut Context<Self>) {
         let busy = self.speed.fee_view().busy;
@@ -1519,10 +1519,10 @@ mod tests {
     /// The whole spine up to the confirm screen, live, for the golden Safe:
     /// its real holdings load, XDAI on Gnosis is picked, a dust transfer to
     /// fixture #2 is drafted, and `Continue` brings back the relay's real
-    /// quote — the stage is Confirm and the slide is armed. No signature, no
+    /// quote — the stage is Confirm and the confirm is armed. No signature, no
     /// submit: nothing moves.
     ///
-    /// `VELA_LIVE_SEND=1` goes one step further and slides — the parallel
+    /// `VELA_LIVE_SEND=1` goes one step further and confirms — the parallel
     /// space's fixture #1 signs, the relay accepts, and the hash is printed.
     /// That step spends dust and is never run by default.
     #[cfg(feature = "dev-fixtures")]
@@ -1614,16 +1614,16 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("a real quote"));
             assert_eq!(fee.chain_id, 100);
             assert!(fee.quoted, "the relay's own quote, not a local fallback");
-            assert!(view.can_confirm, "the slide is armed");
+            assert!(view.can_confirm, "the confirm is armed");
 
             if std::env::var("VELA_LIVE_SEND").as_deref() != Ok("1") {
-                println!("stopping before the slide: set VELA_LIVE_SEND=1 to spend dust");
+                println!("stopping before the confirm: set VELA_LIVE_SEND=1 to spend dust");
                 return;
             }
             money.dispatch(SendEvent::SlideConfirm);
             let view = money.view();
             println!(
-                "after slide: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",
+                "after confirm: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",
                 view.tx_status, view.tx_error, view.user_op_hash, money.submitted
             );
             assert!(

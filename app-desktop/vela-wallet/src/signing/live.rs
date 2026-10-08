@@ -36,23 +36,23 @@ fn tone_of(risk: ClearRisk) -> Tone {
     }
 }
 
-/// May the slide fire?
+/// May the confirm fire?
 ///
 /// **Three machines, ANDed**, and the core's own doc says so: `SignView`'s
 /// `confirm_gate_open` is "this machine's own approval gate" and "the shell
 /// must AND it with `GuardView.confirm_allowed` and
-/// `FeeView.confirm_fee_ready`". Taking any one of them alone arms a slide
-/// over an unpriced fee, or over an unlimited approval nobody capped — each
+/// `FeeView.confirm_fee_ready`". Taking any one of them alone arms the
+/// confirm over an unpriced fee, or over an unlimited approval nobody capped — each
 /// of which is a signature the person did not agree to.
 ///
 /// **The fee's say includes its speed** (spec 069): between a tap and that
 /// speed's own figure landing, the core's `confirm_fee_ready` is still true on
-/// the speed just left, and the slide must not sign it. `speed_tier` is the
+/// the speed just left, and the confirm must not sign it. `speed_tier` is the
 /// tier in force; `None` is a sheet with no speed control.
 ///
 /// **A signature has no fee to wait for** (the phones' rule, `SigningLive`):
-/// nothing is quoted for a message, so a fee gate over one is a slide that
-/// never opens.
+/// nothing is quoted for a message, so a fee gate over one is a confirm
+/// that never opens.
 ///
 /// Spec 099 R7: every one of those rules is the core's now
 /// (`sign_confirm::confirm_state`), the same on every client, and it says
@@ -68,7 +68,7 @@ pub fn confirm_state(
     vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
 }
 
-/// Whether the slide may arm ([`confirm_state`]).
+/// Whether the confirm may arm ([`confirm_state`]).
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
@@ -1240,8 +1240,8 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     let mut out = Vec::new();
 
     // The gas account cannot pay. The full top-up flow is the send column's
-    // and is not wired here yet (phase 29 records it); saying WHY the slide
-    // will not move is the half that must not wait for it.
+    // and is not wired here yet (phase 29 records it); saying WHY the confirm
+    // will not arm is the half that must not wait for it.
     if let Some(funding) = sign.funding.as_ref() {
         out.push(Block::Warning {
             tone: Tone::Caution,
@@ -1879,7 +1879,7 @@ pub fn no_coin_pays_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedS
 }
 
 /// Issue #262: a wallet with 0 ETH and some USDT on mainnet was quoted in
-/// ETH. The core shuts the slide in exactly that case — quoted, not
+/// ETH. The core shuts the confirm in exactly that case — quoted, not
 /// ready, and the coin it was quoted in cannot pay — and this is the sentence
 /// that says why, in the send screen's words.
 #[must_use]
@@ -2026,7 +2026,9 @@ pub fn tech_summary(clear: &ClearSigningView, first_party: bool) -> Option<Share
         .map(SharedString::from)
 }
 
-/// The words on the slide, as the core graded them.
+/// The words on the confirm, as the core graded them: the action alone
+/// ("Confirm swap", "Sign", "Approve", "备份公钥", …) — a tap needs no
+/// "Slide to confirm ·" telling it how (issue #461).
 ///
 /// `Confirm` is never "Approve" — the core's own note says that verb belongs
 /// only to an actual token approval, which is `approval_guard`'s surface. The
@@ -2053,10 +2055,7 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
             _ => intent_term.and_then(|term| s.terms.get(&term).cloned()),
         },
     };
-    match action {
-        Some(action) => SharedString::from(format!("{} · {action}", s.slide_to_confirm)),
-        None => SharedString::from(format!("{} · {}", s.slide_to_confirm, s.confirm_plain)),
-    }
+    action.unwrap_or_else(|| s.confirm_plain.clone())
 }
 
 #[cfg(test)]
@@ -2172,6 +2171,31 @@ mod tests {
         host.view()
     }
 
+    /// Issue #461: the confirm is a tap, and its words are the action alone —
+    /// "Sign", "Confirm swap", "Confirm" — never "Slide to confirm · …"
+    /// telling a button how to be pressed.
+    #[test]
+    fn the_confirm_says_the_action_alone() {
+        use vela_core::app::clear_signing::ClearConfirm;
+        let s = strings();
+        let mut clear = view(result(Vec::new()));
+        clear.confirm = ClearConfirm::Sign;
+        assert_eq!(confirm_label(&clear, &s), s.sign_label);
+        clear.confirm = ClearConfirm::Confirm;
+        assert_eq!(confirm_label(&clear, &s), s.confirm_plain);
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "swap".to_owned(),
+            intent_term: None,
+        };
+        assert_eq!(confirm_label(&clear, &s), s.confirm_swap);
+        // An intent the shell has no words for reads the neutral verb.
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "frobnicate".to_owned(),
+            intent_term: None,
+        };
+        assert_eq!(confirm_label(&clear, &s), s.confirm_plain);
+    }
+
     /// "Technical details" names the contract it folds — but not on the
     /// wallet's own request, where "· Vela passkey registry" names a contract
     /// to somebody who asked nobody. The same reading from a site keeps it:
@@ -2219,9 +2243,10 @@ mod tests {
         assert_eq!(labels, ["网络", "地址", "公钥数量"]);
         assert_eq!(rows[0].1, "Ethereum", "the network the header chip said");
         assert_eq!(rows[2].1, "3");
-        assert!(
-            confirm_label(&registry_backup_reading(1), &zh).ends_with("备份公钥"),
-            "the confirm says what it does"
+        assert_eq!(
+            confirm_label(&registry_backup_reading(1), &zh).as_ref(),
+            "备份公钥",
+            "the confirm says what it does, and nothing else"
         );
         // The rehearsal chain names itself the same way.
         let (_, base) = rows_of(8453);
@@ -2334,7 +2359,7 @@ mod tests {
                 && rows[0].1 == "−1.000000000000000001 xDAI"
         )));
         let label = confirm_label(&clear, &s);
-        assert!(label.ends_with(s.confirm_plain.as_ref()), "{label}");
+        assert_eq!(label, s.confirm_plain, "{label}");
         assert!(
             !label.contains(s.confirm_send.as_ref()),
             "no one call's verb: {label}"
@@ -2707,9 +2732,9 @@ mod tests {
     }
 
     /// Spec 096 F7: every machine says yes, and the request is still being
-    /// read — the slide stays shut until it is.
+    /// read — the confirm stays shut until it is.
     #[test]
-    fn the_slide_waits_for_the_reading() {
+    fn the_confirm_waits_for_the_reading() {
         let mut sign =
             crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
         let mut guard =
@@ -3194,13 +3219,14 @@ mod tests {
             ),
             ("Referral code", "abc")
         );
-        assert!(
-            confirm_label(&clear, &s).ends_with("授权"),
-            "the slide says the word too"
+        assert_eq!(
+            confirm_label(&clear, &s).as_ref(),
+            "授权",
+            "the confirm says the word too"
         );
         assert_eq!(
             shown.confirm, clear.confirm,
-            "the slide switches on the English intent itself"
+            "the confirm switches on the English intent itself"
         );
     }
 
@@ -3603,7 +3629,7 @@ mod tests {
         assert!(status_blocks(&pristine_sign(), &s).is_empty());
     }
 
-    /// The slide is three machines' answer, ANDed.
+    /// The confirm is three machines' answer, ANDed.
     ///
     /// The core's own doc says so, and each one alone is a different way to
     /// arm a signature nobody agreed to: without the fee's, over a price
@@ -3636,7 +3662,7 @@ mod tests {
             }
             assert!(
                 !confirm_enabled(&s, &g, &clear, &f, None),
-                "any one machine withholding shuts the slide ({drop_one})"
+                "any one machine withholding shuts the confirm ({drop_one})"
             );
         }
 
@@ -3651,7 +3677,7 @@ mod tests {
 
     /// Spec 069: between a speed being tapped and its own figure landing, the
     /// core's gate is still open — on the speed just left. The row says
-    /// "estimating" and the slide stays shut; the figure lands, both follow.
+    /// "estimating" and the confirm stays shut; the figure lands, both follow.
     #[test]
     fn another_speeds_fee_neither_shows_nor_signs() {
         use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView};
@@ -4066,7 +4092,7 @@ mod fee_tests {
 
     /// Spec 082 RJ13 (G48, DX-G14): with no fault set, Ethereum's public
     /// node rate-limited the deployment read and the row said "can't reach
-    /// Vela — check your network" over a shut slide. It is the chain's node,
+    /// Vela — check your network" over a shut confirm. It is the chain's node,
     /// rate-limited, and the row says so ("被限流 · 正在自动重试"); a node out
     /// of reach names its chain; neither blames Vela.
     #[test]
@@ -4526,8 +4552,8 @@ mod fee_tests {
         assert_eq!(fee_tap(&unreachable), FeeTap::Requote);
     }
 
-    /// Issue #262: quoted in a coin the wallet cannot pay with, the slide is
-    /// shut — and the sheet says why, in the send screen's words.
+    /// Issue #262: quoted in a coin the wallet cannot pay with, the confirm
+    /// is shut — and the sheet says why, in the send screen's words.
     #[test]
     fn a_fee_the_quoted_coin_cannot_pay_says_so() {
         let s = strings();

@@ -3105,7 +3105,7 @@ fn build_notice(
 
     // On the confirm page the amount itself may have stopped resolving — a
     // display-currency commit landing under an open page re-denominates the
-    // field, and the slide disarms with nothing said.
+    // field, and the confirm disarms with nothing said.
     if confirming && let Some(issue) = &send.confirm_amount_issue {
         let notice = SendNotice {
             dismiss: None,

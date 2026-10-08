@@ -200,7 +200,7 @@ pub fn site_row(
 ///
 /// One entry per tab in the order they are drawn, plus the new-tab button.
 /// `None` throughout is the gallery's strip: drawn exactly as it always was,
-/// answering nothing (the rule the slide and the allowance chips follow).
+/// answering nothing (the rule the confirm and the allowance chips follow).
 #[derive(Default)]
 pub struct TabActions {
     pub select: Vec<Option<crate::flows::panels::Click>>,

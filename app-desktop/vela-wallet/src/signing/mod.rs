@@ -90,7 +90,6 @@ pub struct SigningStrings {
     /// the key `componentsUi.signing.<leaf>`. `live::localized_terms` swaps
     /// them in.
     pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
-    pub slide_to_confirm: SharedString,
     pub confirm_send: SharedString,
     pub confirm_swap: SharedString,
     pub confirm_deposit: SharedString,
@@ -358,7 +357,6 @@ impl SigningStrings {
             terms: vela_core::app::clear_signing::ClearTerm::all()
                 .map(|term| (term, s(&term.leaf())))
                 .collect(),
-            slide_to_confirm: s("slideToConfirm"),
             confirm_send: s("confirmSend"),
             confirm_swap: s("confirmSwap"),
             confirm_deposit: s("confirmDeposit"),
@@ -636,8 +634,8 @@ mod tests {
                 "componentsUi.signing.signatureRequest",
             ),
             (
-                s.slide_to_confirm.as_ref(),
-                "componentsUi.signing.slideToConfirm",
+                s.confirm_plain.as_ref(),
+                "componentsUi.signing.confirmLabel",
             ),
             (s.warn_drain.as_ref(), "componentsUi.signing.drainWarning"),
             (
