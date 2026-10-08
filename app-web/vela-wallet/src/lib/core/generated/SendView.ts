@@ -11,6 +11,7 @@ import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
 import type { SendRecipientRisk } from "./SendRecipientRisk";
+import type { SendRelayReport } from "./SendRelayReport";
 import type { SendRelayUnreachable } from "./SendRelayUnreachable";
 import type { SendSplitRowIssue } from "./SendSplitRowIssue";
 import type { SendStage } from "./SendStage";
@@ -193,7 +194,15 @@ can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendT
 /**
  * Spec 098 §2: the relay cannot serve this chain; the send stops here.
  */
-relay_unreachable: SendRelayUnreachable | null, recipient_identity: SendRecipientIdentity | null, 
+relay_unreachable: SendRelayUnreachable | null, 
+/**
+ * What the stop's "Report this" files (issue 466). `Some` exactly while
+ * a relay stop is up on a network Vela ships — the stops whose
+ * `operator_served` is true; on a network the person added there is no
+ * operator to tell. The shell snapshots it when the button is pressed:
+ * the stop may close (funded) while the report is being read.
+ */
+relay_report: SendRelayReport | null, recipient_identity: SendRecipientIdentity | null, 
 /**
  * Who the money goes to, as the form's recipient line and the confirm
  * page name them (spec 097 F, S2): the address always, a name only

@@ -7599,6 +7599,153 @@ fn continue_into_a_relay_still_empty_brings_the_stop_back() {
     );
 }
 
+// ===========================================================================
+// Issue #466 — "Report this" files a complete report, built by the core
+// ===========================================================================
+
+/// The Unichain stop of the issue, whose "Report this" opened an empty GitHub
+/// form. The core builds what it files: a title line, the relay treasury's
+/// full address, what it holds against its floor in ETH, the bug form's area
+/// — and a fingerprint that stays put while the watch re-reads the balance,
+/// so every report of one outage lands on one issue.
+#[test]
+fn the_operator_stop_carries_a_complete_report_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    assert!(sut.view().relay_report.is_none(), "no stop, no report");
+    sut.resolve(unichain_empty_treasury());
+    let report = sut
+        .view()
+        .relay_report
+        .expect("a stop on a network Vela ships has a report");
+    let title = report.what.lines().next().unwrap_or_default();
+    assert_eq!(title, "Relayer out of gas on Unichain (130)");
+    assert!(title.chars().count() <= 80, "{title:?}");
+    assert!(
+        report.what.contains(&format!("Treasury: {RELAY_TREASURY}")),
+        "the full address: {}",
+        report.what
+    );
+    assert!(
+        report
+            .what
+            .contains("Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH)."),
+        "have and floor, in the coin: {}",
+        report.what
+    );
+    assert_eq!(report.area, "Send");
+    assert_eq!(report.fingerprint, "relay-gas-130");
+    assert!(
+        report
+            .steps
+            .starts_with("1. Send on Unichain (130)\n2. Continue:"),
+        "{}",
+        report.steps
+    );
+
+    // The watch re-reads a balance still short: the figures follow, the key
+    // does not.
+    elapse_the_watch(&mut sut);
+    assert_only_the_watch(
+        &answer_the_watch(
+            &mut sut,
+            short_treasury(
+                UNICHAIN,
+                SendTreasuryAsset::Native,
+                "40000000000000",
+                RELAY_NATIVE_FLOOR,
+            ),
+        ),
+        "still short: waits again",
+    );
+    let refreshed = sut.view().relay_report.expect("still up");
+    assert!(
+        refreshed
+            .what
+            .contains("Has 0.00004 ETH of its 0.0001 ETH floor (short 0.00006 ETH)."),
+        "{}",
+        refreshed.what
+    );
+    assert_eq!(
+        refreshed.fingerprint, "relay-gas-130",
+        "one outage, one issue"
+    );
+
+    // The stop goes, and the report with it.
+    sut.dispatch(Event::DismissTreasurySheet);
+    assert!(sut.view().relay_report.is_none());
+}
+
+/// Figures the core cannot put in a coin are still filed — as the relay's
+/// own base units, with their unit — never left out.
+#[test]
+fn a_report_whose_figures_do_not_read_files_them_raw_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(short_treasury(
+        UNICHAIN,
+        SendTreasuryAsset::Native,
+        "12.5",
+        RELAY_NATIVE_FLOOR,
+    ));
+    let report = sut.view().relay_report.expect("the stop is up");
+    assert!(
+        report
+            .what
+            .contains("Has 12.5 wei of its 100000000000000 wei floor."),
+        "{}",
+        report.what
+    );
+}
+
+/// The can't-reach stop has its own report under its own key — and a stop
+/// raised by the pre-sign recheck says it was the confirm.
+#[test]
+fn the_cant_reach_stop_carries_its_own_report_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(uncovered());
+    let report = sut.view().relay_report.expect("the can't-reach stop");
+    assert_eq!(
+        report.what.lines().next(),
+        Some("Relay can't reach Unichain (130)")
+    );
+    assert_eq!(report.area, "Send");
+    assert_eq!(report.fingerprint, "relay-unreachable-130");
+
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    sut.dispatch(Event::SlideConfirm);
+    sut.resolve(uncovered());
+    let report = sut.view().relay_report.expect("the can't-reach stop");
+    assert_eq!(
+        report.what.lines().next(),
+        Some("Relay can't reach Ethereum (1)")
+    );
+    assert_eq!(report.fingerprint, "relay-unreachable-1");
+    assert!(
+        report.steps.contains("\n2. Confirm:"),
+        "the pre-sign recheck stopped it: {}",
+        report.steps
+    );
+}
+
+/// A network the person added has no operator to tell: neither stop carries
+/// a report there (the same predicate as `operator_served`).
+#[test]
+fn a_stop_on_a_network_someone_added_files_no_report_466() {
+    let mut sut = boot(vec![devnet_coin("3")]);
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(empty_relayer(7_777_001));
+    let view = sut.view();
+    assert!(view.treasury_bootstrap.is_some(), "the stop is up");
+    assert!(view.relay_report.is_none());
+
+    let mut sut = boot(vec![devnet_coin("3")]);
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(uncovered());
+    let view = sut.view();
+    assert!(view.relay_unreachable.is_some(), "the stop is up");
+    assert!(view.relay_report.is_none());
+}
+
 /// The confirm page's gate is one predicate too. A relay stop opened by the
 /// pre-sign recheck closes it in the core — the shells used to AND that on by
 /// themselves, and not all of them did — and the slide refuses on the same

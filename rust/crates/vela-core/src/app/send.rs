@@ -623,6 +623,37 @@ pub struct SendRelayUnreachable {
     pub operator_served: bool,
 }
 
+/// What "Report this" files about a relay stop on a network Vela ships
+/// (issue 466): built here once, so every shell files the same words under
+/// the same dedup key through the in-app reporter it already has (preview,
+/// consent, send, the prefilled form as the fallback).
+///
+/// English on purpose: it is read on the tracker by whoever runs the relay,
+/// not by the person — data, not corpus. It names the relay treasury's full
+/// address and figures. Those are the OPERATOR's, and public (the relay
+/// serves them at `/v1/treasury/<chain>`), never the person's: which is why
+/// they ride in `what`, which the reporter files as written, and never in
+/// the device facts it scrubs of addresses.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendRelayReport {
+    /// What happened. The first line is the issue's title, at most 80
+    /// characters ("Relayer out of gas on Unichain (130)"); the facts follow
+    /// after a blank line.
+    pub what: String,
+    /// How the person got there, numbered as the bug form asks.
+    pub steps: String,
+    /// The bug form's area option, verbatim: `"Send"`.
+    pub area: String,
+    /// The dedup key — `relay-gas-<chain>` or `relay-unreachable-<chain>`: one
+    /// open issue per outage per chain, however many people report it and
+    /// whatever the balance reads meanwhile.
+    pub fingerprint: String,
+}
+
+/// [`SendRelayReport::area`]: the bug form's "Send" option.
+pub const RELAY_REPORT_AREA: &str = "Send";
+
 /// A scan, already parsed by the shell (`parseEIP681` — the parser itself is
 /// wave D's `payment_request`; this machine only consumes the parse).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2121,6 +2152,12 @@ pub struct SendView {
     pub treasury_bootstrap: Option<SendTreasuryStatus>,
     /// Spec 098 §2: the relay cannot serve this chain; the send stops here.
     pub relay_unreachable: Option<SendRelayUnreachable>,
+    /// What the stop's "Report this" files (issue 466). `Some` exactly while
+    /// a relay stop is up on a network Vela ships — the stops whose
+    /// `operator_served` is true; on a network the person added there is no
+    /// operator to tell. The shell snapshots it when the button is pressed:
+    /// the stop may close (funded) while the report is being read.
+    pub relay_report: Option<SendRelayReport>,
     pub recipient_identity: Option<SendRecipientIdentity>,
     /// Who the money goes to, as the form's recipient line and the confirm
     /// page name them (spec 097 F, S2): the address always, a name only
@@ -2579,6 +2616,7 @@ impl Send {
                 sheet.operator_served = super::network_admin::is_builtin_chain(sheet.chain_id);
                 sheet
             }),
+            relay_report: relay_report(model),
             recipient_identity: model.recipient_identity.clone(),
             payees: payees(model),
             recipient_risk: model.recipient_risk.clone(),
@@ -5964,6 +6002,79 @@ fn treasury_symbol(model: &Model, status: &SendTreasuryStatus) -> Option<String>
     }
 }
 
+/// [`SendView::relay_report`]: the report for the relay stop that is up, on
+/// a network Vela ships (the `operator_served` predicate), else `None`.
+fn relay_report(model: &Model) -> Option<SendRelayReport> {
+    // Where the stop met the person: the form's Continue, or the pre-sign
+    // recheck on the confirm page.
+    let pressed = if model.step == SendStep::Confirm {
+        "Confirm"
+    } else {
+        "Continue"
+    };
+    if let Some(status) = &model.treasury_bootstrap {
+        let chain = relay_report_chain(status.chain_id)?;
+        return Some(SendRelayReport {
+            what: format!(
+                "Relayer out of gas on {chain}\n\nTreasury: {}\n{}",
+                status.address,
+                treasury_figures(status, treasury_coin(model, status).as_ref()),
+            ),
+            steps: format!(
+                "1. Send on {chain}\n2. {pressed}: the relay's treasury check stopped \
+                 the send — its relayer is out of gas"
+            ),
+            area: RELAY_REPORT_AREA.to_owned(),
+            fingerprint: format!("relay-gas-{}", status.chain_id),
+        });
+    }
+    let sheet = model.relay_unreachable.as_ref()?;
+    let chain = relay_report_chain(sheet.chain_id)?;
+    Some(SendRelayReport {
+        what: format!(
+            "Relay can't reach {chain}\n\nThe relay's treasury check answered that it \
+             cannot serve this network: it has no RPC it can use for it."
+        ),
+        steps: format!(
+            "1. Send on {chain}\n2. {pressed}: the relay's treasury check stopped the \
+             send — it cannot serve this network"
+        ),
+        area: RELAY_REPORT_AREA.to_owned(),
+        fingerprint: format!("relay-unreachable-{}", sheet.chain_id),
+    })
+}
+
+/// "Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH)." — in whole coin
+/// with its symbol, as the stop shows them. Figures that cannot be put in a
+/// coin are written as the relay's own base units, with their unit, rather
+/// than not at all.
+fn treasury_figures(status: &SendTreasuryStatus, coin: Option<&SendTreasuryCoin>) -> String {
+    if let Some((coin, symbol)) = coin.and_then(|coin| Some((coin, coin.symbol.as_deref()?))) {
+        return format!(
+            "Has {} {symbol} of its {} {symbol} floor (short {} {symbol}).",
+            coin.balance, coin.floor, coin.suggested
+        );
+    }
+    let unit = match status.asset {
+        SendTreasuryAsset::Native => "wei",
+        SendTreasuryAsset::PathUsd => "micro-pathUSD",
+    };
+    format!(
+        "Has {} {unit} of its {} {unit} floor.",
+        status.balance.trim(),
+        status.floor.trim()
+    )
+}
+
+/// "Unichain (130)": a network Vela ships, by its name and id — `None` for
+/// any other, which has no operator to report to.
+fn relay_report_chain(chain_id: u32) -> Option<String> {
+    if !super::network_admin::is_builtin_chain(chain_id) {
+        return None;
+    }
+    super::network_admin::builtin_display_name(chain_id).map(|name| format!("{name} ({chain_id})"))
+}
+
 /// Open the treasury sheet and start watching the relay (spec 098 §4).
 fn open_bootstrap(model: &mut Model, status: SendTreasuryStatus) -> Cmd {
     let chain_id = status.chain_id;
@@ -6657,6 +6768,49 @@ impl super::SplitEffect for SendEffect {
         match self {
             SendEffect::Render(_) => None,
             SendEffect::Shell(request) => Some(request),
+        }
+    }
+}
+
+#[cfg(test)]
+mod relay_report_tests {
+    use super::{relay_report, Model, SendRelayUnreachable, SendTreasuryAsset, SendTreasuryStatus};
+    use crate::app::network_admin::BUILTIN_CHAINS;
+
+    /// Every network Vela ships gets a title the tracker can show whole.
+    #[test]
+    fn every_built_in_chain_s_title_fits_in_80_characters() {
+        for chain in BUILTIN_CHAINS {
+            let unreachable = Model {
+                relay_unreachable: Some(SendRelayUnreachable {
+                    chain_id: chain.chain_id,
+                    operator_served: false,
+                }),
+                ..Model::default()
+            };
+            let gas = Model {
+                treasury_bootstrap: Some(SendTreasuryStatus {
+                    chain_id: chain.chain_id,
+                    address: "0x3e59292e18417f814112f731e7163534c6d2fe3c".to_owned(),
+                    asset: SendTreasuryAsset::Native,
+                    balance: "0".to_owned(),
+                    floor: "100000000000000".to_owned(),
+                    bootstrap_needed: true,
+                    operator_served: false,
+                    coin: None,
+                }),
+                ..Model::default()
+            };
+            for model in [unreachable, gas] {
+                let Some(report) = relay_report(&model) else {
+                    unreachable!("{} ships, so its stop has a report", chain.display_name)
+                };
+                let title = report.what.lines().next().unwrap_or_default();
+                assert!(
+                    title.chars().count() <= 80 && title.contains(chain.display_name),
+                    "{title:?}"
+                );
+            }
         }
     }
 }

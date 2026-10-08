@@ -318,6 +318,7 @@ export * from './SendReceiptView';
 export * from './SendRecipientDraft';
 export * from './SendRecipientIdentity';
 export * from './SendRecipientRisk';
+export * from './SendRelayReport';
 export * from './SendRelayUnreachable';
 export * from './SendRowFieldState';
 export * from './SendScan';
