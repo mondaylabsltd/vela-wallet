@@ -164,7 +164,6 @@ export type UtilityIconId =
 	| 'share-2'
 	| 'power'
 	| 'lock'
-	| 'grip-vertical'
 	| 'external-link'
 	| 'compass'
 	// spec 023 additions (the settings rows' leading glyphs + their chrome)
@@ -577,17 +576,6 @@ export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 		elements: [
 			{ tag: 'rect', width: '18', height: '11', x: '3', y: '11', rx: '2' },
 			{ tag: 'path', d: 'M7 11V7a5 5 0 0 1 10 0v4' }
-		]
-	},
-	'grip-vertical': {
-		style: 'fill',
-		paths: [
-			'M10 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M10 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M10 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z'
 		]
 	},
 	'external-link': {

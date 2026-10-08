@@ -60,12 +60,14 @@ describe('what each state is FOR', () => {
 		expect(e1.tabCountLabel).toBeUndefined();
 	});
 
-	it('E2 carries the eight favourites plus the add tile, and three groups', () => {
+	it('E2 carries the favourites plus the add tile, and Recent dApps — no groups of its own (issue 465)', () => {
 		const e2 = buildMobileState('e2', messages, IDENTICON_STUB);
 		expect(e2.empty).toBeUndefined();
 		expect(e2.favorites?.tiles).toHaveLength(8);
 		expect(e2.favorites?.tiles.at(-1)?.kind).toBe('add');
-		expect(e2.groups.map((g) => g.id)).toEqual(['recent', 'trading', 'prediction']);
+		expect(e2.groups.map((g) => g.id)).toEqual(['recent']);
+		const desktop = buildDesktopState('de2', messages, IDENTICON_STUB);
+		expect(desktop.start.groups.map((g) => g.id)).toEqual(['recent']);
 	});
 
 	it('E3/E6/E7/E8 open on a sheet; E1/E2/E4/E5 do not', () => {
@@ -102,20 +104,29 @@ describe('what each state is FOR', () => {
 		for (const state of MOBILE_STATES) {
 			const { menus } = buildMobileState(state, messages, IDENTICON_STUB);
 			expect(menus.siteMenu.items).toHaveLength(7);
-			expect(menus.groupManage.rows).toHaveLength(4);
+			expect(menus.groupManage.rows).toHaveLength(2);
 			expect(menus.connection.connection.explainer.length).toBeGreaterThan(0);
 		}
 	});
 
-	it('the group manager can hide a system group but never delete one', () => {
-		const rows = buildMobileState('e3', messages, IDENTICON_STUB).menus.groupManage.rows;
-		const system = rows.filter((r) => r.system).map((r) => r.id);
-		expect(system).toEqual(['favorites', 'recent']);
+	it('the group manager is the two sections and an eye each — nothing to make, move or delete (issue 465)', () => {
+		const sheet = buildMobileState('e3', messages, IDENTICON_STUB).menus.groupManage;
+		expect(sheet.rows.map((r) => [r.id, r.title, r.hidden])).toEqual([
+			['favorites', messages.favorites, false],
+			['recent', messages.recent, false]
+		]);
+		// No "System" tag: with no groups of the person's own, there is
+		// nothing to tell the two apart from.
+		expect(sheet.rows[1].meta).toBeUndefined();
+		expect(Object.keys(sheet).sort()).toEqual(['kind', 'rows', 'title']);
 	});
 
 	it('DE1 is empty, DE2 carries the tile context menu, DE3 opens the connection', () => {
 		expect(buildDesktopState('de1', messages, IDENTICON_STUB).start.empty).toBeDefined();
-		expect(buildDesktopState('de2', messages, IDENTICON_STUB).contextMenu?.items).toHaveLength(4);
+		// Open in new tab, Rename, Remove — no "Move to group…" (issue 465).
+		expect(
+			buildDesktopState('de2', messages, IDENTICON_STUB).contextMenu?.items.map((i) => i.id)
+		).toEqual(['new-tab', 'rename', 'remove']);
 		expect(buildDesktopState('de3', messages, IDENTICON_STUB).initialPanel).toBe('connection');
 		expect(buildDesktopState('de4', messages, IDENTICON_STUB).initialPanel).toBe('signing');
 	});
@@ -125,12 +136,6 @@ describe('fixture content is the mock, verbatim (FR-012)', () => {
 	it('site names, hosts and letters', () => {
 		expect(SITES.uniswap).toMatchObject({ name: 'Uniswap', host: 'app.uniswap.org', letter: 'U' });
 		expect(SITES.hyperliquid.host).toBe('app.hyperliquid.xyz');
-		expect(SITES.limitless.name).toBe('Limitless');
-	});
-
-	it('the custom groups keep the names a person typed, untranslated', () => {
-		const groups = buildMobileState('e2', messages, IDENTICON_STUB).groups;
-		expect(groups.map((g) => g.title).slice(1)).toEqual(['交易', '预测市场']);
 	});
 
 	it('the stand-in page is the site’s content, not our chrome', () => {

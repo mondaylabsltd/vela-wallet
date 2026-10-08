@@ -116,10 +116,7 @@
 				{/if}
 
 				{#each model.start.groups as group (group.id)}
-					<SectionHeader
-						title={group.title}
-						action={group.action === 'clear' ? copy.clear : group.action === 'menu' ? '⋯' : ''}
-					/>
+					<SectionHeader title={group.title} action={group.action === 'clear' ? copy.clear : ''} />
 					<div class="rows">
 						{#each group.sites as site (site.id + group.id)}
 							<SiteRow {site} onopen={() => (browsingOverride = true)} />

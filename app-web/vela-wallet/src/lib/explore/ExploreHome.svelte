@@ -239,11 +239,7 @@
 			{/if}
 
 			{#each model.groups as group (group.id)}
-				<SectionHeader
-					title={group.title}
-					action={group.action === 'clear' ? copy.clear : group.action === 'menu' ? '⋯' : ''}
-					onaction={() => (sheetOverride = model.menus.groupManage)}
-				/>
+				<SectionHeader title={group.title} action={group.action === 'clear' ? copy.clear : ''} />
 				<ul>
 					{#each group.sites as site (site.id + group.id)}
 						<li><SiteRow {site} onopen={() => (viewOverride = 'browsing')} /></li>
@@ -266,11 +262,9 @@
 				<GroupManageSheet
 					title={sheet.title}
 					rows={sheet.rows}
-					newGroup={sheet.newGroup}
 					closeLabel={copy.close}
 					hideLabel={copy.hide}
 					showLabel={copy.show}
-					deleteLabel={copy.delete}
 					onclose={() => (sheetOverride = null)}
 				/>
 			{:else if sheet.kind === 'site-menu'}
