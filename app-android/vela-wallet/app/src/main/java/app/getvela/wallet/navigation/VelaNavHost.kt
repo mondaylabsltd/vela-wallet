@@ -171,6 +171,8 @@ import app.getvela.wallet.feature.wallet.WalletScreenState
 import app.getvela.wallet.feature.wallet.components.VelaTab
 import app.getvela.wallet.feature.wallet.gallery.GalleryScreen
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.produceState
 
 object VelaDestinations {
     const val WELCOME = "welcome"
@@ -1545,8 +1547,17 @@ fun VelaNavHost(
                         // The holdings, the feed and the currency are this device's
                         // own (spec 041); the fixture `model` only carries the
                         // labels the live builder cannot compute.
+                        // Issue 462: "Updated 2m" ages while the home is on screen — the
+                        // clock is read again every 30 s, and whenever the balance moves.
+                        val ageTick by produceState(0) {
+                            while (true) {
+                                delay(UPDATED_LABEL_TICK_MS)
+                                value += 1
+                            }
+                        }
+                        val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
                         WalletScreen(
-                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames, chainFilter = chainFilter).let { home ->
+                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
                             },
@@ -1560,6 +1571,8 @@ fun VelaNavHost(
                                 switcherOpen = true
                             },
                             onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
+                            // Issue 462: the hero's "↻ Updated" and the pull gesture.
+                            onRefresh = { wallet.pullRefresh() },
                             onStatusClick = {
                                 // Spec 048 + 092 (F08): the status line's rescue, over the wallet —
                                 // the list of EVERY network the wallet cannot reach (the core's
@@ -2462,6 +2475,9 @@ private val TAB_ROUTES = setOf(VelaDestinations.WALLET, VelaDestinations.CONTACT
 
 /** navigation-compose's own default fade, kept for every move that is not a tab. */
 private const val ROUTE_FADE_MS = 700
+
+/** Issue 462: how often the hero's "Updated 2m" reads the clock again — at least every 30 s. */
+private const val UPDATED_LABEL_TICK_MS = 30_000L
 
 /**
  * A tab to a tab — pushes, swaps and pops alike — cuts instead of fading.

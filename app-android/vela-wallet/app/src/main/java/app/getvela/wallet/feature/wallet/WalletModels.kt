@@ -55,6 +55,24 @@ data class BalanceModel(
     val status: BalanceStatusModel? = null,
     val a11yHide: String,
     val a11yShow: String,
+    /** Issue 462: the "↻ Updated <ago>" control under the figure; `null` draws none. */
+    val refresh: BalanceRefreshModel? = null,
+)
+
+/**
+ * The hero's refresh control (issue 462): the same control on all four
+ * shells, under the total. Idle it says when the figure was last read;
+ * while a refresh the PERSON asked for is out (the core's
+ * `BalanceView.refreshing`) its glyph turns and it reads "Updating…".
+ */
+@Immutable
+data class BalanceRefreshModel(
+    /** "Updated 2m" — `null` until a round has ever settled (the glyph alone). */
+    val updated: String?,
+    /** "Updating…" — always resolved, so the control can reserve its width. */
+    val updating: String,
+    /** The core's `refreshing`; the screen holds the spin for at least [RefreshSpin.MIN_SPIN_MS]. */
+    val refreshing: Boolean = false,
 )
 
 enum class ActivityKind { Sent, Received, Dapp }

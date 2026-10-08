@@ -267,7 +267,27 @@ object WalletFixtures {
         status = status,
         a11yHide = strings.t(I18nKeys.Wallet.A11Y_HIDE_BALANCE),
         a11yShow = strings.t(I18nKeys.Wallet.A11Y_SHOW_BALANCE),
+        refresh = refresh(strings, read = state != BalanceStateKind.Loading),
     )
+
+    /**
+     * The hero's refresh control (issue 462), idle: read two minutes ago —
+     * or, while the first read is still out (H3), never read yet, which is
+     * the glyph alone. The turning "Updating…" is the component board's.
+     */
+    fun refresh(strings: VelaStrings, read: Boolean = true, refreshing: Boolean = false): BalanceRefreshModel =
+        BalanceRefreshModel(
+            updated = if (read) {
+                strings.t(
+                    I18nKeys.Wallet.LAST_UPDATED,
+                    mapOf("ago" to strings.t(I18nKeys.Wallet.TIME_MINUTES_SHORT, mapOf("n" to "2"))),
+                )
+            } else {
+                null
+            },
+            updating = strings.t(I18nKeys.Wallet.UPDATING),
+            refreshing = refreshing,
+        )
 
     private fun header(long: Boolean): WalletHeaderModel = WalletHeaderModel(
         name = if (long) LONG_NAME else NAME,

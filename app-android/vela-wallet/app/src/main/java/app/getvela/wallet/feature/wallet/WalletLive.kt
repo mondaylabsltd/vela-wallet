@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.wallet
 
 import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.RelativeTime
 import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
 import app.getvela.wallet.feature.settings.AccountsSheetRowModel
 import app.getvela.wallet.feature.settings.AccountsSheetModel
@@ -86,7 +87,7 @@ object WalletLive {
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         val groups = activity(feed, strings, now, chainNames)
         return fallback.copy(
-            balance = balance(fallback.balance, view, strings, money, chainNames),
+            balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
@@ -417,7 +418,9 @@ object WalletLive {
                 state = BalanceStateKind.Loading,
                 integer = null,
                 decimals = null,
-                status = fallback.status?.takeIf { view.refreshing },
+                // A refresh the person asked for is the control's to show
+                // (issue 462), never a line pushed in above it.
+                status = null,
             )
         }
 
@@ -449,21 +452,42 @@ object WalletLive {
      * The one line under the hero, most actionable first (the web's
      * `liveBalance`): the networks the wallet cannot reach (spec 092 — every
      * one, held or not; a rate limit heals on its own and is never listed),
-     * said without "RPC" — the line opens their list. Then the refresh (or the
-     * cached figure standing in for the live one), then the core's notice.
+     * said without "RPC" — the line opens their list. Then the cached figure
+     * standing in for the live one, then the core's notice.
+     *
+     * A refresh the person asked for (`view.refreshing`) is NOT a reason for
+     * this line (issue 462): the control under it turns and says "Updating…"
+     * instead. When it was one, every tap inserted "Some balances are still
+     * updating." above the control and pushed it out from under the finger.
      */
     internal fun balanceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
         val unreachable = unreachableLine(view, strings, chainNames)
         return when {
             unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
-            view.refreshing || onCache || view.notice == BalanceNotice.StillUpdating ->
+            onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
             view.notice == BalanceNotice.Unpriced ->
                 BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
             else -> null
         }
     }
+
+    /**
+     * The hero's refresh control (issue 462): when the figure was last read —
+     * "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+     * words — and whether a refresh the person asked for is out. [now] is the
+     * caller's clock; the screen re-reads it at least every 30 s, so the label
+     * ages while it is on screen.
+     */
+    fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
+        BalanceRefreshModel(
+            updated = view.last_refreshed_at_ms?.let { at ->
+                strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
+            },
+            updating = strings.t(I18nKeys.Wallet.UPDATING),
+            refreshing = view.refreshing,
+        )
 
     /**
      * The line over the networks the wallet cannot reach (spec 092) — the
