@@ -791,6 +791,10 @@ pub struct BreakdownRow {
     /// A recipient's address, for the avatar beside the name (spec 038 #D2);
     /// `None` for an asset row, which carries no person.
     pub seed: Option<SharedString>,
+    /// A sweep's coin, drawn as its mark where a recipient's avatar would be
+    /// ("every asset of a sweep by its mark", spec 038 #D2) — the coin rule,
+    /// as the web's breakdown draws it. `None` on a recipient's row.
+    pub mark: Option<TokenMark>,
     pub label: SharedString,
     /// The label IS an address (nobody named it), so it is set in mono — said
     /// by whoever built the row, as the web's `BreakdownRowModel.mono`.

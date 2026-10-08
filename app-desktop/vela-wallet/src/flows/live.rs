@@ -3767,6 +3767,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                     BreakdownRow {
                         seed: (!payee.address.is_empty())
                             .then(|| SharedString::from(payee.address.clone())),
+                        mark: None,
                         label,
                         mono,
                         detail,
@@ -3845,6 +3846,16 @@ fn sweep_breakdown(
             }
             BreakdownRow {
                 seed: None,
+                mark: Some(TokenMark {
+                    ticker: token.symbol.clone().into(),
+                    badge: tint(token.chain_id),
+                    logos: crate::marks::token_logos(
+                        token.chain_id,
+                        &token.symbol,
+                        token.token_address.as_deref(),
+                        &token.logo_urls,
+                    ),
+                }),
                 label: token.symbol.clone().into(),
                 mono: false,
                 detail: None,
@@ -4149,10 +4160,26 @@ fn receipt_parts(
 ) -> (Option<SharedString>, Vec<BreakdownRow>) {
     let coins = sweep_coins(send);
     if !coins.is_empty() {
+        // The sweep's one network (never chain 0): the coins were all sent
+        // on it.
+        let chain_id = send
+            .multi_chain_id
+            .or_else(|| send.selected_token.as_ref().map(|token| token.chain_id))
+            .unwrap_or(1);
         let rows = coins
             .iter()
             .map(|coin| BreakdownRow {
                 seed: None,
+                mark: Some(TokenMark {
+                    ticker: coin.symbol.clone().into(),
+                    badge: tint(chain_id),
+                    logos: crate::marks::token_logos(
+                        chain_id,
+                        &coin.symbol,
+                        coin.token_address.as_deref(),
+                        &coin.logo_urls,
+                    ),
+                }),
                 label: coin.symbol.clone().into(),
                 mono: false,
                 detail: None,
@@ -4171,6 +4198,7 @@ fn receipt_parts(
             .iter()
             .map(|transfer| BreakdownRow {
                 seed: Some(SharedString::from(transfer.to.clone())),
+                mark: None,
                 label: transfer
                     .to_name
                     .clone()
@@ -4194,6 +4222,7 @@ fn receipt_parts(
             .map(|draft| BreakdownRow {
                 seed: (!draft.address.is_empty())
                     .then(|| SharedString::from(draft.address.clone())),
+                mark: None,
                 label: draft
                     .name
                     .clone()
@@ -4217,9 +4246,36 @@ fn receipt_parts(
     (Some(title.into()), rows)
 }
 
+/// One coin of a stored sweep, as its mark: the logo addresses its record
+/// carries first, then the core's own.
+///
+/// A stored line has no contract address, so the coin rule is given what the
+/// record does say: the network's own coin by its ticker (the home chain's
+/// logo, and no badge on its own chain, as on the confirm), any other coin as
+/// a contract the rule cannot place (`Some("")`: no logo guessed for it, its
+/// network's badge shown).
+fn swept_coin_mark(
+    chain_id: u32,
+    transfer: &vela_core::app::activity_feed::FeedBatchTransfer,
+) -> TokenMark {
+    let native = transfer
+        .symbol
+        .eq_ignore_ascii_case(&native_symbol(chain_id));
+    TokenMark {
+        ticker: transfer.symbol.clone().into(),
+        badge: tint(chain_id),
+        logos: crate::marks::token_logos(
+            chain_id,
+            &transfer.symbol,
+            (!native).then_some(""),
+            transfer.logo_urls.as_deref().unwrap_or_default(),
+        ),
+    }
+}
+
 /// Spec 038 #D2: a folded batch row opens to what it folded — the split's
-/// recipients by name and avatar, the sweep's assets — under the facts,
-/// where the single send's "To" would have been.
+/// recipients by name and avatar, the sweep's assets by their marks — under
+/// the facts, where the single send's "To" would have been.
 fn detail_parts(
     item: &vela_core::app::activity_feed::FeedItem,
     s: &FlowStrings,
@@ -4233,6 +4289,7 @@ fn detail_parts(
         .iter()
         .map(|transfer| BreakdownRow {
             seed: split.then(|| SharedString::from(transfer.to.clone())),
+            mark: (!split).then(|| swept_coin_mark(item.chain_id, transfer)),
             label: if split {
                 transfer
                     .to_name
@@ -5664,6 +5721,106 @@ mod tests {
                 }
                 _ => unreachable!("a resolving card"),
             }
+        });
+    }
+
+    /// A stored sweep opens to its coins by their marks: the logo addresses
+    /// its record carries first; the network's own coin by the rule (its home
+    /// chain's logo, no badge on its own chain); a token whose contract the
+    /// record never kept gets no guessed logo, only its network's badge.
+    #[test]
+    fn a_stored_sweep_opens_to_its_coins_by_their_marks() {
+        crate::executor::storage::tests::with_temp_state("flows-sweep-detail", || {
+            use vela_core::app::activity_feed::{
+                FeedBatch, FeedBatchTransfer, FeedDirection, FeedItem, FeedTxKind,
+            };
+            let line = |symbol: &str, logos: Option<Vec<String>>| FeedBatchTransfer {
+                to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+                to_name: None,
+                value: "1".to_owned(),
+                symbol: symbol.to_owned(),
+                decimals: 18,
+                usd_value: 0.0,
+                logo_urls: logos,
+            };
+            let named = "https://data.example/usdc.png".to_owned();
+            let item = |kind: FeedBatchKind| FeedItem {
+                id: "sweep".to_owned(),
+                direction: FeedDirection::Out,
+                counterparty: None,
+                alias: None,
+                value: None,
+                symbol: String::new(),
+                decimals: None,
+                usd_value: 0.0,
+                chain_id: 100,
+                timestamp: 1_756_000_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: Some(FeedBatch {
+                    kind,
+                    count: 3,
+                    total_usd: 0.0,
+                    transfers: vec![
+                        line("xDAI", None),
+                        line("USDC", Some(vec![named.clone()])),
+                        line("GNO", None),
+                    ],
+                    ids: Vec::new(),
+                    from: "0xme".to_owned(),
+                    chain_id: 100,
+                    timestamp: 1_756_000_000.0,
+                    status: FeedTxStatus::Confirmed,
+                    tx_hash: String::new(),
+                    user_op_hash: String::new(),
+                    symbol: None,
+                    logo_urls: None,
+                    to: None,
+                    to_name: None,
+                }),
+                kind: FeedTxKind::Send,
+                status: FeedTxStatus::Confirmed,
+                site: None,
+                counterparty_role: Default::default(),
+                dapp: None,
+                subtitle: Vec::new(),
+                priced: true,
+            };
+            let s = strings();
+            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s);
+            let marks: Vec<&TokenMark> = rows
+                .iter()
+                .map(|row| {
+                    row.mark
+                        .as_ref()
+                        .unwrap_or_else(|| unreachable!("a sweep's coin wears its mark"))
+                })
+                .collect();
+            assert_eq!(
+                marks[0].logos,
+                crate::marks::token_logos(100, "xDAI", None, &[])
+            );
+            assert!(
+                marks[0].logos.badge_hidden,
+                "xDAI on Gnosis repeats no badge"
+            );
+            assert_eq!(
+                marks[1].logos.logo_urls,
+                vec![SharedString::from(named.clone())]
+            );
+            assert!(!marks[1].logos.badge_hidden);
+            assert!(
+                marks[2].logos.logo_urls.is_empty(),
+                "no logo guessed for GNO"
+            );
+            assert!(marks[2].logos.badge_logo.is_some());
+
+            // A split's rows are people, not coins.
+            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s);
+            assert!(
+                rows.iter()
+                    .all(|row| row.mark.is_none() && row.seed.is_some())
+            );
         });
     }
 
@@ -7957,6 +8114,35 @@ mod parity_tests {
                 confirm.subline
             );
             assert!(confirm.mark.is_none(), "one mark would name the wrong coin");
+            // Each coin wears its own mark on the row, as the web's breakdown
+            // draws it: xDAI on its own chain (no badge), USDC's contract.
+            let marks: Vec<_> = confirm
+                .breakdown
+                .iter()
+                .map(|row| {
+                    row.mark
+                        .as_ref()
+                        .map(|mark| (mark.ticker.to_string(), &mark.logos))
+                })
+                .collect();
+            assert_eq!(
+                marks,
+                vec![
+                    Some((
+                        "xDAI".to_owned(),
+                        &crate::marks::token_logos(100, "xDAI", None, &[])
+                    )),
+                    Some((
+                        "USDC".to_owned(),
+                        &crate::marks::token_logos(100, "USDC", Some("0xdd"), &[])
+                    )),
+                ]
+            );
+            assert!(
+                marks[0]
+                    .as_ref()
+                    .is_some_and(|(_, logos)| logos.badge_hidden)
+            );
         });
     }
 
@@ -8432,6 +8618,7 @@ mod payee_tests {
         crate::executor::storage::tests::with_temp_state("payee-sweep-receipt", || {
             let mut view = CoreHost::<SendMachine>::new().view();
             view.multi_select_mode = true;
+            view.multi_chain_id = Some(8453);
             view.recipient = DEV_WALLET.to_owned();
             view.recipient_identity = Some(SendRecipientIdentity {
                 name: Some("Wallet".to_owned()),
@@ -8470,6 +8657,34 @@ mod payee_tests {
                         rows,
                         [("ETH", "0.000418 ETH"), ("USDC", "0.034929 USDC")],
                         "{status:?}: every coin the operation sent"
+                    );
+                    // Each by its mark, on the sweep's one network: ETH wears
+                    // Ethereum's logo with Base's badge, USDC its asset entry
+                    // on Base.
+                    let logos: Vec<_> = shown
+                        .breakdown
+                        .iter()
+                        .map(|row| row.mark.as_ref().map(|mark| mark.logos.clone()))
+                        .collect();
+                    assert_eq!(
+                        logos,
+                        vec![
+                            Some(crate::marks::token_logos(8453, "ETH", None, &[])),
+                            Some(crate::marks::token_logos(
+                                8453,
+                                "USDC",
+                                Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+                                &[]
+                            )),
+                        ],
+                        "{status:?}"
+                    );
+                    assert!(
+                        logos[1]
+                            .as_ref()
+                            .is_some_and(|logos| logos.logo_urls[0].contains(
+                                "/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/"
+                            ))
                     );
                     if status == SendReceiptStatus::Confirmed {
                         assert_eq!(shown.title, s.tx_sent);

@@ -272,7 +272,7 @@ fn column() -> Div {
 
 /// The hairline that separates rows in every list here.
 /// The parts of a batch (spec 038 #D2): every recipient of a split by name
-/// and avatar, every asset of a sweep by name — one list, drawn the same on
+/// and avatar, every asset of a sweep by its mark and name — one list, drawn the same on
 /// the confirm, the receipt and the transaction detail, so what was signed,
 /// what is landing and what landed read as one thing.
 fn breakdown_list(
@@ -299,7 +299,9 @@ fn breakdown_list(
         .bg(theme.bg_raised);
     for item in rows {
         let mut row = div().flex().items_center().gap(px(8.)).py(px(8.));
-        if let Some(seed) = item.seed.as_ref() {
+        if let Some(mark) = item.mark.as_ref() {
+            row = row.child(super::components::inline_mark(theme, mark));
+        } else if let Some(seed) = item.seed.as_ref() {
             row = row.child(crate::wallet::components::identicon_avatar(
                 identicons,
                 seed.as_ref(),
