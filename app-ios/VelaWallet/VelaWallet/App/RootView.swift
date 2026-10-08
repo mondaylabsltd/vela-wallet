@@ -1103,6 +1103,15 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and the card's coin in force, which names the fee row's coin
+                // while no estimate is in hand (`SendView.fee_coin`).
+                .modifier(FeeTokenBridge(
+                    said: FeeTokenBridge.Said(
+                        token: fees.view?.feeToken, pricing: fees.pricingChainId,
+                        form: send.formChainId, journey: send.journey
+                    ),
+                    tell: { token, pricing in send.feeTokenChanged(token, pricing: pricing) }
+                ))
                 // Spec 069: a free upgrade is only decided while the person is
                 // still on the form, and a send already open follows a default
                 // Settings just changed. One modifier, not two `.onChange`s:
@@ -4125,6 +4134,27 @@ enum ThemeOverride {
 
 /// The two facts the speed core hears from outside the send flow (spec 069):
 /// whether the send is still on its form, and the stored default speed.
+/// The fee card's coin into the send machine (`fee_token_changed`). Watches
+/// the coin, the chain the fee session prices, the form's chain and the
+/// journey; `SendStore.feeTokenChanged` decides whether there is anything new
+/// to say. Its own modifier: the chain it sits in is at the type checker's
+/// limit.
+private struct FeeTokenBridge: ViewModifier {
+    struct Said: Equatable {
+        let token: String?
+        let pricing: Int?
+        let form: Int?
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (String?, Int?) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
+}
+
 private struct SpeedBridge: ViewModifier {
     let onForm: Bool?
     let preferred: String?

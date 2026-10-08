@@ -662,6 +662,60 @@ struct SendHoldingsAndFeesTests {
         #expect(send.view?.selectedToken?.balance == "0.75")
     }
 
+    // MARK: - The fee card's coin, into the send machine
+
+    /// The bridge beside `fee_busy_changed`: the card's coin in force reaches
+    /// the send machine (`fee_token_changed`) whenever it differs from what
+    /// this journey was last told, only while the fee session prices the
+    /// form's own chain — and a fresh journey has been told nothing. The core
+    /// names the fee row's coin from it (`SendView.fee_coin`).
+    @Test func theFeeCardsCoinIsToldOncePerChangeAndAgainToANewJourney() async throws {
+        let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
+        let held = try balance([("xDAI", "0.5", 1.0), ("USDC", "3", 1.0)])
+        let send = SendStore(executor: try executor(relay: relay, fees: fees, balances: { held }))
+
+        func enter() async throws -> String {
+            send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
+            await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
+            let usdc = try #require(send.view?.tokens.first { $0.symbol == "USDC" }?.tokenAddress)
+            // No chain on the form yet: a word now is about no chain at all.
+            send.feeTokenChanged(usdc, pricing: 100)
+            send.selectToken(id: "chain-100_native_xDAI")
+            await Wait.until({ send.view?.stage == .enterDetails }, orIdle: { send.isIdle })
+            #expect(send.view?.feeCoin?.contract == nil, "nothing was told before the form had a chain")
+            return usdc
+        }
+
+        let usdc = try await enter()
+        let journey = send.journey
+        send.feeTokenChanged(usdc, pricing: 100)
+        #expect(send.view?.feeCoin == SendFeeCoinWire(symbol: "USDC", contract: usdc, chainId: 100),
+                "the card's pick names the row's coin")
+
+        // The person picks the chain's own coin: newer than the card's word.
+        send.chooseFeeToken(nil)
+        #expect(send.view?.feeCoin?.contract == nil)
+        // The card has not spoken again — the same word is not said twice,
+        // or it would undo the person's pick.
+        send.feeTokenChanged(usdc, pricing: 100)
+        #expect(send.view?.feeCoin?.contract == nil, "an unchanged coin is not told again")
+        send.feeTokenChanged(nil, pricing: 100)
+        #expect(send.view?.feeCoin?.contract == nil)
+        // A session still pricing another chain says nothing about this one.
+        send.feeTokenChanged(usdc, pricing: 1)
+        #expect(send.view?.feeCoin?.contract == nil, "another chain's coin is not told")
+        send.feeTokenChanged(usdc, pricing: 100)
+        #expect(send.view?.feeCoin?.contract == usdc, "a change is told")
+
+        // A new journey has been told nothing: the same coin is told again.
+        send.leave()
+        _ = try await enter()
+        #expect(send.journey == journey + 1)
+        send.feeTokenChanged(usdc, pricing: 100)
+        #expect(send.view?.feeCoin?.contract == usdc, "a fresh journey hears the card's coin")
+    }
+
     // MARK: - One token-amount rule
 
     /// The core's own vectors (`app_send.rs`
