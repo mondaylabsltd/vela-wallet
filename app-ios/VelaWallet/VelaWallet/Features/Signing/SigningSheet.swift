@@ -144,7 +144,10 @@ struct SigningSheet: View {
                        kind: .primary, enabled: confirm.enabled, action: onConfirm)
                 .padding(.bottom, !confirm.enabled && model.confirmBlockLine != nil
                          ? Tokens.Space.s0 : Tokens.Space.s16)
-                .accessibilityIdentifier("signing.confirm")
+                // The Trusted Signer route's button opens a page; it signs
+                // nothing here, so it carries its own hook (Android and
+                // desktop: `signing-open-signer`).
+                .accessibilityIdentifier(model.confirmAsButton ? "signing.openSigner" : "signing.confirm")
             // Spec 099 R7: a shut confirm says why — the core's line for the
             // part of the gate that is shut, and the action that opens it.
             if !confirm.enabled, let line = model.confirmBlockLine {
