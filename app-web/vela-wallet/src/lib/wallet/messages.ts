@@ -26,8 +26,9 @@ export interface WalletMessages {
 		/** Issue 462: what that control says while a read the person asked for is out. */
 		updating: string;
 		/**
-		 * The core's compact relative-time words (`format_relative_time`) —
-		 * "now", "{{n}}m", "{{n}}h" — filled against this device's clock.
+		 * The core's compact relative-time words — "now", "{{n}}m", "{{n}}h",
+		 * `{{n}}` unfilled — which the page hands to the core's
+		 * `formatRelativeTime` with this device's clock.
 		 */
 		ago: { now: string; minutes: string; hours: string };
 	};

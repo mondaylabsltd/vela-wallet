@@ -920,6 +920,47 @@ export function amountTextCaret(raw: string, clean: string, caret: number): numb
 	return wasm.amountTextCaret(raw, clean, caret);
 }
 
+/** The corpus's `time.now` / `time.minutesShort` / `time.hoursShort`, `{{n}}` unfilled. */
+export interface RelativeTimeWords {
+	now: string;
+	minutes: string;
+	hours: string;
+}
+
+/**
+ * The core's compact relative time (`I18n::format_relative_time`): "now"
+ * under 45 s, then rounded minutes and hours, a short weekday under a week,
+ * else the date — one rule for every app. The web carries no catalog, so it
+ * hands the core the three words its prerendered messages hold; `language`
+ * (the page's locale) names the weekday. `atMs` is the moment, `nowMs` the
+ * clock; `utcOffsetMinutes` what to add to UTC for local time;
+ * `dateFormat` the person's preset with `auto` resolved
+ * (`resolvedFormatKeys().date`).
+ */
+export function formatRelativeTime(
+	atMs: number,
+	nowMs: number,
+	utcOffsetMinutes: number,
+	dateFormat: string,
+	language: string,
+	words: RelativeTimeWords
+): string {
+	// The core reads the moment in WHOLE seconds; milliseconds there would
+	// read as the future, which is "now".
+	return translated(() =>
+		wasm.formatRelativeTime(
+			Math.floor(atMs / 1000),
+			nowMs,
+			utcOffsetMinutes,
+			dateFormat,
+			language,
+			words.now,
+			words.minutes,
+			words.hours
+		)
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Spec 082 — submit, answer, reads: the core's rules the web shell draws from
 // ---------------------------------------------------------------------------

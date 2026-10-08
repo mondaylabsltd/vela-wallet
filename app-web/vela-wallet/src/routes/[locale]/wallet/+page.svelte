@@ -1524,7 +1524,7 @@
 			selectedAssetId === null
 				? undefined
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
-		refresh: { now: refreshClock, held: refreshHold.held }
+		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' }
 	});
 	const liveHome = $derived(
 		identity === null
