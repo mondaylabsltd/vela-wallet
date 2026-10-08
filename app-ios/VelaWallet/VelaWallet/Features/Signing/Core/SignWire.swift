@@ -190,6 +190,12 @@ struct SignRequestViewWire: Decodable, Equatable {
     /// one when the request stamped a chain.
     let chainId: Int
     let signerAddress: String?
+    /// The wallet's own request (the key backup), never a page's: the shell
+    /// said so at `request_arrived` — the one place it raises one — and the
+    /// core carries it here. Never derived from the reading, which a site can
+    /// submit byte for byte. The core always sends it; the default is only
+    /// for hand-built views.
+    var firstParty: Bool = false
 }
 
 /// What the tracker must be handed the moment it appears. Idempotent — the

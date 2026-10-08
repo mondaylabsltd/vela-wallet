@@ -58,6 +58,10 @@ final class SigningController {
         /// The address the site was shown (spec 070). `sign_request` signs
         /// from it, and never silently from another account.
         var grantedAddress: String? = nil
+        /// The wallet asked this of itself (the key backup) — set where it
+        /// raises one, `RootView.openEthereumBackup`, and nowhere else. A page
+        /// never is, whatever bytes it submits.
+        var firstParty: Bool = false
     }
 
     struct Ports {
@@ -405,6 +409,7 @@ final class SigningController {
             "params_json": incoming.paramsJson,
             "origin": incoming.origin,
             "transport_id": incoming.transportId,
+            "first_party": incoming.firstParty,
             "dedicated_transport": true,
             "per_request_chain": incoming.chainId,
             "dapp": NSNull(),

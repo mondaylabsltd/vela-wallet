@@ -385,6 +385,77 @@ struct BrowserWireDriftTests {
         }
     }
 
+    /// The wallet's own request is marked as its own by the shell — the one
+    /// place it raises one — and the core carries that word onto the view;
+    /// a page that submits the very same bytes is never first-party. The raw
+    /// key is checked too, because the mirror's default would hide its drift.
+    @Test func firstPartyIsTheShellsWordCarriedOnTheView() throws {
+        func arrive(firstParty: Bool, transport: String) throws -> [String: Any] {
+            let core = SignRequestCore()
+            _ = try core.dispatch(eventJson: CoreJSON.string(["type": "networks_changed", "chain_ids": [1]]))
+            _ = try core.dispatch(eventJson: CoreJSON.string([
+                "type": "accounts_changed",
+                "accounts": [["address": "0x88cca0eedbf2c4426110bbfc998f048689266894", "credential_id": "cred-1"]],
+                "active_index": 0,
+            ]))
+            return try view(from: core.dispatch(eventJson: CoreJSON.string([
+                "type": "request_arrived",
+                "id": "backup-1",
+                "method": "eth_sendTransaction",
+                "params_json": #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x0","data":"0x"}]"#,
+                "origin": "https://getvela.app",
+                "transport_id": transport,
+                "first_party": firstParty,
+                "dedicated_transport": true,
+                "per_request_chain": 1,
+                "dapp": NSNull(),
+                "granted_address": NSNull(),
+                "requested_address": NSNull(),
+                "request_ts_ms": NSNull(),
+                "now_ms": 1_757_000_000_000,
+            ])))
+        }
+
+        let own = try arrive(firstParty: true, transport: SigningLive.walletTransport)
+        #expect((own["request"] as? [String: Any])?["first_party"] as? Bool == true, "the core sends the key")
+        #expect(try CoreJSON.decode(SignViewWire.self, from: own).request?.firstParty == true)
+
+        let page = try arrive(firstParty: false, transport: "tab-1")
+        #expect((page["request"] as? [String: Any])?["first_party"] as? Bool == false)
+        #expect(try CoreJSON.decode(SignViewWire.self, from: page).request?.firstParty == false,
+                "the same bytes from a page are a page's")
+    }
+
+    /// The controller sends the request's own word: `Incoming.firstParty` —
+    /// set by the wallet's backup alone — reaches the view, and every other
+    /// request (the default) arrives as a page's.
+    @Test func theControllerSaysFirstPartyOnlyWhenTheWalletAsked() async {
+        for firstParty in [true, false] {
+            let defaults = UserDefaults(suiteName: UUID().uuidString)!
+            let store = VelaStore(defaults: defaults)
+            let relay = RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+            let accounts = ScriptedAccounts()
+            let controller = SigningController(
+                wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
+                relay: relay, accounts: accounts,
+                spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+                store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+                ports: SigningController.Ports(knownChains: { [1] })
+            )
+            var incoming = SigningController.Incoming(
+                id: "r1", method: "eth_sendTransaction",
+                paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x0"}]"#,
+                origin: "https://getvela.app",
+                transportId: firstParty ? SigningLive.walletTransport : "tab-1", chainId: 1
+            )
+            incoming.firstParty = firstParty
+            controller.open(incoming)
+            await Wait.until { controller.sign.request != nil }
+            #expect(controller.sign.request?.firstParty == firstParty)
+            controller.swipeDismissed()
+        }
+    }
+
     /// **A finding, and a correction to what was ported.**
     ///
     /// Android's research says an untold machine "refuses every transaction

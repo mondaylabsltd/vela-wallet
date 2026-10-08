@@ -1729,7 +1729,8 @@ struct RootView: View {
                 paramsJson: String(decoding: params, as: UTF8.self),
                 origin: "https://getvela.app",
                 transportId: Self.walletTransport,
-                chainId: call.chainId
+                chainId: call.chainId,
+                firstParty: true
             ),
             respond: { _, _, _, _ in }
         )
