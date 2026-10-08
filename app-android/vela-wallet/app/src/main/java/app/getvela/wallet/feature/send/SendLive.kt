@@ -1015,6 +1015,7 @@ object SendLive {
                 identiconSeed = contact.address,
             )
         },
+                address = contact.address,
     )
 
     // -- SD3 ---------------------------------------------------------------------

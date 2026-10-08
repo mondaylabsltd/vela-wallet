@@ -355,7 +355,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     model = sheet.model,
                     onScan = { if (send == null) onNavigate(FlowStep.Scan) else send.onScanOpen?.invoke() },
                     onGroup = { index -> send?.onGroup?.invoke(index) },
-                    onSelect = { index -> send?.onContactSelect?.invoke(index) },
+                    onSelect = { address -> send?.onContactSelect?.invoke(address) },
                 )
                 is FlowSheet.FeeToken -> FeeTokenBody(
                     model = sheet.model,
@@ -480,7 +480,8 @@ class SendCallbacks(
     val onContinue: () -> Unit,
     val onConfirm: () -> Unit,
     val onFeeSelect: (Int) -> Unit,
-    val onContactSelect: (Int) -> Unit,
+    /** Issue #467: the address of the person picked — not their row's position. */
+    val onContactSelect: (String) -> Unit,
     val onSheetDismissed: () -> Unit,
     val onReceiptCta: () -> Unit,
     val onExplorer: () -> Unit,

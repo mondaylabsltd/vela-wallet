@@ -630,6 +630,14 @@ data class ContactEntryModel(
 @Immutable
 data class ContactPickModel(
     val title: String,
+    /**
+     * Issue #467: which person this row IS — the full address the pick sends.
+     * A tap used to send the row's POSITION, looked up again in the book at
+     * tap time; the core re-sorts the book (favourites, recency, display
+     * names that change as ENS and registry names resolve), so a reorder
+     * between drawing and tapping paid the neighbour.
+     */
+    val address: String = identiconSeed,
     val closeLabel: String,
     val searchPlaceholder: String,
     val scanRow: String,

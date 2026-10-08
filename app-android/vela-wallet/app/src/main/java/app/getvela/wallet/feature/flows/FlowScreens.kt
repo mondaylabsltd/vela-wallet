@@ -1336,16 +1336,17 @@ fun ContactPickBody(
     modifier: Modifier = Modifier,
     onScan: () -> Unit = {},
     onGroup: (Int) -> Unit = {},
-    onSelect: (Int) -> Unit = {},
+    /** Issue #467: the picked person's ADDRESS — never a position in a list the core re-sorts. */
+    onSelect: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
     val shown = remember(query, model.contacts) {
         if (query.isBlank()) {
-            model.contacts.withIndex().toList()
+            model.contacts
         } else {
-            model.contacts.withIndex().filter {
-                "${it.value.name} ${it.value.addressDisplay}".contains(query.trim(), true)
+            model.contacts.filter {
+                "${it.name} ${it.addressDisplay}".contains(query.trim(), true)
             }
         }
     }
@@ -1436,7 +1437,10 @@ fun ContactPickBody(
         }
         SectionCaption(model.contactsTitle)
         shown.forEach { entry ->
-            ContactPickRow(contact = entry.value, onSelect = { onSelect(entry.index) })
+            // Keyed by the person, so a row that moves keeps its own state.
+            key(entry.address) {
+                ContactPickRow(contact = entry, onSelect = { onSelect(entry.address) })
+            }
         }
     }
 }

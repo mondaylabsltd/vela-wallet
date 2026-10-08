@@ -1114,8 +1114,11 @@ fun VelaNavHost(
                                 feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
                                 feeSheetOpen = false
                             },
-                            onContactSelect = { index ->
-                                contactsBook.contacts.getOrNull(index)?.let { send.pickedAddress(it.address) }
+                            // Issue #467: the row says WHO — its address. An index into
+                            // the book read at tap time could name someone else once
+                            // the core had re-sorted it.
+                            onContactSelect = { address ->
+                                if (address.isNotBlank()) send.pickedAddress(address)
                             },
                             onSheetDismissed = {
                                 if (feeSheetOpen) feeSheetOpen = false

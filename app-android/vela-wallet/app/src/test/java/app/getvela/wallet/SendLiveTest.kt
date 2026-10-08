@@ -1234,6 +1234,36 @@ class SendLiveTest {
     }
 
     /**
+     * Issue #467: a picked contact is named by ADDRESS. The sheet's rows carry
+     * the person's full address, in the core's order; the tap sends that
+     * address, so a book the core re-sorts between drawing and tapping (a
+     * favourite, a fresh send, an ENS name arriving) can never pay the
+     * person who slid into the tapped row's place.
+     */
+    @Test
+    fun `the contact sheet names each person by address, in the core's order`() {
+        val sheet = (FlowFixtures.build(FlowState.SD2E, strings).sheet as app.getvela.wallet.feature.flows.FlowSheet.ContactPick).model
+        val bob = "0x2222222222222222222222222222222222222222"
+        val alice = "0x1111111111111111111111111111111111111111"
+        val book = app.getvela.wallet.feature.contacts.core.ContactsView(
+            loaded = true,
+            contacts = listOf(
+                app.getvela.wallet.feature.contacts.core.Contact(address = bob, name = "Bob"),
+                app.getvela.wallet.feature.contacts.core.Contact(address = alice, resolved_name = "alice.eth"),
+            ),
+        )
+        val rows = SendLive.contactSheet(sheet, book).contacts
+        assertEquals(listOf(bob, alice), rows.map { it.address })
+        assertEquals(listOf("Bob", "alice.eth"), rows.map { it.name })
+        // The book re-sorted (alice became a favourite): each row still says who it is.
+        val resorted = SendLive.contactSheet(sheet, book.copy(contacts = book.contacts.reversed())).contacts
+        assertEquals(alice, resorted.first { it.name == "alice.eth" }.address)
+        assertEquals(bob, resorted.first { it.name == "Bob" }.address)
+        // The drawn picker's people are addressed too.
+        assertTrue(sheet.contacts.all { it.address.startsWith("0x") && it.address.length == 42 })
+    }
+
+    /**
      * Issue #468: the recipient row has the QR door beside the person on all
      * four shells. Android's was null — written before its scanner existed —
      * so the one platform with the scanner wired had nothing to tap. The
