@@ -435,16 +435,13 @@ type ExploreGroupLine = (ExploreGroupRow, SharedString, Option<SharedString>, bo
 fn explore_group_rows(
     view: &vela_core::app::explore_sites::ExploreView,
     strings: &ExploreStrings,
+    loc: &Loc,
 ) -> [ExploreGroupLine; 2] {
     [
         (
             ExploreGroupRow::Favorites,
             strings.favorites.clone(),
-            Some(SharedString::from(
-                strings
-                    .site_count
-                    .replace("{{n}}", &view.favorites.len().to_string()),
-            )),
+            Some(crate::explore::site_count(loc, view.favorites.len())),
             view.favorites_hidden,
         ),
         (
@@ -1811,7 +1808,7 @@ impl WalletPage {
             return None;
         }
         let view = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let rows = explore_group_rows(&view, &self.explore);
+        let rows = explore_group_rows(&view, &self.explore, &self.loc);
         let manage_groups = self.explore.manage_groups.clone();
 
         let mut list = div().flex().flex_col();
@@ -19967,7 +19964,8 @@ mod tests {
     /// trash or "New group" could hang off.
     #[test]
     fn manage_groups_lists_the_two_sections_and_nothing_else() {
-        let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
+        let loc = crate::loc::Loc::from_env();
+        let strings = ExploreStrings::resolve(&loc);
         let site = |origin: &str| vela_core::app::explore_sites::ExploreSite {
             origin: origin.to_owned(),
             url: format!("{origin}/"),
@@ -19987,13 +19985,13 @@ mod tests {
             recent_tabs: Vec::new(),
             ready: true,
         };
-        let [favorites, recent] = explore_group_rows(&view, &strings);
+        let [favorites, recent] = explore_group_rows(&view, &strings, &loc);
         assert_eq!(
             favorites,
             (
                 ExploreGroupRow::Favorites,
                 strings.favorites.clone(),
-                Some(SharedString::from(strings.site_count.replace("{{n}}", "2"))),
+                Some(crate::explore::site_count(&loc, 2)),
                 false,
             )
         );
