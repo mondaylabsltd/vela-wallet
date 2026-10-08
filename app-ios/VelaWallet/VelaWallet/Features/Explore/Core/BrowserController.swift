@@ -507,7 +507,7 @@ final class BrowserController {
     /// The core's facts about the tab in front.
     var currentTab: DbrTabViewWire? { dbr.tab(explore.selectedTab) }
 
-    // MARK: - Favourites and groups
+    // MARK: - Favourites and the start page's sections
 
     func addFavorite(url: String, title: String?) {
         exploreCore.dispatch(CoreJSON.string([
@@ -543,22 +543,6 @@ final class BrowserController {
     func renameFavorite(origin: String, name: String) {
         exploreCore.dispatch(CoreJSON.string([
             "type": "favorite_renamed", "origin": origin, "name": name,
-        ]))
-    }
-
-    func createGroup(name: String) {
-        exploreCore.dispatch(CoreJSON.string([
-            "type": "group_created", "name": name, "now_ms": now(),
-        ]))
-    }
-
-    func deleteGroup(id: String) {
-        exploreCore.dispatch(CoreJSON.string(["type": "group_deleted", "id": id]))
-    }
-
-    func setGroupHidden(id: String, hidden: Bool) {
-        exploreCore.dispatch(CoreJSON.string([
-            "type": "group_hidden_set", "id": id, "hidden": hidden,
         ]))
     }
 

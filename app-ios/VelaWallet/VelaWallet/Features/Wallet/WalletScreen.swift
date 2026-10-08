@@ -61,6 +61,10 @@ struct WalletScreen: View {
     /// for the same reason). A class reference is one pointer, so there are
     /// no fields to walk.
     var onRefresh: RefreshAction?
+    /// The hero's "↻ Updated" control (issue 462): the same refresh as the
+    /// pull, without the gesture. Absent in the gallery, where the control is
+    /// drawn and takes no tap.
+    var onRefreshNow: (() -> Void)?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -126,7 +130,7 @@ struct WalletScreen: View {
     /// REMOVES the thing you were looking at needs a confirmation you can feel.
     @ViewBuilder private var balanceDisplay: some View {
         if let onToggleBalance {
-            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
+            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap, onRefresh: onRefreshNow)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     // A switch that takes effect: Select, not a button press.
@@ -137,7 +141,7 @@ struct WalletScreen: View {
                 .accessibilityHint(Text(verbatim: model.balance.state == .hidden
                                         ? model.balance.a11yShow : model.balance.a11yHide))
         } else {
-            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
+            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap, onRefresh: onRefreshNow)
         }
     }
 

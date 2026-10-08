@@ -71,6 +71,23 @@ struct BalanceModel {
     var status: BalanceStatusModel?
     let a11yHide: String
     let a11yShow: String
+    /// Issue 462: the "↻ Updated 2m" control under the figure; `nil` draws
+    /// none (the home before the core has ruled).
+    var refresh: BalanceRefreshModel? = nil
+}
+
+/// The hero's refresh control (issue 462) — the same control on all four
+/// shells, under the total. Idle it says when the figure was last read; while
+/// a refresh the PERSON asked for is out (the core's `BalanceView.refreshing`,
+/// held for at least `RefreshSpin.minimumMs`) its glyph turns and it reads
+/// "Updating…".
+struct BalanceRefreshModel: Equatable {
+    /// "Updated 2m" — `nil` until a round has ever settled (the glyph alone).
+    var updated: String?
+    /// "Updating…" — always resolved, so the control reserves its width.
+    let updating: String
+    /// The glyph turns and the words read `updating`; the control is inert.
+    var refreshing = false
 }
 
 enum ActivityKind {

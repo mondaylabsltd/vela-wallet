@@ -102,7 +102,8 @@ enum ClearProvenance: String, Decodable {
 struct ClearSignResultWire: Decodable, Equatable {
     /// The canonical English key — the shell localises it. Printing this
     /// verbatim is how Android shipped a confirm button reading "确认send".
-    /// `var`, with `fields`: see `relabelled`.
+    /// `var`, with `fields`: `SigningLive.localizedTerms` swaps a named word
+    /// for the reader's, and `capped` writes the chosen cap.
     var intent: String
     /// `intent` as a word the shell translates (`ClearTerm`).
     var intentTerm: String? = nil
@@ -411,18 +412,6 @@ struct ClearSigningViewWire: Decodable, Equatable {
 
 
 extension ClearSignResultWire {
-    /// The same result wearing the shell's words: a new intent, and the first
-    /// `labels.count` field labels replaced in order. Values, roles, risk and
-    /// verification are the core's and are not touched.
-    func relabelled(intent: String, labels: [String]) -> ClearSignResultWire {
-        var next = self
-        next.intent = intent
-        for index in next.fields.indices where index < labels.count {
-            next.fields[index].label = labels[index]
-        }
-        return next
-    }
-
     /// The same result reading the cap the person chose instead of the
     /// request's "Unlimited": the approval's warning amount field takes the
     /// cap and stops being a warning, and if it was the only warning the risk

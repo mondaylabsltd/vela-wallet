@@ -58,6 +58,10 @@ final class SigningController {
         /// The address the site was shown (spec 070). `sign_request` signs
         /// from it, and never silently from another account.
         var grantedAddress: String? = nil
+        /// The wallet asked this of itself (the key backup) — set where it
+        /// raises one, `RootView.openEthereumBackup`, and nowhere else. A page
+        /// never is, whatever bytes it submits.
+        var firstParty: Bool = false
     }
 
     struct Ports {
@@ -84,7 +88,7 @@ final class SigningController {
         var simDeltas: (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) -> Void
         = { _, _, _ in }
         /// The judged simulation the sheet draws its "Balance changes" from
-        /// (`token_trust`'s sim view) — read at the slide, so the record keeps
+        /// (`token_trust`'s sim view) — read at the confirm, so the record keeps
         /// the lines the person saw (083 F1, spec 093).
         var simView: () -> TrustSimViewWire? = { nil }
         /// `eth_simulateV1` with these params, its answer as it came; `nil` =
@@ -117,7 +121,7 @@ final class SigningController {
 
     /// How the last Trusted Signer ceremony for this request ended without a
     /// signature. The core heard a cancelled ceremony and kept the request
-    /// open; this is the sentence that says why, until the next slide.
+    /// open; this is the sentence that says why, until the next confirm.
     private(set) var trustedSignerNotice: TrustedSignerNotice?
 
     /// The fee row's coin list (the web's `feeOpen`). Which coins pay, what
@@ -167,7 +171,7 @@ final class SigningController {
 
     /// Spec 079 (owner: one slide, not two): this account signs on the
     /// Trusted Signer's page, whose own slide is the consent — so the sheet
-    /// offers a button that goes there instead of a second slide. Read once
+    /// offers a confirm that goes there instead of a second consent. Read once
     /// per request, from the route the spine will sign over.
     private(set) var trustedSignerRoute = false
     private var ports: Ports
@@ -195,7 +199,7 @@ final class SigningController {
     /// The page behind this request is gone (`transportDropped`): nothing
     /// may be signed or sent for it any more (RB2).
     private var askerGone = false
-    /// When the slide fired — the start of the answer window (RA12).
+    /// When the confirm was tapped — the start of the answer window (RA12).
     private var approvedAtMs: Double?
     /// The operation the relay accepted for this request, once it has.
     private var submittedHash: String?
@@ -360,15 +364,14 @@ final class SigningController {
             // The browser's fact about who asked. The wallet's own request is
             // not a site, and the page draws an empty origin as the wallet.
             origin: { [weak self] in
-                guard let request = self?.request, request.transportId != SigningLive.walletTransport
-                else { return "" }
+                guard let request = self?.request, !request.firstParty else { return "" }
                 return request.origin
             },
             // A page in this app's browser — never the wallet's own requests
             // (the key backup): the browser saw that origin (spec 079).
             originSeenByBrowser: { [weak self] in
                 guard let request = self?.request else { return false }
-                return request.transportId != SigningLive.walletTransport
+                return !request.firstParty
             },
             trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
@@ -405,6 +408,7 @@ final class SigningController {
             "params_json": incoming.paramsJson,
             "origin": incoming.origin,
             "transport_id": incoming.transportId,
+            "first_party": incoming.firstParty,
             "dedicated_transport": true,
             "per_request_chain": incoming.chainId,
             "dapp": NSNull(),
@@ -596,7 +600,7 @@ final class SigningController {
             // WHICH COIN is the fee machine's until the person taps one (spec
             // 078): it pays in a coin that can, and the approve carries the
             // fee view's `fee_token` — the very coin it picked — beside the
-            // amount from the same estimate (`approveOpts`), so what the slide
+            // amount from the same estimate (`approveOpts`), so what the sheet
             // shows is what is signed. A tap re-asks with the pick turned off
             // (`FeeStore.chooseFeeToken`).
             fees.ask(
@@ -634,7 +638,7 @@ final class SigningController {
 
     // MARK: - What the sheet does
 
-    /// The slide fired.
+    /// The confirm was tapped.
     func approve() {
         cancelRequote()
         trustedSignerNotice = nil
@@ -645,7 +649,7 @@ final class SigningController {
         )])
     }
 
-    /// What the sheet drew under "Balance changes" as the slide fired (083
+    /// What the sheet drew under "Balance changes" as the confirm was tapped (083
     /// F1, spec 093): the core's judgments, exactly as `SigningLive.balanceBlocks`
     /// gates them — this request's simulation answered, its judgments ready
     /// and not empty. `nil` otherwise (a notice stood there, or nothing yet),
@@ -771,7 +775,7 @@ final class SigningController {
             lastShownJson = signJson
         }
         // A free upgrade is decided only while the person can still choose —
-        // never under a slide that has already gone.
+        // never under a confirm that has already gone.
         let onForm = view.surface == .sheet && !view.isSigning && !view.isSubmitting
         if onForm != lastOnForm {
             lastOnForm = onForm
@@ -820,7 +824,7 @@ final class SigningController {
     private func commitFee(_ view: FeeViewWire) {
         scheduleRequote(view)
         // A quote goes stale while somebody reads. While the sheet is up and
-        // nothing is signing, ask again — otherwise the slide shuts with no
+        // nothing is signing, ask again — otherwise the confirm shuts with no
         // way to reopen it, which is what Android's phase 5 watched happen.
         // The core keeps the request it priced; `requote` re-runs THAT one.
         guard view.stale, !view.busy, !answered, !requoting,
@@ -1039,7 +1043,7 @@ final class SigningController {
         return submitted
     }
 
-    /// What the confirm slides into: the fee as quoted, the guard's rewrite,
+    /// What the confirm signs: the fee as quoted, the guard's rewrite,
     /// the intent.
     ///
     /// `params_override_json` is the load-bearing one. When the guard rewrote
@@ -1076,7 +1080,7 @@ final class SigningController {
         ]
     }
 
-    /// The fee the slide displayed, as signed: amount in the paying coin's
+    /// The fee the sheet displayed, as signed: amount in the paying coin's
     /// base units, and where it goes. No recipient → no quoted fee (the send
     /// core's `submit_user_op` rule).
     static func quotedFee(_ estimate: FeeEstimateWire?) -> [String: Any]? {

@@ -222,7 +222,21 @@ enum WalletFixtures {
             liveText: state == .zeroLive ? loc.t("home.liveIndicator") : nil,
             status: status,
             a11yHide: loc.t("home.a11yHideBalance"),
-            a11yShow: loc.t("home.a11yShowBalance")
+            a11yShow: loc.t("home.a11yShowBalance"),
+            refresh: refresh(loc: loc, read: state != .loading)
+        )
+    }
+
+    /// The hero's refresh control (issue 462), idle: read two minutes ago —
+    /// or, while the first read is still out (H3), never read yet, which is
+    /// the glyph alone. `refreshing` draws it turning, "Updating…".
+    static func refresh(loc: Loc, read: Bool = true, refreshing: Bool = false) -> BalanceRefreshModel {
+        BalanceRefreshModel(
+            updated: read
+                ? loc.t("home.lastUpdated", vars: ["ago": loc.t("time.minutesShort", vars: ["n": "2"])])
+                : nil,
+            updating: loc.t("home.updating"),
+            refreshing: refreshing
         )
     }
 

@@ -84,7 +84,11 @@ final class BrowserAcceptanceTests: XCTestCase {
     @discardableResult
     private func connect(_ app: XCUIApplication) -> Bool {
         app.webViews.buttons["Connect"].firstMatch.tap()
-        let approve = app.buttons["批准"].firstMatch
+        // The consent sheet's primary says 连接 since its 079 redraw; 批准 is
+        // what it said before, kept so an older build still runs this.
+        let approve = app.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "连接", "批准")
+        ).firstMatch
         let asked = approve.waitForExistence(timeout: 12)
         if asked { approve.tap() }
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_requestAccounts ok"),
@@ -363,7 +367,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// the founder's own passkey doing the same thing is SC-012 and is owed.
     ///
     /// What it proves, in order: the sheet describes the call in words before
-    /// hex, one slide signs it, the row is written pending at submit, and the
+    /// hex, one tap signs it, the row is written pending at submit, and the
     /// page is answered with a **transaction** hash rather than a
     /// user-operation hash.
     #if VELA_LIVE_SEND
@@ -385,33 +389,16 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "the sheet did not describe a no-calldata transfer as a send")
         attach(app.screenshot(), named: "device-browser-signing-sheet")
 
-        // The slide carries an accessibility action, because VoiceOver and
-        // Switch Control confirm by activating rather than dragging — so the
-        // harness activates it too, and a drag whose geometry drifts cannot
-        // make this test lie.
-        // `matching`, not `containing`: `containing` finds elements whose
-        // DESCENDANTS match, and the slide is a single accessibility element
-        // with no children — so `containing` silently matched an ancestor,
-        // reported it enabled, and tapped a container that does nothing.
-        let slide = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
-        ).firstMatch
-        XCTAssertTrue(slide.waitForExistence(timeout: 20), "the confirm slide is missing")
-        XCTAssertTrue(slide.isEnabled,
-                      "the slide is shut — one of the three gating machines never said yes")
-
-        // **A real drag, not a tap.**
-        //
-        // The slide carries an `accessibilityAction` so VoiceOver and Switch
-        // Control can confirm by activating — but XCUITest's `tap()`
-        // synthesises a touch at the element's centre rather than invoking
-        // that action. The drag gesture then sees a press at ~50% of the
-        // track, which is under the 88% commit threshold, and resets. The
-        // sheet is left looking exactly as if nothing had been tapped, which
-        // is what it was.
-        let knob = slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-        let end = slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
-        knob.press(forDuration: 0.05, thenDragTo: end)
+        // Issue #461: the confirm is one tap on a button, found by its
+        // stable hook — its label is the action ("确认发送"), which changes
+        // with the request. The gate opens when the quote lands.
+        let confirm = app.buttons["signing.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20), "the confirm button is missing")
+        XCTAssertEqual(XCTWaiter().wait(
+            for: [expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: confirm)],
+            timeout: 90
+        ), .completed, "the confirm is shut — one of the three gating machines never said yes")
+        confirm.tap()
 
         // **The wallet's own surface first, and the page's second.**
         //
@@ -424,7 +411,7 @@ final class BrowserAcceptanceTests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH %@", "已提交")
         ).firstMatch
         let accepted = submitted.waitForExistence(timeout: 120)
-        attach(app.screenshot(), named: "device-browser-after-slide")
+        attach(app.screenshot(), named: "device-browser-after-confirm")
         XCTAssertTrue(accepted,
                       "the relay never accepted the operation — the sheet never said 已提交")
 
@@ -444,7 +431,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// speed control under its fee: folded on the tier in force, opened onto
     /// three speeds, a pick folding it onto the new one.
     ///
-    /// **Nothing here spends.** The slide is never touched: the sheet is
+    /// **Nothing here spends.** The confirm is never touched: the sheet is
     /// swiped away, which is the refusal, and the page is answered 4001.
     func testTheDappSheetOffersASpeedAndNeverSignsOneItLeft() throws {
         let app = launchBrowsing()
@@ -488,8 +475,8 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// happen, and does not make the person read hex to find out.
     ///
     /// The device half of FR-010: the editor is there, the "as requested" chip
-    /// is **disabled** rather than merely unselected, and the slide is **shut**
-    /// until a finite cap is named. That the signed calldata then carries the
+    /// is **disabled** rather than merely unselected, and the confirm is
+    /// **shut** until a finite cap is named. That the signed calldata then carries the
     /// cap is proved hermetically (`DisplayedIsSignedTests`) — it is a fact
     /// about bytes, and a screenshot cannot show it.
     func testAnUnlimitedApprovalIsKeptAsAskedAndSaid() throws {
@@ -519,20 +506,19 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(warning.exists, "an unlimited approval must never go out unsaid")
 
         // Kept as asked, the guard agrees; the fee machine is the third gate,
-        // so the slide arms when the quote lands. It is NOT slid: this test
-        // proves the sheet lets the ask through, not that the chain takes it.
-        let slide = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
-        ).firstMatch
-        XCTAssertTrue(slide.waitForExistence(timeout: 20))
+        // so the confirm arms when the quote lands. It is NOT tapped: this
+        // test proves the sheet lets the ask through, not that the chain
+        // takes it.
+        let confirm = app.buttons["signing.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20))
         let armed = XCTWaiter().wait(
             for: [expectation(
-                for: NSPredicate(format: "isEnabled == true"), evaluatedWith: slide
+                for: NSPredicate(format: "isEnabled == true"), evaluatedWith: confirm
             )],
             timeout: 90
         )
         XCTAssertEqual(armed, .completed,
-                       "the kept ask did not arm the slide — the guard, or the fee, never agreed")
+                       "the kept ask did not arm the confirm — the guard, or the fee, never agreed")
 
         // A cap is one chip away. 撤销 is a finite choice — zero — and needs
         // no typing.
@@ -551,7 +537,7 @@ final class BrowserAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-browser-unlimited-capped")
         XCTAssertFalse(warning.waitForExistence(timeout: 3),
                        "a revoked approval is not unlimited — the warning must go")
-        XCTAssertTrue(slide.isEnabled, "a finite choice keeps the slide armed")
+        XCTAssertTrue(confirm.isEnabled, "a finite choice keeps the confirm armed")
     }
 
     /// 2^254 is past the approval guard's line (2^200) but under the
@@ -624,18 +610,16 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "the sheet did not show the message it was asked to sign")
         attach(app.screenshot(), named: "device-browser-message")
 
-        let slide = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
-        ).firstMatch
-        XCTAssertTrue(slide.waitForExistence(timeout: 20))
+        let confirm = app.buttons["signing.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20))
         // No network fee to wait for: an off-chain signature costs nothing.
-        XCTAssertTrue(slide.isEnabled, "a message signature must not wait for a fee quote")
+        XCTAssertTrue(confirm.isEnabled, "a message signature must not wait for a fee quote")
+        // The label is the action alone (issue #461): 签名, never a "slide to".
+        XCTAssertEqual(confirm.label, "签名")
         // The account signs with the key it signed in with: the sheet offers
         // no "Sign with" (founder, 2026-09-26).
         XCTAssertFalse(app.staticTexts["签名方式"].exists, "the signing sheet offers a \"Sign with\" again")
-        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-            .press(forDuration: 0.05,
-                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
+        confirm.tap()
 
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict personal_sign ok", timeout: 90),
                       "the page never got a signature")
@@ -665,13 +649,9 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "the sheet did not show the message it was asked to sign")
         XCTAssertFalse(app.staticTexts["签名方式"].exists, "the signing sheet offers a \"Sign with\" again")
         attach(app.screenshot(), named: "device-signed-in-key-sheet")
-        let slide = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
-        ).firstMatch
-        XCTAssertTrue(slide.waitForExistence(timeout: 20))
-        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-            .press(forDuration: 0.05,
-                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
+        let confirm = app.buttons["signing.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20))
+        confirm.tap()
 
         let signed = try XCTUnwrap(verdictLine(app, containing: "#verdict personal_sign ok", timeout: 90),
                                    "the page never got a signature").lowercased()

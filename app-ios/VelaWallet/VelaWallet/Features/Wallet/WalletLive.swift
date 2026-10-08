@@ -65,18 +65,26 @@ enum WalletLive {
     }
 
     /// Swap the balance hero and the asset rows onto the drawn home.
+    ///
+    /// `now` ages the refresh control's "Updated 2m"; `spinning` is the
+    /// store's held spin (`WalletStore.spin`), the core's `refreshing` when
+    /// absent.
     static func apply(
         _ view: BalanceViewWire,
         currency: CurrencyViewWire? = nil,
         feed: FeedViewWire? = nil,
         feedRead: Bool = false,
         on model: WalletHomeModel,
-        loc: Loc
+        loc: Loc,
+        now: Date = Date(),
+        spinning: Bool? = nil,
+        networks: WalletNetworks = .builtin
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency)
         copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
-        copy.assetRows = assetRows(view, display: display)
+        copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
+        copy.assetRows = assetRows(view, display: display, networks: networks)
         copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
         if let feed {
             copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
@@ -177,9 +185,9 @@ enum WalletLive {
         return total == 0 ? .zeroLive : .normal
     }
 
-    /// The line under the figure. A partial total says so; a refresh over a
-    /// cached figure says that instead — in `home.balanceStale`, as the other
-    /// three clients say it. The drawn fixture's own status was nil on the
+    /// The line under the figure. A partial total says so; a figure the core
+    /// is still reading over says that instead — in `home.balanceStale`, as
+    /// the other three clients say it. The drawn fixture's own status was nil on the
     /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
@@ -195,10 +203,33 @@ enum WalletLive {
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
         }
-        if view.refreshing || view.notice == .stillUpdating {
+        // A refresh the person asked for (`view.refreshing`) is NOT a reason
+        // for this line (issue 462): the refresh control under it turns and
+        // says "Updating…" instead. When it was one, every pull inserted
+        // "Some balances are still updating." above the control and pushed it
+        // out from under the finger.
+        if view.notice == .stillUpdating {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
+    }
+
+    /// The hero's refresh control (issue 462): when the figure was last read —
+    /// "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+    /// words — and whether a refresh the person asked for is out. The home
+    /// re-reads the clock at least every 30 s, so the label ages on screen.
+    static func refresh(
+        _ view: BalanceViewWire, loc: Loc, now: Date = Date(), spinning: Bool? = nil
+    ) -> BalanceRefreshModel {
+        BalanceRefreshModel(
+            updated: view.lastRefreshedAtMs.map { at in
+                loc.t("home.lastUpdated", vars: [
+                    "ago": RelativeTime.ago(atMs: at, nowMs: now.timeIntervalSince1970 * 1000, loc: loc),
+                ])
+            },
+            updating: loc.t("home.updating"),
+            refreshing: spinning ?? view.refreshing
+        )
     }
 
     /// The line over the networks the wallet cannot reach (spec 092) — the
@@ -250,11 +281,18 @@ enum WalletLive {
     ///
     /// Invisible until the balance was real — with a fixture there was nothing
     /// to duplicate.
-    static func assetRows(_ view: BalanceViewWire, display: Display = .usd) -> [AssetRowModel] {
+    ///
+    /// The chain is named from the wallet's networks, the person's own
+    /// included — a token on a network they added had a blank chain line.
+    static func assetRows(
+        _ view: BalanceViewWire,
+        display: Display = .usd,
+        networks: WalletNetworks = .builtin
+    ) -> [AssetRowModel] {
         view.tokens.map { token in
             AssetRowModel(
                 ticker: token.symbol,
-                chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
+                chain: networks.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
                 // The one token-amount rule every shell prints (spec 078,
                 // `tokenAmountText`): the core's ladder, so this row, the Send

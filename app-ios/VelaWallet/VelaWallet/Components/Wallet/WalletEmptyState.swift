@@ -38,7 +38,7 @@ struct WalletEmptyState: View {
 #Preview("Empty states dark") {
     VStack(spacing: Tokens.Space.s24) {
         WalletEmptyState(icon: .inbox, model: SectionEmptyModel(
-            title: "暂无交易记录", caption: "收款将实时显示在这里。"
+            title: "暂无交易记录", caption: "你发出的交易会显示在这里，收到的钱会计入余额。"
         ))
         WalletEmptyState(icon: .walletUtility, model: SectionEmptyModel(
             title: "存入您的第一笔资产", caption: "点击此处查看地址并接收代币"

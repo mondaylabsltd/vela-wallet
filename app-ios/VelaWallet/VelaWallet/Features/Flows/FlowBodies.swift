@@ -124,6 +124,24 @@ struct FundAddressView: View {
     }
 }
 
+/// Issue #466: a relay stop's "Report this". The operator's lead says telling
+/// them is the fastest fix, and this is how: it opens the app's own report
+/// sheet with the core's words already in it (read, editable, then sent) —
+/// never a blank GitHub form. A quiet full-width button, as the web and
+/// Android draw it, under the address it is about.
+struct RelayReportButton: View {
+    let title: String
+    let action: () -> Void
+
+    /// A stable hook for tests — Android's test tag for the same button.
+    static let testId = "relay-report"
+
+    var body: some View {
+        VelaButton(title: title, kind: .secondary, action: action)
+            .accessibilityIdentifier(Self.testId)
+    }
+}
+
 /// R2 / R3 — the address, as a code.
 struct ReceiveQrBody: View {
     @Environment(\.theme) private var theme
@@ -856,6 +874,9 @@ struct SendFormBody: View {
     var warning: String?
     /// Spec 098 §4: the treasury stop's address, under [warning].
     var fund: FundAddressModel?
+    /// Issue #466: a relay stop's "Report this", under [fund]; its tap.
+    var report: String?
+    var onReport: () -> Void = {}
     var ctaDisabled = false
     /// Spec 069: measure the fee again; fold or unfold the speed control; a
     /// one-shot pick. Absent in the gallery.
@@ -880,7 +901,10 @@ struct SendFormBody: View {
                     badgeColor: row.mark.badgeColor,
                     balance: row.amount,
                     fiat: .none,
-                    masked: false
+                    masked: false,
+                    // The coin's mark the builder made — dropped here, so a
+                    // sweep's rows were letters and a dot.
+                    mark: row.mark
                 ))
                 .overlay(alignment: .trailing) {
                     // An empty label means no chip. A sweep moves the MAXIMUM
@@ -924,6 +948,7 @@ struct SendFormBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.warningBase)
                 if let fund { FundAddressView(model: fund) }
+                if let report { RelayReportButton(title: report, action: onReport) }
             }
             if let add = model.addRecipient {
                 Button(action: onAddRecipient) {
@@ -983,6 +1008,7 @@ struct SendFormBody: View {
                     .foregroundStyle(warning != nil ? theme.warningBase : theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let fund { FundAddressView(model: fund) }
+                if let report { RelayReportButton(title: report, action: onReport) }
             }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
@@ -1033,18 +1059,19 @@ struct ContactPickBody: View {
 
     let model: ContactPickModel
     var onScan: () -> Void = {}
-    var onGroup: (Int) -> Void = { _ in }
-    var onSelect: (Int) -> Void = { _ in }
+    /// The tapped group's id.
+    var onGroup: (String) -> Void = { _ in }
+    /// The tapped person's ADDRESS (issue #467) — never a position in a list
+    /// the core re-sorts while names resolve.
+    var onSelect: (String) -> Void = { _ in }
 
     @State private var query = ""
 
-    private var shown: [(offset: Int, element: ContactEntryModel)] {
+    private var shown: [ContactEntryModel] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        let all = Array(model.contacts.enumerated())
-        guard !trimmed.isEmpty else { return all.map { ($0.offset, $0.element) } }
-        return all
-            .filter { "\($0.element.name) \($0.element.addressDisplay)".localizedCaseInsensitiveContains(trimmed) }
-            .map { ($0.offset, $0.element) }
+        guard !trimmed.isEmpty else { return model.contacts }
+        return model.contacts
+            .filter { "\($0.name) \($0.addressDisplay)".localizedCaseInsensitiveContains(trimmed) }
     }
 
     var body: some View {
@@ -1071,8 +1098,8 @@ struct ContactPickBody: View {
 
             if !model.groups.isEmpty && query.isEmpty {
                 sectionCaption(model.groupsTitle)
-                ForEach(Array(model.groups.enumerated()), id: \.element.id) { index, group in
-                    Button { onGroup(index) } label: {
+                ForEach(model.groups) { group in
+                    Button { onGroup(group.id) } label: {
                         HStack(spacing: Tokens.Space.s12) {
                             // Two overlapping discs stand for "several people"
                             // without drawing any of them — a group has no
@@ -1105,10 +1132,10 @@ struct ContactPickBody: View {
             }
 
             sectionCaption(model.contactsTitle)
-            ForEach(shown, id: \.element.id) { entry in
+            ForEach(shown) { entry in
                 ContactPickRowView(
-                    contact: entry.element,
-                    onSelect: { onSelect(entry.offset) }
+                    contact: entry,
+                    onSelect: { onSelect(entry.address) }
                 )
             }
         }
@@ -1387,6 +1414,8 @@ struct SendConfirmBody: View {
     var onConfirm: () -> Void = {}
     var onNoticeAction: () -> Void = {}
     var onNoticeSecondary: () -> Void = {}
+    /// Issue #466: the stop's "Report this".
+    var onNoticeReport: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -1441,6 +1470,9 @@ struct SendConfirmBody: View {
                 VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                     NoticeBannerView(text: notice)
                     if let fund = model.noticeFund { FundAddressView(model: fund) }
+                    if let report = model.noticeReport {
+                        RelayReportButton(title: report, action: onNoticeReport)
+                    }
                     if model.noticeAction != nil || model.noticeSecondary != nil {
                         HStack(spacing: Tokens.Space.s8) {
                             if let secondary = model.noticeSecondary {

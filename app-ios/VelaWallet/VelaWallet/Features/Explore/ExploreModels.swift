@@ -50,11 +50,12 @@ enum TileModel: Identifiable {
     }
 }
 
-/// `favorites` and `recent` are system groups: hideable, never deletable.
-enum GroupKind { case favorites, recent, custom }
+/// `favorites` and `recent` are the only sections (issue #465: no custom
+/// groups): hideable, never deletable.
+enum GroupKind { case favorites, recent }
 
-/// The trailing affordance on a group's header row.
-enum GroupAction { case edit, clear, menu }
+/// The trailing affordance on a section's header row.
+enum GroupAction { case edit, clear }
 
 struct GroupModel: Identifiable {
     let id: String
@@ -115,12 +116,14 @@ struct SiteMenuItem: Identifiable {
     var danger: Bool = false
 }
 
+/// One row of Manage groups: Favorites or Recent dApps, with an eye (issue
+/// #465 — the two sections are all there is, so nothing is deletable and
+/// nothing is new).
 struct GroupManageRow: Identifiable {
     let id: String
     let title: String
-    /// "8 个网站" / "2 · 已隐藏" — resolved by the fixture layer.
+    /// "8 个网站" — resolved by the fixture layer. `nil` draws no second word.
     let meta: String?
-    let system: Bool
     var hidden: Bool
 }
 
@@ -231,7 +234,7 @@ enum ExploreSheetKind: String, Identifiable {
 }
 
 enum ExploreSheet: Identifiable {
-    case groupManage(title: String, rows: [GroupManageRow], newGroup: String)
+    case groupManage(title: String, rows: [GroupManageRow])
     case siteMenu(site: SiteModel, statusLine: String, items: [SiteMenuItem])
     case connection(ConnectionModel)
     case addNetwork

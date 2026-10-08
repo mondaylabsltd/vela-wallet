@@ -3,7 +3,8 @@
 //  VelaWalletTests
 //
 //  The haptics Android plays and iOS did not (074), pinned at the call: the
-//  signing slider's threshold, a copy, and the send machine's two outcomes.
+//  shared button's press (the signing confirm), a copy, and the send
+//  machine's two outcomes.
 //  A simulator cannot vibrate; `VelaHaptic.recording` is what can be read.
 //
 
@@ -14,21 +15,16 @@ import UIKit
 @MainActor
 struct VelaHapticsTests {
 
-    /// Released past 88% the slide is a signature, and the finger feels it —
-    /// once. Short of it the knob goes back without a sound.
-    @Test func theSigningSlideIsADetentOnlyPastItsThreshold() {
-        var confirmed = false
-        let short = VelaHaptic.recording {
-            confirmed = SlideToConfirmView.released(at: ExploreGeometry.slideCommit - 0.01)
+    /// The signing sheet confirms with a tap (issue #461): the shared
+    /// button's press, felt once, and the approve once — the 88% slide and its
+    /// detent are gone.
+    @Test func theSigningConfirmIsOnePressAndOneApprove() {
+        var approved = 0
+        let played = VelaHaptic.recording {
+            VelaButton.pressed { approved += 1 }
         }
-        #expect(!confirmed)
-        #expect(short.isEmpty)
-
-        let past = VelaHaptic.recording {
-            confirmed = SlideToConfirmView.released(at: ExploreGeometry.slideCommit)
-        }
-        #expect(confirmed)
-        #expect(past == [.detent])
+        #expect(approved == 1)
+        #expect(played == [.press])
     }
 
     /// Read through `VelaClipboard.recording`, not `UIPasteboard.general`: the

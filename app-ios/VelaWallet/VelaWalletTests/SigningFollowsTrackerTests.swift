@@ -344,7 +344,7 @@ struct SigningFollowsTrackerTests {
         #expect(run.port.posts == 1)
     }
 
-    /// The ✕ after the slide refuses nothing (spec 079): the op written ahead
+    /// The ✕ after the confirm refuses nothing (spec 079): the op written ahead
     /// is still POSTed, and the page still gets its one answer from the
     /// tracker's verdict.
     @Test func aCloseDuringTheWriteAheadStillSendsAndAnswersOnce() async throws {
@@ -357,7 +357,7 @@ struct SigningFollowsTrackerTests {
         await Wait.until { run.seen.tracked.contains { $0.admitted } }
         #expect(run.port.posts == 1)
         let hash = try #require(run.controller.submittedUserOp)
-        #expect(run.seen.answers.isEmpty, "a close after the slide is not a refusal: \(run.seen.answers)")
+        #expect(run.seen.answers.isEmpty, "a close after the confirm is not a refusal: \(run.seen.answers)")
         run.controller.trackerChanged(view(hash, status: "confirmed", txHash: tx))
         await Wait.until { !run.seen.answers.isEmpty }
         #expect(run.seen.answers.first?["result"] as? String == tx)

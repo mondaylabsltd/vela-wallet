@@ -4,10 +4,10 @@
 //
 //  Spec 022 gates for the signing layer.
 //
-//  Two of these are product contracts rather than style checks — the slide is
-//  the only confirmation, and an unlimited approval can never be confirmed as
-//  requested — so they are asserted here: a later refactor has to break a test
-//  to break the promise.
+//  Two of these are product contracts rather than style checks — the confirm
+//  always says what it confirms, and an unlimited approval is kept as asked
+//  only where it is said — so they are asserted here: a later refactor has to
+//  break a test to break the promise.
 //
 
 import Foundation
@@ -28,7 +28,7 @@ struct SigningFixturesTests {
             m.dapp.name, m.dapp.host, m.network.name,
             m.signer.label, m.signer.name, m.panelTitle, m.tech.title,
         ]
-        if let confirm = m.confirm { out += [confirm.hint, confirm.action] }
+        if let confirm = m.confirm { out.append(confirm.action) }
         for block in m.blocks {
             switch block {
             case .intent(let text, _): out.append(text)
@@ -74,8 +74,9 @@ struct SigningFixturesTests {
         return out
     }
 
-    @Test func allThirtyThreeScenariosBuild() {
-        #expect(SigningStateId.allCases.count == 33)
+    @Test func everyScenarioBuilds() {
+        // The 33 drawn boards and cs36, the wallet's own backup.
+        #expect(SigningStateId.allCases.count == 34)
         for state in SigningStateId.allCases {
             let m = model(state)
             #expect(m.id == state)
@@ -95,13 +96,16 @@ struct SigningFixturesTests {
         }
     }
 
-    @Test func theSlideAlwaysSaysWhatItConfirms() {
+    /// Issue #461: the confirm is a tap on a button labelled with the action
+    /// alone — never "滑动以确认 · …", whose key the corpus no longer has.
+    @Test func theConfirmAlwaysSaysWhatItConfirms() {
         for state in SigningStateId.allCases {
             let m = model(state)
-            // Every DRAWN state offers the slide; the refusal state has no
+            // Every DRAWN state offers the confirm; the refusal state has no
             // fixture, because it is reached from the core, not the gallery.
-            #expect(m.confirm?.hint.isEmpty == false, "\(state) has no slide hint")
-            #expect(m.confirm?.action.isEmpty == false, "\(state) has no slide action")
+            let action = m.confirm?.action ?? ""
+            #expect(!action.isEmpty, "\(state) has no confirm label")
+            #expect(!action.contains("滑动") && !action.contains("·"), "\(state) still says a slide: \(action)")
         }
     }
 
@@ -116,7 +120,7 @@ struct SigningFixturesTests {
         #expect(m.blocks.contains { if case .warning(.danger, _) = $0 { true } else { false } })
     }
 
-    @Test func choosingAFiniteCapReEnablesTheSlide() {
+    @Test func choosingAFiniteCapReEnablesTheConfirm() {
         for state: SigningStateId in [.cs6, .cs8] {
             #expect(model(state).confirm?.enabled == true, "\(state) should be confirmable")
         }
@@ -174,9 +178,87 @@ struct SigningFixturesTests {
         }
     }
 
+    /// The wallet's own backup (first party): no requester — its intent is
+    /// the header's title, not repeated in the form — the rows in the core's
+    /// words with the network first, the confirm reading the intent, and no
+    /// contract summary on the technical details.
+    @Test func theWalletsOwnBackupHasAHeadlineAndNoRequester() {
+        let own = model(.cs36)
+        #expect(own.dappOwn)
+        #expect(own.headline?.text == "备份公钥")
+        #expect(!own.formBlocks.contains { if case .intent = $0 { true } else { false } },
+                "the headline is drawn once, in the header")
+        #expect(own.formBlocks.count == own.blocks.count - 1)
+        guard case .rows(let rows) = own.formBlocks.first else {
+            Issue.record("the backup's rows lead the form"); return
+        }
+        #expect(rows.map(\.label) == ["网络", "地址", "公钥数量"])
+        #expect(rows.first?.value == "Ethereum")
+        #expect(own.confirm?.action == "备份公钥")
+        #expect(own.tech.summary == nil)
+
+        // A site's sheet keeps its header and its intent in the form.
+        let site = model(.cs1)
+        #expect(site.headline == nil)
+        #expect(site.formBlocks.count == site.blocks.count)
+    }
+
     @Test func cs29IsCs1WithTheTechnicalPanelOpen() {
         #expect(model(.cs29).techOpen)
         #expect(!model(.cs1).techOpen)
         #expect(model(.cs29).tech.identities.count == 2)
+    }
+
+    // MARK: - Coins wear the token mark (DESIGN L, S4)
+
+    /// Every drawn amount line names its coin with the coin's token mark,
+    /// lettered from the very ticker the line prints — never a first letter
+    /// on a brand disc, which drew USDC and USDT as the same "U". A coin the
+    /// drawings give a contract for carries its logo candidates; spWETH,
+    /// which they give none, gets no guessed logo.
+    @Test func everyAmountLinesCoinWearsItsOwnTokenMark() {
+        var lines: [AmountLine] = []
+        for state in SigningStateId.allCases {
+            for block in model(state).blocks {
+                switch block {
+                case .amount(let line, _, _): lines.append(line)
+                case .swap(let pay, let receive): lines += [pay, receive]
+                default: break
+                }
+            }
+        }
+        let marked = lines.filter { $0.token != nil }
+        #expect(!marked.isEmpty, "no drawn amount line wears a mark")
+        for line in marked {
+            guard let mark = line.token else { continue }
+            #expect(mark.glyph == String(line.symbol.prefix(3)).uppercased(),
+                    "\(line.symbol) drawn as \(mark.glyph)")
+            if line.symbol == "spWETH" {
+                #expect(mark.logoURLs.isEmpty, "a guessed logo for a coin with no contract")
+            } else {
+                #expect(!mark.logoURLs.isEmpty, "\(line.symbol) has no logo to try")
+            }
+        }
+        let usdc = marked.first { $0.symbol == "USDC" }?.token
+        let usdt = marked.first { $0.symbol == "USDT" }?.token
+        #expect(usdc?.logoURLs.first != nil && usdc?.logoURLs.first != usdt?.logoURLs.first,
+                "USDC and USDT wear the same picture")
+    }
+
+    /// The technical details' identities: the token wears its mark, the
+    /// person their identicon from their address — not a letter.
+    @Test func theTechnicalIdentitiesWearAMarkOrAFace() {
+        let identities = model(.cs1).tech.identities
+        #expect(!identities.isEmpty)
+        for identity in identities {
+            switch identity.lead {
+            case .token(let mark)?:
+                #expect(!mark.logoURLs.isEmpty)
+            case .identicon(let seed)?:
+                #expect(seed == identity.address)
+            default:
+                Issue.record("\(identity.name) wears nothing")
+            }
+        }
     }
 }

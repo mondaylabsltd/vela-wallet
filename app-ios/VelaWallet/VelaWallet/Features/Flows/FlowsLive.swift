@@ -38,9 +38,11 @@ enum FlowsLive {
         currency: CurrencyViewWire?,
         selected: Int? = nil,
         on model: AssetsModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> AssetsModel {
-        let all = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency))
+        let all = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency),
+                                       networks: networks)
         let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
         // Empty only once the core has actually looked — never while the
         // fetch is still out (FR-008) — or when the chosen chain holds nothing
@@ -53,7 +55,8 @@ enum FlowsLive {
                 title: model.header.title,
                 backLabel: model.header.backLabel,
                 action: model.header.action,
-                pill: pill(selected: selected, loc: loc, fallback: model.header.pill)
+                pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
+                           networks: networks)
             ),
             searchPlaceholder: model.searchPlaceholder,
             rows: rows,
@@ -75,11 +78,13 @@ enum FlowsLive {
 
     /// The chain picker over the assets list: the chains this account HOLDS
     /// something on, with how many — the web's `liveChainRows`. A filter
-    /// offering a chain with nothing on it is a dead end.
+    /// offering a chain with nothing on it is a dead end. The chains are the
+    /// wallet's own, the person's added networks included.
     static func assetChainSheet(
         _ balance: BalanceViewWire,
         selected: Int?,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> ChainSheetModel {
         var counts: [Int: Int] = [:]
         for token in balance.tokens { counts[token.chainId, default: 0] += 1 }
@@ -90,7 +95,7 @@ enum FlowsLive {
             selected: selected == nil,
             chainId: nil
         )]
-        for chain in ChainCatalog.chains {
+        for chain in networks.chains {
             guard let count = counts[chain.chainId] else { continue }
             rows.append(chainRow(chain, count: count, selected: selected))
         }
@@ -125,7 +130,8 @@ enum FlowsLive {
     static func chainSheet(
         _ feed: FeedViewWire,
         selected: Int?,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> ChainSheetModel {
         var counts: [Int: Int] = [:]
         for item in items(feed) { counts[item.chainId, default: 0] += 1 }
@@ -137,8 +143,9 @@ enum FlowsLive {
             selected: selected == nil,
             chainId: nil
         )]
-        // Registry order, so the list does not reshuffle as counts change.
-        for chain in ChainCatalog.chains {
+        // Registry order, so the list does not reshuffle as counts change —
+        // the core's, the person's own networks after the built-ins.
+        for chain in networks.chains {
             guard let count = counts[chain.chainId] else { continue }
             rows.append(chainRow(chain, count: count, selected: selected))
         }
@@ -148,8 +155,11 @@ enum FlowsLive {
     }
 
     /// The header pill: which filter is on.
-    static func pill(selected: Int?, loc: Loc, fallback: FlowPillModel?) -> FlowPillModel? {
-        guard let selected, let chain = ChainCatalog.meta(selected) else { return fallback }
+    static func pill(
+        selected: Int?, loc: Loc, fallback: FlowPillModel?,
+        networks: WalletNetworks = .builtin
+    ) -> FlowPillModel? {
+        guard let selected, let chain = networks.meta(selected) else { return fallback }
         return FlowPillModel(
             dots: [SettingsLive.mark(chainId: chain.chainId, name: chain.displayName).color],
             label: chain.displayName
@@ -169,13 +179,15 @@ enum FlowsLive {
         selected: Int? = nil,
         on model: HistoryModel,
         loc: Loc,
-        hidden: Bool
+        hidden: Bool,
+        networks: WalletNetworks = .builtin
     ) -> HistoryModel {
         let header = FlowHeaderModel(
             title: model.header.title,
             backLabel: model.header.backLabel,
             action: model.header.action,
-            pill: pill(selected: selected, loc: loc, fallback: model.header.pill)
+            pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
+                       networks: networks)
         )
         let groups = WalletLive.activityGroups(feed, loc: loc, hidden: hidden)
         return HistoryModel(
@@ -209,14 +221,16 @@ enum FlowsLive {
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
         loc: Loc,
-        readRequest: @escaping (String) -> String? = { _ in nil }
+        readRequest: @escaping (String) -> String? = { _ in nil },
+        networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
         if let dapp = item.dapp {
-            return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, readRequest: readRequest)
+            return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc,
+                              readRequest: readRequest, networks: networks)
         }
         let incoming = item.direction == .in
         let dapp = item.kind == .dappTx
-        let chain = ChainCatalog.meta(item.chainId)
+        let chain = networks.meta(item.chainId)
         let counterparty = item.counterparty ?? record?.from ?? ""
 
         var facts: [FactRowModel] = []
@@ -245,16 +259,7 @@ enum FlowsLive {
             ))
         }
         if let chain {
-            facts.append(FactRowModel(
-                label: loc.t("componentsTx.detail.labelChain"),
-                value: chain.displayName,
-                lead: .token(TokenMarkModel.chain(
-                    chainId: chain.chainId,
-                    symbol: chain.nativeSymbol,
-                    color: SettingsLive.mark(chainId: chain.chainId,
-                                             name: chain.displayName).color
-                ))
-            ))
+            facts.append(networkFact(chain, loc: loc))
         }
         // The drawn sheet has a 代币合约 row and this build cannot fill it: the
         // stored record carries a symbol and decimals, not the contract it came
@@ -329,7 +334,8 @@ enum FlowsLive {
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
         loc: Loc,
-        readRequest: @escaping (String) -> String?
+        readRequest: @escaping (String) -> String?,
+        networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
         let money = WalletLive.dappFigure(item, dapp: dapp)
         let allowance = money == nil ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) } : nil
@@ -356,7 +362,7 @@ enum FlowsLive {
             // when the core knows no price (spec 097 N7).
             fiat: money == nil || !item.priced ? "" : (record?.usd.map { "≈ \($0)" } ?? ""),
             positive: leadsWithBack && dapp.received?.direction == .in,
-            facts: dapp.facts.compactMap { fact($0, item: item, dapp: dapp, loc: loc) },
+            facts: dapp.facts.compactMap { fact($0, item: item, dapp: dapp, loc: loc, networks: networks) },
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
             deleteLabel: loc.t("history.deleteRecord"),
             deleteQuiet: !dapp.offChain && (item.status == .pending || item.status == .unknown),
@@ -387,13 +393,14 @@ enum FlowsLive {
     /// One of the core's detail facts, labelled (spec 093). `nil` for a
     /// fact this build has never heard of.
     private static func fact(
-        _ fact: FeedFactWire, item: FeedItemWire, dapp: FeedDappWire, loc: Loc
+        _ fact: FeedFactWire, item: FeedItemWire, dapp: FeedDappWire, loc: Loc,
+        networks: WalletNetworks
     ) -> FactRowModel? {
         switch fact {
         case .site(let site):
             return FactRowModel(label: loc.t("connect.detail.labelApp"), value: site)
         case .network(let chainId):
-            return chainFact(chainId, loc: loc)
+            return chainFact(chainId, loc: loc, networks: networks)
         case .contract(let address, let name):
             // A noun — the record is of something done (083 F3 review).
             return partyFact(loc.t("tokenDetail.labelContract"), address, name, loc: loc)
@@ -478,11 +485,18 @@ enum FlowsLive {
     }
 
     /// The network, with its mark — as the transfer detail draws it.
-    private static func chainFact(_ chainId: Int, loc: Loc) -> FactRowModel {
-        guard let chain = ChainCatalog.meta(chainId) else {
+    private static func chainFact(_ chainId: Int, loc: Loc, networks: WalletNetworks) -> FactRowModel {
+        guard let chain = networks.meta(chainId) else {
             return FactRowModel(label: loc.t("componentsTx.detail.labelChain"), value: String(chainId))
         }
-        return FactRowModel(
+        return networkFact(chain, loc: loc)
+    }
+
+    /// A transaction's network: its name, and the NETWORK's own mark (the
+    /// kind rule) — never its coin's. ETH sent on Base is "Base" beside
+    /// Base's logo.
+    private static func networkFact(_ chain: ChainMeta, loc: Loc) -> FactRowModel {
+        FactRowModel(
             label: loc.t("componentsTx.detail.labelChain"),
             value: chain.displayName,
             lead: .token(TokenMarkModel.chain(
@@ -555,9 +569,10 @@ enum FlowsLive {
         feed: FeedViewWire?,
         display: WalletLive.Display,
         on model: TokenDetailModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> TokenDetailModel {
-        let chain = ChainCatalog.meta(token.chainId)?.displayName ?? ""
+        let chain = networks.meta(token.chainId)?.displayName ?? ""
         var facts: [FactRowModel] = []
         if let price = token.priceUsd {
             facts.append(FactRowModel(
@@ -623,13 +638,18 @@ enum FlowsLive {
     /// sent to the drawn address is money gone. Until this landed, 收款 showed
     /// `WalletFixtures.identity` — somebody else's address entirely — beside a
     /// code drawn from a demo pattern.
+    ///
+    /// Every network the wallet has — the core's list, the person's own
+    /// networks included (a row's index is its place in `networks.chains`,
+    /// which is the list the tap is looked up in).
     static func receiveList(
         _ address: String,
         on model: ReceiveListModel,
-        loc: Loc
+        loc: Loc,
+        networks wallet: WalletNetworks = .builtin
     ) -> ReceiveListModel {
         guard !address.isEmpty else { return model }
-        let networks = ChainCatalog.chains
+        let networks = wallet.chains
         var live = model
         live.address = address
         live.subtitle = loc.t("receive.networksLine", vars: ["count": String(networks.count)])
@@ -813,15 +833,20 @@ enum FlowsLive {
     static func addToken(
         _ view: MtokViewWire,
         on model: AddTokenModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> AddTokenModel {
         let found = view.found.first
         var live = model
         live.network = found.map { card in
             AddTokenNetworkModel(
-                mark: TokenMarkModel(ticker: card.symbol,
-                                     badgeColor: SettingsLive.mark(chainId: card.chainId,
-                                                                  name: card.networkName).color),
+                // The NETWORK the token was found on, in the network's own
+                // mark (the kind rule) — it drew the TOKEN's ticker, as letters.
+                mark: TokenMarkModel.chain(
+                    chainId: card.chainId,
+                    symbol: networks.meta(card.chainId)?.nativeSymbol ?? card.networkName,
+                    color: SettingsLive.mark(chainId: card.chainId, name: card.networkName).color
+                ),
                 name: card.networkName,
                 pickLabel: model.network?.pickLabel ?? ""
             )
@@ -877,10 +902,16 @@ enum FlowsLive {
         }
         guard let card = view.found.first else { return .none }
         return .token(
-            mark: TokenMarkModel(
-                ticker: card.symbol,
-                badgeColor: SettingsLive.mark(chainId: card.chainId,
-                                              name: card.networkName).color
+            // The token's own logo, by the contract the person typed — the
+            // web's and Android's card. A card exists only for a contract
+            // the probe found, so the address is never the native coin's
+            // nil; one the rule cannot place gets letters and its badge.
+            mark: TokenMarkModel.of(
+                chainId: card.chainId,
+                symbol: card.symbol,
+                tokenAddress: view.addressValid
+                    ? view.inputAddress.trimmingCharacters(in: .whitespaces) : "",
+                color: SettingsLive.mark(chainId: card.chainId, name: card.networkName).color
             ),
             name: card.name,
             detail: "\(card.symbol) · \(loc.t("tokenDetail.labelDecimals")) \(card.decimals)"

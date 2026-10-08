@@ -39,6 +39,11 @@ final class HybridCableScanner: NSObject, CBCentralManagerDelegate, CBPeripheral
     private var openCont: CheckedContinuation<CBL2CAPChannel, Error>?
     private var connectWatchdog: Task<Void, Never>?
     private var connectingPeripheral: CBPeripheral?
+    /// `cancel()` was called. One scanner serves one ceremony, so a cancel
+    /// that lands between two of its steps still ends it: a scan or a
+    /// connect asked for afterwards finds the flag rather than waiting out
+    /// its own timeout (issue #459).
+    private var cancelled = false
 
     override init() {
         super.init()
@@ -50,6 +55,7 @@ final class HybridCableScanner: NSObject, CBCentralManagerDelegate, CBPeripheral
     // MARK: scan
 
     func findResponder(qrSecret: Data, timeoutMs: Int) async -> AdvertHit? {
+        if cancelled { return nil }
         self.qrSecret = qrSecret
         return await withCheckedContinuation { (cont: CheckedContinuation<AdvertHit?, Never>) in
             self.scanCont = cont
@@ -128,6 +134,7 @@ final class HybridCableScanner: NSObject, CBCentralManagerDelegate, CBPeripheral
 
     /// GATT-connect the matched peripheral and open the L2CAP CoC at `psm`.
     func openL2cap(_ hit: AdvertHit, psm: UInt16, timeoutMs: Int) async throws -> L2capCableConn {
+        if cancelled { throw CableConnError.closed }
         let p = hit.peripheral
         p.delegate = self
         connectingPeripheral = p
@@ -145,6 +152,7 @@ final class HybridCableScanner: NSObject, CBCentralManagerDelegate, CBPeripheral
             }
         }
         connectWatchdog?.cancel(); connectWatchdog = nil
+        if cancelled { throw CableConnError.closed }
         print("[vela-cable] GATT connected; opening L2CAP CoC (PSM \(psm))")
 
         let channel = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<CBL2CAPChannel, Error>) in
@@ -190,8 +198,16 @@ final class HybridCableScanner: NSObject, CBCentralManagerDelegate, CBPeripheral
         }
     }
 
+    /// Stop whatever this scanner is doing — the scan, a connect, an L2CAP
+    /// open — and fail what waits on it now rather than at its timeout. A
+    /// dismissed code (issue #459) and the ceremony's own cleanup both end
+    /// here.
     func cancel() {
+        cancelled = true
         finishScan(nil)
+        connectWatchdog?.cancel(); connectWatchdog = nil
+        if let cont = connectCont { connectCont = nil; cont.resume(throwing: CableConnError.closed) }
+        if let cont = openCont { openCont = nil; cont.resume(throwing: CableConnError.closed) }
         if let p = connectingPeripheral { central.cancelPeripheralConnection(p) }
     }
 }

@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  The fee row, its expanded fee-token selector, and the signer row — the
-//  three things that sit between the last block and the slide, in that order
+//  three things that sit between the last block and the confirm, in that order
 //  on every scenario.
 //
 
@@ -38,7 +38,7 @@ struct SigningFeeView: View {
         case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 onchainBody(label: label, value: value, selector: selector, tappable: tappable)
-                // Issue #262: the reason the slide below is shut, said where
+                // Issue #262: the reason the confirm below is shut, said where
                 // the fix is — and spec 079's "the service cannot be reached,
                 // it will be asked again".
                 if let warning {
@@ -79,8 +79,7 @@ struct SigningFeeView: View {
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Button { onPick(option.id) } label: {
                             HStack(spacing: Tokens.Space.s12) {
-                                LetterAvatarView(letter: option.mark.letter, tint: option.mark.tint,
-                                                 size: Tokens.Space.s32)
+                                TokenIconView(mark: option.mark)
                                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                                     Text(verbatim: option.name)
                                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -114,7 +113,7 @@ struct SigningFeeView: View {
                                 .typeRole(Typography.rowSub.scaled(textScale))
                                 .foregroundStyle(theme.errorBase)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .padding(.leading, Tokens.Space.s8 + Tokens.Space.s32 + Tokens.Space.s12)
+                                .padding(.leading, Tokens.Space.s8 + WalletGeometry.rowIcon + Tokens.Space.s12)
                                 .padding(.trailing, Tokens.Space.s8)
                                 .padding(.bottom, Tokens.Space.s4)
                                 .accessibilityIdentifier("signing.fee.option.reason")

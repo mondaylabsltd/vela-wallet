@@ -490,6 +490,32 @@ struct SendHoldingsAndFeesTests {
         #expect(tokens.compactMap { $0["symbol"] as? String } == ["xDAI", "ODD"])
     }
 
+    /// Each coin carries its logo candidates into the send machine — the
+    /// core copies them into the records and the receipt, so a send made on
+    /// this phone still wears its coins' logos when any shell opens it. They
+    /// were empty.
+    @Test func everyHoldingCarriesItsLogoCandidates() {
+        let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+        let view = BalanceViewWire(
+            address: golden,
+            displayTotalUsd: 1, balanceUnknown: false, balancePartial: false,
+            notice: nil, hidden: false, refreshing: false, lastRefreshedAtMs: nil,
+            tokens: [
+                BalanceTokenWire(chainId: 100, symbol: "xDAI", name: "xDAI", balance: "1",
+                                 decimals: 18, tokenAddress: nil, priceUsd: 1, spam: false),
+                BalanceTokenWire(chainId: 100, symbol: "USDC", name: "USD Coin", balance: "1",
+                                 decimals: 6, tokenAddress: usdc, priceUsd: 1, spam: false),
+            ],
+            unpricedTokens: [], failedChainIds: [], rateLimitedChainIds: [],
+            holdingsLoading: false, cachedTotalUsd: nil,
+            switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
+        )
+        let urls = SendExecutor.sendTokens(view).map { $0["logo_urls"] as? [String] ?? [] }
+        #expect(urls[0] == [Marks.chainLogoURL(100)].compactMap { $0 }, "xDAI wears Gnosis's logo")
+        #expect(urls[1] == Marks.token(chainId: 100, symbol: "USDC", tokenAddress: usdc).logoUrls)
+        #expect(urls[1].count == 2, "checksummed, then lowercase")
+    }
+
     /// A flow opened before the asset list settled for this account waits for
     /// the first round — streaming what has arrived — instead of "could not
     /// load".

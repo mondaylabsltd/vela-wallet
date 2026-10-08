@@ -192,6 +192,27 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// Issue #466: `SendView` carries the relay stop's report. The key is
+    /// always on the wire (null with no stop up), and a report decodes whole —
+    /// title line, steps, the core's area and its stable fingerprint.
+    @Test func theSendViewCarriesTheRelayReport() throws {
+        var object = try CoreJSON.object(SendCore().view())
+        #expect(object.keys.contains("relay_report"), "the core sends the key")
+        #expect(try CoreJSON.decode(SendViewWire.self, from: object).relayReport == nil)
+
+        object["relay_report"] = [
+            "what": "Relayer out of gas on Unichain (130)\nHas 0 ETH of its 0.0001 ETH floor.",
+            "steps": "1. Send on Unichain\n2. Continue",
+            "area": "Send",
+            "fingerprint": "relay-gas-130",
+        ]
+        let report = try #require(try CoreJSON.decode(SendViewWire.self, from: object).relayReport)
+        #expect(report.area == "Send")
+        #expect(report.fingerprint == "relay-gas-130")
+        #expect(report.what.hasPrefix("Relayer out of gas on Unichain (130)"))
+        #expect(report.steps.contains("Continue"))
+    }
+
     /// The bridge's three methods behave the way `CoreDriver` assumes.
     ///
     /// Property 2 of the driver's contract: resolving an effect id the bridge

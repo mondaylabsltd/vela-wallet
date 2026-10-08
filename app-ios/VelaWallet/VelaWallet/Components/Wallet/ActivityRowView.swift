@@ -109,10 +109,10 @@ struct ActivityRowView: View {
                         .foregroundStyle(model.kind == .received ? theme.successBase : theme.fgBase)
                 }
             if let url = model.badgeLogoURL {
-                RemoteLogoView(urls: [url], size: WalletGeometry.badge) {
+                RemoteLogoView(urls: [url], size: WalletGeometry.badgeLogo) {
                     Circle().fill(model.badgeColor)
                 }
-                .padding(WalletGeometry.badgeRing)
+                .padding(WalletGeometry.badgeLogoRingWidth)
                 .background(Circle().fill(theme.bgBase))
             } else {
                 ChainBadgeDot(color: model.badgeColor)

@@ -91,7 +91,7 @@ enum SendLive {
 
     static func pick(
         _ view: SendViewWire, on model: SendPickModel, picking: Bool = false,
-        classFilter: String = "all", loc: Loc
+        classFilter: String = "all", loc: Loc, networks: WalletNetworks = .builtin
     ) -> SendPickModel {
         // Which class of token is on screen. The CORE lists every holding —
         // which subset a person is looking at is a render decision, like the
@@ -121,22 +121,21 @@ enum SendLive {
             //
             // The core's own `添加该网络` affordance has no drawn home on this
             // client; recorded in results rather than invented.
-            notice: lockNotice(view, loc: loc) ?? requestNotice(view, loc: loc)
-                ?? (picking && view.multiChainId != nil
-                ? SendNoticeModel(
-                    mark: model.notice?.mark
-                        ?? TokenMarkModel(
-                            ticker: "",
-                            badgeColor: chainColor(view.multiChainId ?? 0)
-                        ),
-                    text: loc.t("send.multiSendSummary", vars: [
-                        "n": String(view.multiSelectedIds.count),
-                        "chain": view.multiChainId
-                            .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
-                    ])
-                )
-                : nil),
-            rows: shown.map(assetRow),
+            notice: lockNotice(view, loc: loc, networks: networks)
+                ?? requestNotice(view, loc: loc, networks: networks)
+                ?? (picking ? view.multiChainId.map { chainId in
+                    SendNoticeModel(
+                        // The chain the sweep is locked to, in the network's
+                        // own mark (the kind rule) — never the drawing's
+                        // Ethereum, never a blank disc.
+                        mark: networkMark(chainId, networks: networks),
+                        text: loc.t("send.multiSendSummary", vars: [
+                            "n": String(view.multiSelectedIds.count),
+                            "chain": networks.meta(chainId)?.displayName ?? "",
+                        ])
+                    )
+                } : nil),
+            rows: shown.map { assetRow($0, networks: networks) },
             selection: picking ? SendSelectionModel(
                 selected: shown.map { view.multiSelectedIds.contains($0.id) },
                 // A row on a chain the pick has left behind is drawn dimmed and
@@ -168,17 +167,27 @@ enum SendLive {
     /// Issue #312: the network a scanned code named, in the receive card's own
     /// words ("BNB Chain payments only"). Above an empty list it is also why
     /// the list is empty.
-    static func requestNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+    static func requestNotice(
+        _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> SendNoticeModel? {
         guard let chainId = view.requestChainId else { return nil }
-        let meta = ChainCatalog.meta(chainId)
         return SendNoticeModel(
-            mark: TokenMarkModel.chain(
-                chainId: chainId, symbol: meta?.nativeSymbol ?? "", color: chainColor(chainId)
-            ),
+            mark: networkMark(chainId, networks: networks),
             text: loc.t("receive.shareCardNetworkNote", vars: [
-                "network": meta?.displayName ?? "Chain \(chainId)",
+                "network": networks.meta(chainId)?.displayName ?? "Chain \(chainId)",
             ])
         )
+    }
+
+    /// A NETWORK in a line of text — a notice that locks a chain, the
+    /// confirm's Network row: its own logo over its coin's letters, never a
+    /// badge, never its coin's logo (the kind rule: ETH on Base is Base's
+    /// logo here). `nil` for a chain the wallet cannot name, which has no
+    /// letters to fall back on — no mark rather than an empty disc.
+    static func networkMark(_ chainId: Int, networks: WalletNetworks) -> TokenMarkModel? {
+        guard let chain = networks.meta(chainId) else { return nil }
+        return TokenMarkModel.chain(chainId: chainId, symbol: chain.nativeSymbol,
+                                    color: chainColor(chainId))
     }
 
     /// Issue #332: the picker's "To" line — the recipient the core already
@@ -290,17 +299,24 @@ enum SendLive {
     /// `lock_error` is a field the core has always computed and this client was
     /// not reading: a code for a chain the wallet does not have put the send
     /// flow into a stage with nothing drawn on it at all.
-    static func lockNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+    ///
+    /// A notice about a NETWORK wears that network's mark — when the wallet
+    /// can name it; a code for a chain it does not have gets none. One about
+    /// a token, or about an add-network attempt, names no network and wears
+    /// no mark: these were an empty grey disc.
+    static func lockNotice(
+        _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> SendNoticeModel? {
         switch view.lockError {
         case .network(let chainId):
             return SendNoticeModel(
-                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(chainId)),
+                mark: networkMark(chainId, networks: networks),
                 text: "\(loc.t("send.lock.netTitle")) · "
                     + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)])
             )
         case .token:
             return SendNoticeModel(
-                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                mark: nil,
                 text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
             )
         case nil:
@@ -308,30 +324,21 @@ enum SendLive {
             // person asked for something and it did not happen.
             switch view.addNetworkMsg {
             case .netNotFound:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netNotFound")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotFound"))
             case .netNotCompatible:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netNotCompatible")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotCompatible"))
             case .netAddError:
-                return SendNoticeModel(
-                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
-                    text: loc.t("send.lock.netAddError")
-                )
+                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netAddError"))
             case nil:
                 return nil
             }
         }
     }
 
-    private static func assetRow(_ token: SendTokenWire) -> AssetRowModel {
+    private static func assetRow(_ token: SendTokenWire, networks: WalletNetworks) -> AssetRowModel {
         AssetRowModel(
             ticker: token.symbol,
-            chain: ChainCatalog.meta(token.chainId)?.displayName ?? token.network,
+            chain: networks.meta(token.chainId)?.displayName ?? token.network,
             badgeColor: chainColor(token.chainId),
             // The asset list's own formatter (`WalletLive.trimBalance`): the
             // picker lists the same holdings, so it prints them the same way.
@@ -339,7 +346,22 @@ enum SendLive {
             // The picker's job is to choose an asset, so the row states the
             // holding. A priced row's fiat line is the home's business.
             fiat: token.priceUsd == nil ? .noPrice("") : .value(""),
-            masked: false
+            masked: false,
+            // The coin's own mark, as the home's row draws the same holding:
+            // its logo, and the badge only where it would not repeat it. With
+            // none, the row fell back to the drawing's letters and an
+            // always-on dot — BNB on BNB Chain as "BNB" with a yellow dot.
+            mark: coinMark(token)
+        )
+    }
+
+    /// A held coin's mark: the core's rule on its chain, contract and the
+    /// logo URLs the core already named for it.
+    static func coinMark(_ token: SendTokenWire) -> TokenMarkModel {
+        TokenMarkModel.of(
+            chainId: token.chainId, symbol: token.symbol,
+            tokenAddress: token.tokenAddress, color: chainColor(token.chainId),
+            named: token.logoUrls
         )
     }
 
@@ -359,7 +381,8 @@ enum SendLive {
         display: WalletLive.Display,
         on model: SendFormModel,
         loc: Loc,
-        speed: SpeedInputs? = nil
+        speed: SpeedInputs? = nil,
+        networks: WalletNetworks = .builtin
     ) -> SendFormModel {
         var live = model
         let token = view.selectedToken
@@ -377,10 +400,7 @@ enum SendLive {
         live.token = token.map { held in
             SendTokenCardModel(
                 // The held token's own logo (058), with its lettermark behind.
-                mark: TokenMarkModel.of(
-                    chainId: held.chainId, symbol: held.symbol,
-                    tokenAddress: held.tokenAddress, color: chainColor(held.chainId)
-                ),
+                mark: coinMark(held),
                 symbol: held.symbol,
                 // "Gnosis · Balance 0.53097" — labelled, as the other shells
                 // say it, and formatted by the very call the asset list's row
@@ -467,10 +487,7 @@ enum SendLive {
                     ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
                 }
                 return SweepRowModel(
-                    mark: TokenMarkModel.of(
-                        chainId: token.chainId, symbol: token.symbol,
-                        tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
-                    ),
+                    mark: coinMark(token),
                     symbol: token.symbol,
                     balanceLabel: "\(WalletLive.tokenAmountText(token.balance)) \(token.symbol)",
                     // **No spec, no figure.** Falling back to the balance would
@@ -564,7 +581,8 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed),
+            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
+                        networks: networks),
             speed: speed.map { speedModel($0, view: view, display: display, loc: loc) },
             cta: stopRetry(view, loc: loc) ?? live.cta,
             // While the pre-check is out the button is busy, not unfinished.
@@ -676,7 +694,8 @@ enum SendLive {
 
     private static func feeRow(
         _ fallback: FeeRowModel, view: SendViewWire, fee: FeeViewWire?,
-        display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil
+        display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil,
+        networks: WalletNetworks = .builtin
     ) -> FeeRowModel {
         let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
         // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): on
@@ -695,14 +714,12 @@ enum SendLive {
         let waiting = busy ? loc.t("send.estimatingFee") : "—"
         return FeeRowModel(
             label: fallback.label,
-            // The fee is paid on THIS chain. The drawing's mark was ETH, which
-            // is the wrong badge on every network but one.
-            mark: view.fee.map { estimate in
-                TokenMarkModel.of(
-                    chainId: estimate.chainId, symbol: feeTicker(estimate),
-                    color: chainColor(estimate.chainId)
-                )
-            } ?? fallback.mark,
+            // The fee is paid on THIS chain, in THIS coin. The drawing's mark
+            // was ETH, which is the wrong coin on every network but one —
+            // and it stood in whenever no estimate was in hand ("ETH" on a
+            // BNB Chain send whose quote had failed).
+            mark: feeCoinMark(view, fee: fee, networks: networks)
+                ?? TokenMarkModel(ticker: "", badgeColor: fallback.mark.badgeColor, badgeHidden: true),
             value: ofAnotherTier ? loc.t("send.estimatingFee") : (text ?? waiting),
             openLabel: fallback.openLabel,
             refreshLabel: speed.map { _ in loc.t("send.feeRefresh") },
@@ -726,15 +743,6 @@ enum SendLive {
     /// A tier's NAME — the speed itself, never a number.
     static func tierName(_ tier: String, loc: Loc) -> String {
         loc.t("send.gasTier.\(offered(tier))")
-    }
-
-    /// …and what it buys, the line under the name.
-    private static func tierHint(_ tier: String, loc: Loc) -> String {
-        switch offered(tier) {
-        case "standard": loc.t("send.gasTierHintStandard")
-        case "slow": loc.t("send.gasTierHintSlow")
-        default: loc.t("send.gasTierHintFast")
-        }
     }
 
     /// The folded speed control (spec 068), drawn from the `fee_speed` core's
@@ -762,7 +770,6 @@ enum SendLive {
                 FeeSpeedOptionModel(
                     id: option.tier,
                     label: tierName(option.tier, loc: loc),
-                    detail: tierHint(option.tier, loc: loc),
                     // "…" while this tier's own quote is out, "—" when there is
                     // none to be had.
                     value: option.fee.map { feeLine($0, view: view, fee: speed.feeView(option.tier), display: display) }
@@ -852,11 +859,25 @@ enum SendLive {
         return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
-    /// The symbol the fee is charged in.
-    private static func feeTicker(_ estimate: FeeEstimateWire) -> String {
-        switch estimate.feeAsset {
-        case .native: return ChainCatalog.meta(estimate.chainId)?.nativeSymbol ?? ""
-        case .erc20(_, _, _, let symbol): return symbol ?? "TOKEN"
+    /// The coin the fee row names, in its own mark: the estimate's coin
+    /// (the one in hand, else the fee session's), on the send's chain — an
+    /// ERC-20 by its CONTRACT, which the row used to leave out, so a USDC fee
+    /// would have worn the chain's logo by the native-coin rule. With no
+    /// estimate yet, or none at all, the chain's own coin: what the web and
+    /// the desktop draw. `nil` only with no chain to name (no token chosen).
+    static func feeCoinMark(
+        _ view: SendViewWire, fee: FeeViewWire?, networks: WalletNetworks
+    ) -> TokenMarkModel? {
+        let estimate = view.fee ?? fee?.fee
+        guard let chainId = view.selectedToken?.chainId ?? view.multiChainId ?? estimate?.chainId
+        else { return nil }
+        let native = networks.meta(chainId)?.nativeSymbol ?? ""
+        switch estimate?.feeAsset {
+        case .erc20(let contract, _, _, let symbol)?:
+            return TokenMarkModel.of(chainId: chainId, symbol: symbol ?? "TOKEN",
+                                     tokenAddress: contract, color: chainColor(chainId))
+        case .native?, nil:
+            return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
         }
     }
 
@@ -924,17 +945,23 @@ enum SendLive {
         on model: SendConfirmModel,
         loc: Loc,
         fee: FeeViewWire? = nil,
-        speed: FeeSpeedViewWire? = nil
+        speed: FeeSpeedViewWire? = nil,
+        networks: WalletNetworks = .builtin
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
         let symbol = token?.symbol ?? ""
-        let chain = token.map { ChainCatalog.meta($0.chainId)?.displayName ?? $0.network } ?? ""
+        let chain = token.map { networks.meta($0.chainId)?.displayName ?? $0.network } ?? ""
+        // The network the signature moves money on: a sweep's locked chain,
+        // else the token's. Never 0.
+        let networkChainId = (view.multiSelectMode ? view.multiChainId : nil) ?? token?.chainId
 
         var facts = [
+            // Who pays, with the face every other shell draws beside it.
             FactRowModel(
                 label: model.facts.first?.label ?? "",
-                value: from.name ?? AddressText.short(from.address)
+                value: from.name ?? AddressText.short(from.address),
+                lead: isAddress(from.address) ? .identicon(from.address) : nil
             ),
             // Who is paid, as the core names them (spec 097 F): a single send
             // and a sweep alike. A split's has no one payee and goes below.
@@ -943,9 +970,12 @@ enum SendLive {
                 address: view.recipient.trimmingCharacters(in: .whitespaces),
                 payee: singlePayee(view), loc: loc
             ),
+            // The NETWORK, in the network's own mark (the kind rule): "Base"
+            // beside Base's logo, whatever coin is sent on it.
             FactRowModel(
                 label: model.facts.count > 2 ? model.facts[2].label : "",
-                value: chain
+                value: networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain,
+                lead: networkChainId.flatMap { networkMark($0, networks: networks) }.map { .token($0) }
             ),
             FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
@@ -1062,6 +1092,7 @@ enum SendLive {
                 : view.treasuryBootstrap != nil
                     ? loc.t("componentsUi.funding.cancel")
                     : nil,
+            noticeReport: reportLabel(view, loc: loc),
             repeatNote: confirmRepeatNote(view, loc: loc),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
@@ -1117,10 +1148,7 @@ enum SendLive {
             if let usd { total += usd }
             let value = "\(WalletLive.tokenAmountText(amount)) \(token.symbol)"
             return BreakdownRowModel(
-                lead: TokenMarkModel.of(
-                    chainId: token.chainId, symbol: token.symbol,
-                    tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
-                ),
+                lead: coinMark(token),
                 label: token.symbol,
                 value: usd.map { "\(value) · ≈\(money($0, display: display))" } ?? value
             )
@@ -1220,6 +1248,27 @@ enum SendLive {
             copy: loc.t("componentsUi.treasuryBootstrap.copyBtn"),
             copied: loc.t("componentsUi.treasuryBootstrap.copied")
         )
+    }
+
+    /// Issue #466: "Report this" on either relay stop — shown exactly while
+    /// the core built a report for it (`relay_report`: a stop up on a network
+    /// Vela ships, whose operator is the one to tell). The words are the
+    /// stop's own key; what the button files is the core's.
+    static func reportLabel(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.relayReport != nil else { return nil }
+        if view.relayUnreachable != nil { return loc.t("componentsUi.relayUnreachable.reportBtn") }
+        if view.treasuryBootstrap != nil { return loc.t("componentsUi.treasuryBootstrap.reportBtn") }
+        return nil
+    }
+
+    /// What "Report this" files, snapshotted at the tap: the core's words,
+    /// area and fingerprint. The stop closes itself once the relay is funded,
+    /// and a watch refresh rewrites its figures — the sheet keeps what the
+    /// person was shown when they asked.
+    static func reportSeed(_ view: SendViewWire) -> BugReport.Seed? {
+        guard let report = view.relayReport else { return nil }
+        return BugReport.Seed(what: report.what, steps: report.steps,
+                              area: report.area, fingerprint: report.fingerprint)
     }
 
     static func stopRetry(_ view: SendViewWire, loc: Loc) -> String? {
@@ -1457,13 +1506,18 @@ enum SendLive {
         // Several coins (spec 097 F): one coin — a single send, a split, or a
         // sweep whose native line the gas reserve dropped — is the title's.
         if coins.count > 1 {
-            let chainId = view.multiChainId ?? view.selectedToken?.chainId ?? 0
+            // The sweep's chain — never 0. With none (a receipt read back
+            // with no send in hand), the coins' own named logos and no badge.
+            let chainId = view.multiChainId ?? view.selectedToken?.chainId
             let rows = coins.map { coin in
                 BreakdownRowModel(
-                    lead: TokenMarkModel.of(
-                        chainId: chainId, symbol: coin.symbol, tokenAddress: coin.tokenAddress,
-                        color: chainColor(chainId), named: coin.logoUrls
-                    ),
+                    lead: chainId.map { chainId in
+                        TokenMarkModel.of(
+                            chainId: chainId, symbol: coin.symbol, tokenAddress: coin.tokenAddress,
+                            color: chainColor(chainId), named: coin.logoUrls
+                        )
+                    } ?? TokenMarkModel(ticker: coin.symbol, badgeColor: chainColor(0),
+                                        logoURLs: coin.logoUrls, badgeHidden: true),
                     label: coin.symbol,
                     value: "\(WalletLive.tokenAmountText(coin.amount)) \(coin.symbol)"
                 )
@@ -1499,13 +1553,20 @@ enum SendLive {
 
     // MARK: - SD2F, the fee-token sheet
 
-    static func feeSheet(_ fee: FeeViewWire, on model: FeeTokenPickModel, loc: Loc) -> FeeTokenPickModel {
+    /// `chainId` is the SEND's chain (its token's, or the sweep's) — the
+    /// estimate's is absent while a quote is out or after one failed, and
+    /// "absent" used to be chain 0: every ERC-20 asked `assets/eip155-0` and
+    /// every badge `eip155-0.png`, so the sheet was letters and grey dots.
+    static func feeSheet(
+        _ fee: FeeViewWire, on model: FeeTokenPickModel, loc: Loc, chainId: Int? = nil
+    ) -> FeeTokenPickModel {
+        let chain = chainId ?? fee.fee?.chainId
         let rows = fee.options.map { option in
             FeeTokenRowModel(
-                mark: TokenMarkModel.of(
-                    chainId: fee.fee?.chainId ?? 0, symbol: option.symbol,
-                    tokenAddress: option.contract, color: chainColor(fee.fee?.chainId ?? 0)
-                ),
+                mark: chain.map { chain in
+                    TokenMarkModel.of(chainId: chain, symbol: option.symbol,
+                                      tokenAddress: option.contract, color: chainColor(chain))
+                } ?? TokenMarkModel(ticker: option.symbol, badgeColor: chainColor(0), badgeHidden: true),
                 symbol: option.symbol,
                 balanceLabel: trim(fromBase(option.balance, decimals: option.decimals)),
                 fee: option.amount.map { "~\(trim(fromBase($0, decimals: option.decimals))) \(option.symbol)" } ?? "—",
@@ -1671,8 +1732,8 @@ enum SendLive {
     ) -> ContactPickModel {
         // The person's own groups — the drawing's two were a picture that did
         // nothing when tapped. A tap ADDS the group's members to the form
-        // (`append_split_recipients`), so the order here is the order the
-        // shell indexes into: `book.groups`.
+        // (`append_split_recipients`), named by the group's id and each person
+        // by their address (issue #467) — never by a place in the list.
         let swatches = ChainCatalog.chains.map { chainColor($0.chainId) }
         return ContactPickModel(
             title: model.title,
@@ -1682,6 +1743,7 @@ enum SendLive {
             groupsTitle: model.groupsTitle,
             groups: book.groups.enumerated().map { index, group in
                 ContactGroupModel(
+                    id: group.id,
                     name: group.name,
                     count: loc.t("contacts.groupMembers", vars: ["count": String(group.members.count)]),
                     // Two discs from the chain palette — decoration, not
@@ -1699,10 +1761,27 @@ enum SendLive {
                     group: book.groups.first { group in
                         group.members.contains { $0.address == contact.address }
                     }?.name,
+                    address: contact.address,
                     addressDisplay: AddressText.short(contact.address),
                     identiconSeed: contact.address
                 )
             }
+        )
+    }
+
+    /// The picker while the book is still being read: the drawn chrome —
+    /// title, search, the scan row — and nobody in it. Never the drawing's
+    /// people (issue #467).
+    static func contactSheetReading(on model: ContactPickModel) -> ContactPickModel {
+        ContactPickModel(
+            title: model.title,
+            closeLabel: model.closeLabel,
+            searchPlaceholder: model.searchPlaceholder,
+            scanRow: model.scanRow,
+            groupsTitle: model.groupsTitle,
+            groups: [],
+            contactsTitle: model.contactsTitle,
+            contacts: []
         )
     }
 

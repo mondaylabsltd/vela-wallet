@@ -33,7 +33,8 @@ final class HybridCeremony {
     /// must not say "create").
     private let showQr: @MainActor (String?, Bool) -> Void
 
-    @MainActor private var scanner: HybridCableScanner?
+    /// The ceremony in flight, if one is: its scanner and its cancel state.
+    @MainActor private var attempt: Attempt?
 
     init(prompts: SmartCardCtapCeremony.Prompts, showQr: @escaping @MainActor (String?, Bool) -> Void) {
         self.prompts = prompts
@@ -45,6 +46,42 @@ final class HybridCeremony {
         let staticSeed: Data
         let qrSecret: Data
     }
+
+    /// One ceremony's own cancel state (issue #459), made fresh by every
+    /// `run`: a dismissal ends THIS ceremony and never the next one —
+    /// recovery's second signature, or an immediate retry.
+    @MainActor
+    private final class Attempt {
+        let scanner = HybridCableScanner()
+        /// The person dismissed the code, or "look at your phone".
+        var cancelled = false
+        /// The tunnel while it opens: closing it ends that wait.
+        var tunnel: WebSocketCableConn?
+        /// The channel the ceremony talks over: closing it fails the
+        /// ceremony thread's blocked read.
+        var port: CableConnPort?
+    }
+
+    /// The person dismissed the code — swiped it away, tapped outside, or
+    /// pressed Cancel — or, once their phone connected, "look at your phone"
+    /// (issue #459). THIS ceremony ends as `PasskeyFailure(.cancelled)`, which
+    /// the core takes quietly (sign-in goes idle, create returns to its keys)
+    /// — instead of scanning on for 90 s into "your other device didn't
+    /// connect". With no ceremony in flight it does nothing: a cancel never
+    /// reaches the next one.
+    @MainActor func cancel() {
+        guard let attempt, !attempt.cancelled else { return }
+        print("[vela-cable] dismissed — ending this ceremony")
+        attempt.cancelled = true
+        attempt.scanner.cancel()
+        attempt.tunnel?.close()
+        attempt.port?.close()
+    }
+
+    /// What a dismissed ceremony throws. Never the coroutine-style
+    /// cancellation of the task: the core must be ANSWERED, or sign-in stays
+    /// busy for good.
+    static let dismissed = PasskeyFailure(kind: .cancelled, message: "The code was dismissed")
 
     func register(
         name: String,
@@ -112,20 +149,23 @@ final class HybridCeremony {
         // `showQr(nil)` from signature one wiped signature two's fresh QR off
         // the screen; the undismantled GATT link from a BLE ceremony likewise
         // fouled the next scan (device-found 2026-08-28).
-        let scanner = await MainActor.run { () -> HybridCableScanner in
-            let s = HybridCableScanner()
-            self.scanner = s
-            return s
+        let attempt = await MainActor.run { () -> Attempt in
+            let fresh = Attempt()
+            self.attempt = fresh
+            return fresh
         }
+        let scanner = attempt.scanner
         await MainActor.run { showQr(qr, !forGet) }
 
         var openPort: CableConnPort?
+        let outcome: T
         do {
             print("[vela-cable] QR on screen; scanning for the phone's advert…")
             guard let hit = await scanner.findResponder(
                 qrSecret: session.qrSecret,
                 timeoutMs: Self.scanTimeoutMs
             ) else {
+                if attempt.cancelled { throw Self.dismissed }
                 print("[vela-cable] no advert matched within the scan window")
                 throw PasskeyFailure(
                     kind: .other,
@@ -149,16 +189,24 @@ final class HybridCeremony {
                 ), let url = URL(string: urlString) else {
                     throw PasskeyFailure(kind: .other, message: "the phone's advertisement named an unknown tunnel")
                 }
-                conn = try await WebSocketCableConn.connect(url: url, timeoutMs: Self.connectTimeoutMs)
+                if attempt.cancelled { throw Self.dismissed }
+                conn = try await WebSocketCableConn.connect(
+                    url: url, timeoutMs: Self.connectTimeoutMs,
+                    opening: { attempt.tunnel = $0 }
+                )
             }
 
             let port = await CableConnPort(conn)
             openPort = port
+            attempt.port = port
+            attempt.tunnel = nil
+            // Dismissed while the channel opened: it closes in `finish`.
+            if attempt.cancelled { throw Self.dismissed }
             let host = CableHostBridge(prompts: prompts)
             let plaintext = hit.advert.plaintext
 
             print("[vela-cable] channel up; starting the ceremony (Noise + CTAP in Rust)")
-            let outcome = try await withCheckedThrowingContinuation { continuation in
+            outcome = try await withCheckedThrowingContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
                     do {
                         continuation.resume(returning: try body(port, plaintext, host, session))
@@ -172,24 +220,33 @@ final class HybridCeremony {
                     }
                 }
             }
-            await finish(scanner: scanner, port: openPort)
-            return outcome
         } catch {
-            await finish(scanner: scanner, port: openPort)
+            await finish(attempt, port: openPort)
+            // Whatever the dismissal broke on its way out — the scan, a
+            // connect, the channel under the ceremony — it was the person
+            // saying no, not the link failing.
+            if attempt.cancelled { throw Self.dismissed }
             throw error
         }
+        await finish(attempt, port: openPort)
+        // Dismissed while the phone's answer was on its way: the person's last
+        // word wins. A signature they said no to is never used; a key the
+        // phone made in that instant is left unused, as on the desktop.
+        if attempt.cancelled { throw Self.dismissed }
+        return outcome
     }
 
     /// The one cleanup path, awaited before `run` returns on EVERY exit: clear
     /// the prompts, close the channel, and dismantle this ceremony's Bluetooth
     /// (stop the scan, drop the GATT link) so the next ceremony starts on a
     /// silent radio and a fresh screen.
-    private func finish(scanner: HybridCableScanner, port: CableConnPort?) async {
+    private func finish(_ attempt: Attempt, port: CableConnPort?) async {
         prompts.touchWaiting(kind: nil, product: "")
         port?.close()
         await MainActor.run {
-            scanner.cancel()
-            if self.scanner === scanner { self.scanner = nil }
+            attempt.tunnel?.close()
+            attempt.scanner.cancel()
+            if self.attempt === attempt { self.attempt = nil }
             self.showQr(nil, false)
         }
     }
@@ -220,8 +277,9 @@ final class HybridCeremony {
     /// The person picks up the other phone, unlocks it, approves the prompt.
     private static let scanTimeoutMs = 90_000
     private static let connectTimeoutMs = 15_000
-    /// What the touch prompt names while the OTHER phone shows its sheet.
-    private static let hybridProduct = "your phone"
+    /// What the touch prompt names while the OTHER phone shows its sheet —
+    /// and how that prompt knows it is the phone's, not a security key's.
+    static let hybridProduct = "your phone"
 }
 
 /// The CtapCeremonyHost for a phone-resident credential: no PIN, no picker

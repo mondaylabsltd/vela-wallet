@@ -136,7 +136,14 @@ final class SettingsStore {
         executor.onDappAddSettled = { [weak self] tab, id, outcome in
             self?.onDappAddSettled(tab, id, outcome)
         }
+        executor.onEndpointsWritten = { [weak self] endpoints in
+            self?.onEndpointsWritten(endpoints)
+        }
     }
+
+    /// Set by the app: Settings wrote the endpoints, and this is the stored
+    /// blob as it now reads — the logos' endpoint follows it (`Marks.adopt`).
+    var onEndpointsWritten: (_ endpoints: [String: Any]) -> Void = { _ in }
 
     /// Boot the default-speed machine. App-wide and idempotent, like the
     /// currency: the send form's folded control shows THIS, not a hardcoded

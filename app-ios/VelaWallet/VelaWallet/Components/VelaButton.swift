@@ -42,10 +42,7 @@ struct VelaButton: View {
 
     var body: some View {
         Button {
-            // A press whose visible result is a system sheet several hundred
-            // ms away needs an answer in the same instant the finger lands.
-            VelaHaptic.press.play()
-            action()
+            Self.pressed(action)
         } label: {
             if loading, let busyTitle {
                 HStack(spacing: Tokens.Space.s8) {
@@ -66,6 +63,15 @@ struct VelaButton: View {
         // The label is hidden behind the spinner while busy; the button still
         // answers to its own name.
         .accessibilityLabel(loading ? (busyTitle ?? title) : title)
+    }
+
+    /// One tap: the press the finger feels, then the action — once each. A
+    /// press whose visible result is a system sheet several hundred ms away
+    /// (the signing confirm's passkey prompt) needs an answer in the same
+    /// instant the finger lands.
+    static func pressed(_ action: () -> Void) {
+        VelaHaptic.press.play()
+        action()
     }
 
     /// The spinner grows with the words (v3 B4): small at the standard sizes,

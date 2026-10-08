@@ -2,8 +2,8 @@
 //  IssueFixesDeviceTests.swift
 //  VelaWalletUITests
 //
-//  Issues #444, #445, #446, #449 and #450, looked at on a real phone — each
-//  one a thing a person SEES, which no hermetic test can say.
+//  Issues #444, #445, #446, #449, #450 and #459, looked at on a real phone —
+//  each one a thing a person SEES, which no hermetic test can say.
 //
 //      xcodebuild test -project app-ios/VelaWallet/VelaWallet.xcodeproj \
 //        -scheme VelaWallet -destination 'platform=iOS,id=<device>' \
@@ -152,6 +152,42 @@ final class IssueFixesDeviceTests: XCTestCase {
         let close = element(labelled: "关闭", in: app)
         if close.waitForExistence(timeout: 3) { close.tap() }
         settle(1.5)
+        app.terminate()
+    }
+
+    /// #459 — Phone or tablet, then the person changes their mind: Cancel,
+    /// and separately a swipe down, takes the code away at once, Welcome's
+    /// buttons work again, and no "your other device didn't connect" sheet
+    /// follows. Leave the code UNSCANNED while this runs.
+    func testADismissedPhoneCodeCancelsQuietly() throws {
+        let app = launch(page: nil)
+        for exit in ["cancel", "swipe"] {
+            toSignInMethods(app)
+            tap(element(labelled: "手机或平板", in: app))
+            let cancel = app.buttons["cable.cancel"]
+            XCTAssertTrue(cancel.waitForExistence(timeout: 15), "the phone's code has no Cancel")
+            settle(1.5)
+            attach(app.screenshot(), named: "459-code-\(exit)")
+
+            if exit == "cancel" {
+                cancel.tap()
+            } else {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+            }
+            XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the code stayed up after \(exit)")
+            // Long enough for a phone-link sheet to have come back, were the
+            // scan still running into one.
+            settle(5)
+            attach(app.screenshot(), named: "459-after-\(exit)")
+            XCTAssertFalse(
+                app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "另一台设备")).firstMatch.exists,
+                "a dismissed code was blamed on the link"
+            )
+            if app.buttons["我已有钱包"].exists {
+                XCTAssertTrue(app.buttons["我已有钱包"].isEnabled, "Welcome is still busy after \(exit)")
+            }
+        }
         app.terminate()
     }
 
