@@ -3030,6 +3030,43 @@ export function canonicalizeSignature(sig) {
 }
 
 /**
+ * `{base}/chainlogos/eip155-{chainId}.png` on the person's chain-data
+ * endpoint ("" = the built-in one); `undefined` for chain 0, which names no
+ * network.
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @returns {string | undefined}
+ */
+export function chainLogoUrl(ethereum_data_url, chain_id) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.chainLogoUrl(ptr0, len0, chain_id);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * A NETWORK drawn as itself, a `MarkView` (`remote_mark::chain_mark`): its
+ * own logo, never a badge.
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @param {string} native_symbol
+ * @returns {any}
+ */
+export function chainMark(ethereum_data_url, chain_id, native_symbol) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(native_symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.chainMark(ptr0, len0, chain_id, ptr1, len1);
+    return ret;
+}
+
+/**
  * @param {string} address_hex
  * @returns {string}
  */
@@ -5034,6 +5071,31 @@ export function toQuantity(value) {
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
+}
+
+/**
+ * A COIN's mark, a `MarkView` (`remote_mark::token_mark`):
+ * `ethereumDataUrl` is the person's chain-data endpoint ("" = the built-in
+ * one), `tokenAddress` `undefined`/`null` for the chain's native coin, `named`
+ * the logo URLs an index already gave (tried first).
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @param {string} symbol
+ * @param {string | null | undefined} token_address
+ * @param {string[]} named
+ * @returns {any}
+ */
+export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, named) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(token_address) ? 0 : passStringToWasm0(token_address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArrayJsValueToWasm0(named, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.tokenMark(ptr0, len0, chain_id, ptr1, len1, ptr2, len2, ptr3, len3);
+    return ret;
 }
 
 /**
