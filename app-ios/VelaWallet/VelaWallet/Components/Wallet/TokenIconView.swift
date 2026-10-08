@@ -58,10 +58,10 @@ struct TokenIconView: View {
         if mark?.badgeHidden == true {
             EmptyView()
         } else if let url = mark?.badgeLogoURL {
-            RemoteLogoView(urls: [url], size: WalletGeometry.badge) {
+            RemoteLogoView(urls: [url], size: WalletGeometry.badgeLogo) {
                 Circle().fill(badgeColor)
             }
-            .padding(WalletGeometry.badgeRing)
+            .padding(WalletGeometry.badgeLogoRingWidth)
             .background(Circle().fill(theme.bgBase))
         } else {
             ChainBadgeDot(color: badgeColor)

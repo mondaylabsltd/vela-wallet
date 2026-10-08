@@ -155,6 +155,18 @@ struct MarksTests {
         #expect(usdc.glyph == "USD")
     }
 
+    /// The badge that carries a chain's logo is one size on all four shells
+    /// (the 2026-10-08 ruling): 16 across with a 1.5 ring, the logo 13 inside
+    /// it — the web's `.badge.with-logo`, Android's and the desktop's. It was
+    /// a 12 logo in a 2 ring here.
+    @Test func theLogoBadgeIsSixteenWithAOneAndAHalfRing() {
+        #expect(WalletGeometry.badgeLogoRing == 16)
+        #expect(WalletGeometry.badgeLogoRingWidth == 1.5)
+        #expect(WalletGeometry.badgeLogo == 13)
+        #expect(WalletGeometry.badgeLogo + 2 * WalletGeometry.badgeLogoRingWidth
+                == WalletGeometry.badgeLogoRing)
+    }
+
     /// Settings' endpoint write reaches whoever the app named to hear it,
     /// with the stored blob as it now reads — which is how the logos follow a
     /// changed 服务节点 without a relaunch. Nothing here touches `Marks.base`.
