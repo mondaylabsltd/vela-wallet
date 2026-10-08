@@ -874,6 +874,23 @@ export function feeRequoteTimeoutMs(): number;
 export function feeSignalsCacheTtlMs(): number;
 
 /**
+ * The core's compact relative time — `"now"`, `"2m"`, `"3h"`, a short
+ * weekday under a week, else the date — spelt with the words the caller
+ * holds (`I18n::format_relative_time`'s rule, `format_relative_time_with`).
+ *
+ * For the web client, which carries no catalog: `now` / `minutes` /
+ * `hours` are `time.now`, `time.minutesShort` and `time.hoursShort` as the
+ * prerendered messages hold them (`{{n}}` in place); `language` the page's
+ * locale, which names the weekday. `ts_seconds` is the moment in WHOLE
+ * SECONDS (`Math.floor(atMs / 1000)` — milliseconds there read as the
+ * future, which is "now"); `now_ms` the clock; `utc_offset_minutes` what to
+ * add to UTC for local time (`-new Date(atMs).getTimezoneOffset()`);
+ * `date_format` the person's preset as stored (`resolvedFormatKeys().date`),
+ * `auto` already resolved.
+ */
+export function formatRelativeTime(ts_seconds: number, now_ms: number, utc_offset_minutes: number, date_format: string, language: string, now: string, minutes: string, hours: string): string;
+
+/**
  * A signed balance change from signed base units, or `undefined` for zero
  * or unreadable text: the token ladder, dust written exactly (never `−0`),
  * U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
@@ -1558,6 +1575,7 @@ export interface InitOutput {
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
+    readonly formatRelativeTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly formatSignedTokenAmount: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
