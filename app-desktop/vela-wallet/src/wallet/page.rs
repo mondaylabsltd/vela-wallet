@@ -16460,9 +16460,12 @@ impl WalletPage {
             let host = self.signing_host.as_ref()?.read(cx);
             let (method, params) = host.raw.clone();
             let result = host.clear_view.result.as_ref();
-            let summary = result
-                .and_then(|result| result.contract_name.clone())
-                .map(SharedString::from);
+            let first_party = host
+                .view
+                .request
+                .as_ref()
+                .is_some_and(|request| request.first_party);
+            let summary = crate::signing::live::tech_summary(&host.clear_view, first_party);
             let party = result.and_then(|result| {
                 let address = result.contract_address.clone()?;
                 let name = result
@@ -16650,14 +16653,18 @@ impl WalletPage {
             model.dapp_name = name;
             model.dapp_host = dapp_host;
             model.dapp_letter = letter;
-            // The wallet's own request (the key backup) is not a site: its own
-            // mark and name, and no host. A site gets its own icon over its
+            // The wallet's own request (the key backup) is not a site, and the
+            // core says which it is (`first_party`, set where the shell raised
+            // it) — never this file reading the transport or the bytes. It has
+            // no requester header at all. A site gets its own icon over its
             // initial — https only, never over a channel anybody could answer on.
-            let own = host.transport_id == crate::wallet::signing_host::WALLET_TRANSPORT;
-            model.dapp_own = own;
+            let own = host
+                .view
+                .request
+                .as_ref()
+                .is_some_and(|request| request.first_party);
+            model.first_party = own;
             if own {
-                model.dapp_name = gpui::SharedString::from("Vela Wallet");
-                model.dapp_host = gpui::SharedString::default();
                 // Matched on the VERIFIED registry address, never on "it is ours"
                 // alone and never on the English words: the first look at this
                 // column headed a plain self-transfer "备份公钥".
@@ -16781,7 +16788,7 @@ impl WalletPage {
                     .flex()
                     .flex_col()
                     .gap(px(16.))
-                    .child(signing_components::header_view(theme, &header))
+                    .children(signing_components::header_view(theme, &header))
                     .child(card);
             }
             if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
@@ -16827,11 +16834,13 @@ impl WalletPage {
             });
         #[cfg(target_os = "linux")]
         let confirm_action: Option<panels::Click> = None;
+        // The wallet's own request draws no header — and no gap where it was:
+        // its intent, the headline below, is the first thing in the column.
         let mut column = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(signing_components::header(theme, &model));
+            .children(signing_components::header(theme, &model));
 
         // The allowance cards that are controls, in the order the blocks list
         // them: the single approval's, then each batch leg's. Each carries its
@@ -16965,7 +16974,7 @@ impl WalletPage {
                     window,
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
-                (model.dapp_own, item)
+                (model.first_party, item)
             {
                 // The wallet's own request has no figure to lead with — its
                 // intent IS the outcome, so it is the headline rather than the
@@ -18035,6 +18044,9 @@ impl WalletPage {
             &receipt.title,
             &receipt.captions,
         );
+        // The wallet's own request has no header here either: its receipt
+        // is centred in the whole column, as one with no header is.
+        let header = header.and_then(|header| signing_components::header_view(theme, header));
         // Centred in what is left of the column, as the web's `.receipt`
         // (`min-height: 100%; justify-content: center`).
         let reserved = if header.is_some() { 190. } else { 120. };
@@ -18142,7 +18154,7 @@ impl WalletPage {
                 .flex()
                 .flex_col()
                 .gap(px(16.))
-                .child(signing_components::header_view(theme, header))
+                .child(header)
                 .child(body),
             None => body,
         }

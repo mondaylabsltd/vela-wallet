@@ -2001,6 +2001,24 @@ pub fn dapp_identity(origin: &str) -> (SharedString, SharedString, SharedString)
     )
 }
 
+/// What "Technical details" names as the thing it folds: the contract being
+/// called — except on the wallet's own request (`first_party`), where
+/// "· Vela passkey registry" named a contract to somebody who asked nobody,
+/// and the toggle is the bare "Technical details". The registry still shows,
+/// by name and address, once the section is open.
+#[must_use]
+pub fn tech_summary(clear: &ClearSigningView, first_party: bool) -> Option<SharedString> {
+    if first_party {
+        return None;
+    }
+    clear
+        .result
+        .as_ref()?
+        .contract_name
+        .clone()
+        .map(SharedString::from)
+}
+
 /// The words on the slide, as the core graded them.
 ///
 /// `Confirm` is never "Approve" — the core's own note says that verb belongs
@@ -2122,6 +2140,44 @@ mod tests {
             intent_term: None,
             terms_off_chain: false,
         }
+    }
+
+    /// The wallet's own key backup as the REAL core reads it: the registry's
+    /// `register` call (the core's own fixture — the bytes the backup
+    /// replays) on `chain_id`, which needs nothing fetched.
+    fn registry_backup_reading(chain_id: u32) -> ClearSigningView {
+        use vela_core::app::clear_signing::{ClearLocale, Event};
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex"
+        );
+        let hex = std::fs::read_to_string(path).unwrap_or_else(|e| unreachable!("{path}: {e}"));
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let ops = host.dispatch(Event::ResolveTransaction {
+            to: Some(vela_core::registry_backup::REGISTRY.to_owned()),
+            data: Some(format!("0x{}", hex.trim())),
+            value: Some("0x0".to_owned()),
+            chain_id,
+            locale: ClearLocale::default(),
+        });
+        assert!(ops.is_empty(), "the backup reads with nothing to fetch");
+        host.view()
+    }
+
+    /// "Technical details" names the contract it folds — but not on the
+    /// wallet's own request, where "· Vela passkey registry" names a contract
+    /// to somebody who asked nobody. The same reading from a site keeps it:
+    /// first-party is the request's fact, never the bytes'.
+    #[test]
+    fn the_wallets_own_request_folds_its_details_under_the_bare_toggle() {
+        let backup = registry_backup_reading(1);
+        assert_eq!(tech_summary(&backup, true), None);
+        assert_eq!(
+            tech_summary(&backup, false).as_deref(),
+            Some("Vela passkey registry"),
+            "a site sending the same bytes still sees whose contract it is"
+        );
     }
 
     fn view(result: ClearSignResult) -> ClearSigningView {

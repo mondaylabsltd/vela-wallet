@@ -177,8 +177,10 @@ pub struct SigningModel {
     pub dapp_tint: Hsla,
     pub network_name: SharedString,
     pub network_dot: Hsla,
-    /// The wallet asking ITSELF (the key backup): its own mark and name, no host.
-    pub dapp_own: bool,
+    /// The wallet asking ITSELF (the key backup) — the core's
+    /// `SignRequestView.first_party`, never read off the request's bytes: no
+    /// requester header, and the intent leads as the headline.
+    pub first_party: bool,
     /// The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19).
     pub dapp_icon_urls: Vec<SharedString>,
     /// The chain's logo; the dot shows until it lands, and when there is none.
@@ -296,7 +298,7 @@ fn base(
         dapp_tint: dapp.tint,
         network_name: "Ethereum".into(),
         network_dot: chain_ethereum(),
-        dapp_own: false,
+        first_party: false,
         dapp_icon_urls: Vec::new(),
         network_logo: None,
         blocks,

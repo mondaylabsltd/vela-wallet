@@ -42,7 +42,10 @@ pub struct HeaderModel {
     pub dapp_host: SharedString,
     pub dapp_letter: SharedString,
     pub dapp_tint: Hsla,
-    pub dapp_own: bool,
+    /// The wallet asked itself (the core's `SignRequestView.first_party`):
+    /// there is no requester to name, so no header is drawn at all — the
+    /// column's scaffold already says what this is and owns the ✕.
+    pub first_party: bool,
     pub dapp_icon_urls: Vec<SharedString>,
     pub network_name: SharedString,
     pub network_dot: Hsla,
@@ -57,7 +60,7 @@ impl HeaderModel {
             dapp_host: model.dapp_host.clone(),
             dapp_letter: model.dapp_letter.clone(),
             dapp_tint: model.dapp_tint,
-            dapp_own: model.dapp_own,
+            first_party: model.first_party,
             dapp_icon_urls: model.dapp_icon_urls.clone(),
             network_name: model.network_name.clone(),
             network_dot: model.network_dot,
@@ -66,53 +69,51 @@ impl HeaderModel {
     }
 }
 
-/// The dApp header: who is asking, and on which network.
-pub fn header(theme: &Theme, model: &SigningModel) -> Div {
+/// The dApp header: who is asking, and on which network — `None` for the
+/// wallet's own request ([`HeaderModel::first_party`]).
+pub fn header(theme: &Theme, model: &SigningModel) -> Option<Div> {
     header_view(theme, &HeaderModel::of(model))
 }
 
 /// The header from its facts alone.
-pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
+///
+/// `None` when the wallet asked itself (the key backup): no app mark, no
+/// "Vela Wallet", no network chip. The column's scaffold already titles the
+/// request and owns the ✕, so nothing is drawn in the header's place — the
+/// caller adds it with `.children(…)`, which leaves no gap where it was. The
+/// network the request is on is the reading's first row instead (the core's
+/// backup reading names it).
+pub fn header_view(theme: &Theme, model: &HeaderModel) -> Option<Div> {
+    if model.first_party {
+        return None;
+    }
     let label = vela_core::app::browser_load::site_label(&model.dapp_name, &model.dapp_host);
-    div()
+    // The site's own icon over its initial: a picture that fails to load
+    // draws nothing, so the letter beneath is what stays.
+    let mut mark = div()
+        .relative()
+        .size(px(36.))
+        .flex_none()
+        .child(letter_avatar(
+            model.dapp_letter.clone(),
+            model.dapp_tint,
+            36.,
+        ));
+    for url in model.dapp_icon_urls.iter().rev() {
+        mark = mark.child(
+            gpui::img(url.clone())
+                .absolute()
+                .top_0()
+                .left_0()
+                .size(px(36.))
+                .rounded_full(),
+        );
+    }
+    let header = div()
         .flex()
         .items_center()
         .gap(px(12.))
-        .child(if model.dapp_own {
-            // The wallet asking itself: its own mark, never a letter on a disc.
-            div()
-                .size(px(36.))
-                .flex_none()
-                .rounded_full()
-                .bg(theme.bg_sunken)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(crate::ui::vela_mark(theme, px(22.)))
-        } else {
-            // The site's own icon over its initial: a picture that fails to load
-            // draws nothing, so the letter beneath is what stays.
-            let mut mark = div()
-                .relative()
-                .size(px(36.))
-                .flex_none()
-                .child(letter_avatar(
-                    model.dapp_letter.clone(),
-                    model.dapp_tint,
-                    36.,
-                ));
-            for url in model.dapp_icon_urls.iter().rev() {
-                mark = mark.child(
-                    gpui::img(url.clone())
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size(px(36.))
-                        .rounded_full(),
-                );
-            }
-            mark
-        })
+        .child(mark)
         .child(
             div()
                 .flex()
@@ -176,7 +177,8 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
                         .text_color(theme.fg_base)
                         .child(model.network_name.clone()),
                 ),
-        )
+        );
+    Some(header)
 }
 
 /// The intent as the sheet's headline (issue #314): a request with no figure
@@ -1330,3 +1332,30 @@ pub fn reset_slide() {
 }
 
 use super::fixtures::ChipState;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loc::Loc;
+    use crate::signing::SigningStrings;
+    use crate::theme::ThemeMode;
+
+    /// The wallet's own request draws no requester header — no app mark, no
+    /// "Vela Wallet", no network chip — on the form and on its receipt; the
+    /// column's scaffold already titles it and owns the ✕. A site's request
+    /// always names the site.
+    #[test]
+    fn only_a_site_gets_a_requester_header() {
+        let theme = Theme::of(ThemeMode::Light);
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let mut model = super::super::fixtures::build("cs1", &s);
+        assert!(header(&theme, &model).is_some(), "a site names itself");
+        assert!(header_view(&theme, &HeaderModel::of(&model)).is_some());
+        model.first_party = true;
+        assert!(header(&theme, &model).is_none(), "the form draws none");
+        assert!(
+            header_view(&theme, &HeaderModel::of(&model)).is_none(),
+            "nor does the receipt the column ends on"
+        );
+    }
+}
