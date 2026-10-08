@@ -6,10 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { rawResolve, resolveExploreMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { pluralForm } from '$lib/i18n/plural';
 import {
 	buildDesktopState,
 	buildMobileState,
 	DESKTOP_STATES,
+	fill,
 	MOBILE_STATES,
 	SITES
 } from './fixtures';
@@ -17,9 +19,12 @@ import {
 const IDENTICON_STUB = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const messages = resolveExploreMessages('zh');
 
+/** The plural keys: no bare value, a form per category the locale has. */
+const PLURAL_KEYS = ['siteCount'];
+
 /** Every corpus key this layer names, derived from the resolver's own output. */
 const EXPLORE_KEYS = Object.keys(resolveExploreMessages('en')).filter(
-	(k) => k !== 'nav' && k !== 'closeLabel'
+	(k) => k !== 'nav' && k !== 'closeLabel' && !PLURAL_KEYS.includes(k)
 );
 
 describe('explore messages', () => {
@@ -29,6 +34,29 @@ describe('explore messages', () => {
 			expect(value, `explore.${key} in ${locale}`).not.toBe(`explore.${key}`);
 			expect(value.trim()).not.toBe('');
 		}
+		// A plural key ships every form the locale has, each counting.
+		const forms = resolveExploreMessages(locale).siteCount.forms;
+		expect(Object.keys(forms)).toContain('_other');
+		for (const [suffix, form] of Object.entries(forms)) {
+			expect(form, `explore.siteCount${suffix} in ${locale}`).toContain('{{count}}');
+		}
+	});
+
+	// "explore.siteCount" became plural forms with {{count}}: one site is not
+	// "1 sites", and Russian's 2–4 is not its 5.
+	it('counts sites in the form the count takes', () => {
+		const count = (locale: Parameters<typeof resolveExploreMessages>[0], n: number) =>
+			fill(pluralForm(resolveExploreMessages(locale).siteCount, n), { count: String(n) });
+		expect(count('en', 1)).toBe('1 site');
+		expect(count('en', 8)).toBe('8 sites');
+		expect(count('ru', 1)).toBe('1 сайт');
+		expect(count('ru', 3)).toBe('3 сайта');
+		expect(count('ru', 8)).toBe('8 сайтов');
+		expect(count('zh', 8)).toBe('8 个网站');
+		// The E3 board's Favorites row reads its eight sites that way too.
+		const row = buildMobileState('e3', resolveExploreMessages('ru'), IDENTICON_STUB).menus
+			.groupManage.rows[0];
+		expect(row.meta).toBe('8 сайтов');
 	});
 });
 

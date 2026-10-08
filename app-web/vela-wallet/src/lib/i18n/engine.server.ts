@@ -27,6 +27,7 @@ import type { SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
+import type { PluralCopy } from './plural';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
 const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
@@ -749,6 +750,21 @@ export function resolveWalletFlowMessages(locale: Locale): WalletFlowMessages {
 	) as WalletFlowMessages;
 }
 
+/**
+ * A plural key as the forms `locale` has — the core's categories for it, the
+ * same set `resolveFlowMessages` ships — for a screen that knows the count
+ * only when it draws (`pluralForm`).
+ */
+function pluralCopy(locale: Locale, key: string): PluralCopy {
+	activate(locale);
+	return {
+		locale,
+		forms: Object.fromEntries(
+			i18nPluralSuffixes(locale).map((suffix) => [suffix, t(locale, `${key}${suffix}`)])
+		)
+	};
+}
+
 /** Direct engine access for the differential test only. */
 export function rawResolve(locale: Locale, key: string): string {
 	activate(locale);
@@ -839,7 +855,7 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 		delete: k('explore.delete'),
 		openInNewTab: k('explore.openInNewTab'),
 		removeFromFavorites: k('explore.removeFromFavorites'),
-		siteCount: k('explore.siteCount'),
+		siteCount: pluralCopy(locale, 'explore.siteCount'),
 		tabs: k('explore.tabs'),
 		newTab: k('explore.newTab'),
 		startPage: k('explore.startPage'),
