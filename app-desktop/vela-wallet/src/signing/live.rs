@@ -1768,12 +1768,19 @@ pub fn fee_model(
                             )
                         };
                         FeeTokenOption {
-                            mark: (
-                                SharedString::from(
-                                    option.symbol.chars().take(1).collect::<String>(),
+                            // The send flow's fee-coin mark, on the REQUEST's
+                            // chain: the coin's logo (a native coin wears its
+                            // own chain's) over the drawn ticker.
+                            mark: crate::flows::fixtures::TokenMark {
+                                ticker: SharedString::from(option.symbol.clone()),
+                                badge: crate::flows::live::chain_tint(chain_id),
+                                logos: crate::marks::token_logos(
+                                    chain_id,
+                                    &option.symbol,
+                                    option.contract.as_deref(),
+                                    &[],
                                 ),
-                                crate::flows::live::chain_tint(chain_id),
-                            ),
+                            },
                             name: SharedString::from(option.symbol.clone()),
                             balance: SharedString::from(format!(
                                 "{} {}",
@@ -4170,6 +4177,88 @@ mod fee_tests {
             }
             _ => unreachable!("an open fee row lists its coins"),
         }
+    }
+
+    /// The fee coins wear their own marks — the send flow's fee-coin sheet's,
+    /// on the REQUEST's chain — not a letter on a disc: USDC and USDT were
+    /// both "U". A native coin wears its own chain's logo (ETH on Base is
+    /// still Ethereum's, with Base as the badge), a token its endpoint logo
+    /// with the lowercase path second, and the drawn ticker stays beneath as
+    /// the fallback.
+    #[test]
+    fn the_fee_coins_wear_their_own_logos() {
+        crate::executor::storage::tests::with_temp_state("signing-fee-marks", || {
+            let s = strings();
+            let clear =
+                crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new()
+                    .view();
+            let usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+            let usdt = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+            let fee = quoted(
+                vec![
+                    option("ETH", None, false, true),
+                    option("USDC", Some(usdc), false, false),
+                    option("USDT", Some(usdt), false, false),
+                ],
+                true,
+            );
+            let options = |chain_id: u32| match fee_model(
+                &clear,
+                &fee,
+                chain_id,
+                true,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            ) {
+                FeeModel::OnChain {
+                    selector: Some((_, options)),
+                    ..
+                } => options,
+                _ => unreachable!("an open fee row lists its coins"),
+            };
+            let mainnet = options(1);
+            let tickers: Vec<&str> = mainnet.iter().map(|o| o.mark.ticker.as_ref()).collect();
+            assert_eq!(
+                tickers,
+                ["ETH", "USDC", "USDT"],
+                "the glyph under each logo"
+            );
+            let eth = &mainnet[0].mark.logos;
+            assert!(
+                eth.logo_urls[0].ends_with("/chainlogos/eip155-1.png"),
+                "{eth:?}"
+            );
+            assert!(eth.badge_hidden, "ETH on Ethereum: no badge repeating it");
+            let usdc_logos = &mainnet[1].mark.logos;
+            assert!(
+                usdc_logos.logo_urls[0].ends_with(
+                    "/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png"
+                ),
+                "{usdc_logos:?}"
+            );
+            assert!(
+                usdc_logos.logo_urls[1].ends_with(&format!("/assets/eip155-1/{usdc}/logo.png")),
+                "the lowercase path is the second candidate"
+            );
+            assert!(!usdc_logos.badge_hidden);
+            assert_ne!(
+                mainnet[1].mark.logos, mainnet[2].mark.logos,
+                "USDC and USDT are two coins, not one \"U\""
+            );
+            let base = options(8453);
+            let eth_on_base = &base[0].mark.logos;
+            assert!(eth_on_base.logo_urls[0].ends_with("/chainlogos/eip155-1.png"));
+            assert!(!eth_on_base.badge_hidden);
+            assert!(
+                eth_on_base
+                    .badge_logo
+                    .as_ref()
+                    .is_some_and(|badge| badge.ends_with("/chainlogos/eip155-8453.png")),
+                "the request's chain is the badge"
+            );
+        });
     }
 
     /// Issue #408, as reported: 0 ETH and 0.754189 USDT against ~0.001334 ETH

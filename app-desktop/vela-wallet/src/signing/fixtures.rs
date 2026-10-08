@@ -122,7 +122,11 @@ pub enum Block {
 }
 
 pub struct FeeTokenOption {
-    pub mark: Mark,
+    /// The coin's own mark — the send flow's fee-coin sheet's: its logo from
+    /// the chain-data endpoint over the drawn ticker, the request's chain as
+    /// the badge. It was a letter on a tinted disc, so USDC and USDT were the
+    /// same "U".
+    pub mark: crate::flows::fixtures::TokenMark,
     pub name: SharedString,
     pub balance: SharedString,
     pub fee: SharedString,
@@ -229,6 +233,17 @@ pub const ALL_STATES: [&str; 35] = [
 
 fn mark(letter: &'static str, hex: u32) -> Mark {
     (letter.into(), rgb(hex).into())
+}
+
+/// A fee coin's mark as the drawings show it: the ticker glyph and the
+/// chain's badge colour, with no logos — the documented fallback, so the
+/// gallery never reaches the network.
+fn fee_mark(ticker: &'static str) -> crate::flows::fixtures::TokenMark {
+    crate::flows::fixtures::TokenMark {
+        ticker: ticker.into(),
+        badge: chain_ethereum(),
+        logos: crate::marks::Logos::default(),
+    }
 }
 
 fn amount(
@@ -908,7 +923,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         s.fee_token_title.clone(),
                         vec![
                             FeeTokenOption {
-                                mark: eth.clone(),
+                                mark: fee_mark("ETH"),
                                 name: "ETH".into(),
                                 balance: format!("{} 0.0689", s.fee_balance).into(),
                                 fee: "~0.0021 ETH".into(),
@@ -917,7 +932,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 reason: None,
                             },
                             FeeTokenOption {
-                                mark: usdc.clone(),
+                                mark: fee_mark("USDC"),
                                 name: "USDC".into(),
                                 balance: format!("{} 1,240.00", s.fee_balance).into(),
                                 fee: "~5.55 USDC".into(),

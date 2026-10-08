@@ -23,6 +23,11 @@ use crate::explore::components::letter_avatar;
 pub const SLIDE_H: f32 = 56.;
 pub const SLIDE_KNOB: f32 = 48.;
 
+/// Where a fee coin's shortfall reason starts: past the row's padding (8),
+/// the coin's mark (the wallet row icon, 40) and the gap (12) — under the
+/// coin's name.
+const FEE_REASON_INDENT: f32 = 8. + theme::WALLET_ROW_ICON + 12.;
+
 fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     match tone {
         Tone::Neutral => theme.fg_base,
@@ -1050,7 +1055,12 @@ pub fn fee(
                     .when(option.selected, |d| d.bg(theme.bg_raised))
                     // A coin that cannot pay is shown, dimmed, and not offered.
                     .when(option.insufficient, |d| d.opacity(0.45))
-                    .child(letter_avatar(option.mark.0.clone(), option.mark.1, 32.))
+                    .child(crate::wallet::components::token_icon_logos(
+                        theme,
+                        option.mark.ticker.as_ref(),
+                        option.mark.badge,
+                        &option.mark.logos,
+                    ))
                     .child(
                         div()
                             .flex()
@@ -1088,11 +1098,11 @@ pub fn fee(
                 ));
                 // Issue #408: why a greyed coin cannot pay, under its row and
                 // at full strength — the dimming is not a reason. Set in past
-                // the mark (8 + 32 + 12), under the name.
+                // the mark (8 + 40 + 12), under the name.
                 if let Some(reason) = option.reason.clone() {
                     col = col.child(
                         div()
-                            .pl(px(52.))
+                            .pl(px(FEE_REASON_INDENT))
                             .pr(px(8.))
                             .pb(px(4.))
                             .text_size(theme::text_row_sub())
