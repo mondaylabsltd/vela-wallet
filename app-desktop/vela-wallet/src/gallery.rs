@@ -843,4 +843,27 @@ mod tests {
             }
         }
     }
+
+    /// Issue 460, as the gallery shows it: every failure sheet's badge is
+    /// the exclamation — the red ones included — and none is a ×.
+    #[test]
+    fn no_failure_sheet_wears_a_close_glyph() {
+        use crate::outcome::BadgeVariant;
+        let loc = crate::loc::Loc::from_env();
+        let mut errors = 0;
+        for entry in entries() {
+            let Fixture::Sheet { kind, .. } = &entry.fixture else {
+                continue;
+            };
+            let badge = OutcomeKind::for_prompt(kind).spec(&loc).badge;
+            errors += usize::from(badge == BadgeVariant::Error);
+            let glyph = crate::ui::badge_glyph(badge);
+            assert!(
+                glyph.is_none_or(|glyph| glyph == "!"),
+                "`{}` draws {glyph:?}",
+                entry.code
+            );
+        }
+        assert!(errors > 0, "the gallery shows at least one red badge");
+    }
 }

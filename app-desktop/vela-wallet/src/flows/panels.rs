@@ -3562,10 +3562,23 @@ fn send_receipt(
         .child(div().flex_1().flex_grow(3.))
 }
 
+/// The glyph in the receipt hero's disc — `None` while submitting, which
+/// spins instead. A failure is an exclamation, never the ✕ that closes the
+/// sheet a few points above it (issue 460).
+fn hero_icon(stage: crate::flows::fixtures::ReceiptStage) -> Option<Icon> {
+    use crate::flows::fixtures::ReceiptStage;
+    match stage {
+        ReceiptStage::Submitting => None,
+        ReceiptStage::Submitted => Some(Icon::Clock),
+        ReceiptStage::Confirmed => Some(Icon::Check),
+        ReceiptStage::Failed => Some(Icon::Exclamation),
+    }
+}
+
 /// The receipt's centrepiece — the web's `StatusHero`: one 88 disc for all
 /// four stages, so the mark does not resize as the transaction moves — a
 /// spinner while submitting, a clock while submitted, a tick once confirmed,
-/// a cross on failure. Submitted and confirmed wear a ring OUTSIDE the disc
+/// an exclamation on failure (`hero_icon`). Submitted and confirmed wear a ring OUTSIDE the disc
 /// (104 across, 2.5 stroke): it fills as the chain's usual time passes and is
 /// the same ring that closes and turns green on the confirmation, so the tick
 /// arrives as the end of what the person was watching. Without an estimate
@@ -3587,11 +3600,9 @@ pub fn status_hero(
         ReceiptStage::Confirmed => (theme.success_soft, theme.success_base),
         ReceiptStage::Failed => (theme.error_soft, theme.error_base),
     };
-    let mark: gpui::AnyElement = match stage {
-        ReceiptStage::Submitting => crate::ui::spinner(fg, px(30.), px(1.5)),
-        ReceiptStage::Submitted => icon_img(icons, Icon::Clock, false, fg, 26.).into_any_element(),
-        ReceiptStage::Confirmed => icon_img(icons, Icon::Check, false, fg, 26.).into_any_element(),
-        ReceiptStage::Failed => icon_img(icons, Icon::X, false, fg, 26.).into_any_element(),
+    let mark: gpui::AnyElement = match hero_icon(stage) {
+        None => crate::ui::spinner(fg, px(30.), px(1.5)),
+        Some(icon) => icon_img(icons, icon, false, fg, 26.).into_any_element(),
     };
 
     // An arc of `sweep` (0–1 of a turn) from `start` (0–1, 0 = 12 o'clock),
@@ -3933,6 +3944,22 @@ fn receive_gate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 460: a failed receipt's disc holds an exclamation — the cross
+    /// is the sheet's close, and a red one in the middle read as one too.
+    #[test]
+    fn a_failed_receipt_is_an_exclamation_not_a_close() {
+        use crate::flows::fixtures::ReceiptStage;
+        assert_eq!(hero_icon(ReceiptStage::Failed), Some(Icon::Exclamation));
+        for stage in [
+            ReceiptStage::Submitting,
+            ReceiptStage::Submitted,
+            ReceiptStage::Confirmed,
+            ReceiptStage::Failed,
+        ] {
+            assert_ne!(hero_icon(stage), Some(Icon::X), "{stage:?}");
+        }
+    }
 
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
         TxDetail {

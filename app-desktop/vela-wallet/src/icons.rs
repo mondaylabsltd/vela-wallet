@@ -76,6 +76,10 @@ pub enum Icon {
     Info,
     /// Lucide `circle-alert` — the send form's refusal line (078 F-09).
     CircleAlert,
+    /// A bare exclamation, for a mark that already sits in a disc: the
+    /// receipt's failed hero (issue 460). The same two strokes as Android's
+    /// `VelaIcons.Exclamation`; a cross there read as a close button.
+    Exclamation,
     LogOut,
     ExternalLink,
     // explore + signing (spec 022; lucide v1.11.0 except `Star`, a computed
@@ -238,6 +242,7 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         Icon::CircleAlert => {
             r##"<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>"##
         }
+        Icon::Exclamation => r##"<path d="M12 6v7"/><path d="M12 17h.01"/>"##,
         Icon::LogOut => {
             r##"<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>"##
         }
@@ -367,4 +372,30 @@ pub(crate) fn rasterize(svg: &str, size: u32) -> Option<Arc<RenderImage>> {
     );
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     render_image_from_pixmap(&pixmap)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue 460's exclamation draws both of its strokes: the bar, and the
+    /// dot under it — a zero-length `h.01` that only the round cap inks.
+    #[test]
+    fn the_exclamation_draws_its_bar_and_its_dot() {
+        let svg = svg_document(Icon::Exclamation, false, "#000000");
+        let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
+            .unwrap_or_else(|_| unreachable!("the exclamation is not an SVG"));
+        let mut pixmap =
+            resvg::tiny_skia::Pixmap::new(24, 24).unwrap_or_else(|| unreachable!("a 24×24 pixmap"));
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::identity(),
+            &mut pixmap.as_mut(),
+        );
+        let alpha = |x: u32, y: u32| pixmap.pixel(x, y).map_or(0, |p| p.alpha());
+        assert!(alpha(12, 9) > 128, "the bar");
+        assert!(alpha(12, 17) > 128, "the dot");
+        assert!(alpha(12, 15) < 64, "a gap between them");
+        assert_eq!(alpha(3, 3), 0, "and nothing else");
+    }
 }
