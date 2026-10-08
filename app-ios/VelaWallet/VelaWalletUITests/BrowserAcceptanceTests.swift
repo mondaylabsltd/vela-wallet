@@ -84,7 +84,11 @@ final class BrowserAcceptanceTests: XCTestCase {
     @discardableResult
     private func connect(_ app: XCUIApplication) -> Bool {
         app.webViews.buttons["Connect"].firstMatch.tap()
-        let approve = app.buttons["批准"].firstMatch
+        // The consent sheet's primary says 连接 since its 079 redraw; 批准 is
+        // what it said before, kept so an older build still runs this.
+        let approve = app.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "连接", "批准")
+        ).firstMatch
         let asked = approve.waitForExistence(timeout: 12)
         if asked { approve.tap() }
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_requestAccounts ok"),
