@@ -55,6 +55,13 @@ enum WalletFlowGeometry {
     /// notice banner) rather than leading a row of its own.
     static let inlineMark: CGFloat = 26
 
+    /// The one diameter of every mark a fact row leads with — a network's
+    /// logo and an account's identicon alike (icon.lg, 20). A fact row is a
+    /// line of text with a hint of art; the confirm page and the transaction
+    /// detail drew the network at 26 beside identicons at 18. The web's
+    /// FactRow and Android's `FACT_MARK` draw both at 20.
+    static let factMark: CGFloat = 20
+
     /// The send form's figure, on the hero ladder the web (`AmountInput`) and
     /// the desktop (`theme::amount_hero_rung`) draw: 46 / 38 / 31 — the same
     /// three rungs the Welcome headline steps down, so the 38 and the 31 ARE
