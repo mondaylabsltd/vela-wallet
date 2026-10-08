@@ -716,11 +716,11 @@ enum SendLive {
         let waiting = busy ? loc.t("send.estimatingFee") : "—"
         return FeeRowModel(
             label: fallback.label,
-            // The fee is paid on THIS chain, in THIS coin. The drawing's mark
-            // was ETH, which is the wrong coin on every network but one —
-            // and it stood in whenever no estimate was in hand ("ETH" on a
-            // BNB Chain send whose quote had failed).
-            mark: feeCoinMark(view, fee: fee, networks: networks)
+            // The fee is paid on THIS chain, in THIS coin — the core's answer.
+            // The drawing's mark was ETH, the wrong coin on every network but
+            // one, and it stood in whenever no estimate was in hand. With no
+            // chain known there is no coin to name: an empty disc.
+            mark: feeCoinMark(view)
                 ?? TokenMarkModel(ticker: "", badgeColor: fallback.mark.badgeColor, badgeHidden: true),
             value: ofAnotherTier ? loc.t("send.estimatingFee") : (text ?? waiting),
             openLabel: fallback.openLabel,
@@ -868,51 +868,21 @@ enum SendLive {
         return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
-    /// The coin the fee row names, in its own mark — the coin that will PAY,
-    /// on the send's chain, an ERC-20 by its CONTRACT (without it a USDC fee
-    /// wore the chain's logo by the native-coin rule). `nil` only with no
-    /// chain to name (no token chosen).
+    /// The coin the fee row names, in the core's token mark — the core's
+    /// `SendView.fee_coin`, one answer on all four shells whether or not a
+    /// figure is beside it: the estimate in hand (this speed's, else the speed
+    /// just left's while a new one is measured — the coin does not change with
+    /// the speed), else the coin in force (the fee card's, mirrored by
+    /// `fee_token_changed`, else the person's pick), else the chain's own. An
+    /// ERC-20 by its CONTRACT, on the send's chain — never chain 0. `nil` only
+    /// while no chain is known.
     ///
-    /// The estimate in hand first — the send machine's, else the fee
-    /// session's — its symbol and its contract read from that SAME estimate.
-    /// The send machine keeps its estimate while a newly picked speed is
-    /// measured, and the coin does not change with the speed (the desktop's
-    /// `fee_coin`). With no estimate at all, the coin the fee session is
-    /// pricing in; only when that is nobody's choice, the chain's own coin.
-    static func feeCoinMark(
-        _ view: SendViewWire, fee: FeeViewWire?, networks: WalletNetworks
-    ) -> TokenMarkModel? {
-        let estimate = view.fee ?? fee?.fee
-        guard let chainId = view.selectedToken?.chainId ?? view.multiChainId ?? estimate?.chainId
-        else { return nil }
-        let native = networks.meta(chainId)?.nativeSymbol ?? ""
-        switch estimate?.feeAsset {
-        case .erc20(let contract, _, _, let symbol)?:
-            return TokenMarkModel.of(chainId: chainId, symbol: symbol ?? "TOKEN",
-                                     tokenAddress: contract, color: chainColor(chainId))
-        case .native?:
-            return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
-        case nil:
-            guard let coin = payingCoin(view, fee: fee, chainId: chainId) else {
-                return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
-            }
-            return TokenMarkModel.of(chainId: chainId, symbol: coin.symbol,
-                                     tokenAddress: coin.contract, color: chainColor(chainId))
-        }
-    }
-
-    /// The ERC-20 the fee session is pricing in while no estimate is in hand
-    /// — a speed being measured, a quote out — named by the session's own
-    /// row for it, else by the form's holdings. `nil` = the chain's own coin.
-    static func payingCoin(
-        _ view: SendViewWire, fee: FeeViewWire?, chainId: Int
-    ) -> (symbol: String, contract: String)? {
-        guard let contract = fee?.feeToken, !contract.isEmpty else { return nil }
-        func same(_ other: String?) -> Bool { other?.lowercased() == contract.lowercased() }
-        let symbol = fee?.options.first { same($0.contract) }?.symbol
-            ?? ([view.selectedToken].compactMap { $0 } + view.tokens)
-                .first { $0.chainId == chainId && same($0.tokenAddress) }?.symbol
-        return (symbol ?? "TOKEN", contract)
+    /// Each shell used to answer this itself while no estimate was in hand,
+    /// and a failed quote on BNB Chain with USDT chosen was drawn three ways.
+    static func feeCoinMark(_ view: SendViewWire) -> TokenMarkModel? {
+        guard let coin = view.feeCoin else { return nil }
+        return TokenMarkModel.of(chainId: coin.chainId, symbol: coin.symbol,
+                                 tokenAddress: coin.contract, color: chainColor(coin.chainId))
     }
 
     /// The core's live refusal on the form: the same-asset ceiling first, then

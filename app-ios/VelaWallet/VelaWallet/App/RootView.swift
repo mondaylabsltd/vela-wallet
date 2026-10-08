@@ -1103,6 +1103,15 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and the card's coin in force, which names the fee row's coin
+                // while no estimate is in hand (`SendView.fee_coin`).
+                .modifier(FeeTokenBridge(
+                    said: FeeTokenBridge.Said(
+                        token: fees.view?.feeToken, pricing: fees.pricingChainId,
+                        form: send.formChainId, journey: send.journey
+                    ),
+                    tell: { token, pricing in send.feeTokenChanged(token, pricing: pricing) }
+                ))
                 // Spec 069: a free upgrade is only decided while the person is
                 // still on the form, and a send already open follows a default
                 // Settings just changed. One modifier, not two `.onChange`s:
@@ -1356,6 +1365,7 @@ struct RootView: View {
                                 wallet.balance, display: WalletLive.Display.from(settings.currency)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
+                            networks: walletNetworks,
                             loc: loc
                         ),
                         loc: loc,
@@ -1388,7 +1398,7 @@ struct RootView: View {
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
-                            rateLimited: pool.rateLimitedChains, loc: loc
+                            rateLimited: pool.rateLimitedChains, loc: loc, networks: walletNetworks
                         ),
                         onChainRetry: { retryPageChain() },
                         chainRetrying: chainRetrying,
@@ -2263,13 +2273,14 @@ struct RootView: View {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
             let display = WalletLive.Display.from(settings.currency)
-            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
+                                                   networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
                                                  networks: walletNetworks)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
-                                            on: model, loc: loc)
+                                            on: model, loc: loc, networks: walletNetworks)
         }
         return model
     }
@@ -4123,6 +4134,27 @@ enum ThemeOverride {
 
 /// The two facts the speed core hears from outside the send flow (spec 069):
 /// whether the send is still on its form, and the stored default speed.
+/// The fee card's coin into the send machine (`fee_token_changed`). Watches
+/// the coin, the chain the fee session prices, the form's chain and the
+/// journey; `SendStore.feeTokenChanged` decides whether there is anything new
+/// to say. Its own modifier: the chain it sits in is at the type checker's
+/// limit.
+private struct FeeTokenBridge: ViewModifier {
+    struct Said: Equatable {
+        let token: String?
+        let pricing: Int?
+        let form: Int?
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (String?, Int?) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
+}
+
 private struct SpeedBridge: ViewModifier {
     let onForm: Bool?
     let preferred: String?

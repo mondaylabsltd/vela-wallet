@@ -1091,12 +1091,15 @@ enum SettingsLive {
     /// a rate-limited chain gets a grey line and NO button because it resolves
     /// itself, while an unreachable one gets a red line and 立即重试 because it
     /// does not; and a hidden balance stays hidden here — a person who hid the
-    /// figure did not agree to have it broken out per chain.
+    /// figure did not agree to have it broken out per chain. A network is
+    /// named from the wallet's list, the person's own included — the name the
+    /// hero and SR6 give it.
     static func withBalanceDetail(
         _ balance: BalanceViewWire,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         let mask = "••••"
@@ -1110,7 +1113,7 @@ enum SettingsLive {
         }
 
         func chainName(_ id: Int) -> String {
-            ChainCatalog.meta(id)?.displayName ?? chainMeta(loc, id)
+            networks.meta(id)?.displayName ?? chainMeta(loc, id)
         }
         func row(_ id: Int) -> ChainMarkModel {
             mark(chainId: id, name: chainName(id))
@@ -1208,15 +1211,17 @@ enum SettingsLive {
     ///
     /// The chain is the first that failed. Per-chain rather than one global
     /// button because the fix IS per chain, which is the same argument the
-    /// drawn banner makes.
+    /// drawn banner makes. Named from the wallet's list, as the SR6 row that
+    /// opens it is.
     static func withRpcFix(
         chainId: Int,
         endpoint: String,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
-        let name = ChainCatalog.meta(chainId)?.displayName ?? chainMeta(loc, chainId)
+        let name = networks.meta(chainId)?.displayName ?? chainMeta(loc, chainId)
         var live = model
         live.rpcFix = RpcFixModel(
             title: model.rpcFix.title,

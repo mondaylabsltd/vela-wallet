@@ -20,6 +20,14 @@
 //  DEBUG-only and env-gated, like every other `VELA_*` pin. It is not production
 //  navigation and there is no code path to it from the app.
 //
+//  **And simulator-only.** The seed REPLACES the whole account list, and the
+//  next launch without the pin removes that list — fine for a simulator's
+//  fixture, and a wipe of the owner's wallets on a phone. A device test that
+//  reused a simulator suite (ContactPickerAcceptanceTests, the dApp activity
+//  screenshots) would have done exactly that. On a device the pin is ignored
+//  and nothing here reads or writes the account list; the UI tests that need it
+//  skip there (`DeviceSafety`).
+//
 
 import Foundation
 
@@ -35,7 +43,7 @@ enum DevAccountSeed {
     /// `vela.accounts` on its first event and a record written after that would
     /// not be seen until a relaunch.
     static func applyIfRequested(store: VelaStore) {
-        #if DEBUG
+        #if DEBUG && targetEnvironment(simulator)
         let raw = ProcessInfo.processInfo.environment["VELA_ACCOUNT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 

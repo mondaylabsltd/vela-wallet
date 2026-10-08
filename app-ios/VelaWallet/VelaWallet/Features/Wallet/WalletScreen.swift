@@ -130,16 +130,18 @@ struct WalletScreen: View {
     /// REMOVES the thing you were looking at needs a confirmation you can feel.
     @ViewBuilder private var balanceDisplay: some View {
         if let onToggleBalance {
-            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap, onRefresh: onRefreshNow)
+            let toggle = {
+                // A switch that takes effect: Select, not a button press.
+                VelaHaptic.select.play()
+                onToggleBalance()
+            }
+            // The trait and the hint ride on the figure (`onToggle`), not on
+            // this stack: here they reached the status line and the refresh
+            // control too, and overrode what those two say.
+            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap, onRefresh: onRefreshNow,
+                           onToggle: toggle)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    // A switch that takes effect: Select, not a button press.
-                    VelaHaptic.select.play()
-                    onToggleBalance()
-                }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(Text(verbatim: model.balance.state == .hidden
-                                        ? model.balance.a11yShow : model.balance.a11yHide))
+                .onTapGesture(perform: toggle)
         } else {
             BalanceDisplay(model: model.balance, onStatusTap: onStatusTap, onRefresh: onRefreshNow)
         }
