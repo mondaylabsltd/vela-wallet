@@ -137,6 +137,46 @@ class SendLiveTest {
     }
 
     /**
+     * The fee row's coin is the one that will pay, also for the moment a newly
+     * picked speed is measured: the coin does not change with the speed. The
+     * row took its coin from the speed's own estimate — none yet — and drew
+     * no coin at all for that moment (the web drew the native coin's). The
+     * figure still says "estimating" (issue 681).
+     */
+    @Test
+    fun `the fee row keeps the paying coin while a new speed is measured`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+            val usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+            val inUsdc = fee().copy(fee_asset = FeeAssetView.Erc20(token = usdc, decimals = 6, amount = "10000", symbol = "USDC"))
+            val view = SendView(stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient, amount = "0.1", fee = inUsdc)
+            val usdcMark = WalletLive.mark(100, "USDC", usdc)
+            assertTrue(usdcMark.logoUrls.first().startsWith("https://data.example/assets/eip155-100/"))
+
+            fun row(tier: FeeTier) = SendLive.form(
+                drawn.model, view, FeeView(), ctx(),
+                SendLive.SpeedInputs(app.getvela.wallet.feature.send.core.FeeSpeedView(tier = tier, picked = true)) { null },
+            ).fee
+
+            // Fast is the estimate's own speed; Slow was just picked and is measuring.
+            val own = row(FeeTier.Fast)
+            assertTrue(own.value, own.value.endsWith(" USDC"))
+            assertEquals(usdcMark, own.mark)
+            val measuring = row(FeeTier.Slow)
+            assertEquals(strings.t(I18nKeys.Flows.FEE_ESTIMATING), measuring.value)
+            assertEquals("the coin that pays, not none and not the chain's own", usdcMark, measuring.mark)
+
+            // Nothing in hand at all: still no coin the fee may never be paid in.
+            val none = SendLive.form(drawn.model, view.copy(fee = null), FeeView(), ctx()).fee
+            assertEquals("", none.mark.ticker)
+            assertTrue(none.mark.logoUrls.isEmpty())
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
+    /**
      * Spec 098: the core opens both relay stops at Continue, while the stage is
      * still the form. Until 098 this app drew them on the confirm page only, so
      * pressing Continue into a relay with no gas did nothing anyone could see.
