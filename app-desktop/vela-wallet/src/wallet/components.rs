@@ -971,12 +971,11 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
 }
 
 fn token_glyph(theme: &Theme, ticker: &str) -> Div {
-    let glyph: String = ticker.chars().take(3).collect::<String>().to_uppercase();
     div()
         .text_size(theme::text_glyph())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_muted)
-        .child(SharedString::from(glyph))
+        .child(crate::marks::glyph(ticker))
 }
 
 /// Token icon: sunken circle with a 3-letter glyph + chain badge.

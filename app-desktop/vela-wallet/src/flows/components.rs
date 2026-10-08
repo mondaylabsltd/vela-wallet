@@ -274,13 +274,7 @@ pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
         .justify_center()
         .text_size(theme::text_label())
         .text_color(theme.fg_muted)
-        .child(SharedString::from(
-            mark.ticker
-                .chars()
-                .take(3)
-                .collect::<String>()
-                .to_uppercase(),
-        ));
+        .child(crate::marks::glyph(&mark.ticker));
     // The logo over the glyph, never instead of it (issue 201): gpui draws
     // nothing at all while a remote image is in flight, and an inline mark
     // that blinks out is worse than one that never changed.
