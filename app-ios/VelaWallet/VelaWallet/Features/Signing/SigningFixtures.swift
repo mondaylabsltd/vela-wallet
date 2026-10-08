@@ -154,8 +154,7 @@ enum SigningFixtures {
                 ],
                 tech: transferTech(loc), techOpen: state == .cs29, fee: onchainFee(loc),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -173,8 +172,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "firstTimeTag"), tone: .caution)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -192,8 +190,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "walletTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -211,8 +208,7 @@ enum SigningFixtures {
                            address: Addr.vitalik),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -240,8 +236,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
                 // Unlimited, seen and said — signable as asked.
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -265,8 +260,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -291,8 +285,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -316,8 +309,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentRevoke"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentRevoke"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -335,8 +327,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "contactTag"), tone: .neutral)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -362,8 +353,7 @@ enum SigningFixtures {
                     .warning(tone: .caution, text: a(loc, "setApprovalAllWarn")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: a(loc, "verbApproveAll"),
-                          enabled: true),
+                confirm: (action: a(loc, "verbApproveAll"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -403,8 +393,7 @@ enum SigningFixtures {
                 fee: .onchain(label: loc.t("componentsUi.gas.networkFee"), value: feeValue,
                               selector: feeSelector),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -428,8 +417,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -453,8 +441,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "simWillFail")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -477,8 +464,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmDeposit"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmDeposit"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -496,8 +482,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmWithdraw"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmWithdraw"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -524,8 +509,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -547,8 +531,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -571,8 +554,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc, summary: t(loc, "byteSize", ["n": "412"])), techOpen: false,
                 fee: .offchain(note: t(loc, "noNetworkFee")), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -592,8 +574,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -619,8 +600,7 @@ enum SigningFixtures {
                                   Addr.selfShort]),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -637,8 +617,7 @@ enum SigningFixtures {
                     .rows([SigningRow(label: t(loc, "signingFor"), value: "dapp.example.com")]),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -653,8 +632,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "ethSignWarning")),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -676,8 +654,7 @@ enum SigningFixtures {
                               note: t(loc, "blindButSimulated"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -698,8 +675,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "blindDecodeWarning", ["bytes": "4"])),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -718,8 +694,7 @@ enum SigningFixtures {
                     ]),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -748,8 +723,7 @@ enum SigningFixtures {
                               note: t(loc, "balanceMatchesHero"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -771,8 +745,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -790,8 +763,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "tokenToContractWarning")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -826,8 +798,7 @@ enum SigningFixtures {
                               note: t(loc, "bestEffortSimulated"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -854,8 +825,7 @@ enum SigningFixtures {
                               note: t(loc, "balanceMatchesHero"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -881,8 +851,7 @@ enum SigningFixtures {
                           note: "(\(t(loc, "byteSize", ["n": "132"])))"),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
         }

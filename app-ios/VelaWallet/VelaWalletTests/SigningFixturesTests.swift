@@ -4,10 +4,10 @@
 //
 //  Spec 022 gates for the signing layer.
 //
-//  Two of these are product contracts rather than style checks — the slide is
-//  the only confirmation, and an unlimited approval can never be confirmed as
-//  requested — so they are asserted here: a later refactor has to break a test
-//  to break the promise.
+//  Two of these are product contracts rather than style checks — the confirm
+//  always says what it confirms, and an unlimited approval is kept as asked
+//  only where it is said — so they are asserted here: a later refactor has to
+//  break a test to break the promise.
 //
 
 import Foundation
@@ -28,7 +28,7 @@ struct SigningFixturesTests {
             m.dapp.name, m.dapp.host, m.network.name,
             m.signer.label, m.signer.name, m.panelTitle, m.tech.title,
         ]
-        if let confirm = m.confirm { out += [confirm.hint, confirm.action] }
+        if let confirm = m.confirm { out.append(confirm.action) }
         for block in m.blocks {
             switch block {
             case .intent(let text, _): out.append(text)
@@ -95,13 +95,16 @@ struct SigningFixturesTests {
         }
     }
 
-    @Test func theSlideAlwaysSaysWhatItConfirms() {
+    /// Issue #461: the confirm is a tap on a button labelled with the action
+    /// alone — never "滑动以确认 · …", whose key the corpus no longer has.
+    @Test func theConfirmAlwaysSaysWhatItConfirms() {
         for state in SigningStateId.allCases {
             let m = model(state)
-            // Every DRAWN state offers the slide; the refusal state has no
+            // Every DRAWN state offers the confirm; the refusal state has no
             // fixture, because it is reached from the core, not the gallery.
-            #expect(m.confirm?.hint.isEmpty == false, "\(state) has no slide hint")
-            #expect(m.confirm?.action.isEmpty == false, "\(state) has no slide action")
+            let action = m.confirm?.action ?? ""
+            #expect(!action.isEmpty, "\(state) has no confirm label")
+            #expect(!action.contains("滑动") && !action.contains("·"), "\(state) still says a slide: \(action)")
         }
     }
 
@@ -116,7 +119,7 @@ struct SigningFixturesTests {
         #expect(m.blocks.contains { if case .warning(.danger, _) = $0 { true } else { false } })
     }
 
-    @Test func choosingAFiniteCapReEnablesTheSlide() {
+    @Test func choosingAFiniteCapReEnablesTheConfirm() {
         for state: SigningStateId in [.cs6, .cs8] {
             #expect(model(state).confirm?.enabled == true, "\(state) should be confirmable")
         }

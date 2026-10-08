@@ -75,17 +75,20 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
     }
 
     private func sheetOpen(_ app: XCUIApplication) -> Bool {
-        app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '滑动以确认' OR label CONTAINS[c] '签名消息' OR label CONTAINS[c] '签名账户'")).firstMatch.exists
-            || app.otherElements.containing(NSPredicate(format: "label CONTAINS[c] '滑动以确认'")).firstMatch.exists
+        app.buttons["signing.confirm"].exists
+            || app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '签名消息' OR label CONTAINS[c] '签名账户'")).firstMatch.exists
     }
 
-    /// Drags the slide (the element whose label starts "滑动以确认") to its end.
-    private func slide(_ app: XCUIApplication) {
-        let slider = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] '滑动以确认'")).firstMatch
-        guard slider.waitForExistence(timeout: 10) else { return }
-        let start = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
-        let end = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
-        start.press(forDuration: 0.15, thenDragTo: end)
+    /// Taps the sheet's confirm (issue #461: a button, by its stable hook),
+    /// once the core's gate has opened it.
+    private func confirm(_ app: XCUIApplication) {
+        let button = app.buttons["signing.confirm"]
+        guard button.waitForExistence(timeout: 10) else { return }
+        _ = XCTWaiter().wait(
+            for: [expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: button)],
+            timeout: 30
+        )
+        button.tap()
     }
 
     func testProbeTheBrowserCheckpoints() throws {
@@ -128,16 +131,16 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.webViews.buttons["Sign"].firstMatch.tap()
             Thread.sleep(forTimeInterval: 3)
         }
-        slide(app)
+        confirm(app)
         frames(app, "07-after-sign", count: 8, every: 0.5)
 
-        // A transaction: the fee row, then what follows the slide.
+        // A transaction: the fee row, then what follows the confirm.
         app.webViews.buttons["Switch to Gnosis"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 2)
         app.webViews.buttons["Send dust"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 6)
         record(app, "08-send-sheet")
-        slide(app)
+        confirm(app)
         frames(app, "09-after-send", count: 24, every: 1.5)
         // Spec 079: the ✕ is the one way out; the scrim no longer closes it.
         let close = app.buttons["关闭"].firstMatch

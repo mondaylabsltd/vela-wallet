@@ -414,9 +414,9 @@ struct FlowHost: View {
                 )
             } footer: {
                 FlowFooter {
-                    // A BUTTON, not a slider: the slider belongs to the signing
-                    // sheet, and Android 045 recorded the difference after
-                    // building the wrong one.
+                    // A BUTTON — the same primary button the signing sheet
+                    // confirms with since issue #461, so the two confirm
+                    // screens are one control.
                     VelaButton(title: m.cta, kind: .primary) {
                         if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
                     }

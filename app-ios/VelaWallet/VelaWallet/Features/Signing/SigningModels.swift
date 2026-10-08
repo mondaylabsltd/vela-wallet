@@ -175,7 +175,7 @@ struct FeeTokenOption: Identifiable {
 }
 
 enum FeeModel {
-    /// `warning` says why the slide is shut when the coin that pays is not
+    /// `warning` says why the confirm is shut when the coin that pays is not
     /// there (issue #262); it sits under the row, where the other coins are.
     /// `tappable` is whether the row can DO anything: ask a failed quote
     /// again, or open a list with more than one coin in it. With one coin and
@@ -211,14 +211,16 @@ struct SigningModel {
     /// send is a number about nothing.
     let fee: FeeModel?
     var signer: (label: String, name: String, seed: String)
-    /// The slide. There is no reject BUTTON anywhere in this vocabulary; the
-    /// header's ✕ is the explicit refusal, and since spec 079 nothing else
-    /// closes the sheet (owner ruling: no swipe rejection).
+    /// The confirm (issue #461): one tap on the shared primary button, its
+    /// label the action alone — "确认兑换", "签名", "授权", "备份公钥". There is
+    /// no reject BUTTON anywhere in this vocabulary; the header's ✕ is the
+    /// explicit refusal, and since spec 079 nothing else closes the sheet
+    /// (owner ruling: no swipe rejection).
     ///
-    /// `nil` under a refusal: a dead slide reads as an option somebody merely
+    /// `nil` under a refusal: a dead button reads as an option somebody merely
     /// failed to use, rather than one the wallet never offered.
-    let confirm: (hint: String, action: String, enabled: Bool)?
-    /// Spec 099 R7: why the slide is shut, in the core's words for the part
+    let confirm: (action: String, enabled: Bool)?
+    /// Spec 099 R7: why the confirm is shut, in the core's words for the part
     /// of the gate that is (`componentsUi.signing.confirmBlock.*`) — one line
     /// under it. `nil` while it may arm, or where the sheet says it its own way.
     var confirmBlockLine: String?
@@ -228,8 +230,8 @@ struct SigningModel {
     /// gallery, which draws no ✕.
     var closeLabel = ""
     /// Spec 079 (owner: one slide): the account signs on the Trusted Signer's
-    /// page, whose slide is the consent — the sheet's action is a button that
-    /// goes there (`confirmButtonLabel`, "去签名页确认"), not a second slide.
+    /// page, whose slide is the consent — the sheet's confirm goes there and
+    /// says so (`confirmButtonLabel`, "去签名页确认") instead of the action.
     var confirmAsButton = false
     var confirmButtonLabel = ""
     /// Spec 079: once the person has approved, the sheet stops being a form

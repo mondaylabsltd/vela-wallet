@@ -19,7 +19,8 @@ struct TrustedSignerOneSlideTests {
 
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
 
-    /// An account that signs on the page gets a button, not a second slide.
+    /// An account that signs on the page gets a confirm that goes there, not
+    /// the action's own words: the page's slide is the consent.
     @Test func anAccountThatSignsOnThePageGetsAButtonNotASecondSlide() {
         let request = SigningController.Incoming(
             id: "r1", method: "personal_sign",
@@ -42,7 +43,7 @@ struct TrustedSignerOneSlideTests {
                 clear: .empty, guard: .empty, fee: nil, context: context
             )
         }
-        #expect(!model().confirmAsButton, "a passkey account slides on the sheet")
+        #expect(!model().confirmAsButton, "a passkey account confirms on the sheet, with the action's words")
         context.trustedSignerRoute = true
         let button = model()
         #expect(button.confirmAsButton)

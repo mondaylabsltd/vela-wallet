@@ -6,7 +6,7 @@
 //
 //  The drawn model keeps only its labels. The dApp is the **host** — guessing
 //  a pretty name from a domain is exactly the counterfeit route — the blocks
-//  are the core's reading, the fee is the fee policy's, and the slide opens
+//  are the core's reading, the fee is the fee policy's, and the confirm opens
 //  only when the core's one gate says it may (`signConfirmState`, spec 099
 //  R7), with its line under it when it does not.
 //
@@ -47,8 +47,8 @@ enum SigningLive {
         /// Spec 079: the chain's usual inclusion time (the core's table,
         /// `networkTypicalInclusionS`), for the receipt's ring.
         var typicalS: Int?
-        /// Spec 079: this account signs on the Trusted Signer's page — its
-        /// slide is the one consent.
+        /// Spec 079: this account signs on the Trusted Signer's page — the
+        /// page's own slide is the one consent.
         var trustedSignerRoute = false
         /// Spec 082 RF5: the quote could not even start (the account's
         /// deployment could not be read) — the core's failure name for it,
@@ -212,7 +212,7 @@ enum SigningLive {
         /// The sheet's speed control (spec 069); `nil` draws the fee alone.
         speed: SendLive.SpeedInputs? = nil,
         /// The core's gate over these views (`SigningController.confirmState`).
-        /// `nil` — nobody asked the core — keeps the slide shut.
+        /// `nil` — nobody asked the core — keeps the confirm shut.
         gate: SignConfirmStateWire? = nil
     ) -> SigningModel {
         let loc = context.loc
@@ -300,8 +300,7 @@ enum SigningLive {
                      seed: context.walletAddress),
             confirm: refused
                 ? nil
-                : (hint: s(loc, "slideToConfirm"),
-                   action: confirmLabel(clear: clear, loc: loc),
+                : (action: confirmLabel(clear: clear, loc: loc),
                    enabled: (gate ?? .shut).enabled),
             panelTitle: s(loc, "signatureRequest")
         )
@@ -311,8 +310,8 @@ enum SigningLive {
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
-        // Spec 099 R7: a shut slide says which part of the gate is shut — the
-        // core's line for it — never a dead control with no reason.
+        // Spec 099 R7: a shut confirm says which part of the gate is shut —
+        // the core's line for it — never a dead control with no reason.
         if !refused, let gate, !gate.enabled, let key = gate.key {
             model.confirmBlockLine = loc.t(key)
         }
@@ -336,7 +335,7 @@ enum SigningLive {
     // MARK: - What the fee row draws
 
     // The GATE is the core's (`SignConfirmStateWire`, spec 099 R7): this file
-    // no longer decides whether the slide arms. The two readings below only
+    // no longer decides whether the confirm arms. The two readings below only
     // pick what the fee row DRAWS — the "no network fee" line for a message,
     // and no figure under a speed it was not priced at — and the core's gate
     // applies the same two rules (`sign_confirm::off_chain`,
@@ -1329,7 +1328,7 @@ enum SigningLive {
             : nil
         // Issue #262: the core shut the gate because the selected coin cannot
         // pay this fee — the send form's own sentence (#211), about the same
-        // shortfall. A dark slide with no reason is issue 204.
+        // shortfall. A dark confirm with no reason is issue 204.
         var warning: String?
         if let fee, fee.fee != nil, fee.noCoinPays {
             // Issue #408: and not one coin on offer can pay — the core's
@@ -1371,7 +1370,8 @@ enum SigningLive {
         return FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: fee?.busy ?? false)
     }
 
-    /// The slide's verb: the core's intent id, **in the corpus's words**.
+    /// The confirm's label (issue #461: the action alone, no "slide to"
+    /// prefix): the core's intent id, **in the corpus's words**.
     ///
     /// Printing the id raw is how Android shipped a button reading 确认send.
     static func confirmLabel(clear: ClearSigningViewWire, loc: Loc) -> String {

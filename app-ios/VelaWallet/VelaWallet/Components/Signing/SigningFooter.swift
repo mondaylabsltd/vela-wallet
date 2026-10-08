@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  The fee row, its expanded fee-token selector, and the signer row — the
-//  three things that sit between the last block and the slide, in that order
+//  three things that sit between the last block and the confirm, in that order
 //  on every scenario.
 //
 
@@ -38,7 +38,7 @@ struct SigningFeeView: View {
         case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 onchainBody(label: label, value: value, selector: selector, tappable: tappable)
-                // Issue #262: the reason the slide below is shut, said where
+                // Issue #262: the reason the confirm below is shut, said where
                 // the fix is — and spec 079's "the service cannot be reached,
                 // it will be asked again".
                 if let warning {

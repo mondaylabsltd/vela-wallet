@@ -962,11 +962,11 @@ struct SigningLiveTests {
             zh.t("componentsUi.signing.labelAmount"), zh.t("componentsUi.signing.labelSpender"), "Referral code",
         ])
         #expect(result.fields.map(\.value) == [zh.t("componentsUi.signing.valueUnlimited"), "0x1111", "abc"])
-        // The slide says the core's word for an intent it has no verb of its own for.
+        // The confirm says the core's word for an intent it has no verb of its own for.
         #expect(SigningLive.confirmLabel(clear: view, loc: zh) == zh.t("componentsUi.signing.intentApprove"))
     }
 
-    /// **The slide's verb is a corpus string, never a raw intent id.**
+    /// **The confirm's verb is a corpus string, never a raw intent id.**
     ///
     /// Android shipped a button reading 确认send — the id concatenated onto a
     /// prefix. Asserting the absence of the id would be wrong in English,
@@ -998,7 +998,7 @@ struct SigningLiveTests {
                 == zh.t("componentsUi.signing.signLabel"))
     }
 
-    /// The slide is three machines ANDed — and an **off-chain** signature has
+    /// The confirm is three machines ANDed — and an **off-chain** signature has
     /// no fee to be ready about.
     // MARK: - Spec 096 (part B): what you see is what you sign
 
@@ -1208,9 +1208,9 @@ struct SigningLiveTests {
     }
 
     /// F7: the request is still being read — the sheet says "Loading…". (The
-    /// slide staying shut under it is the core's gate since spec 099 R7:
+    /// confirm staying shut under it is the core's gate since spec 099 R7:
     /// `ConfirmGateTests`.)
-    @Test func theSlideWaitsForTheReading() {
+    @Test func theConfirmWaitsForTheReading() {
         let reading = ClearSigningViewWire(
             resolving: true, resolved: false, result: nil, message: nil,
             surface: .loading, confirm: .confirm, blindTyped: nil, dangerHaptic: false
@@ -1227,7 +1227,7 @@ struct SigningLiveTests {
     /// Spec 069: the sheet's fee card carries the send form's speed control,
     /// drawn by the same builder — and a fee left from the speed just walked
     /// away from does not show under the new one's name (issue 681). That it
-    /// does not open the slide either is the core's gate (spec 099 R7,
+    /// does not open the confirm either is the core's gate (spec 099 R7,
     /// `ConfirmGateTests`).
     @Test func theFeeCardCarriesTheSpeedControlAndNeverSignsAnotherSpeed() {
         let openGate = SignViewWire(

@@ -297,7 +297,7 @@ struct SigningFeeRetryTests {
 
     /// G48: a public node's rate limit on the deployment read is a
     /// rate-limited chain read — "retrying automatically" — never "can't
-    /// reach Vela" and never a shut slide for ever.
+    /// reach Vela" and never a shut confirm for ever.
     @Test func aRateLimitedDeploymentReadIsARateLimitedChainRead() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)

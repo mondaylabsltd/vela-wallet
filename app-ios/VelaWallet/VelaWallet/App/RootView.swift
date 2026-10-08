@@ -1354,7 +1354,7 @@ struct RootView: View {
                         // editor's chip is an event the editor does not
                         // answer, and the chip silently does nothing.
                         // Device-found: 撤销 was tapped, the sheet kept saying
-                        // 无限额, and the slide stayed shut.
+                        // 无限额, and the confirm stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
@@ -1793,7 +1793,7 @@ struct RootView: View {
                     trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
                 },
                 // The same judged view the sheet draws (`signingContext`),
-                // read at the slide for the record (spec 093).
+                // read at the confirm for the record (spec 093).
                 simView: { [trust] in trust.trust?.sim }
             )
         )

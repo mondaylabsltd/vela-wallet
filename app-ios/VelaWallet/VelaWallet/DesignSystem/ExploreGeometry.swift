@@ -30,11 +30,6 @@ enum ExploreGeometry {
     /// dApp avatar in the signing header and the chip beside it (mock CS1).
     static let signingAvatar: CGFloat = 36
     static let networkChip: CGFloat = 26
-    /// Slide-to-confirm: 342×56 track, 48 knob (mock CS1, row y=770).
-    static let slideTrack: CGFloat = 56
-    static let slideKnob: CGFloat = 48
-    /// Fraction of the track the knob must cross to commit (SPEC 动效).
-    static let slideCommit: CGFloat = 0.88
     /// The token mark beside a hero amount.
     static let tokenMark: CGFloat = 22
     /// The sail on the empty start page (mock E1).

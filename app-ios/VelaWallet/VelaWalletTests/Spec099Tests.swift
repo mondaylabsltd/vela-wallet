@@ -13,7 +13,7 @@
 //    told (timed out, rate limited, no endpoint) is the one it names;
 //  - the shell's clock reaches the record (`consent_rejected` with `now_ms`);
 //  - the tab's status line and record, in the core's words;
-//  - the signing slide's gate (`signConfirmState`) and its line;
+//  - the signing confirm's gate (`signConfirmState`) and its line;
 //  - the landing's countdown (`landingPace`), from the relay's send;
 //  - a passkey failure carries its kind, and the sheet names the signer.
 //
@@ -369,7 +369,7 @@ struct BrowserStatusTests {
     }
 }
 
-// MARK: - The signing slide's gate (FR-010)
+// MARK: - The signing confirm's gate (FR-010)
 
 @MainActor
 struct ConfirmGateTests {
@@ -421,7 +421,7 @@ struct ConfirmGateTests {
         SignConfirmStateWire.of(sign: sign, guard: guardJson, clear: clear, fee: fee, speedTier: speed)
     }
 
-    @Test func everyPartSaysYesAndTheSlideArms() throws {
+    @Test func everyPartSaysYesAndTheConfirmArms() throws {
         let state = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),
                          fee: try fee(ready: true, tier: "fast"), speed: "fast")
         #expect(state.enabled)
@@ -460,7 +460,7 @@ struct ConfirmGateTests {
         let short = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),
                          fee: try fee(ready: false, tier: "fast"), speed: "fast")
         #expect(short.block == "fee_short")
-        // Issue #438: the fee section says a short coin; the slide repeated it.
+        // Issue #438: the fee section says a short coin; the confirm repeated it.
         #expect(short.key == nil)
 
         // Issue 681: the figure is another speed's — not this one's to sign.
@@ -470,9 +470,9 @@ struct ConfirmGateTests {
         #expect(another.block == "fee_measuring")
     }
 
-    /// Spec 096 F8: a failure held on the sheet shuts the slide, and its line
+    /// Spec 096 F8: a failure held on the sheet shuts the confirm, and its line
     /// says what opens it — Try again when the core offers it, else that the
-    /// request has ended. Drawn under the slide by the sheet's model.
+    /// request has ended. Drawn under the confirm by the sheet's model.
     @Test func aHeldFailureNamesTheWayOn() throws {
         let held = { (retryable: Bool) throws -> SignConfirmStateWire in
             self.gate(
@@ -488,7 +488,7 @@ struct ConfirmGateTests {
         #expect(retry.key == "componentsUi.signing.confirmBlock.answeredRetry")
         #expect(try held(false).key == "componentsUi.signing.confirmBlock.answered")
 
-        // The sheet draws the line under the shut slide, in the person's words.
+        // The sheet draws the line under the shut confirm, in the person's words.
         let model = SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
             request: SigningController.Incoming(
@@ -505,7 +505,7 @@ struct ConfirmGateTests {
         #expect(model.confirm?.enabled == false)
         #expect(model.confirmBlockLine == loc.t("componentsUi.signing.confirmBlock.answeredRetry"))
 
-        // A view that does not read keeps the slide shut, silently.
+        // A view that does not read keeps the confirm shut, silently.
         #expect(gate(sign: "{}", guard: try guardView(), clear: try clear("clear_sign"), fee: nil) == .shut)
     }
 }
@@ -616,7 +616,7 @@ struct SignerKindTests {
     }
 
     /// End to end through the real controller and core: the passkey cannot be
-    /// used, the core names the signer, the slide stays shut with its line,
+    /// used, the core names the signer, the confirm stays shut with its line,
     /// and the sheet says it in the signer's words — tried again only when a
     /// retry can help.
     @Test(.timeLimit(.minutes(2)))

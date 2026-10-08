@@ -258,14 +258,12 @@ enum LucideIconSize {
     static let flowRowAction: CGFloat = 18
     static let flowStatus: CGFloat = 26
     static let flowScanTool: CGFloat = 18
-    // Explore + signing slots (spec 022). The four names its screens read and
-    // the corpus never carried; sized off the same mocks the Android and web
+    // Explore + signing slots (spec 022). The names its screens read and the
+    // corpus never carried; sized off the same mocks the Android and web
     // clients measured — the browser bar's back/forward/star, the https mark
-    // beside an address, a disclosure chevron, the slide-to-confirm arrow and
-    // the favourites tile's glyph.
+    // beside an address, a disclosure chevron and the favourites tile's glyph.
     static let browserBarGlyph: CGFloat = 20
     static let addressLock: CGFloat = 12
     static let disclosure: CGFloat = 14
-    static let slideArrow: CGFloat = 20
     static let tileGlyph: CGFloat = 24
 }
