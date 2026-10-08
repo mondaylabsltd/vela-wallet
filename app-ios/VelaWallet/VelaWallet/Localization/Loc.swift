@@ -144,6 +144,38 @@ final class Loc {
         return (try? engine.t(key: key, opts: opts)) ?? key
     }
 
+    // MARK: - How long ago (the core's rule, issue 462)
+
+    /// The core's compact relative time in the active language — "now",
+    /// "2m", "3h", a short weekday within the week, else the date in the
+    /// person's own format — for the hero's "Updated <ago>".
+    ///
+    /// `I18n::format_relative_time`, across uniffi: this shell ports none of
+    /// it. The moment goes over in WHOLE seconds, the zone is this device's
+    /// at that moment, and the date preset is the person's with `auto`
+    /// already resolved, as the desktop hands them over.
+    func relativeTime(atMs: Double, now: Date = Date(), timeZone: TimeZone = .current) -> String {
+        let at = Date(timeIntervalSince1970: atMs / 1000)
+        return relativeTime(
+            tsSeconds: Int64((atMs / 1000).rounded(.down)),
+            nowMs: Int64((now.timeIntervalSince1970 * 1000).rounded(.down)),
+            utcOffsetMinutes: Int32(timeZone.secondsFromGMT(for: at) / 60),
+            dateFormat: Formats.resolve(Formats.current.date).rawValue
+        ) ?? Formats.date(at)
+    }
+
+    /// The same, with every input spelled as the core takes it — the route
+    /// the conformance vectors replay. `nil` only from a dead engine.
+    func relativeTime(
+        tsSeconds: Int64, nowMs: Int64, utcOffsetMinutes: Int32, dateFormat: String
+    ) -> String? {
+        _ = resolvedLanguage
+        return try? engine?.formatRelativeTime(
+            tsSeconds: tsSeconds, nowMs: nowMs,
+            utcOffsetMinutes: utcOffsetMinutes, dateFormat: dateFormat
+        )
+    }
+
     // MARK: - Language detection (the core's rule, spec 095)
 
     /// What "follow the system" means: the first of the person's preferred

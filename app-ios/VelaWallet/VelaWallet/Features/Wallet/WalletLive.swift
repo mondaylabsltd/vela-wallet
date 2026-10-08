@@ -223,9 +223,7 @@ enum WalletLive {
     ) -> BalanceRefreshModel {
         BalanceRefreshModel(
             updated: view.lastRefreshedAtMs.map { at in
-                loc.t("home.lastUpdated", vars: [
-                    "ago": RelativeTime.ago(atMs: at, nowMs: now.timeIntervalSince1970 * 1000, loc: loc),
-                ])
+                loc.t("home.lastUpdated", vars: ["ago": loc.relativeTime(atMs: at, now: now)])
             },
             updating: loc.t("home.updating"),
             refreshing: spinning ?? view.refreshing
