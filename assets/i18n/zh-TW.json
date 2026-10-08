@@ -1348,6 +1348,10 @@
    "labelYouPayMax": "你最多支付",
    "labelYouReceive": "你收到",
    "labelYouReceiveMin": "你最少收到",
+   "intentBackUpPublicKeys": "備份公鑰",
+   "labelNetwork": "網路",
+   "labelAddress": "地址",
+   "labelPublicKeys": "公鑰數量",
    "valueUnlimited": "無上限",
    "valueAll": "全部",
    "warnOrderTerms": "這筆訂單的金額不會在這裡顯示 — 請先在網站上核對。",
@@ -1794,10 +1798,7 @@
    "backedUp": "已備份到以太坊",
    "notBackedUp": "尚未備份",
    "couldNotCheck": "無法檢查",
-   "explain": "只發布公鑰，用於從以太坊找回並重建這個錢包。私鑰始終留在你的裝置裡。",
-   "intent": "備份公鑰",
-   "registeredAs": "註冊名稱",
-   "publicKeys": "公鑰數量"
+   "explain": "只發布公鑰，用於從以太坊找回並重建這個錢包。私鑰始終留在你的裝置裡。"
   },
   "keys": {
    "title": "金鑰",

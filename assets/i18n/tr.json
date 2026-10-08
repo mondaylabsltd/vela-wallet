@@ -1348,6 +1348,10 @@
    "labelYouPayMax": "En fazla ödeyeceğiniz",
    "labelYouReceive": "Aldığınız",
    "labelYouReceiveMin": "En az alacağınız",
+   "intentBackUpPublicKeys": "Açık anahtarları yedekle",
+   "labelNetwork": "Ağ",
+   "labelAddress": "Adres",
+   "labelPublicKeys": "Açık anahtar sayısı",
    "valueUnlimited": "Sınırsız",
    "valueAll": "Tümü",
    "warnOrderTerms": "Bu emrin tutarları burada gösterilmiyor — önce sitede kontrol edin.",
@@ -1794,10 +1798,7 @@
    "backedUp": "Ethereum'a yedeklendi",
    "notBackedUp": "Henüz yedeklenmedi",
    "couldNotCheck": "Kontrol edilemedi",
-   "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz.",
-   "intent": "Açık anahtarları yedekle",
-   "registeredAs": "Kayıtlı ad",
-   "publicKeys": "Açık anahtar sayısı"
+   "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz."
   },
   "keys": {
    "title": "Anahtarlar",

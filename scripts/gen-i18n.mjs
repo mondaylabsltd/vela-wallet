@@ -596,8 +596,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the core's `PromptKind::NotSupported{Create,Login}.security_key`), where
 //   it said "biometric authentication is not available". 1791 leaves, 99
 //   branches.
-if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
+// 1891 (signing-sheet polish, 2026-10-08): the registry backup's words are
+//   ClearTerms, so they live under `componentsUi.signing` — `settingsModals.
+//   backup.{intent,publicKeys}` move to `componentsUi.signing.
+//   {intentBackUpPublicKeys,labelPublicKeys}`, + `componentsUi.signing.
+//   {labelNetwork,labelAddress}` (the backup's rows now say the network the
+//   wallet's own sheet no longer draws as a header chip; values are each
+//   locale's existing `addToken.labelNetwork` / `contacts.addressLabel`), and
+//   − `settingsModals.backup.registeredAs` (the footer's signing account
+//   already names the wallet). 1791 − 3 + 4 = 1792 leaves, 99 branches.
+if (PATHS.length !== 1891) fail(`expected 1891 paths (1792 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1792) fail(`expected 1792 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

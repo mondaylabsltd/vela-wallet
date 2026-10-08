@@ -1348,6 +1348,10 @@
    "labelYouPayMax": "Anda bayar (maks)",
    "labelYouReceive": "Anda terima",
    "labelYouReceiveMin": "Anda terima (min)",
+   "intentBackUpPublicKeys": "Cadangkan kunci publik",
+   "labelNetwork": "Jaringan",
+   "labelAddress": "Alamat",
+   "labelPublicKeys": "Jumlah kunci publik",
    "valueUnlimited": "Tanpa batas",
    "valueAll": "Semua",
    "warnOrderTerms": "Jumlah order ini tidak ditampilkan di sini — periksa dulu di situs.",
@@ -1794,10 +1798,7 @@
    "backedUp": "Sudah dicadangkan di Ethereum",
    "notBackedUp": "Belum dicadangkan",
    "couldNotCheck": "Tidak dapat memeriksa",
-   "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda.",
-   "intent": "Cadangkan kunci publik",
-   "registeredAs": "Terdaftar sebagai",
-   "publicKeys": "Jumlah kunci publik"
+   "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda."
   },
   "keys": {
    "title": "Kunci",

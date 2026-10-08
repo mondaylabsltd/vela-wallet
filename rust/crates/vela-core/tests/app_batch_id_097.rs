@@ -157,6 +157,7 @@ fn batch_approved(id: &str, params_json: &str, opts: SignApproveOpts) -> Signer 
         requested_address: None,
         request_ts_ms: None,
         now_ms: NOW,
+        first_party: false,
     });
     signer.dispatch(Event::ApproveTapped { opts });
     let ops = signer.resolve(Res::PreCheck { funding: None });
@@ -401,6 +402,7 @@ fn a_transaction_still_waits_for_its_receipt() {
         requested_address: None,
         request_ts_ms: None,
         now_ms: NOW,
+        first_party: false,
     });
     signer.dispatch(Event::ApproveTapped {
         opts: SignApproveOpts::default(),

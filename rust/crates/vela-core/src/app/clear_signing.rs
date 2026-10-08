@@ -808,8 +808,9 @@ pub struct ClearSignField {
 /// Matched on the WHOLE text, ignoring case and surrounding space: a
 /// descriptor that says "Amount" means what ours does; one that says anything
 /// else keeps its own words. A term is a translation, never a claim about where
-/// the text came from — Vela's own backup request is recognised by address
-/// (the shells' `localizedOwnBackup`), not by its words.
+/// the text came from — Vela's own backup request is first-party because the
+/// shell that raised it says so (`sign_request`'s `first_party`), never
+/// because of its words or its address.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -818,6 +819,9 @@ pub enum ClearTerm {
     IntentApproveNft,
     IntentApproveAllNfts,
     IntentAuthorizeSpending,
+    /// The wallet's own registry backup (spec 062): copying its founding
+    /// record's PUBLIC keys to another chain.
+    IntentBackUpPublicKeys,
     IntentBorrow,
     IntentBridge,
     IntentBurn,
@@ -843,6 +847,7 @@ pub enum ClearTerm {
     IntentWithdraw,
     IntentWrap,
     IntentWrapEth,
+    LabelAddress,
     LabelAmount,
     LabelAmountToSpend,
     LabelApproved,
@@ -851,6 +856,7 @@ pub enum ClearTerm {
     LabelFrom,
     LabelMaxSpendingAmount,
     LabelMinReceived,
+    LabelNetwork,
     LabelNewContract,
     LabelNft,
     LabelNonce,
@@ -861,6 +867,7 @@ pub enum ClearTerm {
     LabelOwner,
     LabelPay,
     LabelPrice,
+    LabelPublicKeys,
     LabelQuantities,
     LabelQuantity,
     LabelReceived,
@@ -912,6 +919,7 @@ impl ClearTerm {
             "authorize spending of tokens",
             Self::IntentAuthorizeSpending,
         ),
+        ("back up public keys", Self::IntentBackUpPublicKeys),
         ("borrow", Self::IntentBorrow),
         ("bridge", Self::IntentBridge),
         ("burn", Self::IntentBurn),
@@ -935,6 +943,7 @@ impl ClearTerm {
         ("withdraw", Self::IntentWithdraw),
         ("wrap", Self::IntentWrap),
         ("wrap eth", Self::IntentWrapEth),
+        ("address", Self::LabelAddress),
         ("amount", Self::LabelAmount),
         ("amount to spend", Self::LabelAmountToSpend),
         ("approved", Self::LabelApproved),
@@ -943,6 +952,7 @@ impl ClearTerm {
         ("from", Self::LabelFrom),
         ("max spending amount", Self::LabelMaxSpendingAmount),
         ("min received", Self::LabelMinReceived),
+        ("network", Self::LabelNetwork),
         ("new contract", Self::LabelNewContract),
         ("nft", Self::LabelNft),
         ("nonce", Self::LabelNonce),
@@ -952,6 +962,7 @@ impl ClearTerm {
         ("owner", Self::LabelOwner),
         ("pay", Self::LabelPay),
         ("price", Self::LabelPrice),
+        ("public keys", Self::LabelPublicKeys),
         ("quantities", Self::LabelQuantities),
         ("quantity", Self::LabelQuantity),
         ("received", Self::LabelReceived),
@@ -2380,7 +2391,7 @@ fn start_tx(
     // what it is, with nothing to fetch.
     if let Some(result) = to
         .as_deref()
-        .and_then(|to| build_registry_backup_result(to, &data))
+        .and_then(|to| build_registry_backup_result(to, &data, chain_id))
     {
         model.result = Some(result);
         model.resolved = true;
@@ -3882,10 +3893,13 @@ fn format_generic_value(v: &Ctx, ty: &str, name: &str, locale: &ClearLocale) -> 
 ///
 /// Verified: the contract is ours and the bytes are the Gnosis record's own
 /// (the target registry re-verifies every signature in them), so no warning
-/// is owed. The rows say whose record it is and how many keys it carries; the
-/// network is in the sheet's header. Labels are descriptor vocabulary, like
-/// every built-in descriptor's.
-fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult> {
+/// is owed. The rows, in this order, say where the record goes (the network —
+/// the wallet's own sheet draws no header chip, so the rows must name it),
+/// which wallet's record it is (its address) and how many public keys it
+/// carries. No name row: the footer's signing account already names the
+/// wallet. Every word is a [`ClearTerm`], so each shell says it in the
+/// reader's language with no hand-written relabelling.
+fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<ClearSignResult> {
     if !to.eq_ignore_ascii_case(crate::registry_backup::REGISTRY) {
         return None;
     }
@@ -3909,17 +3923,13 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
             bound: None,
         };
     let address = call.wallet_address.to_lowercase();
-    Some(ClearSignResult {
-        // PUBLIC keys: "back up wallet keys" read as handing over the keys
-        // themselves (founder, 2026-09-19).
-        intent: "Back up public keys".to_owned(),
-        contract_name: Some("Vela passkey registry".to_owned()),
-        owner: Some("Vela".to_owned()),
-        fields: vec![
-            // The name IN THE RECORD being copied — what the wallet was called on
-            // the day it was registered, not what its owner calls it now (that is
-            // the sheet's own signing-account row).
-            field("Registered as", call.wallet_name, "raw", None),
+    // The network the record is copied TO — a built-in chain's own name. A
+    // chain this build does not ship gets no row rather than a number.
+    let network = super::network_admin::builtin_display_name(chain_id)
+        .map(|name| field("Network", name.to_owned(), "raw", None));
+    let fields = network
+        .into_iter()
+        .chain([
             field(
                 "Address",
                 format!(
@@ -3931,7 +3941,15 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
                 Some(address),
             ),
             field("Public keys", call.key_count.to_string(), "raw", None),
-        ],
+        ])
+        .collect();
+    Some(ClearSignResult {
+        // PUBLIC keys: "back up wallet keys" read as handing over the keys
+        // themselves (founder, 2026-09-19).
+        intent: "Back up public keys".to_owned(),
+        contract_name: Some("Vela passkey registry".to_owned()),
+        owner: Some("Vela".to_owned()),
+        fields,
         risk: ClearRisk::Safe,
         contract_address: Some(to.to_lowercase()),
         verified: false,
@@ -7672,6 +7690,11 @@ mod clear_term_tests {
             }
         }
         words.extend(["Deploy contract", "New contract", "send"].map(str::to_owned));
+        // The registry backup's own builder (spec 062) writes its words in
+        // code, not descriptor JSON.
+        words.extend(
+            ["Back up public keys", "Network", "Address", "Public keys"].map(str::to_owned),
+        );
         words.sort();
         words.dedup();
         words

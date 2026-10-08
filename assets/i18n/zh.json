@@ -1358,6 +1358,10 @@
    "labelYouPayMax": "你最多支付",
    "labelYouReceive": "你收到",
    "labelYouReceiveMin": "你最少收到",
+   "intentBackUpPublicKeys": "备份公钥",
+   "labelNetwork": "网络",
+   "labelAddress": "地址",
+   "labelPublicKeys": "公钥数量",
    "valueUnlimited": "无限额",
    "valueAll": "全部",
    "warnOrderTerms": "此订单的金额不在这里显示 — 请先在网站上核对。",
@@ -1804,10 +1808,7 @@
    "backedUp": "已备份到以太坊",
    "notBackedUp": "尚未备份",
    "couldNotCheck": "无法检查",
-   "explain": "只发布公钥，用于从以太坊找回并重建这个钱包。私钥始终留在你的设备里。",
-   "intent": "备份公钥",
-   "registeredAs": "注册名称",
-   "publicKeys": "公钥数量"
+   "explain": "只发布公钥，用于从以太坊找回并重建这个钱包。私钥始终留在你的设备里。"
   },
   "keys": {
    "title": "钥匙",

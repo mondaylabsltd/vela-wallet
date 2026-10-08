@@ -257,6 +257,16 @@ pub fn builtin_native_symbol(chain_id: u32) -> Option<&'static str> {
         .map(|chain| chain.native_symbol)
 }
 
+/// A built-in chain's name as the wallet writes it ("Ethereum", "Unichain")
+/// — or `None` for a chain it does not ship. For words the core writes
+/// itself (the registry backup's Network row, the relay report's title); a
+/// network someone added is named by its own document, which the core does
+/// not hold here.
+#[must_use]
+pub fn builtin_display_name(chain_id: u32) -> Option<&'static str> {
+    builtin(chain_id).map(|chain| chain.display_name)
+}
+
 /// A holding's symbol as the wallet writes it: a built-in chain's own coin
 /// (no contract) takes the registry spelling; everything else is left as
 /// read. Only the CASE is ever changed — a native row whose symbol is some

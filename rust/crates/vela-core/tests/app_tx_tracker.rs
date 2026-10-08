@@ -2732,6 +2732,7 @@ fn dapp_submitted() -> (String, vela_core::app::sign_request::SignTrackerHandoff
         requested_address: None,
         request_ts_ms: None,
         now_ms: T0,
+        first_party: false,
     });
     sign.dispatch(SignEvent::ApproveTapped {
         opts: SignApproveOpts::default(),

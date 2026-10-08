@@ -1352,6 +1352,10 @@
    "labelYouPayMax": "Paghi (max)",
    "labelYouReceive": "Ricevi",
    "labelYouReceiveMin": "Ricevi (min)",
+   "intentBackUpPublicKeys": "Backup delle chiavi pubbliche",
+   "labelNetwork": "Rete",
+   "labelAddress": "Indirizzo",
+   "labelPublicKeys": "Chiavi pubbliche",
    "valueUnlimited": "Illimitato",
    "valueAll": "Tutto",
    "warnOrderTerms": "Gli importi di questo ordine non sono mostrati qui — controllali prima sul sito.",
@@ -1798,10 +1802,7 @@
    "backedUp": "Salvate su Ethereum",
    "notBackedUp": "Non ancora salvate",
    "couldNotCheck": "Impossibile verificare",
-   "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi.",
-   "intent": "Backup delle chiavi pubbliche",
-   "registeredAs": "Registrato come",
-   "publicKeys": "Chiavi pubbliche"
+   "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi."
   },
   "keys": {
    "title": "Chiavi",

@@ -1348,6 +1348,10 @@
    "labelYouPayMax": "最大支払額",
    "labelYouReceive": "受取額",
    "labelYouReceiveMin": "最小受取額",
+   "intentBackUpPublicKeys": "公開鍵をバックアップ",
+   "labelNetwork": "ネットワーク",
+   "labelAddress": "アドレス",
+   "labelPublicKeys": "公開鍵の数",
    "valueUnlimited": "無制限",
    "valueAll": "全額",
    "warnOrderTerms": "この注文の金額は表示されません — サイトでご確認ください。",
@@ -1794,10 +1798,7 @@
    "backedUp": "Ethereum にバックアップ済み",
    "notBackedUp": "まだバックアップされていません",
    "couldNotCheck": "確認できませんでした",
-   "explain": "公開されるのは公開鍵だけです。Ethereum からこのウォレットを見つけて復元するために使われます。秘密鍵が端末の外に出ることはありません。",
-   "intent": "公開鍵をバックアップ",
-   "registeredAs": "登録名",
-   "publicKeys": "公開鍵の数"
+   "explain": "公開されるのは公開鍵だけです。Ethereum からこのウォレットを見つけて復元するために使われます。秘密鍵が端末の外に出ることはありません。"
   },
   "keys": {
    "title": "キー",
