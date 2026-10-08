@@ -256,6 +256,7 @@ private fun FlowHostContent(
                     onRefreshFee = send?.onRefreshFee,
                     onToggleSpeed = { send?.onToggleSpeed?.invoke() },
                     onPickSpeed = { id -> send?.onPickSpeed?.invoke(id) },
+                    onReport = { send?.onRelayReport?.invoke() },
                 )
             }
             is FlowBase.SendConfirm -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -264,6 +265,7 @@ private fun FlowHostContent(
                     onConfirm = { send?.onConfirm?.invoke() ?: onNavigate(FlowStep.SendReceipt) },
                     onNoticeAction = { send?.onNoticeAction?.invoke() },
                     onNoticeSecondary = { send?.onNoticeSecondary?.invoke() },
+                    onReport = { send?.onRelayReport?.invoke() },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -489,6 +491,8 @@ class SendCallbacks(
     val onNoticeAction: () -> Unit = {},
     /** Spec 045 US4: the notice's second exit (the treasury pause's "not now"). */
     val onNoticeSecondary: () -> Unit = {},
+    /** Issue #466: a relay stop's "Report this" (form or confirm). */
+    val onRelayReport: () -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

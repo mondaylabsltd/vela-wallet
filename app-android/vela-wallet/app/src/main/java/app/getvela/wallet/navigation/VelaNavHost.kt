@@ -144,6 +144,9 @@ import app.getvela.wallet.feature.flows.WalletFlowEntry
 import app.getvela.wallet.feature.flows.rememberFlowNavState
 import app.getvela.wallet.feature.settings.SettingsActions
 import app.getvela.wallet.feature.settings.SettingsFixtures
+import app.getvela.wallet.feature.send.RelayReport
+import app.getvela.wallet.feature.send.RelayReportSheet
+import app.getvela.wallet.feature.send.core.SendRelayReport
 import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsOverlay
 import app.getvela.wallet.feature.settings.core.NetEndpointField
@@ -911,6 +914,10 @@ fun VelaNavHost(
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
                 val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
                 var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+                // Issue #466: the report a relay stop's "Report this" opened — the
+                // core's, as it stood at the tap (the stop closes itself once the
+                // relayer is funded; the report the person is reading must not).
+                var relayReport by remember { mutableStateOf<SendRelayReport?>(null) }
                 // Any open — also a payment request re-opening the Send on screen —
                 // starts without a fee sheet over it.
                 val sendOpens by send.opens.collectAsStateWithLifecycle()
@@ -978,6 +985,53 @@ fun VelaNavHost(
                 }
                 sendAlert?.let { kind ->
                     SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)
+                }
+                // Issue #466: the app's own report sheet, over the flow, seeded with the
+                // core's report — ONE sheet (the stop's button is on the page, so no
+                // flow sheet is up under it), filed with the core's area and fingerprint.
+                relayReport?.let { report ->
+                    val feedback = application.container.feedback
+                    val feedbackState by feedback.state.collectAsStateWithLifecycle()
+                    val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
+                    val poolView by application.container.pool.view.collectAsStateWithLifecycle()
+                    val facts = reportFacts(i18nState.language, poolView.failed_chains.map { chainNames[it] ?: it.toString() })
+                    val reportBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.ST15, strings) }
+                    val reportModel = SettingsLive.withFeedbackStatus(
+                        SettingsLive.withFeedback(reportBase, facts, strings),
+                        feedbackState.sending,
+                        feedbackState.outcome,
+                    )
+                    RelayReportSheet(
+                        model = reportModel,
+                        seed = remember(report) { RelayReport.seed(report) },
+                        onDismiss = { relayReport = null },
+                        onSend = { what, steps, screenshots ->
+                            if (!feedbackState.sending && what.isNotBlank()) {
+                                val labels = SettingsLive.feedbackLabels(strings)
+                                scope.launch {
+                                    val payload = withContext(Dispatchers.Default) {
+                                        RelayReport.payload(report, what, steps, labels, facts, screenshots)
+                                    }
+                                    feedback.submit(payload)
+                                }
+                            }
+                        },
+                        // "Prefer GitHub?": the form already filled with the core's report,
+                        // never a blank one (the bare link this button replaces).
+                        onGithub = {
+                            context.openUrl(
+                                BugReportUrl.build(
+                                    what = report.what,
+                                    steps = report.steps,
+                                    environment = reportModel.feedback.previewLines.joinToString("\n"),
+                                    area = report.area,
+                                ),
+                            )
+                        },
+                        onOpenLink = { url -> context.openUrl(url) },
+                        onOpened = { feedback.sheetOpened() },
+                        onClosed = { feedback.sheetClosed() },
+                    )
                 }
 
                 val flowState = flows.top
@@ -1162,6 +1216,13 @@ fun VelaNavHost(
                             },
                             onNoticeSecondary = {
                                 if (sendView.relay_unreachable != null) send.dismissRelayUnreachable() else send.dismissTreasurySheet()
+                            },
+                            // Issue #466: snapshot the core's report NOW and open the report sheet with it.
+                            onRelayReport = {
+                                sendView.relay_report?.let { report ->
+                                    VelaLog.event("send", "relay report", "fingerprint" to report.fingerprint)
+                                    relayReport = report
+                                }
                             },
                             onExplorer = {
                                 val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
@@ -2049,14 +2110,7 @@ fun VelaNavHost(
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.
-                val feedbackFacts = BugReport.DeviceFacts(
-                    version = BuildConfig.VERSION_NAME,
-                    commit = BuildConfig.GIT_COMMIT,
-                    platform = "Android ${android.os.Build.VERSION.RELEASE}",
-                    language = i18nState.language,
-                    unreachable = poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() },
-                    failures = VelaLog.recentFailures(),
-                )
+                val feedbackFacts = reportFacts(i18nState.language, poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() })
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
@@ -2478,6 +2532,20 @@ private val TAB_ROUTES = setOf(VelaDestinations.WALLET, VelaDestinations.CONTACT
 
 /** navigation-compose's own default fade, kept for every move that is not a tab. */
 private const val ROUTE_FADE_MS = 700
+
+/**
+ * What this device may say about itself in a report — five named fields,
+ * never an address, a balance or an endpoint URL. One builder for the
+ * Settings report and a relay stop's (issue #466), so the two previews agree.
+ */
+private fun reportFacts(language: String, unreachable: List<String>): BugReport.DeviceFacts = BugReport.DeviceFacts(
+    version = BuildConfig.VERSION_NAME,
+    commit = BuildConfig.GIT_COMMIT,
+    platform = "Android ${android.os.Build.VERSION.RELEASE}",
+    language = language,
+    unreachable = unreachable,
+    failures = VelaLog.recentFailures(),
+)
 
 /** Issue 462: how often the hero's "Updated 2m" reads the clock again — at least every 30 s. */
 private const val UPDATED_LABEL_TICK_MS = 30_000L

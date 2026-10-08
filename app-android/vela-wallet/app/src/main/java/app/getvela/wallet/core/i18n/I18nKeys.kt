@@ -614,6 +614,9 @@ object I18nKeys {
         const val RELAY_UNREACHABLE_HINT = "componentsUi.relayUnreachable.settingsHint"
         const val RELAY_UNREACHABLE_RETRY = "componentsUi.relayUnreachable.retryBtn"
         const val RELAY_UNREACHABLE_CLOSE = "componentsUi.relayUnreachable.closeBtn"
+        // Issue #466: each relay stop's "Report this" — the in-app report, seeded with the core's.
+        const val TREASURY_REPORT = "componentsUi.treasuryBootstrap.reportBtn"
+        const val RELAY_UNREACHABLE_REPORT = "componentsUi.relayUnreachable.reportBtn"
         const val ADD_NATIVE_ALIAS_TITLE = "addToken.nativeAliasTitle"
         const val ADD_NATIVE_ALIAS_MESSAGE = "addToken.nativeAliasMessage"
         const val ADD_NET_SEARCH_LABEL = "addToken.netSearchLabel"

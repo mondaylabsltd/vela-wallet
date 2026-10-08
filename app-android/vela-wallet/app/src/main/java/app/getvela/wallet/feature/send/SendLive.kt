@@ -499,6 +499,7 @@ object SendLive {
             ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
+            report = reportLabel(view, ctx),
         )
     }
 
@@ -572,6 +573,7 @@ object SendLive {
             ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
+            report = reportLabel(view, ctx),
             hint = splitHint(view, ctx),
             fillEmpty = splitFillEmpty(view, symbol, ctx),
         )
@@ -1013,9 +1015,9 @@ object SendLive {
                 group = null,
                 addressDisplay = shortAddress(contact.address),
                 identiconSeed = contact.address,
+                address = contact.address,
             )
         },
-                address = contact.address,
     )
 
     // -- SD3 ---------------------------------------------------------------------
@@ -1119,6 +1121,7 @@ object SendLive {
             ctaEnabled = view.can_confirm,
             notice = confirmNotice(view, ctx),
             noticeFund = fundAddress(view, ctx),
+            noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
             // and "not now" — DismissTreasurySheet, the facts kept. The
             // can't-reach stop (spec 098 §2) has the same two, its own.
@@ -1232,6 +1235,20 @@ object SendLive {
             copy = s.t(I18nKeys.Flows.TREASURY_COPY),
             copied = s.t(I18nKeys.Flows.TREASURY_COPIED),
         )
+    }
+
+    /**
+     * Issue #466: the stop's "Report this" — only while the core has a report
+     * to file (`relay_report`: a stop up on a network Vela ships, whose
+     * operator can be told). A network the person added has nobody to tell.
+     */
+    internal fun reportLabel(view: SendView, ctx: Context): String? {
+        if (view.relay_report == null) return null
+        return when {
+            view.relay_unreachable != null -> ctx.strings.t(I18nKeys.Flows.RELAY_UNREACHABLE_REPORT)
+            view.treasury_bootstrap != null -> ctx.strings.t(I18nKeys.Flows.TREASURY_REPORT)
+            else -> null
+        }
     }
 
     /** The form's button while a relay stop is up: its retry, which is Continue again. */

@@ -187,6 +187,94 @@ class SendLiveTest {
     }
 
     /**
+     * Issue #466: each relay stop offers "Report this" — on the form and on
+     * confirm — exactly while the core has a report to file
+     * (`relay_report`: a stop up on a network Vela ships). A network the
+     * person added has no operator to tell, and no button.
+     */
+    @Test
+    fun `a relay stop offers its report exactly while the core has one`() {
+        val formDrawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
+        val confirmDrawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val report = app.getvela.wallet.feature.send.core.SendRelayReport(
+            what = "Relayer out of gas on Unichain (130)\nTreasury 0x3e59292e18417f814112f731e7163534c6d2fe3c. Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH).",
+            steps = "1. Send ETH on Unichain (130).\n2. Press Continue.",
+            area = "Send",
+            fingerprint = "relay-gas-130",
+        )
+        val empty = SendTreasuryStatus(
+            chain_id = 130, address = "0x3e59292e18417f814112f731e7163534c6d2fe3c", asset = SendTreasuryAsset.Native,
+            balance = "0", floor = "100000000000000", bootstrap_needed = true, operator_served = true,
+        )
+        val form = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient, amount = "0.1", fee = fee(), can_continue = true)
+
+        val gas = form.copy(treasury_bootstrap = empty, relay_report = report)
+        assertEquals(strings.t("componentsUi.treasuryBootstrap.reportBtn"), SendLive.form(formDrawn, gas, FeeView(), ctx()).report)
+        assertEquals(
+            strings.t("componentsUi.treasuryBootstrap.reportBtn"),
+            SendLive.confirm(confirmDrawn, gas.copy(stage = SendStage.Confirm, can_confirm = false), ctx()).noticeReport,
+        )
+
+        val unreachable = form.copy(
+            relay_unreachable = SendRelayUnreachable(chain_id = 130, operator_served = true),
+            relay_report = report.copy(fingerprint = "relay-unreachable-130"),
+        )
+        assertEquals(strings.t("componentsUi.relayUnreachable.reportBtn"), SendLive.form(formDrawn, unreachable, FeeView(), ctx()).report)
+        assertEquals(
+            strings.t("componentsUi.relayUnreachable.reportBtn"),
+            SendLive.confirm(confirmDrawn, unreachable.copy(stage = SendStage.Confirm), ctx()).noticeReport,
+        )
+
+        // A stop the core has no report for (a network the person added): no button.
+        val custom = form.copy(relay_unreachable = SendRelayUnreachable(chain_id = 1337, operator_served = false))
+        assertNull(SendLive.form(formDrawn, custom, FeeView(), ctx()).report)
+        assertNull(SendLive.confirm(confirmDrawn, custom.copy(stage = SendStage.Confirm), ctx()).noticeReport)
+        // No stop, no button.
+        assertNull(SendLive.form(formDrawn, form, FeeView(), ctx()).report)
+    }
+
+    /**
+     * Issue #466: what "Report this" files. The sheet opens with the core's
+     * words; whatever the person leaves in the boxes is sent, under the
+     * core's area and fingerprint — the same marker on every platform and
+     * version, so one outage is one issue. The treasury address is the
+     * operator's and rides in `what`; the device lines stay the five facts.
+     */
+    @Test
+    fun `a relay report files the cores words under the cores area and fingerprint`() {
+        val report = app.getvela.wallet.feature.send.core.SendRelayReport(
+            what = "Relayer out of gas on Unichain (130)\nTreasury 0x3e59292e18417f814112f731e7163534c6d2fe3c. Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH).",
+            steps = "1. Send ETH on Unichain (130).\n2. Press Continue.",
+            area = "Send",
+            fingerprint = "relay-gas-130",
+        )
+        val seed = app.getvela.wallet.feature.send.RelayReport.seed(report)
+        assertEquals(report.what, seed.what)
+        assertEquals(report.steps, seed.steps)
+
+        val labels = app.getvela.wallet.feature.settings.SettingsLive.feedbackLabels(strings)
+        val facts = app.getvela.wallet.core.diagnostics.BugReport.DeviceFacts(
+            version = "0.9.7", commit = "abc1234", platform = "Android 14", language = "en", unreachable = emptyList(), failures = emptyList(),
+        )
+        val payload = app.getvela.wallet.feature.send.RelayReport.payload(report, seed.what + "\nSeen twice today.", seed.steps, labels, facts)
+        assertEquals("Send", payload.area)
+        assertEquals("relay-gas-130", payload.fingerprint)
+        assertTrue("the person's own words are kept", payload.what.endsWith("Seen twice today."))
+        assertTrue("the operator's treasury rides in what", payload.what.contains("0x3e59292e18417f814112f731e7163534c6d2fe3c"))
+        assertFalse("the device lines carry no address", payload.environment.contains("0x"))
+        // The same outage reported again — other words, another build — is the same issue.
+        val again = app.getvela.wallet.feature.send.RelayReport.payload(report, "Still stuck.", "", labels, facts.copy(version = "0.9.8"))
+        assertEquals(payload.fingerprint, again.fingerprint)
+        // The fallback road carries it too: the prefilled form, area and all.
+        val url = app.getvela.wallet.core.diagnostics.BugReportUrl.prefilled(payload)
+        assertTrue(url, url.contains("area=Send"))
+        assertTrue(url, url.contains("Relayer+out+of+gas+on+Unichain"))
+        // A settings report keeps the word-derived marker.
+        val plain = app.getvela.wallet.core.diagnostics.BugReport.build("Hello", "", "Other (explain above)", labels, facts)
+        assertEquals(app.getvela.wallet.core.diagnostics.BugReport.fingerprintOf("Hello", "Other (explain above)", "0.9.7"), plain.fingerprint)
+    }
+
+    /**
      * Issue #424: both buttons are the core's gates and nothing else. The
      * shell used to OR the relay stops onto `can_continue` and AND them (and a
      * signature under way, and a refused submit) onto `can_confirm` — its own
