@@ -408,7 +408,8 @@ struct AmountHeroView: View {
 }
 
 /// The send receipt's centrepiece (component 20) — SD4a's spinner, SD4b's
-/// clock, SD4c's tick, and the failure cross.
+/// clock, SD4c's tick, and the failure's "!" (issue #460: never the close
+/// glyph, which reads as a button that does nothing).
 ///
 /// One disc size for all four so the mark does not resize as the transaction
 /// moves between them: the person is watching this circle, and a circle that
@@ -499,12 +500,28 @@ struct StatusHeroView: View {
                         spinning = true
                     }
                 }
-        case .submitted:
-            LucideIcon(.clock, size: LucideIconSize.flowStatus).foregroundStyle(theme.fgMuted)
-        case .confirmed:
-            LucideIcon(.check, size: LucideIconSize.flowStatus).foregroundStyle(theme.successBase)
-        case .failed:
-            LucideIcon(.close, size: LucideIconSize.flowStatus).foregroundStyle(theme.errorBase)
+        case .submitted, .confirmed, .failed:
+            if let glyph = Self.markGlyph(stage) {
+                LucideIcon(glyph, size: LucideIconSize.flowStatus).foregroundStyle(markTint)
+            }
+        }
+    }
+
+    /// The disc's glyph; `nil` while submitting, which spins instead.
+    static func markGlyph(_ stage: ReceiptStage) -> LucideGlyph? {
+        switch stage {
+        case .submitting: nil
+        case .submitted: .clock
+        case .confirmed: .check
+        case .failed: .exclamation
+        }
+    }
+
+    private var markTint: Color {
+        switch stage {
+        case .submitting, .submitted: theme.fgMuted
+        case .confirmed: theme.successBase
+        case .failed: theme.errorBase
         }
     }
 

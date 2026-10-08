@@ -22,6 +22,15 @@ struct WalletFlowFixturesTests {
         }
     }
 
+    /// Issue #460: the failed receipt's disc says "!" in the error colour —
+    /// never the close glyph, which reads as a button that does nothing.
+    @Test func aFailedReceiptIsAnExclamationNeverAClose() {
+        #expect(StatusHeroView.markGlyph(.failed) == .exclamation)
+        for stage: ReceiptStage in [.submitting, .submitted, .confirmed, .failed] {
+            #expect(StatusHeroView.markGlyph(stage) != .close)
+        }
+    }
+
     @Test func onlyR2xCarriesTheLargeTextScale() {
         for state in FlowStateId.allCases {
             let expected: CGFloat = state == .r2x ? 1.35 : 1

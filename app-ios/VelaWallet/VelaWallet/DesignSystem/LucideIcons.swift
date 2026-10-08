@@ -27,6 +27,10 @@ enum LucideGlyph: String {
     case eyeOff, search, close, copy
     case chevronRight, chevronDown
     case link2, triangleAlert, refreshCw, check, inbox
+    /// A bare "!" — the stroke of lucide's `circle-alert` without its ring
+    /// (the disc it sits in is the ring): a failure's mark (issue #460), the
+    /// same two strokes Android's `VelaIcons.Exclamation` draws.
+    case exclamation
     case walletUtility
     // Contacts utility glyphs (spec 018 contracts/icons.json — lucide v1.11.0).
     case userRoundPlus, usersRound, folderPlus
@@ -113,6 +117,8 @@ enum LucideGlyph: String {
             return ##"<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/>"##
         case .triangleAlert:
             return ##"<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>"##
+        case .exclamation:
+            return ##"<path d="M12 6v7"/><path d="M12 17h.01"/>"##
         case .refreshCw:
             return ##"<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>"##
         case .check:
