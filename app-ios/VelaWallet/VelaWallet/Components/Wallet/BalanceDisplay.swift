@@ -150,7 +150,9 @@ private struct BalanceToggleA11y: ViewModifier {
 /// Tapping it reads every chain again (the caller's `onRefresh`:
 /// `RefreshRequested{force, pull}` plus the activity tick). While that is out
 /// (`model.refreshing`, which the store holds for at least 650 ms) the glyph
-/// turns, the words read "Updating…", and a second tap does nothing. At rest
+/// turns, the words read "Updating…", and a second tap does nothing. Under
+/// Reduce Motion the glyph stays still and the words alone say it is reading,
+/// as on the web. At rest
 /// before any read has settled it draws the glyph alone, and is called
 /// "Refresh balance" (`home.refreshBalance`) — never "Updating…" over a
 /// control that is not.
@@ -163,6 +165,7 @@ private struct BalanceToggleA11y: ViewModifier {
 struct BalanceRefreshControl: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let model: BalanceRefreshModel
     var onRefresh: (() -> Void)?
@@ -200,13 +203,19 @@ struct BalanceRefreshControl: View {
         .accessibilityIdentifier(Self.testId)
     }
 
+    /// Whether the glyph turns: while a refresh is out, never under Reduce
+    /// Motion — "Updating…" says it there.
+    static func turns(_ model: BalanceRefreshModel, reduceMotion: Bool) -> Bool {
+        model.refreshing && !reduceMotion
+    }
+
     /// What VoiceOver calls the control: "Updating…" only while it turns.
     static func spoken(_ model: BalanceRefreshModel) -> String {
         model.refreshing ? model.updating : (model.updated ?? model.named)
     }
 
     @ViewBuilder private var glyph: some View {
-        if model.refreshing {
+        if Self.turns(model, reduceMotion: reduceMotion) {
             // A clock-driven turn, composed only while turning: an idle home
             // runs no frame clock, and no implicit animation can leak into the
             // hero's layout. One revolution at the CTA spinner's speed.

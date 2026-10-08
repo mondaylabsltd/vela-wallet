@@ -162,6 +162,18 @@ struct BalanceRefreshTests {
         #expect(idle.balance.refresh?.refreshing == false)
     }
 
+    /// Reduce Motion: the glyph stays still while it reads, and the words
+    /// ("Updating…") say it — the web's `prefers-reduced-motion` rule.
+    @Test func reduceMotionKeepsTheGlyphStill() {
+        let turning = WalletFixtures.refresh(loc: loc, refreshing: true)
+        #expect(BalanceRefreshControl.turns(turning, reduceMotion: false))
+        #expect(!BalanceRefreshControl.turns(turning, reduceMotion: true))
+        #expect(BalanceRefreshControl.spoken(turning) == loc.t("home.updating"),
+                "the words still say it is reading")
+        #expect(!BalanceRefreshControl.turns(WalletFixtures.refresh(loc: loc), reduceMotion: false),
+                "at rest it never turns")
+    }
+
     /// The line above the control no longer comes and goes with a refresh the
     /// person asked for — that pushed the control out from under the finger.
     /// The core's own "still updating" notice still says it.
