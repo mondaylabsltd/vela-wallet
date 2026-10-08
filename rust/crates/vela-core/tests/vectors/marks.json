@@ -506,6 +506,44 @@
    }
   },
   {
+   "name": "token_mark/glyph-non-bmp-ticker",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "ab🚀x",
+    "token_address": "0x9999999999999999999999999999999999999999",
+    "named": []
+   },
+   "expect": {
+    "glyph": "AB🚀",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-1/0x9999999999999999999999999999999999999999/logo.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/glyph-non-bmp-ticker-leading",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "🚀moon",
+    "token_address": "0x9999999999999999999999999999999999999999",
+    "named": []
+   },
+   "expect": {
+    "glyph": "🚀MO",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-1/0x9999999999999999999999999999999999999999/logo.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
    "name": "token_mark/glyph-empty-ticker",
    "fn": "token_mark",
    "input": {
