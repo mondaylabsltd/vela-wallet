@@ -3884,6 +3884,8 @@ impl WalletPage {
         // can cross. The balance stays outside it: one-ended, and a large one
         // needs the room. Full-screen, the rows used to run the width of the
         // monitor with a token's name at one end and its amount at the other.
+        // The system's Reduce Motion: the refresh glyph keeps still.
+        let reduce_motion = cx.reduce_motion();
         let column = self
             .content_scroll
             .wire(div().id("wallet-content").size_full(), cx.entity_id())
@@ -3926,6 +3928,7 @@ impl WalletPage {
                             }))
                                 as crate::wallet::components::BalanceToggle
                         }),
+                        reduce_motion,
                     ))
                     .child(
                         div()
@@ -8164,6 +8167,8 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
+            // The board draws the motion design; gpui still holds a turn
+            // still under Reduce Motion.
             balances = balances.child(balance_display(
                 theme,
                 &mut self.icons,
@@ -8171,6 +8176,7 @@ impl WalletPage {
                 None,
                 None,
                 None,
+                false,
             ));
         }
 
