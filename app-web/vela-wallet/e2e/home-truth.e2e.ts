@@ -224,7 +224,7 @@ test('every unreachable network is listed with what was last read there, and one
  */
 test('the refresh under the total reads again, says so, and moves nothing (issue 462)', async ({
 	page
-}) => {
+}, testInfo) => {
 	await openHome(page);
 	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
 	const control = page.getByTestId('balance-refresh');
@@ -243,6 +243,7 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
 	expect(await control.boundingBox()).toEqual(before);
 	await expect(page.getByText(en('home.balanceStale'))).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('462-updating.png') });
 
 	// The read lands: the new figure, and the control at rest again.
 	await expect(page.getByText('$6,000', { exact: true })).toBeVisible({ timeout: 20_000 });
@@ -250,4 +251,10 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 	await expect(control).toHaveAttribute('aria-busy', 'false');
 	await expect(control.locator('.shown')).toHaveText(updatedNow);
 	expect(await control.boundingBox()).toEqual(before);
+	await page.screenshot({ path: testInfo.outputPath('462-updated.png') });
+
+	// The wide layout draws the same control under its total.
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await expect(page.getByTestId('balance-refresh')).toHaveText(new RegExp(updatedNow));
+	await page.screenshot({ path: testInfo.outputPath('462-wide.png') });
 });
