@@ -119,7 +119,7 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey } from '$lib/flows/core/send-estimates';
+	import { feeKey, feeTokenNews } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
@@ -765,6 +765,7 @@
 		// session has heard nothing.
 		lastFeeStamp = null;
 		lastFeeBusy = false;
+		lastFeeToken = undefined;
 		resyncedFee = null;
 		nav.close();
 	}
@@ -1047,6 +1048,13 @@
 	 */
 	let lastFeeStamp: string | null = null;
 	let lastFeeBusy = false;
+	/**
+	 * The fee card's coin as this send session last heard it (`undefined`:
+	 * nothing yet). It names the form's fee row while no estimate is in hand —
+	 * the core's `SendView.fee_coin` — so a quote that fails after the fee
+	 * machine picked a coin still shows the coin in force (`feeTokenNews`).
+	 */
+	let lastFeeToken: string | null | undefined = undefined;
 	/** The one re-send per (session quote, send-machine quote) pair — see below. */
 	let resyncedFee: string | null = null;
 	$effect(() => {
@@ -1057,6 +1065,11 @@
 		if (view.busy !== lastFeeBusy) {
 			lastFeeBusy = view.busy;
 			sendSession.dispatch({ type: 'fee_busy_changed', busy: view.busy });
+		}
+		const coinNews = feeTokenNews(lastFeeToken, view.fee_token);
+		if (coinNews !== null) {
+			lastFeeToken = view.fee_token;
+			sendSession.dispatch(coinNews);
 		}
 		const estimate = view.fee;
 		if (!estimate) return;

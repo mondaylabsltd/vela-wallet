@@ -4,6 +4,7 @@
 // prices the confirm screen wrong, so these are fund-safety codecs.
 import type { FeeAssetView } from '$lib/core/generated/FeeAssetView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
+import type { SendEvent } from '$lib/core/generated/SendEvent';
 import type { TransactionFeeEstimate } from '$lib/services/safe-transaction';
 import { fromWireAmount } from '$lib/services/amount-codec';
 
@@ -99,6 +100,25 @@ export function fromFeeWire(view: FeeEstimateView): TransactionFeeEstimate {
 /** Structural key of a wire estimate — the registry's identity. */
 export function feeKey(view: FeeEstimateView): string {
 	return JSON.stringify(view);
+}
+
+/**
+ * The fee card's coin in force (`FeeView.fee_token`), as news for the send
+ * machine: the `fee_token_changed` to dispatch, or `null` when the machine has
+ * heard this already. `told` is what this send session was last told —
+ * `undefined` for a session that has heard nothing, so a fresh one is told the
+ * card's coin even when it is `null` (the chain's own).
+ *
+ * The send form's fee row names this coin while no estimate is in hand
+ * (`SendView.fee_coin`): when nobody chose, the fee machine picks a coin that
+ * can pay, and a quote that then fails leaves that coin in force with no
+ * estimate to say so.
+ */
+export function feeTokenNews(
+	told: string | null | undefined,
+	feeToken: string | null
+): Extract<SendEvent, { type: 'fee_token_changed' }> | null {
+	return told === feeToken ? null : { type: 'fee_token_changed', fee_token: feeToken };
 }
 
 /**
