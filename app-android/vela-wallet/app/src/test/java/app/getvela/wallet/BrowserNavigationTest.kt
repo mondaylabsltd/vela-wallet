@@ -123,6 +123,34 @@ class BrowserNavigationTest {
     }
 
     @Test
+    fun `a full strip has no room for a new tab, so the core answers the selected one`() {
+        // The machine drops a `tab_opened` past its 24 tabs: "new tab" there
+        // would be an open that does nothing. The core says where it goes;
+        // the shell has no rule of its own for it.
+        fun strip(count: Int) = ExploreView(
+            tabs = (1..count).map { ExploreTab("t$it", url = "https://site$it.example/", title = "", host = "site$it.example") },
+            selected_tab = "t3",
+            recent_tabs = listOf("t3"),
+            ready = true,
+        )
+        for (kind in listOf(ExploreOpenKind.Address, ExploreOpenKind.Site)) {
+            assertEquals(
+                ExploreOpenTarget.Load("t3"),
+                BrowserTabs.openTarget(strip(24), shown = "t3", onPage = false, url = "https://late.example/", kind = kind),
+            )
+        }
+        // A picked site already open still comes back as it was left; one short of the cap, a new tab.
+        assertEquals(
+            ExploreOpenTarget.Resume("t7"),
+            BrowserTabs.openTarget(strip(24), shown = "t3", onPage = false, url = "https://site7.example/", kind = ExploreOpenKind.Site),
+        )
+        assertEquals(
+            ExploreOpenTarget.NewTab,
+            BrowserTabs.openTarget(strip(23), shown = "t3", onPage = false, url = "https://late.example/", kind = ExploreOpenKind.Address),
+        )
+    }
+
+    @Test
     fun `the switcher lights the page's tab, and over the home only a start page`() {
         val live = view("t1", dapp, start)
         assertEquals("t1", BrowserTabs.litTab(live, shown = "t1", onPage = true))

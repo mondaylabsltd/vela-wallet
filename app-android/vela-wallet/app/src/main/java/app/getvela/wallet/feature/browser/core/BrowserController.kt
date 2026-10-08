@@ -1119,7 +1119,8 @@ class BrowserController(
      * ([onPage]); over the home, a tab already on a picked site ([kind]
      * [ExploreOpenKind.Site]) resumed as it was left, else the selected
      * start-page tab's first page, else a NEW tab — never a load over a live
-     * dApp from the home. [fromOutside] (a deep link, a scan, the
+     * dApp from the home (a full strip, which takes no new tab, is the one
+     * exception: the core then answers the selected tab). [fromOutside] (a deep link, a scan, the
      * external-page sheet, a launch URL) is an address, and says so to the
      * host once the open is in the view, so 探索 lands on it.
      */
