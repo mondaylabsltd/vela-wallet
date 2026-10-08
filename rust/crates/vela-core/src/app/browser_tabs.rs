@@ -68,6 +68,11 @@
 //!    its first page.
 //! 4. Otherwise a NEW tab, so a tab waiting unlit — a dApp left for the
 //!    wallet, a tab restored at launch — is left intact.
+//! 5. Unless the strip is full ([`TABS_CAP`]): the explore machine refuses a
+//!    tab past the cap, so a new tab would be an open that silently does
+//!    nothing. The selected tab — the one the person last had in front —
+//!    takes the address instead, as the desktop's open did at the cap
+//!    before this rule was the core's.
 //!
 //! A site PICKED (a favourite, a recent dApp, a featured tile) and an address
 //! TYPED differ in rule 2 only. A site is an origin — the explore machine and
@@ -85,7 +90,7 @@ use ts_rs::TS;
 
 use super::dapp_browser::DbrView;
 use super::dapp_permissions::origin_of;
-use super::explore_sites::{ExploreTab, ExploreView};
+use super::explore_sites::{ExploreTab, ExploreView, TABS_CAP};
 
 /// Most engines kept alive at once, the selected and busy tabs included —
 /// unless more than this are busy, which are all kept regardless.
@@ -290,6 +295,9 @@ pub enum ExploreOpenTarget {
     /// own address, as any tab switch does. The shell sends `tab_selected`.
     Resume { id: String },
     /// A new tab onto the address (`tab_opened`): nothing open is replaced.
+    /// Never answered for a full strip ([`TABS_CAP`]) — the machine would
+    /// drop that `tab_opened` — which gets [`Self::Load`] of the selected
+    /// tab instead.
     NewTab,
 }
 
@@ -333,8 +341,29 @@ pub fn open_target(
             return ExploreOpenTarget::Resume { id };
         }
     }
-    lit_tab(view, None, false).map_or(ExploreOpenTarget::NewTab, |id| ExploreOpenTarget::Load {
-        id,
+    if let Some(id) = lit_tab(view, None, false) {
+        return ExploreOpenTarget::Load { id };
+    }
+    if view.tabs.len() >= TABS_CAP {
+        if let Some(id) = in_front(view) {
+            return ExploreOpenTarget::Load { id };
+        }
+    }
+    ExploreOpenTarget::NewTab
+}
+
+/// The tab in front of a full strip (rule 5): the selected one, else — a
+/// view whose selection names no tab, which the machine never publishes but
+/// a shell's re-encoded copy might — the one used most recently.
+fn in_front(view: &ExploreView) -> Option<String> {
+    let selected = view
+        .selected_tab
+        .as_deref()
+        .filter(|id| view.tabs.iter().any(|tab| tab.id == *id));
+    selected.map(str::to_owned).or_else(|| {
+        super::explore_sites::by_recency(&view.tabs, &view.recent_tabs)
+            .next()
+            .map(|tab| tab.id.clone())
     })
 }
 

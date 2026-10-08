@@ -111,7 +111,7 @@ mod navigation {
         ExploreOpenKind, ExploreOpenTarget,
     };
     use vela_core::app::dapp_browser::{DbrConsentView, DbrSigningView, DbrView};
-    use vela_core::app::explore_sites::{ExploreTab, ExploreView};
+    use vela_core::app::explore_sites::{ExploreTab, ExploreView, TABS_CAP};
 
     const UNISWAP: &str = "https://app.uniswap.org/#/swap";
     const AAVE: &str = "https://app.aave.com/";
@@ -383,6 +383,87 @@ mod navigation {
         assert_eq!(
             open_target(&view, None, true, UNISWAP, ExploreOpenKind::Address),
             ExploreOpenTarget::NewTab
+        );
+    }
+
+    /// A full strip (TABS_CAP) has no room for a new tab — the explore
+    /// machine drops that `tab_opened`, so "new tab" would be an open that
+    /// silently does nothing. The selected tab takes the address instead
+    /// (the tab the person last had in front, as the desktop's open did at
+    /// the cap). The other rules still come first: a picked site already
+    /// open is resumed, a selected start-page tab gets its first page, and
+    /// on a page the address loads there. One short of the cap is a new tab.
+    #[test]
+    fn a_full_strip_loads_in_the_selected_tab_rather_than_doing_nothing() {
+        let ids: Vec<String> = (1..=TABS_CAP).map(|i| format!("t{i}")).collect();
+        let full = |selected: &str, start_page: Option<&str>| {
+            let tabs: Vec<(&str, Option<&str>)> = ids
+                .iter()
+                .map(|id| {
+                    let url = if Some(id.as_str()) == start_page {
+                        None
+                    } else if id == "t1" {
+                        Some(UNISWAP)
+                    } else {
+                        Some("https://example.org/")
+                    };
+                    (id.as_str(), url)
+                })
+                .collect();
+            strip(&tabs, Some(selected), &[selected])
+        };
+
+        let view = full("t7", None);
+        for kind in [ExploreOpenKind::Site, ExploreOpenKind::Address] {
+            assert_eq!(
+                open_target(&view, None, false, AAVE, kind),
+                load("t7"),
+                "{kind:?} over the home"
+            );
+            assert_eq!(
+                open_target(&view, Some("t3"), false, AAVE, kind),
+                load("t7"),
+                "{kind:?}: the selected tab, not the one last shown"
+            );
+        }
+        // Rule 2 before rule 5: a picked site already open comes back.
+        assert_eq!(
+            open_target(&view, None, false, UNISWAP, ExploreOpenKind::Site),
+            resume("t1")
+        );
+        // Rule 3 before rule 5: a selected start-page tab gets the page.
+        let view = full("t9", Some("t9"));
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t9")
+        );
+        // Rule 1: on a page, that page.
+        let view = full("t7", None);
+        assert_eq!(
+            open_target(&view, Some("t3"), true, AAVE, ExploreOpenKind::Address),
+            load("t3")
+        );
+        // A selection that names no tab (a shell's own copy): the tab used
+        // most recently.
+        let mut stale = full("t7", None);
+        stale.selected_tab = Some("gone".to_owned());
+        stale.recent_tabs = vec!["gone".to_owned(), "t5".to_owned()];
+        assert_eq!(
+            open_target(&stale, None, false, AAVE, ExploreOpenKind::Address),
+            load("t5")
+        );
+        // One short of the cap there is still room: a new tab.
+        let mut room = full("t7", None);
+        room.tabs.pop();
+        assert_eq!(
+            open_target(&room, None, false, AAVE, ExploreOpenKind::Address),
+            ExploreOpenTarget::NewTab
+        );
+        // The same answer over the wire.
+        let json = serde_json::to_string(&full("t7", None)).expect("a view serializes");
+        assert_eq!(
+            open_target_json(&json, None, false, AAVE, "address").as_deref(),
+            Some(r#"{"type":"load","id":"t7"}"#)
         );
     }
 

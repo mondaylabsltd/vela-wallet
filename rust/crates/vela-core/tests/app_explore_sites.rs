@@ -15,7 +15,7 @@ use vela_core::app::browser_load::{visit_to_record, LoadFinished};
 use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
     Event, ExploreDoc, ExploreOperation as Op, ExploreShellResult as Res, ExploreSites,
-    ExploreSystemGroup, ExploreTab, ExploreView, FAVORITES_CAP, NAME_RULE, RESUME_SHOWN,
+    ExploreSystemGroup, ExploreTab, ExploreView, FAVORITES_CAP, NAME_RULE, RESUME_SHOWN, TABS_CAP,
 };
 
 type Sut = DomainDriver<ExploreSites>;
@@ -525,6 +525,66 @@ fn a_new_tab_is_the_selected_one() {
         doc.tabs[1].title, "b.example",
         "an untitled page is its host"
     );
+}
+
+/// The strip holds TABS_CAP tabs and refuses the next `tab_opened`, so an
+/// open into a full strip must not ask for one: the core's open target
+/// answers the selected tab, and its `tab_navigated` puts the address in
+/// the strip — the open is never silently lost.
+#[test]
+fn an_open_into_a_full_strip_lands_in_the_selected_tab() {
+    use vela_core::app::browser_tabs::{open_target, ExploreOpenKind, ExploreOpenTarget};
+    let mut sut = ready(None);
+    for i in 0..TABS_CAP {
+        #[allow(clippy::cast_precision_loss, reason = "two dozen test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: Some(format!("https://site{i}.example/")),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let view = sut.view();
+    assert!(view.tabs_full);
+    let selected = view.selected_tab.clone().expect("a strip has a selection");
+
+    // The machine refuses a tab past the cap: nothing written.
+    assert!(sut
+        .dispatch(Event::TabOpened {
+            url: Some("https://late.example/".to_owned()),
+            title: None,
+            now_ms: T0 + 100.0,
+        })
+        .is_empty());
+    assert_eq!(sut.view().tabs.len(), TABS_CAP);
+
+    // So the open target never says "new tab" here.
+    let target = open_target(
+        &view,
+        None,
+        false,
+        "https://late.example/",
+        ExploreOpenKind::Address,
+    );
+    assert_eq!(
+        target,
+        ExploreOpenTarget::Load {
+            id: selected.clone()
+        }
+    );
+    let doc = written(sut.dispatch(Event::TabNavigated {
+        id: selected.clone(),
+        url: "https://late.example/".to_owned(),
+        title: None,
+    }));
+    assert_eq!(doc.tabs.len(), TABS_CAP);
+    let tab = doc
+        .tabs
+        .iter()
+        .find(|t| t.id == selected)
+        .expect("still there");
+    assert_eq!(tab.url.as_deref(), Some("https://late.example/"));
+    assert_eq!(sut.view().selected_tab.as_deref(), Some(selected.as_str()));
 }
 
 /// Closing the selected tab hands selection to its right-hand neighbour, and

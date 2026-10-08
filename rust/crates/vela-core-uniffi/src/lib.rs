@@ -602,7 +602,8 @@ pub fn explore_landing(
 /// `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
 /// `tab_navigated` and load it there), `{"type":"resume","id":…}` (a tab
 /// already on that site: `tab_selected`, shown as it was left) or
-/// `{"type":"new_tab"}` (`tab_opened`). `None` for input that does not read.
+/// `{"type":"new_tab"}` (`tab_opened`; never for a full strip, whose open
+/// loads in the selected tab). `None` for input that does not read.
 /// See `vela_core::app::browser_tabs::open_target`.
 #[uniffi::export]
 #[must_use]
