@@ -55,6 +55,9 @@ class I18nRuntime(
     override fun t(key: String, count: Int): String =
         engine.t(key, options(emptyList(), count = count.toDouble()))
 
+    override fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String =
+        engine.formatRelativeTime(tsSeconds, nowMs, utcOffsetMinutes, dateFormat)
+
     private fun options(vars: List<TVar>, count: Double? = null): TOptions = TOptions(
         count = count,
         context = null,

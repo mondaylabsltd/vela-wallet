@@ -75,6 +75,9 @@ private object ContactsPreviewStrings : VelaStrings {
 
     /** Previews carry one sample per key, so a plural key is its own sample. */
     override fun t(key: String, count: Int): String = t(key, mapOf("count" to count.toString()))
+
+    /** Previews have no engine and no clock: one sample. */
+    override fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String = "2m"
 }
 
 @Composable

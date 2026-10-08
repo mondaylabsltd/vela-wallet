@@ -305,15 +305,11 @@ object I18nKeys {
         const val A11Y_SHOW_BALANCE = "home.a11yShowBalance"
         /**
          * Issue 462: the hero's refresh control — "Updated {{ago}}" when idle
-         * (`ago` is [TIME_NOW] / [TIME_MINUTES_SHORT] / [TIME_HOURS_SHORT], the
-         * core's relative-time words), "Updating…" while a refresh the person
-         * asked for is out.
+         * (`ago` is the core's relative time, `VelaStrings.relativeTime`),
+         * "Updating…" while a refresh the person asked for is out.
          */
         const val LAST_UPDATED = "home.lastUpdated"
         const val UPDATING = "home.updating"
-        const val TIME_NOW = "time.now"
-        const val TIME_MINUTES_SHORT = "time.minutesShort"
-        const val TIME_HOURS_SHORT = "time.hoursShort"
 
         // Sections & empty states.
         const val SECTION_ACTIVITY = "home.tabActivity"
