@@ -130,29 +130,6 @@ object SigningLive {
     private fun VelaStrings.a(key: String) = t("componentsUi.signingApprove.$key")
     private fun VelaStrings.a(key: String, vars: Map<String, String>) = t("componentsUi.signingApprove.$key", vars)
 
-    /** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
-    private const val PASSKEY_REGISTRY = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
-
-    /**
-     * The wallet's own key backup, in the person's language. The core's built-in
-     * results are English, like the descriptors beside them ("the words stay in
-     * the shell"); this one is OURS, and a Chinese sheet whose three most
-     * important lines were English read as half-finished (founder, 2026-09-19).
-     * Matched on the request being first-party AND the verified registry
-     * address — never on the English words.
-     */
-    fun localizedOwnBackup(clear: ClearSigningView, own: Boolean, strings: VelaStrings): ClearSigningView {
-        val result = clear.result ?: return clear
-        if (!own || !result.verified || result.contract_address?.equals(PASSKEY_REGISTRY, ignoreCase = true) != true) return clear
-        val labels = listOf("settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys").map(strings::t)
-        return clear.copy(
-            result = result.copy(
-                intent = strings.t("settingsModals.backup.intent"),
-                fields = result.fields.mapIndexed { index, field -> field.copy(label = labels.getOrElse(index) { field.label }) },
-            ),
-        )
-    }
-
     /**
      * The core's words in the reader's language. A clear-signing result is
      * English — a descriptor's intent and labels, the "Unlimited" a threshold
@@ -162,6 +139,11 @@ object SigningLive {
      * the descriptor wrote it. Same rule in every shell; runs before
      * [cappedApproval]. The confirm is left alone: [confirmLabel] switches on
      * its English intent and falls back to the term.
+     *
+     * The wallet's own key backup is no exception: the core names its intent
+     * and every row (Network, Address, Public keys), so it is translated here
+     * like any other reading — never relabelled by position, which put the
+     * wrong word on a row the moment the core added one.
      */
     fun localizedTerms(clear: ClearSigningView, strings: VelaStrings): ClearSigningView {
         fun word(term: String?, text: String): String {
@@ -266,10 +248,7 @@ object SigningLive {
         confirm: ConfirmState = confirmState(sign, guard, rawClear, fee, speed),
     ): SigningScreenModel {
         val s = ctx.strings
-        val clear = cappedApproval(
-            localizedTerms(localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s), s),
-            guard,
-        )
+        val clear = cappedApproval(localizedTerms(rawClear, s), guard)
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson, request.method)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0

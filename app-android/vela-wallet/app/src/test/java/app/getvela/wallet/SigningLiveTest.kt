@@ -665,13 +665,15 @@ class SigningLiveTest {
         val backup = ClearSigningView(
             resolved = true,
             surface = ClearSurface.ClearSign,
+            // The core's reading of the backup: every word is a term.
             result = ClearSignResult(
                 intent = "Back up public keys",
+                intent_term = "intentBackUpPublicKeys",
                 contract_name = "Vela passkey registry",
                 fields = listOf(
-                    ClearSignField("Registered as", "Parallel space"),
-                    ClearSignField("Address", "0x88cCA0Ee…266894", format = "addressName", address = founder.lowercase()),
-                    ClearSignField("Public keys", "1"),
+                    ClearSignField("Network", "Ethereum", label_term = "labelNetwork"),
+                    ClearSignField("Address", "0x88cCA0…266894", format = "addressName", address = founder.lowercase(), label_term = "labelAddress"),
+                    ClearSignField("Public keys", "1", label_term = "labelPublicKeys"),
                 ),
                 risk = ClearRisk.Safe,
                 contract_address = registry,
@@ -686,7 +688,7 @@ class SigningLiveTest {
 
         val ownSheet = sheet(own, nothingMoves)
         assertTrue(ownSheet.dappOwn)
-        assertEquals(strings.t("settingsModals.backup.intent"), (ownSheet.blocks.first() as SigningBlock.Intent).text)
+        assertEquals(strings.t("componentsUi.signing.intentBackUpPublicKeys"), (ownSheet.blocks.first() as SigningBlock.Intent).text)
         assertTrue("the no-change card is still on the sheet", ownSheet.blocks.none { it is SigningBlock.Balances })
         assertEquals(strings.t("componentsUi.signing.simResultLabel"), ownSheet.tech.simResult?.label)
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), ownSheet.tech.simResult?.value)
@@ -702,6 +704,44 @@ class SigningLiveTest {
         val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
         assertTrue("a balance that would move stays on the sheet", moves.blocks.any { it is SigningBlock.Balances })
         assertNull(moves.tech.simResult)
+    }
+
+    /**
+     * The wallet's own key backup (spec 062) as the REAL core reads the bytes
+     * the backup sends: every word on it is a core term, so the sheet says it
+     * in the reader's language with no relabel of its own — the network first,
+     * then the address and the keys, no "Registered as" — and the confirm
+     * reads the intent. Positional relabelling used to call the core's new
+     * Network row "Registered as".
+     */
+    @Test
+    fun `the wallet's own backup is the core's words, network first, in the reader's language`() {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        val zh = I18nRuntime { tag -> File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        val registry = "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9"
+        val data = "0x" + File(root, "rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex").readText().trim()
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", registry).put("data", data).put("value", "0x0")).toString()
+        val clear = clearOf("eth_sendTransaction", params, chainId = 1)
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null, first_party = true),
+            confirm_gate_open = true,
+        )
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        val sheet = SigningLive.model(
+            drawn, own, sign, clear, GuardView(), FeeView(confirm_fee_ready = true),
+            ctx.copy(strings = zh, chainName = "Ethereum", nativeSymbol = "ETH", chainId = 1),
+        )
+        fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
+        val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
+        assertEquals(
+            listOf(term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894", term("labelPublicKeys") to "3"),
+            rows.map { it.label to it.value },
+        )
+        assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
+        listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
+            assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
+        }
     }
 
     /**
