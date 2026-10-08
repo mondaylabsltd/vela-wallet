@@ -20,10 +20,10 @@ enum ExploreGeometry {
     static let rowAvatar: CGFloat = 40
     /// Start-page search box (mock E2: y116–163).
     static let searchField: CGFloat = 48
-    /// Browsing address pill and the toolbar under the page (mock E4).
+    /// Browsing address pill (mock E4).
     static let addressPill: CGFloat = 40
-    static let browserBar: CGFloat = 56
-    /// The boxed tab count, in the header and in the toolbar (mock E2/E4).
+    /// The boxed tab count in the browsing bar (DESIGN N board E4) — its
+    /// smallest box; a two-digit count widens it inside its 44.
     static let tabCount: CGFloat = 26
     /// Tab-switcher card preview (mock E5: two columns, 3:4 previews).
     static let tabCardAspect: CGFloat = 3.0 / 4.0
@@ -32,9 +32,11 @@ enum ExploreGeometry {
     static let networkChip: CGFloat = 26
     /// The sail on the empty start page (mock E1).
     static let emptyMark: CGFloat = 56
-    /// The identicon in the signer row and the account chip.
+    /// The identicon in the signer row.
     static let signerAvatar: CGFloat = 18
-    static let accountChipAvatar: CGFloat = 16
+    /// The account in the browsing bar (DESIGN N board E4: icon.2xl), with
+    /// the connection's dot on its edge.
+    static let barAvatar: CGFloat = 30
 }
 
 /// Site and token brand colours. CONTENT, not theme: a site's pink is its

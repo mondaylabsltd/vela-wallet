@@ -108,6 +108,35 @@ struct BrowserWireDriftTests {
         #expect(tags(try effects(from: closed)) == ["write_explore"], "one write for the batch")
     }
 
+    /// DESIGN N: the home's resume rows (`resumable`) decode as the core
+    /// sends them — the tabs that have a page, most recently used first, at
+    /// most three — and a pick moves its tab to the front of them. A renamed
+    /// field would leave the home with no way back to an open dApp.
+    @Test func exploreResumableDecodes() throws {
+        let core = ExploreSitesCore()
+        let start = try effects(from: core.dispatch(eventJson: CoreJSON.string(["type": "start"])))
+        let read = try #require(start.first { ($0["operation"] as? [String: Any])?["type"] as? String == "read_explore" })
+        let id = try #require((read["id"] as? NSNumber)?.uint64Value)
+        let tab = { (id: String) -> [String: Any] in
+            ["id": id, "url": "https://\(id).example/", "title": id, "host": "\(id).example"]
+        }
+        let blank: [String: Any] = ["id": "s", "url": NSNull(), "title": "", "host": ""]
+        let loaded = try core.resolveEffect(effectId: id, resultJson: CoreJSON.string([
+            "type": "loaded",
+            "doc": ["tabs": ["a", "b", "c", "d"].map(tab) + [blank], "selected_tab": "s"],
+        ]))
+        let home = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: loaded))
+        #expect(home.ready)
+        #expect(home.tabs.count == 5)
+        #expect(home.resumable.count == 3, "the core caps the rows at RESUME_SHOWN")
+        #expect(home.resumable.allSatisfy { $0.url != nil }, "a start page is never a row")
+
+        let picked = try core.dispatch(eventJson: CoreJSON.string(["type": "tab_selected", "id": "d"]))
+        let after = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: picked))
+        #expect(after.resumable.first?.id == "d", "the tab used last leads")
+        #expect(after.resumable.count == 3)
+    }
+
     /// Issue #425: a favourite pinned under v0.9.5 while its site had failed
     /// kept the engine's error page as its name ("网页无法打开") — #329's fix
     /// named new favourites, not stored ones. A document from before the rule

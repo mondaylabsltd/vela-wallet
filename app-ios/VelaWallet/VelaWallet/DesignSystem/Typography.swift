@@ -160,6 +160,8 @@ enum Typography {
     static let tokenGlyph = TypeRole(fontName: FontName.semiBold, size: Tokens.TextSize.t11, relativeTo: .caption, leading: Tokens.Leading.none)
     /// Tab-bar item label — text.t10, medium, single-line.
     static let tab = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t10, relativeTo: .caption2, leading: Tokens.Leading.none)
+    /// The browsing bar's boxed tab count (DESIGN N) — text.t13, semibold.
+    static let tabCount = TypeRole(fontName: FontName.semiBold, size: Tokens.TextSize.t13, relativeTo: .footnote, leading: Tokens.Leading.none)
 
     // MARK: Contacts roles (spec 018 — docs/design/contacts mocks)
 
