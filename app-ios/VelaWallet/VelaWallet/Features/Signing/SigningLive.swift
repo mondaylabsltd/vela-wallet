@@ -274,7 +274,9 @@ enum SigningLive {
             blocks: blocks,
             tech: TechModel(
                 title: fallback.tech.title,
-                summary: refused ? nil : clear.result?.contractName,
+                // "· Vela passkey registry" names the wallet's own contract
+                // to the wallet's own person: dropped on its own request.
+                summary: refused || own ? nil : clear.result?.contractName,
                 fn: refused
                     ? nil
                     : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
@@ -315,8 +317,10 @@ enum SigningLive {
         if !refused, let gate, !gate.enabled, let key = gate.key {
             model.confirmBlockLine = loc.t(key)
         }
-        // The wallet's own request (the key backup) is not a site: its own mark
-        // and name, and no host — "getvela.app" under a letter read as a stranger.
+        // The wallet's own request (the key backup) is not a site: no
+        // requester header at all — "getvela.app" under a letter read as a
+        // stranger, and "Vela Wallet" over the wallet's own sheet said
+        // nothing. Its headline and the ✕ take the row (`SigningModel.headline`).
         model.dappOwn = own
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)

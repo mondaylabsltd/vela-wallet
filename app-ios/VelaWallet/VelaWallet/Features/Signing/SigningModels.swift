@@ -18,6 +18,10 @@ enum SigningStateId: String, CaseIterable, Identifiable {
     case cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8, cs9, cs10, cs11
     case cs12, cs13, cs14, cs15, cs16, cs17, cs18, cs19, cs20, cs21, cs22
     case cs23, cs24, cs25, cs26, cs27, cs28, cs29, cs30, cs31, cs32, cs33
+    /// The wallet's own key backup (first party): the headline row, no
+    /// requester. Numbered after web and desktop's cs34/cs35 (the cap being
+    /// typed), which this client does not draw as boards.
+    case cs36
     var id: String { rawValue }
     /// Gallery chip label — mock naming, not translatable copy.
     var label: String { rawValue.uppercased() }
@@ -239,8 +243,9 @@ struct SigningModel {
     /// transaction and a send look the same while they land. Also the ending
     /// the sheet keeps after the core has closed it (`SigningAftercare`).
     var receipt: SendReceiptModel?
-    /// The wallet asking ITSELF (the key backup): its own mark and name, and
-    /// no host — it is not a site.
+    /// The wallet asking ITSELF (the key backup; the core's `first_party`):
+    /// not a site, so no requester header — no mark, no name, no chain chip.
+    /// The header is one row, `headline` and the ✕.
     var dappOwn = false
     /// The speed control under the fee (spec 069) — the send form's own.
     var feeSpeed: FeeSpeedModel?
@@ -255,4 +260,26 @@ struct SigningModel {
     /// The fee row's chevron: only where a tap opens a coin list. A failed
     /// quote is still asked again by a tap, but the refresh control says so.
     var feeChevron = true
+
+    /// The wallet's own request leads with its outcome (issue #314): its
+    /// first intent ("备份公钥") is the sheet's title, in the header row
+    /// beside the ✕. `nil` on a site's request, whose intent is the eyebrow
+    /// over its figure.
+    var headline: (text: String, tone: SigningTone)? {
+        guard dappOwn, let index = headlineIndex,
+              case .intent(let text, let tone) = blocks[index] else { return nil }
+        return (text, tone)
+    }
+
+    /// What the form draws: every block, less the intent the header carries.
+    var formBlocks: [SigningBlock] {
+        guard dappOwn, let index = headlineIndex else { return blocks }
+        var rest = blocks
+        rest.remove(at: index)
+        return rest
+    }
+
+    private var headlineIndex: Int? {
+        blocks.firstIndex { if case .intent = $0 { return true } else { return false } }
+    }
 }

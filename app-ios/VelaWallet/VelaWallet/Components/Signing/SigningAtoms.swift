@@ -2,7 +2,8 @@
 //  SigningAtoms.swift
 //  VelaWallet
 //
-//  The signing sheet's small parts (spec 022 §3): the dApp header, the intent
+//  The signing sheet's small parts (spec 022 §3): the dApp header (or, for the
+//  wallet's own request, its headline row), the intent
 //  eyebrow, the hero amount and its swap pair, the plain-language sentence,
 //  the counterparty row, key/value rows, warnings, reassurances, code blocks,
 //  detail cards and the balance-change preview.
@@ -36,7 +37,14 @@ struct SigningHeaderView: View {
 
     let dapp: (name: String, host: String, letter: String, tint: Color)
     let network: (name: String, dot: Color)
+    /// The wallet asking itself (the key backup; the core's `first_party`).
+    /// There is no requester to name: no mark, no "Vela Wallet", no chain
+    /// chip — the reading's first row says the network — so the header is
+    /// one row, `headline` and the ✕.
     var own = false
+    /// The request's intent ("备份公钥"), the sheet's title on `own`; the
+    /// form then does not draw it again.
+    var headline: (text: String, tone: SigningTone)?
     var iconUrls: [String] = []
     var networkLogoUrl: String?
     /// Spec 079: the sheet's one explicit close. It no longer closes on a
@@ -53,19 +61,37 @@ struct SigningHeaderView: View {
     }
 
     var body: some View {
+        if own {
+            ownRow
+        } else {
+            siteRow
+        }
+    }
+
+    /// The wallet's own request: the headline and the ✕ on one row. The ✕
+    /// stays in every mode that draws this — form, status, receipt — since
+    /// it is the sheet's only way out. A long headline wraps under itself;
+    /// the ✕ keeps the top of the row.
+    private var ownRow: some View {
+        HStack(alignment: .top, spacing: Tokens.Space.s12) {
+            if let headline {
+                SigningIntentLabel(text: headline.text, tone: headline.tone, lead: true)
+                    .frame(minHeight: Tokens.Control.md)
+                    .accessibilityAddTraits(.isHeader)
+            } else {
+                Spacer(minLength: Tokens.Space.s0)
+            }
+            closeButton
+        }
+    }
+
+    private var siteRow: some View {
         let label = Self.label(name: dapp.name, host: dapp.host)
         return HStack(alignment: .top, spacing: Tokens.Space.s12) {
-            if own {
-                // The wallet asking itself: its own mark, never a letter on a disc.
-                VelaMark(size: ExploreGeometry.signingAvatar * 0.6)
-                    .frame(width: ExploreGeometry.signingAvatar, height: ExploreGeometry.signingAvatar)
-                    .background(theme.bgSunken, in: Circle())
-            } else {
-                // The site's own icon; its initial until one lands, and when it has none.
-                RemoteLogoView(urls: iconUrls, size: ExploreGeometry.signingAvatar) {
-                    LetterAvatarView(letter: dapp.letter, tint: dapp.tint,
-                                     size: ExploreGeometry.signingAvatar)
-                }
+            // The site's own icon; its initial until one lands, and when it has none.
+            RemoteLogoView(urls: iconUrls, size: ExploreGeometry.signingAvatar) {
+                LetterAvatarView(letter: dapp.letter, tint: dapp.tint,
+                                 size: ExploreGeometry.signingAvatar)
             }
             // Spec 082 RE13 (G12): at 375 pt the host was cut to
             // "192.168.50.9:…" and the chain chip to "Ethe…". Round 1 gave the
@@ -105,17 +131,21 @@ struct SigningHeaderView: View {
                 .padding(.top, Tokens.Space.s4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if let onClose {
-                Button(action: onClose) {
-                    LucideIcon(.close, size: LucideIconSize.menuRow)
-                        .foregroundStyle(theme.fgMuted)
-                        .frame(width: Tokens.Control.md, height: Tokens.Control.md)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(closeLabel)
-                .accessibilityIdentifier("signing.close")
+            closeButton
+        }
+    }
+
+    @ViewBuilder private var closeButton: some View {
+        if let onClose {
+            Button(action: onClose) {
+                LucideIcon(.close, size: LucideIconSize.menuRow)
+                    .foregroundStyle(theme.fgMuted)
+                    .frame(width: Tokens.Control.md, height: Tokens.Control.md)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(closeLabel)
+            .accessibilityIdentifier("signing.close")
         }
     }
 }

@@ -854,6 +854,38 @@ enum SigningFixtures {
                 confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
+
+        // -- cs36: the wallet's own key backup (first party) --------------
+        case .cs36:
+            // What the live sheet draws for RootView.openEthereumBackup: the
+            // core's rows in its words (Network first — there is no chip),
+            // no requester header, the intent as the headline and the
+            // confirm's label, and no "· Vela passkey registry" summary.
+            var model = SigningModel(
+                id: state,
+                dapp: (name: "Vela Wallet", host: "", letter: "V", tint: BrandPalette.unknown),
+                network: network,
+                blocks: [
+                    .intent(text: t(loc, "intentBackUpPublicKeys"), tone: .success),
+                    .rows([
+                        SigningRow(label: t(loc, "labelNetwork"), value: network.name),
+                        SigningRow(label: t(loc, "labelAddress"), value: Addr.selfShort, mono: true),
+                        SigningRow(label: t(loc, "labelPublicKeys"), value: "3"),
+                    ]),
+                ],
+                tech: tech(
+                    loc,
+                    fn: (label: t(loc, "techFunction"), signature: t(loc, "intentBackUpPublicKeys")),
+                    simResult: SigningRow(label: t(loc, "simResultLabel"),
+                                          value: t(loc, "balanceNoAssetsMove")),
+                    raw: (label: t(loc, "techRawData"), hex: "0xcd438f9b0000000000000000000000000000…")
+                ),
+                techOpen: false, fee: onchainFee(loc), signer: signer(loc),
+                confirm: (action: t(loc, "intentBackUpPublicKeys"), enabled: true),
+                panelTitle: t(loc, "signatureRequest")
+            )
+            model.dappOwn = true
+            return model
         }
     }
 }

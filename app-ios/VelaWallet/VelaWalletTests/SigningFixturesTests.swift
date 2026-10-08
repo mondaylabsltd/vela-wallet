@@ -74,8 +74,9 @@ struct SigningFixturesTests {
         return out
     }
 
-    @Test func allThirtyThreeScenariosBuild() {
-        #expect(SigningStateId.allCases.count == 33)
+    @Test func everyScenarioBuilds() {
+        // The 33 drawn boards and cs36, the wallet's own backup.
+        #expect(SigningStateId.allCases.count == 34)
         for state in SigningStateId.allCases {
             let m = model(state)
             #expect(m.id == state)
@@ -175,6 +176,31 @@ struct SigningFixturesTests {
         } else {
             Issue.record("cs33 opens the fee-token selector")
         }
+    }
+
+    /// The wallet's own backup (first party): no requester — its intent is
+    /// the header's title, not repeated in the form — the rows in the core's
+    /// words with the network first, the confirm reading the intent, and no
+    /// contract summary on the technical details.
+    @Test func theWalletsOwnBackupHasAHeadlineAndNoRequester() {
+        let own = model(.cs36)
+        #expect(own.dappOwn)
+        #expect(own.headline?.text == "备份公钥")
+        #expect(!own.formBlocks.contains { if case .intent = $0 { true } else { false } },
+                "the headline is drawn once, in the header")
+        #expect(own.formBlocks.count == own.blocks.count - 1)
+        guard case .rows(let rows) = own.formBlocks.first else {
+            Issue.record("the backup's rows lead the form"); return
+        }
+        #expect(rows.map(\.label) == ["网络", "地址", "公钥数量"])
+        #expect(rows.first?.value == "Ethereum")
+        #expect(own.confirm?.action == "备份公钥")
+        #expect(own.tech.summary == nil)
+
+        // A site's sheet keeps its header and its intent in the form.
+        let site = model(.cs1)
+        #expect(site.headline == nil)
+        #expect(site.formBlocks.count == site.blocks.count)
     }
 
     @Test func cs29IsCs1WithTheTechnicalPanelOpen() {

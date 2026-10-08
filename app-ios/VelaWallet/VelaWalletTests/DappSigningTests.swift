@@ -680,6 +680,12 @@ struct SigningLiveTests {
             #expect(drawn.first?.value == "Ethereum", "the network the backup goes to is a row")
             #expect(drawn.allSatisfy { !$0.label.hasPrefix("settingsModals.") && !$0.label.hasPrefix("componentsUi.") })
             #expect(model.confirm?.action == "备份公钥", "the confirm reads the intent, not a bare 确认")
+            // The wallet's own sheet has no requester header: the intent is
+            // its title (drawn once, in the header row with the ✕), and the
+            // technical details do not name the wallet's own contract to it.
+            #expect(model.headline?.text == (own ? "备份公钥" : nil))
+            #expect(model.formBlocks.count == model.blocks.count - (own ? 1 : 0))
+            #expect(model.tech.summary == (own ? nil : "Vela passkey registry"))
         }
     }
 

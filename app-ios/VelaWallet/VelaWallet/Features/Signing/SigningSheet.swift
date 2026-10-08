@@ -12,6 +12,9 @@
 //  was the one confirm in the app that wanted a drag; the passkey or Face ID
 //  prompt that follows is the second step.
 //
+//  The wallet's own request (the key backup, the core's `first_party`) has no
+//  requester: the header is one row, its headline and the ✕.
+//
 //  The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
 //  明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
 //  the dApp's request away). No swipe closes it: the presenter sets
@@ -63,6 +66,7 @@ struct SigningSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s16) {
                 SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
+                                  headline: model.headline,
                                   iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
                                   onClose: onClose, closeLabel: model.closeLabel)
                     .padding(.top, Tokens.Space.s8)
@@ -108,7 +112,8 @@ struct SigningSheet: View {
 
     @ViewBuilder
     private var form: some View {
-        ForEach(model.blocks) { block in
+        // The wallet's own request: its intent is already the header's title.
+        ForEach(model.formBlocks) { block in
             blockView(block)
         }
 
@@ -162,10 +167,9 @@ struct SigningSheet: View {
     private func blockView(_ block: SigningBlock) -> some View {
         switch block {
         case .intent(let text, let tone):
-            // Issue #314: the wallet's own request has no figure to lead with
-            // — its intent IS the outcome, so it is the sheet's headline
-            // rather than the eyebrow over a hero.
-            SigningIntentLabel(text: text, tone: tone, lead: model.dappOwn)
+            // The eyebrow over a hero. The wallet's own request has no figure
+            // to lead with (issue #314): its intent is the header's title.
+            SigningIntentLabel(text: text, tone: tone)
         case .amount(let line, let card, let note):
             SigningAmountView(line: line, card: card, note: note)
         case .swap(let pay, let receive):
