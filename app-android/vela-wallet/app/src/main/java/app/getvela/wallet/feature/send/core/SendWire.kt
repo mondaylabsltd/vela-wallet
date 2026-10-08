@@ -173,6 +173,24 @@ data class SendRelayUnreachable(
     val operator_served: Boolean = false,
 )
 
+/**
+ * What a relay stop's "Report this" files (issue #466), built by the core once
+ * so every shell files the same words under the same dedup key. English on
+ * purpose — the operator reads it, not the person. It names the relay
+ * treasury's address and figures, which are the operator's and public.
+ */
+@Serializable
+data class SendRelayReport(
+    /** The first line is the issue's title (≤ 80 characters); the facts follow after a blank line. */
+    val what: String,
+    /** How the person got there, numbered as the bug form asks. */
+    val steps: String,
+    /** The bug form's area option, verbatim (`"Send"`). */
+    val area: String,
+    /** `relay-gas-<chain>` / `relay-unreachable-<chain>`: one open issue per outage per chain. */
+    val fingerprint: String,
+)
+
 /** What the relay's treasury can front on this chain — `unknown` when it could not be asked. */
 @Serializable
 sealed class SendTreasuryProbe {
@@ -662,6 +680,12 @@ data class SendView(
     val treasury_bootstrap: SendTreasuryStatus? = null,
     /** Spec 098 §2: the relay cannot serve this chain; the send stops here. */
     val relay_unreachable: SendRelayUnreachable? = null,
+    /**
+     * Issue #466: what the stop's "Report this" files — set exactly while a
+     * relay stop is up on a network Vela ships. Snapshot it at the tap: the
+     * stop may close (funded) while the report is being read.
+     */
+    val relay_report: SendRelayReport? = null,
     val recipient_identity: SendRecipientIdentity? = null,
     /**
      * Spec 097 F (S2): who the money goes to, as the form line and the confirm
