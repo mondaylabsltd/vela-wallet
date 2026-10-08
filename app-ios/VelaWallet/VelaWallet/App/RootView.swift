@@ -1186,29 +1186,40 @@ struct RootView: View {
             } else {
                 switch section {
                 case .wallet:
-                    WalletScreen(
-                        model: walletModel,
-                        loc: loc,
-                        onSelectTab: selectTab,
-                        onFlow: { enterFlow($0) },
-                        onOpenActivity: { activityItemId = $0 },
-                        onToggleBalance: { wallet.togglePrivacy() },
-                        onStatusTap: { openRescue() },
-                        // The name line's chevron has drawn a disclosure since
-                        // spec 015 and led nowhere on this screen until now.
-                        onOpenAccounts: {
-                            openAccountSwitcher()
-                            homeSwitcherOpen = true
-                        },
-                        onRefresh: RefreshAction {
-                            // `pull: true` is carried so the core can tell a
-                            // person's own gesture from the 30-second tick and
-                            // answer it differently.
-                            wallet.refresh(pull: true)
-                            activity.focusTick()
-                            await wallet.settled()
-                        }
-                    )
+                    // The hero's "Updated 2m" ages on screen (issue 462): the
+                    // home is rebuilt at least every 30 s while it is shown,
+                    // and whenever the balance moves.
+                    TimelineView(.periodic(from: .now, by: Self.homeClockTick)) { _ in
+                        WalletScreen(
+                            model: walletModel,
+                            loc: loc,
+                            onSelectTab: selectTab,
+                            onFlow: { enterFlow($0) },
+                            onOpenActivity: { activityItemId = $0 },
+                            onToggleBalance: { wallet.togglePrivacy() },
+                            onStatusTap: { openRescue() },
+                            // The name line's chevron has drawn a disclosure since
+                            // spec 015 and led nowhere on this screen until now.
+                            onOpenAccounts: {
+                                openAccountSwitcher()
+                                homeSwitcherOpen = true
+                            },
+                            onRefresh: RefreshAction {
+                                // The same refresh as the hero's control, held
+                                // until its spin ends — one spin for both, so a
+                                // pull while the control turns starts nothing new.
+                                if wallet.pullRefresh() { activity.focusTick() }
+                                await wallet.settled()
+                            },
+                            // Issue 462: `pull: true` is carried so the core can
+                            // tell a person's own tap from the 10-minute poll and
+                            // answer it differently — `refreshing` holds until
+                            // this round settles, and the control turns until then.
+                            onRefreshNow: {
+                                if wallet.pullRefresh() { activity.focusTick() }
+                            }
+                        )
+                    }
                     // The hero's status line, as a sheet over the wallet —
                     // which is what SR2 and SR3 are drawn as. The settings
                     // route would put the settings list behind a sentence
@@ -2372,14 +2383,22 @@ struct RootView: View {
     /// follows, and it matters more here: a fixture total under a real address
     /// is the app telling somebody their money is somewhere it is not.
     private var walletModel: WalletHomeModel {
-        let base = WalletFixtures
+        var base = WalletFixtures
             .buildMobileState(.h1, loc: loc)
             .withAddress(session.view.address)
             .withName(session.view.activeName)
-        guard let view = wallet.balance else { return base }
+        guard let view = wallet.balance else {
+            // The drawing's "Updated 2m" is a fixture's; nothing has been read.
+            base.balance.refresh = nil
+            return base
+        }
         return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
-                                feedRead: activity.hasRead, on: base, loc: loc)
+                                feedRead: activity.hasRead, on: base, loc: loc,
+                                now: Date(), spinning: wallet.spin.spinning)
     }
+
+    /// How often the home re-reads the clock, so "Updated 2m" ages (issue 462).
+    private static let homeClockTick: TimeInterval = 30
 
     /// A flow screen, with the parts that have machines behind them swapped
     /// in and the rest still drawn.

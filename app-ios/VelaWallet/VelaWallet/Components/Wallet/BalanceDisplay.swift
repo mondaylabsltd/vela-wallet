@@ -6,7 +6,7 @@
 //  line (总余额 · USD), hero amount with de-emphasised decimals, exactly
 //  one of normal / zero-live (pulsing dot + 实时·监听收款中) / loading
 //  (skeleton block) / hidden (six dots + eye-off), plus an optional
-//  warning/refreshing status line.
+//  warning/refreshing status line, then the refresh control (issue 462).
 //
 
 import SwiftUI
@@ -19,6 +19,9 @@ struct BalanceDisplay: View {
     /// Where the status line goes. Absent in the gallery, where the line is a
     /// picture of a state rather than a way out of one.
     var onStatusTap: (() -> Void)?
+    /// Issue 462: the refresh control's tap. Absent in the gallery, where the
+    /// control is drawn and takes no tap.
+    var onRefresh: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -31,6 +34,9 @@ struct BalanceDisplay: View {
             }
             if let status = model.status {
                 statusDoor(status)
+            }
+            if let refresh = model.refresh {
+                BalanceRefreshControl(model: refresh, onRefresh: onRefresh)
             }
         }
     }
@@ -103,6 +109,101 @@ struct BalanceDisplay: View {
             LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                 .foregroundStyle(theme.fgSubtle)
         }
+    }
+}
+
+/// The hero's "↻ Updated 2m" (issue 462) — the same control on all four
+/// shells, under the total and its status line.
+///
+/// Tapping it reads every chain again (the caller's `onRefresh`:
+/// `RefreshRequested{force, pull}` plus the activity tick). While that is out
+/// (`model.refreshing`, which the store holds for at least 650 ms) the glyph
+/// turns, the words read "Updating…", and a second tap does nothing.
+///
+/// **Nothing moves.** Both labels are laid out in one box, the one not
+/// showing invisible, so the box is the wider one's width in both states and
+/// its height never changes: the control does not slide out from under the
+/// finger that tapped it. Quiet ink like the status line — a fresh figure is
+/// the normal case.
+struct BalanceRefreshControl: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let model: BalanceRefreshModel
+    var onRefresh: (() -> Void)?
+
+    /// The control's test hook — the desktop's element id for the same control.
+    static let testId = "balance-refresh"
+
+    var body: some View {
+        Button { if !model.refreshing { onRefresh?() } } label: {
+            HStack(spacing: Tokens.Space.s8) {
+                glyph
+                ZStack(alignment: .leading) {
+                    label(model.updated ?? "", shown: !model.refreshing)
+                    label(model.updating, shown: model.refreshing)
+                }
+            }
+            // The words swap at once. The press's spring rides the same
+            // transaction as the tap's state change, and cross-faded the two
+            // labels into each other ("更新中新 · 刚刚") — on a simulator run.
+            .transaction { $0.animation = nil }
+            .frame(minHeight: Tokens.Control.sm)
+            .contentShape(Rectangle())
+        }
+        // Inert while it turns — and in the gallery — without dimming: a
+        // refresh in flight is busy, not disabled. The tap is still taken
+        // (and dropped) rather than let through: under the control the hero
+        // hides the figure on a tap.
+        .buttonStyle(RefreshPressStyle(live: onRefresh != nil && !model.refreshing))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: model.refreshing ? model.updating : (model.updated ?? model.updating)))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(model.refreshing ? .updatesFrequently : [])
+        .accessibilityIdentifier(Self.testId)
+    }
+
+    @ViewBuilder private var glyph: some View {
+        if model.refreshing {
+            // A clock-driven turn, composed only while turning: an idle home
+            // runs no frame clock, and no implicit animation can leak into the
+            // hero's layout. One revolution at the CTA spinner's speed.
+            TimelineView(.animation) { context in
+                let period = Tokens.Motion.slow * 2
+                let turn = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period
+                LucideIcon(.refreshCw, size: LucideIconSize.statusIcon)
+                    .foregroundStyle(theme.fgSubtle)
+                    .rotationEffect(.degrees(turn * 360))
+            }
+        } else {
+            LucideIcon(.refreshCw, size: LucideIconSize.statusIcon)
+                .foregroundStyle(theme.fgSubtle)
+        }
+    }
+
+    private func label(_ text: String, shown: Bool) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgSubtle)
+            .lineLimit(1)
+            .opacity(shown ? 1 : 0)
+    }
+}
+
+/// The refresh control's press: it dims and taps back like every text button
+/// here while it can be pressed, and answers nothing while it cannot. No
+/// scale — the control must not move under the finger.
+private struct RefreshPressStyle: ButtonStyle {
+    let live: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(live && configuration.isPressed ? Interaction.pressedOpacity : 1)
+            .animation(Interaction.pressSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if live && pressed { VelaHaptic.press.play() }
+            }
     }
 }
 
