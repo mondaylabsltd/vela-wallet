@@ -82,9 +82,8 @@ enum SigningLive {
     }
 
     /// The transport of a request the WALLET made of itself (`RootView`).
+    /// Nothing listens on it: an answer addressed here never reaches a page.
     static let walletTransport = "wallet"
-    /// `registry_backup::REGISTRY` — the one contract the wallet's own backup calls.
-    private static let passkeyRegistry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
 
     /// Where a site's icon conventionally lives, best first. Https only: never
     /// over plain http, where anybody on the path could answer with somebody
@@ -105,20 +104,6 @@ enum SigningLive {
         return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
     }
 
-    /// The wallet's own key backup, in the person's language. The core's
-    /// built-in results are English, like the descriptors beside them ("the
-    /// words stay in the shell"); this one is OURS. Matched on the request being
-    /// first-party AND the verified registry address — never on the English words.
-    static func localizedOwnBackup(_ clear: ClearSigningViewWire, own: Bool, loc: Loc) -> ClearSigningViewWire {
-        guard own, let result = clear.result, result.verified,
-              result.contractAddress?.lowercased() == passkeyRegistry
-        else { return clear }
-        let labels = ["settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys"].map { loc.t($0) }
-        var next = clear
-        next.result = result.relabelled(intent: loc.t("settingsModals.backup.intent"), labels: labels)
-        return next
-    }
-
     /// The core's words in the reader's language. A clear-signing result is
     /// English — a descriptor's intent and labels, the "Unlimited" a threshold
     /// prints — and the core names the ones it recognises (`intentTerm`,
@@ -127,6 +112,10 @@ enum SigningLive {
     /// the descriptor wrote it. Same rule in every shell; runs before
     /// `cappedApproval`. The confirm is left alone: `confirmLabel` switches on
     /// its English intent and falls back to the term.
+    ///
+    /// The wallet's own key backup is no exception: the core names every word
+    /// on it (the intent, Network, Address, Public keys), so nothing here
+    /// matches a contract or relabels rows by position.
     static func localizedTerms(_ clear: ClearSigningViewWire, loc: Loc) -> ClearSigningViewWire {
         func word(_ term: String?, _ text: String) -> String {
             guard let term else { return text }
@@ -228,11 +217,11 @@ enum SigningLive {
     ) -> SigningModel {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
-        let own = request.transportId == walletTransport
-        let clear = cappedApproval(
-            localizedTerms(localizedOwnBackup(rawClear, own: own, loc: loc), loc: loc),
-            guard: guardView
-        )
+        // The wallet asking itself (the key backup) — the core's word, which
+        // the shell said once, where it raised the request; never read off
+        // the reading, which a site can submit byte for byte.
+        let own = sign.request?.firstParty ?? request.firstParty
+        let clear = cappedApproval(localizedTerms(rawClear, loc: loc), guard: guardView)
         let facts = SigningController.firstCall(paramsJson: request.paramsJson, method: request.method)
         // 089 S1: a batch's technical details are the whole batch, never call 1's calldata.
         let wholeBatch = clear.surface == .batch

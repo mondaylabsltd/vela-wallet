@@ -1709,14 +1709,12 @@ struct RootView: View {
         }
     }
 
-    /// The transport of a request the WALLET made of itself. Nothing is
-    /// listening on it: an answer addressed here must never reach a page.
-    private static let walletTransport = "wallet"
-
     /// The wallet's own request to copy its founding keys to Ethereum (spec
     /// 062), through the same sheet a page's request gets — the person reads
-    /// what it is, sees the fee, and slides. There is no page to answer, so the
-    /// answer goes nowhere; the settings row re-reads the chain when it closes.
+    /// what it is, sees the fee, and confirms. There is no page to answer, so
+    /// the answer goes nowhere; the settings row re-reads the chain when it
+    /// closes. The one place the wallet says a request is its own
+    /// (`firstParty`).
     private func openEthereumBackup(_ call: RegistryBackup.Call) {
         let tx: [String: Any] = [
             "from": session.view.address, "to": call.to, "value": "0x0", "data": call.data,
@@ -1728,7 +1726,7 @@ struct RootView: View {
                 method: "eth_sendTransaction",
                 paramsJson: String(decoding: params, as: UTF8.self),
                 origin: "https://getvela.app",
-                transportId: Self.walletTransport,
+                transportId: SigningLive.walletTransport,
                 chainId: call.chainId,
                 firstParty: true
             ),

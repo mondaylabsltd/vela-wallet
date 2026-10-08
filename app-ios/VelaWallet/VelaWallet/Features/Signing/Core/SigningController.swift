@@ -364,15 +364,14 @@ final class SigningController {
             // The browser's fact about who asked. The wallet's own request is
             // not a site, and the page draws an empty origin as the wallet.
             origin: { [weak self] in
-                guard let request = self?.request, request.transportId != SigningLive.walletTransport
-                else { return "" }
+                guard let request = self?.request, !request.firstParty else { return "" }
                 return request.origin
             },
             // A page in this app's browser — never the wallet's own requests
             // (the key backup): the browser saw that origin (spec 079).
             originSeenByBrowser: { [weak self] in
                 guard let request = self?.request else { return false }
-                return request.transportId != SigningLive.walletTransport
+                return !request.firstParty
             },
             trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
