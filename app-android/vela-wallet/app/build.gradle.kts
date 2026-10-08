@@ -89,7 +89,7 @@ android {
         targetSdk = 36
         // Spec 088 FR-012 — see velaVersionCode above. The name is set by hand per release.
         versionCode = velaVersionCode
-        versionName = "0.9.6"
+        versionName = "0.9.7"
 
         // Spec 047: the About page and the bug report name the build. A provider,
         // not a process at configuration time — the configuration cache refuses that.

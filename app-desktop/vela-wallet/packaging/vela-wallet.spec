@@ -87,6 +87,24 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Thu Oct 08 2026 Monday Labs <hello@getvela.app> - 0.9.7-1
+- Pre-release: dApp browser tabs keep their page when you switch between them
+  (on desktop, no reload), and close the way a browser's do: others, to the
+  right, or all. A dApp can ask Vela to add a network, and Vela adds only one
+  your account can use. If the relay cannot reach a network, the wallet stops
+  before you sign, and it says when the relay is topping up its gas. The fee
+  coin defaults to one that can pay, and a coin that cannot says why. Coins paid
+  straight to the wallet show in Activity, the desktop balance has a refresh
+  button, and a tiny incoming amount is no longer shown a trillion times too
+  large. Uniswap no longer shows a swap that landed as failed. On iPhone and
+  iPad: a spinner while a send is submitted, search when adding group members,
+  phone-QR sign-in on iPad, contact export that works, a security-key prompt
+  that asks for the key, and no crash when the share sheet is dismissed. On
+  Android: the launch screen, showing a hidden group again, and the scan-a-code
+  sheet are fixed. The web wallet and the browser extension now send anonymous
+  usage statistics, never addresses, amounts or the sites you visit; turn them
+  off in Settings → About.
+
 * Sat Oct 03 2026 Monday Labs <hello@getvela.app> - 0.9.6-1
 - Pre-release: signing a dApp request now says what the call actually does — the
   coin it sends, a token contract by name, an unlimited allowance, an order's
