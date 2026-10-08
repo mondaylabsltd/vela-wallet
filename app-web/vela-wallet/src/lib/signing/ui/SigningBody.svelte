@@ -45,6 +45,22 @@
 	// cs29 ships the disclosure open; anything after that is the person's call.
 	let techOverride = $state<boolean | undefined>();
 	const techOpen = $derived(techOverride ?? model.techOpen);
+
+	/** Spec 099 R7: why the confirm is shut, in the core's words. */
+	const note = $derived(model.confirm.enabled ? undefined : model.confirm.note);
+	/**
+	 * The note comes and goes with the gate — "Working out the network fee…"
+	 * on every re-quote, refresh and new speed — and the phone sheet is
+	 * bottom-anchored: each time it came, the whole sheet above rose by a line
+	 * (the Android device: ~33 px a re-quote; the web measured 29). Once a note
+	 * has been said, its line stays, holding the last words invisibly while
+	 * the gate is open, so a measurement moves nothing.
+	 */
+	let lastNote: string | undefined;
+	const noteLine = $derived.by(() => {
+		if (note !== undefined) lastNote = note;
+		return lastNote;
+	});
 </script>
 
 <div class="blocks">
@@ -101,9 +117,17 @@
 				{model.confirm.action}
 			</Button>
 		</div>
-		{#if !model.confirm.enabled && model.confirm.note}
-			<!-- Spec 099 R7: a shut confirm says why, in the core's words. -->
-			<p class="confirm-note">{model.confirm.note}</p>
+		{#if noteLine}
+			<!-- Spec 099 R7: a shut confirm says why, in the core's words. One
+			     element for both states — read on every frame, so the line it
+			     holds is always the last one said. -->
+			<p
+				class="confirm-note"
+				class:reserved={note === undefined}
+				aria-hidden={note === undefined ? 'true' : undefined}
+			>
+				{noteLine}
+			</p>
 		{/if}
 	{/if}
 </div>
@@ -114,6 +138,9 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 		text-align: center;
+	}
+	.confirm-note.reserved {
+		visibility: hidden;
 	}
 	.dismiss,
 	.confirm {

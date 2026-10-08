@@ -292,6 +292,7 @@ describe('the desktop column title (T484)', () => {
 				recipient_is_contract: false,
 				amount_warning: null,
 				fee: null,
+				fee_coin: null,
 				fee_issue: null,
 				estimating_gas: false,
 				can_continue: false,

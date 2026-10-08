@@ -85,12 +85,20 @@
 		     box for both states, so a press moves nothing: the glyph turns in
 		     its own square, and the two labels share one grid cell — the box is
 		     as wide as the longer of them, the one not shown is laid out under
-		     the other, invisible. Inert while it turns, never dimmed. -->
+		     the other, invisible. Inert while it turns, never dimmed. Its name
+		     is what it says — "Updating…" while it turns, "Updated 2m" at rest —
+		     and "Refresh balance" while no read has settled and the glyph stands
+		     alone: a glyph is aria-hidden and the laid-out-but-invisible label
+		     names nothing, so without it a screen reader heard a bare "button"
+		     exactly when a person most needs the control. -->
 		<button
 			type="button"
 			class="refresh"
 			class:spinning
 			data-testid="balance-refresh"
+			aria-label={spinning
+				? balance.refresh.updating
+				: (balance.refresh.updated ?? balance.refresh.a11yIdle)}
 			aria-busy={spinning}
 			aria-disabled={spinning || onrefresh === undefined ? 'true' : undefined}
 			onclick={refresh}

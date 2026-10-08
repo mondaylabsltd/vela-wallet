@@ -28,6 +28,31 @@
 	}
 
 	let { fee, ontoggle, onpick, onspeed, onspeedpick, onrefresh }: Props = $props();
+
+	/**
+	 * The line under the fee card says why the confirm is shut: a coin that
+	 * cannot pay, a quote that failed. While the fee is measured again (the
+	 * 30 s re-quote, a refresh, a new speed) that verdict is about the last
+	 * quote, so it is not said — but its line keeps its height, holding the
+	 * last words: the phone sheet is bottom-anchored, and a line that came and
+	 * went with every measurement moved everything above it. A fee that lands
+	 * with nothing to say lets the line go; that is a change, not a jump.
+	 * The builder's own reservation (spec 082 G47, a failure being asked
+	 * again) comes first.
+	 */
+	let lastWarning: string | undefined;
+	/** The line under the card: said, held (drawn invisibly), or none. */
+	const warningLine = $derived.by((): { text: string; said: boolean } | undefined => {
+		if (fee.kind !== 'onchain') return undefined;
+		if (fee.warning !== undefined) {
+			lastWarning = fee.warning;
+			return { text: fee.warning, said: true };
+		}
+		const held = fee.refreshing === true ? (fee.warningReserved ?? lastWarning) : undefined;
+		if (fee.refreshing !== true) lastWarning = undefined;
+		const text = held ?? fee.warningReserved;
+		return text === undefined ? undefined : { text, said: false };
+	});
 </script>
 
 {#if fee.kind === 'offchain'}
@@ -110,16 +135,16 @@
 				/>
 			{/if}
 		</div>
-		{#if fee.warning}
+		{#if warningLine?.said}
 			<!-- Issue 262: the reason the confirm is shut, right under the fee it is
 			     about (spec 082 G47 — it sat under the speed row) — the coin cannot
 			     pay, or (spec 079) the fee could not be asked and the sheet is
 			     asking again. -->
-			<p class="warning" role="alert">{fee.warning}</p>
-		{:else if fee.warningReserved}
-			<!-- Asking again: the last failure's words are not this ask's, but
-			     their line keeps its height, so nothing below jumps (G47). -->
-			<p class="warning reserved" aria-hidden="true">{fee.warningReserved}</p>
+			<p class="warning" role="alert">{warningLine.text}</p>
+		{:else if warningLine}
+			<!-- Measuring again: the last words are not this ask's, but their
+			     line keeps its height, so nothing above or below jumps (G47). -->
+			<p class="warning reserved" aria-hidden="true">{warningLine.text}</p>
 		{/if}
 		{#if fee.refreshLabel !== undefined}
 			<!-- The send form's calm note, in its standing line: the confirm

@@ -43,7 +43,10 @@
 	{/if}
 
 	{#if panel.report}
-		<button type="button" class="report" onclick={onreport}>{panel.report.label}</button>
+		<!-- The same hook as the treasury sheet's, and the phones'. -->
+		<button type="button" class="report" data-testid="relay-report" onclick={onreport}
+			>{panel.report.label}</button
+		>
 	{/if}
 
 	<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>

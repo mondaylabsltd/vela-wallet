@@ -1289,8 +1289,16 @@ describe('the fee row names the coin that is paying', () => {
 		}
 	};
 
+	// The coin the row wears is the core's (`SendView.fee_coin`): for an
+	// estimate in hand, the estimate's coin (live-send-fee-coin.test.ts drives
+	// the real core).
+	const usdtCoin = { symbol: 'USDT', contract: '0x' + 'cc'.repeat(20), chain_id: 1 };
+
 	it('an erc20 fee reads in that token, never in the native coin', () => {
-		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: usdcQuote }));
+		const model = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, fee: usdcQuote, fee_coin: usdtCoin })
+		);
 		expect(model.fee.value).toBe('0.944 USDT');
 		expect(model.fee.mark.ticker).toBe('USDT');
 	});
@@ -1301,7 +1309,8 @@ describe('the fee row names the coin that is paying', () => {
 			inputs(
 				{
 					selected_token: ETH,
-					fee: { ...usdcQuote, fee_asset: { ...usdcQuote.fee_asset, symbol: null } }
+					fee: { ...usdcQuote, fee_asset: { ...usdcQuote.fee_asset, symbol: null } },
+					fee_coin: usdtCoin
 				},
 				{
 					options: [
@@ -2141,8 +2150,9 @@ describe('the folded speed control (spec 068)', () => {
 	 * The coin does not change with the speed. While a newly picked speed is
 	 * measured the row has no figure (issue 681), and it used to have no coin
 	 * either: it fell back to the chain's own, so a USDC fee wore ETH's logo for
-	 * that moment. It keeps the coin that will pay — the fee option in force,
-	 * else the estimate in hand — as the desktop does.
+	 * that moment. It keeps the coin that will pay — the core's `fee_coin`,
+	 * which holds the estimate in hand across the speed change — whatever the
+	 * card's own options say.
 	 */
 	it('keeps the paying coin’s mark while a newly picked speed is measured', () => {
 		const usdc = '0x' + 'cc'.repeat(20);
@@ -2180,30 +2190,40 @@ describe('the folded speed control (spec 068)', () => {
 			THREE[1],
 			{ tier: 'slow' as const, view: IDLE_FEE, busy: true }
 		];
+		const usdcCoin = { symbol: 'USDC', contract: usdc, chain_id: 1 };
 		const measuring = (fee: Partial<FeeView>) =>
 			liveSendForm(formModel(), {
 				...speedInputs(false, 'slow', slowMeasuring),
-				send: { ...EMPTY_SEND, selected_token: ETH, fee: paidInUsdc },
+				send: { ...EMPTY_SEND, selected_token: ETH, fee: paidInUsdc, fee_coin: usdcCoin },
 				fee: { ...IDLE_FEE, busy: true, ...fee }
 			});
-		// The option in force names it…
+		// The core's coin names it, with the option in force…
 		const byOption = measuring({ options: [usdcOption] });
 		expect(byOption.fee.value).toBe('…');
 		expect(byOption.fee.mark).toEqual(usdcMark);
-		// …and with the options not back yet, the estimate in hand does.
+		// …and with the options not back yet.
 		expect(measuring({ options: [] }).fee.mark).toEqual(usdcMark);
 		// Once this speed's own figure lands it is the same coin, now with its money.
 		const landed = liveSendForm(formModel(), {
 			...speedInputs(false, 'slow', THREE),
-			send: { ...EMPTY_SEND, selected_token: ETH, fee: { ...paidInUsdc, tier: 'slow' } },
+			send: {
+				...EMPTY_SEND,
+				selected_token: ETH,
+				fee: { ...paidInUsdc, tier: 'slow' },
+				fee_coin: usdcCoin
+			},
 			fee: { ...IDLE_FEE, options: [usdcOption] }
 		});
 		expect(landed.fee.value).toBe('0.944 USDC');
 		expect(landed.fee.mark).toEqual(usdcMark);
 		// A native fee stays the chain's own coin throughout.
-		expect(liveSendForm(formModel(), speedInputs(false, 'slow', slowMeasuring)).fee.mark).toEqual(
-			tokenMarkFor(1, 'ETH', null)
-		);
+		const native = speedInputs(false, 'slow', slowMeasuring);
+		expect(
+			liveSendForm(formModel(), {
+				...native,
+				send: { ...native.send, fee_coin: { symbol: 'ETH', contract: null, chain_id: 1 } }
+			}).fee.mark
+		).toEqual(tokenMarkFor(1, 'ETH', null));
 	});
 
 	// The promise the picker makes, in words, before the tap that would

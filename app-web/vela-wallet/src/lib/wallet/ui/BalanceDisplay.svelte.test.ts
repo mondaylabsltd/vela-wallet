@@ -5,6 +5,7 @@
  */
 import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import type { BalanceModel } from '../model';
@@ -19,7 +20,12 @@ function hero(spinning: boolean, updated: string | null = 'Updated 2m'): Balance
 		integer: '$1,383',
 		decimals: '28',
 		status: { kind: 'warning', text: "Some tokens couldn't be priced." },
-		refresh: { updated: updated ?? undefined, updating: 'Updating…', spinning },
+		refresh: {
+			updated: updated ?? undefined,
+			updating: 'Updating…',
+			a11yIdle: 'Refresh balance',
+			spinning
+		},
 		a11yHide: 'Hide balance',
 		a11yShow: 'Show balance'
 	};
@@ -45,6 +51,8 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		const screen = render(BalanceDisplay, { props: { balance: hero(false), onrefresh } });
 		const button = control(screen.container);
 		expect(shownWords(button)).toBe('Updated 2m');
+		// Its name is what it says.
+		await expect.element(page.getByRole('button', { name: 'Updated 2m' })).toBeInTheDocument();
 		expect(button.getAttribute('aria-busy')).toBe('false');
 		expect(button.hasAttribute('aria-disabled')).toBe(false);
 		button.click();
@@ -56,6 +64,7 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		const screen = render(BalanceDisplay, { props: { balance: hero(true), onrefresh } });
 		const button = control(screen.container);
 		expect(shownWords(button)).toBe('Updating…');
+		await expect.element(page.getByRole('button', { name: 'Updating…' })).toBeInTheDocument();
 		expect(button.getAttribute('aria-busy')).toBe('true');
 		expect(button.getAttribute('aria-disabled')).toBe('true');
 		const glyph = button.querySelector<HTMLElement>('.glyph')!;
@@ -94,15 +103,24 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		host.remove();
 	});
 
-	it('before any read has settled it is the glyph alone, still a door', async () => {
+	it('before any read has settled it is the glyph alone, still a door, named', async () => {
 		const onrefresh = vi.fn();
 		const screen = render(BalanceDisplay, {
 			props: { balance: hero(false, null), onrefresh }
 		});
 		const button = control(screen.container);
 		expect(shownWords(button)).toBe('');
+		// The glyph is aria-hidden and the invisible label names nothing: the
+		// control says what it does, not "Updating…" while nothing is.
+		await expect
+			.element(page.getByRole('button', { name: 'Refresh balance', exact: true }))
+			.toBeInTheDocument();
+		expect(button.getAttribute('aria-label')).toBe('Refresh balance');
 		button.click();
 		expect(onrefresh).toHaveBeenCalledTimes(1);
+		// Its first read turns it: then it is "Updating…", like the words.
+		await screen.rerender({ balance: hero(true, null), onrefresh });
+		expect(control(screen.container).getAttribute('aria-label')).toBe('Updating…');
 	});
 
 	it('a board with no control draws none', () => {

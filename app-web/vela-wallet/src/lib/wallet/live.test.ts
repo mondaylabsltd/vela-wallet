@@ -304,9 +304,11 @@ describe('the hero refresh control (issue 462)', () => {
 		expect(rest.refresh).toEqual({
 			updated: fill(m.balance.lastUpdated, { ago: '2m' }),
 			updating: m.balance.updating,
+			a11yIdle: m.balance.refreshBalance,
 			spinning: false
 		});
 		expect(rest.refresh?.updated).toBe('Updated 2m');
+		expect(m.balance.refreshBalance).toBe('Refresh balance');
 		expect(m.balance.updating).toBe('Updating…');
 		// The core's flag turns it…
 		expect(

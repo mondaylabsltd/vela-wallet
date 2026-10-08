@@ -19,6 +19,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
+import type { SendFeeCoin } from '$lib/core/generated/SendFeeCoin';
 import type { SendPayee } from '$lib/core/generated/SendPayee';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
@@ -38,14 +39,7 @@ import {
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
-import {
-	feeAmountText,
-	feeLine,
-	feeLineParts,
-	feeOptionPriceUsd,
-	feeParts,
-	feeSymbol
-} from './fee-line';
+import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
 import { speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
@@ -268,36 +262,23 @@ function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 }
 
 /**
- * The coin the fee row names, for its mark: the coin that will PAY.
+ * The fee row's coin mark: the core's `SendView.fee_coin`, in every state.
  *
- * The figure is this speed's or none (issue 681), but the coin does not change
- * with the speed. While a newly picked speed is measured there is no estimate
- * of its own, and the row used to fall back to the chain's own coin — for that
- * moment a USDC fee wore ETH's logo. So the coin comes from this speed's
- * estimate when there is one (the mark and the figure are then one coin), else
- * from the fee option in force (`selected`, the core's choice), else from the
- * estimate in hand, which names the same coin at the speed just left. Only
- * with none of those is it the chain's own coin.
+ * With no estimate in hand — a quote out, a quote that failed, a speed being
+ * measured — each shell used to pick the row's coin its own way (this one: the
+ * estimate, else the option in force, else the estimate in hand, else the
+ * chain's own coin; Android an empty disc; the desktop the chain's coin), so
+ * one state was drawn three ways and a failed quote kept the wrong picture on
+ * screen. The core now names it: the estimate in hand, else the coin in force
+ * (the fee card's, mirrored by `fee_token_changed`, else the pick on this
+ * form), else the chain's own — on the form's chain, never chain 0. `null`
+ * only while no chain is known: the empty disc, claiming no coin.
  */
-function feeCoin(
-	quote: FeeEstimateView | null,
-	inHand: FeeEstimateView | null,
-	options: FeeView['options'],
-	chainId: number
-): { symbol: string; contract: string | null } {
-	const ofEstimate = (estimate: FeeEstimateView) => ({
-		symbol: feeSymbol(estimate, options),
-		contract: estimate.fee_asset.type === 'erc20' ? estimate.fee_asset.token : null
-	});
-	if (quote) return ofEstimate(quote);
-	const selected = options.find((option) => option.selected);
-	// The chain's own coin is named as an estimate of it names it (`feeSymbol`).
-	if (selected)
-		return selected.contract === null
-			? { symbol: nativeSymbol(chainId), contract: null }
-			: { symbol: selected.symbol, contract: selected.contract };
-	if (inHand) return ofEstimate(inHand);
-	return { symbol: nativeSymbol(chainId), contract: null };
+function feeRowMark(coin: SendFeeCoin | null, template: FeeRowModel): TokenMarkModel {
+	if (coin === null) {
+		return { ticker: '', badgeColor: template.mark.badgeColor, badgeHidden: true };
+	}
+	return tokenMarkFor(coin.chain_id, coin.symbol, coin.contract);
 }
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
@@ -329,14 +310,12 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 					inputs.currency
 				)
 			: null;
-	const chainId = send.selected_token?.chain_id ?? inHand?.chain_id ?? 1;
-	const coin = feeCoin(quote, inHand, fee.options, chainId);
 	return {
 		// A figure the relay did not quote — a local fallback from defaults —
 		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
 		// the core carries the fact as `quoted`; the label is where it shows.
 		label: quote && !quote.quoted ? m['send.feeTokenEstimate'] : m['componentsUi.gas.networkFee'],
-		mark: tokenMarkFor(chainId, coin.symbol, coin.contract),
+		mark: feeRowMark(send.fee_coin, template),
 		// A figure in hand stays on screen while a re-quote is out (spec 028
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for
