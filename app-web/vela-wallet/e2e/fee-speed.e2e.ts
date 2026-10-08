@@ -954,7 +954,8 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 	// "unable to decode (0 bytes)" in red, which is what it drew before.
 	const sheet = page.getByRole('dialog').filter({ has: slider });
 	await expect(sheet.locator('p.intent')).toHaveText(en('componentsUi.signing.intentSend'));
-	await expect(sheet.getByText('-0.000000000000000001', { exact: true })).toBeVisible();
+	// U+2212, the sheet's minus (spec 082 G19/RJ15) — never an ASCII hyphen.
+	await expect(sheet.getByText('\u22120.000000000000000001', { exact: true })).toBeVisible();
 	await expect(
 		sheet.getByText(en('componentsUi.signing.recipientLabel'), { exact: true })
 	).toBeVisible();
