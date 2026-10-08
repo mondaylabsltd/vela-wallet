@@ -143,6 +143,19 @@ class MarksTest {
         assertEquals("the dot under the badge is the coin's chain's colour", WalletLive.badge(8453), coin.badgeColor)
     }
 
+    /**
+     * The badge that carries a chain's logo is one size on all four shells:
+     * 16 across with a 1.5 ring, the logo 13 inside it — what the web's
+     * `.badge.with-logo` (border-box) and the desktop's draw. It was a 12
+     * logo in a 2 ring here.
+     */
+    @Test
+    fun `the logo badge is 16 with a 1 and a half ring`() {
+        val metrics = app.getvela.wallet.feature.wallet.components.WalletMetrics
+        assertEquals(16f, metrics.badgeLogoRingSize.value, 0f)
+        assertEquals(13f, metrics.badgeLogoSize.value, 0f)
+    }
+
     /** Chain 0 names no network: nothing is asked of the endpoint for it. */
     @Test
     fun `chain 0 asks the endpoint for nothing`() {
