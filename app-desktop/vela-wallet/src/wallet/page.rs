@@ -199,6 +199,28 @@ fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
     }
 }
 
+/// Where a click on 探索 in the sidebar lands (spec 099 navigation, the
+/// core's `explore_landing`): from another section, or again while Explore
+/// is up, its start page — the dApp's tab kept, live and unlit in the strip,
+/// one click from its page as it was left. A signing column that comes back
+/// with Explore (RJ18, `panel` is `Signing` again) comes back with the page
+/// whose request it holds: `signing_tab`, `None` for the wallet's own.
+fn explore_landing_from_sidebar(
+    view: &vela_core::app::explore_sites::ExploreView,
+    from: Section,
+    panel: PanelId,
+    signing_tab: Option<&str>,
+) -> vela_core::app::browser_tabs::ExploreLanding {
+    use vela_core::app::browser_tabs::{ExploreEntry, explore_landing};
+    let entry = if from == Section::Explore {
+        ExploreEntry::Reselect
+    } else {
+        ExploreEntry::Section
+    };
+    let waiting = signing_tab.filter(|_| panel == PanelId::Signing);
+    explore_landing(view, entry, waiting)
+}
+
 /// Whether a request's ending that arrives now is kept (RJ18): the column is
 /// on screen, or only hidden by a switch of section. One the person closed
 /// opens for nothing.
@@ -821,7 +843,9 @@ pub struct WalletPage {
     /// bar says "reloaded to save memory" until it is left.
     reloaded_tab: Option<String>,
     /// Spec 082 RD6: the tab whose page is in the webview — `None` at launch,
-    /// when a restored tab waits unlit for a click.
+    /// when a restored tab waits unlit for a click. Under the start page it
+    /// may still name a page (spec 099 navigation: Explore entered again
+    /// lands on its start page), live and hidden until its tab is clicked.
     shown_tab: Option<String>,
     /// Spec 082 G54: the tab strip's measure and scroll, kept across frames.
     tab_strip: explore_components::TabStripScroll,
@@ -3538,12 +3562,16 @@ impl WalletPage {
                         this.signing_hidden = true;
                     }
                     let kept = this.signing_hidden && this.signing_to_show();
+                    let from = this.section;
                     this.section = destination;
                     this.panel = panel_after_switch(destination, kept);
                     if this.panel == PanelId::Signing {
                         this.signing_hidden = false;
                     }
                     this.menu = None;
+                    if destination == Section::Explore {
+                        this.land_in_explore(from, cx);
+                    }
                     cx.notify();
                 })),
                 None => row,
@@ -12785,14 +12813,68 @@ impl WalletPage {
         if url.trim().is_empty() {
             return;
         }
-        self.open_here(url, cx);
+        // Handed in from outside: an address, never a site to resume.
+        self.open_here(
+            url,
+            vela_core::app::browser_tabs::ExploreOpenKind::Address,
+            cx,
+        );
     }
 
     /// The tab the strip lights (spec 082 RD6): the one whose page is in the
     /// webview, or a selected start-page tab over the start page. A restored
     /// tab waits unlit until somebody clicks it.
     fn lit_tab(&self, view: &vela_core::app::explore_sites::ExploreView) -> Option<String> {
-        crate::wallet::browser_host::lit_tab(view, self.shown_tab.as_deref(), self.browsing)
+        vela_core::app::browser_tabs::lit_tab(view, self.shown_tab.as_deref(), self.browsing)
+    }
+
+    /// Explore, chosen in the sidebar (spec 099 navigation): where it lands
+    /// is the core's (`explore_landing_from_sidebar`). The start page only
+    /// hides the page: its tab stays selected, live and unlit, and a click on
+    /// it is `switch_to_tab` — the page as it was left, no load.
+    fn land_in_explore(&mut self, from: Section, cx: &mut Context<Self>) {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let signing_tab = self.signing_column_tab(cx);
+        match explore_landing_from_sidebar(&explore, from, self.panel, signing_tab.as_deref()) {
+            ExploreLanding::Home => {
+                if self.browsing {
+                    crate::diag::vlog!(
+                        "browser",
+                        "explore home, tab={} kept",
+                        self.shown_tab.as_deref().unwrap_or("-")
+                    );
+                }
+                self.browsing = false;
+                // All off over the start page (RD6). The poll that would say
+                // so stopped while another section was in front, and a dimmed
+                // arrow still asks this at the click — of the hidden page.
+                self.nav_enabled = [false; 3];
+            }
+            ExploreLanding::Tab { id } => {
+                let url = explore
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .and_then(|tab| tab.url.clone());
+                self.browser_go(crate::wallet::browser_host::Go::Tab { id, url }, cx);
+            }
+        }
+    }
+
+    /// The tab whose request the signing column holds (RJ18): the live
+    /// request's page, or the page whose request's ending it shows. `None`
+    /// for the wallet's own requests, which no page made.
+    fn signing_column_tab(&self, cx: &gpui::App) -> Option<String> {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = &self.signing_host {
+            return host.read(cx).tab.clone();
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
+        self.dapp_landing
+            .as_ref()
+            .and_then(|landing| landing.tab.clone())
     }
 
     /// Every navigation the page starts goes through here (spec 082 RD1):
@@ -12800,27 +12882,13 @@ impl WalletPage {
     /// (spec 099 FR-003: a switch retires no page).
     fn browser_go(&mut self, go: crate::wallet::browser_host::Go, cx: &mut Context<Self>) {
         use crate::wallet::browser_host::{Go, Went, went};
+        use vela_core::app::browser_tabs::ExploreOpenKind;
         let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
         let lit = self.lit_tab(&explore);
         match went(&go, lit.as_deref()) {
             Went::AlreadyThere => {}
             Went::Go => match go {
-                Go::Tab { id, url } => {
-                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
-                            cx,
-                        );
-                    });
-                    match url {
-                        Some(url) => self.switch_to_tab(id, url, cx),
-                        // A start-page tab: the wallet's own screen.
-                        None => {
-                            self.show_tab(Some(id), cx);
-                            self.browsing = false;
-                        }
-                    }
-                }
+                Go::Tab { id, url } => self.select_strip_tab(id, url, cx),
                 Go::NewTab => {
                     // A new tab is the START page: a browser does not decide
                     // where somebody wants to go next.
@@ -12836,7 +12904,10 @@ impl WalletPage {
                     });
                     self.browsing = false;
                 }
-                Go::Typed(url) | Go::Open(url) => self.open_here(url, cx),
+                // A typed address names a page; a picked site names a site,
+                // which a tab already on it is (the core's open rule).
+                Go::Typed(url) => self.open_here(url, ExploreOpenKind::Address, cx),
+                Go::Open(url) => self.open_here(url, ExploreOpenKind::Site, cx),
                 Go::OpenInNewTab(url) => self.open_in_new_tab(url, None, cx),
                 Go::Reload => {
                     // Over the failure panel, reload is its Retry: the
@@ -12945,15 +13016,16 @@ impl WalletPage {
                 host.view
                     .pending_op_hash
                     .clone()
-                    .map(|op| (op, host.chain_id, host.seen_submitted_ms))
+                    .map(|op| (op, host.chain_id, host.seen_submitted_ms, host.tab.clone()))
             });
-            if let Some((user_op_hash, chain_id, seen_submitted_ms)) = following {
+            if let Some((user_op_hash, chain_id, seen_submitted_ms, tab)) = following {
                 self.dapp_landing_seq += 1;
                 self.dapp_landing = Some(DappLanding {
                     ending: vela_core::app::sign_request::SignEnding::StillConfirming {
                         user_op_hash,
                     },
                     chain_id,
+                    tab,
                     seq: self.dapp_landing_seq,
                     seen_submitted_ms,
                     closing: false,
@@ -12965,15 +13037,25 @@ impl WalletPage {
         let _ = cx;
     }
 
-    /// An address, in the page on screen (RD6): the shown tab's page; over
-    /// the start page, the selected start-page tab; otherwise — a restored
-    /// tab waiting unlit — a NEW tab, leaving the waiting one intact.
-    fn open_here(&mut self, url: String, cx: &mut Context<Self>) {
+    /// An address or a site, opened where the core's open rule says (RD6,
+    /// spec 099 navigation): the shown tab's page; over the start page, a
+    /// picked site's own tab already on it — resumed as it was left — else
+    /// the selected start-page tab; otherwise — a dApp or a restored tab
+    /// waiting unlit — a NEW tab, leaving the waiting one intact.
+    fn open_here(
+        &mut self,
+        url: String,
+        kind: vela_core::app::browser_tabs::ExploreOpenKind,
+        cx: &mut Context<Self>,
+    ) {
+        use vela_core::app::browser_tabs::{ExploreOpenTarget, open_target};
         let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let target = crate::wallet::browser_host::open_target(
+        let target = open_target(
             &explore,
             self.shown_tab.as_deref(),
             self.browsing,
+            &url,
+            kind,
         );
         crate::diag::vlog!(
             "browser",
@@ -12987,11 +13069,38 @@ impl WalletPage {
             crate::ui::editor::is_composing(&self.address_focus)
         );
         match target {
-            Some(id) => {
+            ExploreOpenTarget::Load { id } => {
                 self.show_tab(Some(id), cx);
                 self.navigate_to(url);
             }
-            None => self.open_in_new_tab(url, None, cx),
+            ExploreOpenTarget::Resume { id } => {
+                let url = explore
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .and_then(|tab| tab.url.clone());
+                self.select_strip_tab(id, url, cx);
+            }
+            ExploreOpenTarget::NewTab => self.open_in_new_tab(url, None, cx),
+        }
+    }
+
+    /// A tab of the strip, chosen (RD1): the core hears it selected, and its
+    /// page comes to the front (`switch_to_tab`); a start-page tab is the
+    /// wallet's own screen.
+    fn select_strip_tab(&mut self, id: String, url: Option<String>, cx: &mut Context<Self>) {
+        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
+                cx,
+            );
+        });
+        match url {
+            Some(url) => self.switch_to_tab(id, url, cx),
+            None => {
+                self.show_tab(Some(id), cx);
+                self.browsing = false;
+            }
         }
     }
 
@@ -15543,7 +15652,14 @@ impl WalletPage {
         let window_handle = self.window_handle;
         let account = account.clone();
         let host = cx.new(|cx| {
-            crate::wallet::signing_host::SigningHost::open(&account, request, window_handle, cx)
+            let mut host = crate::wallet::signing_host::SigningHost::open(
+                &account,
+                request,
+                window_handle,
+                cx,
+            );
+            host.tab = tab.clone();
+            host
         });
         let observed = tab.clone();
         cx.observe(&host, move |page, host, cx| {
@@ -15590,6 +15706,7 @@ impl WalletPage {
                     read.ending.clone().map(|ending| DappLanding {
                         ending,
                         chain_id: read.chain_id,
+                        tab: read.tab.clone(),
                         seq: 0,
                         seen_submitted_ms: read.seen_submitted_ms,
                         closing: false,
@@ -19757,6 +19874,9 @@ enum AddressKey {
 struct DappLanding {
     ending: vela_core::app::sign_request::SignEnding,
     chain_id: u32,
+    /// The tab whose request ended (RJ18): the column comes back with its
+    /// page. `None` for the wallet's own.
+    tab: Option<String>,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,
     /// When the column first saw the operation accepted.
@@ -19934,6 +20054,7 @@ mod tests {
             favorites_full: false,
             tabs_full: false,
             recent_tabs: Vec::new(),
+            resumable: Vec::new(),
             ready: true,
         };
         let [favorites, recent] = explore_group_rows(&view, &strings);
@@ -19976,6 +20097,50 @@ mod tests {
         // Closed by the person (✕, Done): nothing comes back.
         assert!(!keeps_ending(PanelId::None, false));
         assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Spec 099 navigation (desktop): 探索 from another section, or again
+    /// while a page shows, lands on the start page with the dApp's tab kept;
+    /// a signing column that comes back with Explore (RJ18) brings its own
+    /// page — the tab whose request it holds, not merely the one last shown.
+    #[test]
+    fn explore_from_the_sidebar_lands_home_unless_a_signing_column_comes_back() {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        use vela_core::app::explore_sites::{ExploreTab, ExploreView};
+        let tab = |id: &str, url: &str| ExploreTab {
+            id: id.to_owned(),
+            url: Some(url.to_owned()),
+            title: String::new(),
+            host: crate::diag::host_of(url),
+        };
+        let view = ExploreView {
+            tabs: vec![
+                tab("t1", "https://app.uniswap.org/"),
+                tab("t2", "https://polymarket.com/"),
+            ],
+            selected_tab: Some("t1".to_owned()),
+            ready: true,
+            ..ExploreView::default()
+        };
+        let home = ExploreLanding::Home;
+        let page = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
+        let land = |from, panel, signing_tab| {
+            explore_landing_from_sidebar(&view, from, panel, signing_tab)
+        };
+        // From the wallet, and a re-click while a page shows: the start page.
+        assert_eq!(land(Section::Wallet, PanelId::None, None), home);
+        assert_eq!(land(Section::Explore, PanelId::None, None), home);
+        // A column for t2's request, hidden by 钱包, comes back with t2's page.
+        let back = panel_after_switch(Section::Explore, true);
+        assert_eq!(land(Section::Wallet, back, Some("t2")), page("t2"));
+        // A re-click with the column on screen keeps it, and its page.
+        assert_eq!(land(Section::Explore, back, Some("t1")), page("t1"));
+        // A column the person closed is no reason to leave the start page.
+        let closed = panel_after_switch(Section::Explore, false);
+        assert_eq!(land(Section::Wallet, closed, Some("t2")), home);
+        // The wallet's own request (no page asked), or a tab since closed.
+        assert_eq!(land(Section::Wallet, back, None), home);
+        assert_eq!(land(Section::Wallet, back, Some("gone")), home);
     }
 
     /// Spec 097 E: the Connection column speaks of a real connection or of

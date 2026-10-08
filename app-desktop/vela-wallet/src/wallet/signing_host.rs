@@ -332,6 +332,10 @@ pub struct SigningHost {
     pub transport_id: String,
     /// The request this column is for — what a `cancel_signing` names.
     pub request_id: String,
+    /// The strip tab whose page asked (spec 082 RJ18: a column hidden by a
+    /// switch of section comes back with this tab's page). `None` for the
+    /// wallet's own requests; the page sets it as it opens the column.
+    pub tab: Option<String>,
     /// The request has been answered. The column may still be showing (a
     /// receipt, an error), but the request is over, so another may take the
     /// column's place.
@@ -532,6 +536,7 @@ impl SigningHost {
             sim_notice: None,
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
+            tab: None,
             responded: false,
             answers: Vec::new(),
             fee_open: false,

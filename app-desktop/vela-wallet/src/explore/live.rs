@@ -420,6 +420,7 @@ mod tests {
             favorites_full: false,
             tabs_full: false,
             recent_tabs: Vec::new(),
+            resumable: Vec::new(),
             ready: true,
         };
         let tabs = tab_models(
