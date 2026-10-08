@@ -245,9 +245,13 @@ test('Report this opens the in-app report in the same sheet, prefilled, and file
 	await expect(what).toHaveValue(/^Relayer out of gas on Ethereum \(1\)/);
 	await expect(what).toHaveValue(new RegExp(EMPTY_TREASURY.address));
 	await expect(what).toHaveValue(/0\.0001 ETH/);
-	await expect(
-		sheet.getByRole('textbox', { name: en('componentsUi.bugReport.stepsPlaceholder') })
-	).toHaveValue(/Ethereum \(1\)/);
+	const steps = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.stepsPlaceholder') });
+	await expect(steps).toHaveValue(/Ethereum \(1\)/);
+	// Read whole at phone width: the boxes grow to the report, so the address
+	// and the figures need no scroll inside them.
+	for (const field of [what, steps]) {
+		expect(await field.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+	}
 
 	await page.screenshot({ path: testInfo.outputPath('466-report.png') });
 
