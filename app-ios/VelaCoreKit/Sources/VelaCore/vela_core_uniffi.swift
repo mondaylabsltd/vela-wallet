@@ -13284,6 +13284,23 @@ public func browserEnginePlan(inputJson: String) -> String?  {
 })
 }
 /**
+ * The tab a strip or switcher marks as "this tab": the page's tab while a
+ * page is on screen; over the home, the selected tab only when it is a
+ * start-page tab — a tab waiting unlit is not "this tab" under a home page.
+ * `None` when nothing is lit or the view does not read. See
+ * `vela_core::app::browser_tabs::lit_tab`.
+ */
+public func browserLitTab(viewJson: String, shown: String?, onPage: Bool) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_lit_tab(
+        FfiConverterString.lower(viewJson),
+        FfiConverterOptionString.lower(shown),
+        FfiConverterBool.lower(onPage),uniffiCallStatus
+    )
+})
+}
+/**
  * The platform's raw load error → the one failure every shell shows, or
  * `None` when it is not a failure (a cancelled navigation). `platform` is
  * `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
@@ -13387,6 +13404,30 @@ public func browserLoadVisit(url: String, title: String, icon: String?, mainFram
 })
 }
 /**
+ * Which tab an open goes into — never over a live dApp from the home: the
+ * explore view (JSON), the tab whose page is in the view, whether that page
+ * is on screen (`false` for anything asked from the home or from outside),
+ * the address, and how it was asked for (`"address"` typed or handed in,
+ * `"site"` a favourite, recent or featured tile picked) in; an
+ * `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
+ * `tab_navigated` and load it there), `{"type":"resume","id":…}` (a tab
+ * already on that site: `tab_selected`, shown as it was left) or
+ * `{"type":"new_tab"}` (`tab_opened`). `None` for input that does not read.
+ * See `vela_core::app::browser_tabs::open_target`.
+ */
+public func browserOpenTarget(viewJson: String, shown: String?, onPage: Bool, url: String, kind: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_open_target(
+        FfiConverterString.lower(viewJson),
+        FfiConverterOptionString.lower(shown),
+        FfiConverterBool.lower(onPage),
+        FfiConverterString.lower(url),
+        FfiConverterString.lower(kind),uniffiCallStatus
+    )
+})
+}
+/**
  * The title a page is pinned under as a favourite (spec 086, issue #329):
  * `last_good`'s title when it is the same site as `url` — the bar's address,
  * the failed one under a failure panel — else `None`, and the favourite takes
@@ -13424,6 +13465,20 @@ public func browserSiteLetter(host: String) -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_browser_site_letter(
         FfiConverterString.lower(host),uniffiCallStatus
+    )
+})
+}
+/**
+ * The tab whose request is in front of the person — the browser machine's
+ * consent, signature or add-network sheet — from a `DbrView` JSON: what
+ * `explore_landing` takes as `waiting`. `None` while nothing waits. See
+ * `vela_core::app::browser_tabs::waiting_tab`.
+ */
+public func browserWaitingTab(dappViewJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_waiting_tab(
+        FfiConverterString.lower(dappViewJson),uniffiCallStatus
     )
 })
 }
@@ -13765,6 +13820,26 @@ public func entryPointAddress() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_entry_point_address(uniffiCallStatus
+    )
+})
+}
+/**
+ * What Explore shows when somebody enters it: the explore view (JSON — only
+ * `tabs`, `selected_tab` and `recent_tabs` are read), what brought it up
+ * (`"section"` from another section, `"reselect"` chosen again while up,
+ * `"page_opened"` a page opened from outside — asked once that open is in
+ * the view) and the tab whose request waits on the person
+ * (`browser_waiting_tab`) in; an `ExploreLanding` JSON out —
+ * `{"type":"home"}` or `{"type":"tab","id":…}`. `None` for input that does
+ * not read. See `vela_core::app::browser_tabs::explore_landing`.
+ */
+public func exploreLanding(viewJson: String, entry: String, waiting: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_explore_landing(
+        FfiConverterString.lower(viewJson),
+        FfiConverterString.lower(entry),
+        FfiConverterOptionString.lower(waiting),uniffiCallStatus
     )
 })
 }
@@ -15859,6 +15934,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_engine_plan() != 22471) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_lit_tab() != 37827) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 57968) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15880,6 +15958,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_open_target() != 26339) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_browser_pinned_title() != 57380) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15887,6 +15968,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_site_letter() != 47269) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_waiting_tab() != 29027) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_bundler_quote_cacheable() != 62844) {
@@ -15974,6 +16058,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_entry_point_address() != 5546) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_explore_landing() != 9060) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_explore_tabs_closed_by() != 32722) {
