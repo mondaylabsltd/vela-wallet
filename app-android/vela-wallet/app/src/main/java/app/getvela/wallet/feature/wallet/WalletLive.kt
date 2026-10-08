@@ -523,25 +523,28 @@ object WalletLive {
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
-    ): AssetRowModel = AssetRowModel(
-        id = holdingId(token.chain_id, token.token_address),
-        ticker = token.symbol,
-        // The chain, falling back to the token's own name only when this
-        // device has no row for the chain — never a blank line.
-        chain = chainNames[token.chain_id] ?: token.name,
-        badgeColor = badgeColour(token.chain_id),
-        logoUrls = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).logoUrls,
-        badgeLogoUrl = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeLogoUrl,
-        badgeHidden = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeHidden,
-        // The ONE token-amount rule (spec 078): Send's picker, token card,
-        // confirm and receipt call the same function on the same holding.
-        balance = "${tokenAmountText(token.balance)} ${token.symbol}",
-        fiat = token.price_usd?.let { price ->
-            val value = money.convert(amountAsDouble(token.balance) * price)
-            AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
-        } ?: AssetFiatModel.NoPrice("—"),
-        masked = false,
-    )
+    ): AssetRowModel {
+        val mark = mark(token.chain_id, token.symbol, token.token_address)
+        return AssetRowModel(
+            id = holdingId(token.chain_id, token.token_address),
+            ticker = token.symbol,
+            // The chain, falling back to the token's own name only when this
+            // device has no row for the chain — never a blank line.
+            chain = chainNames[token.chain_id] ?: token.name,
+            badgeColor = mark.badgeColor,
+            logoUrls = mark.logoUrls,
+            badgeLogoUrl = mark.badgeLogoUrl,
+            badgeHidden = mark.badgeHidden,
+            // The ONE token-amount rule (spec 078): Send's picker, token card,
+            // confirm and receipt call the same function on the same holding.
+            balance = "${tokenAmountText(token.balance)} ${token.symbol}",
+            fiat = token.price_usd?.let { price ->
+                val value = money.convert(amountAsDouble(token.balance) * price)
+                AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
+            } ?: AssetFiatModel.NoPrice("—"),
+            masked = false,
+        )
+    }
 
     private fun amountAsDouble(balance: String): Double = balance.toDoubleOrNull() ?: 0.0
 
@@ -599,23 +602,36 @@ object WalletLive {
     }
 
     /**
-     * Spec 047: every token mark on the phone — the drawn colour plus the
-     * web's logo rules (`tokenMarkFor`): the coin's chain logo for a native
-     * coin, the asset entry for a token, the badge hidden when it would repeat.
+     * Every COIN's mark on the phone: the core's answer (`Marks.tokenMark`:
+     * the coin's home-chain logo for a native coin, the asset entry for a
+     * token, no badge where it would repeat the coin) in this shell's colours.
+     * [tokenAddress] is `null` for the chain's own coin.
      */
-    fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel {
-        val m = Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls)
-        return TokenMarkModel(symbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
-    }
+    fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel =
+        markModel(symbol, chainId, Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls))
 
     /**
-     * A network by itself (the web's `chainMark`): the chain's own logo, no
-     * badge — the mark of "anything on this network", never of its coin.
+     * Every NETWORK's mark (the kind rule): a network row or fact, a notice
+     * that locks a chain, the QR centre. The chain's own logo over its coin's
+     * letters, never a badge, and never the coin's home chain — ETH sent on
+     * Base is Base's logo here.
      */
-    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel {
-        val m = Marks.chainMark(chainId)
-        return TokenMarkModel(nativeSymbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
-    }
+    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel =
+        markModel(nativeSymbol, chainId, Marks.chainMark(chainId, nativeSymbol))
+
+    /**
+     * The core's mark in this shell's model. The badge is drawn exactly when
+     * the core names its chain; its dot is that chain's colour.
+     * [ticker] stays what the caller named (the QR centre letters it in
+     * full); the circle draws its first three letters, as the core's glyph.
+     */
+    private fun markModel(ticker: String, chainId: Int, mark: uniffi.vela_core_uniffi.MarkView): TokenMarkModel = TokenMarkModel(
+        ticker = ticker,
+        badgeColor = badgeColour(mark.badgeChainId?.toInt() ?: chainId),
+        logoUrls = mark.logoUrls,
+        badgeLogoUrl = mark.badgeLogoUrl,
+        badgeHidden = mark.badgeChainId == null,
+    )
 
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
 

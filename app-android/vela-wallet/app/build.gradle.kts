@@ -188,6 +188,11 @@ android {
             test.inputs.dir(velaRepoRoot.resolve("assets/i18n"))
                 .withPathSensitivity(PathSensitivity.RELATIVE)
                 .withPropertyName("velaI18nCatalogs")
+            // The core's mark vectors MarksTest replays: a new or edited case
+            // must re-run it, not leave it UP-TO-DATE.
+            test.inputs.file(velaRepoRoot.resolve("rust/crates/vela-core/tests/vectors/marks.json"))
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaMarkVectors")
             // The ts-rs mirrors CoreWireDriftTest checks the Kotlin wire types
             // against (spec 040 FR-008). Same stale-green hazard as the tokens
             // above, and worse: without this, a Rust rename lands, the mirrors

@@ -213,16 +213,21 @@ class FlowLiveTest {
         }
     }
 
-    /** No chain-data endpoint: the lettered disc is the whole mark, not a blank circle. */
+    /**
+     * No endpoint set yet (Settings not loaded, or the field left blank) is
+     * the built-in endpoint — the core's reading, not "letters only", which
+     * left the centre lettered until the container caught up — and the
+     * lettered disc stays under the logo as its fallback.
+     */
     @Test
-    fun `without an endpoint the centre mark falls back to its letters`() {
+    fun `without an endpoint the centre mark asks the built-in one, over its letters`() {
         Marks.base = ""
         val live = FlowLive.receiveQr(
             qrFixture(), mine, "Me",
             PaymentRequestView(asset = ReceiveAsset(chain_id = 56, symbol = "BNB")),
         )
 
-        assertTrue(live.centre.logoUrls.isEmpty())
+        assertEquals(listOf("https://ethereum-data.getvela.app/chainlogos/eip155-56.png"), live.centre.logoUrls)
         assertEquals("BNB", live.centre.ticker)
     }
 

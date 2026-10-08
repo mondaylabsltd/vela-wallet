@@ -76,7 +76,7 @@ fun TokenIcon(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = ticker.take(3).uppercase(),
+                    text = tokenGlyph(ticker),
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.bold,
@@ -95,6 +95,14 @@ fun TokenIcon(
         if (!inline && !badgeHidden) ChainBadge(color = badgeColor, logoUrl = badgeLogoUrl)
     }
 }
+
+/**
+ * The letters a mark's circle draws: the core's `MarkView.glyph` rule, the
+ * ticker's first three characters upper-cased ("USD" for USDC). Drawn here
+ * from the ticker so a fixture without a core answer letters the same way;
+ * `MarksTest` holds it to the core's vectors.
+ */
+internal fun tokenGlyph(ticker: String): String = ticker.take(3).uppercase()
 
 /** The same icon from a flow's mark model. */
 @Composable

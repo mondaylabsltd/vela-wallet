@@ -503,20 +503,23 @@ object SendLive {
         )
     }
 
-    private fun assetRow(token: SendToken, ctx: Context): AssetRowModel = AssetRowModel(
-        id = tokenId(token),
-        ticker = token.symbol,
-        chain = ctx.chainNames[token.chain_id] ?: token.network,
-        badgeColor = WalletLive.badge(token.chain_id.toLong()),
-        logoUrls = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).logoUrls,
-        badgeLogoUrl = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeLogoUrl,
-        badgeHidden = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeHidden,
-        balance = "${trim(token.balance)} ${token.symbol}",
-        fiat = token.price_usd?.let { price ->
-            AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
-        } ?: AssetFiatModel.NoPrice("—"),
-        masked = false,
-    )
+    private fun assetRow(token: SendToken, ctx: Context): AssetRowModel {
+        val mark = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls)
+        return AssetRowModel(
+            id = tokenId(token),
+            ticker = token.symbol,
+            chain = ctx.chainNames[token.chain_id] ?: token.network,
+            badgeColor = mark.badgeColor,
+            logoUrls = mark.logoUrls,
+            badgeLogoUrl = mark.badgeLogoUrl,
+            badgeHidden = mark.badgeHidden,
+            balance = "${trim(token.balance)} ${token.symbol}",
+            fiat = token.price_usd?.let { price ->
+                AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+            } ?: AssetFiatModel.NoPrice("—"),
+            masked = false,
+        )
+    }
 
     // -- SD2 ---------------------------------------------------------------------
 
