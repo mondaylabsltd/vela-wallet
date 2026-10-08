@@ -27,11 +27,7 @@ import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { formatDate, groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
-import {
-	balanceTokenBadgeChainId,
-	balanceTokenLogoURLs,
-	chainLogoURL
-} from '$lib/services/tokens-model';
+import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
 import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
@@ -480,7 +476,7 @@ export function liveAssetRow(
 	m: WalletMessages,
 	hidden: boolean
 ): AssetRowModel {
-	const badgeChain = balanceTokenBadgeChainId(token);
+	const art = balanceTokenMark(token);
 	const fiat: AssetRowModel['fiat'] = hidden
 		? { kind: 'masked' }
 		: token.price_usd === null
@@ -493,10 +489,10 @@ export function liveAssetRow(
 		id: balanceTokenId(token),
 		ticker: token.symbol,
 		chain: chainName(token.chain_id),
-		badgeColor: chainColor(token.chain_id),
-		logoUrls: balanceTokenLogoURLs(token),
-		badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),
-		badgeHidden: badgeChain === null,
+		badgeColor: art.badgeColor,
+		logoUrls: art.logoUrls,
+		badgeLogoUrl: art.badgeLogoUrl,
+		badgeHidden: art.badgeHidden,
 		balance: hidden ? MASK : tokenAmountText(token.balance),
 		fiat,
 		masked: hidden
@@ -742,7 +738,7 @@ export function liveAssetDetail(
 ): AssetDetailPanelModel {
 	const { balance: view, currency, m } = inputs;
 	const hidden = view.hidden;
-	const badgeChain = balanceTokenBadgeChainId(token);
+	const art = balanceTokenMark(token);
 	const held = parseFloat(token.balance) || 0;
 	const fiat =
 		hidden || token.price_usd === null ? undefined : moneyText(held * token.price_usd, currency);
@@ -756,12 +752,12 @@ export function liveAssetDetail(
 		title: token.symbol,
 		token: {
 			ticker: token.symbol,
-			badgeColor: chainColor(token.chain_id),
+			badgeColor: art.badgeColor,
 			balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
-			logoUrls: balanceTokenLogoURLs(token),
-			badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),
-			badgeHidden: badgeChain === null
+			logoUrls: art.logoUrls,
+			badgeLogoUrl: art.badgeLogoUrl,
+			badgeHidden: art.badgeHidden
 		},
 		facts: [
 			{ label: m.assetDetail.labelName, value: token.name },

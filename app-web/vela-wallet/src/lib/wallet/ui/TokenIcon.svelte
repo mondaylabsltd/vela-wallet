@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tokenGlyph } from '../token-glyph';
 	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {
@@ -16,7 +17,8 @@
 		badgeLogoUrl?: string;
 		/**
 		 * No badge at all: a native coin on its own chain (ETH on Ethereum)
-		 * would wear its own logo twice. The phone app's `tokenBadgeChainId`.
+		 * would wear its own logo twice, and a network drawn as itself has
+		 * none. The core decides (`MarkView.badge_chain_id`).
 		 */
 		badgeHidden?: boolean;
 		/**
@@ -37,7 +39,7 @@
 		size = 'row'
 	}: Props = $props();
 
-	const glyph = $derived(ticker.slice(0, 3).toUpperCase());
+	const glyph = $derived(tokenGlyph(ticker));
 </script>
 
 <span class="token {size}" aria-hidden="true">

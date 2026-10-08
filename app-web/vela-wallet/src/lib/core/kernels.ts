@@ -34,6 +34,7 @@ import type { GuardView } from '$lib/core/generated/GuardView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
+import type { MarkView } from '$lib/core/generated/MarkView';
 
 export {
 	PROXY_CREATION_CODE,
@@ -1178,6 +1179,37 @@ export function browserSiteLabel(title: string, host: string): SiteLabel {
  */
 export function markMissTtlMs(kind: string, status?: number | null): number | null {
 	return wasm.markMissTtlMs(kind, status ?? null) ?? null;
+}
+
+/**
+ * What a COIN's circle wears (`remote_mark::token_mark`): its glyph, its logo
+ * candidates best first, and the corner badge's chain and logo (`null` = no
+ * badge). `ethereumDataUrl` is the person's endpoint as stored; a blank one
+ * is the built-in host, the core's call. `tokenAddress` is `null` for the
+ * chain's own coin, never `''`. `named` are logos the API already named.
+ */
+export function tokenMark(
+	ethereumDataUrl: string,
+	chainId: number,
+	symbol: string,
+	tokenAddress: string | null,
+	named: readonly string[]
+): MarkView {
+	return wasm.tokenMark(ethereumDataUrl, chainId, symbol, tokenAddress, [...named]) as MarkView;
+}
+
+/** What a NETWORK's circle wears (`remote_mark::chain_mark`): its own logo, never a badge. */
+export function chainMark(
+	ethereumDataUrl: string,
+	chainId: number,
+	nativeSymbol: string
+): MarkView {
+	return wasm.chainMark(ethereumDataUrl, chainId, nativeSymbol) as MarkView;
+}
+
+/** A chain's logo on the endpoint (`remote_mark::chain_logo_url`); none for chain 0. */
+export function chainLogoUrl(ethereumDataUrl: string, chainId: number): string | undefined {
+	return wasm.chainLogoUrl(ethereumDataUrl, chainId) ?? undefined;
 }
 
 /** Which balances one chain's read covers, in order (RE9). */

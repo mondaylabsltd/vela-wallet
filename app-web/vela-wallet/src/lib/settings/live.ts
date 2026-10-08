@@ -46,7 +46,7 @@ import {
 	type FormatOption
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
-import { chainLogoURL } from '$lib/services/tokens-model';
+import { chainLogoURL } from '$lib/flows/marks';
 import {
 	chainMeta,
 	feedbackPanel,

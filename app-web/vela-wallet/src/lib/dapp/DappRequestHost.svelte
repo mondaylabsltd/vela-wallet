@@ -41,7 +41,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { chainName } from '$lib/services/networks';
-	import { chainLogoURL } from '$lib/services/tokens-model';
+	import { chainLogoURL } from '$lib/flows/marks';
 	import type { RequestMessages } from '$lib/dapp/messages';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
