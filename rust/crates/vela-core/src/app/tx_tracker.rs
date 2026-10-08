@@ -100,7 +100,19 @@ use ts_rs::TS;
 /// (`tx-reconciler.ts:36`). Every consumer of the same hash shares one
 /// in-flight request and one 3s cooldown, so opening the receipt sheet never
 /// doubles `eth_getUserOperationReceipt` traffic (`safe-transaction.ts:2237-2240`).
+///
+/// The cooldown counts from when a poll was ISSUED (issue #464). It used to
+/// count from when the answer came back, and every shell ticks every 3 s: a
+/// poll answered 0.3 s after its tick was then 2.7 s old on the next tick and
+/// waited for the one after — an op was asked every 6 s, not every 3.
 pub const RECEIPT_POLL_INTERVAL_MS: f64 = 3_000.0;
+/// How early a receipt poll may be issued against its cooldown. A shell's
+/// tick is a timer, and the clock it reads wobbles by a few milliseconds
+/// either way: a poll issued on one 3 s tick must be due on the next even
+/// when that tick reads 2 999 ms later, or a tick 1 ms "early" waits a whole
+/// extra tick — the 6 s cadence of issue #464 again, by chance. Far below
+/// every interval of the cadence ladder ([`receipt_interval_ms`]).
+pub const RECEIPT_TICK_SLACK_MS: f64 = 250.0;
 /// Relay lifecycle-status cadence while the wait window is open —
 /// `USER_OP_STATUS_POLL_INTERVAL_MS` (`safe-transaction.ts`). The first status
 /// poll waits one full interval: "not ready yet" is by far the common case.
@@ -754,8 +766,11 @@ struct Entry {
     /// Stamped from the first observed clock after `Submitted` (or carried by
     /// the recovered record). Every deadline measures from it.
     submitted_at_ms: Option<f64>,
-    /// Completion time of the last receipt poll — the 3s cooldown counts
-    /// from completion, exactly as `completedAt` does (`tx-reconciler.ts:184`).
+    /// Issue time of the last receipt poll — the cooldown counts from it
+    /// (issue #464). A poll issued before any clock was seen (the first, at
+    /// `Submitted`) is stamped by the first clock that arrives, or failing
+    /// that by its own answer: a result only ever fills an EMPTY stamp. The
+    /// in-flight flag, not this stamp, keeps two requests from overlapping.
     last_receipt_poll_ms: Option<f64>,
     /// Issue time of the last status poll (`lastStatusAt` is stamped before
     /// the call, and starts at `start` so the first poll waits a full 12s).
@@ -794,7 +809,8 @@ struct Entry {
     find: FindScan,
     /// A [`TrackOperation::TxReceipt`] for `relay_tx_hash` is out (RJ4).
     tx_receipt_in_flight: bool,
-    /// Completion time of the last one — the receipt cadence counts from it.
+    /// Issue time of the last one — the receipt cadence counts from it, as
+    /// for `last_receipt_poll_ms` (issue #464).
     last_tx_receipt_ms: Option<f64>,
     /// A POST of this op is out (spec 082 RJ1, second review): the write-
     /// ahead handed the op over with no record, before its bytes left, and
@@ -1346,7 +1362,8 @@ fn submitted(
     // First receipt poll goes out immediately, like `waitForReceipt`'s first
     // loop iteration. A second consumer of an already-tracked hash joins the
     // shared request/cooldown instead (invariant ⑤) — its polls resume on
-    // the next Tick under the 3s throttle.
+    // the next Tick under the 3s throttle. No clock is known yet, so this one
+    // poll goes out unstamped; the first clock seen stamps it (issue #464).
     let poll_now = !entry.status.is_terminal()
         && !entry.receipt_in_flight
         && entry.last_receipt_poll_ms.is_none();
@@ -1427,7 +1444,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 return Command::done();
             };
             entry.receipt_in_flight = false;
-            entry.last_receipt_poll_ms = Some(now_ms);
+            entry.last_receipt_poll_ms.get_or_insert(now_ms);
             entry.saw_clean_response = true;
             entry.acknowledged = true;
             if entry.status.is_terminal() {
@@ -1450,7 +1467,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             let key = normalize(&user_op_hash);
             if let Some(entry) = model.entries.get_mut(&key) {
                 entry.receipt_in_flight = false;
-                entry.last_receipt_poll_ms = Some(now_ms);
+                entry.last_receipt_poll_ms.get_or_insert(now_ms);
                 entry.saw_clean_response = true;
             }
             // Mirror the `waitForReceipt` loop: right after a receipt
@@ -1464,7 +1481,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             let key = normalize(&user_op_hash);
             if let Some(entry) = model.entries.get_mut(&key) {
                 entry.receipt_in_flight = false;
-                entry.last_receipt_poll_ms = Some(now_ms);
+                entry.last_receipt_poll_ms.get_or_insert(now_ms);
                 // NOT a failure (①) — counted so the window's end can be
                 // honest about never having reached the bundler (⑧).
                 entry.rpc_failures = entry.rpc_failures.saturating_add(1);
@@ -1662,6 +1679,13 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
 /// The unified cadence policy. Runs on every clock-bearing answer, mirroring
 /// the `waitForReceipt` loop body: attempt/complete a receipt poll, then the
 /// 12s status check, then classification when the window has elapsed.
+/// Is a receipt read (the relay's receipt, or the bundle tx's from the
+/// chain) due? `last` is when the previous one was ISSUED; `None` = never.
+/// [`RECEIPT_TICK_SLACK_MS`] absorbs a tick's jitter.
+fn receipt_due(last: Option<f64>, now_ms: f64, interval: f64) -> bool {
+    last.is_none_or(|last| now_ms - last >= interval - RECEIPT_TICK_SLACK_MS)
+}
+
 fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> {
     let attempt = model.attempt;
     let mut commands: Vec<Command<TrackEffect, Event>> = Vec::new();
@@ -1711,15 +1735,15 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
 
         // Receipt cadence: 3s inside the window, then a pace that slows with
         // the op's age (or after an abort). One in-flight request per hash,
-        // shared (⑤).
+        // shared (⑤). Stamped at issue (issue #464), so a 3 s tick asks
+        // every 3 s.
         let in_window = !entry.window_closed && !entry.aborted;
         let receipt_interval = receipt_interval_ms(in_window, age);
         if !entry.receipt_in_flight
-            && entry
-                .last_receipt_poll_ms
-                .is_none_or(|last| now_ms - last >= receipt_interval)
+            && receipt_due(entry.last_receipt_poll_ms, now_ms, receipt_interval)
         {
             entry.receipt_in_flight = true;
+            entry.last_receipt_poll_ms = Some(now_ms);
             commands.push(shell_request(
                 attempt,
                 TrackOperation::PollReceipt {
@@ -1767,14 +1791,14 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         }
 
         // RJ4: the relay named the bundle tx — read its receipt from the
-        // chain at the receipt cadence, one request per hash in flight.
+        // chain at the receipt cadence, one request per hash in flight,
+        // stamped at issue like the receipt poll.
         if let Some(tx_hash) = entry.relay_tx_hash.clone() {
             let due = !entry.tx_receipt_in_flight
-                && entry
-                    .last_tx_receipt_ms
-                    .is_none_or(|last| now_ms - last >= receipt_interval);
+                && receipt_due(entry.last_tx_receipt_ms, now_ms, receipt_interval);
             if due {
                 entry.tx_receipt_in_flight = true;
+                entry.last_tx_receipt_ms = Some(now_ms);
                 commands.push(shell_request(
                     attempt,
                     TrackOperation::TxReceipt {
@@ -1958,7 +1982,7 @@ fn on_receipt(
         return Command::done();
     };
     entry.receipt_in_flight = false;
-    entry.last_receipt_poll_ms = Some(now_ms);
+    entry.last_receipt_poll_ms.get_or_insert(now_ms);
     entry.saw_clean_response = true;
     entry.acknowledged = true;
     if entry.status.is_terminal() {
@@ -1992,7 +2016,7 @@ fn on_tx_receipt(
         return Command::done();
     };
     entry.tx_receipt_in_flight = false;
-    entry.last_tx_receipt_ms = Some(now_ms);
+    entry.last_tx_receipt_ms.get_or_insert(now_ms);
     if entry.status.is_terminal() {
         return Command::done(); // resolved meanwhile — never double-resolve
     }
@@ -2405,12 +2429,17 @@ fn clock_of(result: &TrackShellResult) -> Option<f64> {
 /// Entries created before any clock was observed get stamped by the first
 /// result that carries one; `last_status_poll` starts at submission
 /// (`lastStatusAt = start`) so the first status poll waits a full interval.
+/// The receipt poll that went out with the op is stamped the same way: it
+/// was issued then, and the cooldown counts from the issue (issue #464).
 fn stamp_unstamped(model: &mut Model, now_ms: f64) {
     for entry in model.entries.values_mut() {
         if entry.submitted_at_ms.is_none() {
             entry.submitted_at_ms = Some(now_ms);
             entry.last_status_poll_ms = Some(now_ms);
             entry.find.last_ms = Some(now_ms);
+            if entry.receipt_in_flight {
+                entry.last_receipt_poll_ms.get_or_insert(now_ms);
+            }
         }
         // The POST's verdict came: the not-found grace counts from here.
         if entry.grace_from_ms == Some(None) {

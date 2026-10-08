@@ -461,13 +461,63 @@ fn same_hash_shares_one_throttled_receipt_request() {
         })
         .is_empty());
 
-    // The request completes; the cooldown counts from completion.
+    // The request completes. The cooldown counts from the ask, which went
+    // out with the op and was stamped by the first clock, T0 (issue #464).
     assert!(sut.resolve(receipt_pending(T0 + 1_200.0)).is_empty());
-    assert_eq!(tick(&mut sut, T0 + 2_500.0), vec![], "1.3s < 3s: throttled");
+    assert_eq!(tick(&mut sut, T0 + 2_500.0), vec![], "2.5s < 3s: throttled");
     assert_eq!(
         tick(&mut sut, T0 + 4_300.0),
         vec![poll_receipt(), poll_status()]
     );
+}
+
+/// Issue #464: every shell ticks every 3 s, and the receipt cooldown used to
+/// count from the ANSWER — a poll answered 0.3 s after its tick was 2.7 s old
+/// on the next tick and waited for the one after, so an op was asked every
+/// 6 s. It counts from the ASK now: the receipt is asked every 3 s, including
+/// on a tick whose clock reads a millisecond short of 3 s, and a slow answer
+/// does not push the next ask out.
+#[test]
+fn a_three_second_tick_asks_for_the_receipt_every_three_seconds() {
+    /// Answer every outstanding poll at `at`, noting any receipt ask the
+    /// answers themselves make.
+    fn answer_all(sut: &mut Sut, at: f64, asks: &mut Vec<f64>) {
+        while sut.outstanding().iter().any(is_receipt) {
+            let ops = sut.resolve_matching(is_receipt, receipt_pending(T0 + at));
+            if ops.contains(&poll_receipt()) {
+                asks.push(at);
+            }
+        }
+        while sut.outstanding().iter().any(is_status) {
+            sut.resolve_matching(is_status, status(TrackLifecycle::Queued, T0 + at));
+        }
+    }
+
+    let mut sut = Sut::new();
+    submitted(&mut sut); // asked with the op at T0, answered at T0 + 0.3 s
+    let mut asks = vec![0.0];
+    // (the tick, when what it asked is answered)
+    let ticks = [
+        (3_000.0, 3_300.0),
+        (6_000.0, 6_300.0),
+        (8_999.0, 9_299.0),   // the timer's clock reads 1 ms early
+        (12_000.0, 14_900.0), // a slow answer, 2.9 s after the ask
+        (15_000.0, 15_300.0),
+        (18_000.0, 18_300.0),
+    ];
+    for (at, answered) in ticks {
+        if tick(&mut sut, T0 + at).contains(&poll_receipt()) {
+            asks.push(at);
+        }
+        answer_all(&mut sut, answered, &mut asks);
+    }
+    assert_eq!(
+        asks,
+        vec![0.0, 3_000.0, 6_000.0, 8_999.0, 12_000.0, 14_900.0, 18_000.0],
+        "asked every 3 s — the slow answer re-asks at once, as it is already 2.9 s since the ask"
+    );
+    // Between asks nothing is due early: 1 s after one is still too soon.
+    assert!(!tick(&mut sut, T0 + 19_000.0).contains(&poll_receipt()));
 }
 
 /// The reconcile sweep itself is single-flight and 12s-throttled — Home focus
@@ -853,7 +903,8 @@ fn receipt_polls_slow_down_as_an_op_ages() {
 }
 
 /// Driven through the machine: at 30 minutes old a poll 20 s after the last
-/// answer is not due; one a minute after is. Still no patch anywhere.
+/// ask is not due; one a minute after is (the pace counts from the ask, issue
+/// #464). Still no patch anywhere.
 #[test]
 fn a_half_hour_old_op_is_asked_once_a_minute() {
     let mut sut = Sut::new();
@@ -2005,20 +2056,22 @@ fn an_included_tx_hash_is_confirmed_through_the_chain() {
     let ops = included_with_tx(&mut sut);
     assert_eq!(ops, vec![tx_receipt_op()], "asked at once");
     // One in flight per hash: a tick before it answers asks nothing new.
-    let ops = tick(&mut sut, T0 + 16_000.0);
+    let ops = tick(&mut sut, T0 + 14_000.0);
     assert!(!ops.iter().any(is_tx_receipt), "{ops:?}");
-    // Not mined yet (a null receipt): asked again at the receipt cadence.
-    let ops = sut.resolve_matching(is_tx_receipt, tx_receipt(T0 + 16_100.0, Some("null")));
+    // Not mined yet (a null receipt): asked again at the receipt cadence,
+    // which counts from when the last ask went out (12.8 s), not from this
+    // answer (issue #464).
+    let ops = sut.resolve_matching(is_tx_receipt, tx_receipt(T0 + 14_100.0, Some("null")));
     assert!(!ops.iter().any(is_tx_receipt), "{ops:?}");
     assert_eq!(entry_status(&sut), TrackStatus::Pending);
     while sut.outstanding().iter().any(is_receipt) {
-        sut.resolve_matching(is_receipt, receipt_pending(T0 + 16_200.0));
+        sut.resolve_matching(is_receipt, receipt_pending(T0 + 14_200.0));
     }
-    let ops = tick(&mut sut, T0 + 19_200.0);
+    let ops = tick(&mut sut, T0 + 15_900.0);
     assert!(ops.contains(&tx_receipt_op()), "{ops:?}");
     let ops = sut.resolve_matching(
         is_tx_receipt,
-        tx_receipt(T0 + 19_400.0, Some(&bundle_receipt(vec![our_event(true)]))),
+        tx_receipt(T0 + 16_100.0, Some(&bundle_receipt(vec![our_event(true)]))),
     );
     // The whole receipt was read: the op's own logs say it moved nothing
     // for the account (spec 097) — unlike the event alone, which says
