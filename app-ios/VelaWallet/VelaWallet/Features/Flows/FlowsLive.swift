@@ -833,15 +833,20 @@ enum FlowsLive {
     static func addToken(
         _ view: MtokViewWire,
         on model: AddTokenModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> AddTokenModel {
         let found = view.found.first
         var live = model
         live.network = found.map { card in
             AddTokenNetworkModel(
-                mark: TokenMarkModel(ticker: card.symbol,
-                                     badgeColor: SettingsLive.mark(chainId: card.chainId,
-                                                                  name: card.networkName).color),
+                // The NETWORK the token was found on, in the network's own
+                // mark (the kind rule) — it drew the TOKEN's ticker, as letters.
+                mark: TokenMarkModel.chain(
+                    chainId: card.chainId,
+                    symbol: networks.meta(card.chainId)?.nativeSymbol ?? card.networkName,
+                    color: SettingsLive.mark(chainId: card.chainId, name: card.networkName).color
+                ),
                 name: card.networkName,
                 pickLabel: model.network?.pickLabel ?? ""
             )
@@ -897,10 +902,16 @@ enum FlowsLive {
         }
         guard let card = view.found.first else { return .none }
         return .token(
-            mark: TokenMarkModel(
-                ticker: card.symbol,
-                badgeColor: SettingsLive.mark(chainId: card.chainId,
-                                              name: card.networkName).color
+            // The token's own logo, by the contract the person typed — the
+            // web's and Android's card. A card exists only for a contract
+            // the probe found, so the address is never the native coin's
+            // nil; one the rule cannot place gets letters and its badge.
+            mark: TokenMarkModel.of(
+                chainId: card.chainId,
+                symbol: card.symbol,
+                tokenAddress: view.addressValid
+                    ? view.inputAddress.trimmingCharacters(in: .whitespaces) : "",
+                color: SettingsLive.mark(chainId: card.chainId, name: card.networkName).color
             ),
             name: card.name,
             detail: "\(card.symbol) · \(loc.t("tokenDetail.labelDecimals")) \(card.decimals)"

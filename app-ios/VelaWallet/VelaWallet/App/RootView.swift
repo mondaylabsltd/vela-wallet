@@ -2560,7 +2560,8 @@ struct RootView: View {
         // `network_admin`'s wizard and not this machine's.
         if case .addToken(let sheet) = model.sheet, sheet.tab == .erc20,
            let view = tokens.view {
-            model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
+            model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc,
+                                                       networks: walletNetworks))
         }
         return model
     }

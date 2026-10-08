@@ -224,6 +224,27 @@ struct ManageTokensTests {
         #expect(live.network?.name == "Gnosis")
     }
 
+    /// The found card wears the TOKEN's own logo, by the contract typed —
+    /// it was letters — and the network row the NETWORK's own mark, not the
+    /// token's ticker (the kind rule).
+    @Test func aFoundTokenWearsItsLogoAndItsNetworkTheNetworksMark() {
+        let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+        let live = FlowsLive.addToken(
+            view(input: usdc, valid: true, found: [card]), on: base, loc: loc
+        )
+        guard case .token(let mark, _, _, _) = live.result else {
+            Issue.record("a found token did not render as one")
+            return
+        }
+        #expect(mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-100/0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83/logo.png") == true)
+        #expect(mark.badgeLogoURL == Marks.chainLogoURL(100))
+        let network = live.network?.mark
+        #expect(network?.logoURLs == [Marks.chainLogoURL(100)].compactMap { $0 })
+        #expect(network?.badgeHidden == true)
+        #expect(network?.glyph == "XDA", "Gnosis's coin's letters, not the token's")
+    }
+
     /// A token already in the wallet cannot be added twice, and the sheet says
     /// so rather than silently doing nothing when the button is pressed.
     @Test func anAlreadyAddedTokenShutsTheGate() {
