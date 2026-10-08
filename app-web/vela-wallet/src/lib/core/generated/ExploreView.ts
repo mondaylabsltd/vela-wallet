@@ -22,6 +22,18 @@ tabs_full: boolean,
  */
 recent_tabs: Array<string>, 
 /**
+ * The home's resume rows (spec 099 navigation): the tabs that have a
+ * page, most recently used first ([`Self::recent_tabs`]), then the ones
+ * recency does not know in strip order, at most [`RESUME_SHOWN`]. A
+ * start-page tab is never one — there is nothing in it to go back to.
+ *
+ * One tap on a row is `tab_selected` and that tab's page as it was left
+ * (a live engine, no load). The section draws only while this has a
+ * row; its header counts every open tab (`tabs`, what the switcher
+ * holds — `explore.openTabs`), and its action opens the switcher.
+ */
+resumable: Array<ExploreTab>, 
+/**
  * The mirror is live. Before this, a screen shows nothing rather than an
  * empty start page it would have to correct a frame later.
  */

@@ -78,6 +78,10 @@ pub const NAME_RULE: u32 = 1;
 /// is well past what anyone arranges on purpose.
 pub const TABS_CAP: usize = 24;
 
+/// Resume rows on the home ([`ExploreView::resumable`]). A glance, not a
+/// second tab switcher: past three the switcher, one tap away, is the list.
+pub const RESUME_SHOWN: usize = 3;
+
 // ---------------------------------------------------------------------------
 // Wire value types
 // ---------------------------------------------------------------------------
@@ -273,8 +277,9 @@ pub enum Event {
     TabSelected {
         id: String,
     },
-    /// Close one. The strip is never left empty and never left with nothing
-    /// selected — see [`close_tab`].
+    /// Close one. A closed selected tab hands the selection to a neighbour;
+    /// closing the last tab leaves the strip empty and nothing selected,
+    /// which is the start page — see [`close_tab`].
     TabClosed {
         id: String,
     },
@@ -319,7 +324,7 @@ pub struct Model {
 // ViewModel
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct ExploreView {
     pub favorites: Vec<ExploreSite>,
@@ -337,6 +342,17 @@ pub struct ExploreView {
     /// [`super::browser_tabs::plan_engines`] keeps engines alive in.
     #[serde(default)]
     pub recent_tabs: Vec<String>,
+    /// The home's resume rows (spec 099 navigation): the tabs that have a
+    /// page, most recently used first ([`Self::recent_tabs`]), then the ones
+    /// recency does not know in strip order, at most [`RESUME_SHOWN`]. A
+    /// start-page tab is never one — there is nothing in it to go back to.
+    ///
+    /// One tap on a row is `tab_selected` and that tab's page as it was left
+    /// (a live engine, no load). The section draws only while this has a
+    /// row; its header counts every open tab (`tabs`, what the switcher
+    /// holds — `explore.openTabs`), and its action opens the switcher.
+    #[serde(default)]
+    pub resumable: Vec<ExploreTab>,
     /// The mirror is live. Before this, a screen shows nothing rather than an
     /// empty start page it would have to correct a frame later.
     pub ready: bool,
@@ -529,6 +545,7 @@ impl App for ExploreSites {
                 .filter(|id| doc.tabs.iter().any(|tab| &tab.id == *id))
                 .cloned()
                 .collect(),
+            resumable: resumable(doc, &model.recent),
             ready: model.phase == Phase::Ready,
         }
     }
@@ -619,6 +636,31 @@ fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
         }
     }
     persist(model)
+}
+
+/// [`ExploreView::resumable`]: the tabs with a page, most recently used
+/// first, then strip order, capped at [`RESUME_SHOWN`].
+fn resumable(doc: &ExploreDoc, recent: &[String]) -> Vec<ExploreTab> {
+    by_recency(&doc.tabs, recent)
+        .filter(|tab| tab.url.is_some())
+        .take(RESUME_SHOWN)
+        .cloned()
+        .collect()
+}
+
+/// The strip's tabs most recently used first, then the ones `recent` does
+/// not know — restored at launch, never selected since — in strip order. The
+/// order the resume rows are drawn in, and a picked site's tab is found in
+/// ([`super::browser_tabs::open_target`]).
+pub(crate) fn by_recency<'a>(
+    tabs: &'a [ExploreTab],
+    recent: &'a [String],
+) -> impl Iterator<Item = &'a ExploreTab> + 'a {
+    let known = recent
+        .iter()
+        .filter_map(|id| tabs.iter().find(|tab| &tab.id == id));
+    let rest = tabs.iter().filter(|tab| !recent.contains(&tab.id));
+    known.chain(rest)
 }
 
 /// `id` is the tab in use now: first in the recency order.

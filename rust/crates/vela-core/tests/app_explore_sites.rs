@@ -15,7 +15,7 @@ use vela_core::app::browser_load::{visit_to_record, LoadFinished};
 use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
     Event, ExploreDoc, ExploreOperation as Op, ExploreShellResult as Res, ExploreSites,
-    ExploreSystemGroup, ExploreTab, FAVORITES_CAP, NAME_RULE,
+    ExploreSystemGroup, ExploreTab, ExploreView, FAVORITES_CAP, NAME_RULE, RESUME_SHOWN,
 };
 
 type Sut = DomainDriver<ExploreSites>;
@@ -796,4 +796,123 @@ fn a_surviving_selection_stays_and_all_leaves_the_start_page() {
     let doc = written(sut.dispatch(Event::TabsClosed { ids: all }));
     assert!(doc.tabs.is_empty());
     assert_eq!(sut.view().selected_tab, None);
+}
+
+// ---------------------------------------------------------------------------
+// The home's resume rows (spec 099 navigation)
+// ---------------------------------------------------------------------------
+
+fn ids_of(tabs: &[ExploreTab]) -> Vec<String> {
+    tabs.iter().map(|tab| tab.id.clone()).collect()
+}
+
+/// The tabs with a page, the one used last first. A start-page tab is never
+/// a row — there is nothing in it to go back to.
+#[test]
+fn the_resume_rows_are_the_tabs_with_a_page_most_recent_first() {
+    let mut sut = ready(None);
+    for (i, url) in [
+        Some("https://a.example/"),
+        Some("https://b.example/"),
+        None,
+        Some("https://c.example/"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "four test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: url.map(str::to_owned),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let ids = ids_of(&sut.view().tabs);
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[3].clone(), ids[1].clone(), ids[0].clone()]
+    );
+
+    written(sut.dispatch(Event::TabSelected { id: ids[0].clone() }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[0].clone(), ids[3].clone(), ids[1].clone()]
+    );
+
+    // The start-page tab gets a page: it is a row now, and the first.
+    written(sut.dispatch(Event::TabSelected { id: ids[2].clone() }));
+    written(sut.dispatch(Event::TabNavigated {
+        id: ids[2].clone(),
+        url: "https://d.example/".to_owned(),
+        title: None,
+    }));
+    let rows = sut.view().resumable;
+    assert_eq!(rows.len(), RESUME_SHOWN);
+    assert_eq!(rows[0].id, ids[2]);
+    assert_eq!(rows[0].host, "d.example", "a row carries what it draws");
+}
+
+/// At most [`RESUME_SHOWN`]: the switcher, one tap away, is the full list.
+#[test]
+fn the_resume_rows_stop_at_three() {
+    let (sut, ids) = five_tabs();
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[3].clone(), ids[2].clone()]
+    );
+}
+
+/// At launch recency knows only the selected tab: it comes first, then the
+/// restored tabs in strip order.
+#[test]
+fn restored_tabs_resume_from_the_selected_one_then_in_strip_order() {
+    let tab = |id: &str, url: Option<&str>| ExploreTab {
+        id: id.to_owned(),
+        url: url.map(str::to_owned),
+        title: id.to_owned(),
+        host: String::new(),
+    };
+    let sut = ready(Some(ExploreDoc {
+        tabs: vec![
+            tab("t-1", Some("https://a.example/")),
+            tab("t-2", None),
+            tab("t-3", Some("https://c.example/")),
+            tab("t-4", Some("https://d.example/")),
+        ],
+        selected_tab: Some("t-3".to_owned()),
+        ..ExploreDoc::default()
+    }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec!["t-3".to_owned(), "t-1".to_owned(), "t-4".to_owned()]
+    );
+}
+
+/// A closed tab leaves the rows with its engine; closing them all leaves
+/// none, and the home draws no section.
+#[test]
+fn a_closed_tab_is_no_longer_a_row() {
+    let (mut sut, ids) = five_tabs();
+    written(sut.dispatch(Event::TabClosed { id: ids[3].clone() }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[2].clone(), ids[1].clone()]
+    );
+    let all = tabs_closed_by(&sut.view().tabs, &TabCloseScope::All);
+    written(sut.dispatch(Event::TabsClosed { ids: all }));
+    assert!(sut.view().resumable.is_empty());
+}
+
+/// A view written before the rows existed still reads — every shell decodes
+/// the view it is sent, and an older one simply has no rows.
+#[test]
+fn a_view_without_resume_rows_still_reads() {
+    let view: ExploreView = serde_json::from_str(
+        r#"{"favorites":[],"groups":[],"tabs":[],"selected_tab":null,
+            "favorites_hidden":false,"recent_hidden":false,"favorites_full":false,
+            "tabs_full":false,"ready":true}"#,
+    )
+    .expect("an older view reads");
+    assert!(view.resumable.is_empty() && view.recent_tabs.is_empty());
 }

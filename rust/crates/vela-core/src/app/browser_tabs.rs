@@ -1,10 +1,14 @@
-//! Pure policy — which browser tabs keep a live engine (spec 099 R2).
+//! Pure policy — the browser's tabs: which keep a live engine (spec 099 R2),
+//! what Explore shows when somebody enters it, and which tab an opened site
+//! goes into. Every client asks these functions, so the four agree.
+//!
+//! ## Live engines
 //!
 //! A live tab is a webview with its page running: switching to it shows the
 //! page as it was left, inputs, scroll, sockets and all. A suspended tab is
 //! only its URL and title: selecting it loads the page again. Every client
 //! keeps one engine per tab (the desktop since 099, the phones since 044/053),
-//! and every client asks this function which ones to let go, so "which tab
+//! and every client asks [`plan_engines`] which ones to let go, so "which tab
 //! reloaded, and why" is the same answer everywhere.
 //!
 //! ```text
@@ -24,11 +28,64 @@
 //! 4. Every other live tab is suspended. A tab with no engine has nothing to
 //!    suspend, and nothing here ever wakes one: the shell wakes the selected
 //!    tab, and only that.
+//!
+//! ## Where Explore lands
+//!
+//! Leaving a dApp for the wallet and coming back put the person straight back
+//! inside the dApp on both phones, and the desktop re-showed whatever page it
+//! had last: each shell decided for itself, and they had drifted apart.
+//! [`explore_landing`] decides it once.
+//!
+//! ```text
+//! entry ─ section / reselect ─────────────► Home
+//!       ─ page_opened ─ selected has a page ► Tab{selected}   (else Home)
+//! waiting ─ a tab with a page ─────────────► Tab{waiting}     (any entry)
+//! ```
+//!
+//! - Explore chosen from another section, or chosen again while it is up →
+//!   its home. Nothing is closed: the dApp's tab stays — live, unlit in the
+//!   strip, first in [`ExploreView::resumable`] — and one tap resumes it with
+//!   no reload.
+//! - Explore brought up by a page opened from outside — a deep link, a scan,
+//!   the external-page sheet, a launch URL → that page's tab.
+//! - A tab with a request waiting on the person ([`waiting_tab`]) → that tab,
+//!   whatever brought Explore up: a request is never shown beside a home page
+//!   it did not come from (the desktop's RJ18 signing column comes back WITH
+//!   its tab).
+//!
+//! Only ENTERING Explore asks. A pick inside it — a resume row, a tab in the
+//! switcher, a site opened from the home — shows its own tab.
+//!
+//! ## Where an opened site goes
+//!
+//! [`open_target`], the desktop's spec 082 RD6 rule moved here and extended
+//! so that opening a site from Explore's home never replaces a live dApp:
+//!
+//! 1. On a page (the address bar of the page on screen) → that tab loads it.
+//! 2. Over the home, a PICKED site with a tab already on its origin → that
+//!    tab, resumed as it was left.
+//! 3. Over the home, the selected tab when it is a start-page tab → it gets
+//!    its first page.
+//! 4. Otherwise a NEW tab, so a tab waiting unlit — a dApp left for the
+//!    wallet, a tab restored at launch — is left intact.
+//!
+//! A site PICKED (a favourite, a recent dApp, a featured tile) and an address
+//! TYPED differ in rule 2 only. A site is an origin — the explore machine and
+//! the history both key it so — so a tab already on that origin IS the site,
+//! and picking it brings that tab back rather than a second copy of it. An
+//! address names a page: switching to a same-origin tab would drop the path
+//! somebody typed, and loading it there would replace the live dApp, so it
+//! takes rule 3 or 4. A page handed in from outside (deep link, scan, launch
+//! URL, the external-page sheet) is an address, and is never "on a page".
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
+
+use super::dapp_browser::DbrView;
+use super::dapp_permissions::origin_of;
+use super::explore_sites::{ExploreTab, ExploreView};
 
 /// Most engines kept alive at once, the selected and busy tabs included —
 /// unless more than this are busy, which are all kept regardless.
@@ -114,4 +171,290 @@ pub fn plan_engines(input: &EngineInput) -> EnginePlan {
 pub fn plan_engines_json(input_json: &str) -> Option<String> {
     let input: EngineInput = serde_json::from_str(input_json).ok()?;
     serde_json::to_string(&plan_engines(&input)).ok()
+}
+
+// ---------------------------------------------------------------------------
+// Where Explore lands
+// ---------------------------------------------------------------------------
+
+/// What brought Explore up — [`explore_landing`]'s question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ExploreEntry {
+    /// Explore chosen from another section (the tab bar, the sidebar) — the
+    /// first time after a launch included.
+    Section,
+    /// Explore chosen again while it is already up: a re-tap while browsing
+    /// is the way back to its home.
+    Reselect,
+    /// Explore came up because a page was opened from outside: a deep link,
+    /// a scan, the external-page sheet, a launch URL. Asked once that open's
+    /// `tab_opened` / `tab_navigated` is in the view, so the selected tab is
+    /// the page.
+    PageOpened,
+}
+
+/// What Explore shows on entry ([`explore_landing`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ExploreLanding {
+    /// The start page: search, the resume rows, favourites, recents. Every
+    /// tab stays as it was — this closes nothing and loads nothing.
+    Home,
+    /// This tab's page. Always a tab of the strip that has a page.
+    Tab { id: String },
+}
+
+/// The landing rule (module doc, "Where Explore lands"). `waiting` is the tab
+/// whose request waits on the person ([`waiting_tab`], or the desktop's kept
+/// signing column); a tab the strip does not carry, or one with no page, is
+/// no reason to leave the home.
+#[must_use]
+pub fn explore_landing(
+    view: &ExploreView,
+    entry: ExploreEntry,
+    waiting: Option<&str>,
+) -> ExploreLanding {
+    let has_page = |id: &&str| {
+        view.tabs
+            .iter()
+            .any(|tab| tab.id == *id && tab.url.is_some())
+    };
+    let tab = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
+    if let Some(waiting) = waiting.filter(has_page) {
+        return tab(waiting);
+    }
+    match entry {
+        ExploreEntry::Section | ExploreEntry::Reselect => ExploreLanding::Home,
+        ExploreEntry::PageOpened => view
+            .selected_tab
+            .as_deref()
+            .filter(has_page)
+            .map_or(ExploreLanding::Home, tab),
+    }
+}
+
+/// The tab whose request is in front of the person — the consent, the
+/// signature, or the add-network sheet the browser machine holds, in that
+/// order. `None` while nothing waits.
+#[must_use]
+pub fn waiting_tab(dapp: &DbrView) -> Option<String> {
+    first_waiting(
+        dapp.consent.as_ref().map(|consent| consent.tab.as_str()),
+        dapp.signing.as_ref().map(|signing| signing.tab.as_str()),
+        dapp.adding_network
+            .as_ref()
+            .map(|adding| adding.tab.as_str()),
+    )
+}
+
+/// The order [`waiting_tab`] reads the three sheets in.
+fn first_waiting(
+    consent: Option<&str>,
+    signing: Option<&str>,
+    adding_network: Option<&str>,
+) -> Option<String> {
+    consent.or(signing).or(adding_network).map(str::to_owned)
+}
+
+// ---------------------------------------------------------------------------
+// Where an opened site goes
+// ---------------------------------------------------------------------------
+
+/// How an open was asked for — the one difference between the two is
+/// [`open_target`]'s rule 2 (module doc).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ExploreOpenKind {
+    /// An address: typed into a bar, or handed in from outside (deep link,
+    /// scan, launch URL, the external-page sheet). It names a page.
+    Address,
+    /// A site picked from the home: a favourite, a recent dApp, a featured
+    /// tile. It names a site — an origin.
+    Site,
+}
+
+/// Where an open goes ([`open_target`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ExploreOpenTarget {
+    /// Load the address in this tab: the page on screen, or a start-page
+    /// tab's first page. The shell sends `tab_navigated`.
+    Load { id: String },
+    /// Show this tab as it was left — it is already on the site. A live
+    /// engine comes to the front with no load; a suspended one loads its
+    /// own address, as any tab switch does. The shell sends `tab_selected`.
+    Resume { id: String },
+    /// A new tab onto the address (`tab_opened`): nothing open is replaced.
+    NewTab,
+}
+
+/// The tab the strip lights (spec 082 RD6): the one whose page is on screen
+/// while a page shows (`on_page`, `shown`); over the home, the selected tab
+/// only when it IS a start-page tab. A tab waiting unlit — restored at
+/// launch, or left for the wallet — is not "this tab" under a home page.
+#[must_use]
+pub fn lit_tab(view: &ExploreView, shown: Option<&str>, on_page: bool) -> Option<String> {
+    if on_page {
+        return shown.map(str::to_owned);
+    }
+    let selected = view.selected_tab.as_deref()?;
+    view.tabs
+        .iter()
+        .find(|tab| tab.id == selected && tab.url.is_none())
+        .map(|tab| tab.id.clone())
+}
+
+/// The open rule (module doc, "Where an opened site goes"): `url` asked for
+/// as `kind`, with `shown` the tab whose page is in the view and `on_page`
+/// whether that page is on screen (the address bar of a page) rather than
+/// the home.
+#[must_use]
+pub fn open_target(
+    view: &ExploreView,
+    shown: Option<&str>,
+    on_page: bool,
+    url: &str,
+    kind: ExploreOpenKind,
+) -> ExploreOpenTarget {
+    if on_page {
+        if let Some(shown) = shown {
+            return ExploreOpenTarget::Load {
+                id: shown.to_owned(),
+            };
+        }
+    }
+    if kind == ExploreOpenKind::Site {
+        if let Some(id) = same_site(view, url) {
+            return ExploreOpenTarget::Resume { id };
+        }
+    }
+    lit_tab(view, None, false).map_or(ExploreOpenTarget::NewTab, |id| ExploreOpenTarget::Load {
+        id,
+    })
+}
+
+/// The tab already on `url`'s origin, most recently used first, then in
+/// strip order. Origins as the connection rule reads them
+/// ([`origin_of`]): the site a tab is connected as is the site it is.
+fn same_site(view: &ExploreView, url: &str) -> Option<String> {
+    let origin = origin_of(url)?;
+    let on_origin = |tab: &&ExploreTab| {
+        tab.url
+            .as_deref()
+            .and_then(origin_of)
+            .is_some_and(|its| its == origin)
+    };
+    super::explore_sites::by_recency(&view.tabs, &view.recent_tabs)
+        .find(on_origin)
+        .map(|tab| tab.id.clone())
+}
+
+// ---------------------------------------------------------------------------
+// Over JSON (UniFFI)
+// ---------------------------------------------------------------------------
+
+/// What the JSON wrappers read of an `ExploreView`: the strip, its selection
+/// and its recency, each defaulting when absent — a shell that re-encodes
+/// its own copy of the view (fields it never decoded, a renamed one gone) is
+/// still read, rather than answered with nothing.
+#[derive(Deserialize)]
+struct StripJson {
+    #[serde(default)]
+    tabs: Vec<ExploreTab>,
+    #[serde(default)]
+    selected_tab: Option<String>,
+    #[serde(default)]
+    recent_tabs: Vec<String>,
+}
+
+fn strip_of(view_json: &str) -> Option<ExploreView> {
+    let strip: StripJson = serde_json::from_str(view_json).ok()?;
+    Some(ExploreView {
+        tabs: strip.tabs,
+        selected_tab: strip.selected_tab,
+        recent_tabs: strip.recent_tabs,
+        ..ExploreView::default()
+    })
+}
+
+/// A unit enum from its bare wire word (`"section"`, `"site"`), the way a
+/// shell already holds it.
+fn word<T: serde::de::DeserializeOwned>(word: &str) -> Option<T> {
+    serde_json::from_value(serde_json::Value::String(word.to_owned())).ok()
+}
+
+/// [`explore_landing`] over JSON: an `ExploreView` JSON, the entry's word
+/// (`"section"`, `"reselect"`, `"page_opened"`) and the waiting tab in, an
+/// [`ExploreLanding`] JSON out (`{"type":"home"}`, `{"type":"tab","id":…}`).
+/// `None` for input that does not read.
+#[must_use]
+pub fn explore_landing_json(view_json: &str, entry: &str, waiting: Option<&str>) -> Option<String> {
+    let view = strip_of(view_json)?;
+    let entry: ExploreEntry = word(entry)?;
+    serde_json::to_string(&explore_landing(&view, entry, waiting)).ok()
+}
+
+/// [`open_target`] over JSON: an `ExploreView` JSON, the shown tab, whether
+/// its page is on screen, the address and the kind's word (`"address"`,
+/// `"site"`) in, an [`ExploreOpenTarget`] JSON out (`{"type":"load","id":…}`,
+/// `{"type":"resume","id":…}`, `{"type":"new_tab"}`). `None` for input that
+/// does not read.
+#[must_use]
+pub fn open_target_json(
+    view_json: &str,
+    shown: Option<&str>,
+    on_page: bool,
+    url: &str,
+    kind: &str,
+) -> Option<String> {
+    let view = strip_of(view_json)?;
+    let kind: ExploreOpenKind = word(kind)?;
+    serde_json::to_string(&open_target(&view, shown, on_page, url, kind)).ok()
+}
+
+/// [`lit_tab`] over JSON: an `ExploreView` JSON, the shown tab and whether
+/// its page is on screen in, the lit tab's id out. `None` when nothing is lit
+/// or the view does not read.
+#[must_use]
+pub fn lit_tab_json(view_json: &str, shown: Option<&str>, on_page: bool) -> Option<String> {
+    lit_tab(&strip_of(view_json)?, shown, on_page)
+}
+
+/// What [`waiting_tab`] reads of a `DbrView`: the three sheets' tabs.
+#[derive(Deserialize)]
+struct SheetsJson {
+    #[serde(default)]
+    consent: Option<TabOnly>,
+    #[serde(default)]
+    signing: Option<TabOnly>,
+    #[serde(default)]
+    adding_network: Option<TabOnly>,
+}
+
+#[derive(Deserialize)]
+struct TabOnly {
+    tab: String,
+}
+
+impl TabOnly {
+    fn of(sheet: Option<&Self>) -> Option<&str> {
+        sheet.map(|sheet| sheet.tab.as_str())
+    }
+}
+
+/// [`waiting_tab`] over JSON: a `DbrView` JSON in, the waiting tab's id out.
+/// `None` while nothing waits, or for a view that does not read.
+#[must_use]
+pub fn waiting_tab_json(dapp_view_json: &str) -> Option<String> {
+    let sheets: SheetsJson = serde_json::from_str(dapp_view_json).ok()?;
+    first_waiting(
+        TabOnly::of(sheets.consent.as_ref()),
+        TabOnly::of(sheets.signing.as_ref()),
+        TabOnly::of(sheets.adding_network.as_ref()),
+    )
 }

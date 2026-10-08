@@ -576,6 +576,73 @@ pub fn explore_tabs_closed_by(tabs_json: String, scope_json: String) -> Option<S
     vela_core::app::explore_sites::tabs_closed_by_json(&tabs_json, &scope_json)
 }
 
+/// What Explore shows when somebody enters it: the explore view (JSON — only
+/// `tabs`, `selected_tab` and `recent_tabs` are read), what brought it up
+/// (`"section"` from another section, `"reselect"` chosen again while up,
+/// `"page_opened"` a page opened from outside — asked once that open is in
+/// the view) and the tab whose request waits on the person
+/// (`browser_waiting_tab`) in; an `ExploreLanding` JSON out —
+/// `{"type":"home"}` or `{"type":"tab","id":…}`. `None` for input that does
+/// not read. See `vela_core::app::browser_tabs::explore_landing`.
+#[uniffi::export]
+#[must_use]
+pub fn explore_landing(
+    view_json: String,
+    entry: String,
+    waiting: Option<String>,
+) -> Option<String> {
+    vela_core::app::browser_tabs::explore_landing_json(&view_json, &entry, waiting.as_deref())
+}
+
+/// Which tab an open goes into — never over a live dApp from the home: the
+/// explore view (JSON), the tab whose page is in the view, whether that page
+/// is on screen (`false` for anything asked from the home or from outside),
+/// the address, and how it was asked for (`"address"` typed or handed in,
+/// `"site"` a favourite, recent or featured tile picked) in; an
+/// `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
+/// `tab_navigated` and load it there), `{"type":"resume","id":…}` (a tab
+/// already on that site: `tab_selected`, shown as it was left) or
+/// `{"type":"new_tab"}` (`tab_opened`). `None` for input that does not read.
+/// See `vela_core::app::browser_tabs::open_target`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_open_target(
+    view_json: String,
+    shown: Option<String>,
+    on_page: bool,
+    url: String,
+    kind: String,
+) -> Option<String> {
+    vela_core::app::browser_tabs::open_target_json(
+        &view_json,
+        shown.as_deref(),
+        on_page,
+        &url,
+        &kind,
+    )
+}
+
+/// The tab a strip or switcher marks as "this tab": the page's tab while a
+/// page is on screen; over the home, the selected tab only when it is a
+/// start-page tab — a tab waiting unlit is not "this tab" under a home page.
+/// `None` when nothing is lit or the view does not read. See
+/// `vela_core::app::browser_tabs::lit_tab`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_lit_tab(view_json: String, shown: Option<String>, on_page: bool) -> Option<String> {
+    vela_core::app::browser_tabs::lit_tab_json(&view_json, shown.as_deref(), on_page)
+}
+
+/// The tab whose request is in front of the person — the browser machine's
+/// consent, signature or add-network sheet — from a `DbrView` JSON: what
+/// `explore_landing` takes as `waiting`. `None` while nothing waits. See
+/// `vela_core::app::browser_tabs::waiting_tab`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_waiting_tab(dapp_view_json: String) -> Option<String> {
+    vela_core::app::browser_tabs::waiting_tab_json(&dapp_view_json)
+}
+
 /// May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
 /// clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
 /// no fee session) and the speed in force (`"fast"`…, `None` with no speed
