@@ -150,6 +150,102 @@ struct SendMarksTests {
         #expect(form.sweepRows[1].mark.logoURLs.first?.contains("/assets/eip155-8453/") == true)
     }
 
+    // MARK: - The fee coin
+
+    /// A fee estimate as the send machine holds it, paid in `asset`.
+    private func estimate(chainId: Int, asset: [String: Any]) -> [String: Any] {
+        [
+            "chain_id": chainId, "total_wei": "2100000000000000", "max_fee_per_gas": "2000000000",
+            "network_fee_per_gas": "1000000000", "relayer_fee_per_gas": "1000000000",
+            "bundler_gas_price": "1000000000", "in_band_gas_basis": "0",
+            "effective_gas_price": NSNull(), "max_gas_price": NSNull(), "total_gas": "21000",
+            "deployed": true, "tier": "fast", "quoted": true, "fee_asset": asset,
+            "fee_recipient": "0xfee",
+        ]
+    }
+
+    /// A USDC fee wears USDC's own logo — by its contract, which the row
+    /// left out, so it would have worn the chain's logo by the native-coin
+    /// rule — with the chain's badge.
+    @Test func anERC20FeeWearsItsOwnContractsLogo() {
+        let view = sendView([
+            "selected_token": token("ETH", chainId: 8453),
+            "fee": estimate(chainId: 8453, asset: [
+                "type": "erc20", "token": Self.usdcBase, "decimals": 6, "amount": "50000", "symbol": "USDC",
+            ]),
+        ])
+        let row = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(row.mark.ticker == "USDC")
+        #expect(row.mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        #expect(!row.mark.logoURLs.contains { $0.contains("/chainlogos/") })
+        #expect(row.mark.badgeLogoURL == Marks.chainLogoURL(8453))
+    }
+
+    /// With no estimate in hand (a quote out, or one that failed), the row
+    /// wears the send's chain's own coin — BNB on a BNB Chain send — never
+    /// the drawing's ETH.
+    @Test func withNoEstimateTheFeeRowWearsTheChainsOwnCoin() {
+        let view = sendView(["selected_token": token("BNB", chainId: 56)])
+        let row = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(row.mark.ticker == "BNB")
+        #expect(row.mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(row.mark.badgeHidden)
+        // No token at all: no coin to name, and no drawing's coin either.
+        let none = SendLive.form(sendView([:]), fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(none.mark.ticker.isEmpty)
+        #expect(none.mark.logoURLs.isEmpty)
+    }
+
+    /// The fee-coin sheet with no estimate names the SEND's chain — never 0.
+    @Test func theFeeCoinSheetNeverAsksForChainZero() {
+        func option(_ symbol: String, contract: String?) -> FeeOptionWire {
+            FeeOptionWire(
+                symbol: symbol, contract: contract, decimals: 18, balance: "0", recipient: "0x1",
+                usdBalance: "0", usdPrice: "1", amount: nil, insufficient: false, selected: contract == nil
+            )
+        }
+        let fee = FeeViewWire(
+            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [option("BNB", contract: nil), option("USDT", contract: "0x55d398326f99059ff775485246999027b3197955")],
+            confirmFeeReady: false
+        )
+        guard case .feeToken(let drawn)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet
+        else { fatalError("SD2f does not draw the fee sheet") }
+        let sheet = SendLive.feeSheet(fee, on: drawn, loc: loc, chainId: 56)
+        let urls = sheet.rows.flatMap { $0.mark.logoURLs + [$0.mark.badgeLogoURL].compactMap { $0 } }
+        #expect(!urls.isEmpty)
+        #expect(!urls.contains { $0.contains("eip155-0") })
+        #expect(sheet.rows[0].mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(sheet.rows[1].mark.logoURLs.first?.contains("/assets/eip155-56/") == true)
+        // With no chain at all: letters, and nothing asked of anybody.
+        let blind = SendLive.feeSheet(fee, on: drawn, loc: loc)
+        #expect(blind.rows.allSatisfy { $0.mark.logoURLs.isEmpty && $0.mark.badgeHidden })
+    }
+
+    /// A sweep's receipt with no chain in hand draws its coins' named logos,
+    /// never a URL on chain 0.
+    @Test func aReceiptWithNoChainNeverAsksForChainZero() {
+        let view = sendView([
+            "receipt": [
+                "status": "submitted", "hold_reason": NSNull(), "kind": "multi_select",
+                "transfers": [[String: Any]](), "amount": "", "usd_value": 0,
+                "submitted_at_ms": NSNull(), "typical_inclusion_s": NSNull(),
+                "coins": [
+                    ["symbol": "ETH", "amount": "0.1", "token_address": NSNull(),
+                     "logo_urls": [String](), "usd_value": 0],
+                    ["symbol": "USDC", "amount": "5", "token_address": Self.usdcBase,
+                     "logo_urls": ["https://logos.example/usdc.png"], "usd_value": 0],
+                ],
+            ],
+        ])
+        let parts = SendLive.receiptParts(view, symbol: "", loc: loc)
+        #expect(parts.rows.count == 2)
+        let urls = parts.rows.flatMap { ($0.lead?.logoURLs ?? []) + [$0.lead?.badgeLogoURL].compactMap { $0 } }
+        #expect(!urls.contains { $0.contains("eip155-0") })
+        #expect(parts.rows[1].lead?.logoURLs == ["https://logos.example/usdc.png"])
+    }
+
     // MARK: - The confirm page
 
     /// The confirm page's From row has the account's face, and its Network

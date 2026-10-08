@@ -2507,7 +2507,8 @@ struct RootView: View {
                     view, fee: fees.view, display: display, on: form, loc: loc,
                     speed: fees.speed.map { speed in
                         SendLive.SpeedInputs(view: speed, feeView: { [fees] tier in fees.view(of: tier) })
-                    }
+                    },
+                    networks: walletNetworks
                 ))
             }
             if case .sendReceipt(let receipt) = model.base {
@@ -2532,7 +2533,10 @@ struct RootView: View {
                 model.base = .sendConfirm(live)
             }
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
-                model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
+                model.sheet = .feeToken(SendLive.feeSheet(
+                    fee, on: sheet, loc: loc,
+                    chainId: view.selectedToken?.chainId ?? view.multiChainId
+                ))
             }
             // The person's own book, or — while it is still being read — the
             // drawn chrome with nobody in it. Never the drawing's people: a

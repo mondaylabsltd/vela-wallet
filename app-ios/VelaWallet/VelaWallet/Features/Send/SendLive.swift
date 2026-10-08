@@ -381,7 +381,8 @@ enum SendLive {
         display: WalletLive.Display,
         on model: SendFormModel,
         loc: Loc,
-        speed: SpeedInputs? = nil
+        speed: SpeedInputs? = nil,
+        networks: WalletNetworks = .builtin
     ) -> SendFormModel {
         var live = model
         let token = view.selectedToken
@@ -580,7 +581,8 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed),
+            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
+                        networks: networks),
             speed: speed.map { speedModel($0, view: view, display: display, loc: loc) },
             cta: stopRetry(view, loc: loc) ?? live.cta,
             // While the pre-check is out the button is busy, not unfinished.
@@ -692,7 +694,8 @@ enum SendLive {
 
     private static func feeRow(
         _ fallback: FeeRowModel, view: SendViewWire, fee: FeeViewWire?,
-        display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil
+        display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil,
+        networks: WalletNetworks = .builtin
     ) -> FeeRowModel {
         let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
         // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): on
@@ -711,14 +714,12 @@ enum SendLive {
         let waiting = busy ? loc.t("send.estimatingFee") : "—"
         return FeeRowModel(
             label: fallback.label,
-            // The fee is paid on THIS chain. The drawing's mark was ETH, which
-            // is the wrong badge on every network but one.
-            mark: view.fee.map { estimate in
-                TokenMarkModel.of(
-                    chainId: estimate.chainId, symbol: feeTicker(estimate),
-                    color: chainColor(estimate.chainId)
-                )
-            } ?? fallback.mark,
+            // The fee is paid on THIS chain, in THIS coin. The drawing's mark
+            // was ETH, which is the wrong coin on every network but one —
+            // and it stood in whenever no estimate was in hand ("ETH" on a
+            // BNB Chain send whose quote had failed).
+            mark: feeCoinMark(view, fee: fee, networks: networks)
+                ?? TokenMarkModel(ticker: "", badgeColor: fallback.mark.badgeColor, badgeHidden: true),
             value: ofAnotherTier ? loc.t("send.estimatingFee") : (text ?? waiting),
             openLabel: fallback.openLabel,
             refreshLabel: speed.map { _ in loc.t("send.feeRefresh") },
@@ -858,11 +859,25 @@ enum SendLive {
         return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
-    /// The symbol the fee is charged in.
-    private static func feeTicker(_ estimate: FeeEstimateWire) -> String {
-        switch estimate.feeAsset {
-        case .native: return ChainCatalog.meta(estimate.chainId)?.nativeSymbol ?? ""
-        case .erc20(_, _, _, let symbol): return symbol ?? "TOKEN"
+    /// The coin the fee row names, in its own mark: the estimate's coin
+    /// (the one in hand, else the fee session's), on the send's chain — an
+    /// ERC-20 by its CONTRACT, which the row used to leave out, so a USDC fee
+    /// would have worn the chain's logo by the native-coin rule. With no
+    /// estimate yet, or none at all, the chain's own coin: what the web and
+    /// the desktop draw. `nil` only with no chain to name (no token chosen).
+    static func feeCoinMark(
+        _ view: SendViewWire, fee: FeeViewWire?, networks: WalletNetworks
+    ) -> TokenMarkModel? {
+        let estimate = view.fee ?? fee?.fee
+        guard let chainId = view.selectedToken?.chainId ?? view.multiChainId ?? estimate?.chainId
+        else { return nil }
+        let native = networks.meta(chainId)?.nativeSymbol ?? ""
+        switch estimate?.feeAsset {
+        case .erc20(let contract, _, _, let symbol)?:
+            return TokenMarkModel.of(chainId: chainId, symbol: symbol ?? "TOKEN",
+                                     tokenAddress: contract, color: chainColor(chainId))
+        case .native?, nil:
+            return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
         }
     }
 
@@ -1491,13 +1506,18 @@ enum SendLive {
         // Several coins (spec 097 F): one coin — a single send, a split, or a
         // sweep whose native line the gas reserve dropped — is the title's.
         if coins.count > 1 {
-            let chainId = view.multiChainId ?? view.selectedToken?.chainId ?? 0
+            // The sweep's chain — never 0. With none (a receipt read back
+            // with no send in hand), the coins' own named logos and no badge.
+            let chainId = view.multiChainId ?? view.selectedToken?.chainId
             let rows = coins.map { coin in
                 BreakdownRowModel(
-                    lead: TokenMarkModel.of(
-                        chainId: chainId, symbol: coin.symbol, tokenAddress: coin.tokenAddress,
-                        color: chainColor(chainId), named: coin.logoUrls
-                    ),
+                    lead: chainId.map { chainId in
+                        TokenMarkModel.of(
+                            chainId: chainId, symbol: coin.symbol, tokenAddress: coin.tokenAddress,
+                            color: chainColor(chainId), named: coin.logoUrls
+                        )
+                    } ?? TokenMarkModel(ticker: coin.symbol, badgeColor: chainColor(0),
+                                        logoURLs: coin.logoUrls, badgeHidden: true),
                     label: coin.symbol,
                     value: "\(WalletLive.tokenAmountText(coin.amount)) \(coin.symbol)"
                 )
@@ -1533,13 +1553,20 @@ enum SendLive {
 
     // MARK: - SD2F, the fee-token sheet
 
-    static func feeSheet(_ fee: FeeViewWire, on model: FeeTokenPickModel, loc: Loc) -> FeeTokenPickModel {
+    /// `chainId` is the SEND's chain (its token's, or the sweep's) — the
+    /// estimate's is absent while a quote is out or after one failed, and
+    /// "absent" used to be chain 0: every ERC-20 asked `assets/eip155-0` and
+    /// every badge `eip155-0.png`, so the sheet was letters and grey dots.
+    static func feeSheet(
+        _ fee: FeeViewWire, on model: FeeTokenPickModel, loc: Loc, chainId: Int? = nil
+    ) -> FeeTokenPickModel {
+        let chain = chainId ?? fee.fee?.chainId
         let rows = fee.options.map { option in
             FeeTokenRowModel(
-                mark: TokenMarkModel.of(
-                    chainId: fee.fee?.chainId ?? 0, symbol: option.symbol,
-                    tokenAddress: option.contract, color: chainColor(fee.fee?.chainId ?? 0)
-                ),
+                mark: chain.map { chain in
+                    TokenMarkModel.of(chainId: chain, symbol: option.symbol,
+                                      tokenAddress: option.contract, color: chainColor(chain))
+                } ?? TokenMarkModel(ticker: option.symbol, badgeColor: chainColor(0), badgeHidden: true),
                 symbol: option.symbol,
                 balanceLabel: trim(fromBase(option.balance, decimals: option.decimals)),
                 fee: option.amount.map { "~\(trim(fromBase($0, decimals: option.decimals))) \(option.symbol)" } ?? "—",
