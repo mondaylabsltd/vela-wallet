@@ -1594,8 +1594,15 @@ pub(crate) fn fee_line(
     format!("{coin} · ≈{}", currency.text(usd, locale))
 }
 
-/// The fee coin's symbol, for the row's mark.
-fn fee_symbol(send: &SendView, fee: &FeeView) -> (String, u32) {
+/// The coin the fee row names, for its mark: its symbol, its contract
+/// (`None` for the chain's own coin) and the chain it is paid on.
+///
+/// Symbol and contract come from the SAME estimate, the one in hand. The
+/// contract used to come from the estimate of the speed showing, which is
+/// none while a newly picked speed is measured — so for that moment a USDC fee
+/// was "USDC" with no contract, and the native coin's rule drew the chain's
+/// logo in its place. The coin does not change with the speed.
+fn fee_coin(send: &SendView, fee: &FeeView) -> (String, Option<String>, u32) {
     let quote = send.fee.as_ref().or(fee.fee.as_ref());
     let chain_id = send
         .selected_token
@@ -1603,17 +1610,18 @@ fn fee_symbol(send: &SendView, fee: &FeeView) -> (String, u32) {
         .map(|token| token.chain_id)
         .or_else(|| quote.map(|quote| quote.chain_id))
         .unwrap_or(1);
-    let symbol = match quote.map(|quote| &quote.fee_asset) {
-        Some(FeeAssetView::Erc20 { symbol, .. }) => {
-            symbol.clone().unwrap_or_else(|| native_symbol(chain_id))
-        }
-        _ => native_symbol(chain_id),
-    };
-    (symbol, chain_id)
+    match quote.map(|quote| &quote.fee_asset) {
+        Some(FeeAssetView::Erc20 { symbol, token, .. }) => (
+            symbol.clone().unwrap_or_else(|| native_symbol(chain_id)),
+            Some(token.clone()),
+            chain_id,
+        ),
+        _ => (native_symbol(chain_id), None, chain_id),
+    }
 }
 
 fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
-    let (symbol, chain_id) = fee_symbol(i.send, i.fee);
+    let (symbol, contract, chain_id) = fee_coin(i.send, i.fee);
     let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
     // path where a pick re-measures, the estimate in hand still belongs to the
@@ -1635,15 +1643,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         mark: TokenMark {
             ticker: symbol.clone().into(),
             badge: tint(chain_id),
-            logos: crate::marks::token_logos(
-                chain_id,
-                &symbol,
-                quote.and_then(|quote| match &quote.fee_asset {
-                    FeeAssetView::Erc20 { token, .. } => Some(token.as_str()),
-                    FeeAssetView::Native => None,
-                }),
-                &[],
-            ),
+            logos: crate::marks::token_logos(chain_id, &symbol, contract.as_deref(), &[]),
         },
         value: if measuring || of_another_tier {
             i.s.fee_pending.clone()
@@ -7529,6 +7529,38 @@ mod speed_tests {
                 .iter()
                 .any(|fact| fact.label == s.fee_speed_label)
         );
+    }
+
+    /// A USDC fee keeps USDC's own logo while a newly picked speed is
+    /// measured. The coin does not change with the speed; the row used to
+    /// take the coin's NAME from the estimate in hand and its CONTRACT from
+    /// the speed's own estimate — none, for that moment — so "USDC" fell to
+    /// the native coin's rule and wore the chain's logo.
+    #[test]
+    fn the_fee_coin_keeps_its_logo_while_another_speed_is_measured() {
+        crate::executor::storage::tests::with_temp_state("flows-fee-coin-mark", || {
+            let (s, wallet) = strings();
+            let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83";
+            let mut paid_in_usdc = quote(FeeTier::Fast, "10000", None);
+            paid_in_usdc.fee_asset = FeeAssetView::Erc20 {
+                token: usdc.to_owned(),
+                decimals: 6,
+                amount: "1".to_owned(),
+                symbol: Some("USDC".to_owned()),
+            };
+            let mut send = CoreHost::<SendMachine>::new().view();
+            send.fee = Some(paid_in_usdc);
+            let fee = CoreHost::<FeePolicy>::new().view();
+            let usdc_logos = crate::marks::token_logos(100, "USDC", Some(usdc), &[]);
+            assert!(usdc_logos.logo_urls[0].contains("/assets/eip155-100/"));
+            // Fast is the estimate's own speed; Slow is a pick still measuring.
+            for tier in [FeeTier::Fast, FeeTier::Slow] {
+                let picked = speed(tier, false, false, None, &[]);
+                let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, Some(&picked)));
+                assert_eq!(row.mark.ticker.as_ref(), "USDC");
+                assert_eq!(row.mark.logos, usdc_logos, "{tier:?}");
+            }
+        });
     }
 
     /// Issue 681: the fee row never shows the speed just left under the new
