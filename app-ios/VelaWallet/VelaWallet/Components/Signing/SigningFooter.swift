@@ -79,8 +79,7 @@ struct SigningFeeView: View {
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Button { onPick(option.id) } label: {
                             HStack(spacing: Tokens.Space.s12) {
-                                LetterAvatarView(letter: option.mark.letter, tint: option.mark.tint,
-                                                 size: Tokens.Space.s32)
+                                TokenIconView(mark: option.mark)
                                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                                     Text(verbatim: option.name)
                                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -114,7 +113,7 @@ struct SigningFeeView: View {
                                 .typeRole(Typography.rowSub.scaled(textScale))
                                 .foregroundStyle(theme.errorBase)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .padding(.leading, Tokens.Space.s8 + Tokens.Space.s32 + Tokens.Space.s12)
+                                .padding(.leading, Tokens.Space.s8 + WalletGeometry.rowIcon + Tokens.Space.s12)
                                 .padding(.trailing, Tokens.Space.s8)
                                 .padding(.bottom, Tokens.Space.s4)
                                 .accessibilityIdentifier("signing.fee.option.reason")

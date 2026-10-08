@@ -26,6 +26,11 @@ enum SigningLive {
         let nativeSymbol: String
         let walletName: String
         let walletAddress: String
+        /// The REQUEST's chain (`RootView.signingContext`), for the fee coins'
+        /// marks — never the estimate's, which is absent while a quote is out,
+        /// and never 0. `nil` only in hand-built contexts, where the coins
+        /// draw their glyph.
+        var chainId: Int? = nil
         /// The display currency the fee's "≈" half is written in (issue 201).
         var display: WalletLive.Display = .usd
         /// The page's host, for the sign-in verdict's words.
@@ -1314,8 +1319,14 @@ enum SigningLive {
             ? (title: s(context.loc, "feeTokenTitle"), options: options.map { option in
                 FeeTokenOption(
                     id: option.contract ?? nativeFeeId,
-                    mark: TokenMark(letter: String(option.symbol.prefix(1)).uppercased(),
-                                    tint: context.chainDot),
+                    // The coin's real logo — the send form's fee-coin sheet's
+                    // own mark (chain + symbol + contract; the native coin
+                    // wears its chain's logo), over the drawn ticker. A letter
+                    // on a disc drew USDC and USDT as the same "U".
+                    mark: context.chainId.map {
+                        TokenMarkModel.of(chainId: $0, symbol: option.symbol,
+                                          tokenAddress: option.contract, color: context.chainDot)
+                    } ?? TokenMarkModel(ticker: option.symbol, badgeColor: context.chainDot),
                     name: option.symbol,
                     balance: "\(SendLive.trim(SendLive.fromBase(option.balance, decimals: option.decimals))) \(option.symbol)",
                     fee: option.amount.map {

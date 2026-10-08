@@ -2871,6 +2871,7 @@ struct RootView: View {
             nativeSymbol: ChainCatalog.meta(chain)?.nativeSymbol ?? "",
             walletName: session.view.activeName,
             walletAddress: session.view.address,
+            chainId: chain,
             display: WalletLive.Display.from(settings.currency),
             origin: live?.request?.origin,
             // What the chain said this transaction would do, and how far the

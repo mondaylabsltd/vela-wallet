@@ -1478,6 +1478,56 @@ struct SigningLiveTests {
         #expect(open.options[1].reason == "Need ~3.58361 USDT, have 0.754189 USDT")
     }
 
+    /// The coin list draws each coin's real logo — the send form's fee-coin
+    /// sheet's own mark, on the REQUEST's chain: ETH on Ethereum wears the
+    /// Ethereum logo and no badge; USDC and USDT their own contract's logos
+    /// (checksummed path first), so they are no longer both a "U". With the
+    /// quote still out there is no estimate to take a chain from, and the
+    /// marks still name chain 1, never 0.
+    @Test func theCoinListDrawsEachCoinsOwnLogoOnTheRequestsChain() {
+        let eth = option("ETH", contract: nil, decimals: 18, balance: "0",
+                         amount: "1000", insufficient: false, selected: true)
+        let usdc = option("USDC", contract: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                          decimals: 6, balance: "0", amount: "1000", insufficient: false, selected: false)
+        let usdt = option("USDT", contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                          decimals: 6, balance: "0", amount: "1000", insufficient: false, selected: false)
+        // Busy: no estimate, so nothing on the fee says which chain.
+        let fee = FeeViewWire(
+            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [eth, usdc, usdt], confirmFeeReady: false
+        )
+        var ctx = context()
+        ctx.feeOpen = true
+        ctx.chainId = 1
+        guard case .onchain(_, _, let list?, _, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with three coins is drawn")
+            return
+        }
+        let base = Marks.base.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        #expect(list.options.map(\.mark.ticker) == ["ETH", "USDC", "USDT"])
+        #expect(list.options[0].mark.logoURLs == ["\(base)/chainlogos/eip155-1.png"])
+        #expect(list.options[0].mark.badgeHidden, "ETH on Ethereum: the badge would repeat the coin")
+        #expect(list.options[1].mark.logoURLs.first
+                == "\(base)/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png")
+        #expect(list.options[2].mark.logoURLs.first
+                == "\(base)/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png")
+        #expect(list.options.allSatisfy { mark in
+            !mark.mark.logoURLs.contains { $0.contains("eip155-0") }
+        })
+
+        // A hand-built context names no chain: the drawn tickers, no guess.
+        ctx.chainId = nil
+        guard case .onchain(_, _, let glyphs?, _, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with three coins is drawn")
+            return
+        }
+        #expect(glyphs.options.allSatisfy { $0.mark.logoURLs.isEmpty })
+    }
+
     /// One coin short, one able: only the short one says why, and the line is
     /// still about the coin in force (#262) — picking the other one fixes it.
     @Test func issue408ACoinThatCanPayKeepsTheLineAboutTheCoinInForce() {

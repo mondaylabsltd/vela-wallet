@@ -166,7 +166,8 @@ struct TechModel {
 
 struct FeeTokenOption: Identifiable {
     let id: String
-    let mark: TokenMark
+    /// The coin's mark — logo over its drawn ticker, the send flow's own.
+    let mark: TokenMarkModel
     let name: String
     let balance: String
     let fee: String

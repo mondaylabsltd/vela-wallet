@@ -361,10 +361,15 @@ enum SigningFixtures {
         case .cs11, .cs33:
             let feeSelector: (title: String, options: [FeeTokenOption])? = state == .cs33
                 ? (title: t(loc, "feeTokenTitle"), options: [
-                    FeeTokenOption(id: "eth", mark: Mark.eth, name: "ETH",
+                    FeeTokenOption(id: "eth",
+                                   mark: TokenMarkModel.of(chainId: 1, symbol: "ETH", color: network.dot),
+                                   name: "ETH",
                                    balance: "\(loc.t("componentsUi.gas.rowBalance")) 0.0689",
                                    fee: "~0.0021 ETH", selected: true),
-                    FeeTokenOption(id: "usdc", mark: Mark.usdc, name: "USDC",
+                    FeeTokenOption(id: "usdc",
+                                   mark: TokenMarkModel.of(chainId: 1, symbol: "USDC",
+                                                           tokenAddress: Addr.usdcFull, color: network.dot),
+                                   name: "USDC",
                                    balance: "\(loc.t("componentsUi.gas.rowBalance")) 1,240.00",
                                    fee: "~5.55 USDC", selected: false),
                 ])
