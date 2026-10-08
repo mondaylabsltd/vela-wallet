@@ -266,6 +266,48 @@ struct SendMarksTests {
                                                            color: SendLive.chainColor(8453)).logoURLs)
     }
 
+    /// A quote that failed on BNB Chain — the simulator's "ETH —" for the
+    /// golden Safe — names BNB, the chain's own coin, beside its "—"; a coin
+    /// the person chose (USDT) is named instead. Never the drawing's ETH.
+    @Test func aFailedQuoteNamesTheChainsCoinOrTheChosenOne() {
+        let usdt = "0x55d398326f99059ff775485246999027b3197955"
+        let view = sendView([
+            "selected_token": token("BNB", chainId: 56),
+            "tokens": [token("BNB", chainId: 56), token("USDT", chainId: 56, address: usdt)],
+        ])
+        func failed(_ feeToken: String?) -> FeeViewWire {
+            FeeViewWire(busy: false, failed: "quote_unavailable", fee: nil, stale: false,
+                        feeToken: feeToken, options: [], confirmFeeReady: false)
+        }
+        let bnb = SendLive.form(view, fee: failed(nil), display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(bnb.mark.ticker == "BNB")
+        #expect(bnb.mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(bnb.value == "—")
+        let chosen = SendLive.form(view, fee: failed(usdt), display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(chosen.mark.ticker == "USDT")
+        #expect(chosen.mark.logoURLs.first?.contains("/assets/eip155-56/") == true)
+        #expect(chosen.mark.badgeLogoURL == Marks.chainLogoURL(56))
+        #expect(chosen.value == "—")
+        // And before the fee session exists at all, the chain's coin too.
+        let none = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        for row in [bnb, chosen, none] {
+            #expect(row.mark.ticker != "ETH" && row.mark.glyph != "ETH")
+        }
+    }
+
+    /// The fee-coin sheet before any quote was asked draws its chrome and no
+    /// coins — never the drawing's ETH, USDC and USDT at its own balances,
+    /// which stood in on a live send.
+    @Test func theFeeCoinSheetBeforeAnyQuoteDrawsNoDrawnCoins() {
+        guard case .feeToken(let drawn)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet
+        else { fatalError("SD2f does not draw the fee sheet") }
+        #expect(drawn.rows.contains { $0.symbol == "ETH" }, "the drawing that used to stand in")
+        let reading = SendLive.feeSheetReading(on: drawn)
+        #expect(reading.rows.isEmpty)
+        #expect(reading.title == drawn.title)
+        #expect(reading.hint == drawn.hint)
+    }
+
     /// The fee-coin sheet with no estimate names the SEND's chain — never 0.
     @Test func theFeeCoinSheetNeverAsksForChainZero() {
         func option(_ symbol: String, contract: String?) -> FeeOptionWire {

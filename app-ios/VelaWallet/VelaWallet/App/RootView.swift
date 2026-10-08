@@ -2532,11 +2532,16 @@ struct RootView: View {
                 }
                 model.base = .sendConfirm(live)
             }
-            if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
-                model.sheet = .feeToken(SendLive.feeSheet(
-                    fee, on: sheet, loc: loc,
-                    chainId: view.selectedToken?.chainId ?? view.multiChainId
-                ))
+            // The fee session's coins — or, before it has said anything, the
+            // sheet's chrome and no coins. Never the drawing's ETH, USDC and
+            // USDT at somebody else's balances over a live send.
+            if case .feeToken(let sheet)? = model.sheet {
+                model.sheet = .feeToken(fees.view.map { fee in
+                    SendLive.feeSheet(
+                        fee, on: sheet, loc: loc,
+                        chainId: view.selectedToken?.chainId ?? view.multiChainId
+                    )
+                } ?? SendLive.feeSheetReading(on: sheet))
             }
             // The person's own book, or — while it is still being read — the
             // drawn chrome with nobody in it. Never the drawing's people: a

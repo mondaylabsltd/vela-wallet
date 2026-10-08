@@ -1608,6 +1608,16 @@ enum SendLive {
         )
     }
 
+    /// SD2f before the fee session has said anything (no quote asked yet):
+    /// the sheet's chrome and no coins. The drawing's rows were ETH, USDC
+    /// and USDT at its own balances, and they stood in on a live send.
+    static func feeSheetReading(on model: FeeTokenPickModel) -> FeeTokenPickModel {
+        FeeTokenPickModel(
+            title: model.title, closeLabel: model.closeLabel, hint: model.hint,
+            estimateLabel: model.estimateLabel, rows: []
+        )
+    }
+
     // MARK: - SD2C, the payroll importer
 
     /// The web's `liveBatchImport`, word for word: the core parsed, priced and
