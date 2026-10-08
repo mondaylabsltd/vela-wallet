@@ -107,8 +107,19 @@ fun TokenIcon(
  * ticker's first three characters upper-cased ("USD" for USDC). Drawn here
  * from the ticker so a fixture without a core answer letters the same way;
  * `MarksTest` holds it to the core's vectors.
+ *
+ * Three CHARACTERS — code points, as the core's `chars()` counts them and as
+ * the web's `tokenGlyph` does — never three UTF-16 units: an emoji ticker
+ * ("AB🚀") would otherwise end on half a surrogate pair and draw "�", and
+ * "🚀MOON" would draw "🚀M" where every other shell draws "🚀MO".
  */
-internal fun tokenGlyph(ticker: String): String = ticker.take(3).uppercase()
+internal fun tokenGlyph(ticker: String): String {
+    val end = if (ticker.codePointCount(0, ticker.length) <= GLYPH_CHARS) ticker.length else ticker.offsetByCodePoints(0, GLYPH_CHARS)
+    return ticker.substring(0, end).uppercase()
+}
+
+/** The core's `GLYPH_CHARS`. */
+private const val GLYPH_CHARS = 3
 
 /** The same icon from a flow's mark model. */
 @Composable
