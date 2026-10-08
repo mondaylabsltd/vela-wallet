@@ -3809,8 +3809,8 @@ struct RootView: View {
 
     /// The single onboarding sheet's presentation. A swipe-to-dismiss routes to
     /// `dismissOnboardingSheet`, which cancels whatever the active prompt is
-    /// waiting for; the touch and connecting states disable interactive dismiss,
-    /// so they never reach it.
+    /// waiting for; a security key's touch and the connecting state disable
+    /// interactive dismiss, so they never reach it.
     private var onboardingSheet: Binding<Bool> {
         Binding(
             get: { onboarding.onboardingSheetPresented },
@@ -3829,7 +3829,7 @@ struct RootView: View {
             UsbWalletPickerSheet(loc: loc, pending: pick, onPick: onboarding.answerWalletPick)
                 .themed(scheme)
         } else if let touch = onboarding.usbTouch {
-            UsbTouchSheet(loc: loc, touch: touch)
+            UsbTouchSheet(loc: loc, touch: touch, onCancel: onboarding.cancelCable)
                 .themed(scheme)
         } else if onboarding.pendingInsertKey != nil {
             UsbInsertKeySheet(loc: loc, onCancel: { onboarding.answerInsertKey(false) })
@@ -3837,8 +3837,11 @@ struct RootView: View {
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.
-            CableQrSheet(loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn)
-                .themed(scheme)
+            CableQrSheet(
+                loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn,
+                onCancel: onboarding.cancelCable
+            )
+            .themed(scheme)
         } else if let prompt = onboarding.pending {
             FlowSheet(
                 loc: loc,

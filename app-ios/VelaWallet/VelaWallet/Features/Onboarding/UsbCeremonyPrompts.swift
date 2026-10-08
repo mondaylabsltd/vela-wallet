@@ -203,12 +203,16 @@ struct UsbTouchSheet: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let touch: OnboardingModel.UsbTouch
+    /// The phone's sheet only (issue #459): Cancel, a swipe or a tap outside
+    /// ends that ceremony, as the desktop's phone card does. A security key's
+    /// touch keeps no exit — the key itself is the answer.
+    var onCancel: () -> Void = {}
 
     /// Over caBLE the "authenticator" is the person's phone, and the approval
     /// happens THERE — "touch your security key" would send them hunting for
     /// hardware they never owned (device-found 2026-08-28). Same corpus keys
     /// the desktop and Android use.
-    private var remote: Bool { touch.product == "your phone" }
+    private var remote: Bool { touch.remote }
 
     private var title: String {
         remote ? loc.t(I18nKeys.Flow.touchRemoteTitle) : loc.t(I18nKeys.Create.touchTitle)
@@ -243,14 +247,20 @@ struct UsbTouchSheet: View {
                     .foregroundStyle(theme.fgMuted)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if remote {
+                    VelaButton(title: loc.t(I18nKeys.Flow.cancel), kind: .secondary) { onCancel() }
+                        .padding(.top, Tokens.Space.s8)
+                        .accessibilityIdentifier("cable.touch.cancel")
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
             .padding(.vertical, Tokens.Space.s32)
             .presentationDetents([.medium])
-            .presentationDragIndicator(.hidden)
+            .presentationDragIndicator(remote ? .visible : .hidden)
             .presentationBackground(theme.bgRaised)
-            .interactiveDismissDisabled(true)
+            .interactiveDismissDisabled(!remote)
     }
 }
 

@@ -258,8 +258,14 @@ final class WebSocketCableConn: NSObject, CableConn {
 
     static let subprotocol = "fido.cable"
 
-    static func connect(url: URL, timeoutMs: Int) async throws -> WebSocketCableConn {
+    /// `opening` is handed the connection before the wait for the tunnel
+    /// begins, so a dismissed code (issue #459) can `close()` it and end that
+    /// wait at once instead of at the connect deadline.
+    static func connect(
+        url: URL, timeoutMs: Int, opening: (WebSocketCableConn) -> Void = { _ in }
+    ) async throws -> WebSocketCableConn {
         let c = WebSocketCableConn()
+        opening(c)
         let cfg = URLSessionConfiguration.default
         // The connect deadline is the open watchdog below. A request timeout as
         // short would also bound the idle wait for the phone's answer, which is
@@ -335,6 +341,11 @@ final class WebSocketCableConn: NSObject, CableConn {
     }
 
     func close() {
+        // Still opening: the wait ends now, as a closed channel.
+        if let pending = openCont {
+            openCont = nil
+            pending.resume(throwing: CableConnError.closed)
+        }
         task?.cancel(with: .normalClosure, reason: nil)
         session?.invalidateAndCancel()
     }

@@ -171,6 +171,9 @@ enum I18nKeys {
         /// core's `security_key` on a not-supported prompt).
         static let keyUnavailableTitle = "onboarding.common.keyUnavailableTitle"
         static let keyUnavailableBody = "onboarding.common.keyUnavailableBody"
+        /// Issue #459: leaving the phone's code, or "look at your phone" — the
+        /// shared word, as the desktop's card says it.
+        static let cancel = "common.cancel"
     }
 
     /// Spec 088 FR-004: a page another app asked to open — the host is data,
