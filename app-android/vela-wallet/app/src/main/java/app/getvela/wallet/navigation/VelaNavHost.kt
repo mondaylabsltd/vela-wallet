@@ -1084,7 +1084,7 @@ fun VelaNavHost(
                             else -> base
                         }
                         val sheet = when (val sheet = drawn.sheet) {
-                            is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
+                            is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, sendView, ctx))
                             is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
                             is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces))
                             else -> sheet

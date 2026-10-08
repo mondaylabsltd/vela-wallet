@@ -985,10 +985,10 @@ object SendLive {
 
     // -- SD2F --------------------------------------------------------------------
 
-    internal fun feeSheet(fallback: FeeTokenPickModel, fee: FeeView, ctx: Context): FeeTokenPickModel = fallback.copy(
+    internal fun feeSheet(fallback: FeeTokenPickModel, fee: FeeView, view: SendView, ctx: Context): FeeTokenPickModel = fallback.copy(
         rows = fee.options.map { option ->
             FeeTokenRowModel(
-                mark = WalletLive.mark((fee.fee?.chain_id ?: 0).toInt(), option.symbol, option.contract),
+                mark = WalletLive.mark(feeSheetChain(fee, view), option.symbol, option.contract),
                 symbol = option.symbol,
                 balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(humanOfBase(option.balance, option.decimals)))),
                 // A fee reads as the fee row writes it — rounded UP.
@@ -1024,6 +1024,20 @@ object SendLive {
             )
         },
     )
+
+    /**
+     * The chain the fee coins are on: the send's own (a sweep's, else the
+     * picked coin's), then the estimate's. Never chain 0 — the list opens
+     * while the fee is still being measured or after it failed, and the
+     * estimate's absence made every coin ask for an `eip155-0` logo and draw
+     * its letters over a neutral dot. Ethereum, as the web, only when no
+     * coin is picked at all.
+     */
+    internal fun feeSheetChain(fee: FeeView, view: SendView): Int =
+        (if (view.multi_select_mode) view.multi_chain_id else null)
+            ?: view.selected_token?.chain_id
+            ?: fee.fee?.chain_id
+            ?: 1
 
     // -- SD3 ---------------------------------------------------------------------
 

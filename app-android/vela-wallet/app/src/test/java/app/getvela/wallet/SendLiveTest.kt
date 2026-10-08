@@ -691,11 +691,44 @@ class SendLiveTest {
                 FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "5000000", recipient = "0x2", usd_balance = "5", amount = "2100", selected = false),
             ),
         )
-        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        val live = SendLive.feeSheet(drawn.model, fee, SendView(selected_token = xdai), ctx())
         assertEquals(listOf("XDAI", "USDC"), live.rows.map { it.symbol })
         assertTrue(live.rows[0].selected)
         assertTrue(live.rows[1].fee.contains("0.0021") && live.rows[1].fee.contains("USDC"))
         assertTrue(live.rows[0].balanceLabel.contains("0.71697"))
+    }
+
+    /**
+     * The fee coins' marks are on the send's chain while the fee is still
+     * being measured (or failed): no estimate made every row ask for
+     * `eip155-0` and draw letters over a neutral dot.
+     */
+    @Test
+    fun `the fee sheet never asks for chain 0`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2F, strings).sheet as FlowSheet.FeeToken
+            val usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+            val measuring = FeeView(
+                fee = null,
+                options = listOf(
+                    FeeOptionView(symbol = "XDAI", contract = null, decimals = 18, balance = "1", recipient = "0x2", usd_balance = "1", selected = true),
+                    FeeOptionView(symbol = "USDC", contract = usdc, decimals = 6, balance = "1", recipient = "0x2", usd_balance = "1"),
+                ),
+            )
+            val rows = SendLive.feeSheet(drawn.model, measuring, SendView(selected_token = xdai), ctx()).rows
+            assertEquals(listOf("https://data.example/chainlogos/eip155-100.png"), rows[0].mark.logoUrls)
+            assertTrue(rows[1].mark.logoUrls.all { it.startsWith("https://data.example/assets/eip155-100/") })
+            assertEquals("https://data.example/chainlogos/eip155-100.png", rows[1].mark.badgeLogoUrl)
+            assertTrue(rows.none { row -> (row.mark.logoUrls + listOfNotNull(row.mark.badgeLogoUrl)).any { "eip155-0" in it } })
+            // A sweep's coins are on the sweep's chain.
+            val sweep = SendView(multi_select_mode = true, multi_chain_id = 56)
+            assertEquals(56, SendLive.feeSheetChain(measuring, sweep))
+            // Nothing picked and nothing measured: still a chain, never 0.
+            assertEquals(1, SendLive.feeSheetChain(measuring, SendView()))
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
     }
 
     /** Issue 211: a coin the core judged unable to pay is dimmed and says why, not drawn like the rest. */
@@ -709,7 +742,7 @@ class SendLiveTest {
                 FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "0", recipient = "0x2", usd_balance = "0", amount = "2100", insufficient = true),
             ),
         )
-        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        val live = SendLive.feeSheet(drawn.model, fee, SendView(selected_token = xdai), ctx())
         assertFalse(live.rows[0].insufficient)
         assertTrue(live.rows[1].insufficient)
         assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "USDC")), live.rows[1].insufficientNote)
