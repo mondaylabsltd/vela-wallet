@@ -324,8 +324,57 @@ func runCase(_ fn: String, _ input: [String: Any]) throws -> Any? {
             "resolved_language": st.resolvedLanguage.map { $0 as Any } ?? NSNull(),
             "languages": st.languages,
         ] as [String: Any]
+
+    // --- marks (app::remote_mark) ---
+    case "token_mark":
+        return markJson(tokenMark(
+            ethereumDataUrl: try str(input, "ethereum_data_url"),
+            chainId: try u32(input, "chain_id"),
+            symbol: try str(input, "symbol"),
+            tokenAddress: try optStr(input, "token_address"),
+            named: try strList(input, "named")))
+    case "chain_mark":
+        return markJson(chainMark(
+            ethereumDataUrl: try str(input, "ethereum_data_url"),
+            chainId: try u32(input, "chain_id"),
+            nativeSymbol: try str(input, "native_symbol")))
+    case "chain_logo_url":
+        let url = chainLogoUrl(
+            ethereumDataUrl: try str(input, "ethereum_data_url"),
+            chainId: try u32(input, "chain_id"))
+        return url.map { $0 as Any } ?? NSNull()
     default: throw NoDispatch(fn: fn)
     }
+}
+
+/// A `MarkView` as the vector's field-wise shape. Optionals unwrap to the
+/// value or `NSNull`: boxing an Optional into `Any` compares as `Optional(…)`.
+func markJson(_ mark: MarkView) -> [String: Any] {
+    [
+        "glyph": mark.glyph,
+        "logo_urls": mark.logoUrls,
+        "badge_chain_id": mark.badgeChainId.map { $0 as Any } ?? NSNull(),
+        "badge_logo_url": mark.badgeLogoUrl.map { $0 as Any } ?? NSNull(),
+    ]
+}
+
+/// A string input that may be JSON `null`; missing altogether is malformed.
+func optStr(_ input: [String: Any], _ key: String) throws -> String? {
+    if input[key] is NSNull { return nil }
+    guard let v = input[key] as? String else { throw BadInput(detail: "missing string-or-null input `\(key)`") }
+    return v
+}
+
+func u32(_ input: [String: Any], _ key: String) throws -> UInt32 {
+    guard let n = input[key] as? NSNumber, let v = UInt32(exactly: n.doubleValue) else {
+        throw BadInput(detail: "missing u32 input `\(key)`")
+    }
+    return v
+}
+
+func strList(_ input: [String: Any], _ key: String) throws -> [String] {
+    guard let v = input[key] as? [String] else { throw BadInput(detail: "missing string-array input `\(key)`") }
+    return v
 }
 
 // ---------------------------------------------------------------------------
@@ -491,7 +540,7 @@ let REQUIRED_SUITES = [
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "primitives", "safe", "safe-multi", "webauthn",
+    "identicon", "identicon-bulk", "marks", "primitives", "safe", "safe-multi", "webauthn",
 ]
 
 /// Functions that exist in vela-core but are deliberately NOT on any binding surface
