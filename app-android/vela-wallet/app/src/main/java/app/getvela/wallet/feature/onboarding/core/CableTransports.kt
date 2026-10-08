@@ -155,6 +155,10 @@ class WebSocketCableConn private constructor(
     override fun close() {
         runCatching { ws.close(1000, null) }
         runCatching { client.dispatcher.executorService.shutdown() }
+        // A read blocked on the queue ends now, not when the relay
+        // acknowledges the close: closing is how a dismissal (issue #459)
+        // unblocks an exchange that is waiting on the other phone.
+        inbound.offer(CLOSED)
     }
 
     companion object {

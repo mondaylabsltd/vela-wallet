@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
+import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -273,19 +274,24 @@ fun UsbWalletPicker(
 }
 
 /**
- * The key is blinking — "touch it now". Not dismissable: the person's next act
- * is a physical touch, not a tap on screen. It clears when the ceremony's next
+ * The key is blinking — "touch it now". It clears when the ceremony's next
  * step arrives (the ViewModel sets the state to null).
+ *
+ * Over caBLE the authenticator is the person's phone, and the approval waits
+ * THERE: putting this away — Cancel, a tap outside, a swipe, Back — is
+ * [onCancel], which ends the ceremony as the core's quiet cancel (issue #459),
+ * the desktop's phone card's Cancel. A USB key's prompt keeps its old way: the
+ * person's next act is a touch, and a dismissal lets the exchange time out.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UsbTouchIndicator(kind: String, product: String) {
+fun UsbTouchIndicator(kind: String, product: String, onCancel: () -> Unit = {}) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
     // Over caBLE the "authenticator" is the person's phone, and the approval
     // happens THERE — "touch your security key" would send them hunting for
     // hardware they never owned. Same corpus keys the desktop and iOS use.
-    val remote = product == "your phone"
+    val remote = product == app.getvela.wallet.feature.onboarding.core.HYBRID_PRODUCT
     val body = when {
         remote -> strings.t(I18nKeys.Flow.TOUCH_REMOTE_BODY)
         kind == "fingerprint" -> strings.t(I18nKeys.Create.TOUCH_FINGERPRINT_BODY, mapOf("product" to product))
@@ -297,7 +303,7 @@ fun UsbTouchIndicator(kind: String, product: String) {
         // A blinking key is answered with a finger, not a swipe — but a sheet
         // that literally cannot be dismissed traps a person whose key went
         // away, so dismissal is allowed and simply lets the exchange time out.
-        onDismissRequest = {},
+        onDismissRequest = if (remote) onCancel else ({}),
         containerColor = colors.bgRaised,
     ) {
         Column(
@@ -320,6 +326,14 @@ fun UsbTouchIndicator(kind: String, product: String) {
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
             )
+            if (remote) {
+                Spacer(modifier = Modifier.height(VelaSpacing.md))
+                VelaSecondaryButton(
+                    text = strings.t(I18nKeys.Common.CANCEL),
+                    onClick = onCancel,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

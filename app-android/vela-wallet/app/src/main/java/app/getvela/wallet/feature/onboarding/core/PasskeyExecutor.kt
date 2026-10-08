@@ -102,6 +102,25 @@ class PasskeyExecutor(
     private val manager: CredentialManager? =
         runCatching { CredentialManager.create(context) }.getOrNull()
 
+    /**
+     * The caBLE ceremony whose code is on screen, with that code — so putting
+     * a code away ends ITS ceremony and never the next one (issue #459).
+     */
+    @Volatile
+    private var liveHybrid: Pair<String, HybridCeremony.Session>? = null
+
+    /**
+     * The person put the code for [payload] away (or the phone's "look at your
+     * phone" prompt): that ceremony ends as [FailureKind.Cancelled], the
+     * core's quiet cancel. A code from a ceremony that already ended is
+     * ignored, so a late tap cannot cancel a retry or recovery's second
+     * signature.
+     */
+    fun cancelHybrid(payload: String) {
+        val (shown, session) = liveHybrid ?: return
+        if (shown == payload) session.dismiss()
+    }
+
     /** When this app last minted a credential, and which one (see `assert`). */
     private var mintedAt: Long = 0
     private var mintedCredentialIdHex: String? = null
@@ -748,10 +767,12 @@ class PasskeyExecutor(
             FailureKind.Other,
             "Could not start sign in with your phone.",
         )
+        liveHybrid = qr to session
         showQr(qr, !forGet)
         return try {
             body(session)
         } finally {
+            if (liveHybrid?.second === session) liveHybrid = null
             showQr(null, false)
         }
     }

@@ -2353,7 +2353,7 @@ fun VelaNavHost(
         )
     }
     onboarding.usbTouchWaiting?.let { touch ->
-        UsbTouchIndicator(kind = touch.kind, product = touch.product)
+        UsbTouchIndicator(kind = touch.kind, product = touch.product, onCancel = onboarding::cancelCable)
     }
     onboarding.cableQr?.let { payload ->
         CableQrSheet(
@@ -2363,6 +2363,9 @@ fun VelaNavHost(
             } else {
                 app.getvela.wallet.feature.onboarding.flow.KeyChooser.SignIn
             },
+            // Issue #459: put away, the phone ceremony ends — sign-in, create,
+            // recovery and a send signed with a phone-held key alike.
+            onCancel = onboarding::cancelCable,
         )
     }
     // Spec 071/075: every Trusted Signer sheet, hosted OUTSIDE the NavHost for

@@ -3,7 +3,13 @@ package app.getvela.wallet.feature.onboarding.core
 import android.content.Context
 import app.getvela.wallet.MainActivity
 import app.getvela.wallet.core.diagnostics.VelaLog
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import uniffi.vela_core_uniffi.CableFramePort
 import uniffi.vela_core_uniffi.CtapCeremonyHost
@@ -32,6 +38,13 @@ import java.security.SecureRandom
  *
  * Deliberately parallel to [UsbSecurityKeyCeremony]: same shape, different
  * route. The executor picks THIS one for [KeyMethod.Hybrid] (the scan method).
+ *
+ * A person who puts the code away ([Session.dismiss], issue #459) ends THIS
+ * ceremony with [FailureKind.Cancelled] — the core's quiet cancel — at
+ * whichever step it is in: the scan stops, a channel still opening is closed
+ * when it opens, and an open one is closed under the exchange. Never a
+ * coroutine cancellation: that is never answered, and the core would wait on
+ * the ceremony forever.
  */
 class HybridCeremony(
     private val context: Context,
@@ -40,8 +53,50 @@ class HybridCeremony(
     private val scanner = HybridCableScanner(context)
     private val secureRandom = SecureRandom()
 
-    /** Fresh per-ceremony secrets: the QR both encodes and the handshake keys off. */
-    class Session(val staticSeed: ByteArray, val qrSecret: ByteArray)
+    /**
+     * Fresh per-ceremony secrets: the QR both encodes and the handshake keys
+     * off — and the ceremony's own dismissal, so a code put away cannot end
+     * the next ceremony (a retry, or recovery's second signature).
+     */
+    class Session(val staticSeed: ByteArray, val qrSecret: ByteArray) {
+        private val dismissal = CompletableDeferred<Unit>()
+
+        /** The channel the ceremony is talking over, once one is open. */
+        @Volatile
+        private var conn: CableConn? = null
+
+        /** The person put the code (or the phone's prompt) away. */
+        val dismissed: Boolean get() = dismissal.isCompleted
+
+        /**
+         * End this ceremony: the scan stops, and closing the channel is what
+         * unblocks an exchange already running (it is a blocking call).
+         */
+        fun dismiss() {
+            if (!dismissal.complete(Unit)) return
+            VelaLog.event("cable", "dismissed — ending this ceremony")
+            conn?.let { runCatching { it.close() } }
+        }
+
+        /** [work]'s answer, or [FailureKind.Cancelled] the moment the person dismisses. */
+        internal suspend fun <T> unlessDismissed(work: Deferred<T>): T = select {
+            work.onAwait { it }
+            dismissal.onAwait { throw dismissedFailure() }
+        }
+
+        /** Holds [opened] so a dismissal closes it; refuses it if the dismissal came first. */
+        internal fun hold(opened: CableConn) {
+            conn = opened
+            // The other order is covered too: [dismiss] reads the channel
+            // after it marks the dismissal, so one of the two closes it.
+            if (dismissed) {
+                runCatching { opened.close() }
+                throw dismissedFailure()
+            }
+        }
+
+        internal fun dismissedFailure() = PasskeyFailure(FailureKind.Cancelled, "The code was dismissed")
+    }
 
     fun newSession(): Session = Session(
         staticSeed = ByteArray(32).also(secureRandom::nextBytes),
@@ -94,10 +149,14 @@ class HybridCeremony(
         session: Session,
         body: (CableFramePort, ByteArray, CtapCeremonyHost) -> T,
     ): T {
+        // The code is on screen through every step below, so it may be put
+        // away during any of them: each ends the ceremony there.
+        if (session.dismissed) throw session.dismissedFailure()
         val granted = (context as? MainActivity)?.requestBluetoothPermission() ?: false
         if (!granted) {
             throw PasskeyFailure(FailureKind.Cancelled, "Bluetooth permission was declined")
         }
+        if (session.dismissed) throw session.dismissedFailure()
         if (!scanner.bluetoothReady()) {
             // A radio that is merely OFF is not "not supported" — NotSupported
             // renders as the biometrics alert, a sentence about the wrong
@@ -126,15 +185,46 @@ class HybridCeremony(
                 throw PasskeyFailure(FailureKind.Cancelled, "Location stayed off")
             }
         }
+        if (session.dismissed) throw session.dismissedFailure()
 
         return withContext(Dispatchers.IO) {
-            val hit = scanner.findResponder(session.qrSecret, SCAN_TIMEOUT_MS)
-                ?: throw PasskeyFailure(
-                    FailureKind.Other,
-                    "No phone answered the code. Scan it with the other device and try again.",
-                )
+            // The scan is cancellable: a dismissal stops it at once.
+            val hit = coroutineScope {
+                session.unlessDismissed(async { scanner.findResponder(session.qrSecret, SCAN_TIMEOUT_MS) })
+            } ?: throw PasskeyFailure(
+                FailureKind.Other,
+                "No phone answered the code. Scan it with the other device and try again.",
+            )
 
-            val conn: CableConn = if (hit.advert.psm != null) {
+            val conn = openChannel(session, hit)
+            val port = CableConnPort(conn)
+            val host = HostBridge(prompts, secureRandom)
+            try {
+                body(port, hit.advert.plaintext, host).also {
+                    // Put away as the phone answered: the person said no, and a
+                    // signature they took back must not go on to sign a send.
+                    if (session.dismissed) throw session.dismissedFailure()
+                }
+            } catch (error: CtapException) {
+                // The channel closed under the exchange because the person
+                // dismissed it — their cancel, not a failed link.
+                if (session.dismissed) throw session.dismissedFailure()
+                throw error.toPasskeyFailure()
+            } finally {
+                runCatching { conn.close() }
+                prompts.touchWaiting(null, "")
+            }
+        }
+    }
+
+    /**
+     * Open the channel the advert chose. The connect blocks and nothing
+     * interrupts it, so it runs outside this ceremony's scope: a dismissal
+     * answers at once, and a channel that opens afterwards is closed unused.
+     */
+    private suspend fun openChannel(session: Session, hit: HybridCableScanner.AdvertHit): CableConn {
+        val opening = OPENER.async {
+            val opened = if (hit.advert.psm != null) {
                 VelaLog.event("cable", "advert offers BLE (PSM ${hit.advert.psm}) — L2CAP CoC, no tunnel")
                 L2capCableConn.connect(hit.device, hit.advert.psm!!.toInt())
             } else {
@@ -143,18 +233,10 @@ class HybridCeremony(
                 VelaLog.event("cable", "advert has no PSM — WebSocket tunnel")
                 WebSocketCableConn.connect(url, timeoutMs = TUNNEL_CONNECT_MS)
             }
-
-            val port = CableConnPort(conn)
-            val host = HostBridge(prompts, secureRandom)
-            try {
-                body(port, hit.advert.plaintext, host)
-            } catch (error: CtapException) {
-                throw error.toPasskeyFailure()
-            } finally {
-                runCatching { conn.close() }
-                prompts.touchWaiting(null, "")
-            }
+            // Dismissed while it was opening: nobody is waiting for it.
+            opened.also { if (session.dismissed) runCatching { it.close() } }
         }
+        return session.unlessDismissed(opening).also(session::hold)
     }
 
     /**
@@ -198,10 +280,20 @@ class HybridCeremony(
     }
 
     private companion object {
+        /**
+         * Where a channel opens: not a child of the ceremony, so a dismissal
+         * never waits on a connect that cannot be interrupted.
+         */
+        val OPENER = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
         /** The person picks up the other phone, unlocks it, approves the prompt. */
         const val SCAN_TIMEOUT_MS = 90_000L
         const val TUNNEL_CONNECT_MS = 15_000L
-        /** What the touch prompt names while the OTHER phone shows its sheet. */
-        const val HYBRID_PRODUCT = "your phone"
     }
 }
+
+/**
+ * What the touch prompt names while the OTHER phone shows its sheet — how the
+ * prompt knows the approval waits on the phone, not on a key in hand.
+ */
+const val HYBRID_PRODUCT = "your phone"
