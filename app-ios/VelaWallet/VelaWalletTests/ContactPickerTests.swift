@@ -134,6 +134,44 @@ struct ContactPickerTests {
         #expect(same(send.view?.recipient, alice))
     }
 
+    /// In a split, the pick lands where the CORE puts it — the first row with
+    /// no address, then a new row at the end — and never in the single form's
+    /// recipient, which a split hides and never pays. The shell sends the
+    /// pick as it does on the single form; it no longer appends a row of its
+    /// own to aim it.
+    @Test func aSplitsPickFillsTheFirstFreeRowThenANewOne() async throws {
+        let carol = "0x2222222222222222222222222222222222222222"
+        let send = try await form()
+        send.enterSplitMode()
+        await Wait.until({ send.view?.splitMode == true }, orIdle: { send.isIdle })
+        let seeded = try #require(send.view?.recipients)
+        #expect(seeded.count == 2)
+        #expect(seeded.allSatisfy { $0.address.isEmpty })
+
+        func pick(_ address: String) throws -> [SendRecipientDraftWire] {
+            send.openContactPicker(target: nil)
+            #expect(drawn(send) == .sd2e, "从通讯录 opened nothing the router draws")
+            send.pickedAddress(address)
+            #expect(send.view?.showContactPicker == false, "the core closes the picker on a pick")
+            #expect(send.view?.recipient.isEmpty == true, "never the hidden single recipient")
+            return try #require(send.view?.recipients)
+        }
+
+        var rows = try pick(alice)
+        #expect(rows.count == 2, "a free row takes the pick; no row is added")
+        #expect(same(rows.first?.address, alice))
+        #expect(rows.last?.address.isEmpty == true)
+
+        rows = try pick(bob)
+        #expect(rows.count == 2)
+        #expect(same(rows.last?.address, bob))
+
+        rows = try pick(carol)
+        #expect(rows.count == 3, "every row taken: the pick is a new row")
+        #expect(same(rows.last?.address, carol))
+        #expect(rows.map(\.id).count == Set(rows.map(\.id)).count, "each row its own id")
+    }
+
     /// × (or a drag) lowers the flag, so the icon opens the picker AGAIN —
     /// left up, the sheet stayed hidden and the icon was dead from then on.
     @Test func aClosedPickerOpensAgain() async throws {

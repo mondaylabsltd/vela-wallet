@@ -2682,24 +2682,15 @@ struct RootView: View {
     /// `contacts.view` could name a neighbour by the time the tap lands: the
     /// core re-sorts the book (favourites, recency, names as they resolve).
     ///
-    /// A split takes the person as a new row of their own (the web's
-    /// `pickContactFor` does the same with a blank row it targets) — a
-    /// targetless pick would fill the single form's hidden recipient.
+    /// Where the pick lands is the core's (`apply_picked_address`): the
+    /// single form's recipient, or — in a split — the row the picker was
+    /// opened for, else the first row with no address, else a new row. The
+    /// shell adds no row of its own to aim it, and the single field's text
+    /// follows only a pick that went there.
     private func pickSendContact(_ address: String) {
         guard let view = send.view else { return }
-        if view.splitMode {
-            // Only the person's OWN name rides along (spec 097 F), as a
-            // group's members do.
-            let name = contacts.view?.contacts
-                .first { $0.address.lowercased() == address.lowercased() }?.name
-            send.appendSplitRecipients([[
-                "id": "", "address": address, "amount": "",
-                "name": name.map { $0 as Any } ?? NSNull(),
-            ]])
-        } else {
-            recipientDraft = address
-            send.pickedAddress(address)
-        }
+        if !view.splitMode { recipientDraft = address }
+        send.pickedAddress(address)
         if send.view?.showContactPicker == true { send.closeContactPicker() }
     }
 
