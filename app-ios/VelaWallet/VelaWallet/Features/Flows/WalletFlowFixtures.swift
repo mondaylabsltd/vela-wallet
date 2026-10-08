@@ -788,7 +788,12 @@ enum WalletFlowFixtures {
         case .single:
             return SendConfirmModel(
                 header: header,
-                mark: TokenMarkModel.of(chainId: 1, symbol: "USDT", color: ChainPalette.ethereum),
+                // USDT by its mainnet contract. Without one the native-coin
+                // rule took it for the chain's own coin and drew Ethereum's
+                // logo beside "120 USDT".
+                mark: TokenMarkModel.of(chainId: 1, symbol: "USDT",
+                                        tokenAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                                        color: ChainPalette.ethereum),
                 amount: "120",
                 amountUnit: "USDT",
                 subline: "≈ $120.00",

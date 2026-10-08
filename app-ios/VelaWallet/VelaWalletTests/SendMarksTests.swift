@@ -97,6 +97,59 @@ struct SendMarksTests {
         #expect(isNetwork(try #require(SendLive.lockNotice(known, loc: loc)).mark, 100))
     }
 
+    // MARK: - Coins wear the coin's mark
+
+    private func drawnForm(_ state: FlowStateId = .sd2) -> SendFormModel {
+        guard case .sendForm(let model) = WalletFlowFixtures.build(state, loc: loc).base
+        else { fatalError("\(state) does not draw the form") }
+        return model
+    }
+
+    /// The picker's rows wear each coin's own mark, as the home's rows do:
+    /// BNB on BNB Chain is BNB's logo with no badge (it was "BNB" letters and
+    /// a yellow dot); USDC on Base is USDC's asset logo, checksummed first,
+    /// with Base's badge.
+    @Test func thePickerRowsWearEachCoinsOwnMark() throws {
+        let view = sendView(["tokens": [
+            token("BNB", chainId: 56),
+            token("USDC", chainId: 8453, address: Self.usdcBase),
+        ]])
+        let rows = SendLive.pick(view, on: drawnPick(), loc: loc).rows
+        let bnb = try #require(rows.first?.mark)
+        #expect(bnb.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(bnb.badgeHidden)
+        let usdc = try #require(rows.last?.mark)
+        #expect(usdc.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        #expect(usdc.logoURLs.count == 2, "the lowercase spelling second")
+        #expect(!usdc.badgeHidden)
+        #expect(usdc.badgeLogoURL == Marks.chainLogoURL(8453))
+        #expect(rows.last?.chain == "Base")
+    }
+
+    /// The URLs the core already named for a coin come first.
+    @Test func aCoinsNamedLogoComesFirst() throws {
+        var usdc = token("USDC", chainId: 8453, address: Self.usdcBase)
+        usdc["logo_urls"] = ["https://logos.example/usdc.png"]
+        let rows = SendLive.pick(sendView(["tokens": [usdc]]), on: drawnPick(), loc: loc).rows
+        #expect(try #require(rows.first?.mark).logoURLs.first == "https://logos.example/usdc.png")
+    }
+
+    /// A sweep's rows carry each coin's mark to the form (the body used to
+    /// drop it and draw letters with a dot).
+    @Test func aSweepsRowsWearEachCoinsOwnMark() {
+        let view = sendView([
+            "multi_select_mode": true, "multi_chain_id": 8453, "recipient": Self.alice,
+            "multi_selected_ids": ["chain-8453_native_ETH", "chain-8453_\(Self.usdcBase)_USDC"],
+            "tokens": [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)],
+        ])
+        let form = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc)
+        #expect(form.sweepRows.map(\.symbol) == ["ETH", "USDC"])
+        #expect(form.sweepRows[0].mark.logoURLs == [Marks.chainLogoURL(1)].compactMap { $0 })
+        #expect(form.sweepRows[0].mark.badgeLogoURL == Marks.chainLogoURL(8453))
+        #expect(form.sweepRows[1].mark.logoURLs.first?.contains("/assets/eip155-8453/") == true)
+    }
+
     // MARK: - The confirm page
 
     /// The confirm page's From row has the account's face, and its Network

@@ -901,7 +901,10 @@ struct SendFormBody: View {
                     badgeColor: row.mark.badgeColor,
                     balance: row.amount,
                     fiat: .none,
-                    masked: false
+                    masked: false,
+                    // The coin's mark the builder made — dropped here, so a
+                    // sweep's rows were letters and a dot.
+                    mark: row.mark
                 ))
                 .overlay(alignment: .trailing) {
                     // An empty label means no chip. A sweep moves the MAXIMUM

@@ -135,7 +135,7 @@ enum SendLive {
                         ])
                     )
                 } : nil),
-            rows: shown.map(assetRow),
+            rows: shown.map { assetRow($0, networks: networks) },
             selection: picking ? SendSelectionModel(
                 selected: shown.map { view.multiSelectedIds.contains($0.id) },
                 // A row on a chain the pick has left behind is drawn dimmed and
@@ -335,10 +335,10 @@ enum SendLive {
         }
     }
 
-    private static func assetRow(_ token: SendTokenWire) -> AssetRowModel {
+    private static func assetRow(_ token: SendTokenWire, networks: WalletNetworks) -> AssetRowModel {
         AssetRowModel(
             ticker: token.symbol,
-            chain: ChainCatalog.meta(token.chainId)?.displayName ?? token.network,
+            chain: networks.meta(token.chainId)?.displayName ?? token.network,
             badgeColor: chainColor(token.chainId),
             // The asset list's own formatter (`WalletLive.trimBalance`): the
             // picker lists the same holdings, so it prints them the same way.
@@ -346,7 +346,22 @@ enum SendLive {
             // The picker's job is to choose an asset, so the row states the
             // holding. A priced row's fiat line is the home's business.
             fiat: token.priceUsd == nil ? .noPrice("") : .value(""),
-            masked: false
+            masked: false,
+            // The coin's own mark, as the home's row draws the same holding:
+            // its logo, and the badge only where it would not repeat it. With
+            // none, the row fell back to the drawing's letters and an
+            // always-on dot — BNB on BNB Chain as "BNB" with a yellow dot.
+            mark: coinMark(token)
+        )
+    }
+
+    /// A held coin's mark: the core's rule on its chain, contract and the
+    /// logo URLs the core already named for it.
+    static func coinMark(_ token: SendTokenWire) -> TokenMarkModel {
+        TokenMarkModel.of(
+            chainId: token.chainId, symbol: token.symbol,
+            tokenAddress: token.tokenAddress, color: chainColor(token.chainId),
+            named: token.logoUrls
         )
     }
 
@@ -384,10 +399,7 @@ enum SendLive {
         live.token = token.map { held in
             SendTokenCardModel(
                 // The held token's own logo (058), with its lettermark behind.
-                mark: TokenMarkModel.of(
-                    chainId: held.chainId, symbol: held.symbol,
-                    tokenAddress: held.tokenAddress, color: chainColor(held.chainId)
-                ),
+                mark: coinMark(held),
                 symbol: held.symbol,
                 // "Gnosis · Balance 0.53097" — labelled, as the other shells
                 // say it, and formatted by the very call the asset list's row
@@ -474,10 +486,7 @@ enum SendLive {
                     ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
                 }
                 return SweepRowModel(
-                    mark: TokenMarkModel.of(
-                        chainId: token.chainId, symbol: token.symbol,
-                        tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
-                    ),
+                    mark: coinMark(token),
                     symbol: token.symbol,
                     balanceLabel: "\(WalletLive.tokenAmountText(token.balance)) \(token.symbol)",
                     // **No spec, no figure.** Falling back to the balance would
@@ -1124,10 +1133,7 @@ enum SendLive {
             if let usd { total += usd }
             let value = "\(WalletLive.tokenAmountText(amount)) \(token.symbol)"
             return BreakdownRowModel(
-                lead: TokenMarkModel.of(
-                    chainId: token.chainId, symbol: token.symbol,
-                    tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
-                ),
+                lead: coinMark(token),
                 label: token.symbol,
                 value: usd.map { "\(value) · ≈\(money($0, display: display))" } ?? value
             )
