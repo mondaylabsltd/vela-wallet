@@ -381,6 +381,12 @@ impl I18n {
     /// `d.toLocaleDateString(lng, { weekday: 'short' })`, the last host-`Intl`
     /// dependency on this path and unreliable on Hermes for the same reason the
     /// plural rules were. It now reads the compiled-in table.
+    ///
+    /// The shells reach it through the bindings: uniffi's
+    /// `I18n.format_relative_time` (the date preset as its stored word,
+    /// [`crate::l10n::date_preset_of`]); the web client, which carries no
+    /// catalog, through [`format_relative_time_with`] and the three words its
+    /// prerendered messages hold.
     pub fn format_relative_time(
         &self,
         ts_seconds: i64,
@@ -388,27 +394,20 @@ impl I18n {
         utc_offset_minutes: i32,
         date_preset: crate::l10n::DatePreset,
     ) -> Result<String, CoreError> {
-        let diff = (now_ms.div_euclid(1000) - ts_seconds).max(0);
-        let opts = Options::default();
-        if diff < 45 {
-            return self.t("time.now", &opts);
-        }
-        let civil = crate::l10n::Civil::from_unix_millis(
-            ts_seconds.saturating_mul(1000),
+        let span = relative_span(
+            ts_seconds,
+            now_ms,
             utc_offset_minutes,
+            &self.state.language,
+            date_preset,
         );
-        if diff < 3_600 {
-            let n = (diff as f64 / 60.0).round();
-            return self.t_with_n("time.minutesShort", n);
+        match span {
+            RelativeSpan::Now => self.t("time.now", &Options::default()),
+            RelativeSpan::Minutes(n) => self.t_with_n("time.minutesShort", n),
+            RelativeSpan::Hours(n) => self.t_with_n("time.hoursShort", n),
+            RelativeSpan::Weekday(name) => Ok(name.to_owned()),
+            RelativeSpan::Date(date) => Ok(date),
         }
-        if diff < 86_400 {
-            let n = (diff as f64 / 3_600.0).round();
-            return self.t_with_n("time.hoursShort", n);
-        }
-        if diff < 7 * 86_400 {
-            return Ok(crate::l10n::weekday_name(&civil, &self.state.language).to_owned());
-        }
-        Ok(crate::l10n::format_date(&civil, date_preset))
     }
 
     /// Resolve `key` with a single numeric `{{n}}` variable.
@@ -808,4 +807,96 @@ impl FixedT<'_> {
 /// corpus pins interpolation separately from resolution (`i18n_interpolate`).
 pub fn interpolate(template: &str, opts: &Options<'_>) -> Result<String, CoreError> {
     interpolate::interpolate(template, opts)
+}
+
+// ---------------------------------------------------------------------------
+// Compact relative time — one rule, two ways to spell it
+// ---------------------------------------------------------------------------
+
+/// Which of the five shapes a relative time takes — the arithmetic of
+/// [`I18n::format_relative_time`], kept apart from the words so a caller that
+/// holds the words rather than the catalog gets the same answer.
+enum RelativeSpan {
+    /// Under 45 s, or a time ahead of the clock.
+    Now,
+    /// Rounded whole minutes, under an hour.
+    Minutes(f64),
+    /// Rounded whole hours, under a day.
+    Hours(f64),
+    /// The short weekday, under a week.
+    Weekday(&'static str),
+    /// The date in the person's preset.
+    Date(String),
+}
+
+fn relative_span(
+    ts_seconds: i64,
+    now_ms: i64,
+    utc_offset_minutes: i32,
+    language: &str,
+    date_preset: crate::l10n::DatePreset,
+) -> RelativeSpan {
+    let diff = (now_ms.div_euclid(1000) - ts_seconds).max(0);
+    if diff < 45 {
+        return RelativeSpan::Now;
+    }
+    if diff < 3_600 {
+        return RelativeSpan::Minutes((diff as f64 / 60.0).round());
+    }
+    if diff < 86_400 {
+        return RelativeSpan::Hours((diff as f64 / 3_600.0).round());
+    }
+    let civil =
+        crate::l10n::Civil::from_unix_millis(ts_seconds.saturating_mul(1000), utc_offset_minutes);
+    if diff < 7 * 86_400 {
+        return RelativeSpan::Weekday(crate::l10n::weekday_name(&civil, language));
+    }
+    RelativeSpan::Date(crate::l10n::format_date(&civil, date_preset))
+}
+
+/// The three words a compact relative time is spelt with, as the locale's
+/// catalog holds them: `time.now`, `time.minutesShort` and `time.hoursShort`,
+/// the last two with `{{n}}` still in place.
+#[derive(Debug, Clone, Copy)]
+pub struct RelativeTimeWords<'a> {
+    pub now: &'a str,
+    pub minutes_short: &'a str,
+    pub hours_short: &'a str,
+}
+
+/// [`I18n::format_relative_time`] for a caller that holds the words but not
+/// the catalog — the web client, whose messages are resolved when the page is
+/// prerendered. `language` names the weekday (the compiled-in table, as the
+/// engine's active language does); everything else is the engine's rule, so
+/// the two agree for every input (`tests/vectors/relative-time.json`).
+pub fn format_relative_time_with(
+    words: &RelativeTimeWords<'_>,
+    language: &str,
+    ts_seconds: i64,
+    now_ms: i64,
+    utc_offset_minutes: i32,
+    date_preset: crate::l10n::DatePreset,
+) -> Result<String, CoreError> {
+    let with_n = |template: &str, n: f64| {
+        let mut buf = ryu_js::Buffer::new();
+        let vars = [("n", Var::Str(buf.format(n)))];
+        let opts = Options {
+            vars: &vars,
+            ..Options::default()
+        };
+        interpolate::interpolate(template, &opts)
+    };
+    match relative_span(
+        ts_seconds,
+        now_ms,
+        utc_offset_minutes,
+        language,
+        date_preset,
+    ) {
+        RelativeSpan::Now => Ok(words.now.to_owned()),
+        RelativeSpan::Minutes(n) => with_n(words.minutes_short, n),
+        RelativeSpan::Hours(n) => with_n(words.hours_short, n),
+        RelativeSpan::Weekday(name) => Ok(name.to_owned()),
+        RelativeSpan::Date(date) => Ok(date),
+    }
 }

@@ -343,6 +343,14 @@ func runCase(_ fn: String, _ input: [String: Any]) throws -> Any? {
             ethereumDataUrl: try str(input, "ethereum_data_url"),
             chainId: try u32(input, "chain_id"))
         return url.map { $0 as Any } ?? NSNull()
+
+    // --- relative time (I18n.formatRelativeTime): the phones' route ---
+    case "format_relative_time":
+        return try i18nEngine(lng: try str(input, "lng")).formatRelativeTime(
+            tsSeconds: try i64(input, "ts_seconds"),
+            nowMs: try i64(input, "now_ms"),
+            utcOffsetMinutes: try i32(input, "utc_offset_minutes"),
+            dateFormat: try str(input, "date_format"))
     default: throw NoDispatch(fn: fn)
     }
 }
@@ -368,6 +376,20 @@ func optStr(_ input: [String: Any], _ key: String) throws -> String? {
 func u32(_ input: [String: Any], _ key: String) throws -> UInt32 {
     guard let n = input[key] as? NSNumber, let v = UInt32(exactly: n.doubleValue) else {
         throw BadInput(detail: "missing u32 input `\(key)`")
+    }
+    return v
+}
+
+func i64(_ input: [String: Any], _ key: String) throws -> Int64 {
+    guard let n = input[key] as? NSNumber, let v = Int64(exactly: n.doubleValue) else {
+        throw BadInput(detail: "missing integer input `\(key)`")
+    }
+    return v
+}
+
+func i32(_ input: [String: Any], _ key: String) throws -> Int32 {
+    guard let v = Int32(exactly: try i64(input, key)) else {
+        throw BadInput(detail: "i32 input `\(key)` out of range")
     }
     return v
 }
@@ -540,7 +562,8 @@ let REQUIRED_SUITES = [
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "marks", "primitives", "safe", "safe-multi", "webauthn",
+    "identicon", "identicon-bulk", "marks", "primitives", "relative-time", "safe", "safe-multi",
+    "webauthn",
 ]
 
 /// Functions that exist in vela-core but are deliberately NOT on any binding surface

@@ -443,6 +443,77 @@ fn relative_time_uses_translated_labels_and_the_compiled_weekday_table() {
     );
 }
 
+/// The web client holds the three words, not the catalog: spelt with them,
+/// the relative time is the engine's own, in every shipped language, on both
+/// sides of every threshold, in any zone and any preset.
+#[test]
+fn relative_time_from_the_words_is_the_engines() {
+    let now_ms = 1_781_358_300_999_i64;
+    let now_s = now_ms.div_euclid(1000);
+    let ages = [
+        -90,
+        0,
+        44,
+        45,
+        89,
+        90,
+        149,
+        150,
+        3_569,
+        3_570,
+        3_599,
+        3_600,
+        5_399,
+        5_400,
+        86_399,
+        86_400,
+        6 * 86_400,
+        7 * 86_400 - 1,
+        7 * 86_400,
+        400 * 86_400,
+    ];
+    let presets = [
+        "ymd_slash",
+        "mdy_slash",
+        "dmy_slash",
+        "dmy_dot",
+        "iso",
+        "auto",
+    ];
+    for lng in vela_core::i18n::SUPPORTED {
+        let e = engine(lng);
+        let word = |key: &str| {
+            e.t(key, &Options::default())
+                .unwrap_or_else(|err| unreachable!("{lng} {key}: {err}"))
+        };
+        let (now, minutes, hours) = (
+            word("time.now"),
+            word("time.minutesShort"),
+            word("time.hoursShort"),
+        );
+        let words = vela_core::i18n::RelativeTimeWords {
+            now: &now,
+            minutes_short: &minutes,
+            hours_short: &hours,
+        };
+        for age in ages {
+            for offset in [-600, -420, 0, 330, 840] {
+                for preset in presets {
+                    let p = vela_core::l10n::date_preset_of(preset);
+                    let ts = now_s - age;
+                    assert_eq!(
+                        vela_core::i18n::format_relative_time_with(
+                            &words, lng, ts, now_ms, offset, p
+                        ),
+                        e.format_relative_time(ts, now_ms, offset, p),
+                        "{lng}, {age} s ago, UTC{offset:+} min, {preset}"
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn relative_time_is_localised() {
     let now_ms = 1_781_358_300_000_i64;

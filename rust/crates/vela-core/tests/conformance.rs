@@ -43,7 +43,7 @@ struct Case {
 /// or a partial checkout would make all four surfaces report "green" over a corpus
 /// that had silently shrunk — the precise false confidence this feature exists to
 /// prevent.
-const REQUIRED_SUITES: [&str; 13] = [
+const REQUIRED_SUITES: [&str; 14] = [
     "abi",
     "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
@@ -57,6 +57,10 @@ const REQUIRED_SUITES: [&str; 13] = [
     // from the four shells' rule rather than dumped from a TypeScript oracle.
     "marks",
     "primitives",
+    // The compact relative time ("now", "2m", "3h", a weekday, the date),
+    // hand-written: the engine's rule, and the same rule spelt from the words
+    // a caller holds without the catalog (the web client).
+    "relative-time",
     "safe",
     // `safe` before `safe-multi`: a prefix sorts before its extension.
     "safe-multi",
@@ -575,6 +579,46 @@ fn run_case(case: &Case) -> Result<(), String> {
                     "languages": state.languages,
                 })),
             )
+        }
+        // --- relative time (I18n::format_relative_time) ---------------------
+        //
+        // Both spellings of the one rule must give the vector's answer: the
+        // engine's, and `format_relative_time_with` over the words that engine
+        // resolves — what the web prerenders and its client then spells with.
+        "format_relative_time" => {
+            let lng = in_str(input, "lng")?;
+            let ts_seconds = in_i64(input, "ts_seconds")?;
+            let now_ms = in_i64(input, "now_ms")?;
+            let offset = i32::try_from(in_i64(input, "utc_offset_minutes")?)
+                .map_err(|e| format!("utc_offset_minutes: {e}"))?;
+            let preset = vela_core::l10n::date_preset_of(&in_str(input, "date_format")?);
+            let engine = i18n_engine(&lng, &lng, i18n::PluralMode::Cldr)
+                .map_err(|e| format!("engine for `{lng}`: {e}"))?;
+            check_string(
+                expect,
+                engine.format_relative_time(ts_seconds, now_ms, offset, preset),
+            )
+            .map_err(|e| format!("engine: {e}"))?;
+            let word = |key: &str| {
+                engine
+                    .t(key, &i18n::Options::default())
+                    .map_err(|e| format!("{key}: {e}"))
+            };
+            let (now, minutes, hours) = (
+                word("time.now")?,
+                word("time.minutesShort")?,
+                word("time.hoursShort")?,
+            );
+            let words = i18n::RelativeTimeWords {
+                now: &now,
+                minutes_short: &minutes,
+                hours_short: &hours,
+            };
+            check_string(
+                expect,
+                i18n::format_relative_time_with(&words, &lng, ts_seconds, now_ms, offset, preset),
+            )
+            .map_err(|e| format!("from the words: {e}"))
         }
         // --- marks (app::remote_mark; the module needs the `crux` feature) ---
         #[cfg(feature = "crux")]

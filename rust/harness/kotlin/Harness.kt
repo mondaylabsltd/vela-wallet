@@ -271,6 +271,14 @@ fun runCase(fn: String, input: JSONObject): Any? = when (fn) {
         chainMark(input.getString("ethereum_data_url"), u32(input, "chain_id"), input.getString("native_symbol"))
     )
     "chain_logo_url" -> chainLogoUrl(input.getString("ethereum_data_url"), u32(input, "chain_id")) ?: JSONObject.NULL
+
+    // --- relative time (I18n.formatRelativeTime): the phones' route ---
+    "format_relative_time" -> i18nEngine(input.getString("lng")).formatRelativeTime(
+        input.getLong("ts_seconds"),
+        input.getLong("now_ms"),
+        input.getInt("utc_offset_minutes"),
+        input.getString("date_format"),
+    )
     else -> throw NoSuchElementException("no dispatch arm for fn `$fn` — add it to Harness.kt")
 }
 
@@ -310,7 +318,8 @@ val REQUIRED_SUITES = listOf(
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "marks", "primitives", "safe", "safe-multi", "webauthn",
+    "identicon", "identicon-bulk", "marks", "primitives", "relative-time", "safe", "safe-multi",
+    "webauthn",
 )
 
 /**

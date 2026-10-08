@@ -199,6 +199,16 @@ const DISPATCH = {
     wasm.tokenMark(i.ethereum_data_url, i.chain_id, i.symbol, i.token_address, i.named),
   chain_mark: (i) => wasm.chainMark(i.ethereum_data_url, i.chain_id, i.native_symbol),
   chain_logo_url: (i) => wasm.chainLogoUrl(i.ethereum_data_url, i.chain_id) ?? null,
+  // --- relative time: the web's own route. The words are resolved by the
+  // engine the way the prerender resolves them (no `{{n}}` filled), and the
+  // client export spells the core's rule with them.
+  format_relative_time: (i) => {
+    const e = i18nEngine(i.lng, i.lng);
+    return wasm.formatRelativeTime(
+      i.ts_seconds, i.now_ms, i.utc_offset_minutes, i.date_format, i.lng,
+      e.t('time.now'), e.t('time.minutesShort'), e.t('time.hoursShort'),
+    );
+  },
   recover_public_key_from_assertions: (i) => {
     const key = wasm.recoverPublicKeyFromAssertions(
       bytes(i.a.authenticator_data), bytes(i.a.client_data_json), bytes(i.a.signature_der),
@@ -259,6 +269,7 @@ const REQUIRED_SUITES = [
   'identicon-bulk',
   'marks',
   'primitives',
+  'relative-time',
   'safe',
   // `safe` before `safe-multi`: a prefix sorts before its extension.
   'safe-multi',

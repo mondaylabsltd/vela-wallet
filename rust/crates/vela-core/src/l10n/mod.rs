@@ -22,7 +22,8 @@ pub mod number;
 pub use bidi::{isolate, isolate_into, text_direction};
 pub use currency::{currency_fraction_digits, format_fiat, FiatOptions};
 pub use datetime::{
-    format_date, format_date_time, format_time, weekday_name, Civil, DatePreset, TimePreset,
+    date_preset_of, format_date, format_date_time, format_time, weekday_name, Civil, DatePreset,
+    TimePreset,
 };
 pub use number::{
     format_compact, format_number, format_signed_token_amount, format_token_amount, group_digits,

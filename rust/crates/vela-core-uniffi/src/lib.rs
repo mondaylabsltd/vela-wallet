@@ -1058,6 +1058,31 @@ impl I18n {
             .as_str()
             .to_owned())
     }
+
+    /// The core's compact relative time in the active language — `"now"`,
+    /// `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+    /// home's "Updated <ago>" and anything else that says how long ago.
+    ///
+    /// `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+    /// handing it milliseconds reads as the future, which is "now");
+    /// `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+    /// to UTC for local time at that moment; `date_format` the person's date
+    /// preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+    /// `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+    pub fn format_relative_time(
+        &self,
+        ts_seconds: i64,
+        now_ms: i64,
+        utc_offset_minutes: i32,
+        date_format: String,
+    ) -> Result<String, CoreError> {
+        Ok(self.inner.read().map_err(lock_err)?.format_relative_time(
+            ts_seconds,
+            now_ms,
+            utc_offset_minutes,
+            vela_core::l10n::date_preset_of(&date_format),
+        )?)
+    }
 }
 
 // -- plural rules, exposed standalone so a platform can check a category --------
@@ -3243,6 +3268,45 @@ mod tests_082 {
         );
         assert_eq!(base.badge_chain_id, None);
         assert_eq!(chain_logo_url(String::new(), 0), None);
+    }
+
+    /// The phones' "Updated 2m" is the core's sentence in the active
+    /// language, the weekday and the stored date word included.
+    #[test]
+    fn a_relative_time_crosses_the_ffi_in_the_active_language() {
+        // 2026-06-13 13:45:00.999 UTC, a Saturday.
+        const NOW_MS: i64 = 1_781_358_300_999;
+        let asset = |lng: &str| {
+            let path = format!(
+                "{}/../../../assets/i18n/{lng}.json",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::read(&path).unwrap_or_else(|e| unreachable!("{path}: {e}"))
+        };
+        let i18n = I18n::new(asset("en")).unwrap_or_else(|e| unreachable!("{e}"));
+        let ago = |ts_seconds: i64, date: &str| {
+            i18n.format_relative_time(ts_seconds, NOW_MS, 0, date.into())
+                .unwrap_or_else(|e| unreachable!("{e}"))
+        };
+        let now_s = NOW_MS / 1000;
+        assert_eq!(ago(now_s - 44, "iso"), "now");
+        assert_eq!(ago(now_s - 90, "iso"), "2m");
+        assert_eq!(ago(now_s - 5_400, "iso"), "2h");
+        assert_eq!(ago(now_s - 3 * 86_400, "iso"), "Wed");
+        assert_eq!(ago(now_s - 30 * 86_400, "iso"), "2026-05-14");
+        assert_eq!(ago(now_s - 30 * 86_400, "dmy_dot"), "14.05.2026");
+        // Milliseconds where seconds belong are the future: "now", never a
+        // date thousands of years out.
+        assert_eq!(ago(NOW_MS - 30 * 86_400_000, "iso"), "now");
+
+        i18n.load_catalog("zh".into(), asset("zh"))
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        i18n.change_language("zh".into())
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(ago(now_s, "ymd_slash"), "刚刚");
+        assert_eq!(ago(now_s - 120, "ymd_slash"), "2分钟前");
+        assert_eq!(ago(now_s - 3 * 86_400, "ymd_slash"), "周三");
+        assert_eq!(ago(now_s - 30 * 86_400, "ymd_slash"), "2026/05/14");
     }
 
     #[test]

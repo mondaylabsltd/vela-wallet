@@ -31,6 +31,22 @@ pub enum DatePreset {
     Iso,
 }
 
+/// The preset a shell names on the wire — the stored word
+/// (`prefs::DATE_FORMATS`): `ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+/// `iso`. `auto` and anything unknown read as the default, `mdy_slash`: the
+/// shells resolve `auto` from the device before they call, the same as
+/// `amount_text::preset_of` for numbers.
+#[must_use]
+pub fn date_preset_of(key: &str) -> DatePreset {
+    match key {
+        "ymd_slash" => DatePreset::YmdSlash,
+        "dmy_slash" => DatePreset::DmySlash,
+        "dmy_dot" => DatePreset::DmyDot,
+        "iso" => DatePreset::Iso,
+        _ => DatePreset::MdySlash,
+    }
+}
+
 /// Clock presets, matching `TimeFormatKey`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TimePreset {
@@ -266,6 +282,20 @@ mod tests {
         assert_eq!(format_date(&c, DatePreset::DmySlash), "13/06/2026");
         assert_eq!(format_date(&c, DatePreset::DmyDot), "13.06.2026");
         assert_eq!(format_date(&c, DatePreset::MdySlash), "06/13/2026");
+    }
+
+    #[test]
+    fn a_stored_date_word_names_its_preset() {
+        let c = sample();
+        let shown = |word: &str| format_date(&c, date_preset_of(word));
+        assert_eq!(shown("ymd_slash"), "2026/06/13");
+        assert_eq!(shown("mdy_slash"), "06/13/2026");
+        assert_eq!(shown("dmy_slash"), "13/06/2026");
+        assert_eq!(shown("dmy_dot"), "13.06.2026");
+        assert_eq!(shown("iso"), "2026-06-13");
+        // `auto` is the shell's to resolve; unresolved, it is the default.
+        assert_eq!(date_preset_of("auto"), DatePreset::default());
+        assert_eq!(date_preset_of("YMD_SLASH"), DatePreset::MdySlash);
     }
 
     #[test]
