@@ -739,8 +739,9 @@ fun StatusHero(
                     tint = tint,
                     modifier = Modifier.size(VelaIconSize.xl2),
                 )
+                // Issue #460: a failure is said with !, never the close glyph.
                 ReceiptStage.Failed -> Icon(
-                    imageVector = VelaIcons.Close,
+                    imageVector = VelaIcons.Exclamation,
                     contentDescription = null,
                     tint = tint,
                     modifier = Modifier.size(VelaIconSize.xl2),
