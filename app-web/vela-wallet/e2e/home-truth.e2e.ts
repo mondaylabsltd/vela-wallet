@@ -42,14 +42,19 @@ test.beforeEach(async ({ page }) => {
 			rpc: [`${STUB}/1`]
 		}
 	});
-	await stubJsonRpc(page, /stub-rpc\.test\/rpc\/(\d+)/, (method, params, url) => {
+	await stubJsonRpc(page, /stub-rpc\.test\/rpc\/(\d+)/, chainHolding(ONE_AND_A_HALF_ETH));
+});
+
+/** The stub's answers, with `wei` of ETH on Ethereum and nothing anywhere else. */
+function chainHolding(wei: bigint) {
+	return (method: string, params: unknown[], url: string): unknown => {
 		const chainId = Number(/\/rpc\/(\d+)/.exec(url)?.[1]);
 		if (method === 'eth_chainId') return '0x' + chainId.toString(16);
 		if (method === 'eth_blockNumber') return '0x10';
 		if (method === 'eth_call') {
 			const call = params[0] as { data?: string } | undefined;
 			const n = call?.data ? aggregate3CallCount(call.data) : 0;
-			const balance = chainId === 1 ? ONE_AND_A_HALF_ETH : 0n;
+			const balance = chainId === 1 ? wei : 0n;
 			const data =
 				'0x' +
 				abiWord(balance) +
@@ -60,8 +65,8 @@ test.beforeEach(async ({ page }) => {
 			return encodeAggregate3Result(Array.from({ length: n }, () => ({ success: true, data })));
 		}
 		return undefined;
-	});
-});
+	};
+}
 
 async function openHome(page: import('@playwright/test').Page): Promise<void> {
 	await page.goto('/en/wallet');
@@ -156,7 +161,10 @@ test('an unreachable chain’s status line opens the list, its row the RPC fix, 
 	await sheet.getByRole('button', { name: en('common.done') }).click();
 	await expect(sheet.getByText(en('assets.unreachableNone')).first()).toBeVisible();
 	await expect(list.getByRole('listitem')).toHaveCount(0);
-	await sheet.getByRole('button', { name: en('componentsUi.identiconViewer.close') }).first().click();
+	await sheet
+		.getByRole('button', { name: en('componentsUi.identiconViewer.close') })
+		.first()
+		.click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toHaveCount(0, {
 		timeout: 20_000
@@ -205,4 +213,41 @@ test('every unreachable network is listed with what was last read there, and one
 	await expect(rows).toHaveCount(2, { timeout: 30_000 });
 	await expect(sheet.getByText("Can't reach 2 networks right now").first()).toBeVisible();
 	await expect(sheet.getByTestId('unreachable-list')).not.toContainText('BNB Chain');
+});
+
+/**
+ * Issue 462: "↻ Updated <ago>" under the total. A press reads every chain
+ * again — a deposit made from another device shows without waiting for the
+ * ten-minute poll — and while the read is out the glyph turns and says
+ * "Updating…" in the same box: nothing on the hero moves, and no "still
+ * updating" line drops in above the control.
+ */
+test('the refresh under the total reads again, says so, and moves nothing (issue 462)', async ({
+	page
+}) => {
+	await openHome(page);
+	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+	const control = page.getByTestId('balance-refresh');
+	const updatedNow = en('home.lastUpdated').replace('{{ago}}', en('time.now'));
+	await expect(control).toHaveText(new RegExp(updatedNow));
+	const before = await control.boundingBox();
+
+	// A deposit lands from somewhere else: Ethereum now holds 2 ETH.
+	let reads = 0;
+	await stubJsonRpc(page, /stub-rpc\.test\/rpc\/(\d+)/, (method, params, url) => {
+		if (method === 'eth_call') reads++;
+		return chainHolding(2_000_000_000_000_000_000n)(method, params, url);
+	});
+	await control.click();
+	await expect(control).toHaveAttribute('aria-busy', 'true');
+	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
+	expect(await control.boundingBox()).toEqual(before);
+	await expect(page.getByText(en('home.balanceStale'))).toHaveCount(0);
+
+	// The read lands: the new figure, and the control at rest again.
+	await expect(page.getByText('$6,000', { exact: true })).toBeVisible({ timeout: 20_000 });
+	expect(reads).toBeGreaterThan(0);
+	await expect(control).toHaveAttribute('aria-busy', 'false');
+	await expect(control.locator('.shown')).toHaveText(updatedNow);
+	expect(await control.boundingBox()).toEqual(before);
 });

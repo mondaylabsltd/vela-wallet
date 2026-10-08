@@ -21,6 +21,15 @@ export interface WalletMessages {
 		noPrice: string;
 		a11yHide: string;
 		a11yShow: string;
+		/** Issue 462: "Updated {{ago}}" under the hero. */
+		lastUpdated: string;
+		/** Issue 462: what that control says while a read the person asked for is out. */
+		updating: string;
+		/**
+		 * The core's compact relative-time words (`format_relative_time`) —
+		 * "now", "{{n}}m", "{{n}}h" — filled against this device's clock.
+		 */
+		ago: { now: string; minutes: string; hours: string };
 	};
 	actions: { receive: string; send: string; scan: string };
 	sections: { activity: string; assets: string; all: string; add: string };
@@ -152,6 +161,12 @@ export const WALLET_KEYS = [
 	'home.balanceDetailNoPrice',
 	'home.a11yHideBalance',
 	'home.a11yShowBalance',
+	// Issue 462: the hero's refresh control, and the age it reads.
+	'home.lastUpdated',
+	'home.updating',
+	'time.now',
+	'time.minutesShort',
+	'time.hoursShort',
 	'componentsUi.dock.receive',
 	'componentsUi.dock.send',
 	'componentsUi.dock.scan',

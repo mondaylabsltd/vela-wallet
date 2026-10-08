@@ -146,7 +146,14 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
-			a11yShow: k('home.a11yShowBalance')
+			a11yShow: k('home.a11yShowBalance'),
+			lastUpdated: k('home.lastUpdated'),
+			updating: k('home.updating'),
+			ago: {
+				now: k('time.now'),
+				minutes: k('time.minutesShort'),
+				hours: k('time.hoursShort')
+			}
 		},
 		actions: {
 			receive: k('componentsUi.dock.receive'),

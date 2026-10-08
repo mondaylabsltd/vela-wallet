@@ -44,6 +44,13 @@ export interface BalanceModel {
 	decimalMark?: string;
 	liveText?: string;
 	status?: { kind: 'warning' | 'refreshing'; text: string };
+	/**
+	 * Issue 462: the hero's own refresh, "↻ Updated 2m" — the same control on
+	 * all four apps. `updated` is absent until a read has settled (the glyph
+	 * alone); while a read the person asked for is out, `spinning` turns the
+	 * glyph and the words are `updating`. Absent, no control is drawn.
+	 */
+	refresh?: { updated?: string; updating: string; spinning: boolean };
 	a11yHide: string;
 	a11yShow: string;
 }

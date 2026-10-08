@@ -66,6 +66,7 @@
 	import { FlowNav, type FlowEntry } from '$lib/flows/nav.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
+	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
 	import {
 		createReceiveWatchSession,
 		type ReceiveWatchSession
@@ -1470,11 +1471,38 @@
 			if (document.visibilityState === 'visible') {
 				balance.focused();
 				feed.focusTick();
+				refreshClock = Date.now();
 			} else balance.backgrounded();
 		};
 		document.addEventListener('visibilitychange', onvisibility);
 		return () => document.removeEventListener('visibilitychange', onvisibility);
 	});
+
+	// --- The hero's refresh (issue 462) ----------------------------------------
+	//
+	// "↻ Updated 2m" under the total, the control all four apps draw. A press is
+	// what iOS's pull-to-refresh sends — a forced read the person asked for
+	// (`pull`, which is what makes the core hold `refreshing`) and the
+	// activity's focus tick — and the glyph turns for at least 650 ms.
+	const refreshHold = new RefreshHold();
+	/** The clock "Updated <ago>" is worded against: it ages while the home is seen. */
+	let refreshClock = $state(Date.now());
+	onMount(() => {
+		const id = setInterval(() => {
+			if (document.visibilityState === 'visible') refreshClock = Date.now();
+		}, REFRESH_AGE_TICK_MS);
+		return () => {
+			clearInterval(id);
+			refreshHold.dispose();
+		};
+	});
+	function refreshBalances(): void {
+		// Inert while it turns: a second press would only start a second round.
+		if (balance.view.refreshing || refreshHold.held) return;
+		refreshHold.press();
+		balance.refresh(true, true);
+		feed.focusTick();
+	}
 
 	/** Fixture base → identity overlay → live balance/holdings (research D10). */
 	const liveInputs = $derived({
@@ -1488,7 +1516,8 @@
 		selectedToken:
 			selectedAssetId === null
 				? undefined
-				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId)
+				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
+		refresh: { now: refreshClock, held: refreshHold.held }
 	});
 	const liveHome = $derived(
 		identity === null
@@ -1995,6 +2024,7 @@
 				onflow={enter}
 				onbalancetoggle={() => balance.togglePrivacy()}
 				onstatus={openRescue}
+				onbalancerefresh={refreshBalances}
 				onchainselect={(row) => chainFilter.select(row.chainId ?? null)}
 				onasset={(row) => {
 					// The column is the asset's now: whatever flow held it closes.
@@ -2096,6 +2126,7 @@
 					onflow={enter}
 					onbalancetoggle={() => balance.togglePrivacy()}
 					onstatus={openRescue}
+					onbalancerefresh={refreshBalances}
 					onactivity={(row) => (selectedTxId = row.id ?? null)}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 				/>

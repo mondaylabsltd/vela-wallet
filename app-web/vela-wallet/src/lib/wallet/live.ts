@@ -71,6 +71,8 @@ export interface WalletLiveInputs {
 	 * panel, live). Absent, the column is closed — or the flow host's.
 	 */
 	selectedToken?: BalanceToken;
+	/** Issue 462: the hero's refresh control — its clock and press hold. Absent, none. */
+	refresh?: BalanceRefreshInput;
 }
 
 /** A held token's key — chain, contract (or `native`), symbol — for a tap to name. */
@@ -337,15 +339,73 @@ export function unreachableLine(
 	return undefined;
 }
 
+/**
+ * The core's compact relative time (`I18n::format_relative_time`) on this
+ * device's clock: under 45 s "now", under an hour "{{n}}m", under a day
+ * "{{n}}h" — the same thresholds and rounding, and the same clamp (a time
+ * ahead of the clock is "now"). Past a day the core names the weekday from a
+ * table the web client does not carry, so this writes the date in the
+ * person's preset, the core's own last branch. A read is at most ten minutes
+ * old while the page is open (the poll), so that branch is a wake from sleep.
+ */
+export function agoText(
+	atMs: number,
+	nowMs: number,
+	words: WalletMessages['balance']['ago']
+): string {
+	const diff = Math.max(0, Math.floor(nowMs / 1000) - Math.floor(atMs / 1000));
+	if (diff < 45) return words.now;
+	if (diff < 3_600) return fill(words.minutes, { n: Math.round(diff / 60) });
+	if (diff < 86_400) return fill(words.hours, { n: Math.round(diff / 3_600) });
+	return formatDate(atMs);
+}
+
+/** What the page holds for the hero's refresh control (issue 462). */
+export interface BalanceRefreshInput {
+	/** The clock the "Updated <ago>" is worded against; the page ticks it. */
+	now: number;
+	/** A press's minimum spin (650 ms) is still running (`RefreshHold`). */
+	held: boolean;
+}
+
+/**
+ * The hero's "↻ Updated 2m" (issue 462): when the last read settled — the
+ * core's `last_refreshed_at_ms` — and whether the glyph turns: while the read
+ * the person asked for is out (`view.refreshing`, which only a pull sets),
+ * and in any case for the press's minimum hold, so a read answered in a
+ * frame still says it happened.
+ */
+export function balanceRefresh(
+	view: BalanceView,
+	m: WalletMessages,
+	input: BalanceRefreshInput
+): NonNullable<BalanceModel['refresh']> {
+	const at = view.last_refreshed_at_ms;
+	return {
+		updated:
+			at === null
+				? undefined
+				: fill(m.balance.lastUpdated, { ago: agoText(at, input.now, m.balance.ago) }),
+		updating: m.balance.updating,
+		spinning: view.refreshing || input.held
+	};
+}
+
 export function liveBalance(
 	view: BalanceView,
 	currency: CurrencyView,
-	m: WalletMessages
+	m: WalletMessages,
+	/** Issue 462: the refresh control's clock and hold. Absent, no control. */
+	refreshInput?: BalanceRefreshInput
 ): BalanceModel {
 	const base = {
 		label: m.balance.totalLabel,
 		a11yHide: m.balance.a11yHide,
-		a11yShow: m.balance.a11yShow
+		a11yShow: m.balance.a11yShow,
+		// Under a skeleton and under a hidden figure too: hiding the figure is
+		// not hiding that it is being read, and a first read that hangs is
+		// exactly when a person reaches for it.
+		...(refreshInput === undefined ? {} : { refresh: balanceRefresh(view, m, refreshInput) })
 	};
 
 	if (view.hidden) {
@@ -384,15 +444,20 @@ export function liveBalance(
 	// One status line, most actionable first: the networks the wallet cannot
 	// reach (spec 092 — every one, held or not; a rate limit heals on its own
 	// and is never listed), then the core's notice.
+	//
+	// NOT a read the person asked for (issue 462, `view.refreshing`): the
+	// control they pressed says that itself, turning in place. As a line here
+	// it landed ABOVE the control and pushed it a row down under the finger —
+	// and a figure re-read on request is current, not "still updating".
 	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
 		unreachable !== undefined
 			? { kind: 'warning', text: unreachable }
-			: view.refreshing || onCache || view.notice === 'still_updating'
-					? { kind: 'refreshing', text: m.balance.stale }
-					: view.notice === 'unpriced'
-						? { kind: 'warning', text: m.balance.unpriced }
-						: undefined;
+			: onCache || view.notice === 'still_updating'
+				? { kind: 'refreshing', text: m.balance.stale }
+				: view.notice === 'unpriced'
+					? { kind: 'warning', text: m.balance.unpriced }
+					: undefined;
 
 	return {
 		...base,
@@ -760,7 +825,7 @@ function liveSections(inputs: WalletLiveInputs) {
 	const tokens = filter === null ? view.tokens : view.tokens.filter((t) => t.chain_id === filter);
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
 	return {
-		balance: liveBalance(view, currency, m),
+		balance: liveBalance(view, currency, m, inputs.refresh),
 		assetsMode:
 			filter !== null && tokens.length === 0 && view.tokens.length > 0
 				? ('empty' as const)
