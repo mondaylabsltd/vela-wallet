@@ -51,7 +51,8 @@ export type SigningStateId =
 /** Semantic weight. `accent` is the intent sentence; the rest colour warnings. */
 export type Tone = 'neutral' | 'accent' | 'success' | 'caution' | 'danger';
 
-export interface TokenMark {
+/** A party's letter on a tint of its own colour — a person or a site, never a coin. */
+export interface LetterMark {
 	letter: string;
 	tint: string;
 }
@@ -61,7 +62,12 @@ export interface AmountLine {
 	sign: string;
 	value: string;
 	symbol: string;
-	token?: TokenMark;
+	/**
+	 * The coin's mark, the wallet's token circle (`tokenMarkFor`): its logo
+	 * over its glyph, the same circle the send flow draws for it. A letter on
+	 * a disc drew USDC and USDT alike as "U".
+	 */
+	token?: TokenMarkModel;
 	fiat?: string;
 	/** "支付" / "最少收到" / "存入资产" — the line's own small label. */
 	caption?: string;
@@ -157,7 +163,10 @@ export interface TechIdentity {
 	role: string;
 	name: string;
 	address: string;
-	mark?: TokenMark;
+	/** A coin this call names (the token it moves): the wallet's token circle. */
+	mark?: TokenMarkModel;
+	/** Anyone else it names (the recipient): their letter, as before. */
+	avatar?: LetterMark;
 }
 
 export interface TechModel {

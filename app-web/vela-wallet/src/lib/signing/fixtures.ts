@@ -20,9 +20,9 @@ import type {
 	SigningModel,
 	SigningStateId,
 	TechModel,
-	TokenMark,
 	Tone
 } from './model';
+import type { TokenMarkModel } from '$lib/flows/model';
 
 type Identicon = (seed: string) => string;
 
@@ -78,14 +78,18 @@ export const ALL_STATES: SigningStateId[] = [
 const NETWORK = { name: 'Ethereum', dot: '#627EEA' };
 const FEE_VALUE = '~0.0021 ETH ≈ $5.40';
 
-/** Token marks: brand content, exactly like the wallet's chain colours. */
+/**
+ * Token marks: the wallet's token circle, drawn as its glyph (fixtures fetch
+ * nothing), on the boards' Ethereum. ETH there is the chain's own coin and
+ * wears no badge; the inline circle draws none anyway.
+ */
 const T = {
-	usdc: { letter: 'U', tint: '#2775CA' },
-	eth: { letter: 'E', tint: '#627EEA' },
-	weth: { letter: 'W', tint: '#8A92B2' },
-	spweth: { letter: 'S', tint: '#4C6FFF' },
-	usdt: { letter: 'T', tint: '#26A17B' }
-} satisfies Record<string, TokenMark>;
+	usdc: { ticker: 'USDC', badgeColor: CHAIN_COLORS.ethereum },
+	eth: { ticker: 'ETH', badgeColor: CHAIN_COLORS.ethereum, badgeHidden: true },
+	weth: { ticker: 'WETH', badgeColor: CHAIN_COLORS.ethereum },
+	spweth: { ticker: 'spWETH', badgeColor: CHAIN_COLORS.ethereum },
+	usdt: { ticker: 'USDT', badgeColor: CHAIN_COLORS.ethereum }
+} satisfies Record<string, TokenMarkModel>;
 
 /** dApps as the signing header draws them. `unknown` is the no-name case. */
 const D = {
@@ -128,7 +132,7 @@ const line = (
 	sign: string,
 	value: string,
 	symbol: string,
-	token: TokenMark | undefined,
+	token: TokenMarkModel | undefined,
 	tone: Tone,
 	fiat?: string,
 	caption?: string
@@ -182,7 +186,7 @@ function transferTech(m: SigningMessages): TechModel {
 				role: m.techIdentityRecipient,
 				name: 'Alice Chen',
 				address: ADDR.aliceFull,
-				mark: { letter: 'A', tint: '#E8572A' }
+				avatar: { letter: 'A', tint: '#E8572A' }
 			}
 		],
 		simResult: row(m.techSimResult, `−1,000 USDC · ${m.balancesMatchHero}`),
