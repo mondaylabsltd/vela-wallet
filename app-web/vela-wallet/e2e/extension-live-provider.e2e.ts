@@ -401,16 +401,20 @@ test.describe('a provider a dApp can use', () => {
 			new panel.MutationObserver(look).observe(panel.document.body, { childList: true, subtree: true });
 			`
 		);
-		// The slide, by keyboard (the same onconfirm a drag reaches).
-		await inSidePanel(
-			wallet,
-			`
-			const slider = panel.document.querySelector('[data-testid="signing-confirm"]');
-			if (!slider) throw new Error('no slider in the panel');
-			slider.focus();
-			slider.dispatchEvent(new panel.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-			`
-		);
+		// The confirm (issue 461: a tap), once the core's gate opens it.
+		const CONFIRM = 'button[data-testid="signing-confirm"]';
+		await expect
+			.poll(
+				() =>
+					inSidePanel<boolean | null>(
+						wallet,
+						`return panel.document.querySelector(arg)?.disabled ?? null;`,
+						CONFIRM
+					),
+				{ timeout: 30_000 }
+			)
+			.toBe(false);
+		await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
 
 		await page.waitForFunction(
 			() => JSON.parse(document.getElementById('out')!.textContent!).results.personal_sign,

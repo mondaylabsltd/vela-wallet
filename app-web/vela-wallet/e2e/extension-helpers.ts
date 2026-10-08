@@ -246,7 +246,7 @@ export const sidePanelShowsRequest = (extensionPage: Page): Promise<boolean> =>
 /**
  * Run `body` inside the side panel's window (a function of `panel: Window`),
  * from another extension page. For what the helpers above do not cover — a
- * MutationObserver, a slide, a navigation.
+ * MutationObserver, a confirm, a navigation.
  */
 export function inSidePanel<T>(extensionPage: Page, body: string, arg?: unknown): Promise<T> {
 	return extensionPage.evaluate(
@@ -297,20 +297,14 @@ export async function noRequestWindow(context: BrowserContext, timeoutMs = 15_00
 }
 
 /**
- * Confirm the slide control — by keyboard.
- *
- * The control commits on a pointer drag past 88% of its travel, and it also
- * commits on Enter, because a slider a keyboard user cannot operate is a
- * signature they cannot give. The keyboard path is what this drives: it is the
- * SAME `onconfirm`, and it is the half that would otherwise never be exercised.
- *
- * (A synthesized pointer drag was tried first and does not commit here — the
- * control captures the pointer, and Playwright's synthesized moves do not
- * reach the captured element. Worth knowing before spending an hour on it.)
+ * Tap the signing sheet's confirm (issue 461: a button, as on the Send
+ * screen). Found by its stable hook — its label is the request's action, in
+ * the sheet's language — and pressed once the core's gate opens it: a click
+ * waits for the button to be enabled, so a press made before the fee is
+ * quoted is not one the sheet could have refused.
  */
-export async function slideToConfirm(page: Page): Promise<void> {
-	const slider = page.getByTestId('signing-confirm');
-	await slider.waitFor({ state: 'visible', timeout: 30_000 });
-	await slider.focus();
-	await slider.press('Enter');
+export async function confirmSigning(page: Page): Promise<void> {
+	const confirm = page.getByTestId('signing-confirm');
+	await confirm.waitFor({ state: 'visible', timeout: 30_000 });
+	await confirm.click({ timeout: 60_000 });
 }

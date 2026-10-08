@@ -335,7 +335,7 @@
 	/**
 	 * A control that owns its own touch gesture keeps it: text fields (a drag
 	 * there selects text), and anything that says so with `touch-action` —
-	 * the slide-to-confirm track, a horizontal slider.
+	 * a horizontal slider.
 	 */
 	function ownsGesture(target: Element | null): boolean {
 		if (target?.closest('input, textarea, select, [contenteditable], [data-sheet-nodrag]')) {

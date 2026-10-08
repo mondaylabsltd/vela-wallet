@@ -197,7 +197,7 @@ export interface SigningMessages {
 	 */
 	feeReasons: Record<string, string>;
 	/**
-	 * Spec 099 R7: the line under a shut slide, by the corpus key the core's
+	 * Spec 099 R7: the line under a shut confirm, by the corpus key the core's
 	 * `confirm_state` names (`componentsUi.signing.confirmBlock.*`).
 	 */
 	confirmBlock: Record<string, string>;
@@ -283,7 +283,7 @@ export interface SigningMessages {
 	/**
 	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
 	 * the sheet says once the person has approved, in the SEND receipt's words,
-	 * as Android's signing receipt says them — never a greyed slide.
+	 * as Android's signing receipt says them — never a greyed confirm.
 	 */
 	status: {
 		/**

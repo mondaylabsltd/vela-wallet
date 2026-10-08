@@ -12,7 +12,7 @@
  * 1. **The confirm gate is an AND.** `SignView.confirm_gate_open` says the
  *    request may be signed; `GuardView.confirm_allowed` says the cap has been
  *    chosen; `ClearSigningView.resolving` says the request is still being
- *    read (spec 096 F7). The slider arms only when all agree (and the fee,
+ *    read (spec 096 F7). The confirm opens only when all agree (and the fee,
  *    when the request has one, is ready). Its own doc in the drawn component
  *    says the shell must AND them — this is that place.
  * 2. **The ✕ is the refusal.** The 022 interaction contract draws no reject
@@ -480,7 +480,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	 * Spec 081: the core refused this request outright — it would have changed
 	 * who controls the account. Say so and stop: the decoded intent below would
 	 * describe a transaction nobody can sign, and reading it as an option is
-	 * exactly the confusion the refusal exists to prevent. The slider is closed
+	 * exactly the confusion the refusal exists to prevent. The confirm is shut
 	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
 	 */
 	if (sign.blocked) {
@@ -489,7 +489,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
-	// Spec 096 F7: still reading — a neutral "Loading…", and the slide stays
+	// Spec 096 F7: still reading — a neutral "Loading…", and the confirm stays
 	// shut (`buildSigningModel`). This said the cap editor's "Set a finite
 	// amount to continue." over an Aave supply for seconds.
 	if (clear.surface === 'loading' || clear.resolving) {
@@ -677,7 +677,7 @@ function nativeValueBlock(inputs: SigningLiveInputs, hero: boolean): Block | nul
 /**
  * NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): for the
  * moment between a speed being picked and its own figure landing, the fee in
- * hand is the previous speed's. The row says "estimating", and the slide stays
+ * hand is the previous speed's. The row says "estimating", and the confirm stays
  * shut — the core's `confirm_fee_ready` is still true then, and would sign the
  * speed the person just walked away from.
  */
@@ -726,9 +726,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	};
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
-		// own row. A sheet that drew nothing here let a person slide on a
+		// own row. A sheet that drew nothing here let a person confirm a
 		// mainnet transaction without ever being told what it costs — and the
-		// slide stays shut in both states, as it does on the phones.
+		// confirm stays shut in both states, as it does on the phones.
 		if (fee.busy || ofAnotherTier) {
 			return {
 				kind: 'onchain',
@@ -802,7 +802,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 			: undefined;
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
-	// other coins are one tap away — a dark slide with no reason is issue 204.
+	// other coins are one tap away — a shut confirm with no reason is issue 204.
 	// Otherwise, spec 096 F2: the coin in force is one the transaction itself
 	// may spend, so what is left for the fee may be too little — the core's
 	// `spent_by_operation`, said while that coin is the one paying.
@@ -1018,7 +1018,7 @@ export function summaryOf(blocks: Block[]): string | undefined {
 
 /**
  * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
- * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
+ * the form with a greyed confirm (the owner: "可信签名器签完后，回到签名提示框，
  * 似乎没有任何提示"). Spec 082 (RA9, G22): its words follow the core's
  * `SignView.phase`, the stage the pipeline is really in:
  *
@@ -1130,8 +1130,8 @@ export function signingCloseEvent(
 /**
  * Spec 082 RJ19 (G57): the relay's own estimate of this operation says it
  * will revert. The web runs no simulation (RG6), so this is the one voice
- * that can say it before the slide — in the danger tone, under the intent.
- * The slide stays live: a warning informs, it never blocks (L-D5); a submit
+ * that can say it before the confirm — in the danger tone, under the intent.
+ * The confirm stays live: a warning informs, it never blocks (L-D5); a submit
  * then meets the relay's refusal, answered as one (RJ3).
  */
 function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[] {
@@ -1178,7 +1178,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// Rule 1: the gate is an AND — the request, the guard, the reading and the
 	// fee at the speed in force. Spec 099 R7: the AND is the core's
 	// (`sign_confirm::confirm_state`), the same on every client, and it says
-	// which part is shut; the line under a shut slide is its corpus key.
+	// which part is shut; the line under a shut confirm is its corpus key.
 	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
@@ -1228,7 +1228,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			identiconSvg: identicon(identity.address),
 			address: identity.address
 		},
-		// Spec 081: refused — no fee, no slider, one way out.
+		// Spec 081: refused — no fee, no confirm, one way out.
 		dismissOnly: sign.blocked ? m.close : undefined,
 		confirm: {
 			/*

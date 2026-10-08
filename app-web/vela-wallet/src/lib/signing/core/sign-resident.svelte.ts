@@ -268,7 +268,7 @@ class SignRequest {
 			// each state change; on the web the session is app-resident state, so
 			// the mirror is an effect on it. Without this the machine has NO
 			// accounts, and `approve_with` finds no signer and returns silently:
-			// the slide commits, the gate is open, and nothing is ever signed
+			// the confirm commits, the gate is open, and nothing is ever signed
 			// (027's SC-304 finding).
 			this.syncAccounts();
 			this.#stopAccountsMirror?.();

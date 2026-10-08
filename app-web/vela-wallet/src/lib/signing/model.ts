@@ -221,7 +221,7 @@ export type FeeModel =
 			 */
 			speed?: FeeSpeedModel;
 			/**
-			 * Why the slide is shut: the coin that pays is not there (issue 262 —
+			 * Why the confirm is shut: the coin that pays is not there (issue 262 —
 			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled) — or,
 			 * spec 079, why there is no fee at all: the relay could not be
 			 * reached, and the sheet will ask again by itself.
@@ -230,7 +230,7 @@ export type FeeModel =
 			/**
 			 * Spec 082 G47: the cause line is hidden while a re-quote runs (it
 			 * said why the LAST ask failed, under "estimating"), but its height
-			 * is kept, so the speed row and the slide below do not jump each
+			 * is kept, so the speed row and the confirm below do not jump each
 			 * time the sheet asks again. The held words, drawn invisibly: the
 			 * reserved line is exactly as tall as the one it stands in for.
 			 */
@@ -327,28 +327,29 @@ export interface SigningModel {
 		address?: string;
 	};
 	/**
-	 * The slide. There is no reject BUTTON anywhere in this vocabulary; the
-	 * header's quiet ✕ is the refusal, and since spec 079 nothing else closes
-	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
+	 * The confirm — a tap on the shared primary button (issue 461). There is
+	 * no reject BUTTON anywhere in this vocabulary; the header's quiet ✕ is
+	 * the refusal, and since spec 079 nothing else closes the sheet (owner
+	 * ruling: no swipe, scrim or Escape rejection).
 	 */
 	confirm: {
 		/** The action alone ("Confirm send"): the control's whole label (issue 461). */
 		action: string;
 		enabled: boolean;
-		/** Spec 099 R7: why the slide is shut, in the core's words. Live only. */
+		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
 	/**
 	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
-	 * a form. No fee controls, no slide (never a greyed one): the request's one
+	 * a form. No fee controls, no confirm (never a greyed one): the request's one
 	 * line and where it stands. Absent while the request is still a request.
 	 */
 	status?: SigningStatus;
 	/**
 	 * Spec 081: the request was refused outright (it would have changed who
-	 * controls the account). There is no fee to show and nothing to slide —
+	 * controls the account). There is no fee to show and nothing to confirm —
 	 * the only thing the sheet offers is the way out, labelled with this word.
 	 */
 	dismissOnly?: string;

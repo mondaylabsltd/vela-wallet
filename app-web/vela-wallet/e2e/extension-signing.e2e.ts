@@ -20,7 +20,7 @@ import {
 	loadExtension,
 	noRequestWindow,
 	requestWindow,
-	slideToConfirm
+	confirmSigning
 } from './extension-helpers';
 
 const APP_ROOT = join(import.meta.dirname, '..');
@@ -193,7 +193,7 @@ test.describe('signing for a dApp', () => {
 	 * SC-304, met in 028 Phase 8 — and the note of why it was not, kept so the
 	 * fix is legible.
 	 *
-	 * 027 measured: the slide committed, `approve_tapped` reached the resident,
+	 * 027 measured: the confirm committed, `approve_tapped` reached the resident,
 	 * the confirm gate was open, and `navigator.credentials.get` was never
 	 * called. The cause was not in the sheet or the transport: the web resident
 	 * never dispatched `accounts_changed`, so the machine had NO signer rows,
@@ -222,7 +222,7 @@ test.describe('signing for a dApp', () => {
 		// own travel. In the parallel space the passkey it then asks for is the
 		// fixture keyset, so this completes headlessly while remaining the REAL
 		// ceremony: the same assertion builder, verified by the same core.
-		await slideToConfirm(win);
+		await confirmSigning(win);
 
 		const answer = await asked;
 		expect(answer.ok).toBe(true);
@@ -262,8 +262,8 @@ test.describe('signing for a dApp', () => {
 
 		// Closing the sheet answers the dApp — and says the wallet refused it,
 		// not the person, who was never offered the choice.
-		// A refused request offers no fee and no slider — only the way out.
-		await expect(win.getByText(/Slide to confirm/i)).toHaveCount(0);
+		// A refused request offers no fee and no confirm — only the way out.
+		await expect(win.getByTestId('signing-confirm')).toHaveCount(0);
 		await win.getByRole('button', { name: /^close$/i }).click();
 		const answer = await asked;
 		expect(answer.ok).toBe(false);
@@ -347,7 +347,7 @@ test.describe('signing for a dApp', () => {
 	/**
 	 * Spec 094 S12: typed data (EIP-712 v4), the shape Permit2 and most dApp
 	 * logins use, signed end to end. A document no descriptor describes is a
-	 * blind signature, and the sheet says so; the slide and the fixture key
+	 * blind signature, and the sheet says so; the confirm and the fixture key
 	 * still sign it, and the page gets a signature.
 	 */
 	test('eth_signTypedData_v4: the sheet shows it, and approving returns a signature', async () => {
@@ -383,7 +383,7 @@ test.describe('signing for a dApp', () => {
 		});
 		await expect(win.getByText('Blind signature')).toBeVisible();
 		await expect(win.getByText(`localhost:${PORT}`).first()).toBeVisible();
-		await slideToConfirm(win);
+		await confirmSigning(win);
 		const answer = await asked;
 		expect(answer.ok).toBe(true);
 		expect(String(answer.result)).toMatch(/^0x[0-9a-fA-F]{100,}$/);

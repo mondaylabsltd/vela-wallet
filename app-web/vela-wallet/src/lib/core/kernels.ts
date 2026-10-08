@@ -798,9 +798,9 @@ export function typicalInclusionSeconds(chainId: number): number {
 }
 
 /**
- * Spec 099 R7: may the signing slide arm, and if not, why — the core's one
+ * Spec 099 R7: may the signing confirm open, and if not, why — the core's one
  * gate (`sign_confirm::confirm_state`), the same on every client. `null`
- * when a view does not read: the slide stays shut.
+ * when a view does not read: the confirm stays shut.
  */
 export function signConfirmState(
 	sign: SignView,

@@ -896,7 +896,7 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.feeMeasuring',
 	'componentsUi.signing.confirmBlock.feeFailed'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
-	// coin, and the slide said it again.
+	// coin, and the confirm's note said it again.
 ] as const;
 
 /** Spec 099 R8: the signer's three failures, by `SignErrorKind`. */

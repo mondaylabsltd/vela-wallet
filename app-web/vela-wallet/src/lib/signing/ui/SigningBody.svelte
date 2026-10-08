@@ -3,14 +3,13 @@
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import SignerRow from './SignerRow.svelte';
-	import SlideToConfirm from './SlideToConfirm.svelte';
 	import TechDetails from './TechDetails.svelte';
 	import type { SigningModel } from '../model';
 
 	/**
 	 * Everything below the dApp header, shared by the phone sheet and the
 	 * desktop third column: blocks, then the fixed footer (technical details →
-	 * fee → signer → slide). The two shells differ in chrome, never in what
+	 * fee → signer → confirm). The two shells differ in chrome, never in what
 	 * they say about a transaction — that is the whole point of one renderer.
 	 */
 	interface Props {
@@ -71,9 +70,9 @@
 		address={model.signer.address}
 	/>
 	<!--
-		Spec 081: a refused request shows no fee and no slider. Leaving a dead
-		"Slide to confirm · Enable module" under the refusal reads as an option
-		the person merely failed to use.
+		Spec 081: a refused request shows no fee and no confirm. Leaving a dead
+		"Enable module" button under the refusal reads as an option the person
+		merely failed to use.
 	-->
 	{#if model.dismissOnly}
 		<!-- RB12 (G16): the shared Button — bordered, full width, the control height. -->
@@ -83,9 +82,27 @@
 			</Button>
 		</div>
 	{:else}
-		<SlideToConfirm action={model.confirm.action} enabled={model.confirm.enabled} {onconfirm} />
+		<!--
+			Issue 461: a tap confirms, as it does on the Send screen — the shared
+			primary button, full width, labelled with the action alone; it was a
+			slide. The second, deliberate step is the passkey prompt the tap
+			raises. Shut while the core's gate is (`confirm_state`); once
+			approved the status replaces the form, so the button is never seen
+			dimmed by its own press.
+		-->
+		<div class="confirm">
+			<Button
+				variant="primary"
+				shape="rounded"
+				testid="signing-confirm"
+				disabled={!model.confirm.enabled}
+				onclick={() => onconfirm?.()}
+			>
+				{model.confirm.action}
+			</Button>
+		</div>
 		{#if !model.confirm.enabled && model.confirm.note}
-			<!-- Spec 099 R7: a shut slide says why, in the core's words. -->
+			<!-- Spec 099 R7: a shut confirm says why, in the core's words. -->
 			<p class="confirm-note">{model.confirm.note}</p>
 		{/if}
 	{/if}
@@ -98,10 +115,12 @@
 		color: var(--color-fg-subtle);
 		text-align: center;
 	}
-	.dismiss {
+	.dismiss,
+	.confirm {
 		display: flex;
 	}
-	.dismiss > :global(*) {
+	.dismiss > :global(*),
+	.confirm > :global(*) {
 		flex: 1;
 	}
 	.blocks {

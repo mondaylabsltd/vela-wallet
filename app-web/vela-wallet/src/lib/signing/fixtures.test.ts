@@ -1,7 +1,7 @@
 /**
  * Spec 022 gates for the signing layer.
  *
- * Two of these are product contracts, not style checks: the slide is the only
+ * Two of these are product contracts, not style checks: the confirm is the only
  * confirmation, and an unlimited approval can never be confirmed as requested.
  * They are asserted here so a later refactor has to break a test to break the
  * promise.
@@ -90,7 +90,7 @@ describe('the catalogue (data-model.md §3)', () => {
 });
 
 describe('unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling)', () => {
-	it('cs5 opens on the requested chip, warns in danger, and may be slid', () => {
+	it('cs5 opens on the requested chip, warns in danger, and may be confirmed', () => {
 		const model = build('cs5');
 		const [editor] = blocks(model, 'allowance');
 		expect(editor.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
@@ -99,7 +99,7 @@ describe('unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling)', 
 		expect(model.confirm.enabled).toBe(true);
 	});
 
-	it('choosing a finite cap keeps the slide armed (cs6, cs8)', () => {
+	it('choosing a finite cap keeps the confirm open (cs6, cs8)', () => {
 		for (const state of ['cs6', 'cs8'] as const) {
 			const model = build(state);
 			expect(model.confirm.enabled, state).toBe(true);

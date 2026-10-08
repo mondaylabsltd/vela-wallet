@@ -4,7 +4,7 @@
  * Two properties matter more than any layout question, and both are asserted
  * here: the confirm gate is an AND of three separate answers, and the
  * never-unlimited mandate reaches the screen as a DISABLED chip plus a shut
- * slider — not as a warning somebody can slide past.
+ * confirm — not as a warning somebody can tap past.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -271,7 +271,7 @@ describe('the fee the sheet shows', () => {
 
 	// Issue 262: 0 ETH and 2 USDT on mainnet, quoted in ETH. The core keeps the
 	// quote (the person sees the figure) and shuts the gate; the row says why.
-	it('says why the slide is shut when the coin that pays is not there', () => {
+	it('says why the confirm is shut when the coin that pays is not there', () => {
 		const eth = {
 			symbol: 'ETH',
 			contract: null,
@@ -509,7 +509,7 @@ describe('the sheet’s one close (spec 079)', () => {
 /**
  * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): from the
  * approval on, the sheet is a status — Android's signing receipt, word for
- * word — and never the form with a greyed slide.
+ * word — and never the form with a greyed confirm.
  */
 describe('after the approval the sheet is a status', () => {
 	const SUMMARY = 'Send USDC · -100 USDC';
@@ -771,12 +771,12 @@ describe('the speed under the fee', () => {
 		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
 		expect(fee.value).toBe(m.feeEstimating);
 		expect(fee.speed?.value).toBe(m.speed.names.slow);
-		// …and the slide stays shut: the core's gate is still open on the old
+		// …and the confirm stays shut: the core's gate is still open on the old
 		// figure, which is exactly the speed the person just walked away from.
 		expect(model?.confirm.enabled).toBe(false);
 	});
 
-	it('opens the slide once the fee in hand is the tier in force', () => {
+	it('opens the confirm once the fee in hand is the tier in force', () => {
 		const model = buildSigningModel(
 			inputs({ speed: { view: speedView('fast'), feeOptions: () => [] } })
 		);
@@ -971,7 +971,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		}
 	};
 
-	it('opens on its own chip, in the danger tone, with the warning, and arms the slider', () => {
+	it('opens on its own chip, in the danger tone, with the warning, and opens the confirm', () => {
 		const model = buildSigningModel(inputs({ guard: unbounded }))!;
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		expect(allowance).toBeDefined();
@@ -1497,9 +1497,9 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	});
 
 	// Issue 438 (Android v0.9.6, the key backup on Ethereum): "No token can
-	// pay this fee" in red under the fee, and again in grey under the slide.
+	// pay this fee" in red under the fee, and again in grey under the confirm.
 	// The core's gate names no line for a short coin, because the fee says it.
-	it('issue 438: a short coin is said once — under the fee, never again under the slide', () => {
+	it('issue 438: a short coin is said once — under the fee, never again under the confirm', () => {
 		const nothingPays = buildSigningModel(inputs({ fee: issue408 }))!;
 		expect(nothingPays.fee).toMatchObject({ warning: m.feeNoCoinPays });
 		expect(nothingPays.confirm.enabled).toBe(false);
@@ -1796,7 +1796,7 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		expect(line?.kind === 'amount' ? line.line.sign : '').toBe('−');
 	});
 
-	it('the relay’s estimate says it reverts → the danger line under the intent; the slide stays live (RJ19, G57)', () => {
+	it('the relay’s estimate says it reverts → the danger line under the intent; the confirm stays live (RJ19, G57)', () => {
 		recordEstimateReverts(
 			REQUEST.chain_id,
 			identity.address,
@@ -2193,7 +2193,7 @@ describe('what the approve carries (spec 093)', () => {
 describe('the readable part says what the call does (096)', () => {
 	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
 
-	it('still reading: "Loading…", never the cap prompt, and the slide stays shut (F7)', () => {
+	it('still reading: "Loading…", never the cap prompt, and the confirm stays shut (F7)', () => {
 		const loading: ClearSigningView = {
 			...INITIAL_CLEAR_VIEW,
 			resolving: true,

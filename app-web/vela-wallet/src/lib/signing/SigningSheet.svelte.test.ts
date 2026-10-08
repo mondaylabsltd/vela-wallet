@@ -43,6 +43,7 @@ async function drawn(props: {
 	dismissible?: boolean;
 	onfeerefresh?: () => void;
 	onretry?: () => void;
+	onconfirm?: () => void;
 }) {
 	const onclose = vi.fn();
 	const screen = render(SigningSheet, {
@@ -51,7 +52,8 @@ async function drawn(props: {
 			dismissible: props.dismissible ?? true,
 			onclose,
 			onfeerefresh: props.onfeerefresh,
-			onretry: props.onretry
+			onretry: props.onretry,
+			onconfirm: props.onconfirm
 		}
 	});
 	await tick();
@@ -121,11 +123,11 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		closable: true
 	};
 
-	it('the form gives way to the status: no fee, no slide — never a greyed one', async () => {
-		const SLIDE = '[data-testid="signing-confirm"]';
-		// The control, before the approval: the slide is there.
+	it('the form gives way to the status: no fee, no confirm — never a greyed one', async () => {
+		const CONFIRM = '[data-testid="signing-confirm"]';
+		// The control, before the approval: the confirm is there.
 		const form = await drawn({});
-		expect(form.sheet.querySelector(SLIDE)).not.toBeNull();
+		expect(form.sheet.querySelector(CONFIRM)).not.toBeNull();
 		await form.screen.unmount();
 
 		const view = await drawn({
@@ -142,7 +144,7 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		const status = view.sheet.querySelector<HTMLElement>('[data-testid="signing-status"]');
 		expect(status?.textContent).toContain('Submitting to network...');
 		expect(status?.textContent).toContain('Closing this page keeps the transaction running');
-		expect(view.sheet.querySelector(SLIDE)).toBeNull();
+		expect(view.sheet.querySelector(CONFIRM)).toBeNull();
 		expect(view.sheet.querySelector('button.refresh')).toBeNull();
 		expect(view.sheet.textContent).not.toContain('Network fee');
 		await view.screen.unmount();
@@ -207,6 +209,66 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 	});
 });
 
+/**
+ * Issue 461: the sheet confirms with a tap — the shared primary button the
+ * Send screen confirms with, full width, its label the action alone. It used
+ * to be a slide whose label read "Slide to confirm · …".
+ */
+describe('the confirm is a button (issue 461)', () => {
+	const confirmOf = (sheet: HTMLElement) =>
+		sheet.querySelector<HTMLButtonElement>('button[data-testid="signing-confirm"]');
+
+	it('says the action alone, fills the footer, and one tap confirms', async () => {
+		const onconfirm = vi.fn();
+		const view = await drawn({ onconfirm });
+		const confirm = confirmOf(view.sheet)!;
+		expect(confirm).not.toBeNull();
+		expect(confirm.textContent?.trim()).toBe('Send');
+		expect(confirm.classList.contains('primary')).toBe(true);
+		expect(confirm.disabled).toBe(false);
+		const footer = confirm.closest('.footer') as HTMLElement;
+		expect(
+			Math.abs(confirm.getBoundingClientRect().width - footer.getBoundingClientRect().width)
+		).toBeLessThanOrEqual(1);
+		confirm.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
+		expect(view.onclose).not.toHaveBeenCalled();
+		await view.screen.unmount();
+	});
+
+	it('is shut while the core’s gate is, and says why under it', async () => {
+		const onconfirm = vi.fn();
+		const view = await drawn({
+			model: model({ confirm: { action: 'Send', enabled: false, note: 'Getting the fee…' } }),
+			onconfirm
+		});
+		const confirm = confirmOf(view.sheet)!;
+		expect(confirm.disabled).toBe(true);
+		confirm.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		const note = view.sheet.querySelector('.confirm-note');
+		expect(note?.textContent).toBe('Getting the fee…');
+		expect(note!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			confirm.getBoundingClientRect().bottom
+		);
+		await view.screen.unmount();
+	});
+
+	// The side panel's column (360 − 2 × 24): the longest action in the corpus
+	// wraps inside the button, which grows; nothing is cut or spills.
+	it('wraps a long action inside itself in the side panel’s width', async () => {
+		const view = await drawn({
+			model: model({ confirm: { action: 'Резервное копирование открытых ключей', enabled: true } })
+		});
+		const confirm = confirmOf(view.sheet)!;
+		(confirm.closest('.footer') as HTMLElement).style.width = '312px';
+		await tick();
+		expect(confirm.scrollWidth).toBeLessThanOrEqual(confirm.clientWidth);
+		expect(confirm.getBoundingClientRect().width).toBeLessThanOrEqual(312.5);
+		await view.screen.unmount();
+	});
+});
+
 describe('the signing fee row (spec 079 US2)', () => {
 	const shown: FeeModel = {
 		kind: 'onchain',
@@ -241,7 +303,7 @@ describe('the signing fee row (spec 079 US2)', () => {
 		await view.screen.unmount();
 	});
 
-	it('keeps the stale note’s line standing, so the slide never moves when it speaks', async () => {
+	it('keeps the stale note’s line standing, so the confirm never moves when it speaks', async () => {
 		const quiet = await drawn({ model: model({ fee: shown }), onfeerefresh: () => {} });
 		const quietStale = quiet.sheet.querySelector<HTMLElement>('.stale')!;
 		expect(getComputedStyle(quietStale).visibility).toBe('hidden');

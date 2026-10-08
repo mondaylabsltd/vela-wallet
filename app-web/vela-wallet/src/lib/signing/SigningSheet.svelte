@@ -22,7 +22,7 @@
 	 * After the approval the sheet is a STATUS (spec 079, F11): the header and
 	 * the send receipt's `StatusHero` — "waiting for biometric", "submitting",
 	 * or why it failed — and no form under it: no fee controls, and never a
-	 * greyed slide. The ✕ then closes without refusing, once the signature
+	 * greyed confirm. The ✕ then closes without refusing, once the signature
 	 * exists (`dismissible: false` shuts it while it does not).
 	 */
 	interface Props {

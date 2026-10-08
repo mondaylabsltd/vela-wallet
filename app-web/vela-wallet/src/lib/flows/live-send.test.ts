@@ -735,7 +735,7 @@ describe('the confirm screen', () => {
 
 	// Spec 096 F12: the WBNB-to-the-WBNB-contract send said only "First time
 	// sending here". The token-contract sentence goes first.
-	it('says the recipient is a token contract before the slide', () => {
+	it('says the recipient is a token contract before the confirm', () => {
 		const single = {
 			selected_token: ETH,
 			recipient: '0x' + 'ab'.repeat(20),

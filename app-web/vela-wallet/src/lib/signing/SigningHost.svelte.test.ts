@@ -330,7 +330,7 @@ describe('the write-ahead hand-off (spec 082 RJ1)', () => {
 describe('after the landing closes, the sheet does not fall back to submitting (G37)', () => {
 	it('a confirmed landing closes itself and its still-unanswered request stays hidden', async () => {
 		const view = mount();
-		// The slide was made; the relay's reply was lost: the handoff is out
+		// The confirm was tapped; the relay's reply was lost: the handoff is out
 		// before the page's answer.
 		fake.sign.view = {
 			...INITIAL_SIGN_VIEW,

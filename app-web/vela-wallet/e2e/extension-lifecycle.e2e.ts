@@ -33,7 +33,7 @@ import {
 	sidePanelShowsRequest,
 	sidePanelUp,
 	sidePanelView,
-	slideToConfirm
+	confirmSigning
 } from './extension-helpers';
 import { abiWord, aggregate3CallCount, encodeAggregate3Result, happyRelay } from './stub-chain';
 
@@ -452,29 +452,21 @@ async function hermeticPanel(wallet: Page): Promise<void> {
 const panelFenced = (wallet: Page) =>
 	inSidePanel<boolean>(wallet, 'return Array.isArray(panel.__velaRefused);');
 
-/** Slide the panel's sheet — by keyboard, the same `onconfirm` — once it arms. */
-async function slideInPanel(wallet: Page): Promise<void> {
-	const TRACK = `[role="dialog"] [data-testid="signing-confirm"]`;
+/** Tap the panel's sheet's confirm (issue 461) — the same `onconfirm` — once it arms. */
+async function confirmInPanel(wallet: Page): Promise<void> {
+	const CONFIRM = `[role="dialog"] button[data-testid="signing-confirm"]`;
 	await expect
 		.poll(
 			() =>
-				inSidePanel<string | null>(
+				inSidePanel<boolean | null>(
 					wallet,
-					`return panel.document.querySelector(arg)?.getAttribute('aria-disabled') ?? null;`,
-					TRACK
+					`return panel.document.querySelector(arg)?.disabled ?? null;`,
+					CONFIRM
 				),
 			{ timeout: 60_000 }
 		)
-		.toBe('false');
-	await inSidePanel(
-		wallet,
-		`
-		const track = panel.document.querySelector(arg);
-		track.focus();
-		track.dispatchEvent(new panel.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-		`,
-		TRACK
-	);
+		.toBe(false);
+	await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
 }
 
 /** Refuse whatever the panel's dialog shows, with its ✕ (the core's 4001). */
@@ -598,7 +590,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	});
 
 	/**
-	 * G35 (P0, RJ2): the device pass closed the side panel after the slide and
+	 * G35 (P0, RJ2): the device pass closed the side panel after the confirm and
 	 * the page was told 4900 "The browser closed…" while the op landed 13 s
 	 * later — a dApp that reads 4900 as "not sent" pays again. Once the submit
 	 * claim carries the operation hash, the page is told it is not confirmed
@@ -608,7 +600,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 * stand-in for the panel in the wallet tab: the worker, the page, the
 	 * provider and content.js are the real ones, and nothing is signed or
 	 * sent. The next case makes the same claim the product's way — a dust send
-	 * slid in the panel itself.
+	 * confirmed in the panel itself.
 	 */
 	test('G35 (RJ2): a claimed submit whose panel goes is answered "not confirmed yet" with its op hash, never 4900', async () => {
 		const context = await loadExtension({ surface: 'panel' });
@@ -700,7 +692,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	});
 
 	/**
-	 * G35 as the device pass met it (post2-E1): a send slid in the side panel,
+	 * G35 as the device pass met it (post2-E1): a send confirmed in the side panel,
 	 * the relay has the op, its reply is still out — and the person closes the
 	 * panel. The panel's own submit claim carries the op's hash (T228), made
 	 * after the write-ahead and before the POST, so the page is told it is not
@@ -719,8 +711,8 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	for (const how of ['close', 'reload'] as const) {
 		const title =
 			how === 'close'
-				? 'G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one "not confirmed yet" naming its op hash'
-				: 'G35 (RJ2): a dust send slid in the panel, the panel reloaded after its submit claim → one "not confirmed yet" naming its op hash, and the new panel owes nothing';
+				? 'G35 (RJ2): a dust send confirmed in the panel, the panel closed after its submit claim → one "not confirmed yet" naming its op hash'
+				: 'G35 (RJ2): a dust send confirmed in the panel, the panel reloaded after its submit claim → one "not confirmed yet" naming its op hash, and the new panel owes nothing';
 		test(title, async () => {
 			await dustSendThenLosePanel(how);
 		});
@@ -753,7 +745,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			asked.catch(() => {});
 			await sidePanelView(wallet, 30_000);
 			expect(await panelFenced(wallet)).toBe(true);
-			await slideInPanel(wallet);
+			await confirmInPanel(wallet);
 
 			// The fixture key signed, the record was written, the claim went, and
 			// the relay has the op — this dust send, from this Safe. Its reply
@@ -882,7 +874,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		}
 	}
 
-	test('eth_sendTransaction: slid in the panel, sent to the relay, landed — the page gets the transaction', async () => {
+	test('eth_sendTransaction: confirmed in the panel, sent to the relay, landed — the page gets the transaction', async () => {
 		await withAnsweringNet(async (wallet, page, net) => {
 			const asked = page.evaluate(
 				([to, value]) =>
@@ -893,7 +885,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			);
 			asked.catch(() => {});
 			await sidePanelView(wallet, 30_000);
-			await slideInPanel(wallet);
+			await confirmInPanel(wallet);
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 			const answer = (await asked) as AskResult;
 			expect(answer.ok).toBe(true);
@@ -926,7 +918,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			);
 			asked.catch(() => {});
 			await sidePanelView(wallet, 30_000);
-			await slideInPanel(wallet);
+			await confirmInPanel(wallet);
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 			const sent = (await asked) as AskResult;
 			expect(sent.ok).toBe(true);
@@ -1007,11 +999,9 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			);
 			asked.catch(() => {});
 			const win = await requestWindow(context, 30_000);
-			// Armed first (the fee quoted): a slide made before it does nothing.
-			await expect(win.getByTestId('signing-confirm')).toHaveAttribute('aria-disabled', 'false', {
-				timeout: 60_000
-			});
-			await slideToConfirm(win);
+			// Armed first (the fee quoted): the confirm is shut until then.
+			await expect(win.getByTestId('signing-confirm')).toBeEnabled({ timeout: 60_000 });
+			await confirmSigning(win);
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 
 			// The relay's status poll says rejected (the tracker asks every ~12 s).

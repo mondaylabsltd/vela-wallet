@@ -111,7 +111,7 @@
 			{/if}
 		</div>
 		{#if fee.warning}
-			<!-- Issue 262: the reason the slide is shut, right under the fee it is
+			<!-- Issue 262: the reason the confirm is shut, right under the fee it is
 			     about (spec 082 G47 — it sat under the speed row) — the coin cannot
 			     pay, or (spec 079) the fee could not be asked and the sheet is
 			     asking again. -->
@@ -122,7 +122,7 @@
 			<p class="warning reserved" aria-hidden="true">{fee.warningReserved}</p>
 		{/if}
 		{#if fee.refreshLabel !== undefined}
-			<!-- The send form's calm note, in its standing line: the slide
+			<!-- The send form's calm note, in its standing line: the confirm
 			     below does not move when a quote grows old. -->
 			<FeeStaleNote note={fee.staleNote} />
 		{/if}

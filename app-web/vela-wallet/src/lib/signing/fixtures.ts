@@ -1227,7 +1227,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 	// cs5 is where this starts: an unlimited request, kept on its Requested
 	// chip. These are what the card becomes once somebody picks Custom — the
 	// field under the chips, the big number above counting what has been
-	// typed, and the slide shut while the typed amount is not one.
+	// typed, and the confirm shut while the typed amount is not one.
 	cs34: (m) => ({
 		dapp: D.oneinch,
 		network: NETWORK,
@@ -1258,7 +1258,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		// A finite cap is a cap: the slide may arm.
+		// A finite cap is a cap: the confirm may open.
 		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
