@@ -71,7 +71,8 @@ export const ALL_STATES: SigningStateId[] = [
 	'cs32',
 	'cs33',
 	'cs34',
-	'cs35'
+	'cs35',
+	'cs36'
 ];
 
 const NETWORK = { name: 'Ethereum', dot: '#627EEA' };
@@ -1299,6 +1300,38 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		signer: signer(m),
 		// A cap nobody could parse is not a cap.
 		confirm: { action: m.intentApprove, enabled: false },
+		panelTitle: m.panelTitle
+	}),
+
+	// -- cs36: the wallet's OWN request (spec 062's key backup) -----------
+	//
+	// Nobody else is asking, so there is no requester to show: the header is
+	// the request's intent and (live) the ✕ — no mark, no "Vela Wallet", no
+	// network chip. The network is a row, in the core's words, as are the
+	// address being backed up and the count of its keys; the toggle names no
+	// contract, and the confirm says the intent. Every word is a core term
+	// (`componentsUi.signing.*`), so the board reads in the gallery's locale.
+	cs36: (m) => ({
+		// Who asked, for the record — not drawn while there is a headline.
+		dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
+		network: NETWORK,
+		// The core grades the backup safe (live: `risk: safe`).
+		headline: { text: m.terms.intentBackUpPublicKeys, tone: 'success' },
+		blocks: [
+			{
+				kind: 'rows',
+				rows: [
+					row(m.terms.labelNetwork, NETWORK.name),
+					row(m.terms.labelAddress, ADDR.self, undefined, true),
+					row(m.terms.labelPublicKeys, '2')
+				]
+			}
+		],
+		tech: tech(m),
+		techOpen: false,
+		fee: onchainFee(m),
+		signer: signer(m),
+		confirm: { action: m.terms.intentBackUpPublicKeys, enabled: true },
 		panelTitle: m.panelTitle
 	})
 };

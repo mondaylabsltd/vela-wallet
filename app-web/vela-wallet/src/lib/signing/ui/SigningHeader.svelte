@@ -1,6 +1,5 @@
 <script lang="ts">
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
 	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -9,6 +8,12 @@
 	interface Props {
 		dapp: SigningModel['dapp'];
 		network: SigningModel['network'];
+		/**
+		 * The wallet's own request: the whole header is this line and the ✕.
+		 * There is no requester to name and no chip to show — the rows below
+		 * say the network.
+		 */
+		headline?: SigningModel['headline'];
 		/**
 		 * Spec 079: the sheet's one close — a quiet ✕ at the end of the row.
 		 * Absent where there is nothing to close (the gallery, the desktop
@@ -21,7 +26,7 @@
 		closeDisabled?: boolean;
 	}
 
-	let { dapp, network, onclose, closeLabel, closeDisabled = false }: Props = $props();
+	let { dapp, network, headline, onclose, closeLabel, closeDisabled = false }: Props = $props();
 </script>
 
 <!--
@@ -33,10 +38,12 @@
 	{#each text.split(/(?<=[.:])/) as part, i (i)}{#if i > 0}<wbr />{/if}{part}{/each}
 {/snippet}
 
-<header class="header">
-	{#if dapp.own}
-		<!-- The wallet asking itself: its own mark, never a letter on a disc. -->
-		<span class="own"><BrandMark size={22} /></span>
+<header class="header" class:own={headline !== undefined}>
+	{#if headline}
+		<!-- The wallet asking itself (first-party): no requester, so the request
+		     says what it is — in the sheet's title type, wrapping rather than
+		     cut — with the ✕ at the end of the same row. -->
+		<h2 class="headline" data-tone={headline.tone}>{headline.text}</h2>
 	{:else}
 		<!-- The site's own icon over its initial: the letter shows until the icon
 		     lands, and stays when the site has none. -->
@@ -44,19 +51,19 @@
 			<LetterAvatar letter={dapp.letter} tint={dapp.tint} size={36} />
 			<RemoteLogo urls={dapp.iconUrls} />
 		</span>
-	{/if}
-	<span class="who">
-		<span class="name">{@render breakable(dapp.name)}</span>
-		{#if dapp.host !== ''}<span class="host">{@render breakable(dapp.host)}</span>{/if}
-	</span>
-	<span class="network">
-		<!-- The chain's logo over a drawn dot, which is what shows until it lands. -->
-		<span class="chain">
-			<span class="dot" style:background={network.dot}></span>
-			<RemoteLogo urls={network.logoUrl === undefined ? undefined : [network.logoUrl]} />
+		<span class="who">
+			<span class="name">{@render breakable(dapp.name)}</span>
+			{#if dapp.host !== ''}<span class="host">{@render breakable(dapp.host)}</span>{/if}
 		</span>
-		{network.name}
-	</span>
+		<span class="network">
+			<!-- The chain's logo over a drawn dot, which is what shows until it lands. -->
+			<span class="chain">
+				<span class="dot" style:background={network.dot}></span>
+				<RemoteLogo urls={network.logoUrl === undefined ? undefined : [network.logoUrl]} />
+			</span>
+			{network.name}
+		</span>
+	{/if}
 	{#if onclose}
 		<button
 			type="button"
@@ -118,15 +125,34 @@
 		color: var(--color-fg-base);
 	}
 
-	.own {
-		display: grid;
-		flex: none;
-		place-items: center;
-		/* The letter avatar's own box (CONTROL.sm = 36). */
-		width: var(--size-control-sm);
-		height: var(--size-control-sm);
-		border-radius: var(--radius-full);
-		background: var(--color-bg-sunken);
+	/* The title row of every other sheet: its type, its ✕, top-aligned so a
+	   headline that wraps keeps the ✕ beside its first line. */
+	.header.own {
+		align-items: flex-start;
+	}
+
+	/* At least as tall as the ✕'s box, so a one-line headline sits centred on
+	   it; a longer one grows the row downwards. */
+	.headline {
+		display: flex;
+		flex: 1;
+		align-items: center;
+		min-width: 0;
+		min-height: var(--size-control-sm);
+		margin: 0;
+		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
+		font-weight: var(--weight-bold);
+		line-height: var(--leading-tight);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
+	}
+
+	.headline[data-tone='danger'] {
+		color: var(--color-error-base);
+	}
+
+	.headline[data-tone='caution'] {
+		color: var(--color-warning-base);
 	}
 
 	.site {

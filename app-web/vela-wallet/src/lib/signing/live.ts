@@ -843,7 +843,7 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	});
 }
 
-function techModel(inputs: SigningLiveInputs): TechModel {
+function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	const { sign, clear, m } = inputs;
 	// A refused request discloses nothing (spec 081). Android and iOS hide this
 	// card entirely under a refusal; web was still putting the raw
@@ -853,7 +853,10 @@ function techModel(inputs: SigningLiveInputs): TechModel {
 	const result = sign.blocked ? null : clear.result;
 	return {
 		title: m.advancedToggle,
-		summary: result?.contract_name ?? undefined,
+		// The contract's name beside the toggle tells a site's request apart;
+		// on the wallet's own backup "· Vela passkey registry" was a stranger's
+		// term over a sheet that is otherwise plain words. It stays inside.
+		summary: own ? undefined : (result?.contract_name ?? undefined),
 		fn: undefined,
 		params: [],
 		identities: result?.contract_address
@@ -1176,16 +1179,28 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
-	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
-	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
+	const drawn = withEstimateVerdict(blocksFor(inputs), inputs);
+	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(drawn), m);
+	// The wallet's own request names no requester: its intent is the header's
+	// headline, beside the ✕, and is not said a second time below it. While
+	// the reading is still out there is no intent yet; the sheet's own title
+	// holds the line until it lands.
+	const lead = own && drawn[0]?.kind === 'intent' ? drawn[0] : undefined;
+	const blocks = lead ? drawn.slice(1) : drawn;
+	const headline = own
+		? lead
+			? { text: lead.text, tone: lead.tone }
+			: { text: m.panelTitle, tone: 'neutral' as const }
+		: undefined;
 
 	return {
 		id: 'cs1',
-		// The wallet's own request (the key backup) is not a site: it wears the
-		// wallet's mark and name, and no host — `localhost:5173` under "Vela" read
-		// as a stranger borrowing the brand (founder, 2026-09-19).
+		// The wallet's own request (the key backup) is not a site, and its
+		// header says no site (`headline`): `localhost:5173` under "Vela" read
+		// as a stranger borrowing the brand (founder, 2026-09-19), and the
+		// wallet's own mark and name over its own request said nothing either.
 		dapp: own
-			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
+			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT }
 			: {
 					name,
 					host: label.host_line ?? '',
@@ -1198,8 +1213,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			dot: NEUTRAL_TINT,
 			logoUrl: chainLogoURL(request.chain_id)
 		},
+		...(headline ? { headline } : {}),
 		blocks,
-		tech: techModel(inputs),
+		tech: techModel(inputs, own),
 		techOpen: false,
 		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
 		signer: {

@@ -279,37 +279,100 @@ describe('the signing fee row (spec 079 US2)', () => {
 	});
 });
 
-// Issue 314: the wallet's own key backup read like a newspaper — its intent
-// was the small grey eyebrow a figure stands under, over a sheet with no
-// figure. The wallet's own request leads with its intent as the headline; a
-// site's sheet keeps the eyebrow its 33 drawn scenarios were built around.
-describe('the intent', () => {
-	const backup = (own: boolean) =>
+// Issue 314, then the first-party header (2026-10-08): the wallet's own key
+// backup has no requester. Its header used to repeat the wallet's mark, "Vela
+// Wallet" and the network chip over a headline that said the same thing again.
+// Now the header IS the headline, beside the ✕ — the sheet's only exit, so it
+// stays in every mode; a site's sheet keeps its requester row and the eyebrow
+// its drawn scenarios were built around.
+describe('the wallet’s own request (first-party)', () => {
+	const BACKUP = 'Back up public keys';
+	const own = (over: Partial<SigningModel> = {}) =>
 		model({
-			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)', own },
+			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
+			headline: { text: BACKUP, tone: 'success' },
 			blocks: [
-				{ kind: 'intent', text: 'Back up public keys', tone: 'success' },
-				{ kind: 'rows', rows: [{ label: 'Public keys', value: '1' }] }
-			]
+				{
+					kind: 'rows',
+					rows: [
+						{ label: 'Network', value: 'Ethereum' },
+						{ label: 'Public keys', value: '1' }
+					]
+				}
+			],
+			...over
 		});
-	const intent = (sheet: HTMLElement) => sheet.querySelector<HTMLElement>('.intent')!;
-	const size = (el: HTMLElement) => parseFloat(getComputedStyle(el).fontSize);
+	const size = (el: Element) => parseFloat(getComputedStyle(el).fontSize);
+	const box = (el: Element) => el.getBoundingClientRect();
 
-	it('leads the wallet’s own request as its headline, in the base ink', async () => {
-		const own = await drawn({ model: backup(true) });
-		const lead = intent(own.sheet);
-		expect(lead.classList.contains('lead')).toBe(true);
-		const headline = size(lead);
+	it('is one row: the headline and the ✕ — no mark, no name, no network chip', async () => {
+		const view = await drawn({ model: own() });
+		const header = view.sheet.querySelector<HTMLElement>('header.header')!;
+		const headline = header.querySelector<HTMLElement>('.headline')!;
+		expect(headline.textContent).toBe(BACKUP);
+		for (const gone of ['.site', '.who', '.name', '.network']) {
+			expect(header.querySelector(gone), gone).toBeNull();
+		}
+		expect(header.textContent).not.toContain('Vela Wallet');
+		expect(header.textContent).not.toContain('Ethereum');
+		// Side by side, on one line: the ✕ at the end of the headline's row.
+		expect(view.close).not.toBeNull();
+		const [h, x] = [box(headline), box(view.close!)];
+		expect(x.left).toBeGreaterThanOrEqual(h.right - 1);
+		expect(Math.abs((h.top + h.bottom) / 2 - (x.top + x.bottom) / 2)).toBeLessThanOrEqual(2);
+		// In the title's ink and type, larger than any site's eyebrow.
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--color-fg-base)';
 		document.body.appendChild(probe);
-		expect(getComputedStyle(lead).color).toBe(getComputedStyle(probe).color);
+		expect(getComputedStyle(headline).color).toBe(getComputedStyle(probe).color);
 		probe.remove();
-		await own.screen.unmount();
+		// The intent is not said a second time below it.
+		expect(view.sheet.querySelector('.intent')).toBeNull();
+		await view.screen.unmount();
+	});
 
-		const site = await drawn({ model: backup(false) });
-		expect(intent(site.sheet).classList.contains('lead')).toBe(false);
-		expect(size(intent(site.sheet))).toBeLessThan(headline);
+	it('keeps its ✕ when the sheet is a status', async () => {
+		const view = await drawn({
+			model: own({
+				status: { stage: 'submitting', title: 'Submitting…', captions: [], closable: true }
+			})
+		});
+		expect(view.sheet.querySelector('.headline')?.textContent).toBe(BACKUP);
+		expect(view.close).not.toBeNull();
+		view.close!.click();
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+	});
+
+	it('wraps a long headline beside the ✕ instead of cutting it', async () => {
+		const LONG = 'Резервное копирование открытых ключей в сеть Ethereum';
+		const view = await drawn({ model: own({ headline: { text: LONG, tone: 'neutral' } }) });
+		const headline = view.sheet.querySelector<HTMLElement>('.headline')!;
+		expect(headline.textContent).toBe(LONG);
+		expect(headline.scrollWidth).toBeLessThanOrEqual(headline.clientWidth);
+		expect(box(view.close!).left).toBeGreaterThanOrEqual(box(headline).right - 1);
+		await view.screen.unmount();
+	});
+
+	it('a site’s request keeps its requester row and the small eyebrow', async () => {
+		const site = await drawn({
+			model: model({
+				blocks: [
+					{ kind: 'intent', text: BACKUP, tone: 'success' },
+					{ kind: 'rows', rows: [{ label: 'Public keys', value: '1' }] }
+				]
+			})
+		});
+		expect(site.sheet.querySelector('.headline')).toBeNull();
+		expect(site.sheet.querySelector('.header .name')?.textContent).toBe('app.example');
+		expect(site.sheet.querySelector('.header .network')).not.toBeNull();
+		const eyebrow = site.sheet.querySelector<HTMLElement>('.intent')!;
+		expect(eyebrow.textContent).toBe(BACKUP);
+		const eyebrowSize = size(eyebrow);
 		await site.screen.unmount();
+
+		const ownView = await drawn({ model: own() });
+		expect(eyebrowSize).toBeLessThan(size(ownView.sheet.querySelector('.headline')!));
+		await ownView.screen.unmount();
 	});
 });

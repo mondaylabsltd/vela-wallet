@@ -88,6 +88,7 @@
 	<SigningHeader
 		dapp={model.dapp}
 		network={model.network}
+		headline={model.headline}
 		closeLabel={model.closeLabel}
 		closeDisabled={!dismissible}
 		onclose={onclose && !model.dismissOnly ? closeNow : undefined}

@@ -1601,10 +1601,10 @@ describe("the wallet's own backup, as the core reads it", () => {
 	it('names the network, the address and the keys in the reader’s words, and confirms with the intent', () => {
 		const zh = resolveSigningMessages('zh');
 		const model = buildSigningModel(inputs({ m: zh, sign: backup(true), clear: coreView() }))!;
-		expect(model.blocks[0]).toMatchObject({
-			kind: 'intent',
-			text: zh.terms.intentBackUpPublicKeys
-		});
+		// The intent is the header's headline, and is not said again below it.
+		// The core grades it safe; the headline keeps the title's ink for that.
+		expect(model.headline).toEqual({ text: zh.terms.intentBackUpPublicKeys, tone: 'success' });
+		expect(model.blocks.some((b) => b.kind === 'intent')).toBe(false);
 		const rows = model.blocks.find((b) => b.kind === 'rows');
 		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
 			[zh.terms.labelNetwork, 'Ethereum'],
@@ -1617,13 +1617,22 @@ describe("the wallet's own backup, as the core reads it", () => {
 
 	it('is the wallet’s own only when the request says so — a site sending the same bytes stays a site', () => {
 		const clear = coreView();
-		expect(buildSigningModel(inputs({ sign: backup(true), clear }))!.dapp).toMatchObject({
-			name: 'Vela Wallet',
-			own: true
-		});
-		const site = buildSigningModel(inputs({ sign: backup(false), clear }))!.dapp;
-		expect(site.own).toBeUndefined();
-		expect(site.name).toBe('app.example');
+		const own = buildSigningModel(inputs({ sign: backup(true), clear }))!;
+		expect(own.headline?.text).toBe(m.terms.intentBackUpPublicKeys);
+		// The toggle names no contract on the wallet's own request…
+		expect(own.tech.summary).toBeUndefined();
+		const site = buildSigningModel(inputs({ sign: backup(false), clear }))!;
+		expect(site.headline).toBeUndefined();
+		expect(site.dapp.name).toBe('app.example');
+		// …and a site's request still opens on its intent, under the site's name.
+		expect(site.blocks[0]).toMatchObject({ kind: 'intent', text: m.terms.intentBackUpPublicKeys });
+		expect(site.tech.summary).toBe('Vela passkey registry');
+	});
+
+	it('holds the headline’s line with the sheet’s title while the reading is still out', () => {
+		const loading = { ...coreView(), surface: 'loading' as const, result: null };
+		const model = buildSigningModel(inputs({ sign: backup(true), clear: loading }))!;
+		expect(model.headline).toEqual({ text: m.panelTitle, tone: 'neutral' });
 	});
 });
 

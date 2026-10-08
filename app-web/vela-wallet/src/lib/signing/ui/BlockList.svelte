@@ -21,20 +21,18 @@
 	 */
 	interface Props {
 		blocks: Block[];
-		/** The intent is the headline — the wallet's own request (issue 314). */
-		leadIntent?: boolean;
 		/** `leg`: the batch leg whose card was tapped; absent = the single approval. */
 		onchip?: (id: string, leg?: number) => void;
 		/** The custom cap's keystrokes, on their way back to the guard. */
 		oncustom?: (text: string, leg?: number) => void;
 	}
 
-	let { blocks, leadIntent = false, onchip, oncustom }: Props = $props();
+	let { blocks, onchip, oncustom }: Props = $props();
 </script>
 
 {#each blocks as block, i (i)}
 	{#if block.kind === 'intent'}
-		<IntentLabel text={block.text} tone={block.tone} lead={leadIntent} />
+		<IntentLabel text={block.text} tone={block.tone} />
 	{:else if block.kind === 'amount'}
 		<AmountHero line={block.line} card={block.card} note={block.note} />
 	{:else if block.kind === 'swap'}

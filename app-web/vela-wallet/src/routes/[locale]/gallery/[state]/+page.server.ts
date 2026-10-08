@@ -192,11 +192,17 @@ export const load: PageServerLoad = ({ params }) => {
 	}
 	if ((SIGNING_STATES as readonly string[]).includes(params.state)) {
 		const state = params.state as SigningStateId;
+		const signing = buildSigningState(state, resolveSigningMessages(locale), identiconSvgFor);
 		return {
 			kind: 'signing' as const,
 			model: buildExploreMobileState('e4', resolveExploreMessages(locale), identiconSvgFor),
 			copy: resolveExploreMessages(locale),
-			signing: buildSigningState(state, resolveSigningMessages(locale), identiconSvgFor)
+			// The wallet's own request (cs36) is raised from Settings (spec 062's
+			// backup row), not by a page: drawn over the screen that asked.
+			settings: signing.headline
+				? buildSettingsMobileState('st1', resolveSettingsMessages(locale), identiconSvgFor)
+				: undefined,
+			signing
 		};
 	}
 	error(404, `unknown state "${params.state}"`);

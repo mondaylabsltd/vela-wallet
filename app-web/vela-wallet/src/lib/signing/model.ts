@@ -44,7 +44,9 @@ export type SigningStateId =
 	| 'cs33'
 	/** Spec 032 phase 39: a cap being TYPED, and the same field refused. */
 	| 'cs34'
-	| 'cs35';
+	| 'cs35'
+	/** The wallet's own key backup (first-party): its headline, no requester. */
+	| 'cs36';
 
 /** Semantic weight. `accent` is the intent sentence; the rest colour warnings. */
 export type Tone = 'neutral' | 'accent' | 'success' | 'caution' | 'danger';
@@ -282,8 +284,6 @@ export interface SigningModel {
 		host: string;
 		letter: string;
 		tint: string;
-		/** The wallet asking ITSELF (the key backup): drawn with the wallet's own mark. */
-		own?: boolean;
 		/**
 		 * The site's own icon, tried in order over the letter (founder ruling
 		 * 2026-09-19, superseding spec 022's "never fetch"): the letter is what
@@ -298,6 +298,16 @@ export interface SigningModel {
 		/** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
 		logoUrl?: string;
 	};
+	/**
+	 * The wallet asking ITSELF — the key backup, which the core marks
+	 * `first_party` (never the origin or the bytes: a site can send the same
+	 * register() call). There is no requester to show, so the header is this
+	 * one line, the request's intent in the sheet's title type, and the ✕ —
+	 * no mark, no "Vela Wallet", no network chip (the rows say the network).
+	 * `dapp` and `network` are not drawn then, and the intent is not repeated
+	 * in `blocks`. Absent for every request a site makes.
+	 */
+	headline?: { text: string; tone: Tone };
 	blocks: Block[];
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
