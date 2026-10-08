@@ -30,7 +30,8 @@ recent_tabs: Array<string>,
  * One tap on a row is `tab_selected` and that tab's page as it was left
  * (a live engine, no load). The section draws only while this has a
  * row; its header counts every open tab (`tabs`, what the switcher
- * holds — `explore.openTabs`), and its action opens the switcher.
+ * holds — the plural `explore.openTabs_*`, `{{count}}` = `tabs.len()`),
+ * and its action opens the switcher.
  */
 resumable: Array<ExploreTab>, 
 /**
