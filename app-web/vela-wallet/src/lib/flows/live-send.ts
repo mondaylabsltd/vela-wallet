@@ -19,6 +19,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
+import type { SendFeeCoin } from '$lib/core/generated/SendFeeCoin';
 import type { SendPayee } from '$lib/core/generated/SendPayee';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
@@ -38,14 +39,7 @@ import {
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
-import {
-	feeAmountText,
-	feeLine,
-	feeLineParts,
-	feeOptionPriceUsd,
-	feeParts,
-	feeSymbol
-} from './fee-line';
+import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
 import { speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
@@ -267,6 +261,26 @@ function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	return feeLine(parts, feeUnitPriceUsd(parts.contract, fee.chain_id, inputs), inputs.currency);
 }
 
+/**
+ * The fee row's coin mark: the core's `SendView.fee_coin`, in every state.
+ *
+ * With no estimate in hand — a quote out, a quote that failed, a speed being
+ * measured — each shell used to pick the row's coin its own way (this one: the
+ * estimate, else the option in force, else the estimate in hand, else the
+ * chain's own coin; Android an empty disc; the desktop the chain's coin), so
+ * one state was drawn three ways and a failed quote kept the wrong picture on
+ * screen. The core now names it: the estimate in hand, else the coin in force
+ * (the fee card's, mirrored by `fee_token_changed`, else the pick on this
+ * form), else the chain's own — on the form's chain, never chain 0. `null`
+ * only while no chain is known: the empty disc, claiming no coin.
+ */
+function feeRowMark(coin: SendFeeCoin | null, template: FeeRowModel): TokenMarkModel {
+	if (coin === null) {
+		return { ticker: '', badgeColor: template.mark.badgeColor, badgeHidden: true };
+	}
+	return tokenMarkFor(coin.chain_id, coin.symbol, coin.contract);
+}
+
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
 	const inHand = send.fee ?? fee.fee;
@@ -296,18 +310,12 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 					inputs.currency
 				)
 			: null;
-	const chainId = send.selected_token?.chain_id ?? quote?.chain_id ?? 1;
-	const symbol = quote ? feeSymbol(quote, fee.options) : nativeSymbol(chainId);
 	return {
 		// A figure the relay did not quote — a local fallback from defaults —
 		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
 		// the core carries the fact as `quoted`; the label is where it shows.
 		label: quote && !quote.quoted ? m['send.feeTokenEstimate'] : m['componentsUi.gas.networkFee'],
-		mark: tokenMarkFor(
-			chainId,
-			symbol,
-			quote?.fee_asset.type === 'erc20' ? quote.fee_asset.token : null
-		),
+		mark: feeRowMark(send.fee_coin, template),
 		// A figure in hand stays on screen while a re-quote is out (spec 028
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for

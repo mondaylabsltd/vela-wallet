@@ -235,7 +235,7 @@ object ExploreLive {
             groupManageSheet = ExploreSheet.GroupManage(
                 title = strings.t("explore.manageGroups"),
                 rows = listOf(
-                    GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", mapOf("n" to view.favorites.size.toString())), hidden = view.favorites_hidden),
+                    GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", view.favorites.size), hidden = view.favorites_hidden),
                     GroupManageRow("recent", strings.t("explore.recent"), meta = null, hidden = view.recent_hidden),
                 ),
             ),

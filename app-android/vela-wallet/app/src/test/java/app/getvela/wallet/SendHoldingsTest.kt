@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -12,6 +13,7 @@ import app.getvela.wallet.feature.send.core.SendView
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.HoldingsFeed
@@ -111,6 +113,45 @@ class SendHoldingsTest {
     private fun SendController.awaitView(what: String, test: (SendView) -> Boolean): SendView = runBlocking {
         runCatching { withTimeout(10_000) { send.first(test) } }
             .getOrElse { throw AssertionError("$what — last view: ${send.value}", it) }
+    }
+
+    /**
+     * Each coin goes to the send machine wearing its logo candidates — the
+     * core's rule on the person's endpoint — and the core copies them into
+     * the records and the receipt it writes, so a send made on this phone
+     * still wears its coins' logos when any shell opens it. They were empty.
+     * Drawing a holding is unchanged: the rule puts its own URLs after these
+     * and drops the repeats.
+     */
+    @Test
+    fun `every holding carries its logo candidates into the send machine`() {
+        Marks.base = "https://data.example/"
+        try {
+            val usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+            val tokens = SendExecutor.sendTokens(
+                BalanceView(
+                    address = ME,
+                    tokens = listOf(token("XDAI", 100, "1"), token("USDC", 100, "1").copy(decimals = 6, token_address = usdc)),
+                    unpriced_tokens = listOf(token("ETH", 8453, "1").copy(price_usd = null)),
+                ),
+            )
+            assertEquals(listOf("XDAI", "USDC", "ETH"), tokens.map { it.symbol })
+            assertEquals("xDAI wears Gnosis's logo", listOf("https://data.example/chainlogos/eip155-100.png"), tokens[0].logo_urls)
+            assertEquals(
+                "an ERC-20 its asset entry, checksummed then lowercase",
+                listOf(
+                    "https://data.example/assets/eip155-100/0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83/logo.png",
+                    "https://data.example/assets/eip155-100/$usdc/logo.png",
+                ),
+                tokens[1].logo_urls,
+            )
+            assertEquals("ETH on Base wears Ethereum's", listOf("https://data.example/chainlogos/eip155-1.png"), tokens[2].logo_urls)
+            for (t in tokens) {
+                assertEquals(t.symbol, WalletLive.mark(t.chain_id, t.symbol, t.token_address), WalletLive.mark(t.chain_id, t.symbol, t.token_address, t.logo_urls))
+            }
+        } finally {
+            Marks.base = ""
+        }
     }
 
     @Test

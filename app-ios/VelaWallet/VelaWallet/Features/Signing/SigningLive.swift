@@ -62,6 +62,9 @@ enum SigningLive {
         /// The clock the landing's pace is read at (spec 099 R6); the screen
         /// counts the seconds itself once a countdown runs.
         var nowMs: Double = Date().timeIntervalSince1970 * 1000
+        /// The wallet's networks, the person's own included — what names the
+        /// native coin a fee figure is in.
+        var networks: WalletNetworks = .builtin
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -331,7 +334,8 @@ enum SigningLive {
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
         if !isOffChain(clear) {
             model.feeSpeed = speed.map {
-                SendLive.speedModel($0, view: nil, display: context.display, loc: loc)
+                SendLive.speedModel($0, view: nil, display: context.display, loc: loc,
+                                    networks: context.networks)
             }
         }
         if !refused {
@@ -860,7 +864,9 @@ enum SigningLive {
                 resultBlocks($0, native: clear.nativeValue, context: context)
             } ?? []
         case .ethSign, .messageSign:
-            return clear.message.map { messageBlocks($0, loc: loc, origin: context.origin) } ?? []
+            return clear.message.map {
+                messageBlocks($0, loc: loc, origin: context.origin, networks: context.networks)
+            } ?? []
         case .blindTypedData:
             guard let typed = clear.blindTyped else { return [] }
             var blocks: [SigningBlock] = [
@@ -1077,7 +1083,7 @@ enum SigningLive {
     }
 
     private static func messageBlocks(
-        _ message: ClearMessageViewWire, loc: Loc, origin: String?
+        _ message: ClearMessageViewWire, loc: Loc, origin: String?, networks: WalletNetworks
     ) -> [SigningBlock] {
         let signingIn = message.siwe != nil
         let danger = message.dangerClass == .ethSign || message.dangerClass == .siwePhish
@@ -1116,7 +1122,8 @@ enum SigningLive {
             if let chainId = siwe.chainId {
                 rows.append(SigningRow(
                     label: s(loc, "labelChain"),
-                    value: ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+                    // From the wallet's list, the person's own included.
+                    value: networks.meta(chainId)?.displayName ?? String(chainId)
                 ))
             }
             if let nonce = siwe.nonce, !nonce.isEmpty {
@@ -1304,7 +1311,8 @@ enum SigningLive {
             // in-band ERC-20 fee is its own amount under its own ticker, never
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
-            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display)
+            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
+                                           networks: context.networks)
         } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {

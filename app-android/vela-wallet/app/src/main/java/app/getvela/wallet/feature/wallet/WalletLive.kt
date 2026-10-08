@@ -486,6 +486,7 @@ object WalletLive {
                 strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),
+            idleLabel = strings.t(I18nKeys.Wallet.REFRESH_BALANCE),
             refreshing = view.refreshing,
         )
 

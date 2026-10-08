@@ -284,10 +284,11 @@ final class SettingsAuditDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    /// No `VELA_ACCOUNT` here: this suite runs on the owner's phone, and the
+    /// seed replaces the account list (`DeviceSafety`).
     private func launch(
         page: String = "settings-live",
-        theme: String? = "dark",
-        account: String? = nil
+        theme: String? = "dark"
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-vela.parallelSpace", "0"]
@@ -296,7 +297,6 @@ final class SettingsAuditDeviceTests: XCTestCase {
         // and `VELA_LANG` deliberately outranks a stored choice (058).
         app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
         if let theme { app.launchEnvironment["VELA_THEME"] = theme }
-        if let account { app.launchEnvironment["VELA_ACCOUNT"] = account }
         app.launch()
         return app
     }

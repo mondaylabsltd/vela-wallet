@@ -80,6 +80,154 @@ pub fn confirm_enabled(
     confirm_state(sign, guard, clear, fee, speed_tier).enabled
 }
 
+/// What the signing column is about: the request, the core's refusal of it
+/// (spec 081), or the gas account it cannot pay from — the in-sheet funding
+/// swap, which replaces the request rather than sitting under it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnKind {
+    Request,
+    Refused,
+    Funding,
+}
+
+impl ColumnKind {
+    /// Read from the core's sheet: the funding swap first — a request the
+    /// core refused never reaches a pre-check, so the two never meet.
+    #[must_use]
+    pub fn of(sign: &SignView) -> Self {
+        if sign.surface == vela_core::app::sign_request::SignSurface::Funding {
+            Self::Funding
+        } else if sign.blocked.is_some() {
+            Self::Refused
+        } else {
+            Self::Request
+        }
+    }
+
+    /// What a tap on the column's armed button sends, when it is not the
+    /// approval: the top-up's "check again" asks the core to look at the gas
+    /// account again, and the request resumes on the opts it saved. `None` is
+    /// the approval, which the host builds from its own machines' reads.
+    #[must_use]
+    pub fn tap_event(self) -> Option<vela_core::app::sign_request::Event> {
+        match self {
+            Self::Funding => Some(vela_core::app::sign_request::Event::FundingCompleteTapped),
+            Self::Request | Self::Refused => None,
+        }
+    }
+}
+
+/// The bottom of the column: the fee card, the button's words, whether it is
+/// armed, and the core's note under a shut one.
+pub struct ColumnConfirm {
+    pub fee: FeeModel,
+    pub label: SharedString,
+    pub enabled: bool,
+    pub note: Option<SharedString>,
+}
+
+/// The column's confirm, by what the column is about. Only the request's
+/// own (`request`, called for it alone) reads the three-machine gate:
+///
+/// - **the top-up** has one button, "check again"
+///   (`treasuryBootstrap.retryBtn`), armed on its own terms — it is not a
+///   signature but "I have sent it, look again", and the only way forward
+///   from a top-up. The core's signing gate is shut there by design
+///   (`ConfirmBlock::Funding`), so taking it would draw the request's verb
+///   on a button that answers to nothing. No fee card: the request's fee is
+///   not what the person is being asked about;
+/// - **a refusal** offers no confirm at all — absent, not disabled, because
+///   the wallet never offered it.
+pub fn column_confirm(
+    kind: ColumnKind,
+    s: &SigningStrings,
+    request: impl FnOnce() -> ColumnConfirm,
+) -> ColumnConfirm {
+    match kind {
+        ColumnKind::Funding => ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: s.funding_check_now.clone(),
+            enabled: true,
+            note: None,
+        },
+        ColumnKind::Refused => ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: SharedString::default(),
+            enabled: false,
+            note: None,
+        },
+        ColumnKind::Request => request(),
+    }
+}
+
+/// The lines that come and go with a fee measurement, held for one request
+/// so the column never moves while one is out — on every refresh, speed
+/// switch and 30 s re-quote. The Android device showed its sheet jumping
+/// about 33 px each time, and the web 29. Here the column is top-anchored,
+/// so the lines moved what is below them: the core says "no coin can pay"
+/// only of a settled figure, so on each re-quote the shortfall under the fee
+/// row went (or turned into "Insufficient ETH", or into nothing once a
+/// refresh dropped its readings) and the signer row and the confirm rode up
+/// under the pointer, then back down; and the confirm's note — "Working out
+/// the network fee…" — came and went at the column's end, which moves the
+/// whole column when it is scrolled to its end. The web's rule, line for
+/// line (its `FeeRow` and `SigningBody`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HeldLines {
+    /// The fee row's warning the settled sheet last drew.
+    warning: Option<SharedString>,
+    /// The confirm's note as last said.
+    note: Option<SharedString>,
+}
+
+impl HeldLines {
+    /// The fee row's warning to draw, and whether it is held — drawn
+    /// invisibly, keeping its line's height — rather than said. While the
+    /// fee is measured again the verdict is about the last quote, so it is
+    /// not said: the line holds the last settled words, and nothing the busy
+    /// view falls to is said in its place. Settled, what is drawn is the
+    /// truth — a fee that lands with nothing to say lets the line go — and is
+    /// what is held next.
+    pub fn warning(
+        &mut self,
+        measuring: bool,
+        drawn: Option<SharedString>,
+    ) -> (Option<SharedString>, bool) {
+        if measuring {
+            (self.warning.clone(), self.warning.is_some())
+        } else {
+            self.warning.clone_from(&drawn);
+            (drawn, false)
+        }
+    }
+
+    /// The confirm's note line: the note said now, or — once one has been
+    /// said for this request — the last words, held invisibly while the
+    /// gate has nothing to say (`false`), so the next measurement's note
+    /// fills the line rather than growing the column.
+    pub fn note(&mut self, said: Option<SharedString>) -> Option<(SharedString, bool)> {
+        match said {
+            Some(note) => {
+                self.note = Some(note.clone());
+                Some((note, true))
+            }
+            None => self.note.clone().map(|note| (note, false)),
+        }
+    }
+}
+
+/// [`HeldLines::warning`] on the fee row, where it has one.
+pub fn hold_fee_warning(model: &mut FeeModel, held: &mut HeldLines, measuring: bool) {
+    if let FeeModel::OnChain {
+        warning,
+        warning_held,
+        ..
+    } = model
+    {
+        (*warning, *warning_held) = held.warning(measuring, warning.take());
+    }
+}
+
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681) — the
 /// core's rule.
 #[must_use]
@@ -1813,6 +1961,7 @@ pub fn fee_model(
             .or(refused)
             .or_else(|| spent_fee_coin_warning(fee, s))
             .or(reason),
+        warning_held: false,
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -3563,6 +3712,145 @@ mod tests {
         );
     }
 
+    /// The top-up's "check again" is a live button that checks again. It was
+    /// drawn armed and answered to nothing: the request's confirm read ran
+    /// after the top-up's and put back the request's verb, its fee card, and
+    /// the core's signing gate — which is shut in Funding by design
+    /// (`ConfirmBlock::Funding`), so no action was ever passed.
+    #[test]
+    fn the_top_up_button_says_check_again_and_sends_it() {
+        use vela_core::app::sign_request::{
+            Event as SignEvent, SignAccountRef, SignApproveOpts, SignFundingNeeded, SignOperation,
+            SignShellResult, SignSponsorship,
+        };
+        const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let s = strings();
+
+        // A live request, approved, on a chain whose gas account is short and
+        // whose silent sponsorship was turned down.
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new();
+        host.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        host.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: ME.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        host.dispatch(SignEvent::RequestArrived {
+            id: "rid-top-up".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json:
+                r#"[{"to":"0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83","data":"0xa9059cbb"}]"#
+                    .to_owned(),
+            origin: "https://app.example".to_owned(),
+            transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: Some(ME.to_owned()),
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 1_000.0,
+            first_party: false,
+        });
+        let ops = host.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        let precheck = ops
+            .iter()
+            .find(|op| matches!(op.operation, SignOperation::CheckBundlerFunding { .. }))
+            .map(|op| op.id)
+            .unwrap_or_else(|| unreachable!("an approval asks about the gas account first"));
+        let ops = host.resolve(
+            precheck,
+            SignShellResult::PreCheck {
+                funding: Some(SignFundingNeeded {
+                    deposit_address: "0xdep0517".to_owned(),
+                    safe_address: ME.to_owned(),
+                    chain_id: 100,
+                    native_symbol: "xDAI".to_owned(),
+                    threshold_wei: "1000000000000000000".to_owned(),
+                    recommended_wei: "1100000000000000000".to_owned(),
+                    current_balance_wei: "0".to_owned(),
+                }),
+            },
+        );
+        let sponsor = ops
+            .iter()
+            .find(|op| matches!(op.operation, SignOperation::AttemptSponsorship { .. }))
+            .map(|op| op.id)
+            .unwrap_or_else(|| unreachable!("a short account asks the treasury first"));
+        let _ = host.resolve(
+            sponsor,
+            SignShellResult::Sponsorship {
+                outcome: SignSponsorship::Denied { reason: None },
+            },
+        );
+        let view = host.view();
+        assert_eq!(
+            view.surface,
+            SignSurface::Funding,
+            "the sheet swapped to the top-up"
+        );
+        let gate = confirm_state(
+            &view,
+            &crate::core_host::CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new()
+                .view(),
+            &pristine(),
+            &crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view(),
+            None,
+        );
+        assert!(
+            !gate.enabled,
+            "the signing gate is shut in a top-up — which is why it must not be read there"
+        );
+
+        let kind = ColumnKind::of(&view);
+        assert_eq!(kind, ColumnKind::Funding);
+        // What the request's own read would have said: its verb, its fee, the
+        // shut gate. None of it may reach the top-up.
+        let drawn = column_confirm(kind, &s, || ColumnConfirm {
+            fee: FeeModel::OffChain("request fee".into()),
+            label: "Confirm send".into(),
+            enabled: gate.enabled,
+            note: Some("request note".into()),
+        });
+        assert_eq!(
+            drawn.label, s.funding_check_now,
+            "treasuryBootstrap.retryBtn"
+        );
+        assert!(drawn.enabled, "armed, so the button carries its action");
+        assert!(
+            matches!(drawn.fee, FeeModel::Hidden),
+            "the request's fee card is not what a top-up asks about"
+        );
+        assert!(drawn.note.is_none());
+        assert!(
+            matches!(kind.tap_event(), Some(SignEvent::FundingCompleteTapped)),
+            "a tap asks the core to look again"
+        );
+
+        // The request itself still reads its own gate, and a refusal offers
+        // no confirm at all.
+        let request = column_confirm(ColumnKind::Request, &s, || ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: "Confirm send".into(),
+            enabled: false,
+            note: None,
+        });
+        assert_eq!(request.label, SharedString::from("Confirm send"));
+        assert!(!request.enabled);
+        assert!(ColumnKind::Request.tap_event().is_none(), "the approval");
+        let refused = column_confirm(ColumnKind::Refused, &s, || {
+            unreachable!("a refusal never reads the request's confirm")
+        });
+        assert!(refused.label.is_empty() && !refused.enabled);
+    }
+
     /// The refusal that used to happen in silence.
     ///
     /// `enforce_no_unlimited` fails CLOSED at the submit chokepoint, so an
@@ -4323,6 +4611,107 @@ mod fee_tests {
                 "the request's chain is the badge"
             );
         });
+    }
+
+    /// Nothing moves while a figure is measured (the Android device's jump
+    /// on every refresh, speed switch and 30 s re-quote; the web's rule).
+    /// The core says "no coin can pay" only of a settled figure, so the line
+    /// went with every re-quote and the signer row and the confirm rode up
+    /// under it. Held, it keeps its line through the measurement — its last
+    /// words, drawn invisibly, since the verdict is about the last quote —
+    /// and a fee that lands with nothing to say takes it away.
+    #[test]
+    fn the_shortfall_and_the_note_hold_their_lines_while_a_figure_is_measured() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| {
+            fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            )
+        };
+        let line = |model: &FeeModel| match model {
+            FeeModel::OnChain {
+                warning,
+                warning_held,
+                ..
+            } => (warning.clone(), *warning_held),
+            _ => unreachable!("an on-chain row"),
+        };
+        let no_coin = Some(s.fee_no_coin_pays.clone());
+        let mut settled = quoted(vec![option("ETH", None, true, true)], false);
+        settled.no_coin_pays = true;
+        // What the core says while a re-quote is out: busy, and no verdict —
+        // the row falls to another line ("Insufficient ETH")…
+        let mut measuring = settled.clone();
+        measuring.busy = true;
+        measuring.no_coin_pays = false;
+        assert_ne!(
+            line(&row(&measuring)).0,
+            no_coin,
+            "the busy view's line is not the settled one"
+        );
+        // …or, a refresh that dropped its readings or a speed not yet
+        // priced, to none at all.
+        let mut unpriced = measuring.clone();
+        unpriced.fee = None;
+        assert_eq!(line(&row(&unpriced)).0, None);
+
+        let mut held = HeldLines::default();
+        // The first measurement has nothing to hold, and says nothing.
+        let mut drawn = row(&measuring);
+        hold_fee_warning(&mut drawn, &mut held, true);
+        assert_eq!(line(&drawn), (None, false));
+        let mut drawn = row(&settled);
+        hold_fee_warning(&mut drawn, &mut held, false);
+        assert_eq!(line(&drawn), (no_coin.clone(), false), "said");
+        for during in [&measuring, &unpriced, &measuring] {
+            let mut drawn = row(during);
+            hold_fee_warning(&mut drawn, &mut held, true);
+            assert_eq!(
+                line(&drawn),
+                (no_coin.clone(), true),
+                "the settled words keep the line, held and not said"
+            );
+            let mut drawn = row(&settled);
+            hold_fee_warning(&mut drawn, &mut held, false);
+            assert_eq!(line(&drawn), (no_coin.clone(), false));
+        }
+        // The fee lands and the coin can pay: the line goes, for real…
+        let paid = quoted(vec![option("ETH", None, false, true)], true);
+        let mut drawn = row(&paid);
+        hold_fee_warning(&mut drawn, &mut held, false);
+        assert_eq!(line(&drawn), (None, false));
+        // …and the next measurement has nothing to hold.
+        let mut drawn = row(&measuring);
+        hold_fee_warning(&mut drawn, &mut held, true);
+        assert_eq!(line(&drawn), (None, false), "nothing to hold once it went");
+
+        // The confirm's note: no line until one has been said; then its
+        // last words keep the line, invisibly, while the gate is open.
+        let measuring_note = SharedString::from("Working out the network fee…");
+        let mut held = HeldLines::default();
+        assert_eq!(held.note(None), None, "a sheet that never had a note");
+        assert_eq!(
+            held.note(Some(measuring_note.clone())),
+            Some((measuring_note.clone(), true))
+        );
+        assert_eq!(
+            held.note(None),
+            Some((measuring_note.clone(), false)),
+            "landed: the line stays, its words held"
+        );
+        assert_eq!(
+            held.note(Some(measuring_note.clone())),
+            Some((measuring_note, true))
+        );
     }
 
     /// Issue #408, as reported: 0 ETH and 0.754189 USDT against ~0.001334 ETH

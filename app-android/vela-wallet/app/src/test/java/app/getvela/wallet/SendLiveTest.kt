@@ -22,6 +22,7 @@ import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeOptionView
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.SendFeeCoin
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
 import app.getvela.wallet.feature.send.core.SendReceiptView
 import app.getvela.wallet.feature.send.core.SendStage
@@ -134,6 +135,104 @@ class SendLiveTest {
         // ×2 on 0.0546 USD = 0.1092, written with the preset's own two places,
         // rounded half up like every money figure (spec 078 round 2).
         assertEquals("0.000091 BNB · ≈€0.11", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+    }
+
+    /**
+     * The fee row's coin is the one that will pay, also for the moment a newly
+     * picked speed is measured: the coin does not change with the speed. The
+     * row took its coin from the speed's own estimate — none yet — and drew
+     * no coin at all for that moment (the web drew the native coin's). The
+     * figure still says "estimating" (issue 681).
+     */
+    @Test
+    fun `the fee row keeps the paying coin while a new speed is measured`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+            val usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+            val inUsdc = fee().copy(fee_asset = FeeAssetView.Erc20(token = usdc, decimals = 6, amount = "10000", symbol = "USDC"))
+            // The core names the estimate in hand's coin, whichever speed is shown.
+            val view = SendView(
+                stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient, amount = "0.1", fee = inUsdc,
+                fee_coin = SendFeeCoin(symbol = "USDC", contract = usdc, chain_id = 100),
+            )
+            val usdcMark = WalletLive.mark(100, "USDC", usdc)
+            assertTrue(usdcMark.logoUrls.first().startsWith("https://data.example/assets/eip155-100/"))
+
+            fun row(tier: FeeTier) = SendLive.form(
+                drawn.model, view, FeeView(), ctx(),
+                SendLive.SpeedInputs(app.getvela.wallet.feature.send.core.FeeSpeedView(tier = tier, picked = true)) { null },
+            ).fee
+
+            // Fast is the estimate's own speed; Slow was just picked and is measuring.
+            val own = row(FeeTier.Fast)
+            assertTrue(own.value, own.value.endsWith(" USDC"))
+            assertEquals(usdcMark, own.mark)
+            val measuring = row(FeeTier.Slow)
+            assertEquals(strings.t(I18nKeys.Flows.FEE_ESTIMATING), measuring.value)
+            assertEquals("the coin that pays, not none and not the chain's own", usdcMark, measuring.mark)
+
+            // No chain known (the core's `null`): the empty disc, claiming no coin.
+            val none = SendLive.form(drawn.model, view.copy(fee = null, fee_coin = null), FeeView(), ctx()).fee
+            assertEquals("", none.mark.ticker)
+            assertTrue(none.mark.logoUrls.isEmpty())
+            assertTrue(none.mark.badgeHidden)
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
+    private val bnb = SendToken(network = "chain-56", chain_id = 56, symbol = "BNB", balance = "0.01", decimals = 18, token_address = null, price_usd = 600.0)
+    private val bscUsdt = "0x55d398326f99059fF775485246999027B3197955"
+    private val usdt = SendToken(network = "chain-56", chain_id = 56, symbol = "USDT", balance = "50", decimals = 18, token_address = bscUsdt, price_usd = 1.0)
+
+    /**
+     * C10: with no estimate in hand the row still wears ONE coin, the core's
+     * (`SendView.fee_coin`), through the core's token mark. A quote that
+     * failed on BNB Chain, nobody having chosen, is BNB — not the empty disc
+     * this row drew, which the other three shells each replaced with a coin
+     * of their own choosing.
+     */
+    @Test
+    fun `a failed quote on BNB Chain wears the BNB mark, not an empty disc`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+            val view = SendView(
+                stage = SendStage.EnterDetails, selected_token = bnb, tokens = listOf(bnb, usdt), recipient = recipient, amount = "0.001",
+                fee = null, fee_coin = SendFeeCoin(symbol = "BNB", contract = null, chain_id = 56),
+            )
+            val row = SendLive.form(drawn.model, view, FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable), ctx()).fee
+            assertEquals("the quote failed: no figure", "—", row.value)
+            val bnbMark = WalletLive.mark(56, "BNB", null)
+            assertEquals(bnbMark, row.mark)
+            assertEquals("BNB", row.mark.ticker)
+            assertTrue("BNB Chain's own coin wears a logo", row.mark.logoUrls.isNotEmpty())
+            assertTrue("the chain's own coin on its own chain wears no badge", row.mark.badgeHidden)
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
+    /** C10: a coin chosen before any estimate of it names the row at once — the USDT mark, not BNB's and not a blank. */
+    @Test
+    fun `USDT chosen with no estimate wears the USDT mark`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+            val view = SendView(
+                stage = SendStage.EnterDetails, selected_token = bnb, tokens = listOf(bnb, usdt), recipient = recipient, amount = "0.001",
+                fee = null, fee_busy = true, gas_fee_token = bscUsdt, fee_coin = SendFeeCoin(symbol = "USDT", contract = bscUsdt, chain_id = 56),
+            )
+            val row = SendLive.form(drawn.model, view, FeeView(busy = true, fee_token = bscUsdt), ctx()).fee
+            assertEquals(strings.t(I18nKeys.Flows.FEE_ESTIMATING), row.value)
+            val usdtMark = WalletLive.mark(56, "USDT", bscUsdt)
+            assertEquals(usdtMark, row.mark)
+            assertTrue(row.mark.logoUrls.first(), row.mark.logoUrls.first().startsWith("https://data.example/assets/eip155-56/"))
+            assertFalse("a token on its chain wears the chain's badge", row.mark.badgeHidden)
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
     }
 
     /**

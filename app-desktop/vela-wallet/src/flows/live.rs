@@ -1594,34 +1594,33 @@ pub(crate) fn fee_line(
     format!("{coin} · ≈{}", currency.text(usd, locale))
 }
 
-/// The coin the fee row names, for its mark: its symbol, its contract
-/// (`None` for the chain's own coin) and the chain it is paid on.
-///
-/// Symbol and contract come from the SAME estimate, the one in hand. The
-/// contract used to come from the estimate of the speed showing, which is
-/// none while a newly picked speed is measured — so for that moment a USDC fee
-/// was "USDC" with no contract, and the native coin's rule drew the chain's
-/// logo in its place. The coin does not change with the speed.
-fn fee_coin(send: &SendView, fee: &FeeView) -> (String, Option<String>, u32) {
-    let quote = send.fee.as_ref().or(fee.fee.as_ref());
-    let chain_id = send
-        .selected_token
-        .as_ref()
-        .map(|token| token.chain_id)
-        .or_else(|| quote.map(|quote| quote.chain_id))
-        .unwrap_or(1);
-    match quote.map(|quote| &quote.fee_asset) {
-        Some(FeeAssetView::Erc20 { symbol, token, .. }) => (
-            symbol.clone().unwrap_or_else(|| native_symbol(chain_id)),
-            Some(token.clone()),
-            chain_id,
-        ),
-        _ => (native_symbol(chain_id), None, chain_id),
+/// The fee row's mark: the coin the CORE names (`SendView.fee_coin` — the
+/// estimate in hand, else the coin in force, else the chain's own coin; one
+/// answer on all four shells, figure or none beside it) through the core's
+/// token mark. The rule used to live here, and on a failed quote it drew the
+/// chain's coin where the web drew the chosen one and Android an empty disc.
+/// `None` only while no chain is known: the empty disc — never chain 1's coin.
+fn fee_mark(send: &SendView) -> TokenMark {
+    match &send.fee_coin {
+        Some(coin) => TokenMark {
+            ticker: coin.symbol.clone().into(),
+            badge: tint(coin.chain_id),
+            logos: crate::marks::token_logos(
+                coin.chain_id,
+                &coin.symbol,
+                coin.contract.as_deref(),
+                &[],
+            ),
+        },
+        None => TokenMark {
+            ticker: SharedString::default(),
+            badge: tint(0),
+            logos: crate::marks::Logos::default(),
+        },
     }
 }
 
 fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
-    let (symbol, contract, chain_id) = fee_coin(i.send, i.fee);
     let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
     // path where a pick re-measures, the estimate in hand still belongs to the
@@ -1640,11 +1639,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         } else {
             i.s.network_fee.clone()
         },
-        mark: TokenMark {
-            ticker: symbol.clone().into(),
-            badge: tint(chain_id),
-            logos: crate::marks::token_logos(chain_id, &symbol, contract.as_deref(), &[]),
-        },
+        mark: fee_mark(i.send),
         value: if measuring || of_another_tier {
             i.s.fee_pending.clone()
         } else {
@@ -7688,11 +7683,84 @@ mod speed_tests {
         );
     }
 
+    /// The real send machine holding `tokens` on `chain` (id, network,
+    /// native symbol), with `pick` selected. Its warm quote is left out, so
+    /// no estimate is in hand — the frame the fee row's coin used to be each
+    /// shell's own guess in.
+    fn form_holding(
+        chain: (u32, &str, &str),
+        tokens: &[SendToken],
+        pick: &SendToken,
+    ) -> CoreHost<SendMachine> {
+        use vela_core::app::send::{
+            Event as SendEvent, SendAccountRef, SendChainInfo, SendDisplayContext, SendOpenParams,
+            SendOperation, SendShellResult,
+        };
+        let drive = |host: &mut CoreHost<SendMachine>, event: SendEvent| {
+            let mut pending = host.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(tokens.to_vec()),
+                        chains: vec![SendChainInfo {
+                            chain_id: chain.0,
+                            network: chain.1.to_owned(),
+                            native_symbol: chain.2.to_owned(),
+                        }],
+                    },
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+        };
+        let mut host = CoreHost::<SendMachine>::new();
+        drive(
+            &mut host,
+            SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            },
+        );
+        drive(
+            &mut host,
+            SendEvent::SelectToken {
+                token_id: pick.id(),
+            },
+        );
+        host
+    }
+
+    fn held(chain_id: u32, network: &str, symbol: &str, contract: Option<&str>) -> SendToken {
+        SendToken {
+            network: network.to_owned(),
+            chain_id,
+            symbol: symbol.to_owned(),
+            balance: "5".to_owned(),
+            decimals: 18,
+            token_address: contract.map(str::to_owned),
+            price_usd: Some(1.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    }
+
     /// A USDC fee keeps USDC's own logo while a newly picked speed is
     /// measured. The coin does not change with the speed; the row used to
     /// take the coin's NAME from the estimate in hand and its CONTRACT from
     /// the speed's own estimate — none, for that moment — so "USDC" fell to
-    /// the native coin's rule and wore the chain's logo.
+    /// the native coin's rule and wore the chain's logo. The coin is the
+    /// core's now (`SendView.fee_coin`); this pins that the row wears it.
     #[test]
     fn the_fee_coin_keeps_its_logo_while_another_speed_is_measured() {
         crate::executor::storage::tests::with_temp_state("flows-fee-coin-mark", || {
@@ -7705,8 +7773,16 @@ mod speed_tests {
                 amount: "1".to_owned(),
                 symbol: Some("USDC".to_owned()),
             };
-            let mut send = CoreHost::<SendMachine>::new().view();
-            send.fee = Some(paid_in_usdc);
+            let xdai = held(100, "gnosis", "xDAI", None);
+            let mut host = form_holding(
+                (100, "gnosis", "xDAI"),
+                &[xdai.clone(), held(100, "gnosis", "USDC", Some(usdc))],
+                &xdai,
+            );
+            host.dispatch(vela_core::app::send::Event::FeeUpdated {
+                estimate: paid_in_usdc,
+            });
+            let send = host.view();
             let fee = CoreHost::<FeePolicy>::new().view();
             let usdc_logos = crate::marks::token_logos(100, "USDC", Some(usdc), &[]);
             assert!(usdc_logos.logo_urls[0].contains("/assets/eip155-100/"));
@@ -7717,6 +7793,54 @@ mod speed_tests {
                 assert_eq!(row.mark.ticker.as_ref(), "USDC");
                 assert_eq!(row.mark.logos, usdc_logos, "{tier:?}");
             }
+        });
+    }
+
+    /// With no estimate in hand — a quote out, or one that failed — the row
+    /// wears the coin the core names, the same picture on all four shells:
+    /// the chain's own coin until a coin is in force, then that coin (the fee
+    /// card's, told by the bridge's `FeeTokenChanged`). On BNB Chain with
+    /// USDT in force the desktop drew BNB where the web drew USDT.
+    #[test]
+    fn with_no_estimate_the_fee_row_wears_the_coin_the_core_names() {
+        crate::executor::storage::tests::with_temp_state("flows-fee-coin-none", || {
+            let (s, wallet) = strings();
+            let usdt = "0x55d398326f99059ff775485246999027b3197955";
+            let bnb = held(56, "bsc", "BNB", None);
+            let mut host = form_holding(
+                (56, "bsc", "BNB"),
+                &[bnb.clone(), held(56, "bsc", "USDT", Some(usdt))],
+                &bnb,
+            );
+            let fee = CoreHost::<FeePolicy>::new().view();
+            let send = host.view();
+            assert!(send.fee.is_none(), "the warm quote is still out");
+            let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, None));
+            assert_eq!(row.mark.ticker.as_ref(), "BNB", "the chain's own coin");
+            assert_eq!(
+                row.mark.logos,
+                crate::marks::token_logos(56, "BNB", None, &[])
+            );
+
+            // The card took USDT up; its quote is not in.
+            host.dispatch(vela_core::app::send::Event::FeeTokenChanged {
+                fee_token: Some(usdt.to_owned()),
+            });
+            let send = host.view();
+            let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, None));
+            assert_eq!(row.mark.ticker.as_ref(), "USDT", "the coin in force");
+            assert_eq!(
+                row.mark.logos,
+                crate::marks::token_logos(56, "USDT", Some(usdt), &[])
+            );
+
+            // Nothing picked: no chain, so no coin — the empty disc, never
+            // chain 1's ETH.
+            let blank = CoreHost::<SendMachine>::new().view();
+            assert!(blank.fee_coin.is_none());
+            let row = send_fee_row(&inputs(&blank, &fee, &s, &wallet, None));
+            assert!(row.mark.ticker.is_empty());
+            assert_eq!(row.mark.logos, crate::marks::Logos::default());
         });
     }
 

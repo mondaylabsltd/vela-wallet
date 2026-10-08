@@ -33,6 +33,8 @@ final class ContactPickerAcceptanceTests: XCTestCase {
     ]
 
     override func setUpWithError() throws {
+        // Its account is a seeded VELA_ACCOUNT: never on somebody's phone.
+        try skipOnDeviceForSeededAccount()
         continueAfterFailure = false
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["VELA_LIVE_READS"] == "1",

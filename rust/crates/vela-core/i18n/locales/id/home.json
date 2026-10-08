@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "Lihat detail",
     "lastUpdated": "Diperbarui {{ago}}",
     "updating": "Memperbarui…",
+    "refreshBalance": "Segarkan saldo",
     "tabActivity": "Aktivitas",
     "tabAssets": "Aset",
     "tabConnections": "Koneksi",

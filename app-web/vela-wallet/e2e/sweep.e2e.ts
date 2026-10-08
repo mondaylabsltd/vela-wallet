@@ -202,4 +202,16 @@ test('two assets on one network go out as ONE operation carrying both', async ({
 	const callData = op.callData.toLowerCase();
 	expect(callData).toContain(USDC.slice(2));
 	expect(callData.split(RECIPIENT.slice(2)).length - 1).toBeGreaterThanOrEqual(2);
+
+	// 6. Its record, opened from Activity: how many coins left and each one —
+	//    never a lone "−" where one coin's figure would be, under "Sent ".
+	await page.getByRole('button', { name: en('send.txCloseBackground') }).click();
+	await page.getByText(en('history.labelSent'), { exact: true }).first().click();
+	const detail = page.getByRole('dialog');
+	await expect(
+		detail.getByText(en('componentsTx.receipt.assetsCount').replace('{{n}}', '2'))
+	).toBeVisible({ timeout: 30_000 });
+	await expect(detail.getByText('100 USDC', { exact: true })).toBeVisible();
+	await expect(detail.getByText('\u2212', { exact: true })).toHaveCount(0);
+	await page.screenshot({ path: test.info().outputPath('sweep-detail.png') });
 });

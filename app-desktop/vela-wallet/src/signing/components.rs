@@ -904,17 +904,24 @@ pub fn fee(
             value,
             selector,
             warning,
+            warning_held,
             tappable,
             refresh,
             refreshing,
             stale_note,
         } => {
             // Said under the row, in the error colour: why the confirm is shut.
+            // Held while the fee is measured again, the last words keep the
+            // line's height and are not said.
             let warning = warning.clone().map(|text| {
                 div()
                     .px(px(16.))
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.error_base)
+                    .text_color(if *warning_held {
+                        gpui::transparent_black()
+                    } else {
+                        theme.error_base
+                    })
                     .child(text)
             });
             let Some((title, options)) = selector else {
@@ -1197,19 +1204,16 @@ pub fn open_signer_button(
 
 /// The gas top-up's one action, "check again" (`treasuryBootstrap.retryBtn`):
 /// a plain button, armed on its own terms — it is not a signature, it is
-/// "I have sent it, look again", and the only way out of a top-up.
+/// "I have sent it, look again", and the only way forward from a top-up.
+/// Armed only when it has something to do: a button with no action is drawn
+/// shut, so it can never look live and answer to nothing.
 pub fn funding_check_button(
     theme: &Theme,
     label: SharedString,
     action: Option<crate::flows::panels::Click>,
 ) -> Div {
-    crate::flows::panels::cta_button(
-        "signing-funding-check",
-        theme,
-        label,
-        crate::flows::fixtures::CtaState::Enabled,
-        action,
-    )
+    let state = armed(action.is_some());
+    crate::flows::panels::cta_button("signing-funding-check", theme, label, state, action)
 }
 
 /// A confirm the core armed is enabled; one it shut is drawn shut.

@@ -624,8 +624,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   meta. `explore.manageGroups`, `siteCount`, `hide`, `show` and `edit`
 //   stay: that sheet still uses them. Contact groups are another feature and
 //   keep every key. 1785 leaves, 99 branches.
-if (PATHS.length !== 1884) fail(`expected 1884 paths (1785 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1785) fail(`expected 1785 leaf paths, got ${leafSet.size}`);
+// 1888 (review of #462/#465/#468, 2026-10-08): + `home.refreshBalance` —
+//   the refresh control's name before any balance read has settled, when it
+//   is the glyph alone and screen readers announced a bare "button" (or,
+//   on iOS, "Updating…" over a control at rest). `explore.siteCount` becomes
+//   `siteCount_{one,few,many,other}` with `{{count}}`, each locale its own
+//   CLDR categories — the Manage groups row read "1 sites". And
+//   `send.recipientPickAria` keeps its path but now names the contact pick
+//   alone: scanning has its own door on every shell (#468). 1789 leaves,
+//   99 branches.
+if (PATHS.length !== 1888) fail(`expected 1888 paths (1789 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1789) fail(`expected 1789 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

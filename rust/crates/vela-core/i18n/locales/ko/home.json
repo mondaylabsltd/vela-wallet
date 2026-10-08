@@ -16,6 +16,7 @@
     "balanceDetailViewHint": "자세히 보기",
     "lastUpdated": "업데이트: {{ago}}",
     "updating": "업데이트 중…",
+    "refreshBalance": "잔액 새로고침",
     "tabActivity": "활동",
     "tabAssets": "자산",
     "tabConnections": "연결",

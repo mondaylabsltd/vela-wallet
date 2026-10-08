@@ -157,6 +157,10 @@ pub enum FeeModel {
         /// spec 079, that the service could not be reached and the wallet
         /// will ask again by itself.
         warning: Option<SharedString>,
+        /// The warning is the last settled quote's, held while the fee is
+        /// measured again: its line keeps its height, drawn invisibly — the
+        /// verdict is about the last quote, so it is not said.
+        warning_held: bool,
         /// Spec 079: the send form's refresh control beside the row (its
         /// label is what a screen reader says), `None` in the drawings.
         refresh: Option<SharedString>,
@@ -351,6 +355,7 @@ fn base(
             value: "~0.0021 ETH ≈ $5.40".into(),
             selector: None,
             warning: None,
+            warning_held: false,
             tappable: true,
             refresh: None,
             refreshing: false,
@@ -1007,6 +1012,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         ],
                     )),
                     warning: None,
+                    warning_held: false,
                     refresh: None,
                     refreshing: false,
                     stale_note: None,

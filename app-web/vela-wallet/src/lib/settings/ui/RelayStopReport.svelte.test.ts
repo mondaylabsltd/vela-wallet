@@ -39,7 +39,9 @@ describe('a relay stop’s Report this', () => {
 		const onreport = vi.fn();
 		const screen = render(RelayerBody, { props: { panel: RELAYER, onreport } });
 		expect(screen.container.querySelector('a.report')).toBeNull();
-		const button = screen.container.querySelector<HTMLButtonElement>('button.report');
+		const button = screen.container.querySelector<HTMLButtonElement>(
+			'button[data-testid="relay-report"]'
+		);
 		expect(button?.textContent?.trim()).toBe('Report this');
 		button!.click();
 		expect(onreport).toHaveBeenCalledTimes(1);
@@ -49,7 +51,10 @@ describe('a relay stop’s Report this', () => {
 		const onreport = vi.fn();
 		const screen = render(RelayUnreachableBody, { props: { panel: UNREACHABLE, onreport } });
 		expect(screen.container.querySelector('a[href*="issues/new"]')).toBeNull();
-		screen.container.querySelector<HTMLButtonElement>('button.report')!.click();
+		// One hook for both stops, the phones' own (`relay-report`).
+		screen.container
+			.querySelector<HTMLButtonElement>('button[data-testid="relay-report"]')!
+			.click();
 		expect(onreport).toHaveBeenCalledTimes(1);
 	});
 

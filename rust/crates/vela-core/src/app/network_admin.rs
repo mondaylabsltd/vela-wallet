@@ -1973,7 +1973,12 @@ pub fn parse_chain_data(
         rpc_url: extract_rpc_url(&data.rpc),
         rpc_urls: extract_all_rpc_urls(&data.rpc),
         explorer_url: data.explorers.first().cloned().unwrap_or_default(),
-        logo_url: format!("{ethereum_data_url}/chainlogos/eip155-{requested_chain_id}.png"),
+        // The marks' one rule (`remote_mark::chain_logo_url`): the base trimmed
+        // of spaces and trailing slashes, a blank one the built-in endpoint.
+        // Formatted here it stored `…//chainlogos/…` for a base saved with a
+        // trailing slash, a URL no other network mark used.
+        logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, requested_chain_id)
+            .unwrap_or_default(),
         is_testnet: data.testnet,
     }
 }
@@ -2655,7 +2660,8 @@ fn site_chain_info(ask: &DappChainAsk, ethereum_data_url: &str) -> NetChainInfo 
         rpc_url: ask.rpc_urls.first().cloned().unwrap_or_default(),
         rpc_urls: ask.rpc_urls.clone(),
         explorer_url: ask.explorer_url.clone().unwrap_or_default(),
-        logo_url: format!("{ethereum_data_url}/chainlogos/eip155-{chain_id}.png"),
+        logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, chain_id)
+            .unwrap_or_default(),
         is_testnet: false,
     }
 }

@@ -21,6 +21,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -416,6 +417,10 @@ class WalletLiveTest {
         assertEquals(BalanceStateKind.Loading, first.state)
         assertNull(first.status)
         assertNull(first.refresh?.updated)
+        // The glyph alone still has a name, and it is not "Updating…": that
+        // would be read over a control at rest (C7).
+        assertEquals("Refresh balance", first.refresh?.idleLabel)
+        assertNotEquals(first.refresh?.updating, first.refresh?.idleLabel)
 
         // Hidden figures keep the control: it reads, it shows no number.
         val hidden = home(BalanceView(display_total_usd = 4.5, hidden = true, last_refreshed_at_ms = now.toDouble()), now = now).balance
@@ -423,9 +428,13 @@ class WalletLiveTest {
         assertEquals("Updated now", hidden.refresh?.updated)
     }
 
-    /** The label ages in the core's words: under 45 s is "now", then minutes, then hours. */
+    /**
+     * The label ages in the core's words: under 45 s is "now", then minutes,
+     * then hours, then the weekday under a week, then the date.
+     */
     @Test
     fun `the updated label ages in the cores relative words`() {
+        // A Friday, 08:00 UTC.
         val now = 1_800_000_000_000L
         fun label(agoMs: Long) = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - agoMs).toDouble()), strings, now).updated
         assertEquals("Updated now", label(0))
@@ -438,9 +447,11 @@ class WalletLiveTest {
         assertEquals("Updated 3h", label(3 * 3_600_000L + 10 * 60_000L))
         // A clock behind the settle (read before it landed) is "now", never negative.
         assertEquals("Updated now", label(-5_000))
-        // Past a day: the person's own date format.
-        val old = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - 3 * 86_400_000L).toDouble()), strings, now).updated
-        assertEquals("Updated " + Formats.current.date(now - 3 * 86_400_000L), old)
+        // Under a week, the weekday — the shell's old port drew a date here.
+        // Three days back is a Tuesday in every zone from UTC−8 to UTC+15.
+        assertEquals("Updated Tue", label(3 * 86_400_000L))
+        // Past a week, the date in the person's own preset.
+        assertEquals("Updated " + Formats.current.date(now - 30 * 86_400_000L), label(30 * 86_400_000L))
     }
 
     // -- the feed ------------------------------------------------------------

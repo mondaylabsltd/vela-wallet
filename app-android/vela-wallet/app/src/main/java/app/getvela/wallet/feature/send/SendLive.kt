@@ -62,6 +62,7 @@ import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.SendFeeCoin
 import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
 import app.getvela.wallet.feature.send.core.SendHoldReason
@@ -803,13 +804,16 @@ object SendLive {
         // tier change — and "measuring" is the honest thing to say.
         val ofAnotherTier = inHand != null && speed != null && offered(inHand.tier) != speed.view.tier
         val estimate = inHand.takeIf { !ofAnotherTier }
-        val (text, mark) = feeText(estimate, view, fee, ctx)
+        val text = feeText(estimate, view, fee, ctx).first
         val s = ctx.strings
         return fallback.copy(
-            // No figure yet, no coin: an empty neutral mark. The fixture's
-            // "ETH" stood in while Gnosis was measuring (design review, 078
-            // round 3) — a coin the fee may never be paid in.
-            mark = mark ?: fallback.mark.copy(ticker = "", logoUrls = emptyList(), badgeLogoUrl = null),
+            // The coin is the core's, in every state (SendView.fee_coin): the
+            // estimate in hand — the speed just left's while a newly picked
+            // one is measured, since the coin does not change with the speed
+            // — else the coin in force, else the chain's own. A quote out or
+            // a quote that failed used to draw an empty disc here, where the
+            // other shells each drew a coin of their own choosing.
+            mark = feeRowMark(view.fee_coin, fallback.mark),
             // A figure in hand stays on screen while a re-quote is out (spec
             // 028); only a figure of ANOTHER speed gives way to "measuring".
             value = when {
@@ -828,6 +832,15 @@ object SendLive {
             staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
         )
     }
+
+    /**
+     * The fee row's coin mark: the core's `SendView.fee_coin` through the
+     * core's token mark (`WalletLive.mark`). `null` only while no chain is
+     * known — then the empty disc, claiming no coin, as web and desktop draw it.
+     */
+    internal fun feeRowMark(coin: SendFeeCoin?, template: TokenMarkModel): TokenMarkModel =
+        coin?.let { WalletLive.mark(it.chain_id, it.symbol, it.contract) }
+            ?: template.copy(ticker = "", logoUrls = emptyList(), badgeLogoUrl = null, badgeHidden = true)
 
     /**
      * The speed control's inputs (spec 069): the `fee_speed` core's view, and

@@ -26,8 +26,15 @@ export interface WalletMessages {
 		/** Issue 462: what that control says while a read the person asked for is out. */
 		updating: string;
 		/**
-		 * The core's compact relative-time words (`format_relative_time`) —
-		 * "now", "{{n}}m", "{{n}}h" — filled against this device's clock.
+		 * Issue 462: the control's name before any read has settled, when it
+		 * draws the glyph alone — "Refresh balance", never "Updating…" for a
+		 * control at rest.
+		 */
+		refreshBalance: string;
+		/**
+		 * The core's compact relative-time words — "now", "{{n}}m", "{{n}}h",
+		 * `{{n}}` unfilled — which the page hands to the core's
+		 * `formatRelativeTime` with this device's clock.
 		 */
 		ago: { now: string; minutes: string; hours: string };
 	};
@@ -164,6 +171,7 @@ export const WALLET_KEYS = [
 	// Issue 462: the hero's refresh control, and the age it reads.
 	'home.lastUpdated',
 	'home.updating',
+	'home.refreshBalance',
 	'time.now',
 	'time.minutesShort',
 	'time.hoursShort',

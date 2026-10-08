@@ -44,7 +44,7 @@ tabs. What a page may ask, and what it is answered, is decided in ONE place.
 | The routing table | `dapp_rpc::classify` — the extension's `lib/protocol.js` `classifyMethod` is a mirror pinned by `src/lib/dapp/core-table.test.ts` |
 | Everything a page is answered | the `dapp_browser` machine; contract in `specs/070-dapp-browser-core/contracts/dapp-browser.md` |
 | Address-bar input | `dapp_rpc::browser_input` (a host → https, a loopback/LAN host → http, anything else → a DuckDuckGo search) |
-| Tabs, favourites, groups | `app::explore_sites` |
+| Tabs, favourites, which of the two home sections (Favorites, Recent dApps) show — no custom groups since #465 | `app::explore_sites` |
 | What Explore shows on entry; which tab an opened site goes into | `app::browser_tabs` — `explore_landing`, `open_target`, `lit_tab` (UniFFI `explore_landing`, `browser_open_target`, `browser_lit_tab`, `browser_waiting_tab`) |
 | Recents | `app::browser_history` |
 | What a signature does | `app::sign_request` + `clear_signing` + `approval_guard` (unchanged by 070) |

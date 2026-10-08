@@ -1676,9 +1676,6 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
 // Scheduler — one pass per clock reading
 // ---------------------------------------------------------------------------
 
-/// The unified cadence policy. Runs on every clock-bearing answer, mirroring
-/// the `waitForReceipt` loop body: attempt/complete a receipt poll, then the
-/// 12s status check, then classification when the window has elapsed.
 /// Is a receipt read (the relay's receipt, or the bundle tx's from the
 /// chain) due? `last` is when the previous one was ISSUED; `None` = never.
 /// [`RECEIPT_TICK_SLACK_MS`] absorbs a tick's jitter.
@@ -1686,6 +1683,9 @@ fn receipt_due(last: Option<f64>, now_ms: f64, interval: f64) -> bool {
     last.is_none_or(|last| now_ms - last >= interval - RECEIPT_TICK_SLACK_MS)
 }
 
+/// The unified cadence policy. Runs on every clock-bearing answer, mirroring
+/// the `waitForReceipt` loop body: attempt/complete a receipt poll, then the
+/// 12s status check, then classification when the window has elapsed.
 fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> {
     let attempt = model.attempt;
     let mut commands: Vec<Command<TrackEffect, Event>> = Vec::new();

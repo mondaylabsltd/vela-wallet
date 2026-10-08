@@ -71,6 +71,13 @@ data class BalanceRefreshModel(
     val updated: String?,
     /** "Updating…" — always resolved, so the control can reserve its width. */
     val updating: String,
+    /**
+     * "Refresh balance" (`home.refreshBalance`) — the control's accessible
+     * name while it is the glyph alone ([updated] `null`, not turning): with
+     * no words on screen TalkBack would say a bare "Button". The other two
+     * states are named by the words they show.
+     */
+    val idleLabel: String,
     /** The core's `refreshing`; the screen holds the spin for at least [RefreshSpin.MIN_SPIN_MS]. */
     val refreshing: Boolean = false,
 )

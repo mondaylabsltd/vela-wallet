@@ -303,6 +303,7 @@ export * from './SendDisplayContext';
 export * from './SendDuplicateRowView';
 export * from './SendEstimateFailure';
 export * from './SendEvent';
+export * from './SendFeeCoin';
 export * from './SendFeeIssueView';
 export * from './SendFeeOutcome';
 export * from './SendHapticKind';

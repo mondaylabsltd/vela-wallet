@@ -1286,7 +1286,8 @@ internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (()
     val angle by turn.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 1200, easing = LinearEasing)),
+        // The balance refresh's pace (motion slow × 2), as web and iOS turn it.
+        animationSpec = infiniteRepeatable(tween(durationMillis = VelaMotion.durationSlow * 2, easing = LinearEasing)),
         label = "fee-refresh-angle",
     )
     Box(

@@ -196,10 +196,12 @@ struct FactRowView: View {
         switch fact.lead {
         case .dot(let color):
             Circle().fill(color).frame(width: WalletGeometry.badge, height: WalletGeometry.badge)
+        // One size for both (`factMark`): a network's logo beside the From and
+        // To identicons was 26 against their 18 — two sizes on one page.
         case .token(let mark):
-            InlineTokenMark(mark: mark)
+            InlineTokenMark(mark: mark, size: WalletFlowGeometry.factMark)
         case .identicon(let seed):
-            IdenticonAvatar(seed: seed, size: LucideIconSize.flowRowAction)
+            IdenticonAvatar(seed: seed, size: WalletFlowGeometry.factMark)
         case nil:
             EmptyView()
         }
@@ -227,14 +229,17 @@ struct InlineTokenMark: View {
     /// A hairline round the drawn disc, for a mark on a grey (`bg.sunken`)
     /// card, where the disc is the card's own colour.
     var ring = false
+    /// The circle's diameter: the in-line 26, or a fact row's 20
+    /// (`WalletFlowGeometry.factMark`). The glyph scales with it.
+    var size: CGFloat = WalletFlowGeometry.inlineMark
 
     var body: some View {
-        RemoteLogoView(urls: mark.logoURLs, size: WalletFlowGeometry.inlineMark) {
+        RemoteLogoView(urls: mark.logoURLs, size: size) {
             Circle()
                 .fill(theme.bgSunken)
                 .overlay {
                     Text(verbatim: mark.glyph)
-                        .typeRole(Typography.tab)
+                        .typeRole(Typography.tab.scaled(size / WalletFlowGeometry.inlineMark))
                         .foregroundStyle(theme.fgMuted)
                         .minimumScaleFactor(WalletGeometry.heroMinScale)
                         .lineLimit(1)

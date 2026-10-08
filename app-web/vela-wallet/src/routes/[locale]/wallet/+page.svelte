@@ -119,7 +119,7 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey } from '$lib/flows/core/send-estimates';
+	import { feeKey, FeeTokenWord } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
@@ -765,6 +765,7 @@
 		// session has heard nothing.
 		lastFeeStamp = null;
 		lastFeeBusy = false;
+		feeTokenWord.forget();
 		resyncedFee = null;
 		nav.close();
 	}
@@ -937,19 +938,12 @@
 						);
 						sendSession?.dispatch({ type: 'recipients_changed', recipients: rows });
 					},
-					// The book, for one row — or for a new one appended for it. The
-					// core's `picker_target` puts the pick where it was asked for.
+					// The book, for one row — or, with no row named (the split's "from
+					// contacts"), for the split as a whole. Where the pick lands is the
+					// core's (`apply_picked_address`): the row named, else the first row
+					// with no address yet, else a new row at the end.
 					pickContactFor: (index: number | null) => {
-						const rows = sendView?.recipients ?? [];
-						let target = index === null ? undefined : rows[index]?.id;
-						if (target === undefined) {
-							const row = blankRecipient();
-							target = row.id;
-							sendSession?.dispatch({
-								type: 'recipients_changed',
-								recipients: [...rows, row]
-							});
-						}
+						const target = index === null ? null : (sendView?.recipients[index]?.id ?? null);
 						sendSession?.dispatch({ type: 'open_contact_picker', target });
 					},
 					// The person the tapped row was drawn for, by address (issue 467) —
@@ -1054,6 +1048,14 @@
 	 */
 	let lastFeeStamp: string | null = null;
 	let lastFeeBusy = false;
+	/**
+	 * What this send journey was last told of the fee card's coin, and on
+	 * which chain. The coin names the form's fee row while no estimate is in
+	 * hand — the core's `SendView.fee_coin` — so a quote that fails after the
+	 * fee machine picked a coin still shows the coin in force. Told only while
+	 * the fee session prices the form's own chain (`FeeTokenWord`).
+	 */
+	const feeTokenWord = new FeeTokenWord();
 	/** The one re-send per (session quote, send-machine quote) pair — see below. */
 	let resyncedFee: string | null = null;
 	$effect(() => {
@@ -1065,6 +1067,11 @@
 			lastFeeBusy = view.busy;
 			sendSession.dispatch({ type: 'fee_busy_changed', busy: view.busy });
 		}
+		// The form's chain: the selected token's, else the sweep's (the core's
+		// `form_chain`).
+		const formChain = sendView?.selected_token?.chain_id ?? sendView?.multi_chain_id ?? null;
+		const coinNews = feeTokenWord.news(view.fee_token, feeQuote.pricingChainId, formChain);
+		if (coinNews !== null) sendSession.dispatch(coinNews);
 		const estimate = view.fee;
 		if (!estimate) return;
 		// Identity is not enough: the core hands out a fresh view object every
@@ -1524,7 +1531,7 @@
 			selectedAssetId === null
 				? undefined
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
-		refresh: { now: refreshClock, held: refreshHold.held }
+		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' }
 	});
 	const liveHome = $derived(
 		identity === null

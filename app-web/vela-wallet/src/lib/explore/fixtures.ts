@@ -4,6 +4,7 @@
  * builders merge it with resolved messages into display-ready view models.
  * Pure data + assembly: no fetching, no URL parsing, no business state.
  */
+import { pluralForm } from '$lib/i18n/plural';
 import { IDENTITY } from '$lib/wallet/fixtures';
 import type { SidebarModel } from '$lib/wallet/model';
 import type { ExploreMessages } from './messages';
@@ -325,7 +326,7 @@ function groupManageSheet(m: ExploreMessages): GroupManageSheet {
 			{
 				id: 'favorites',
 				title: m.favorites,
-				meta: fill(m.siteCount, { n: '8' }),
+				meta: fill(pluralForm(m.siteCount, 8), { count: '8' }),
 				hidden: false
 			},
 			{ id: 'recent', title: m.recent, hidden: false }

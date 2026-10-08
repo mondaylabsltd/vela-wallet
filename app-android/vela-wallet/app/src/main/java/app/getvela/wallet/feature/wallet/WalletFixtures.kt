@@ -50,6 +50,9 @@ object WalletFixtures {
     const val BALANCE_MASK = "••••••"
     const val NETWORK_COUNT = 8
 
+    /** When the fixture's figure was read (2026-06-13 13:45 UTC): its "Updated" is two minutes after. */
+    private const val READ_AT_S = 1_781_358_300L
+
     private enum class Day { Today, Yesterday }
 
     private sealed interface Direction {
@@ -271,21 +274,26 @@ object WalletFixtures {
     )
 
     /**
-     * The hero's refresh control (issue 462), idle: read two minutes ago —
-     * or, while the first read is still out (H3), never read yet, which is
-     * the glyph alone. The turning "Updating…" is the component board's.
+     * The hero's refresh control (issue 462), idle: read two minutes ago, in
+     * the core's relative words — or, while the first read is still out (H3),
+     * never read yet, which is the glyph alone. The turning "Updating…" is
+     * the component board's.
      */
     fun refresh(strings: VelaStrings, read: Boolean = true, refreshing: Boolean = false): BalanceRefreshModel =
         BalanceRefreshModel(
             updated = if (read) {
-                strings.t(
-                    I18nKeys.Wallet.LAST_UPDATED,
-                    mapOf("ago" to strings.t(I18nKeys.Wallet.TIME_MINUTES_SHORT, mapOf("n" to "2"))),
+                val ago = strings.relativeTime(
+                    tsSeconds = READ_AT_S,
+                    nowMs = (READ_AT_S + 120) * 1000,
+                    utcOffsetMinutes = 0,
+                    dateFormat = "iso",
                 )
+                strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to ago))
             } else {
                 null
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),
+            idleLabel = strings.t(I18nKeys.Wallet.REFRESH_BALANCE),
             refreshing = refreshing,
         )
 

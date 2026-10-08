@@ -1031,3 +1031,61 @@ describe('FeedbackBody — review fixes', () => {
 		}
 	});
 });
+
+// Issue 466: "Report this" seeds the sheet with the core's report — a title,
+// the treasury's whole address and its figures. In a four-row box at phone
+// width the address was half hidden and the figures needed a scroll inside a
+// sheet that scrolls.
+describe('FeedbackBody — a seeded report is read whole', () => {
+	const WHAT = [
+		'Relayer out of gas on Ethereum (1)',
+		'',
+		`Treasury: 0x${'7a'.repeat(20)}`,
+		'Has 0.00002 ETH of its 0.0001 ETH floor (short 0.00008 ETH).'
+	].join('\n');
+	const STEPS = [
+		'1. Send on Ethereum (1)',
+		"2. Continue: the relay's treasury check stopped the send — its relayer is out of gas"
+	].join('\n');
+	const fields = (root: HTMLElement) => [...root.querySelectorAll('textarea')];
+	/** The height `rows` lines of this field's type take, padding and border included. */
+	const rowsTall = (field: HTMLTextAreaElement, rows: number) => {
+		const style = getComputedStyle(field);
+		const px = (value: string) => parseFloat(value) || 0;
+		return (
+			rows * px(style.lineHeight) +
+			px(style.paddingBlockStart) +
+			px(style.paddingBlockEnd) +
+			px(style.borderBlockStartWidth) +
+			px(style.borderBlockEndWidth)
+		);
+	};
+
+	it('shows the whole seeded report at phone width, with no scroll inside the boxes', async () => {
+		const draft = new ReportDraft();
+		draft.what = WHAT;
+		draft.steps = STEPS;
+		draft.stepsOpen = true;
+		const { root } = await drawn({ draft });
+		const [what, steps] = fields(root);
+		expect(what.value).toBe(WHAT);
+		expect(steps.value).toBe(STEPS);
+		for (const field of [what, steps]) {
+			expect(field.scrollHeight - field.clientHeight).toBeLessThanOrEqual(1);
+		}
+		// It really did grow: four rows could not hold it.
+		expect(what.getBoundingClientRect().height).toBeGreaterThan(rowsTall(what, 4) + 1);
+	});
+
+	it('keeps an empty box at its rows, and grows as the person writes', async () => {
+		const { root } = await drawn();
+		const [what] = fields(root);
+		const empty = what.getBoundingClientRect().height;
+		expect(Math.abs(empty - rowsTall(what, 4))).toBeLessThan(1);
+		what.value = WHAT;
+		what.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		expect(what.getBoundingClientRect().height).toBeGreaterThan(empty);
+		expect(what.scrollHeight - what.clientHeight).toBeLessThanOrEqual(1);
+	});
+});

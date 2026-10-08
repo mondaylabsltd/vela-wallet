@@ -40,7 +40,7 @@
 
 - **测什么**：ERC-20 unlimited approve（uint256-max）必须被拦截；钱包永不允许无限授权离开。这是资金安全的核心防线。
 - **怎么测**：1) 在设置 → 清晰签名测试中点击「ERC-20 Approve」场景；2) 观察授权方为 1inch Router，金额为 uint256-max；3) 预期：确认按钮禁用，显示「无限授权已禁用」提示；4) 尝试点击确认按钮，应不响应；5) 编辑金额为有限值（如「1000」USDC），确认按钮才启用。
-- **预期结果**：1) 初始状态：「Spending cap」部分显示「Unlimited」带危险红色警告；2) 确认按钮灰显且禁用；3) 输入框显示「无限授权已禁用 - 设置有限额度后重试」；4) 用户修改金额后，确认按钮变蓝可点击；5) 无其他路径绕过此拦截（包括滑动确认）。
+- **预期结果**：1) 初始状态：「Spending cap」部分显示「Unlimited」带危险红色警告；2) 确认按钮灰显且禁用；3) 输入框显示「无限授权已禁用 - 设置有限额度后重试」；4) 用户修改金额后，确认按钮变蓝可点击；5) 无其他路径绕过此拦截（包括直接点按确认按钮）。
 - **边界/异常**：尝试通过粘贴 uint256-max（或 2^255、2^160-1）到自定义字段；应仍被拦截且显示「无限授权已禁用」。
 - **源码参考**：`src/services/approval-guard.ts:30-45（UNLIMITED_CAP_256），src/components/signing/EditableApproveCard.tsx:68-80（validate choice）`
 
@@ -110,7 +110,7 @@
 **`P0`** ｜ **分类** 清晰签名与授权安全（approval/模拟/SIWE） ｜ **平台** All
 
 - **测什么**：当没有 ERC-7730 描述符且 4-byte 数据库查不到函数时，钱包应显示大红「blind sign」警告，禁止用户无意识地签署不可读的交易。
-- **怎么测**：1) 点击「Blind Transaction」场景（unknown selector 0x1a2b3c4d）；2) 观察 Intent 显示为不可读、风险为 danger；3) 显示红色警告横幅「无法验证此交易内容，仔细检查地址和金额」；4) 无法通过简单的「滑动确认」跳过，需明确的「我知道风险」确认；5) 确认后如常签署。
+- **怎么测**：1) 点击「Blind Transaction」场景（unknown selector 0x1a2b3c4d）；2) 观察 Intent 显示为不可读、风险为 danger；3) 显示红色警告横幅「无法验证此交易内容，仔细检查地址和金额」；4) 无法通过直接点按「确认」跳过，需明确的「我知道风险」确认；5) 确认后如常签署。
 - **预期结果**：1) 大红标题 + 危险图标；2) Intent 为「Unknown Call」或「Unknown」；3) 字段为空或仅显示原始 calldata 截断；4) 无绿色/安全配色元素；5) 确认按钮明确要求用户主动确认风险。
 - **边界/异常**：对比「best-effort」场景（4-byte 找到签名，但无 descriptor）：应显示「Caution」+「Not verified - from 4-byte database」标签，比 blind 更轻但仍需谨慎。
 - **源码参考**：`src/services/clear-signing.ts:443-473（resolveBySelector + bestEffort），src/components/SigningRequestModal.tsx（未在摘录中，但应检查危险横幅渲染）`

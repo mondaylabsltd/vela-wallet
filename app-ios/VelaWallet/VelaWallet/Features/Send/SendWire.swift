@@ -369,6 +369,19 @@ struct SendRelayReportWire: Decodable, Equatable {
     let fingerprint: String
 }
 
+/// The coin the form's fee row names (`SendView.fee_coin`) — the core's one
+/// answer, estimate or none: the estimate in hand, else the coin in force
+/// (the fee card's, else the person's pick), else the chain's own.
+struct SendFeeCoinWire: Decodable, Equatable {
+    /// Empty only for an ERC-20 nothing on the form names: the mark then draws
+    /// its logo alone.
+    let symbol: String
+    /// `nil` = the chain's own coin.
+    let contract: String?
+    /// Never 0.
+    let chainId: Int
+}
+
 struct SendViewWire: Decodable, Equatable {
     let stage: SendStageWire
     let loading: Bool
@@ -454,6 +467,10 @@ struct SendViewWire: Decodable, Equatable {
     /// Chain-guarded by the core: never a previous network's quote.
     let fee: FeeEstimateWire?
     let gasFeeToken: String?
+    /// The coin the fee row wears, whether or not a figure is beside it.
+    /// `nil` only while no chain is known. Optional on the wire so a
+    /// hand-written view without it decodes (as no chain known).
+    var feeCoin: SendFeeCoinWire?
     let amountWarning: SendAmountWarningWire?
     let sameAssetFeeIssue: SendFeeIssueWire?
 

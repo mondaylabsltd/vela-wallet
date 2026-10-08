@@ -187,6 +187,8 @@ class ExploreFixturesTest {
             .groupManageSheet.rows
         // Issue #465: the two sections, each hidden or shown, and nothing else.
         assertEquals(listOf("favorites", "recent"), rows.map { it.id })
+        // The count is a plural key (siteCount_one/_other), filled by count.
+        assertEquals("8 个网站", rows[0].meta)
         assertNull("no \"System\" tag on Recent dApps", rows[1].meta)
     }
 

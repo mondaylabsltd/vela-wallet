@@ -654,6 +654,20 @@ pub struct SendRelayReport {
 /// [`SendRelayReport::area`]: the bug form's "Send" option.
 pub const RELAY_REPORT_AREA: &str = "Send";
 
+/// The coin the form's fee row names ([`SendView::fee_coin`]): what the shell
+/// hands its token mark — the core's `remote_mark::token_mark` — to draw.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendFeeCoin {
+    /// The coin's ticker as the wallet writes it. Empty only for an ERC-20
+    /// nothing on the form names — the mark then draws its logo alone.
+    pub symbol: String,
+    /// `None` = the chain's own coin.
+    pub contract: Option<String>,
+    /// The chain the fee is paid on — never 0.
+    pub chain_id: u32,
+}
+
 /// A scan, already parsed by the shell (`parseEIP681` — the parser itself is
 /// wave D's `payment_request`; this machine only consumes the parse).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1412,6 +1426,31 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
+    /// The fee card's coin in force — `FeeView.fee_token`, verbatim (`None` =
+    /// the chain's own coin). It names the fee row's coin while no estimate
+    /// is in hand ([`SendView::fee_coin`]) — when nobody chose, the fee
+    /// machine picks a coin that can pay, and a quote that then fails leaves
+    /// that coin in force with no estimate to say so. It prices and signs
+    /// nothing.
+    ///
+    /// This machine files the word against the form's chain AT THE MOMENT it
+    /// is said (a contract is an address on ONE chain), and DROPS it while
+    /// the form has no chain yet. So every shell's bridge — the same one that
+    /// mirrors [`Event::FeeBusyChanged`] — keeps one rule:
+    ///
+    /// - it speaks only while the fee session prices the form's own chain:
+    ///   the chain of the session's last question equals the form's chain
+    ///   (the selected token's, else the sweep's), both known;
+    /// - it dedupes on the pair (chain id, token): it sends whenever that
+    ///   pair differs from what this send journey was last told — so a coin
+    ///   first seen before the form had a chain, or while the session still
+    ///   priced the network just left, is told once the form is on the
+    ///   priced chain, and the same coin is told again for a new chain;
+    /// - a fresh journey has been told nothing: its first word always goes,
+    ///   `None` included.
+    FeeTokenChanged {
+        fee_token: Option<String>,
+    },
     /// The confirm button was tapped. The name (and its `slide_confirm`
     /// wire tag) predates the tap: every shell dispatches it, so it stays.
     SlideConfirm,
@@ -1699,6 +1738,15 @@ enum MaxFill {
     Exact(String),
 }
 
+/// What [`Event::FeeTokenChanged`] said, and the form's chain when it said
+/// it: a contract is an address on ONE chain, and a word about the network
+/// the form just left never names this one's coin.
+#[derive(Clone, Debug, PartialEq)]
+struct FeeCardCoin {
+    chain_id: u32,
+    token: Option<String>,
+}
+
 #[derive(Default)]
 pub struct Model {
     account: Option<SendAccountRef>,
@@ -1771,6 +1819,9 @@ pub struct Model {
     /// fee machine's choice" and a quote in any coin is its answer; after a
     /// pick, `None` is native, said on purpose.
     fee_coin_chosen: bool,
+    /// The fee card's coin in force, as [`Event::FeeTokenChanged`] last said
+    /// it — `None` until it has. Read for the fee row's coin alone.
+    fee_card_coin: Option<FeeCardCoin>,
     treasury_bootstrap: Option<SendTreasuryStatus>,
     treasury_watch: Option<TreasuryWatch>,
     relay_unreachable: Option<SendRelayUnreachable>,
@@ -2135,6 +2186,28 @@ pub struct SendView {
     /// Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
     pub fee: Option<FeeEstimateView>,
     pub gas_fee_token: Option<String>,
+    /// The coin the form's fee row wears, whether or not a figure is beside
+    /// it. The four shells each had their own answer for the frames with no
+    /// estimate — a quote out, a quote that failed, a speed being measured —
+    /// and drew one state three ways (an empty disc, the chain's coin, the
+    /// chosen coin). In order:
+    ///
+    /// 1. the estimate in hand — this speed's own when it has one, otherwise
+    ///    the speed just left's, which this machine keeps across a speed
+    ///    change and which names the coin that will pay (the coin does not
+    ///    change with the speed; the fee machine's `keep_quote_coin` keeps a
+    ///    quote on screen in the coin in force);
+    /// 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
+    ///    [`Event::FeeTokenChanged`] under its bridge rule, and only when it
+    ///    was said about this chain), else the person's pick on this form;
+    ///    named by the form's holdings;
+    /// 3. the chain's own coin;
+    ///
+    /// on the selected token's chain, else the sweep's, else the estimate's.
+    /// `None` only while no chain is known. The figure is not here: the row
+    /// still shows only this speed's own (issue 681).
+    #[serde(default)]
+    pub fee_coin: Option<SendFeeCoin>,
     pub amount_warning: Option<SendAmountWarning>,
     pub same_asset_fee_issue: Option<SendFeeIssueView>,
     /// The form's button gate — the whole of it. While a relay stop is up the
@@ -2330,6 +2403,9 @@ impl Send {
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
                 model.fee_coin_chosen = true;
+                // The pick is newer than the card's last word: it names the
+                // row's coin until the card says what it took up.
+                model.fee_card_coin = None;
                 // On the form the fee coin is part of what the quote is about
                 // — and so is a Max, which holds back a fee only in the coin
                 // being sent.
@@ -2338,6 +2414,13 @@ impl Send {
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
                 model.fee_busy = busy;
+                render()
+            }
+            Event::FeeTokenChanged { fee_token } => {
+                model.fee_card_coin = form_chain(model).map(|chain_id| FeeCardCoin {
+                    chain_id,
+                    token: fee_token,
+                });
                 render()
             }
             Event::SlideConfirm => slide_confirm(model),
@@ -2601,6 +2684,7 @@ impl Send {
             fee_busy: model.fee_busy,
             fee: selected_fee(model).map(fee_to_view),
             gas_fee_token: quoted_fee_token(model, selected_fee(model)),
+            fee_coin: fee_coin(model),
             amount_warning: warning,
             same_asset_fee_issue: issue,
             can_continue,
@@ -4232,8 +4316,9 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
             if let Some(row) = model.recipients.get_mut(index) {
                 // A row's name is the person's word for whoever its address
                 // was (a group member, a list's name column); another address
-                // is somebody else.
-                if row.address.trim() != address.trim() {
+                // is somebody else. The same address in another letter case
+                // (a list's lowercase, the book's checksum) is the same one.
+                if !row.address.trim().eq_ignore_ascii_case(address.trim()) {
                     row.name = None;
                 }
                 row.address = address;
@@ -4441,6 +4526,95 @@ fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
         .iter()
         .find(|c| c.chain_id == chain_id)
         .map(|c| c.native_symbol.clone())
+}
+
+/// The chain the form is on: the selected token's, else the sweep's.
+fn form_chain(model: &Model) -> Option<u32> {
+    model
+        .selected_token
+        .as_ref()
+        .map(|token| token.chain_id)
+        .or(model.multi_chain_id)
+}
+
+/// [`SendView::fee_coin`].
+fn fee_coin(model: &Model) -> Option<SendFeeCoin> {
+    // 1. The estimate in hand. This machine holds one: each quote the fee card
+    // settles is mirrored here (`FeeUpdated`) and none is dropped for a speed
+    // change, so it is this speed's own once that has landed, and the speed
+    // just left's while it is measured — in the coin that will pay either way.
+    if let Some(fee) = selected_fee(model) {
+        let chain_id = fee.chain_id;
+        return Some(match &fee.fee_asset {
+            FeeAsset::Native => native_fee_coin(model, chain_id),
+            FeeAsset::Erc20 { token, symbol, .. } => SendFeeCoin {
+                symbol: symbol
+                    .clone()
+                    .filter(|symbol| !symbol.trim().is_empty())
+                    .or_else(|| held_symbol(model, chain_id, token))
+                    .unwrap_or_default(),
+                contract: Some(token.clone()),
+                chain_id,
+            },
+        });
+    }
+    let chain_id = form_chain(model).or_else(|| model.fee_estimate.as_ref().map(|f| f.chain_id))?;
+    // 2. The coin in force: the card's word when it spoke about this chain,
+    // else the person's pick. `None` is the chain's own coin.
+    let in_force = match &model.fee_card_coin {
+        Some(card) if card.chain_id == chain_id => card.token.clone(),
+        _ if model.fee_coin_chosen => model.gas_fee_token.clone(),
+        _ => None,
+    };
+    // 3. The chain's own coin.
+    Some(match in_force.filter(|token| !token.trim().is_empty()) {
+        Some(token) => SendFeeCoin {
+            symbol: held_symbol(model, chain_id, &token).unwrap_or_default(),
+            contract: Some(token),
+            chain_id,
+        },
+        None => native_fee_coin(model, chain_id),
+    })
+}
+
+/// The chain's own coin as the fee row names it: the network list's symbol in
+/// the registry's spelling, else the registry's, else the holding's.
+fn native_fee_coin(model: &Model, chain_id: u32) -> SendFeeCoin {
+    let symbol = chain_native_symbol(model, chain_id)
+        .filter(|symbol| !symbol.trim().is_empty())
+        .map(|symbol| super::network_admin::display_native_symbol(chain_id, None, &symbol))
+        .or_else(|| super::network_admin::builtin_native_symbol(chain_id).map(str::to_owned))
+        .or_else(|| {
+            held(model)
+                .find(|token| token.chain_id == chain_id && token.is_native())
+                .map(|token| token.symbol.clone())
+        })
+        .unwrap_or_default();
+    SendFeeCoin {
+        symbol,
+        contract: None,
+        chain_id,
+    }
+}
+
+/// An ERC-20's ticker from the form's holdings on that chain, contracts
+/// compared case aside.
+fn held_symbol(model: &Model, chain_id: u32, contract: &str) -> Option<String> {
+    held(model)
+        .find(|token| {
+            token.chain_id == chain_id
+                && token
+                    .token_address
+                    .as_deref()
+                    .is_some_and(|address| address.trim().eq_ignore_ascii_case(contract.trim()))
+        })
+        .map(|token| token.symbol.clone())
+        .filter(|symbol| !symbol.trim().is_empty())
+}
+
+/// The form's holdings: the selected token first, then the list.
+fn held(model: &Model) -> impl Iterator<Item = &SendToken> {
+    model.selected_token.iter().chain(model.tokens.iter())
 }
 
 /// Nothing is sendable: the fee is drawn from the asset being sent, and the

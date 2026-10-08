@@ -74,7 +74,11 @@
 	</div>
 
 	{#if panel.report}
-		<button type="button" class="report" onclick={onreport}>{panel.report.label}</button>
+		<!-- The hook the phones use too (Android RELAY_REPORT_TAG, iOS
+		     RelayReportButton.testId): one name for both relay stops. -->
+		<button type="button" class="report" data-testid="relay-report" onclick={onreport}
+			>{panel.report.label}</button
+		>
 		<button
 			type="button"
 			class="disclosure"

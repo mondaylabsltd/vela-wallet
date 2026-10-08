@@ -508,25 +508,36 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 				? fill(m['send.recipientCount_other'], { count: parts.length })
 				: fill(m['send.multiSendSummary'], { n: parts.length, chain: chainName(item.chain_id) });
 
-	const amount = item.value === null ? '' : `${trimBalance(item.value)} `;
 	// A dApp record from a core that did not describe it has no figure of its
-	// own to claim (083 H2). A mixed batch keeps its reading.
-	const figureless = dappTx && item.value === null;
+	// own to claim (083 H2). A sweep (several coins to one payee) has no one
+	// figure and no one coin either — the core sends neither — so its hero
+	// says how many coins left, as the sweep's own confirm did, and the
+	// breakdown below names each one. Never a lone "−" over the list.
+	const figure =
+		item.value !== null
+			? `${received ? '+' : '−'}${trimBalance(item.value)} ${item.symbol}`.trim()
+			: !dappTx && batch !== null && parts.length > 0
+				? fill(m['componentsTx.receipt.assetsCount'], { n: parts.length })
+				: '';
 	return {
 		breakdownTitle,
 		breakdown: parts.length > 0 ? parts : undefined,
+		// "Sent ETH" names the coin; a record that names none (a sweep) is
+		// "Sent", as its receipt was — not "Sent " with nobody after it.
 		title: dappTx
 			? m['history.txLabelDappTx']
-			: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
-					symbol: item.symbol
-				}),
+			: item.symbol === '' && !received
+				? m['componentsTx.detail.sent']
+				: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
+						symbol: item.symbol
+					}),
 		// The record's own lifecycle — never the confirmed chip by default
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
-		amount: figureless ? '' : hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
-		fiat: figureless ? '' : fiatText(item, ctx),
+		amount: figure === '' ? '' : hidden ? MASK : figure,
+		fiat: dappTx && item.value === null ? '' : fiatText(item, ctx),
 		positive: received,
 		facts,
 		viewOnExplorer: m['history.viewOnExplorer'],

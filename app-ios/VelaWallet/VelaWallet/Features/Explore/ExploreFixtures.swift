@@ -153,7 +153,7 @@ enum ExploreFixtures {
             title: loc.t("explore.manageGroups"),
             rows: [
                 GroupManageRow(id: "favorites", title: loc.t("explore.favorites"),
-                               meta: loc.t("explore.siteCount", vars: ["n": "8"]),
+                               meta: loc.t("explore.siteCount", count: 8),
                                hidden: false),
                 GroupManageRow(id: "recent", title: loc.t("explore.recent"),
                                meta: nil, hidden: false),

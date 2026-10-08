@@ -170,6 +170,39 @@ struct ExploreFixturesTests {
         #expect(rows[1].meta == nil, "Recent carries no second word")
     }
 
+    /// The Favorites row counts its sites in each language's own plural
+    /// forms — "1 site", never "1 sites"; Russian's few and many.
+    @Test func theFavoritesRowCountsItsSitesByThePluralKey() throws {
+        func meta(_ count: Int, _ tag: String) throws -> String? {
+            let favorites = (0..<count).map { index in
+                ExploreSiteWire(origin: "https://s\(index).example", url: "https://s\(index).example/",
+                                host: "s\(index).example", name: "S\(index)", renamed: false, addedMs: 0)
+            }
+            let view = ExploreViewWire(
+                favorites: favorites, tabs: [], selectedTab: nil, favoritesHidden: false,
+                recentHidden: false, favoritesFull: false, tabsFull: false, ready: true
+            )
+            guard case .groupManage(_, let rows) = ExploreLive.groupManage(
+                explore: view, loc: Loc(overrideTag: tag, preferredLanguages: [])
+            ) else { throw Missing() }
+            return rows.first?.meta
+        }
+        #expect(try meta(1, "en") == "1 site")
+        #expect(try meta(2, "en") == "2 sites")
+        #expect(try meta(3, "ru") == "3 сайта")
+        #expect(try meta(5, "ru") == "5 сайтов")
+        #expect(try meta(1, "zh") == "1 个网站")
+        for tag in ["en", "ru", "zh"] {
+            #expect(try meta(1, tag)?.contains("{{") == false, "\(tag): the count was filled")
+            #expect(try meta(1, tag)?.contains("siteCount") == false, "\(tag): the key resolved")
+        }
+        guard case .groupManage(_, let drawn) = ExploreFixtures.buildMobileState(.e3, loc: loc).menus.groupManage
+        else { throw Missing() }
+        #expect(drawn.first?.meta == "8 个网站")
+    }
+
+    private struct Missing: Error {}
+
     @Test func theStandInPageIsTheSitesContent() {
         let page = ExploreFixtures.buildMobileState(.e4, loc: loc).browser.page
         #expect(page.title == "兑换")

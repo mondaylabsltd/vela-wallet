@@ -69,28 +69,3 @@ struct RefreshSpin: Equatable {
         return next
     }
 }
-
-/// The core's compact relative time — "now", "2m", "3h" — for the hero's
-/// "Updated <ago>" (issue 462).
-///
-/// The rule is `I18n::format_relative_time` in vela-core (the desktop calls it
-/// directly); the uniffi surface exports no formatter, so these are its first
-/// three branches over the same corpus keys (`time.now`, `time.minutesShort`,
-/// `time.hoursShort`) and the same arithmetic: whole seconds, under 45 s is
-/// "now", minutes and hours rounded half away from zero. Past a day the core
-/// names a weekday, then a date; this draws the person's own date format for
-/// both, as Android does — a refresh a day old on a visible home is the rare
-/// case, and a date is never wrong where a weekday could be.
-enum RelativeTime {
-    static func ago(atMs: Double, nowMs: Double, loc: Loc) -> String {
-        let diff = max(0, (nowMs / 1000).rounded(.down) - (atMs / 1000).rounded(.down))
-        if diff < 45 { return loc.t("time.now") }
-        if diff < 3_600 {
-            return loc.t("time.minutesShort", vars: ["n": String(Int((diff / 60).rounded()))])
-        }
-        if diff < 86_400 {
-            return loc.t("time.hoursShort", vars: ["n": String(Int((diff / 3_600).rounded()))])
-        }
-        return Formats.date(Date(timeIntervalSince1970: atMs / 1000))
-    }
-}

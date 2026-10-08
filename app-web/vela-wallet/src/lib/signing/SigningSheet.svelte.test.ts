@@ -438,3 +438,102 @@ describe('the wallet’s own request (first-party)', () => {
 		await ownView.screen.unmount();
 	});
 });
+
+/**
+ * Nothing above moves while the fee is measured.
+ *
+ * On the Android device the whole sheet moved about 33 px on every fee
+ * refresh, speed change and 30 s re-quote: the sheet is bottom-anchored and
+ * wraps its content, and two lines came and went with the measurement — the
+ * confirm's note under the button ("Working out the network fee…") and the
+ * shortfall line under the fee card. The web drew both the same way. Each
+ * sequence below is what the builder hands the sheet as a quote lands and is
+ * asked again; the header, the blocks and the fee card must sit where they sat.
+ */
+describe('a fee being measured moves nothing above it', () => {
+	const MEASURING = 'Working out the network fee…';
+	const NO_COIN = 'None of your coins can pay this fee';
+	const landed: FeeModel = {
+		kind: 'onchain',
+		label: 'Network fee',
+		value: '0.0021 ETH · ≈ $6.30',
+		tappable: false,
+		refreshLabel: 'Refresh fee',
+		refreshing: false,
+		chevron: false
+	};
+	/** The 30 s re-quote: the figure stays, the gate shuts and says why. */
+	const requote: FeeModel = { ...landed, refreshing: true };
+	/** A new speed: no figure of its own yet. */
+	const newSpeed: FeeModel = { ...landed, value: 'Estimating…', refreshing: true };
+	const open = { action: 'Confirm', enabled: true };
+	const shut = { action: 'Confirm', enabled: false, note: MEASURING };
+
+	/** Where the parts above the fee's own lines sit, in one frame. */
+	const frame = (sheet: HTMLElement) => ({
+		header: sheet.querySelector('header.header')!.getBoundingClientRect().top,
+		blocks: sheet.querySelector('.blocks')!.getBoundingClientRect().top,
+		fee: sheet.querySelector('.line')!.getBoundingClientRect().top,
+		confirm: sheet.querySelector('[data-testid="signing-confirm"]')!.getBoundingClientRect().top
+	});
+
+	async function walk(steps: Partial<SigningModel>[]) {
+		const view = await drawn({ model: model(steps[0]), onfeerefresh: () => {} });
+		const frames = [];
+		for (const step of steps) {
+			await view.screen.rerender({ model: model(step) });
+			await tick();
+			await pause(50);
+			frames.push(frame(view.sheet));
+		}
+		await view.screen.unmount();
+		return frames;
+	}
+
+	it('a funded wallet: measured at open, landed, re-quoted, a new speed, landed', async () => {
+		const frames = await walk([
+			{ fee: newSpeed, confirm: shut },
+			{ fee: landed, confirm: open },
+			{ fee: requote, confirm: shut },
+			{ fee: landed, confirm: open },
+			{ fee: newSpeed, confirm: shut },
+			{ fee: landed, confirm: open }
+		]);
+		for (const at of frames.slice(1)) expect(at).toEqual(frames[0]);
+	});
+
+	it('a wallet no coin of which can pay: the shortfall line keeps its height while measured', async () => {
+		const short: FeeModel = { ...landed, warning: NO_COIN };
+		const frames = await walk([
+			{ fee: newSpeed, confirm: shut },
+			{ fee: short, confirm: { action: 'Confirm', enabled: false } },
+			{ fee: requote, confirm: shut },
+			{ fee: short, confirm: { action: 'Confirm', enabled: false } },
+			{ fee: newSpeed, confirm: shut },
+			{ fee: short, confirm: { action: 'Confirm', enabled: false } }
+		]);
+		// From the first landing on (the first measurement had no shortfall
+		// to hold yet), not a pixel.
+		for (const at of frames.slice(2)) expect(at).toEqual(frames[1]);
+	});
+
+	it('a held line is invisible and silent, and goes when the fee lands with nothing to say', async () => {
+		const short: FeeModel = { ...landed, warning: NO_COIN };
+		const view = await drawn({ model: model({ fee: short, confirm: shut }) });
+		await view.screen.rerender({ model: model({ fee: requote, confirm: open }) });
+		await tick();
+		const note = view.sheet.querySelector<HTMLElement>('.confirm-note')!;
+		expect(note.textContent?.trim()).toBe(MEASURING);
+		expect(getComputedStyle(note).visibility).toBe('hidden');
+		expect(note.getAttribute('aria-hidden')).toBe('true');
+		const held = view.sheet.querySelector<HTMLElement>('.warning')!;
+		expect(held.textContent).toBe(NO_COIN);
+		expect(getComputedStyle(held).visibility).toBe('hidden');
+		expect(held.getAttribute('role')).toBeNull();
+		// The coin can pay now: the shortfall is gone for good, not held.
+		await view.screen.rerender({ model: model({ fee: landed, confirm: open }) });
+		await tick();
+		expect(view.sheet.querySelector('.warning')).toBeNull();
+		await view.screen.unmount();
+	});
+});

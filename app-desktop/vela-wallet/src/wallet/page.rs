@@ -221,6 +221,31 @@ fn explore_landing_from_sidebar(
     explore_landing(view, entry, waiting)
 }
 
+/// What becomes of a send parked under "Report this" (issue 466) once the
+/// person is somewhere new.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParkedSend {
+    /// Still in Settings, where the report is: the send waits, unseen.
+    Keep,
+    /// Back on the wallet with no other column open: the send is on screen
+    /// again as it was left — recipient, amount, the stop.
+    Resume,
+    /// Anywhere else: the switch closes the send, as any switch does.
+    Drop,
+}
+
+/// [`ParkedSend`] for where the person is now. The web swaps the same sheet's
+/// body and the phones lay the report over the flow; on desktop the reporter
+/// is a Settings page, so the send is parked the way RJ18 hides a signing
+/// column — and the way back to the wallet is the way back to it.
+fn parked_send_after(section: Section, panel: PanelId) -> ParkedSend {
+    match (section, panel) {
+        (Section::Settings, _) => ParkedSend::Keep,
+        (Section::Wallet, PanelId::None | PanelId::Flow) => ParkedSend::Resume,
+        _ => ParkedSend::Drop,
+    }
+}
+
 /// Whether a request's ending that arrives now is kept (RJ18): the column is
 /// on screen, or only hidden by a switch of section. One the person closed
 /// opens for nothing.
@@ -432,16 +457,13 @@ type ExploreGroupLine = (ExploreGroupRow, SharedString, Option<SharedString>, bo
 fn explore_group_rows(
     view: &vela_core::app::explore_sites::ExploreView,
     strings: &ExploreStrings,
+    loc: &Loc,
 ) -> [ExploreGroupLine; 2] {
     [
         (
             ExploreGroupRow::Favorites,
             strings.favorites.clone(),
-            Some(SharedString::from(
-                strings
-                    .site_count
-                    .replace("{{n}}", &view.favorites.len().to_string()),
-            )),
+            Some(crate::explore::site_count(loc, view.favorites.len())),
             view.favorites_hidden,
         ),
         (
@@ -733,9 +755,16 @@ pub struct WalletPage {
     /// Spec 082 RJ18: the signing column was left for another section, not
     /// closed — its ending is kept, and shown again when Explore returns.
     signing_hidden: bool,
+    /// Issue 466: "Report this" left the send column for Settings →
+    /// Feedback with the send parked, not closed ([`parked_send_after`]).
+    send_parked: bool,
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
+    /// The signing column's lines held through a fee measurement, for the
+    /// request whose id is beside them ([`signing_live::HeldLines`]).
+    #[cfg(not(target_os = "linux"))]
+    signing_held: Option<(String, signing_live::HeldLines)>,
     /// A request the person closed after approving it (spec 079 FR-002): its
     /// machines keep running, unseen, until the core answers the page — the
     /// close refused nothing, so the answer must still get out.
@@ -1426,7 +1455,10 @@ impl WalletPage {
             dapp_landing: None,
             dapp_landing_seq: 0,
             signing_hidden: false,
+            send_parked: false,
             signing_last: None,
+            #[cfg(not(target_os = "linux"))]
+            signing_held: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
             contacts_query: String::new(),
@@ -1806,7 +1838,7 @@ impl WalletPage {
             return None;
         }
         let view = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let rows = explore_group_rows(&view, &self.explore);
+        let rows = explore_group_rows(&view, &self.explore, &self.loc);
         let manage_groups = self.explore.manage_groups.clone();
 
         let mut list = div().flex().flex_col();
@@ -3883,6 +3915,8 @@ impl WalletPage {
         // can cross. The balance stays outside it: one-ended, and a large one
         // needs the room. Full-screen, the rows used to run the width of the
         // monitor with a token's name at one end and its amount at the other.
+        // The system's Reduce Motion: the refresh glyph keeps still.
+        let reduce_motion = cx.reduce_motion();
         let column = self
             .content_scroll
             .wire(div().id("wallet-content").size_full(), cx.entity_id())
@@ -3925,6 +3959,7 @@ impl WalletPage {
                             }))
                                 as crate::wallet::components::BalanceToggle
                         }),
+                        reduce_motion,
                     ))
                     .child(
                         div()
@@ -6109,6 +6144,7 @@ impl WalletPage {
     /// column does, and its answer is what records the payment and hands it
     /// to the tracker, so the machines run on, unseen, until it is in.
     fn let_send_go(&mut self, cx: &mut Context<Self>) {
+        self.send_parked = false;
         let Some(host) = self.send_host.take() else {
             return;
         };
@@ -6131,6 +6167,8 @@ impl WalletPage {
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
+        // A new send replaces one parked under a report.
+        self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
             // A column that ran on unseen goes once its submit is in.
             page.send_background
@@ -8160,6 +8198,8 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
+            // The board draws the motion design; gpui still holds a turn
+            // still under Reduce Motion.
             balances = balances.child(balance_display(
                 theme,
                 &mut self.icons,
@@ -8167,6 +8207,7 @@ impl WalletPage {
                 None,
                 None,
                 None,
+                false,
             ));
         }
 
@@ -16744,11 +16785,9 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
-        // Which of the two things this column is: the request, or the gas
-        // account it cannot pay from.
-        let mut funding = false;
-        // Spec 081: the core refused the request outright.
-        let mut refused = false;
+        // Which of the three things this column is: the request, the core's
+        // refusal of it (spec 081), or the gas account it cannot pay from.
+        let mut kind = signing_live::ColumnKind::Request;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
         // Spec 079 US7: this account signs on the Trusted Signer's page, whose
@@ -16757,6 +16796,9 @@ impl WalletPage {
         let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
+        // The confirm's note line, held for a live request (`HeldLines::note`):
+        // its words, and whether they are said now.
+        let mut held_note: Option<Option<(SharedString, bool)>> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
@@ -16784,19 +16826,14 @@ impl WalletPage {
             // this surface "the in-sheet funding swap (BUG-1: never a stacked
             // second modal)", and a request drawn under a top-up prompt is a
             // person deciding two things at once.
-            if host.view.surface == vela_core::app::sign_request::SignSurface::Funding {
+            kind = signing_live::ColumnKind::of(&host.view);
+            if kind == signing_live::ColumnKind::Funding {
+                // The top-up's button, label and (no) fee card are its own
+                // (`column_confirm`, below): the header and the fee card
+                // belong to the request, not to the top-up — the person is
+                // being asked for one thing here.
                 model.blocks = signing_live::funding_blocks(&host.view, &self.signing);
-                model.confirm_label = self.signing.funding_check_now.clone();
-                // Armed on its own terms: this button is not a signature, it
-                // is "I have sent it, look again". The three-machine AND
-                // governs signing, and applying it here would leave the only
-                // way out of a top-up shut.
-                model.confirm_enabled = true;
-                funding = true;
-                // The header and the fee card belong to the request, not to
-                // the top-up: the person is being asked for one thing here.
-                model.fee = signing_fixtures::FeeModel::Hidden;
-            } else if host.view.blocked.is_some() {
+            } else if kind == signing_live::ColumnKind::Refused {
                 // Spec 081: the core refused this request — it would have
                 // changed who controls the account. The refusal is the whole
                 // sheet. The decoded body, the simulation and the cap editor
@@ -16804,8 +16841,6 @@ impl WalletPage {
                 // reading them invites the question "so why can't I?", which
                 // the refusal already answers.
                 model.blocks = signing_live::status_blocks(&host.view, &self.signing);
-                refused = true;
-                model.fee = signing_fixtures::FeeModel::Hidden;
             } else {
                 // ALWAYS the core's, never "the core's if it has any". The old
                 // `if !blocks.is_empty()` left the GALLERY's blocks under a live
@@ -16895,8 +16930,10 @@ impl WalletPage {
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
             let speed_tier = Some(host.speed_view().tier);
-            if !refused {
-                model.fee = signing_live::fee_model(
+            // The top-up's "check again" and a refusal's absent confirm are
+            // the column's own; only the request reads the signing gate.
+            let mut confirm = signing_live::column_confirm(kind, &self.signing, || {
+                let mut fee_model = signing_live::fee_model(
                     &host.clear_view,
                     fee,
                     host.chain_id,
@@ -16909,31 +16946,68 @@ impl WalletPage {
                 // Spec 079: the speed control's own deployment read, which the
                 // fee machine never sees.
                 signing_live::fee_row_state(
-                    &mut model.fee,
+                    &mut fee_model,
                     host.fee_measuring(),
                     host.fee_unanswered(),
                     &self.signing,
                 );
-                model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-                let confirm = signing_live::confirm_state(
+                let state = signing_live::confirm_state(
                     &host.view,
                     &host.guard_view,
                     &host.clear_view,
                     fee,
                     speed_tier,
                 );
-                model.confirm_enabled = confirm.enabled;
-                model.confirm_note = confirm
-                    .key
-                    .as_deref()
-                    .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
-            } else {
-                // No confirm control at all. It is not disabled — it is
-                // absent, because the wallet never offered it.
-                model.confirm_label = gpui::SharedString::default();
-                model.confirm_enabled = false;
+                signing_live::ColumnConfirm {
+                    fee: fee_model,
+                    label: signing_live::confirm_label(&host.clear_view, &self.signing),
+                    enabled: state.enabled,
+                    note: state
+                        .key
+                        .as_deref()
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string())),
+                }
+            });
+            // Nothing moves while a figure is measured — a refresh, a speed
+            // switch, the 30 s re-quote: the shortfall under the fee row and
+            // the confirm's note keep their lines, holding the last words
+            // invisibly while they have nothing to say.
+            if kind == signing_live::ColumnKind::Request {
+                let id = host
+                    .view
+                    .request
+                    .as_ref()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_default();
+                if self
+                    .signing_held
+                    .as_ref()
+                    .is_none_or(|(held, _)| *held != id)
+                {
+                    self.signing_held = Some((id, signing_live::HeldLines::default()));
+                }
+                if let Some((_, held)) = self.signing_held.as_mut() {
+                    let measuring = fee.busy
+                        || host.fee_measuring()
+                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    signing_live::hold_fee_warning(&mut confirm.fee, held, measuring);
+                    held_note = Some(
+                        held.note(
+                            confirm
+                                .note
+                                .clone()
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                        ),
+                    );
+                }
             }
-            if !funding && !refused && !signing_live::off_chain(&host.clear_view) {
+            model.fee = confirm.fee;
+            model.confirm_label = confirm.label;
+            model.confirm_enabled = confirm.enabled;
+            model.confirm_note = confirm.note;
+            if kind == signing_live::ColumnKind::Request
+                && !signing_live::off_chain(&host.clear_view)
+            {
                 speed_tiers = host
                     .speed_view()
                     .options
@@ -16955,6 +17029,8 @@ impl WalletPage {
         }
         #[cfg(target_os = "linux")]
         let _ = cx;
+        let funding = kind == signing_live::ColumnKind::Funding;
+        let refused = kind == signing_live::ColumnKind::Refused;
 
         // Spec 079: once approved, the column is the send receipt — the form,
         // its fee and its confirm are gone from the first frame after the
@@ -17005,16 +17081,15 @@ impl WalletPage {
                 Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                     if let Some(host) = page.signing_host.as_ref() {
                         host.update(cx, |host, cx| {
-                            if funding {
+                            // What the button SAID when it was drawn, never a
+                            // later read: a "check again" must not become an
+                            // approval because the sheet moved under it.
+                            match kind.tap_event() {
                                 // "I have topped it up" — the core re-runs the
                                 // pre-check with the opts it saved, so the
                                 // request resumes rather than starting over.
-                                host.dispatch_sign(
-                                    vela_core::app::sign_request::Event::FundingCompleteTapped,
-                                    cx,
-                                );
-                            } else {
-                                host.approve(cx);
+                                Some(event) => host.dispatch_sign(event, cx),
+                                None => host.approve(cx),
                             }
                         });
                     }
@@ -17410,16 +17485,27 @@ impl WalletPage {
                     )
                 }
             }))
-            // Spec 099 R7: a shut confirm says why, in the core's words.
+            // Spec 099 R7: a shut confirm says why, in the core's words — in
+            // a line that, once said, stays with its last words invisible
+            // while there is nothing to say, so the next measurement's note
+            // fills it rather than growing the column.
             .children(
-                model
-                    .confirm_note
-                    .clone()
-                    .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
-                    .map(|note| {
+                held_note
+                    .unwrap_or_else(|| {
+                        model
+                            .confirm_note
+                            .clone()
+                            .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
+                            .map(|note| (note, true))
+                    })
+                    .map(|(note, said)| {
                         div()
                             .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
+                            .text_color(if said {
+                                theme.fg_subtle
+                            } else {
+                                gpui::transparent_black()
+                            })
                             .child(note)
                     }),
             );
@@ -19610,8 +19696,23 @@ impl Render for WalletPage {
             self.address_selected = false;
         }
 
+        // The app's report left unsent: the person's own comes back.
+        self.settle_relay_report_visit();
+        // A send parked under that report: back with the wallet, kept while
+        // the person is in Settings, closed by any other switch.
+        if self.send_parked {
+            match parked_send_after(self.section, self.panel) {
+                _ if self.send_host.is_none() => self.send_parked = false,
+                ParkedSend::Keep => {}
+                ParkedSend::Resume => {
+                    self.panel = PanelId::Flow;
+                    self.send_parked = false;
+                }
+                ParkedSend::Drop => self.send_parked = false,
+            }
+        }
         // The column was closed under a live send: its machines go with it.
-        if self.panel != PanelId::Flow && self.send_host.is_some() {
+        if self.panel != PanelId::Flow && self.send_host.is_some() && !self.send_parked {
             self.let_send_go(cx);
             self.send_fee_picker = false;
         }
@@ -20036,7 +20137,8 @@ mod tests {
     /// trash or "New group" could hang off.
     #[test]
     fn manage_groups_lists_the_two_sections_and_nothing_else() {
-        let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
+        let loc = crate::loc::Loc::from_env();
+        let strings = ExploreStrings::resolve(&loc);
         let site = |origin: &str| vela_core::app::explore_sites::ExploreSite {
             origin: origin.to_owned(),
             url: format!("{origin}/"),
@@ -20057,13 +20159,13 @@ mod tests {
             resumable: Vec::new(),
             ready: true,
         };
-        let [favorites, recent] = explore_group_rows(&view, &strings);
+        let [favorites, recent] = explore_group_rows(&view, &strings, &loc);
         assert_eq!(
             favorites,
             (
                 ExploreGroupRow::Favorites,
                 strings.favorites.clone(),
-                Some(SharedString::from(strings.site_count.replace("{{n}}", "2"))),
+                Some(crate::explore::site_count(&loc, 2)),
                 false,
             )
         );
@@ -20141,6 +20243,46 @@ mod tests {
         // The wallet's own request (no page asked), or a tab since closed.
         assert_eq!(land(Section::Wallet, back, None), home);
         assert_eq!(land(Section::Wallet, back, Some("gone")), home);
+    }
+
+    /// Issue 466: "Report this" parks the send under Settings → Feedback.
+    /// The way back to the wallet is the way back to it — recipient, amount
+    /// and the stop as they were — and any other switch closes it as a
+    /// switch always has.
+    #[test]
+    fn a_send_parked_under_a_report_comes_back_with_the_wallet_only() {
+        // On the report (and anywhere in Settings): it waits.
+        assert_eq!(
+            parked_send_after(Section::Settings, PanelId::None),
+            ParkedSend::Keep
+        );
+        // 钱包 from the sidebar (no column), or 完成 on the filed report.
+        let panel = panel_after_switch(Section::Wallet, false);
+        assert_eq!(
+            parked_send_after(Section::Wallet, panel),
+            ParkedSend::Resume
+        );
+        // Any other section: gone.
+        for destination in [Section::Contacts, Section::Explore] {
+            let panel = panel_after_switch(destination, false);
+            assert_eq!(
+                parked_send_after(destination, panel),
+                ParkedSend::Drop,
+                "{destination:?}"
+            );
+        }
+        // Back on the wallet with another column opened over it — a receipt,
+        // a receive: that column is what the person went for.
+        assert_eq!(
+            parked_send_after(Section::Wallet, PanelId::Receive),
+            ParkedSend::Drop
+        );
+        // A signing column RJ18 brings back with Explore does not bring the
+        // send with it.
+        assert_eq!(
+            parked_send_after(Section::Explore, panel_after_switch(Section::Explore, true)),
+            ParkedSend::Drop
+        );
     }
 
     /// Spec 097 E: the Connection column speaks of a real connection or of

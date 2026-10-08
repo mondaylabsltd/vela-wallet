@@ -47,6 +47,13 @@ final class SendStore {
     /// The asset-list round this journey last heard of, so one round is
     /// handed over once however often the screen re-renders.
     private var heardRound: Int?
+    /// What `fee_token_changed` last told this journey: the fee card's coin
+    /// and the chain it is a coin on. `nil` = nothing yet — a fresh journey
+    /// has been told nothing.
+    private var toldFeeToken: (chainId: Int, token: String?)?
+    /// Counts journeys entered, so the fee-coin bridge speaks to each new one
+    /// even when nothing else it watches has moved.
+    private(set) var journey = 0
 
     init(executor: SendExecutor) {
         self.executor = executor
@@ -95,6 +102,7 @@ final class SendStore {
             self?.entered = false
             self?.account = nil
             self?.heardRound = nil
+            self?.toldFeeToken = nil
             self?.trustedSignerNotice = nil
             self?.closes += 1
         }
@@ -123,6 +131,7 @@ final class SendStore {
         entered = false
         account = nil
         heardRound = nil
+        toldFeeToken = nil
         trustedSignerNotice = nil
         alert = nil
     }
@@ -173,6 +182,8 @@ final class SendStore {
         entered = true
         account = address.lowercased()
         heardRound = nil
+        toldFeeToken = nil
+        journey += 1
         if !core.boot(event) { core.dispatch(event) }
     }
 
@@ -293,6 +304,29 @@ final class SendStore {
     func feeBusyChanged(_ busy: Bool) {
         dispatch(["type": "fee_busy_changed", "busy": busy])
     }
+
+    /// The fee card's coin in force (`FeeView.fee_token`, `nil` = the chain's
+    /// own), the bridge's other half beside `feeBusyChanged`: it names the fee
+    /// row's coin while no estimate is in hand (`SendView.fee_coin`) — when
+    /// nobody chose, the fee machine picks a coin that can pay, and a quote
+    /// that then fails leaves that coin in force with nothing else to say so.
+    ///
+    /// Told whenever it differs from what this journey was last told, and
+    /// only while the fee session prices the form's own chain (`chainId`, the
+    /// session's): a contract is an address on ONE chain, and a word said
+    /// while the form had no chain, or while the session still priced the
+    /// network just left, is not about this one — the core records it against
+    /// the form's chain at the moment it is said.
+    func feeTokenChanged(_ token: String?, pricing chainId: Int?) {
+        guard entered, let chainId, chainId == formChainId else { return }
+        if let told = toldFeeToken, told.chainId == chainId, told.token == token { return }
+        toldFeeToken = (chainId, token)
+        dispatch(["type": "fee_token_changed", "fee_token": token.map { $0 as Any } ?? NSNull()])
+    }
+
+    /// The chain the form is on: the selected token's, else the sweep's (the
+    /// core's `form_chain`).
+    var formChainId: Int? { view?.selectedToken?.chainId ?? view?.multiChainId }
     func slideConfirm() { dispatch(["type": "slide_confirm"]) }
     func cancelSigning() { dispatch(["type": "cancel_signing"]) }
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
