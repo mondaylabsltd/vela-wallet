@@ -1,0 +1,653 @@
+{
+ "suite": "marks",
+ "source": "hand-written from the four shells' logo rule (web tokens-model.ts + flows/marks.ts, desktop marks.rs, Android Marks.kt, iOS Marks.swift), 2026-10-08; the rule now lives in vela-core app/remote_mark.rs",
+ "cases": [
+  {
+   "name": "token_mark/eth-on-ethereum",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/eth-on-base-wears-ethereum-with-a-base-badge",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 8453,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": 8453,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+   }
+  },
+  {
+   "name": "token_mark/xdai-on-gnosis-any-case",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 100,
+    "symbol": "xDAI",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "XDA",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-100.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/okb-on-x-layer-is-its-own-chain",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 196,
+    "symbol": "OKB",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "OKB",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-196.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/bnb-on-bnb-chain",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 56,
+    "symbol": "BNB",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "BNB",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-56.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/bnb-on-opbnb-wears-bnb-chain-with-a-badge",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 204,
+    "symbol": "BNB",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "BNB",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-56.png"
+    ],
+    "badge_chain_id": 204,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-204.png"
+   }
+  },
+  {
+   "name": "token_mark/pol-on-polygon",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 137,
+    "symbol": "POL",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "POL",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-137.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/matic-on-polygon",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 137,
+    "symbol": "MATIC",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "MAT",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-137.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/avax-on-avalanche",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 43114,
+    "symbol": "AVAX",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "AVA",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-43114.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/unknown-native-falls-back-to-its-chain",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 4217,
+    "symbol": "pathUSD",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "PAT",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-4217.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/usdc-mixed-case-address",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "USDC",
+    "token_address": "0xa0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+     "https://ethereum-data.getvela.app/assets/eip155-1/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/logo.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/usdc-on-base",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 8453,
+    "symbol": "USDC",
+    "token_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png",
+     "https://ethereum-data.getvela.app/assets/eip155-8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913/logo.png"
+    ],
+    "badge_chain_id": 8453,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+   }
+  },
+  {
+   "name": "token_mark/an-erc20-named-eth-is-still-a-token",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 8453,
+    "symbol": "ETH",
+    "token_address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png",
+     "https://ethereum-data.getvela.app/assets/eip155-8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913/logo.png"
+    ],
+    "badge_chain_id": 8453,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+   }
+  },
+  {
+   "name": "token_mark/digits-only-address-has-one-spelling",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 137,
+    "symbol": "POL",
+    "token_address": "0x0000000000000000000000000000000000001010",
+    "named": []
+   },
+   "expect": {
+    "glyph": "POL",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-137/0x0000000000000000000000000000000000001010/logo.png"
+    ],
+    "badge_chain_id": 137,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-137.png"
+   }
+  },
+  {
+   "name": "token_mark/malformed-address-draws-the-glyph",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "USDC",
+    "token_address": "0x1234",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/uppercase-0X-prefix-is-malformed",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "USDC",
+    "token_address": "0XA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/empty-address-is-not-the-native-coin",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "ETH",
+    "token_address": "",
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/malformed-address-keeps-named-urls",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "USDC",
+    "token_address": "not-an-address",
+    "named": [
+     "https://cdn.example/usdc.png"
+    ]
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [
+     "https://cdn.example/usdc.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/named-first-deduped",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "USDT",
+    "token_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "named": [
+     "https://cdn.example/usdt.png",
+     "",
+     "https://cdn.example/usdt.png",
+     "   ",
+     "https://ethereum-data.getvela.app/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png"
+    ]
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [
+     "https://cdn.example/usdt.png",
+     "https://ethereum-data.getvela.app/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+     "https://ethereum-data.getvela.app/assets/eip155-1/0xdac17f958d2ee523a2206206994597c13d831ec7/logo.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/named-before-a-native-logo",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 10,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": [
+     "https://cdn.example/eth.png"
+    ]
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://cdn.example/eth.png",
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": 10,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-10.png"
+   }
+  },
+  {
+   "name": "token_mark/empty-base-is-the-built-in-endpoint",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 10,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": 10,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-10.png"
+   }
+  },
+  {
+   "name": "token_mark/blank-base-is-the-built-in-endpoint",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "  /  ",
+    "chain_id": 10,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": 10,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-10.png"
+   }
+  },
+  {
+   "name": "token_mark/re-pointed-base-with-a-trailing-slash",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "https://data.example/",
+    "chain_id": 100,
+    "symbol": "USDC",
+    "token_address": "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [
+     "https://data.example/assets/eip155-100/0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83/logo.png",
+     "https://data.example/assets/eip155-100/0xddafbb505ad214d7b80b1f830fccc89b60fb7a83/logo.png"
+    ],
+    "badge_chain_id": 100,
+    "badge_logo_url": "https://data.example/chainlogos/eip155-100.png"
+   }
+  },
+  {
+   "name": "token_mark/chain-0-builds-no-asset-url",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 0,
+    "symbol": "USDC",
+    "token_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "named": []
+   },
+   "expect": {
+    "glyph": "USD",
+    "logo_urls": [],
+    "badge_chain_id": 0,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/chain-0-eth-still-wears-ethereum",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 0,
+    "symbol": "ETH",
+    "token_address": null,
+    "named": []
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": 0,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "token_mark/glyph-short-ticker",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "op",
+    "token_address": "0x4200000000000000000000000000000000000042",
+    "named": []
+   },
+   "expect": {
+    "glyph": "OP",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/assets/eip155-1/0x4200000000000000000000000000000000000042/logo.png"
+    ],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "token_mark/glyph-empty-ticker",
+   "fn": "token_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "symbol": "",
+    "token_address": "0x1234",
+    "named": []
+   },
+   "expect": {
+    "glyph": "",
+    "logo_urls": [],
+    "badge_chain_id": 1,
+    "badge_logo_url": "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "chain_mark/base-wears-base-not-ethereum",
+   "fn": "chain_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 8453,
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "chain_mark/ethereum",
+   "fn": "chain_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 1,
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-1.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "chain_mark/gnosis",
+   "fn": "chain_mark",
+   "input": {
+    "ethereum_data_url": "https://data.example/",
+    "chain_id": 100,
+    "native_symbol": "XDAI"
+   },
+   "expect": {
+    "glyph": "XDA",
+    "logo_urls": [
+     "https://data.example/chainlogos/eip155-100.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "chain_mark/opbnb-wears-opbnb",
+   "fn": "chain_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 204,
+    "native_symbol": "BNB"
+   },
+   "expect": {
+    "glyph": "BNB",
+    "logo_urls": [
+     "https://ethereum-data.getvela.app/chainlogos/eip155-204.png"
+    ],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "chain_mark/chain-0-has-no-logo",
+   "fn": "chain_mark",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 0,
+    "native_symbol": "ETH"
+   },
+   "expect": {
+    "glyph": "ETH",
+    "logo_urls": [],
+    "badge_chain_id": null,
+    "badge_logo_url": null
+   }
+  },
+  {
+   "name": "chain_logo_url/built-in-endpoint",
+   "fn": "chain_logo_url",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 56
+   },
+   "expect": {
+    "value": "https://ethereum-data.getvela.app/chainlogos/eip155-56.png"
+   }
+  },
+  {
+   "name": "chain_logo_url/re-pointed-endpoint",
+   "fn": "chain_logo_url",
+   "input": {
+    "ethereum_data_url": "https://data.example",
+    "chain_id": 1
+   },
+   "expect": {
+    "value": "https://data.example/chainlogos/eip155-1.png"
+   }
+  },
+  {
+   "name": "chain_logo_url/trailing-slashes-trimmed",
+   "fn": "chain_logo_url",
+   "input": {
+    "ethereum_data_url": "https://data.example//",
+    "chain_id": 43114
+   },
+   "expect": {
+    "value": "https://data.example/chainlogos/eip155-43114.png"
+   }
+  },
+  {
+   "name": "chain_logo_url/chain-0-is-none",
+   "fn": "chain_logo_url",
+   "input": {
+    "ethereum_data_url": "",
+    "chain_id": 0
+   },
+   "expect": {
+    "value": null
+   }
+  }
+ ]
+}

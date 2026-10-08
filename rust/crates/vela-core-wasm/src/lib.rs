@@ -2206,6 +2206,56 @@ pub fn mark_miss_ttl_ms(kind: &str, status: Option<u16>) -> Option<u32> {
     vela_core::app::remote_mark::mark_miss_ttl_ms(mark_miss_of(kind, status))
 }
 
+/// A `MarkView` as the JS object its generated type (`MarkView.ts`) promises:
+/// `null`, not `undefined`, for an absent badge.
+fn mark_to_js(mark: &vela_core::app::remote_mark::MarkView) -> JsValue {
+    mark.serialize(&serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true))
+        .unwrap_or(JsValue::NULL)
+}
+
+/// A COIN's mark, a `MarkView` (`remote_mark::token_mark`):
+/// `ethereumDataUrl` is the person's chain-data endpoint ("" = the built-in
+/// one), `tokenAddress` `undefined`/`null` for the chain's native coin, `named`
+/// the logo URLs an index already gave (tried first).
+#[wasm_bindgen(js_name = tokenMark)]
+#[must_use]
+pub fn token_mark(
+    ethereum_data_url: &str,
+    chain_id: u32,
+    symbol: &str,
+    token_address: Option<String>,
+    named: Vec<String>,
+) -> JsValue {
+    mark_to_js(&vela_core::app::remote_mark::token_mark(
+        ethereum_data_url,
+        chain_id,
+        symbol,
+        token_address.as_deref(),
+        &named,
+    ))
+}
+
+/// A NETWORK drawn as itself, a `MarkView` (`remote_mark::chain_mark`): its
+/// own logo, never a badge.
+#[wasm_bindgen(js_name = chainMark)]
+#[must_use]
+pub fn chain_mark(ethereum_data_url: &str, chain_id: u32, native_symbol: &str) -> JsValue {
+    mark_to_js(&vela_core::app::remote_mark::chain_mark(
+        ethereum_data_url,
+        chain_id,
+        native_symbol,
+    ))
+}
+
+/// `{base}/chainlogos/eip155-{chainId}.png` on the person's chain-data
+/// endpoint ("" = the built-in one); `undefined` for chain 0, which names no
+/// network.
+#[wasm_bindgen(js_name = chainLogoUrl)]
+#[must_use]
+pub fn chain_logo_url(ethereum_data_url: &str, chain_id: u32) -> Option<String> {
+    vela_core::app::remote_mark::chain_logo_url(ethereum_data_url, chain_id)
+}
+
 fn balance_read_plan_inner(
     chain_id: u32,
     stables_json: &str,
@@ -2540,6 +2590,22 @@ mod core_082_exports {
             parse(&browser_site_label("Uniswap", "app.uniswap.org")),
             json!({"name": "Uniswap", "host_line": "app.uniswap.org"})
         );
+    }
+
+    /// `tokenMark` / `chainMark` hand back a JsValue, which only exists inside
+    /// a wasm host: verify-web.mjs replays tests/vectors/marks.json through
+    /// them. The plain-string export is checked here.
+    #[test]
+    fn a_chain_logo_is_on_the_persons_endpoint_and_never_on_chain_zero() {
+        assert_eq!(
+            chain_logo_url("", 56).as_deref(),
+            Some("https://ethereum-data.getvela.app/chainlogos/eip155-56.png")
+        );
+        assert_eq!(
+            chain_logo_url("https://data.example/", 1).as_deref(),
+            Some("https://data.example/chainlogos/eip155-1.png")
+        );
+        assert_eq!(chain_logo_url("", 0), None);
     }
 
     #[test]
