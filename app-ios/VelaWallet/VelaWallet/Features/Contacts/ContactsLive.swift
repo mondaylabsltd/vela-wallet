@@ -203,7 +203,8 @@ enum ContactsLive {
         hidden: Bool = false,
         loc: Loc,
         form: ContactDraft? = nil,
-        groupPick: Set<String>? = nil
+        groupPick: Set<String>? = nil,
+        networks: WalletNetworks = .builtin
     ) -> ContactDetailModel {
         let row = contactModel(contact, groups: view.groups)
         return ContactDetailModel(
@@ -222,7 +223,7 @@ enum ContactsLive {
             copiedLabel: loc.t("componentsUi.identiconViewer.copied"),
             activityTitle: loc.t("contacts.recentActivity"),
             activityAction: loc.t("history.filterAll"),
-            activity: rows.map { WalletLive.activityRow($0, loc: loc, hidden: hidden) },
+            activity: rows.map { WalletLive.activityRow($0, loc: loc, hidden: hidden, networks: networks) },
             activityEmpty: ContactsFixtures.activityEmpty(loc: loc),
             deleteLabel: loc.t("contacts.deleteContact"),
             backLabel: loc.t("componentsUi.mainNav.contacts"),

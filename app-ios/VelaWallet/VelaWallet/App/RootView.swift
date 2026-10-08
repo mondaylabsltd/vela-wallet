@@ -1792,7 +1792,12 @@ struct RootView: View {
                     tracker.withdrawn(userOpHash: hash, recordIds: ids)
                 },
                 recordsPersisted: { [activity] in activity.reconciled() },
-                nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
+                // The coin a dApp's record names: from the wallet's list at
+                // the moment it is written, so a network the person added
+                // has its own coin, not none.
+                nativeSymbol: { [settings] chainId in
+                    WalletNetworks(settings.networkAdmin?.networks).meta(chainId)?.nativeSymbol ?? ""
+                },
                 knownChains: { [settings] in
                     settings.networkAdmin?.networks.map(\.chainId) ?? []
                 },
@@ -1932,7 +1937,8 @@ struct RootView: View {
                                 // (`contact_filter_changed`, spec 093).
                                 rows: activity.feed?.contactRows ?? [],
                                 hidden: wallet.balance?.hidden ?? false, loc: loc,
-                                form: contactForm(), groupPick: groupPick
+                                form: contactForm(), groupPick: groupPick,
+                                networks: walletNetworks
                             ),
                             onBack: { contactsRoute = nil },
                             // The pencil shipped doing nothing (survey, 054).
@@ -2258,7 +2264,8 @@ struct RootView: View {
         if let balance = wallet.balance {
             let display = WalletLive.Display.from(settings.currency)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
-            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
+                                                 networks: walletNetworks)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
@@ -2515,7 +2522,8 @@ struct RootView: View {
                 model.base = .sendReceipt(SendLive.receipt(
                     view, display: display, on: receipt, loc: loc,
                     // Spec 099 R6: the countdown starts when the relay sent it.
-                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs
+                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs,
+                    networks: walletNetworks
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
@@ -2988,7 +2996,8 @@ struct RootView: View {
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
-            feeStartFailure: live?.quoteStartFailure
+            feeStartFailure: live?.quoteStartFailure,
+            networks: walletNetworks
         )
     }
 
