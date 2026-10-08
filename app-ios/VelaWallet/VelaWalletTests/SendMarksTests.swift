@@ -153,15 +153,38 @@ struct SendMarksTests {
     // MARK: - The fee coin
 
     /// A fee estimate as the send machine holds it, paid in `asset`.
-    private func estimate(chainId: Int, asset: [String: Any]) -> [String: Any] {
+    private func estimate(chainId: Int, asset: [String: Any], tier: String = "fast") -> [String: Any] {
         [
             "chain_id": chainId, "total_wei": "2100000000000000", "max_fee_per_gas": "2000000000",
             "network_fee_per_gas": "1000000000", "relayer_fee_per_gas": "1000000000",
             "bundler_gas_price": "1000000000", "in_band_gas_basis": "0",
             "effective_gas_price": NSNull(), "max_gas_price": NSNull(), "total_gas": "21000",
-            "deployed": true, "tier": "fast", "quoted": true, "fee_asset": asset,
+            "deployed": true, "tier": tier, "quoted": true, "fee_asset": asset,
             "fee_recipient": "0xfee",
         ]
+    }
+
+    private static let usdcFee: [String: Any] = [
+        "type": "erc20", "token": usdcBase, "decimals": 6, "amount": "50000", "symbol": "USDC",
+    ]
+
+    /// The fee session in force while it measures: no figure, pricing in
+    /// `feeToken` (`nil` = the chain's own coin), its rows not back yet.
+    private func measuring(feeToken: String?, options: [FeeOptionWire] = []) -> FeeViewWire {
+        FeeViewWire(busy: true, failed: nil, fee: nil, stale: false, feeToken: feeToken,
+                    options: options, confirmFeeReady: false)
+    }
+
+    /// The speed control with `tier` in force — picked by the person, its own
+    /// figure not in yet.
+    private func speed(_ tier: String) -> SendLive.SpeedInputs {
+        SendLive.SpeedInputs(
+            view: FeeSpeedViewWire(
+                tier: tier, preferred: "fast", previews: [], open: false, picked: true,
+                free: false, freeNote: false, single: false, gasPriceLine: false, options: []
+            ),
+            feeView: { _ in nil }
+        )
     }
 
     /// A USDC fee wears USDC's own logo — by its contract, which the row
@@ -195,6 +218,94 @@ struct SendMarksTests {
         let none = SendLive.form(sendView([:]), fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
         #expect(none.mark.ticker.isEmpty)
         #expect(none.mark.logoURLs.isEmpty)
+    }
+
+    /// A USDC fee keeps USDC's own logo while a newly picked speed is
+    /// measured (the desktop's rule): the estimate in hand is the speed just
+    /// left, the session in force has no figure yet, and the coin does not
+    /// change with the speed — so the row never drops to the chain's coin for
+    /// that moment, as the web's did.
+    @Test func theFeeCoinKeepsItsLogoWhileANewSpeedIsMeasured() throws {
+        let view = sendView([
+            "selected_token": token("ETH", chainId: 8453),
+            "fee": estimate(chainId: 8453, asset: Self.usdcFee, tier: "fast"),
+        ])
+        let usdc = TokenMarkModel.of(chainId: 8453, symbol: "USDC", tokenAddress: Self.usdcBase,
+                                     color: SendLive.chainColor(8453))
+        // Fast is the estimate's own speed; slow is a pick still measuring.
+        for tier in ["fast", "slow"] {
+            let row = SendLive.form(view, fee: measuring(feeToken: Self.usdcBase), display: .usd,
+                                    on: drawnForm(), loc: loc, speed: speed(tier)).fee
+            #expect(row.mark.ticker == "USDC", "\(tier)")
+            #expect(row.mark.logoURLs == usdc.logoURLs, "\(tier)")
+            #expect(row.mark.badgeLogoURL == usdc.badgeLogoURL, "\(tier)")
+        }
+        let slow = SendLive.form(view, fee: measuring(feeToken: Self.usdcBase), display: .usd,
+                                 on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(slow.value == loc.t("send.estimatingFee"), "the old speed's figure never shows")
+    }
+
+    /// With no estimate in hand at all, the row names the coin the fee
+    /// session is pricing in — the coin that will pay — named by the form's
+    /// holdings when the session's rows are not back; with no coin chosen,
+    /// the chain's own.
+    @Test func withNoEstimateTheRowNamesTheCoinBeingPriced() {
+        let view = sendView([
+            "selected_token": token("ETH", chainId: 8453),
+            "tokens": [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)],
+        ])
+        let usdc = SendLive.form(view, fee: measuring(feeToken: Self.usdcBase), display: .usd,
+                                 on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(usdc.mark.ticker == "USDC")
+        #expect(usdc.mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        let native = SendLive.form(view, fee: measuring(feeToken: nil), display: .usd,
+                                   on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(native.mark.ticker == "ETH")
+        #expect(native.mark.logoURLs == TokenMarkModel.of(chainId: 8453, symbol: "ETH",
+                                                           color: SendLive.chainColor(8453)).logoURLs)
+    }
+
+    /// A quote that failed on BNB Chain — the simulator's "ETH —" for the
+    /// golden Safe — names BNB, the chain's own coin, beside its "—"; a coin
+    /// the person chose (USDT) is named instead. Never the drawing's ETH.
+    @Test func aFailedQuoteNamesTheChainsCoinOrTheChosenOne() {
+        let usdt = "0x55d398326f99059ff775485246999027b3197955"
+        let view = sendView([
+            "selected_token": token("BNB", chainId: 56),
+            "tokens": [token("BNB", chainId: 56), token("USDT", chainId: 56, address: usdt)],
+        ])
+        func failed(_ feeToken: String?) -> FeeViewWire {
+            FeeViewWire(busy: false, failed: "quote_unavailable", fee: nil, stale: false,
+                        feeToken: feeToken, options: [], confirmFeeReady: false)
+        }
+        let bnb = SendLive.form(view, fee: failed(nil), display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(bnb.mark.ticker == "BNB")
+        #expect(bnb.mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(bnb.value == "—")
+        let chosen = SendLive.form(view, fee: failed(usdt), display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(chosen.mark.ticker == "USDT")
+        #expect(chosen.mark.logoURLs.first?.contains("/assets/eip155-56/") == true)
+        #expect(chosen.mark.badgeLogoURL == Marks.chainLogoURL(56))
+        #expect(chosen.value == "—")
+        // And before the fee session exists at all, the chain's coin too.
+        let none = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        for row in [bnb, chosen, none] {
+            #expect(row.mark.ticker != "ETH" && row.mark.glyph != "ETH")
+        }
+    }
+
+    /// The fee-coin sheet before any quote was asked draws its chrome and no
+    /// coins — never the drawing's ETH, USDC and USDT at its own balances,
+    /// which stood in on a live send.
+    @Test func theFeeCoinSheetBeforeAnyQuoteDrawsNoDrawnCoins() {
+        guard case .feeToken(let drawn)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet
+        else { fatalError("SD2f does not draw the fee sheet") }
+        #expect(drawn.rows.contains { $0.symbol == "ETH" }, "the drawing that used to stand in")
+        let reading = SendLive.feeSheetReading(on: drawn)
+        #expect(reading.rows.isEmpty)
+        #expect(reading.title == drawn.title)
+        #expect(reading.hint == drawn.hint)
     }
 
     /// The fee-coin sheet with no estimate names the SEND's chain — never 0.

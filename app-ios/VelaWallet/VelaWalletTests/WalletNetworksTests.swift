@@ -160,6 +160,88 @@ struct WalletNetworksTests {
         #expect(WalletLive.assetRows(held).first?.chain == "", "the catalogue alone had no name")
     }
 
+    /// An activity row on a network the person added names it — on the
+    /// home, the history, a token's page and a contact's page alike; the
+    /// catalogue said "7777".
+    @Test func anActivityRowNamesTheNetworkThePersonAdded() {
+        let lines: [FeedLineWire] = [.network(chainId: Self.customChainId)]
+        #expect(WalletLive.subtitleText(lines, loc: loc, networks: networks) == "Vela Testnet")
+        #expect(WalletLive.subtitleText(lines, loc: loc) == String(Self.customChainId),
+                "the catalogue alone named it by its id")
+        var own = item(id: "a", chainId: Self.customChainId)
+        own.subtitle = lines
+        let view = FeedViewWire(rows: [.header(id: "today", dayStartMs: own.dayStartMs, timestamp: own.timestamp),
+                                       .item(own)],
+                                transactions: [], newItemId: nil, toast: nil)
+        let home = WalletLive.apply(balance([]), feed: view,
+                                    on: WalletFixtures.buildMobileState(.h1, loc: loc),
+                                    loc: loc, networks: networks)
+        #expect(home.activityGroups.first?.rows.first?.subtitle == "Vela Testnet")
+        guard case .history(let drawn) = WalletFlowFixtures.build(.a1, loc: loc).base else {
+            Issue.record("A1 does not draw the history")
+            return
+        }
+        let history = FlowsLive.history(view, on: drawn, loc: loc, hidden: false, networks: networks)
+        #expect(history.groups.first?.rows.first?.subtitle == "Vela Testnet")
+    }
+
+    /// The hero's "can't reach" line names a network the person added by its
+    /// name, and so does the list it opens.
+    @Test func anUnreachableNetworkThePersonAddedIsNamed() {
+        var view = balance([holding("VTN", chainId: Self.customChainId)])
+        view.unreachableNetworks = [UnreachableNetworkWire(
+            chainId: Self.customChainId, lastKnown: "not_read", lastSeenUsd: nil,
+            lineKey: I18nKeys.SettingsUi.notReadYet
+        )]
+        view.unreachableKey = I18nKeys.SettingsUi.unreachableOne
+        let line = WalletLive.unreachableLine(view, loc: loc, networks: networks)
+        #expect(line == loc.t(I18nKeys.SettingsUi.unreachableOne, vars: ["name": "Vela Testnet"]))
+        let home = WalletLive.apply(view, on: WalletFixtures.buildMobileState(.h1, loc: loc),
+                                    loc: loc, networks: networks)
+        #expect(home.balance.status?.text == line)
+        #expect(WalletLive.unreachableLine(view, loc: loc)?.contains("Vela Testnet") == false,
+                "the catalogue alone could not name it")
+        let sheet = SettingsLive.withUnreachable(view, display: .usd, on: SettingsFixtures.build(.sr3, loc: loc),
+                                                 loc: loc, networks: networks)
+        #expect(sheet.unreachable.title == line)
+        #expect(sheet.unreachable.rows.first?.name == "Vela Testnet")
+    }
+
+    /// A fee in the coin of a network the person added says its unit — on
+    /// the send form, its speeds, its confirm and the signing sheet, which
+    /// all write it with `feeLine`. The catalogue left the figure bare.
+    @Test func aFeeOnANetworkThePersonAddedHasItsUnit() throws {
+        let estimate = try CoreJSON.decode(FeeEstimateWire.self, from: [
+            "chain_id": Self.customChainId, "total_wei": "2100000000000000",
+            "max_fee_per_gas": "2000000000", "network_fee_per_gas": "1000000000",
+            "relayer_fee_per_gas": "1000000000", "bundler_gas_price": "1000000000",
+            "in_band_gas_basis": "0", "effective_gas_price": NSNull(), "max_gas_price": NSNull(),
+            "total_gas": "21000", "deployed": true, "tier": "fast", "quoted": true,
+            "fee_asset": ["type": "native"], "fee_recipient": "0xfee",
+        ] as [String: Any])
+        #expect(SendLive.feeText(estimate, networks: networks) == "0.0021 VTN")
+        #expect(SendLive.feeLine(estimate, view: nil, fee: nil, display: .usd, networks: networks)
+                == "0.0021 VTN")
+        #expect(SendLive.feeText(estimate).hasSuffix(" "), "the catalogue alone had no unit")
+        let context = SigningLive.Context(
+            loc: loc, chainName: "Vela Testnet", chainDot: SettingsLive.chainColor(Self.customChainId),
+            nativeSymbol: "VTN", walletName: "Vela", walletAddress: golden,
+            chainId: Self.customChainId, networks: networks
+        )
+        let fee = FeeViewWire(busy: false, failed: nil, fee: estimate, stale: false, feeToken: nil,
+                              options: [], confirmFeeReady: true)
+        let clear = ClearSigningViewWire(
+            resolving: false, resolved: true, result: nil, message: nil, surface: .clearSign,
+            confirm: .confirm, blindTyped: nil, dangerHaptic: false, plainSend: nil
+        )
+        guard case .onchain(_, let value, _, _, _) = SigningLive.feeModel(clear: clear, fee: fee, context: context)
+        else {
+            Issue.record("a transaction's fee row is on-chain")
+            return
+        }
+        #expect(value == "~0.0021 VTN")
+    }
+
     /// A transaction on a network the person added has its Network row, in
     /// the network's own mark — and a transfer of ETH on Base wears Base's
     /// logo there, never its coin's.

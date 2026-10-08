@@ -1792,7 +1792,12 @@ struct RootView: View {
                     tracker.withdrawn(userOpHash: hash, recordIds: ids)
                 },
                 recordsPersisted: { [activity] in activity.reconciled() },
-                nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
+                // The coin a dApp's record names: from the wallet's list at
+                // the moment it is written, so a network the person added
+                // has its own coin, not none.
+                nativeSymbol: { [settings] chainId in
+                    WalletNetworks(settings.networkAdmin?.networks).meta(chainId)?.nativeSymbol ?? ""
+                },
                 knownChains: { [settings] in
                     settings.networkAdmin?.networks.map(\.chainId) ?? []
                 },
@@ -1932,7 +1937,8 @@ struct RootView: View {
                                 // (`contact_filter_changed`, spec 093).
                                 rows: activity.feed?.contactRows ?? [],
                                 hidden: wallet.balance?.hidden ?? false, loc: loc,
-                                form: contactForm(), groupPick: groupPick
+                                form: contactForm(), groupPick: groupPick,
+                                networks: walletNetworks
                             ),
                             onBack: { contactsRoute = nil },
                             // The pencil shipped doing nothing (survey, 054).
@@ -2258,7 +2264,8 @@ struct RootView: View {
         if let balance = wallet.balance {
             let display = WalletLive.Display.from(settings.currency)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
-            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
+                                                 networks: walletNetworks)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
@@ -2515,7 +2522,8 @@ struct RootView: View {
                 model.base = .sendReceipt(SendLive.receipt(
                     view, display: display, on: receipt, loc: loc,
                     // Spec 099 R6: the countdown starts when the relay sent it.
-                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs
+                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs,
+                    networks: walletNetworks
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
@@ -2532,11 +2540,16 @@ struct RootView: View {
                 }
                 model.base = .sendConfirm(live)
             }
-            if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
-                model.sheet = .feeToken(SendLive.feeSheet(
-                    fee, on: sheet, loc: loc,
-                    chainId: view.selectedToken?.chainId ?? view.multiChainId
-                ))
+            // The fee session's coins — or, before it has said anything, the
+            // sheet's chrome and no coins. Never the drawing's ETH, USDC and
+            // USDT at somebody else's balances over a live send.
+            if case .feeToken(let sheet)? = model.sheet {
+                model.sheet = .feeToken(fees.view.map { fee in
+                    SendLive.feeSheet(
+                        fee, on: sheet, loc: loc,
+                        chainId: view.selectedToken?.chainId ?? view.multiChainId
+                    )
+                } ?? SendLive.feeSheetReading(on: sheet))
             }
             // The person's own book, or — while it is still being read — the
             // drawn chrome with nobody in it. Never the drawing's people: a
@@ -2682,24 +2695,15 @@ struct RootView: View {
     /// `contacts.view` could name a neighbour by the time the tap lands: the
     /// core re-sorts the book (favourites, recency, names as they resolve).
     ///
-    /// A split takes the person as a new row of their own (the web's
-    /// `pickContactFor` does the same with a blank row it targets) — a
-    /// targetless pick would fill the single form's hidden recipient.
+    /// Where the pick lands is the core's (`apply_picked_address`): the
+    /// single form's recipient, or — in a split — the row the picker was
+    /// opened for, else the first row with no address, else a new row. The
+    /// shell adds no row of its own to aim it, and the single field's text
+    /// follows only a pick that went there.
     private func pickSendContact(_ address: String) {
         guard let view = send.view else { return }
-        if view.splitMode {
-            // Only the person's OWN name rides along (spec 097 F), as a
-            // group's members do.
-            let name = contacts.view?.contacts
-                .first { $0.address.lowercased() == address.lowercased() }?.name
-            send.appendSplitRecipients([[
-                "id": "", "address": address, "amount": "",
-                "name": name.map { $0 as Any } ?? NSNull(),
-            ]])
-        } else {
-            recipientDraft = address
-            send.pickedAddress(address)
-        }
+        if !view.splitMode { recipientDraft = address }
+        send.pickedAddress(address)
         if send.view?.showContactPicker == true { send.closeContactPicker() }
     }
 
@@ -2992,7 +2996,8 @@ struct RootView: View {
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
-            feeStartFailure: live?.quoteStartFailure
+            feeStartFailure: live?.quoteStartFailure,
+            networks: walletNetworks
         )
     }
 

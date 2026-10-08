@@ -130,11 +130,14 @@ struct BalanceRefreshTests {
         #expect(never.updated == nil, "never read: the glyph alone, no made-up time")
     }
 
-    /// The label ages: the same read, later, says so.
+    /// The label ages: the same read, later, says so — in the core's words
+    /// (`I18n::format_relative_time`, `RelativeTimeTests` replays its
+    /// vectors), a weekday within the week included.
     @Test func theLabelAges() {
-        let at = 1_800_000_000_000.0
+        let at = 1_800_000_000_000.0   // Fri 2027-01-15 08:00 UTC
+        let utc = TimeZone(secondsFromGMT: 0)!
         func said(after seconds: Double) -> String {
-            RelativeTime.ago(atMs: at, nowMs: at + seconds * 1000, loc: en)
+            en.relativeTime(atMs: at, now: Date(timeIntervalSince1970: at / 1000 + seconds), timeZone: utc)
         }
         #expect(said(after: 0) == "now")
         #expect(said(after: 44) == "now")
@@ -144,7 +147,7 @@ struct BalanceRefreshTests {
         #expect(said(after: 3_600) == "1h")
         #expect(said(after: 5 * 3_600 + 1_800) == "6h")
         #expect(said(after: -30) == "now", "a clock behind the read is never negative")
-        #expect(said(after: 2 * 86_400) == Formats.date(Date(timeIntervalSince1970: at / 1000)))
+        #expect(said(after: 2 * 86_400) == "Fri", "within the week, the day the figure was read")
     }
 
     /// The control turns while the core's refresh is out — or while the

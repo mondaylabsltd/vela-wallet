@@ -189,7 +189,7 @@ enum FlowsLive {
             pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
                        networks: networks)
         )
-        let groups = WalletLive.activityGroups(feed, loc: loc, hidden: hidden)
+        let groups = WalletLive.activityGroups(feed, loc: loc, hidden: hidden, networks: networks)
         return HistoryModel(
             header: header,
             mode: groups.isEmpty ? .empty : .rows,
@@ -599,7 +599,7 @@ enum FlowsLive {
         // same ticker on two networks is two different assets.
         let rows = (feed.map(items) ?? [])
             .filter { $0.chainId == token.chainId && $0.symbol == token.symbol }
-            .map { WalletLive.activityRow($0, loc: loc, hidden: false) }
+            .map { WalletLive.activityRow($0, loc: loc, hidden: false, networks: networks) }
 
         return TokenDetailModel(
             mark: TokenMarkModel.of(

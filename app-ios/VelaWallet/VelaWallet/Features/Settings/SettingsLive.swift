@@ -1172,11 +1172,12 @@ enum SettingsLive {
         _ balance: BalanceViewWire,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         let rows = balance.unreachableNetworks.map { network -> UnreachableRowModel in
-            let name = ChainCatalog.meta(network.chainId)?.displayName
+            let name = networks.meta(network.chainId)?.displayName
                 ?? chainMeta(loc, network.chainId)
             let amount = balance.hidden || network.lastSeenUsd == nil
                 ? "••••"
@@ -1194,7 +1195,8 @@ enum SettingsLive {
         }
         var live = model
         live.unreachable = UnreachableModel(
-            title: WalletLive.unreachableLine(balance, loc: loc) ?? loc.t(k.unreachableNone),
+            title: WalletLive.unreachableLine(balance, loc: loc, networks: networks)
+                ?? loc.t(k.unreachableNone),
             summary: rows.isEmpty ? nil : loc.t(k.unreachableBody),
             rows: rows
         )
