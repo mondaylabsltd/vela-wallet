@@ -1,7 +1,8 @@
 //! Rules of the browser's own memory — one test per rule the machine states.
 //!
 //! The rules here were WRITTEN rather than ported: spec 022 drew favourites,
-//! groups and tabs, and no client owned what they mean. Each test is the
+//! groups and tabs, and no client owned what they mean (custom groups are
+//! gone since issue #465; the two sections can still be hidden). Each test is the
 //! statement of one of those decisions, so a later change has to argue with a
 //! sentence rather than with a diff.
 
@@ -13,8 +14,8 @@ use support::DomainDriver;
 use vela_core::app::browser_load::{visit_to_record, LoadFinished};
 use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
-    Event, ExploreDoc, ExploreGroup, ExploreOperation as Op, ExploreShellResult as Res,
-    ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP, NAME_RULE,
+    Event, ExploreDoc, ExploreOperation as Op, ExploreShellResult as Res, ExploreSites,
+    ExploreSystemGroup, ExploreTab, FAVORITES_CAP, NAME_RULE,
 };
 
 type Sut = DomainDriver<ExploreSites>;
@@ -47,17 +48,6 @@ fn favorite(sut: &mut Sut, url: &str, title: Option<&str>, at: f64) -> ExploreDo
     }))
 }
 
-fn group(sut: &mut Sut, name: &str, at: f64) -> String {
-    let doc = written(sut.dispatch(Event::GroupCreated {
-        name: name.to_owned(),
-        now_ms: at,
-    }));
-    doc.groups
-        .last()
-        .map(|g| g.id.clone())
-        .expect("the group was created")
-}
-
 // ---------------------------------------------------------------------------
 // Hydration
 // ---------------------------------------------------------------------------
@@ -68,7 +58,7 @@ fn a_wallet_that_has_never_browsed_starts_empty_and_ready() {
     let sut = ready(None);
     let view = sut.view();
     assert!(view.ready);
-    assert!(view.favorites.is_empty() && view.groups.is_empty() && view.tabs.is_empty());
+    assert!(view.favorites.is_empty() && view.tabs.is_empty());
     assert!(!view.favorites_full);
 }
 
@@ -90,23 +80,69 @@ fn edits_before_hydration_are_dropped() {
     assert!(sut.view().favorites.is_empty());
 }
 
-/// A stored membership naming a site the document no longer carries is
-/// dropped at hydration — a group must never draw a blank row.
+/// A `vela.explore` document written before issue #465, with custom groups —
+/// a named one listing a favourite (desktop's "Move to group…") and an empty
+/// one a phone made — in the shape the shells store.
+const PRE_465_DOC: &str = r#"{
+    "favorites": [
+        {"origin": "https://curve.fi", "url": "https://curve.fi/",
+         "host": "curve.fi", "name": "Curve", "renamed": false,
+         "added_ms": 1759051384000.0},
+        {"origin": "https://polymarket.com", "url": "https://polymarket.com/",
+         "host": "polymarket.com", "name": "Polymarket", "renamed": false,
+         "added_ms": 1759051385000.0}
+    ],
+    "groups": [
+        {"id": "g-1759051390000", "name": "Trading",
+         "members": ["https://curve.fi", "https://gone.example"],
+         "hidden": false, "created_ms": 1759051390000.0},
+        {"id": "g-1759051391000", "name": "New group", "members": [],
+         "hidden": true, "created_ms": 1759051391000.0}
+    ],
+    "tabs": [],
+    "selected_tab": null,
+    "hidden_system": ["recent"],
+    "name_rule": 1
+}"#;
+
+/// Issue #465: custom groups are gone. A document that still carries them
+/// reads — on the wire the shell answers with, too — keeps every favourite
+/// and the hidden sections, and the next write leaves `groups` out.
 #[test]
-fn hydration_drops_memberships_whose_site_is_gone() {
-    let doc = ExploreDoc {
-        favorites: Vec::new(),
-        groups: vec![ExploreGroup {
-            id: "g-1".to_owned(),
-            name: "Trading".to_owned(),
-            members: vec!["https://gone.example".to_owned()],
-            hidden: false,
-            created_ms: T0,
-        }],
-        ..ExploreDoc::default()
-    };
-    let sut = ready(Some(doc));
-    assert!(sut.view().groups[0].sites.is_empty());
+fn a_document_from_before_465_keeps_every_favourite_and_loses_its_groups() {
+    let stored: ExploreDoc = serde_json::from_str(PRE_465_DOC).expect("the pre-#465 shape reads");
+    let answer: Res = serde_json::from_str(&format!(r#"{{"type":"loaded","doc":{PRE_465_DOC}}}"#))
+        .expect("the shell's answer reads with the old groups in it");
+    assert_eq!(
+        answer,
+        Res::Loaded {
+            doc: Some(stored.clone())
+        }
+    );
+
+    let mut sut = ready(Some(stored));
+    let view = sut.view();
+    let origins: Vec<&str> = view
+        .favorites
+        .iter()
+        .map(|site| site.origin.as_str())
+        .collect();
+    assert_eq!(origins, vec!["https://curve.fi", "https://polymarket.com"]);
+    assert!(view.recent_hidden, "a hidden section stays hidden");
+    assert!(!view.favorites_hidden);
+
+    // The next write is the document without groups.
+    let doc = written(sut.dispatch(Event::FavoriteRenamed {
+        origin: "https://curve.fi".to_owned(),
+        name: "Stables".to_owned(),
+    }));
+    let json = serde_json::to_value(&doc).expect("the document serialises");
+    assert!(
+        json.get("groups").is_none(),
+        "groups were written back: {json}"
+    );
+    assert_eq!(doc.favorites.len(), 2, "every favourite is kept");
+    assert_eq!(doc.hidden_system, vec![ExploreSystemGroup::Recent]);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,26 +210,16 @@ fn a_renamed_tile_is_never_renamed_by_the_page() {
     assert_eq!(sut.view().favorites[0].name, "My swap");
 }
 
-/// Un-pinning takes the site out of every group it was in.
+/// Un-pinning takes the tile away.
 #[test]
-fn unpinning_a_site_removes_it_from_its_groups() {
+fn unpinning_a_site_removes_its_tile() {
     let mut sut = ready(None);
     favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    let id = group(&mut sut, "Trading", T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-    assert_eq!(sut.view().groups[0].sites.len(), 1);
-
     let doc = written(sut.dispatch(Event::FavoriteRemoved {
         origin: "https://curve.fi".to_owned(),
     }));
     assert!(doc.favorites.is_empty());
-    assert!(
-        doc.groups[0].members.is_empty(),
-        "a group kept a membership pointing at nothing"
-    );
+    assert!(sut.view().favorites.is_empty());
 }
 
 /// Only a real web address can be pinned, and the grid has an end.
@@ -443,75 +469,8 @@ fn an_untitled_page_is_pinned_under_its_host() {
 }
 
 // ---------------------------------------------------------------------------
-// Groups
+// The two sections (the only groups since issue #465)
 // ---------------------------------------------------------------------------
-
-/// Deleting a group keeps its sites — the rule contacts already settled.
-///
-/// A group is a shelf, not a box: throwing the shelf away does not throw away
-/// the books. A person meets one behaviour across the wallet, not two.
-#[test]
-fn deleting_a_group_keeps_its_sites() {
-    let mut sut = ready(None);
-    favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    let id = group(&mut sut, "Trading", T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-
-    let doc = written(sut.dispatch(Event::GroupDeleted { id }));
-    assert!(doc.groups.is_empty());
-    assert_eq!(doc.favorites.len(), 1, "the favourite went with the shelf");
-}
-
-/// A group lists FAVOURITES. An origin nobody pinned is not one.
-#[test]
-fn a_group_cannot_hold_a_site_that_is_not_pinned() {
-    let mut sut = ready(None);
-    let id = group(&mut sut, "Trading", T0);
-    assert!(
-        sut.dispatch(Event::GroupMemberAdded {
-            id: id.clone(),
-            origin: "https://never-pinned.example".to_owned(),
-        })
-        .is_empty(),
-        "a group took a site the grid above cannot show"
-    );
-    // And the same site twice is one membership.
-    favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-    assert!(sut
-        .dispatch(Event::GroupMemberAdded {
-            id,
-            origin: "https://curve.fi".to_owned(),
-        })
-        .is_empty());
-    assert_eq!(sut.view().groups[0].sites.len(), 1);
-}
-
-/// Two groups made in the same millisecond are two groups.
-///
-/// The shell's clock is the only id source this core has, and a shared id
-/// would mean renaming one renames the other.
-#[test]
-fn groups_made_in_the_same_millisecond_keep_their_own_identities() {
-    let mut sut = ready(None);
-    let first = group(&mut sut, "Trading", T0);
-    let second = group(&mut sut, "Prediction", T0);
-    assert_ne!(first, second);
-
-    written(sut.dispatch(Event::GroupRenamed {
-        id: second,
-        name: "Markets".to_owned(),
-    }));
-    let view = sut.view();
-    assert_eq!(view.groups[0].name, "Trading");
-    assert_eq!(view.groups[1].name, "Markets");
-}
 
 /// A system group can be hidden and can never be deleted.
 ///
@@ -540,26 +499,6 @@ fn system_groups_hide_rather_than_disappear() {
         hidden: false,
     }));
     assert!(doc.hidden_system.is_empty());
-}
-
-/// A blank name creates and renames nothing.
-#[test]
-fn a_group_needs_a_name() {
-    let mut sut = ready(None);
-    assert!(sut
-        .dispatch(Event::GroupCreated {
-            name: "   ".to_owned(),
-            now_ms: T0,
-        })
-        .is_empty());
-    let id = group(&mut sut, "Trading", T0);
-    assert!(sut
-        .dispatch(Event::GroupRenamed {
-            id,
-            name: "\t\n".to_owned(),
-        })
-        .is_empty());
-    assert_eq!(sut.view().groups[0].name, "Trading");
 }
 
 // ---------------------------------------------------------------------------

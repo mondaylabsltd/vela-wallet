@@ -616,8 +616,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   "Updating…" with the glyph spinning. No existing key said exactly that
 //   (`home.balanceStale` is a sentence about some balances, not a label).
 //   1791 leaves, 99 branches.
-if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
+// 1884 (issue #465, 2026-10-08): − `explore.{groupOptions,newGroup,
+//   moveToGroup,hiddenTag,hiddenCount,systemGroup}` — Explore has no custom
+//   groups any more (the core dropped them; a stored document's `groups` is
+//   ignored and not written back), and the Manage groups sheet keeps two
+//   rows, Favorites and Recent dApps, each with its eye and no "System"
+//   meta. `explore.manageGroups`, `siteCount`, `hide`, `show` and `edit`
+//   stay: that sheet still uses them. Contact groups are another feature and
+//   keep every key. 1785 leaves, 99 branches.
+if (PATHS.length !== 1884) fail(`expected 1884 paths (1785 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1785) fail(`expected 1785 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

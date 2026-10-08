@@ -138,8 +138,6 @@ export * from './DsessTimerKind';
 export * from './DsessView';
 export * from './ExploreDoc';
 export * from './ExploreEvent';
-export * from './ExploreGroup';
-export * from './ExploreGroupView';
 export * from './ExploreOperation';
 export * from './ExploreShellResult';
 export * from './ExploreSite';
