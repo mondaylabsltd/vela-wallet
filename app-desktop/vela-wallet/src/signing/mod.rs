@@ -90,9 +90,6 @@ pub struct SigningStrings {
     /// the key `componentsUi.signing.<leaf>`. `live::localized_terms` swaps
     /// them in.
     pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
-    /// The wallet's own key backup, in the person's language.
-    pub backup_intent: SharedString,
-    pub backup_labels: [SharedString; 3],
     pub slide_to_confirm: SharedString,
     pub confirm_send: SharedString,
     pub confirm_swap: SharedString,
@@ -361,12 +358,6 @@ impl SigningStrings {
             terms: vela_core::app::clear_signing::ClearTerm::all()
                 .map(|term| (term, s(&term.leaf())))
                 .collect(),
-            backup_intent: loc.t("settingsModals.backup.intent"),
-            backup_labels: [
-                loc.t("settingsModals.backup.registeredAs"),
-                loc.t("contacts.addressLabel"),
-                loc.t("settingsModals.backup.publicKeys"),
-            ],
             slide_to_confirm: s("slideToConfirm"),
             confirm_send: s("confirmSend"),
             confirm_swap: s("confirmSwap"),

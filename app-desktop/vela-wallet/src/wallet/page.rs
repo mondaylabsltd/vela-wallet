@@ -16664,37 +16664,12 @@ impl WalletPage {
                 .as_ref()
                 .is_some_and(|request| request.first_party);
             model.first_party = own;
-            if own {
-                // Matched on the VERIFIED registry address, never on "it is ours"
-                // alone and never on the English words: the first look at this
-                // column headed a plain self-transfer "备份公钥".
-                let is_backup = host.clear_view.result.as_ref().is_some_and(|result| {
-                    result.verified
-                        && result.contract_address.as_deref().is_some_and(|address| {
-                            address.eq_ignore_ascii_case(vela_core::registry_backup::REGISTRY)
-                        })
-                });
-                // …and its built-in lines, in the person's language. The core's
-                // are English, like the descriptors beside them; this one is
-                // OURS. First-party + the intent block it opens with.
-                if is_backup
-                    && let Some(signing_fixtures::Block::Intent { text, .. }) =
-                        model.blocks.first_mut()
-                {
-                    *text = self.signing.backup_intent.clone();
-                }
-                let mut relabelled = 0;
-                for block in model.blocks.iter_mut().filter(|_| is_backup) {
-                    if let signing_fixtures::Block::Rows(rows) = block {
-                        for row in rows.iter_mut() {
-                            if let Some(label) = self.signing.backup_labels.get(relabelled) {
-                                row.0 = label.clone();
-                                relabelled += 1;
-                            }
-                        }
-                    }
-                }
-            } else if let Some(base) = host.origin.strip_prefix("https://") {
+            // Its words are the core's terms like any reading's
+            // (`localized_terms`, above): the backup's intent and its Network
+            // / Address / Public keys rows arrive named, so nothing here
+            // relabels them — the old swap by position would have put
+            // "Registered as" over the Network row the moment the core added it.
+            if !own && let Some(base) = host.origin.strip_prefix("https://") {
                 let base = base.split('/').next().unwrap_or_default();
                 if !base.is_empty() {
                     model.dapp_icon_urls = vec![

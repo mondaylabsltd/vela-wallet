@@ -2180,6 +2180,47 @@ mod tests {
         );
     }
 
+    /// The wallet's own key backup speaks the reader's language through the
+    /// core's terms alone: its intent, then Network / Address / Public keys,
+    /// in that order. Nothing relabels by position — that swap put
+    /// "Registered as" over whichever row came first, which is the Network
+    /// row now. The confirm says the intent too, not a generic "Confirm".
+    #[test]
+    fn the_key_backup_reads_in_the_readers_language_through_the_terms() {
+        let zh = SigningStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let rows_of = |chain_id: u32| {
+            let shown = localized_terms(&registry_backup_reading(chain_id), &zh);
+            let drawn = blocks(&shown, &RequestFacts::default(), &zh);
+            let intent = match drawn.first() {
+                Some(Block::Intent { text, .. }) => text.to_string(),
+                _ => unreachable!("the backup opens with its intent"),
+            };
+            let rows: Vec<(String, String)> = drawn
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Rows(rows) => Some(rows.clone()),
+                    _ => None,
+                })
+                .flatten()
+                .map(|row| (row.0.to_string(), row.1.to_string()))
+                .collect();
+            (intent, rows)
+        };
+        let (intent, rows) = rows_of(1);
+        assert_eq!(intent, "备份公钥");
+        let labels: Vec<&str> = rows.iter().map(|(label, _)| label.as_str()).collect();
+        assert_eq!(labels, ["网络", "地址", "公钥数量"]);
+        assert_eq!(rows[0].1, "Ethereum", "the network the header chip said");
+        assert_eq!(rows[2].1, "3");
+        assert!(
+            confirm_label(&registry_backup_reading(1), &zh).ends_with("备份公钥"),
+            "the confirm says what it does"
+        );
+        // The rehearsal chain names itself the same way.
+        let (_, base) = rows_of(8453);
+        assert_eq!(base[0], ("网络".to_owned(), "Base".to_owned()));
+    }
+
     fn view(result: ClearSignResult) -> ClearSigningView {
         let mut host =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
