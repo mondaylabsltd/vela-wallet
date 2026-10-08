@@ -57,6 +57,13 @@ struct SigningSheet: View {
     var onRetry: (() -> Void)?
 
     @State private var techOverride: Bool?
+    /// The confirm's note, the last time it was said. The note comes and goes
+    /// with the gate — "正在计算网络费用…" on every re-quote, refresh and new
+    /// speed — and each time it went, the content under a sheet scrolled to
+    /// its end shrank and pulled everything down a line (41 pt; the Android
+    /// device moved ~33 px, the web 29). Once said, its line stays, holding
+    /// these words invisibly while the gate is open (the web's rule).
+    @State private var heldNote: String?
 
     private var techOpen: Binding<Bool> {
         Binding(get: { techOverride ?? model.techOpen }, set: { techOverride = $0 })
@@ -82,6 +89,15 @@ struct SigningSheet: View {
         }
         .background(theme.bgRaised.ignoresSafeArea())
         .accessibilityLabel(model.panelTitle)
+        .onChange(of: saidNote, initial: true) { _, said in
+            if let said { heldNote = said }
+        }
+    }
+
+    /// The confirm's note as the gate says it now; `nil` while it is open.
+    private var saidNote: String? {
+        guard let confirm = model.confirm, !confirm.enabled else { return nil }
+        return model.confirmBlockLine
     }
 
     /// The send receipt's own body and its one button, so a dApp transaction
@@ -126,7 +142,8 @@ struct SigningSheet: View {
             SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
                            speed: model.feeSpeed, onSpeed: onSpeed,
                            refresh: onRefreshFee == nil ? nil : model.feeRefresh,
-                           onRefresh: onRefreshFee, chevron: model.feeChevron)
+                           onRefresh: onRefreshFee, chevron: model.feeChevron,
+                           measuring: model.feeRefresh?.refreshing ?? false)
         }
         SigningSignerRow(label: model.signer.label, name: model.signer.name,
                          seed: model.signer.seed)
@@ -134,6 +151,8 @@ struct SigningSheet: View {
         // all. It is not disabled — it is absent, because the wallet
         // never offered it.
         if let confirm = model.confirm {
+            let note = confirm.enabled ? nil : model.confirmBlockLine
+            let noteLine = note ?? heldNote
             // Issue #461: one tap, full width, shut while the core's gate is
             // (`confirm.enabled`). The approve leaves the form for the
             // receipt in the same pass, so the button is never seen dimmed
@@ -142,25 +161,34 @@ struct SigningSheet: View {
             // says where it goes instead — that page's slide is the consent.
             VelaButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
                        kind: .primary, enabled: confirm.enabled, action: onConfirm)
-                .padding(.bottom, !confirm.enabled && model.confirmBlockLine != nil
-                         ? Tokens.Space.s0 : Tokens.Space.s16)
+                .padding(.bottom, noteLine != nil ? Tokens.Space.s0 : Tokens.Space.s16)
                 // The Trusted Signer route's button opens a page; it signs
                 // nothing here, so it carries its own hook (Android and
                 // desktop: `signing-open-signer`).
                 .accessibilityIdentifier(model.confirmAsButton ? "signing.openSigner" : "signing.confirm")
             // Spec 099 R7: a shut confirm says why — the core's line for the
             // part of the gate that is shut, and the action that opens it.
-            if !confirm.enabled, let line = model.confirmBlockLine {
-                Text(verbatim: line)
-                    .typeRole(Typography.rowSub)
-                    .foregroundStyle(theme.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Tokens.Space.s8)
-                    .padding(.bottom, Tokens.Space.s16)
+            // Once said, the line stays: open, it holds the last words as
+            // space, unseen and unread (`heldNote`).
+            if let note {
+                confirmNote(note)
                     .accessibilityIdentifier("signing.confirmBlock")
+            } else if let noteLine {
+                confirmNote(noteLine)
+                    .hidden()
+                    .accessibilityHidden(true)
             }
         }
+    }
+
+    private func confirmNote(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub)
+            .foregroundStyle(theme.fgMuted)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, Tokens.Space.s8)
+            .padding(.bottom, Tokens.Space.s16)
     }
 
     /// The universal renderer: blocks in mock order, out. Nothing here knows
