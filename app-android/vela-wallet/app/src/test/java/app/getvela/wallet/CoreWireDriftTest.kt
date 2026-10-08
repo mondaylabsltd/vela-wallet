@@ -1398,6 +1398,21 @@ class CoreWireDriftTest {
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
+        // The wallet's own request is marked as such where it is raised, and
+        // the view says so; a request that does not say is a page's.
+        assertTrue("first_party" in serializer<SignRequestView>().descriptor.elementNames)
+        val own = Wire.json.encodeToString(
+            SignEvent.serializer(),
+            SignEvent.RequestArrived(
+                id = "1", method = "eth_sendTransaction", params_json = "[]", origin = "https://getvela.app",
+                transport_id = "wallet", dedicated_transport = true, now_ms = 1.0, first_party = true,
+            ),
+        )
+        assertTrue(own, "\"first_party\":true" in own)
+        assertEquals(
+            false,
+            roundTrip<SignRequestView>("""{"id":"1","method":"eth_sign","kind":"eth_sign","params_json":"[]","origin":"https://x","chain_id":1}""").first_party,
+        )
     }
 
     @Test
