@@ -1052,6 +1052,7 @@ enum SendLive {
                 : view.treasuryBootstrap != nil
                     ? loc.t("componentsUi.funding.cancel")
                     : nil,
+            noticeReport: reportLabel(view, loc: loc),
             repeatNote: confirmRepeatNote(view, loc: loc),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
@@ -1210,6 +1211,27 @@ enum SendLive {
             copy: loc.t("componentsUi.treasuryBootstrap.copyBtn"),
             copied: loc.t("componentsUi.treasuryBootstrap.copied")
         )
+    }
+
+    /// Issue #466: "Report this" on either relay stop — shown exactly while
+    /// the core built a report for it (`relay_report`: a stop up on a network
+    /// Vela ships, whose operator is the one to tell). The words are the
+    /// stop's own key; what the button files is the core's.
+    static func reportLabel(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.relayReport != nil else { return nil }
+        if view.relayUnreachable != nil { return loc.t("componentsUi.relayUnreachable.reportBtn") }
+        if view.treasuryBootstrap != nil { return loc.t("componentsUi.treasuryBootstrap.reportBtn") }
+        return nil
+    }
+
+    /// What "Report this" files, snapshotted at the tap: the core's words,
+    /// area and fingerprint. The stop closes itself once the relay is funded,
+    /// and a watch refresh rewrites its figures — the sheet keeps what the
+    /// person was shown when they asked.
+    static func reportSeed(_ view: SendViewWire) -> BugReport.Seed? {
+        guard let report = view.relayReport else { return nil }
+        return BugReport.Seed(what: report.what, steps: report.steps,
+                              area: report.area, fingerprint: report.fingerprint)
     }
 
     static func stopRetry(_ view: SendViewWire, loc: Loc) -> String? {

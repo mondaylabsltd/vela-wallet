@@ -838,6 +838,10 @@ struct SendConfirmModel {
     /// looking at the page (spec 054 US4).
     var noticeAction: String?
     var noticeSecondary: String?
+    /// Issue #466: a relay stop's "Report this" — the in-app report, seeded
+    /// with the core's. `nil` when the core built no report (a network the
+    /// person added: nobody else to tell).
+    var noticeReport: String? = nil
     /// A split's repeated payees, said again on the page that signs (issue
     /// 203): two lines paying one address are hardest to spot exactly here,
     /// where the avatars are identical and the sum looks right.

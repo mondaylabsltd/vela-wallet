@@ -105,6 +105,10 @@ struct FlowHost: View {
     var sendWarning: String?
     /// Spec 098 §4: the treasury stop's address, under [sendWarning].
     var sendFund: FundAddressModel?
+    /// Issue #466: a relay stop's "Report this" on the form (the confirm
+    /// page's rides in its model), and its tap on either page.
+    var sendReport: String?
+    var onRelayReport: (() -> Void)?
     var sendCtaDisabled = false
     /// Which row of the picker was tapped. The index travels because the core
     /// keys tokens by id and the screen only knows positions — the same defect
@@ -399,6 +403,8 @@ struct FlowHost: View {
                     rowText: sendRow,
                     warning: sendWarning,
                     fund: sendFund,
+                    report: sendReport,
+                    onReport: { onRelayReport?() },
                     ctaDisabled: sendCtaDisabled,
                     onRefreshFee: onRefreshFee,
                     onToggleSpeed: { onToggleSpeed?() },
@@ -410,7 +416,8 @@ struct FlowHost: View {
                 SendConfirmBody(
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
-                    onNoticeSecondary: { onNoticeSecondary?() }
+                    onNoticeSecondary: { onNoticeSecondary?() },
+                    onNoticeReport: { onRelayReport?() }
                 )
             } footer: {
                 FlowFooter {

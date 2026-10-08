@@ -124,6 +124,24 @@ struct FundAddressView: View {
     }
 }
 
+/// Issue #466: a relay stop's "Report this". The operator's lead says telling
+/// them is the fastest fix, and this is how: it opens the app's own report
+/// sheet with the core's words already in it (read, editable, then sent) —
+/// never a blank GitHub form. A quiet full-width button, as the web and
+/// Android draw it, under the address it is about.
+struct RelayReportButton: View {
+    let title: String
+    let action: () -> Void
+
+    /// A stable hook for tests — Android's test tag for the same button.
+    static let testId = "relay-report"
+
+    var body: some View {
+        VelaButton(title: title, kind: .secondary, action: action)
+            .accessibilityIdentifier(Self.testId)
+    }
+}
+
 /// R2 / R3 — the address, as a code.
 struct ReceiveQrBody: View {
     @Environment(\.theme) private var theme
@@ -856,6 +874,9 @@ struct SendFormBody: View {
     var warning: String?
     /// Spec 098 §4: the treasury stop's address, under [warning].
     var fund: FundAddressModel?
+    /// Issue #466: a relay stop's "Report this", under [fund]; its tap.
+    var report: String?
+    var onReport: () -> Void = {}
     var ctaDisabled = false
     /// Spec 069: measure the fee again; fold or unfold the speed control; a
     /// one-shot pick. Absent in the gallery.
@@ -924,6 +945,7 @@ struct SendFormBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.warningBase)
                 if let fund { FundAddressView(model: fund) }
+                if let report { RelayReportButton(title: report, action: onReport) }
             }
             if let add = model.addRecipient {
                 Button(action: onAddRecipient) {
@@ -983,6 +1005,7 @@ struct SendFormBody: View {
                     .foregroundStyle(warning != nil ? theme.warningBase : theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let fund { FundAddressView(model: fund) }
+                if let report { RelayReportButton(title: report, action: onReport) }
             }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
@@ -1387,6 +1410,8 @@ struct SendConfirmBody: View {
     var onConfirm: () -> Void = {}
     var onNoticeAction: () -> Void = {}
     var onNoticeSecondary: () -> Void = {}
+    /// Issue #466: the stop's "Report this".
+    var onNoticeReport: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -1441,6 +1466,9 @@ struct SendConfirmBody: View {
                 VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                     NoticeBannerView(text: notice)
                     if let fund = model.noticeFund { FundAddressView(model: fund) }
+                    if let report = model.noticeReport {
+                        RelayReportButton(title: report, action: onNoticeReport)
+                    }
                     if model.noticeAction != nil || model.noticeSecondary != nil {
                         HStack(spacing: Tokens.Space.s8) {
                             if let secondary = model.noticeSecondary {

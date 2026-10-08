@@ -162,8 +162,10 @@ final class FeedbackSender {
     // MARK: - Sending
 
     /// Send the report: the person's words, the lines the sheet showed, and
-    /// the screenshots that are ready, in tile order.
-    func send(what: String, steps: String, previewLines: [String], version: String) async {
+    /// the screenshots that are ready, in tile order. `seed` — a report the
+    /// app started (issue #466) — files under its own area and fingerprint.
+    func send(what: String, steps: String, previewLines: [String], version: String,
+              seed: BugReport.Seed? = nil) async {
         guard !sending, Self.ready(what) else { return }
         state = .sending
         // Every tile still being prepared is part of this report: wait for
@@ -174,8 +176,9 @@ final class FeedbackSender {
         }
         let images = shots.compactMap { $0.prepared?.jpeg }
         let payload = BugReport.build(
-            what: what, steps: steps, environmentLines: previewLines, version: version,
-            screenshots: images
+            what: what, steps: steps, area: seed?.area ?? BugReport.areaOther,
+            environmentLines: previewLines, version: version,
+            screenshots: images, fingerprint: seed?.fingerprint
         )
         switch await BugReport.send(payload, endpoint: endpoint, transport: transport) {
         case .filed(let number, let url, let deduped, let dropped):

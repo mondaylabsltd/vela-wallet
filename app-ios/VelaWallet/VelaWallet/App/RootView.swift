@@ -198,6 +198,11 @@ struct RootView: View {
     /// always, more people.
     @State private var importReplaces = false
     @State private var feeSheetOpen = false
+    /// Issue #466: the relay stop's report, snapshotted when "Report this"
+    /// was tapped, while its sheet is up — and the sender that files it,
+    /// which outlives the sheet so a report closed mid-send still lands.
+    @State private var relayReport: BugReport.Seed?
+    @State private var relayReportSender = FeedbackSender()
     /// Whether the token picker is showing tick boxes.
     ///
     /// **The shell's**, and deliberately so: the core's `multiSelectMode` flips
@@ -2994,6 +2999,8 @@ struct RootView: View {
                         SendLive.stopNotice($0, loc: loc) ?? SendLive.formWarning($0, loc: loc)
                     },
                     sendFund: send.view.flatMap { SendLive.fundAddress($0, loc: loc) },
+                    sendReport: send.view.flatMap { SendLive.reportLabel($0, loc: loc) },
+                    onRelayReport: { openRelayReport() },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
@@ -3080,6 +3087,23 @@ struct RootView: View {
                     onBatchMerge: { importReplaces.toggle() },
                     scan: scanInputs()
                 )
+                .modifier(RelayReportSheet(
+                    seed: $relayReport,
+                    sender: relayReportSender,
+                    model: { settingsModel(.st1) },
+                    scheme: scheme
+                ))
+    }
+
+    /// "Report this" on a relay stop (issue #466): the in-app report sheet,
+    /// seeded with what the core built for the stop as it stands NOW — the
+    /// stop closes itself once funded and its figures move with each watch,
+    /// so the sheet keeps what the person was shown. A fresh form, unless a
+    /// report is still on its way, whose sheet this then reopens on.
+    private func openRelayReport() {
+        guard let seed = send.view.flatMap(SendLive.reportSeed) else { return }
+        relayReportSender.reset()
+        relayReport = seed
     }
     /// A picked photo with no code in it. Its own alert rather than a silent
     /// return: somebody who chose a picture is owed an answer about it.
