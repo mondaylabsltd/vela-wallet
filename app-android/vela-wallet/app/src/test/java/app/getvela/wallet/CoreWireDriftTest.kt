@@ -756,6 +756,9 @@ class CoreWireDriftTest {
         // Issue #466: what "Report this" files is the core's, field for field.
         assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendRelayReport>("SendRelayReport")
         assertTrue("relay_report" in serializer<SendView>().descriptor.elementNames)
+        // The fee row's coin is the core's, field for field (C10).
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendFeeCoin>("SendFeeCoin")
+        assertTrue("fee_coin" in serializer<SendView>().descriptor.elementNames)
         assertFieldsExist<SendQuotedFee>("SendQuotedFee")
         assertFieldsExist<SendTxRecord>("SendTxRecord")
         assertFieldsExist<SendRecipientIdentity>("SendRecipientIdentity")
