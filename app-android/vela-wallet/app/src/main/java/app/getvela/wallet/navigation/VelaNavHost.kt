@@ -1193,6 +1193,9 @@ fun VelaNavHost(
                             onRecipientAction = { action ->
                                 when (action) {
                                     RecipientAction.Add -> send.splitAdd()
+                                    // The book for the split as a whole: the core puts
+                                    // the pick in the first row with no address, else a
+                                    // new row (#467). Never add a blank row here to aim it.
                                     RecipientAction.Contacts -> send.openContactPicker()
                                     RecipientAction.Import -> send.openBatch()
                                 }

@@ -803,7 +803,12 @@ object SendLive {
         // tier change — and "measuring" is the honest thing to say.
         val ofAnotherTier = inHand != null && speed != null && offered(inHand.tier) != speed.view.tier
         val estimate = inHand.takeIf { !ofAnotherTier }
-        val (text, mark) = feeText(estimate, view, fee, ctx)
+        val text = feeText(estimate, view, fee, ctx).first
+        // The coin is the one in hand even while a newly picked speed is
+        // measured: the coin does not change with the speed, only the figure
+        // does. Taken from the speed's own (absent) estimate it was no coin
+        // for that moment, where the desktop keeps the coin that will pay.
+        val mark = inHand?.let { feeParts(it, nativeSymbol(it.chain_id, ctx)).mark }
         val s = ctx.strings
         return fallback.copy(
             // No figure yet, no coin: an empty neutral mark. The fixture's
