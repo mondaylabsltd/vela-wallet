@@ -34,8 +34,24 @@ use super::fixtures::{
 // two beside it. `bg_raised` stays for what sits ON one of those surfaces —
 // the network pill, the chosen segment, the chosen fee row.
 pub const CHAIN_BADGE: f32 = 40.;
-/// The token mark inside a line of text (fee row, fact row, notice banner).
+/// The token mark inside a line of text (fee row, notice banner).
 pub const INLINE_MARK: f32 = 26.;
+/// The one diameter of every mark a fact row leads with — a network's or a
+/// coin's mark and an identicon alike (icon.lg, 20). A fact row is a line of
+/// text with a hint of art, not a row with an avatar (the web's `FactRow`
+/// says so of its `.mark`): on the send confirm and the transaction detail
+/// the network's mark was 26 beside From/To identicons of 20 — two sizes of
+/// mark on one page. Android draws both at 20 too.
+pub const FACT_MARK: f32 = 20.;
+
+/// How big a fact row draws its lead: every kind at [`FACT_MARK`].
+#[must_use]
+pub fn fact_lead_side(lead: &FactLead) -> Option<f32> {
+    match lead {
+        FactLead::None => None,
+        FactLead::Token(_) | FactLead::Identicon(_) => Some(FACT_MARK),
+    }
+}
 /// DT1L's network pill, measured off the mock: a 30 px capsule whose three
 /// 16 px dots overlap by 3 px each. Overlapped, not spaced — the cluster stands
 /// for "several networks", and three separate dots read as three controls.
@@ -262,24 +278,30 @@ pub fn network_pill(
 }
 
 pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
+    inline_mark_sized(theme, mark, INLINE_MARK)
+}
+
+/// [`inline_mark`] at another diameter — a fact row's [`FACT_MARK`]. The
+/// glyph scales with the circle, so a ticker's letters still fit.
+pub fn inline_mark_sized(theme: &Theme, mark: &TokenMark, side: f32) -> Div {
     let circle = div()
         .relative()
-        .w(px(INLINE_MARK))
-        .h(px(INLINE_MARK))
-        .rounded(px(INLINE_MARK / 2.))
+        .w(px(side))
+        .h(px(side))
+        .rounded(px(side / 2.))
         .flex_none()
         .bg(theme.bg_sunken)
         .flex()
         .items_center()
         .justify_center()
-        .text_size(theme::text_label())
+        .text_size(theme::text_label() * (side / INLINE_MARK))
         .text_color(theme.fg_muted)
         .child(crate::marks::glyph(&mark.ticker));
     // The logos over the glyph, never instead of it (issue 201): gpui draws
     // nothing at all while a remote image is in flight, and an inline mark
     // that blinks out is worse than one that never changed. Every candidate
     // is tried, in the core's order.
-    match crate::wallet::components::logo_candidates(&mark.logos.logo_urls, INLINE_MARK) {
+    match crate::wallet::components::logo_candidates(&mark.logos.logo_urls, side) {
         Some(stack) => circle.child(stack.absolute().top_0().left_0()),
         None => circle,
     }
@@ -327,11 +349,14 @@ pub fn fact_row(
         .justify_end()
         .gap(px(6.));
 
+    // One size for every lead (`FACT_MARK`): a network's mark beside the
+    // identicons on one page is the identicons' size.
+    let side = fact_lead_side(&fact.lead).unwrap_or(FACT_MARK);
     let lead = match &fact.lead {
         FactLead::None => None,
-        FactLead::Token(mark) => Some(inline_mark(theme, mark).into_any_element()),
+        FactLead::Token(mark) => Some(inline_mark_sized(theme, mark, side).into_any_element()),
         FactLead::Identicon(seed) => {
-            Some(openable_identicon(identicons, seed.as_ref(), 20.).into_any_element())
+            Some(openable_identicon(identicons, seed.as_ref(), side).into_any_element())
         }
     };
 
@@ -1653,6 +1678,24 @@ pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fact row's network (or coin) mark is its identicons' size: on the
+    /// send confirm and the transaction detail the network row's mark was 26
+    /// beside From/To identicons of 20. Both are 20 now, as on Android and
+    /// in the web's `FactRow`; marks inside other lines keep their 26.
+    #[test]
+    fn a_fact_rows_network_mark_is_its_identicons_size() {
+        let network = FactLead::Token(TokenMark {
+            ticker: "ETH".into(),
+            badge: gpui::rgb(0x62_7E_EA).into(),
+            logos: crate::marks::Logos::default(),
+        });
+        let from = FactLead::Identicon("0x88cCA0EeDbF2C4426110bbFc998F048689266894".into());
+        assert_eq!(fact_lead_side(&network), fact_lead_side(&from));
+        assert_eq!(fact_lead_side(&network), Some(20.));
+        assert_eq!(fact_lead_side(&FactLead::None), None);
+        assert!((INLINE_MARK - 26.).abs() < f32::EPSILON, "a fee row's mark");
+    }
 
     /// The speed picker's second line is the gas bid alone, and it never
     /// collapses: while a tier is measuring (no bid yet) the line holds its
