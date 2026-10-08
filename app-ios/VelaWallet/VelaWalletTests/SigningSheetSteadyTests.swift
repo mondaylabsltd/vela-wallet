@@ -172,6 +172,28 @@ struct SigningSheetSteadyTests {
         try await Task.sleep(for: .milliseconds(100))
     }
 
+    /// Where the fee row and the confirm sit, once two reads 150 ms apart
+    /// agree (up to ~6 s): beside a thousand other tests on one main actor,
+    /// one read can come before the tree has followed the last commit.
+    private func settled(_ view: UIView) async throws -> (Frame, [Element]) {
+        var last: Frame?
+        var tree: [Element] = []
+        for _ in 0..<40 {
+            tree = []
+            collect(view as Any, depth: 0, into: &tree)
+            if let fee = tree.first(where: { $0.id == "signing.fee.refresh" }),
+               let confirm = tree.first(where: { $0.id == "signing.confirm" }) {
+                let frame = Frame(fee: fee.frame.minY, confirm: confirm.frame.minY)
+                if frame == last { return (frame, tree) }
+                last = frame
+            }
+            try await shown(view)
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let frame = try #require(last, "the fee row's refresh and the confirm are in the tree")
+        return (frame, tree)
+    }
+
     /// Walks `steps` on one live sheet `height` points tall — scrolled to its
     /// end after the first step when `atEnd` — and reads where the fee row and
     /// the confirm sit after each, with every element said aloud.
@@ -194,11 +216,8 @@ struct SigningSheetSteadyTests {
                 scroll.setContentOffset(CGPoint(x: 0, y: max(0, end)), animated: false)
                 try await shown(host.view)
             }
-            var tree: [Element] = []
-            collect(host.view as Any, depth: 0, into: &tree)
-            let fee = try #require(tree.first { $0.id == "signing.fee.refresh" }, "the fee row's refresh")
-            let confirm = try #require(tree.first { $0.id == "signing.confirm" }, "the confirm")
-            frames.append(Frame(fee: fee.frame.minY, confirm: confirm.frame.minY))
+            let (frame, tree) = try await settled(host.view)
+            frames.append(frame)
             trees.append(tree)
         }
         return (frames, trees)

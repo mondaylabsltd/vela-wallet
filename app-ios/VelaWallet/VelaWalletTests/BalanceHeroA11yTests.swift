@@ -44,17 +44,28 @@ struct BalanceHeroA11yTests {
         }
     }()
 
+    /// The tree, once it has the hero's refresh control in it. Read again
+    /// until it does (up to ~8 s): beside a thousand other tests on one main
+    /// actor, a first read can come before the window's first commit. Each
+    /// pass draws the window, which waits for the screen's update.
     private func elements(of view: some View) async throws -> [Element] {
         _ = Self.automation
         let host = UIHostingController(rootView: view.themed(.light))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = host
         window.makeKeyAndVisible()
-        host.view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(600))
+        defer { window.isHidden = true }
         var found: [Element] = []
-        collect(host.view as Any, depth: 0, into: &found)
-        window.isHidden = true
+        for _ in 0..<40 {
+            host.view.layoutIfNeeded()
+            _ = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            found = []
+            collect(host.view as Any, depth: 0, into: &found)
+            if found.contains(where: { $0.id == BalanceRefreshControl.testId }) { break }
+        }
         return found
     }
 
