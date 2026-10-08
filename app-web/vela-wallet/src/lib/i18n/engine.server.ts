@@ -920,8 +920,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signingAccount: k('componentsUi.signing.signingAccount'),
 		advancedToggle: k('componentsUi.signing.advancedToggle'),
 		close: k('componentsUi.signing.close'),
-		slideToConfirm: k('componentsUi.signing.slideToConfirm'),
-		slideConfirmAction: k('componentsUi.signing.slideConfirmAction'),
 		confirmSend: k('componentsUi.signing.confirmSend'),
 		confirmSwap: k('componentsUi.signing.confirmSwap'),
 		confirmDeposit: k('componentsUi.signing.confirmDeposit'),

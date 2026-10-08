@@ -309,7 +309,7 @@ export async function noRequestWindow(context: BrowserContext, timeoutMs = 15_00
  * reach the captured element. Worth knowing before spending an hour on it.)
  */
 export async function slideToConfirm(page: Page): Promise<void> {
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	const slider = page.getByTestId('signing-confirm');
 	await slider.waitFor({ state: 'visible', timeout: 30_000 });
 	await slider.focus();
 	await slider.press('Enter');

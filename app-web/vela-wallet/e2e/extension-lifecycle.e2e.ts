@@ -454,7 +454,7 @@ const panelFenced = (wallet: Page) =>
 
 /** Slide the panel's sheet — by keyboard, the same `onconfirm` — once it arms. */
 async function slideInPanel(wallet: Page): Promise<void> {
-	const TRACK = `[role="dialog"] [role="button"][aria-label^="Slide to confirm"]`;
+	const TRACK = `[role="dialog"] [data-testid="signing-confirm"]`;
 	await expect
 		.poll(
 			() =>
@@ -1008,11 +1008,9 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			asked.catch(() => {});
 			const win = await requestWindow(context, 30_000);
 			// Armed first (the fee quoted): a slide made before it does nothing.
-			await expect(win.getByRole('button', { name: /^Slide to confirm/ })).toHaveAttribute(
-				'aria-disabled',
-				'false',
-				{ timeout: 60_000 }
-			);
+			await expect(win.getByTestId('signing-confirm')).toHaveAttribute('aria-disabled', 'false', {
+				timeout: 60_000
+			});
 			await slideToConfirm(win);
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 

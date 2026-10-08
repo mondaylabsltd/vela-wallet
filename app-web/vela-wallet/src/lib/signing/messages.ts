@@ -22,8 +22,6 @@ export interface SigningMessages {
 	signingAccount: string;
 	advancedToggle: string;
 	close: string;
-	slideToConfirm: string;
-	slideConfirmAction: string;
 	confirmSend: string;
 	confirmSwap: string;
 	confirmDeposit: string;

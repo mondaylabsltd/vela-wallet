@@ -1232,15 +1232,15 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 	});
 });
 
-describe('the slide control says a phrase, never a template', () => {
+describe('the confirm control says a phrase, never a template', () => {
 	it('falls back to the generic word when the core names no intent', () => {
-		// The control renders `hint · action`. Falling back to the TEMPLATE put
-		// its own placeholder on screen — a person read "Slide to confirm · Slide
-		// to confirm · {{action}}" the first time a real dApp request reached the
-		// sheet (spec 027). Same class as 026's `{{bytes}}`.
+		// The control's label is the action alone. Falling back to a TEMPLATE
+		// put its own placeholder on screen — a person read "Slide to confirm ·
+		// Slide to confirm · {{action}}" the first time a real dApp request
+		// reached the sheet (spec 027). Same class as 026's `{{bytes}}`.
 		const model = buildSigningModel(inputs())!;
 		expect(model.confirm.action).not.toContain('{{');
-		expect(model.confirm.hint).not.toContain('{{');
+		expect(model.confirm.action).toBe(m.confirmPlain);
 	});
 });
 

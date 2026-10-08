@@ -229,7 +229,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -256,7 +256,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -279,7 +279,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -301,7 +301,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -340,7 +340,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		fee: onchainFee(m),
 		signer: signer(m),
 		// Unlimited, seen and said — signable as asked.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -378,7 +378,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -414,7 +414,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -452,7 +452,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentRevoke, enabled: true },
+		confirm: { action: m.intentRevoke, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -480,7 +480,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -525,7 +525,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApproveAll, enabled: true },
+		confirm: { action: m.intentApproveAll, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -557,7 +557,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -588,7 +588,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -613,7 +613,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -649,7 +649,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmDeposit, enabled: true },
+		confirm: { action: m.confirmDeposit, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -672,7 +672,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmWithdraw, enabled: true },
+		confirm: { action: m.confirmWithdraw, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -709,7 +709,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -739,7 +739,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -771,7 +771,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -801,7 +801,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -838,7 +838,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -863,7 +863,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -883,7 +883,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -913,7 +913,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -946,7 +946,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -969,7 +969,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1005,7 +1005,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1035,7 +1035,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1063,7 +1063,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1111,7 +1111,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1148,7 +1148,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1184,7 +1184,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1256,7 +1256,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		fee: onchainFee(m),
 		signer: signer(m),
 		// A finite cap is a cap: the slide may arm.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1298,7 +1298,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		fee: onchainFee(m),
 		signer: signer(m),
 		// A cap nobody could parse is not a cap.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: false },
+		confirm: { action: m.intentApprove, enabled: false },
 		panelTitle: m.panelTitle
 	})
 };

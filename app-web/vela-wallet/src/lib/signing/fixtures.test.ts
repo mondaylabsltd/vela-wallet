@@ -76,7 +76,8 @@ describe('the catalogue (data-model.md §3)', () => {
 		const model = build(state);
 		expect(model.blocks[0].kind).toBe('intent');
 		expect(JSON.stringify(model)).not.toContain(messages.confirmPlain + '”');
-		expect(model.confirm.hint).toBe(messages.slideToConfirm);
+		// Issue 461: the control says the action alone — no "Slide to confirm" lead-in.
+		expect(model.confirm).not.toHaveProperty('hint');
 	});
 });
 

@@ -15,7 +15,8 @@
 	 * only a thumb can perform is a confirmation some people can never give.
 	 */
 	interface Props {
-		hint: string;
+		/** A lead-in before the action; the sheet passes none (issue 461). */
+		hint?: string;
 		action: string;
 		enabled: boolean;
 		onconfirm?: () => void;
@@ -33,7 +34,7 @@
 	let dragging = $state(false);
 	let done = $state(false);
 
-	const label = $derived(`${hint} · ${action}`);
+	const label = $derived(hint ? `${hint} · ${action}` : action);
 
 	/** Knob 48 inside 4 of end padding either side, so the travel is W − 56. */
 	const travel = $derived(Math.max(1, trackWidth - 56));
@@ -80,6 +81,7 @@
 	bind:this={track}
 	bind:clientWidth={trackWidth}
 	role="button"
+	data-testid="signing-confirm"
 	tabindex={enabled ? 0 : -1}
 	aria-disabled={!enabled}
 	aria-label={label}

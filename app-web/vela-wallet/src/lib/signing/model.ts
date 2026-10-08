@@ -316,7 +316,7 @@ export interface SigningModel {
 	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
 	 */
 	confirm: {
-		hint: string;
+		/** The action alone ("Confirm send"): the control's whole label (issue 461). */
 		action: string;
 		enabled: boolean;
 		/** Spec 099 R7: why the slide is shut, in the core's words. Live only. */

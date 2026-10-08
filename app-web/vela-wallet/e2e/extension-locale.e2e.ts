@@ -152,7 +152,7 @@ test.describe('the language a person chose, on every surface (issue 317)', () =>
 		) as Promise<AskResult>;
 		const sheet = await requestWindow(context);
 		await expect(sheet).toHaveURL(/\/zh\/request\.html\?rid=/);
-		const slider = sheet.getByRole('button', { name: /^滑动以确认/ });
+		const slider = sheet.getByTestId('signing-confirm');
 		await slider.waitFor({ state: 'visible', timeout: 30_000 });
 		await expect(sheet.getByText('签名账户')).toBeVisible();
 		await expect(sheet.getByText(/Slide to confirm|Signing account|Technical details/)).toHaveCount(

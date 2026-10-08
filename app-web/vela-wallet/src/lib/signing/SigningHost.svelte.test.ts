@@ -137,7 +137,7 @@ vi.mock('$lib/signing/live', () => ({
 			techOpen: false,
 			fee: { kind: 'hidden' },
 			signer: { label: 'Signing account', name: 'One', identiconSvg: '<svg></svg>' },
-			confirm: { hint: 'Slide to confirm', action: 'Send', enabled: true },
+			confirm: { action: 'Send', enabled: true },
 			closeLabel: 'Close',
 			panelTitle: 'Signature request',
 			...(raw.sign.is_submitting

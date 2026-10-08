@@ -83,12 +83,7 @@
 			</Button>
 		</div>
 	{:else}
-		<SlideToConfirm
-			hint={model.confirm.hint}
-			action={model.confirm.action}
-			enabled={model.confirm.enabled}
-			{onconfirm}
-		/>
+		<SlideToConfirm action={model.confirm.action} enabled={model.confirm.enabled} {onconfirm} />
 		{#if !model.confirm.enabled && model.confirm.note}
 			<!-- Spec 099 R7: a shut slide says why, in the core's words. -->
 			<p class="confirm-note">{model.confirm.note}</p>

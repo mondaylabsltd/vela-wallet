@@ -857,7 +857,7 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 			.fire('eth_sendTransaction', [{ from, to, value: '0x2386f26fc10000' }])
 			.catch(() => undefined);
 	}, RECIPIENT);
-	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toBeVisible({
+	await expect(page.getByTestId('signing-confirm')).toBeVisible({
 		timeout: 25_000
 	});
 
@@ -937,11 +937,9 @@ async function dappSendArmed(page: Page): Promise<{ land: () => void }> {
 			.then((answer) => (vela.__answer = answer))
 			.catch((error) => (vela.__error = error));
 	}, RECIPIENT);
-	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toHaveAttribute(
-		'aria-disabled',
-		'false',
-		{ timeout: 30_000 }
-	);
+	await expect(page.getByTestId('signing-confirm')).toHaveAttribute('aria-disabled', 'false', {
+		timeout: 30_000
+	});
 	return { land: () => (landed = true) };
 }
 
@@ -949,7 +947,7 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 	page
 }) => {
 	const { land } = await dappSendArmed(page);
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	const slider = page.getByTestId('signing-confirm');
 
 	// 083 H3: one call, no calldata — the page only moves the chain's own coin.
 	// The sheet says so (what, how much, to whom), exact to the wei, and not
@@ -969,7 +967,7 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 		const seen = { dimmedSlide: false, status: [] as string[] };
 		(window as unknown as { __seen: typeof seen }).__seen = seen;
 		const look = () => {
-			if (document.querySelector('[aria-label^="Slide to confirm"][aria-disabled="true"]')) {
+			if (document.querySelector('[data-testid="signing-confirm"][aria-disabled="true"]')) {
 				seen.dimmedSlide = true;
 			}
 			const status = document.querySelector('[data-testid="signing-status"]');
@@ -1037,7 +1035,7 @@ test('a dApp send closed after approving is still answered, and no landing comes
 	page
 }) => {
 	const { land } = await dappSendArmed(page);
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	const slider = page.getByTestId('signing-confirm');
 	land();
 	await slider.focus();
 	await slider.press('Enter');

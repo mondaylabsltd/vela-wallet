@@ -405,9 +405,7 @@ test.describe('a provider a dApp can use', () => {
 		await inSidePanel(
 			wallet,
 			`
-			const slider = [...panel.document.querySelectorAll('[role="button"]')].find((el) =>
-				(el.getAttribute('aria-label') ?? '').startsWith('Slide to confirm')
-			);
+			const slider = panel.document.querySelector('[data-testid="signing-confirm"]');
 			if (!slider) throw new Error('no slider in the panel');
 			slider.focus();
 			slider.dispatchEvent(new panel.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

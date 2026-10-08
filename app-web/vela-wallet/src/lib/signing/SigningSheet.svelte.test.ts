@@ -31,7 +31,7 @@ function model(over: Partial<SigningModel> = {}): SigningModel {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: { label: 'Signing account', name: 'My Wallet', identiconSvg: '<svg></svg>' },
-		confirm: { hint: 'Slide to confirm', action: 'Send', enabled: true },
+		confirm: { action: 'Send', enabled: true },
 		closeLabel: 'Close',
 		panelTitle: 'Signature request',
 		...over
@@ -122,7 +122,7 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 	};
 
 	it('the form gives way to the status: no fee, no slide — never a greyed one', async () => {
-		const SLIDE = '[role="button"][aria-label^="Slide to confirm"]';
+		const SLIDE = '[data-testid="signing-confirm"]';
 		// The control, before the approval: the slide is there.
 		const form = await drawn({});
 		expect(form.sheet.querySelector(SLIDE)).not.toBeNull();

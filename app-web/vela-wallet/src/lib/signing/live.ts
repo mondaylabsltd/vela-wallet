@@ -1211,15 +1211,11 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		// Spec 081: refused — no fee, no slider, one way out.
 		dismissOnly: sign.blocked ? m.close : undefined,
 		confirm: {
-			hint: m.slideToConfirm,
 			/*
-			 * The drawn control renders `hint · action`, so `action` is a PHRASE
-			 * ("Confirm send"), not a sentence. Falling back to
-			 * `slideConfirmAction` put its raw template on screen — the person read
-			 * "Slide to confirm · Slide to confirm · {{action}}" (spec 027 T340,
-			 * found the first time a real request reached the sheet, and the same
-			 * class as 026's `{{bytes}}`). With no intent from the core, the
-			 * generic word is the honest one.
+			 * The control's whole label is the action, a PHRASE ("Confirm
+			 * send", "Back up public keys"), never a sentence or a template: a
+			 * template fallback once put "{{action}}" on screen (spec 027 T340).
+			 * With no intent from the core, the generic word is the honest one.
 			 */
 			action:
 				clear.surface === 'plain_send' && clear.plain_send
