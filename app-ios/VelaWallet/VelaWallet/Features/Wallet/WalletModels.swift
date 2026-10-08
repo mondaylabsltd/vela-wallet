@@ -86,6 +86,10 @@ struct BalanceRefreshModel: Equatable {
     var updated: String?
     /// "Updating…" — always resolved, so the control reserves its width.
     let updating: String
+    /// "Refresh balance" (`home.refreshBalance`) — what the control is called
+    /// at rest before any read has settled, when it draws the glyph alone.
+    /// "Updating…" is said only while it turns.
+    let named: String
     /// The glyph turns and the words read `updating`; the control is inert.
     var refreshing = false
 }

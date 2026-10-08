@@ -229,6 +229,7 @@ enum WalletLive {
                 loc.t("home.lastUpdated", vars: ["ago": loc.relativeTime(atMs: at, now: now)])
             },
             updating: loc.t("home.updating"),
+            named: loc.t("home.refreshBalance"),
             refreshing: spinning ?? view.refreshing
         )
     }

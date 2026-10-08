@@ -22,6 +22,14 @@ struct BalanceDisplay: View {
     /// Issue 462: the refresh control's tap. Absent in the gallery, where the
     /// control is drawn and takes no tap.
     var onRefresh: (() -> Void)?
+    /// Spec 051's "tap the figure to hide it", as VoiceOver hears it: the
+    /// button trait, the "Hide balance" hint and the action sit on the FIGURE
+    /// alone. This stack is not one accessibility element, so a hint set on
+    /// it reached every element inside — and overrode their own: the refresh
+    /// control under the figure was announced "…, button, Hide balance",
+    /// and double-tapping it refreshed. The sighted tap stays on the caller's
+    /// stack. Absent in the gallery, where a tap would mutate a picture.
+    var onToggle: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -41,7 +49,14 @@ struct BalanceDisplay: View {
         }
     }
 
-    @ViewBuilder private var amount: some View {
+    private var amount: some View {
+        // Hidden, the figure is already called "Show balance": no hint to add.
+        figure.modifier(BalanceToggleA11y(
+            hint: model.state == .hidden ? nil : model.a11yHide, onToggle: onToggle
+        ))
+    }
+
+    @ViewBuilder private var figure: some View {
         switch model.state {
         case .loading:
             SkeletonBlock(width: WalletGeometry.skeletonBalanceWidth, height: WalletGeometry.skeletonBalanceHeight)
@@ -112,13 +127,33 @@ struct BalanceDisplay: View {
     }
 }
 
+/// The figure's hide/show switch for VoiceOver (`BalanceDisplay.onToggle`).
+private struct BalanceToggleA11y: ViewModifier {
+    let hint: String?
+    let onToggle: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onToggle {
+            content
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text(verbatim: hint ?? ""))
+                .accessibilityAction { onToggle() }
+        } else {
+            content
+        }
+    }
+}
+
 /// The hero's "↻ Updated 2m" (issue 462) — the same control on all four
 /// shells, under the total and its status line.
 ///
 /// Tapping it reads every chain again (the caller's `onRefresh`:
 /// `RefreshRequested{force, pull}` plus the activity tick). While that is out
 /// (`model.refreshing`, which the store holds for at least 650 ms) the glyph
-/// turns, the words read "Updating…", and a second tap does nothing.
+/// turns, the words read "Updating…", and a second tap does nothing. At rest
+/// before any read has settled it draws the glyph alone, and is called
+/// "Refresh balance" (`home.refreshBalance`) — never "Updating…" over a
+/// control that is not.
 ///
 /// **Nothing moves.** Both labels are laid out in one box, the one not
 /// showing invisible, so the box is the wider one's width in both states and
@@ -157,10 +192,17 @@ struct BalanceRefreshControl: View {
         // hides the figure on a tap.
         .buttonStyle(RefreshPressStyle(live: onRefresh != nil && !model.refreshing))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: model.refreshing ? model.updating : (model.updated ?? model.updating)))
+        .accessibilityLabel(Text(verbatim: Self.spoken(model)))
+        // "Updated 2m" names when, not what a double-tap does.
+        .accessibilityHint(Text(verbatim: model.refreshing || model.updated == nil ? "" : model.named))
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(model.refreshing ? .updatesFrequently : [])
         .accessibilityIdentifier(Self.testId)
+    }
+
+    /// What VoiceOver calls the control: "Updating…" only while it turns.
+    static func spoken(_ model: BalanceRefreshModel) -> String {
+        model.refreshing ? model.updating : (model.updated ?? model.named)
     }
 
     @ViewBuilder private var glyph: some View {

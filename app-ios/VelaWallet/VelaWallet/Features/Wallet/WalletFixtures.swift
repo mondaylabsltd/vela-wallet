@@ -236,6 +236,7 @@ enum WalletFixtures {
                 ? loc.t("home.lastUpdated", vars: ["ago": loc.t("time.minutesShort", vars: ["n": "2"])])
                 : nil,
             updating: loc.t("home.updating"),
+            named: loc.t("home.refreshBalance"),
             refreshing: refreshing
         )
     }
