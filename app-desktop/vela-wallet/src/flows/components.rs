@@ -275,21 +275,14 @@ pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
         .text_size(theme::text_label())
         .text_color(theme.fg_muted)
         .child(crate::marks::glyph(&mark.ticker));
-    // The logo over the glyph, never instead of it (issue 201): gpui draws
+    // The logos over the glyph, never instead of it (issue 201): gpui draws
     // nothing at all while a remote image is in flight, and an inline mark
-    // that blinks out is worse than one that never changed.
-    let Some(url) = mark.logos.logo_urls.first() else {
-        return circle;
-    };
-    circle.child(
-        gpui::img(url.clone())
-            .absolute()
-            .top_0()
-            .left_0()
-            .w(px(INLINE_MARK))
-            .h(px(INLINE_MARK))
-            .rounded(px(INLINE_MARK / 2.)),
-    )
+    // that blinks out is worse than one that never changed. Every candidate
+    // is tried, in the core's order.
+    match crate::wallet::components::logo_candidates(&mark.logos.logo_urls, INLINE_MARK) {
+        Some(stack) => circle.child(stack.absolute().top_0().left_0()),
+        None => circle,
+    }
 }
 
 /// The most characters a mono value is drawn with (spec 082 G50): a

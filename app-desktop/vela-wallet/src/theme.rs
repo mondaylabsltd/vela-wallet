@@ -322,7 +322,13 @@ pub const WALLET_PAD_TOP: f32 = 28.;
 /// Row heights / avatar sizes.
 pub const WALLET_AVATAR: f32 = 40.;
 pub const WALLET_ROW_ICON: f32 = 40.;
+/// A chain badge that is only a colour dot (no logo to draw).
 pub const WALLET_BADGE: f32 = 12.;
+/// A chain badge that carries the chain's logo: 16, a size a logo can be read
+/// at, ringed 1.5 in the page colour (078 H-09) — the same on all four shells
+/// (the 2026-10-08 ruling; the phones moved up from 12).
+pub const WALLET_BADGE_LOGO: f32 = 16.;
+pub const WALLET_BADGE_RING: f32 = 1.5;
 /// The web sidebar's `--size-control-md`; its network rows use the same 44
 /// (`--size-hitTarget`). At 40/32 the desktop rail read as a crowded copy.
 pub const WALLET_NAV_ROW_H: f32 = 44.;

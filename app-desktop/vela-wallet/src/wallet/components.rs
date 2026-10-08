@@ -12,7 +12,8 @@ use gpui::{
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
+    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_BADGE_LOGO, WALLET_BADGE_RING,
+    WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
 
 use super::fixtures::{
@@ -792,15 +793,44 @@ fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div
     lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default(), true)
 }
 
+/// A mark's logo candidates, drawn over its glyph and tried in order — the
+/// core's rule on every shell: the first that loads wins.
+///
+/// gpui's image element takes one source, so each candidate's fallback is the
+/// next candidate, in the same box: a 404 (or an answer that does not decode)
+/// moves on, and the second URL is asked for only then — the lowercase asset
+/// path the index may hold where it lacks the checksummed one. The last one
+/// falls back to nothing, so the glyph under the stack is what stays. Until
+/// 2026-10-08 only the first candidate was ever asked for.
+pub(crate) fn logo_candidates(urls: &[SharedString], side: f32) -> Option<gpui::Img> {
+    let (first, rest) = urls.split_first()?;
+    let image = img(first.clone()).size(px(side)).rounded(px(side / 2.));
+    if rest.is_empty() {
+        return Some(image);
+    }
+    let rest = rest.to_vec();
+    Some(image.with_fallback(move || {
+        logo_candidates(&rest, side)
+            .map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
+    }))
+}
+
+/// How big a chain badge is: [`WALLET_BADGE_LOGO`] when it carries the
+/// chain's logo, the plain dot's [`WALLET_BADGE`] when it has none.
+pub(crate) fn badge_side(has_logo: bool) -> f32 {
+    if has_logo {
+        WALLET_BADGE_LOGO
+    } else {
+        WALLET_BADGE
+    }
+}
+
 /// The lead circle with the endpoint's logos over it (issue 201).
 ///
-/// The logo is drawn OVER the glyph the shell would draw anyway, not instead
-/// of it: gpui renders nothing at all while a remote image is in flight or
-/// after it 404s, so a row whose only content was the picture would be a hole
-/// where an asset's identity belongs. Only the FIRST candidate is asked for —
-/// gpui's image element takes one source, and the second path exists for a
-/// checksum spelling the index may not have; a miss there simply leaves the
-/// glyph, which is the documented fallback.
+/// The logos are drawn OVER the glyph the shell would draw anyway, not
+/// instead of it: gpui renders nothing at all while a remote image is in
+/// flight or after its last candidate misses, so a row whose only content was
+/// the picture would be a hole where an asset's identity belongs.
 fn lead_circle_logos(
     theme: &Theme,
     inner: impl IntoElement,
@@ -827,27 +857,13 @@ fn lead_circle_logos(
                 .justify_center()
                 .child(inner),
         );
-    if let Some(url) = logos.logo_urls.first() {
-        circle = circle.child(
-            gpui::img(url.clone())
-                .absolute()
-                .top_0()
-                .left_0()
-                .w(px(WALLET_ROW_ICON))
-                .h(px(WALLET_ROW_ICON))
-                .rounded(px(WALLET_ROW_ICON / 2.)),
-        );
+    if let Some(stack) = logo_candidates(&logos.logo_urls, WALLET_ROW_ICON) {
+        circle = circle.child(stack.absolute().top_0().left_0());
     }
     if logos.badge_hidden {
         return circle;
     }
-    // 12, or 16 when it may carry a logo — a size a logo can be read at —
-    // ringed 1.5 in the page colour (078 H-09).
-    let side = if logos.badge_logo.is_some() {
-        16.
-    } else {
-        WALLET_BADGE
-    };
+    let side = badge_side(logos.badge_logo.is_some());
     let mut dot = div()
         .absolute()
         .bottom_0()
@@ -856,7 +872,7 @@ fn lead_circle_logos(
         .h(px(side))
         .rounded(px(side / 2.))
         .bg(badge)
-        .border(px(1.5))
+        .border(px(WALLET_BADGE_RING))
         .border_color(theme.bg_base);
     if let Some(url) = &logos.badge_logo {
         dot = dot.child(
@@ -1449,4 +1465,30 @@ pub fn receipt_toast(theme: &Theme, icons: &mut IconCache, text: SharedString) -
                 .text_color(theme.fg_base)
                 .child(text),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The 2026-10-08 ruling, the same on all four shells: a chain badge that
+    /// carries a logo is 16 with a 1.5 ring; only a bare colour dot is 12.
+    #[test]
+    fn a_badge_with_a_logo_is_sixteen_ringed_one_and_a_half() {
+        assert!((badge_side(true) - 16.).abs() < f32::EPSILON);
+        assert!((badge_side(false) - 12.).abs() < f32::EPSILON);
+        assert!((WALLET_BADGE_RING - 1.5).abs() < f32::EPSILON);
+    }
+
+    /// Every candidate becomes a layer to try, and no candidates draw no
+    /// picture at all — the glyph beneath is the whole mark.
+    #[test]
+    fn no_candidates_leave_the_glyph_alone() {
+        assert!(logo_candidates(&[], WALLET_ROW_ICON).is_none());
+        let two = [
+            SharedString::from("https://data.example/a.png"),
+            SharedString::from("https://data.example/b.png"),
+        ];
+        assert!(logo_candidates(&two, WALLET_ROW_ICON).is_some());
+    }
 }
