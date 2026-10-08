@@ -728,15 +728,6 @@ enum SendLive {
         loc.t("send.gasTier.\(offered(tier))")
     }
 
-    /// …and what it buys, the line under the name.
-    private static func tierHint(_ tier: String, loc: Loc) -> String {
-        switch offered(tier) {
-        case "standard": loc.t("send.gasTierHintStandard")
-        case "slow": loc.t("send.gasTierHintSlow")
-        default: loc.t("send.gasTierHintFast")
-        }
-    }
-
     /// The folded speed control (spec 068), drawn from the `fee_speed` core's
     /// view (spec 069). Every figure is that tier's OWN settled quote, echoed by
     /// the core; only the words and the fee line are made here.
@@ -762,7 +753,6 @@ enum SendLive {
                 FeeSpeedOptionModel(
                     id: option.tier,
                     label: tierName(option.tier, loc: loc),
-                    detail: tierHint(option.tier, loc: loc),
                     // "…" while this tier's own quote is out, "—" when there is
                     // none to be had.
                     value: option.fee.map { feeLine($0, view: view, fee: speed.feeView(option.tier), display: display) }

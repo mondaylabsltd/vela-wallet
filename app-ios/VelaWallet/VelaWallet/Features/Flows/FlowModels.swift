@@ -532,10 +532,9 @@ struct FeeRowModel {
 struct FeeSpeedOptionModel: Identifiable {
     /// The wire tier — `fast` / `standard` / `slow`.
     let id: String
-    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number. What each one buys is
+    /// said on Settings' default speed, not in this per-payment picker.
     let label: String
-    /// What that speed buys, one line under the name.
-    let detail: String
     /// This option's OWN fee, or the "…" / "—" standing in for it.
     let value: String
     /// Its gas bid as a range, already formatted by the core over the set.
