@@ -289,6 +289,22 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(m.base.model.summary?.detail).toBe('≈ $120.00');
 	});
 
+	// Issue 468: the recipient row has the same two doors on the board as on
+	// the live form (live-send.ts) — the book and the scanner — in the phone's
+	// single form, the wide one, and the sweep.
+	it('sd2 and dsd2 draw the scan door beside the book, as the live form does', () => {
+		const sd2 = buildFlowState('sd2', zh, IDENTICON_STUB);
+		if (sd2.base.kind !== 'send-form') throw new Error('expected the send form');
+		expect(sd2.base.model.recipient?.pickLabel).toBe(zh['send.recipientPickAria']);
+		expect(sd2.base.model.recipient?.scanLabel).toBe(zh['send.scanAria']);
+		const dsd2 = buildDesktopFlowState('dsd2', zh, IDENTICON_STUB);
+		if (dsd2.body.kind !== 'send-form') throw new Error('expected the send form');
+		expect(dsd2.body.model.recipient?.scanLabel).toBe(zh['send.scanAria']);
+		const sd2d = buildFlowState('sd2d', zh, IDENTICON_STUB);
+		if (sd2d.base.kind !== 'send-form') throw new Error('expected the send form');
+		expect(sd2d.base.model.recipient?.scanLabel).toBe(zh['send.scanAria']);
+	});
+
 	it('sd2d sweeps three tokens to one address and says so', () => {
 		const m = buildFlowState('sd2d', zh, IDENTICON_STUB);
 		if (m.base.kind !== 'send-form') throw new Error('expected the send form');

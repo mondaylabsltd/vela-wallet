@@ -890,7 +890,10 @@ function sendForm(
 			lines: addressLines(ALICE.addressFull),
 			address: ALICE.addressFull,
 			identiconSvg: identicon(ALICE.addressFull),
-			pickLabel: m['send.recipientPickAria']
+			pickLabel: m['send.recipientPickAria'],
+			// Issue 468: the scan door, as the live form draws it (and the sweep
+			// above, and every other app) — the board drew the book alone.
+			scanLabel: m['send.scanAria']
 		},
 		addRecipient: m['send.addRecipient'],
 		fee,

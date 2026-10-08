@@ -322,6 +322,17 @@ describe('the form', () => {
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
 	});
 
+	// Issue 468: the board's single form and the live one have the same two
+	// doors on the recipient row — the book and the scanner.
+	it('draws the same recipient doors as its board', () => {
+		const board = formModel().recipient;
+		const live = liveSendForm(formModel(), inputs({})).recipient;
+		expect(live?.pickLabel).toBe(m['send.recipientPickAria']);
+		expect(live?.scanLabel).toBe(m['send.scanAria']);
+		expect(board?.pickLabel).toBe(live?.pickLabel);
+		expect(board?.scanLabel).toBe(live?.scanLabel);
+	});
+
 	// Spec 096 F12: the core found the recipient is a token's own contract.
 	// Said first, in the warning tone — over a name, over "first time", and
 	// over the sweep's "every token goes to the same address".
