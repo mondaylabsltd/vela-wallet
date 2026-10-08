@@ -95,12 +95,6 @@ pub enum Icon {
     /// Lucide `lock-open`: a page on plain http (spec 079, owner: a lock, and
     /// only a lock, says whether the connection is https).
     LockOpen,
-    /// The group manager's drag handle. Part of the shared spec-022 glyph
-    /// contract so all four platforms extract the same lucide source; the
-    /// desktop mocks have no group manager (DE2 manages favourites by
-    /// right-click), so nothing here draws it yet.
-    #[allow(dead_code, reason = "cross-platform icon contract, phone-only glyphs")]
-    GripVertical,
     /// The group manager's shown eye on the phones — and, here, the report's
     /// "screenshots are public" line (078 round 3), as the web's.
     Eye,
@@ -265,9 +259,6 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         }
         Icon::LockOpen => {
             r##"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>"##
-        }
-        Icon::GripVertical => {
-            r##"<circle cx="9" cy="5.5" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="9" cy="18.5" r="1.2"/><circle cx="16" cy="5.5" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="18.5" r="1.2"/>"##
         }
         Icon::Eye => {
             r##"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"##

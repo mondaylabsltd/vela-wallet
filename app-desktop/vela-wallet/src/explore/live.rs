@@ -1,10 +1,10 @@
 //! The explore screen, built from what `browser_history` remembers.
 //!
 //! The **sibling** of `fixtures.rs`, as `signing/live.rs` is of its own: both
-//! produce the drawn models, and the page picks. What is live here is exactly
-//! one group — Recent — because exactly one core owns it. The favourites grid
-//! and the custom groups below it are still drawn, and they are drawn because
-//! nothing in `vela-core` owns them yet, which is a gap rather than a choice.
+//! produce the drawn models, and the page picks. The start page has two
+//! sections and both are live: the favourites grid (`explore_sites`) and
+//! Recent (`browser_history`). There are no other groups — issue 465 took the
+//! person's own groups out of every shell and the core.
 //!
 //! Nothing here decides what is recent. Dedupe by origin, recency order, the
 //! cap and the "a report without a title must not clobber one" rule are all
@@ -79,28 +79,6 @@ pub fn tile_of(site: &ExploreSite) -> SiteModel {
         url: Some(SharedString::from(site.url.clone())),
         icon_urls: icons_of(&site.url, None),
     }
-}
-
-/// The person's own groups, in the order they made them.
-///
-/// A hidden group draws nothing at all — hiding is what this wallet offers
-/// instead of deleting for the two system groups, and a custom group that a
-/// person hid should behave the same way rather than reappear greyed.
-#[must_use]
-pub fn custom_groups(view: &ExploreView) -> Vec<GroupModel> {
-    view.groups
-        .iter()
-        .filter(|group| !group.hidden)
-        .map(|group| GroupModel {
-            // The page keys rows by (group id, index); a stable literal here
-            // would collide across groups, so the id travels as the name's
-            // own leaked string only for element ids — see `page.rs`.
-            id: "custom",
-            title: SharedString::from(group.name.clone()),
-            action: GroupAction::Menu,
-            sites: group.sites.iter().map(tile_of).collect(),
-        })
-        .collect()
 }
 
 /// The open tabs, as the strip draws them.
@@ -432,7 +410,6 @@ mod tests {
         };
         let view = ExploreView {
             favorites: Vec::new(),
-            groups: Vec::new(),
             tabs: vec![
                 tab("a", "app.uniswap.org", "Uniswap Interface"),
                 tab("b", "polymarket.com", "Polymarket"),

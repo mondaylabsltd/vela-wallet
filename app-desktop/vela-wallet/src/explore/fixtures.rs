@@ -1,9 +1,8 @@
 //! Canonical explore fixtures — the desktop port of
 //! `specs/022-explore-signing-ui/data-model.md` §2 (web reference:
-//! `src/lib/explore/fixtures.ts`). Site names, hosts, group titles and the
-//! demo page are verbatim mock content and are never translated; brand colours
-//! are fixture data, not theme tokens — the same rule the wallet's chain dots
-//! follow.
+//! `src/lib/explore/fixtures.ts`). Site names, hosts and the demo page are
+//! verbatim mock content and are never translated; brand colours are fixture
+//! data, not theme tokens — the same rule the wallet's chain dots follow.
 
 use gpui::{Hsla, SharedString, rgb};
 
@@ -35,12 +34,6 @@ pub fn brand_ens() -> Hsla {
 }
 pub fn brand_hyperliquid() -> Hsla {
     rgb(0x50d2c1).into()
-}
-pub fn brand_curve() -> Hsla {
-    rgb(0x7b7be8).into()
-}
-pub fn brand_limitless() -> Hsla {
-    rgb(0x8b6dff).into()
 }
 
 /// The stand-in web page's own palette (spec 022 §2): the SITE's colours.
@@ -157,7 +150,6 @@ pub enum GroupAction {
     #[allow(dead_code, reason = "cross-platform group vocabulary")]
     Edit,
     Clear,
-    Menu,
 }
 
 #[derive(Clone)]
@@ -174,11 +166,6 @@ fn with_meta(mut s: SiteModel, meta: &'static str) -> SiteModel {
     s
 }
 
-fn with_subtitle(mut s: SiteModel, subtitle: &'static str) -> SiteModel {
-    s.subtitle = Some(subtitle.into());
-    s
-}
-
 /// The desktop's wider grid shows four recent rows where the phone shows one.
 pub fn groups(strings: &ExploreStrings) -> Vec<GroupModel> {
     let hyperliquid = site(
@@ -188,72 +175,29 @@ pub fn groups(strings: &ExploreStrings) -> Vec<GroupModel> {
         "H",
         brand_hyperliquid(),
     );
-    vec![
-        GroupModel {
-            id: "recent",
-            title: strings.recent.clone(),
-            action: GroupAction::Clear,
-            sites: vec![
-                with_meta(hyperliquid.clone(), "刚刚"),
-                with_meta(
-                    site(
-                        "polymarket",
-                        "Polymarket",
-                        "polymarket.com",
-                        "P",
-                        brand_polymarket(),
-                    ),
-                    "昨天",
+    vec![GroupModel {
+        id: "recent",
+        title: strings.recent.clone(),
+        action: GroupAction::Clear,
+        sites: vec![
+            with_meta(hyperliquid, "刚刚"),
+            with_meta(
+                site(
+                    "polymarket",
+                    "Polymarket",
+                    "polymarket.com",
+                    "P",
+                    brand_polymarket(),
                 ),
-                with_meta(uniswap(), ""),
-                with_meta(
-                    site("opensea", "OpenSea", "opensea.io", "O", brand_opensea()),
-                    "昨天",
-                ),
-            ],
-        },
-        // Custom group titles and blurbs are what the person typed — mock
-        // content, verbatim, never translated (the spec-015 rule).
-        GroupModel {
-            id: "trading",
-            title: "交易".into(),
-            action: GroupAction::Menu,
-            sites: vec![
-                with_subtitle(
-                    site("curve", "Curve", "curve.fi", "C", brand_curve()),
-                    "稳定币兑换",
-                ),
-                with_subtitle(hyperliquid, "永续合约交易"),
-            ],
-        },
-        GroupModel {
-            id: "prediction",
-            title: "预测市场".into(),
-            action: GroupAction::Menu,
-            sites: vec![
-                with_subtitle(
-                    site(
-                        "polymarket",
-                        "Polymarket",
-                        "polymarket.com",
-                        "P",
-                        brand_polymarket(),
-                    ),
-                    "事件预测市场",
-                ),
-                with_subtitle(
-                    site(
-                        "limitless",
-                        "Limitless",
-                        "limitless.exchange",
-                        "L",
-                        brand_limitless(),
-                    ),
-                    "预测市场",
-                ),
-            ],
-        },
-    ]
+                "昨天",
+            ),
+            with_meta(uniswap(), ""),
+            with_meta(
+                site("opensea", "OpenSea", "opensea.io", "O", brand_opensea()),
+                "昨天",
+            ),
+        ],
+    }]
 }
 
 #[derive(Clone)]
@@ -317,36 +261,6 @@ pub fn demo_page() -> DemoPage {
     }
 }
 
-/// DE2's right-click menu on a favourite tile, and the toolbar's ⋯ site menu
-/// (M3). Both ride the spec-018 menu card rather than growing a second one.
-/// "Move to a group": make one, or pick one that exists (spec 032 phase 41).
-///
-/// A menu rather than a new picker: the question is "which of these", which is
-/// what a menu already is. `new group` is FIRST because a wallet with no
-/// groups yet must still be able to start one — the empty list is the common
-/// case on the first use, and a menu whose only item is unreachable is a dead
-/// end.
-pub fn group_pick_menu(strings: &ExploreStrings, groups: &[String]) -> MenuModel {
-    let mut items = vec![MenuItemModel {
-        icon: Icon::FolderPlus,
-        label: strings.new_group.clone(),
-        destructive: false,
-    }];
-    for name in groups {
-        items.push(MenuItemModel {
-            // The same glyph the "new group" item carries: these are the
-            // same kind of thing, and this shell has one folder icon.
-            icon: Icon::FolderPlus,
-            label: SharedString::from(name.clone()),
-            destructive: false,
-        });
-    }
-    MenuModel {
-        divider_after: (!groups.is_empty()).then_some(0),
-        items,
-    }
-}
-
 /// One row of the site's network picker (spec 070, spec 079 FR-017): the
 /// wallet's own networks, each with its logo and what the account holds
 /// there, the site's ticked. The tick IS the state, as in the group pickers.
@@ -407,6 +321,10 @@ pub fn recent_menu(strings: &ExploreStrings) -> MenuModel {
     }
 }
 
+/// DE2's right-click menu on a favourite tile: open it in a new tab, rename
+/// it, and — behind the divider — unpin it. The page arms these rows by
+/// their place (`menu_actions`), so an item added or taken out here is one
+/// added or taken out there in the same change.
 pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
     MenuModel {
         items: vec![
@@ -421,16 +339,11 @@ pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
                 destructive: false,
             },
             MenuItemModel {
-                icon: Icon::FolderPlus,
-                label: strings.move_to_group.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
                 icon: Icon::Trash2,
                 label: strings.remove_from_favorites.clone(),
                 destructive: true,
             },
         ],
-        divider_after: Some(2),
+        divider_after: Some(1),
     }
 }

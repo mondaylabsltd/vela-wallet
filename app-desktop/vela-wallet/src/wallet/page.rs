@@ -351,10 +351,6 @@ enum ContactsMenu {
     /// Spec 034 — right-click on a contact row. Drawn since spec 018, opened
     /// by nothing until now.
     Contact,
-    /// Spec 032 phase 41 — "move to a group", listing the person's own
-    /// groups. A menu rather than a new picker component: the question is
-    /// "which of these", which is what a menu is.
-    MoveGroup,
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
@@ -380,10 +376,6 @@ struct IdenticonViewer {
 enum ExploreAsk {
     /// Rename the favourite at this origin.
     RenameFavorite { origin: String },
-    /// Name a new group. `then_add` is the favourite that opened the picker,
-    /// which is dropped into the group the moment it exists — a person who
-    /// went "move to → new group" meant both halves.
-    NewGroup { then_add: Option<String> },
     /// Pin a site by typing where it lives. The start page's "+ 添加" tile was
     /// drawn with a pointer cursor and no listener, so the only way to get a
     /// favourite was to open a site first and use the tab menu.
@@ -396,13 +388,43 @@ struct ExploreForm {
     text: String,
 }
 
-/// The Explore groups, as the manage sheet lists them (078 W-11).
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// The Explore groups, as the manage sheet lists them (078 W-11): the two
+/// the start page has, and no others (issue 465).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExploreGroupRow {
     Favorites,
     Recent,
-    /// A person's own group, by its place in the core's list.
-    Custom(usize),
+}
+
+/// One row of "Manage groups": which section, its name, its second line and
+/// whether it is hidden now.
+type ExploreGroupLine = (ExploreGroupRow, SharedString, Option<SharedString>, bool);
+
+/// The rows "Manage groups" draws, in order: Favorites, saying how many sites
+/// it holds, then Recent dApps with no second line — its old one, "System",
+/// told nobody anything once every row is a system group.
+fn explore_group_rows(
+    view: &vela_core::app::explore_sites::ExploreView,
+    strings: &ExploreStrings,
+) -> [ExploreGroupLine; 2] {
+    [
+        (
+            ExploreGroupRow::Favorites,
+            strings.favorites.clone(),
+            Some(SharedString::from(
+                strings
+                    .site_count
+                    .replace("{{n}}", &view.favorites.len().to_string()),
+            )),
+            view.favorites_hidden,
+        ),
+        (
+            ExploreGroupRow::Recent,
+            strings.recent.clone(),
+            None,
+            view.recent_hidden,
+        ),
+    ]
 }
 
 /// The frame the viewfinder is showing, and the discipline that keeps its
@@ -746,7 +768,8 @@ pub struct WalletPage {
     notice_press: u64,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
-    /// The explore name dialog: renaming a tile, or naming a new group.
+    /// The explore name dialog: renaming a tile, or pinning a site by its
+    /// address.
     ///
     /// One dialog for both, as the contacts one is for its two questions —
     /// they ask the same thing and differ only in which event takes the
@@ -1618,7 +1641,8 @@ impl WalletPage {
         .detach();
     }
 
-    /// The explore name sheet — renaming a tile, and naming a new group.
+    /// The explore name sheet — renaming a tile, and pinning a site by its
+    /// address.
     ///
     /// The contacts dialog's twin, deliberately: same card, same field, same
     /// two buttons. Two dialogs that ask for a name should not look like two
@@ -1634,7 +1658,6 @@ impl WalletPage {
         let c = &self.contacts;
         let title = match form.ask {
             ExploreAsk::RenameFavorite { .. } => e.rename.clone(),
-            ExploreAsk::NewGroup { .. } => e.new_group.clone(),
             ExploreAsk::NewFavorite => e.add_to_favorites.clone(),
         };
         // The favourite's field takes a URL and nothing else — this dialog
@@ -1722,11 +1745,11 @@ impl WalletPage {
     }
 
     /// "Manage groups" — the web's `GroupManageSheet` (E3), reached from the
-    /// Favorites heading's Edit and a group's ⋯ (078 W-11). Every group, the
-    /// two system ones first: an eye to hide or show it, and — for the
-    /// person's own groups only — a trash to delete it. The system groups have
-    /// no trash rather than a refused one ("hideable, never deletable"). A
-    /// deleted group's sites stay favourited; the core says so.
+    /// Favorites heading's Edit (078 W-11). Exactly the two sections the start
+    /// page has, Favorites and Recent dApps, each with an eye to hide or show
+    /// it (issue 465 took the person's own groups out, and with them the
+    /// grip, the trash and "New group"). Hiding is the only thing a system
+    /// group offers: "hideable, never deletable".
     fn explore_groups_dialog(
         &mut self,
         theme: &Theme,
@@ -1737,38 +1760,8 @@ impl WalletPage {
             return None;
         }
         let view = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let e = &self.explore;
-        let (favorites, recent, system_group, new_group_label, manage_groups, site_count) = (
-            e.favorites.clone(),
-            e.recent.clone(),
-            e.system_group.clone(),
-            e.new_group.clone(),
-            e.manage_groups.clone(),
-            e.site_count.clone(),
-        );
-        let count = |n: usize| SharedString::from(site_count.replace("{{n}}", &n.to_string()));
-        let mut rows: Vec<(ExploreGroupRow, SharedString, SharedString, bool)> = vec![
-            (
-                ExploreGroupRow::Favorites,
-                favorites,
-                count(view.favorites.len()),
-                view.favorites_hidden,
-            ),
-            (
-                ExploreGroupRow::Recent,
-                recent,
-                system_group,
-                view.recent_hidden,
-            ),
-        ];
-        for (i, group) in view.groups.iter().enumerate() {
-            rows.push((
-                ExploreGroupRow::Custom(i),
-                SharedString::from(group.name.clone()),
-                count(group.sites.len()),
-                group.hidden,
-            ));
-        }
+        let rows = explore_group_rows(&view, &self.explore);
+        let manage_groups = self.explore.manage_groups.clone();
 
         let mut list = div().flex().flex_col();
         for (index, (row, title, meta, hidden)) in rows.into_iter().enumerate() {
@@ -1785,20 +1778,13 @@ impl WalletPage {
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.set_explore_group_hidden(row, !hidden, cx);
                 }));
-            let mut line = div()
+            let line = div()
                 .flex()
                 .items_center()
                 .gap(px(16.))
                 .py(px(20.))
                 .border_b_1()
                 .border_color(theme.border_card)
-                .child(icon_img(
-                    &mut self.icons,
-                    Icon::GripVertical,
-                    false,
-                    theme.fg_subtle,
-                    18.,
-                ))
                 // Hidden reads as hidden: the words dim, so the eye is a
                 // confirmation rather than the only clue.
                 .child(
@@ -1816,74 +1802,13 @@ impl WalletPage {
                         .when(hidden, |d| d.opacity(0.4))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_subtle)
-                        .child(meta),
+                        .children(meta),
                 )
                 .child(toggle);
-            if let ExploreGroupRow::Custom(i) = row {
-                line = line.child(
-                    div()
-                        .id(("explore-group-delete", index))
-                        .cursor_pointer()
-                        .child(icon_img(
-                            &mut self.icons,
-                            Icon::Trash2,
-                            false,
-                            theme.fg_muted,
-                            18.,
-                        ))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.delete_explore_group(i, cx);
-                        })),
-                );
-            }
             list = list.child(line);
         }
 
-        let new_group = div()
-            .id("explore-groups-new")
-            .flex()
-            .items_center()
-            .gap(px(16.))
-            .py(px(20.))
-            .cursor_pointer()
-            .child(
-                div()
-                    .size(px(40.))
-                    .rounded_full()
-                    .bg(theme.bg_sunken)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::Plus,
-                        false,
-                        theme.fg_subtle,
-                        18.,
-                    )),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_body())
-                    .text_color(theme.fg_subtle)
-                    .child(new_group_label),
-            )
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.explore_groups = false;
-                this.explore_form = Some(ExploreForm {
-                    ask: ExploreAsk::NewGroup { then_add: None },
-                    text: String::new(),
-                });
-                window.focus(&this.explore_form_focus, cx);
-                cx.notify();
-            }));
-
-        let body = div()
-            .flex()
-            .flex_col()
-            .pb(px(8.))
-            .child(list)
-            .child(new_group);
+        let body = div().flex().flex_col().pb(px(8.)).child(list);
         Some(
             crate::ui::dialog::dialog(
                 "explore-groups",
@@ -1900,8 +1825,7 @@ impl WalletPage {
         )
     }
 
-    /// Hide or show one group — a system one by its kind, the person's own by
-    /// the core's id, read at the moment of the tap.
+    /// Hide or show one of the two sections, by its kind.
     fn set_explore_group_hidden(
         &mut self,
         row: ExploreGroupRow,
@@ -1909,44 +1833,12 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         use vela_core::app::explore_sites::{Event as SitesEvent, ExploreSystemGroup};
-        let resident = resident::resident::<ExploreSites>(cx);
-        let event = match row {
-            ExploreGroupRow::Favorites => SitesEvent::SystemGroupHiddenSet {
-                group: ExploreSystemGroup::Favorites,
-                hidden,
-            },
-            ExploreGroupRow::Recent => SitesEvent::SystemGroupHiddenSet {
-                group: ExploreSystemGroup::Recent,
-                hidden,
-            },
-            ExploreGroupRow::Custom(i) => {
-                let Some(id) = resident.read(cx).view().groups.get(i).map(|g| g.id.clone()) else {
-                    return;
-                };
-                SitesEvent::GroupHiddenSet { id, hidden }
-            }
+        let group = match row {
+            ExploreGroupRow::Favorites => ExploreSystemGroup::Favorites,
+            ExploreGroupRow::Recent => ExploreSystemGroup::Recent,
         };
-        resident.update(cx, |resident, cx| resident.dispatch(event, cx));
-        cx.notify();
-    }
-
-    /// Delete one of the person's own groups. Its sites stay favourited.
-    fn delete_explore_group(&mut self, index: usize, cx: &mut Context<Self>) {
-        let resident = resident::resident::<ExploreSites>(cx);
-        let Some(id) = resident
-            .read(cx)
-            .view()
-            .groups
-            .get(index)
-            .map(|g| g.id.clone())
-        else {
-            return;
-        };
-        resident.update(cx, |resident, cx| {
-            resident.dispatch(
-                vela_core::app::explore_sites::Event::GroupDeleted { id },
-                cx,
-            );
+        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+            resident.dispatch(SitesEvent::SystemGroupHiddenSet { group, hidden }, cx);
         });
         cx.notify();
     }
@@ -1976,11 +1868,8 @@ impl WalletPage {
         }
     }
 
-    /// Take the typed name and give it to whichever machine asked.
-    ///
-    /// A new group made from "move to a group" also TAKES the tile: somebody
-    /// who went that way meant both halves, and leaving the group empty would
-    /// make them do the second half again.
+    /// Take what was typed and give it to the machine: a tile's new name, or
+    /// the address of a site to pin.
     fn save_explore_form(&mut self, cx: &mut Context<Self>) {
         let Some(form) = self.explore_form.take() else {
             return;
@@ -2016,34 +1905,6 @@ impl WalletPage {
                         cx,
                     );
                 });
-            }
-            ExploreAsk::NewGroup { then_add } => {
-                resident.update(cx, |resident, cx| {
-                    resident.dispatch(
-                        vela_core::app::explore_sites::Event::GroupCreated {
-                            name,
-                            now_ms: crate::executor::now_ms(),
-                        },
-                        cx,
-                    );
-                });
-                // The id is the core's, so it is read back rather than
-                // guessed: the machine makes it unique against what exists.
-                if let Some(origin) = then_add
-                    && let Some(id) = resident
-                        .read(cx)
-                        .view()
-                        .groups
-                        .last()
-                        .map(|group| group.id.clone())
-                {
-                    resident.update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::explore_sites::Event::GroupMemberAdded { id, origin },
-                            cx,
-                        );
-                    });
-                }
             }
         }
         cx.notify();
@@ -15779,12 +15640,11 @@ impl WalletPage {
         } else {
             explore_fixtures::favorites()
         };
-        // Nothing pinned, nothing visited, no groups: the web's start page
-        // (078 E-01) — the mark, what this is for, and a way to begin —
-        // instead of a lone "Favorites" over an add tile and nothing else.
+        // Nothing pinned, nothing visited: the web's start page (078 E-01) —
+        // the mark, what this is for, and a way to begin — instead of a lone
+        // "Favorites" over an add tile and nothing else.
         if live_grid
             && favorites.is_empty()
-            && explore_live::custom_groups(&explore_view).is_empty()
             && resident::resident::<BrowserHistory>(cx)
                 .read(cx)
                 .view()
@@ -15893,39 +15753,25 @@ impl WalletPage {
             column = column.child(grid);
         }
 
-        // Recent is the core's; everything below it is still drawn, because
-        // nothing in `vela-core` owns favourites or custom groups yet. The
-        // drawn Recent group is DROPPED when the live one exists rather than
-        // shown beside it — two "Recent" headings, one of them invented, is
-        // the fixture leaking that phases 22, 26 and 27 each had to close.
+        // Recent is the core's, and the only section under the favourites
+        // (issue 465: no groups of the person's own). The drawn Recent group
+        // is DROPPED when the live one exists rather than shown beside it —
+        // two "Recent" headings, one of them invented, is the fixture leaking
+        // that phases 22, 26 and 27 each had to close.
         let history = resident::resident::<BrowserHistory>(cx).read(cx).view();
         // A hidden Recent draws nothing (078 W-11); it comes back from the sheet.
         let live_recent = explore_live::recent_group(&history.entries, &self.explore)
             .filter(|_| !(live_grid && explore_view.recent_hidden));
-        // …and so are the person's own groups. The drawn ones (交易 / 预测市场)
-        // are mock CONTENT, not chrome: they go the moment there is a real
-        // book to show, exactly as the drawn Recent does.
-        let live_groups = if live_grid {
-            explore_live::custom_groups(&explore_view)
-        } else {
-            Vec::new()
-        };
         let groups = explore_fixtures::groups(&self.explore)
             .into_iter()
             .filter(|group| !(group.id == "recent" && self.identity.is_some()))
-            .filter(|group| !(live_grid && group.id != "recent"))
-            .chain(live_groups)
             .collect::<Vec<_>>();
         for (group_index, group) in live_recent.into_iter().chain(groups).enumerate() {
             let action = match group.action {
                 explore_fixtures::GroupAction::Clear => self.explore.clear.clone(),
                 explore_fixtures::GroupAction::Edit => self.explore.edit.clone(),
-                explore_fixtures::GroupAction::Menu => SharedString::from("⋯"),
             };
             // The Clear on the live Recent heading clears the core's history.
-            // The drawn groups' actions stay inert: there is no machine behind
-            // a custom group, and a button that looked identical but deleted
-            // nothing would be the worse of the two lies.
             let clearable = group.id == "recent" && matches!(group.action, GroupAction::Clear);
             let (title_half, action_half) =
                 section_header_parts(theme, &mut self.icons, group.title.clone(), action);
@@ -15940,17 +15786,6 @@ impl WalletPage {
                         cx.notify();
                     }))
                     .into_any_element()
-            } else if live_grid && matches!(group.action, GroupAction::Menu) {
-                // A live group's ⋯ is "Manage groups" (078 W-11), as the web's
-                // header action is. A drawn group's stays inert.
-                action_half
-                    .id(("explore-group-menu", group_index))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.explore_groups = true;
-                        cx.notify();
-                    }))
-                    .into_any_element()
             } else {
                 action_half.into_any_element()
             };
@@ -15960,10 +15795,9 @@ impl WalletPage {
             for (i, site) in group.sites.iter().enumerate() {
                 cells.push(
                     explore_components::site_row(
-                        // By the group's place on the page, not its kind: every
-                        // custom group is "custom", and row 0 of each one
-                        // shared an id — gpui then treats them as one element
-                        // (078 E-02).
+                        // By the group's place on the page, not its kind: two
+                        // groups of one kind once shared row 0's id, and gpui
+                        // then treats them as one element (078 E-02).
                         ElementId::NamedInteger(
                             SharedString::from(format!("explore-group-{group_index}")),
                             i as u64,
@@ -15990,12 +15824,11 @@ impl WalletPage {
                     .on_click({
                         // The row's OWN site (078 E-02). A Recent row opens
                         // where the person left off, verbatim — that is what
-                        // the core stores the whole URL for; a custom group's
-                        // row opens the url its site was pinned at. It used to
-                        // look every row up in the HISTORY by host, and a
-                        // pinned site nobody had visited yet found nothing —
-                        // yet the column still switched to the browser, onto
-                        // whatever page was loaded last.
+                        // the core stores the whole URL for. It used to look
+                        // every row up in the HISTORY by host, and a row with
+                        // no visit behind it found nothing — yet the column
+                        // still switched to the browser, onto whatever page
+                        // was loaded last.
                         let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
                             this.browser_go(crate::wallet::browser_host::Go::Open(url.clone()), cx);
@@ -19134,10 +18967,6 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // "Move to a group": the person's own groups, newest last, with
-            // "new group" at the top. The index is the position in the SAME
-            // list the menu was built from — read again here rather than
-            // captured, so a group made in between cannot shift the answer.
             // The contact's own menu, in the order it is drawn: send, receive,
             // copy, edit, move to a group, delete. Every one of them has
             // somewhere to go on this shell — which is why it is opened at
@@ -19249,55 +19078,6 @@ impl WalletPage {
                     )
                 })
                 .collect(),
-            ContactsMenu::MoveGroup => {
-                let ids: Vec<String> = resident::resident::<ExploreSites>(cx)
-                    .read(cx)
-                    .view()
-                    .groups
-                    .iter()
-                    .map(|group| group.id.clone())
-                    .collect();
-                let mut actions: Vec<Option<contacts_components::MenuAction>> = vec![Some(
-                    Box::new(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
-                        // Name it first; the tile joins it the moment it
-                        // exists.
-                        let origin = this.menu_origin.take();
-                        this.menu = None;
-                        this.explore_form = Some(ExploreForm {
-                            ask: ExploreAsk::NewGroup { then_add: origin },
-                            text: String::new(),
-                        });
-                        window.focus(&this.explore_form_focus, cx);
-                        cx.notify();
-                    })) as contacts_components::MenuAction,
-                )];
-                for id in ids {
-                    actions.push(Some(Box::new(cx.listener(
-                        move |this, _: &gpui::ClickEvent, _, cx| {
-                            let origin = this.menu_origin.take();
-                            this.menu = None;
-                            if let Some(origin) = origin {
-                                resident::resident::<ExploreSites>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                        vela_core::app::explore_sites::Event::GroupMemberAdded {
-                                            id: id.clone(),
-                                            origin,
-                                        },
-                                        cx,
-                                    );
-                                    },
-                                );
-                            }
-                            cx.notify();
-                        },
-                    ))
-                        as contacts_components::MenuAction));
-                }
-                actions
-            }
-
             // Spec 099: a tab's closes — this one, then the core's scopes.
             ContactsMenu::Tab => {
                 use vela_core::app::explore_sites::TabCloseScope;
@@ -19367,14 +19147,12 @@ impl WalletPage {
                     cx.notify();
                 })) as contacts_components::MenuAction),
             ],
-            // The favourite tile's menu, in the order it is drawn: open in a
-            // new tab, rename, move to a group, remove.
+            // The favourite tile's menu, in the order `tile_menu` draws it:
+            // open in a new tab, rename, remove. Paired by place — a row
+            // taken out there is taken out here, or every row below it would
+            // run its neighbour's action (issue 465 took "Move to group…").
             //
-            // Remove is the core's `FavoriteRemoved`, which also takes the
-            // site out of every group it was in. Rename and move need an
-            // input and a group picker that no desktop scenario draws yet,
-            // and a new tab needs the strip (still owed) — all three stay
-            // drawn and inert rather than armed and lying.
+            // Remove is the core's `FavoriteRemoved`.
             ContactsMenu::Tile => vec![
                 // Open in a new tab — the strip exists now (phase 37).
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
@@ -19421,14 +19199,6 @@ impl WalletPage {
                         cx.notify();
                     })) as contacts_components::MenuAction,
                 ),
-                // Move to a group — the picker, which keeps the origin.
-                Some(
-                    Box::new(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                        this.menu =
-                            Some((ContactsMenu::MoveGroup, event.position(), Anchor::TopLeft));
-                        cx.notify();
-                    })) as contacts_components::MenuAction,
-                ),
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     let origin = this.menu_origin.take();
                     this.menu = None;
@@ -19448,25 +19218,11 @@ impl WalletPage {
 
     /// What the menu `kind` lists — its rows, in the order its actions are
     /// armed (`menu_actions`).
-    fn menu_model(
-        &self,
-        kind: ContactsMenu,
-        cx: &mut Context<Self>,
-    ) -> contacts_fixtures::MenuModel {
+    fn menu_model(&self, kind: ContactsMenu) -> contacts_fixtures::MenuModel {
         match kind {
             ContactsMenu::Header => contacts_fixtures::header_dropdown(&self.contacts),
             ContactsMenu::Group => contacts_fixtures::group_context(&self.contacts),
             ContactsMenu::Recent => explore_fixtures::recent_menu(&self.explore),
-            ContactsMenu::MoveGroup => explore_fixtures::group_pick_menu(
-                &self.explore,
-                &resident::resident::<ExploreSites>(cx)
-                    .read(cx)
-                    .view()
-                    .groups
-                    .iter()
-                    .map(|group| group.name.clone())
-                    .collect::<Vec<_>>(),
-            ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
             ContactsMenu::Tab => explore_fixtures::tab_menu(&self.explore),
             // Drawn by its own card: logos and figures, not glyphs.
@@ -19501,7 +19257,7 @@ impl WalletPage {
                 actions,
             )
         } else {
-            let model = self.menu_model(kind, cx);
+            let model = self.menu_model(kind);
             menu_card(theme, &mut self.icons, &model, actions)
         }
     }
@@ -19509,11 +19265,11 @@ impl WalletPage {
     /// How big [`Self::menu_card_of`] draws `kind`, its shadow aside — what
     /// a float is sized to before anything is laid out in it.
     #[cfg(target_os = "macos")]
-    fn menu_card_size_of(&self, kind: ContactsMenu, cx: &mut Context<Self>) -> gpui::Size<Pixels> {
+    fn menu_card_size_of(&self, kind: ContactsMenu) -> gpui::Size<Pixels> {
         if matches!(kind, ContactsMenu::SiteNetwork) {
             explore_components::network_pick_card_size(self.site_networks.len())
         } else {
-            contacts_components::menu_card_size(&self.menu_model(kind, cx))
+            contacts_components::menu_card_size(&self.menu_model(kind))
         }
     }
 
@@ -20063,6 +19819,49 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 465: "Manage groups" is the start page's two sections and
+    /// nothing else — Favorites with its count, Recent dApps with no second
+    /// line, each with whether it is hidden — so there is no row a grip, a
+    /// trash or "New group" could hang off.
+    #[test]
+    fn manage_groups_lists_the_two_sections_and_nothing_else() {
+        let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
+        let site = |origin: &str| vela_core::app::explore_sites::ExploreSite {
+            origin: origin.to_owned(),
+            url: format!("{origin}/"),
+            host: origin.trim_start_matches("https://").to_owned(),
+            name: origin.trim_start_matches("https://").to_owned(),
+            renamed: false,
+            added_ms: 1.0,
+        };
+        let view = vela_core::app::explore_sites::ExploreView {
+            favorites: vec![site("https://curve.fi"), site("https://app.uniswap.org")],
+            tabs: Vec::new(),
+            selected_tab: None,
+            favorites_hidden: false,
+            recent_hidden: true,
+            favorites_full: false,
+            tabs_full: false,
+            recent_tabs: Vec::new(),
+            ready: true,
+        };
+        let [favorites, recent] = explore_group_rows(&view, &strings);
+        assert_eq!(
+            favorites,
+            (
+                ExploreGroupRow::Favorites,
+                strings.favorites.clone(),
+                Some(SharedString::from(strings.site_count.replace("{{n}}", "2"))),
+                false,
+            )
+        );
+        assert_eq!(
+            recent,
+            (ExploreGroupRow::Recent, strings.recent.clone(), None, true),
+            "Recent has no \"System\" line, and its hide is the person's"
+        );
+    }
 
     /// Spec 082 RJ18 (G51, T181): a may-have-been-sent ending on screen →
     /// 钱包 → back to 探索: the ending is there. One that arrives while the
