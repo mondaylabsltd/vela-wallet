@@ -4983,6 +4983,20 @@ fn a_split_pick_never_lands_nowhere_and_never_keeps_a_strangers_name() {
     });
     assert_eq!(sut.view().recipients[0].name.as_deref(), Some("Ann"));
 
+    // The same address in another case (the book stores it checksummed) is
+    // the same person, and keeps the name too.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
+    });
+    assert_eq!(
+        sut.view().recipients[0].name.as_deref(),
+        Some("Ann"),
+        "the same address in another case is the same person"
+    );
+
     // Somebody else picked for it does not wear it.
     sut.dispatch(Event::OpenContactPicker {
         target: Some("rcpt_1".to_owned()),

@@ -4301,8 +4301,9 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
             if let Some(row) = model.recipients.get_mut(index) {
                 // A row's name is the person's word for whoever its address
                 // was (a group member, a list's name column); another address
-                // is somebody else.
-                if row.address.trim() != address.trim() {
+                // is somebody else. The same address in another letter case
+                // (a list's lowercase, the book's checksum) is the same one.
+                if !row.address.trim().eq_ignore_ascii_case(address.trim()) {
                     row.name = None;
                 }
                 row.address = address;
