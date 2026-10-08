@@ -1166,7 +1166,8 @@ object SigningLive {
             fee.options.map { option ->
                 FeeTokenOption(
                     id = option.contract ?: NATIVE_FEE_ID,
-                    mark = TokenMark(option.symbol.take(1).uppercase(), ctx.chainDot),
+                    // The request's chain (never an estimate's, which can be absent).
+                    mark = WalletLive.mark(ctx.chainId, option.symbol, option.contract),
                     name = option.symbol,
                     balance = "${ctx.strings.t("componentsUi.gas.rowBalance")} ${SendLive.fromBase(option.balance, option.decimals)}",
                     fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",

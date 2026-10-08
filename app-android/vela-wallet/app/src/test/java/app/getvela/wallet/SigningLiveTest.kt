@@ -830,6 +830,39 @@ class SigningLiveTest {
         assertFalse(open.options[1].disabled)
     }
 
+    /**
+     * Each coin in the list wears its real mark — the send form's fee-coin
+     * sheet's: its logo on the REQUEST's chain over its drawn ticker, the
+     * chain's badge hidden where it would repeat the coin. It was the first
+     * letter on a disc, and USDC and USDT were both "U".
+     */
+    @Test
+    fun `the fee coins wear their real marks on the request's chain`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val usdc = usdt.copy(symbol = "USDC", contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", selected = false)
+            // No estimate in hand: the request's chain still names the logos.
+            val fee = FeeView(options = listOf(eth, usdt, usdc))
+            val open = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = true, chainId = 1)) as FeeModel.OnChain
+            val (ethMark, usdtMark, usdcMark) = open.options.map { it.mark }
+            assertEquals(listOf("ETH", "USDT", "USDC"), listOf(ethMark, usdtMark, usdcMark).map { it.ticker })
+            assertEquals(listOf("https://data.example/chainlogos/eip155-1.png"), ethMark.logoUrls)
+            assertTrue("ETH on Ethereum: no badge repeating it", ethMark.badgeHidden)
+            assertEquals(
+                "https://data.example/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+                usdtMark.logoUrls.first(),
+            )
+            assertEquals(
+                "https://data.example/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                usdcMark.logoUrls.first(),
+            )
+            assertEquals("a token is badged with its chain", "https://data.example/chainlogos/eip155-1.png", usdcMark.badgeLogoUrl)
+            assertTrue(open.options.none { "eip155-0" in it.mark.logoUrls.joinToString() })
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
     // -- Issue #408: a coin that cannot pay says why ---------------------------
 
     /**

@@ -3,6 +3,7 @@ package app.getvela.wallet.feature.signing
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.explore.ExploreFixtures
+import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.WalletFixtures
 
 /**
@@ -408,12 +409,12 @@ object SigningFixtures {
                         selectorTitle = sg("feeTokenTitle"),
                         options = listOf(
                             FeeTokenOption(
-                                "eth", Mark.eth, "ETH",
+                                "eth", TokenMarkModel("ETH", WalletFixtures.ChainColors.ethereum), "ETH",
                                 "${t("componentsUi.gas.rowBalance")} 0.0689",
                                 "~0.0021 ETH", selected = true,
                             ),
                             FeeTokenOption(
-                                "usdc", Mark.usdc, "USDC",
+                                "usdc", TokenMarkModel("USDC", WalletFixtures.ChainColors.ethereum), "USDC",
                                 "${t("componentsUi.gas.rowBalance")} 1,240.00",
                                 "~5.55 USDC", selected = false,
                             ),

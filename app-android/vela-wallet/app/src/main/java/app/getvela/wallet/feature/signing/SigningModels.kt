@@ -165,7 +165,13 @@ data class TechModel(
 @Immutable
 data class FeeTokenOption(
     val id: String,
-    val mark: TokenMark,
+    /**
+     * The coin's real mark — the send form's fee-coin sheet's own: its logo
+     * on the REQUEST's chain (a native coin wears its chain's), over the drawn
+     * ticker when the logo cannot load. Never a first letter (USDC and USDT
+     * were both "U").
+     */
+    val mark: app.getvela.wallet.feature.flows.TokenMarkModel,
     val name: String,
     val balance: String,
     val fee: String,
