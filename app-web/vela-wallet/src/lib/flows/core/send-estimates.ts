@@ -104,21 +104,47 @@ export function feeKey(view: FeeEstimateView): string {
 
 /**
  * The fee card's coin in force (`FeeView.fee_token`), as news for the send
- * machine: the `fee_token_changed` to dispatch, or `null` when the machine has
- * heard this already. `told` is what this send session was last told —
- * `undefined` for a session that has heard nothing, so a fresh one is told the
- * card's coin even when it is `null` (the chain's own).
+ * machine — the bridge's half of `send::Event::FeeTokenChanged`, under the
+ * core's one rule (iOS `SendStore.feeTokenChanged`, Android `FeeTokenWord`,
+ * desktop `FeeTokenTold`).
  *
  * The send form's fee row names this coin while no estimate is in hand
  * (`SendView.fee_coin`): when nobody chose, the fee machine picks a coin that
  * can pay, and a quote that then fails leaves that coin in force with no
  * estimate to say so.
+ *
+ * The core files the word against the form's chain at the moment it is said,
+ * and drops it while the form has no chain. So it is said only while the fee
+ * session prices the form's own chain (both known), and whenever the pair
+ * (chain, coin) differs from what this journey was last told — a coin first
+ * seen before the form had a chain is told once it has one. {@link forget}
+ * starts a journey that has been told nothing.
  */
-export function feeTokenNews(
-	told: string | null | undefined,
-	feeToken: string | null
-): Extract<SendEvent, { type: 'fee_token_changed' }> | null {
-	return told === feeToken ? null : { type: 'fee_token_changed', fee_token: feeToken };
+export class FeeTokenWord {
+	/** What this journey was last told; `null` = nothing yet. */
+	#told: { chainId: number; token: string | null } | null = null;
+
+	/**
+	 * The `fee_token_changed` to dispatch for the card's coin `token`, priced
+	 * on `pricing` (the fee session's chain) while the form is on `form` — or
+	 * `null` when there is nothing to say.
+	 */
+	news(
+		token: string | null,
+		pricing: number | null,
+		form: number | null
+	): Extract<SendEvent, { type: 'fee_token_changed' }> | null {
+		if (pricing === null || pricing !== form) return null;
+		const told = this.#told;
+		if (told !== null && told.chainId === pricing && told.token === token) return null;
+		this.#told = { chainId: pricing, token };
+		return { type: 'fee_token_changed', fee_token: token };
+	}
+
+	/** A new journey: nothing told yet. */
+	forget(): void {
+		this.#told = null;
+	}
 }
 
 /**

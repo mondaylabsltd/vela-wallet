@@ -20,7 +20,7 @@ import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { SendCore } from '../../../../../rust/pkg-web/vela_core.js';
 import type { SendEffect } from './core/send-types';
-import { feeTokenNews } from './core/send-estimates';
+import { FeeTokenWord } from './core/send-estimates';
 import { buildFlowState } from './fixtures';
 import { liveSendForm, sendTokenId, type SendLiveInputs } from './live-send';
 import { tokenMarkFor } from './marks';
@@ -63,6 +63,13 @@ const BSC_USDT: SendToken = {
 	token_address: BSC_USDT_CONTRACT,
 	price_usd: 1
 };
+const ETH: SendToken = {
+	...BNB,
+	network: 'ethereum',
+	chain_id: 1,
+	symbol: 'ETH',
+	price_usd: 3000
+};
 
 function formModel() {
 	const state = buildFlowState('sd2', m, identicon);
@@ -76,7 +83,7 @@ function inputs(send: SendView, fee: Partial<FeeView> = {}): SendLiveInputs {
 }
 
 /** The real send core, answered by hand. */
-function realSend() {
+function realSend(tokens: SendToken[] = [BSC_USDT, BNB]) {
 	const core = new SendCore();
 	const pending: SendEffect[] = [];
 	const take = (json: string): SendView => {
@@ -112,16 +119,18 @@ function realSend() {
 	});
 	send.answer('fetch_tokens', {
 		type: 'tokens_loaded',
-		tokens: [BSC_USDT, BNB],
-		chains: [{ chain_id: 56, network: 'bsc', native_symbol: 'BNB' }]
+		tokens,
+		chains: [
+			{ chain_id: 56, network: 'bsc', native_symbol: 'BNB' },
+			{ chain_id: 1, network: 'ethereum', native_symbol: 'ETH' }
+		]
 	});
 	while (send.asks('prewarm_fees')) send.answer('prewarm_fees', { type: 'fees_prewarmed' });
 	return send;
 }
 
 /** Pick `token`, and let its warm quote FAIL: the form has no estimate in hand. */
-function withAFailedQuote(token: SendToken) {
-	const send = realSend();
+function withAFailedQuote(token: SendToken, send = realSend()) {
 	send.dispatch({ type: 'select_token', token_id: sendTokenId(token) });
 	send.answer('load_account_credential', { type: 'account_credential', public_key_hex: '04ab' });
 	send.answer('estimate_fee', {
@@ -162,7 +171,7 @@ describe("the fee row draws the core's coin, estimate or none", () => {
 		const send = withAFailedQuote(BNB);
 		// Nobody chose: the card picked the coin that can pay, and its quote
 		// failed. The bridge mirrors FeeView.fee_token; the row must not say BNB.
-		const told = feeTokenNews(undefined, BSC_USDT_CONTRACT);
+		const told = new FeeTokenWord().news(BSC_USDT_CONTRACT, 56, 56);
 		expect(told).toEqual({ type: 'fee_token_changed', fee_token: BSC_USDT_CONTRACT });
 		const view = send.dispatch(told!);
 		const row = liveSendForm(
@@ -185,25 +194,98 @@ describe("the fee row draws the core's coin, estimate or none", () => {
 	});
 });
 
+/**
+ * The bridge beside `fee_busy_changed` (iOS `SendStore.feeTokenChanged`): the
+ * card's coin reaches the send machine whenever the pair (chain, coin) differs
+ * from what this journey was last told, only while the fee session prices the
+ * form's own chain — the core files the word against the form's chain at the
+ * moment it is said, and drops it while the form has none. A fresh journey has
+ * been told nothing.
+ */
 describe('the fee→send bridge tells the send machine the card’s coin', () => {
-	it('tells a fresh session whatever the card holds, the chain’s own coin included', () => {
-		expect(feeTokenNews(undefined, null)).toEqual({ type: 'fee_token_changed', fee_token: null });
-		expect(feeTokenNews(undefined, BSC_USDT_CONTRACT)).toEqual({
-			type: 'fee_token_changed',
-			fee_token: BSC_USDT_CONTRACT
+	/** The real send core with the page's bridge in front of it. */
+	function bridged() {
+		const word = new FeeTokenWord();
+		const journey = { send: realSend([BSC_USDT, BNB, ETH]) };
+		const told: SendEvent[] = [];
+		/** The card's coin `token`, with its session pricing `pricing`. */
+		const tell = (token: string | null, pricing: number | null) => {
+			const view = journey.send.view();
+			const form = view.selected_token?.chain_id ?? view.multi_chain_id ?? null;
+			const news = word.news(token, pricing, form);
+			if (news !== null) {
+				told.push(news);
+				journey.send.dispatch(news);
+			}
+			return news;
+		};
+		/** Leave, and open a new journey: nothing told yet. */
+		const reopen = () => {
+			word.forget();
+			journey.send = realSend([BSC_USDT, BNB, ETH]);
+		};
+		return { journey, told, tell, reopen };
+	}
+
+	it('tells each change once, only about the form’s own chain, and again to a new journey', () => {
+		const { journey, told, tell, reopen } = bridged();
+		// No chain on the form yet: a word now is about no chain at all.
+		expect(tell(BSC_USDT_CONTRACT, 56)).toBeNull();
+		withAFailedQuote(BNB, journey.send);
+		expect(
+			journey.send.view().fee_coin?.contract,
+			'nothing was told before the form had a chain'
+		).toBeNull();
+
+		// The same coin, now that the form is on the chain it is priced on.
+		tell(BSC_USDT_CONTRACT, 56);
+		expect(journey.send.view().fee_coin).toEqual({
+			symbol: 'USDT',
+			contract: BSC_USDT_CONTRACT,
+			chain_id: 56
 		});
+		expect(told).toHaveLength(1);
+
+		// The person picks the chain's own coin: newer than the card's word.
+		journey.send.dispatch({ type: 'choose_fee_token', token: null });
+		expect(journey.send.view().fee_coin?.contract).toBeNull();
+		// The card has not spoken again — the same word is not said twice, or
+		// it would undo the person's pick.
+		expect(tell(BSC_USDT_CONTRACT, 56), 'an unchanged coin is not told again').toBeNull();
+		expect(journey.send.view().fee_coin?.contract).toBeNull();
+		expect(tell(null, 56)).toEqual({ type: 'fee_token_changed', fee_token: null });
+		// A session still pricing another chain says nothing about this one.
+		expect(tell(BSC_USDT_CONTRACT, 1), 'another chain’s coin is not told').toBeNull();
+		expect(journey.send.view().fee_coin?.contract).toBeNull();
+		tell(BSC_USDT_CONTRACT, 56);
+		expect(journey.send.view().fee_coin?.contract, 'a change is told').toBe(BSC_USDT_CONTRACT);
+		expect(told).toHaveLength(3);
+
+		// A new journey has been told nothing: the same coin is told again.
+		reopen();
+		withAFailedQuote(BNB, journey.send);
+		tell(BSC_USDT_CONTRACT, 56);
+		expect(journey.send.view().fee_coin?.contract, 'a fresh journey hears the card’s coin').toBe(
+			BSC_USDT_CONTRACT
+		);
+		expect(told).toHaveLength(4);
 	});
 
-	it('tells a change, and nothing it has heard already', () => {
-		expect(feeTokenNews(null, null)).toBeNull();
-		expect(feeTokenNews(BSC_USDT_CONTRACT, BSC_USDT_CONTRACT)).toBeNull();
-		expect(feeTokenNews(BSC_USDT_CONTRACT, null)).toEqual({
-			type: 'fee_token_changed',
-			fee_token: null
-		});
-		expect(feeTokenNews(null, BSC_USDT_CONTRACT)).toEqual({
-			type: 'fee_token_changed',
-			fee_token: BSC_USDT_CONTRACT
-		});
+	it('tells the same coin again when the form moves to another chain', () => {
+		const { journey, told, tell } = bridged();
+		withAFailedQuote(BNB, journey.send);
+		tell(null, 56);
+		expect(told).toEqual([{ type: 'fee_token_changed', fee_token: null }]);
+
+		// The form moves to Ethereum; the session still prices BNB Chain.
+		journey.send.dispatch({ type: 'change_token' });
+		withAFailedQuote(ETH, journey.send);
+		expect(journey.send.view().selected_token?.chain_id).toBe(1);
+		expect(tell(null, 56), 'the network just left says nothing about this one').toBeNull();
+		// Priced on Ethereum now: "the chain's own coin" is news about THIS chain.
+		expect(tell(null, 1)).toEqual({ type: 'fee_token_changed', fee_token: null });
+		expect(tell(null, 1)).toBeNull();
+		expect(told).toHaveLength(2);
+		expect(journey.send.view().fee_coin).toEqual({ symbol: 'ETH', contract: null, chain_id: 1 });
 	});
 });
