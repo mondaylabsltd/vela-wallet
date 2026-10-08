@@ -105,6 +105,17 @@ fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> Sen
     }
 }
 
+/// The fee card's coin in force, when it is news to the send machine
+/// (`Event::FeeTokenChanged`): whenever it differs from what this send was
+/// last told — and always for a send told nothing yet, even "the chain's own
+/// coin". `told` is `None` until the first word.
+fn fee_token_news(
+    told: Option<&Option<String>>,
+    in_force: &Option<String>,
+) -> Option<Option<String>> {
+    (told != Some(in_force)).then(|| in_force.clone())
+}
+
 pub struct SendHost {
     send: CoreHost<Send>,
     /// The account this journey sends from, fixed when it opened.
@@ -145,6 +156,10 @@ pub struct SendHost {
     /// The `EstimateFee` effect the fee session is answering.
     pending_fee: Option<u64>,
     last_fee_busy: bool,
+    /// The fee card's coin in force (`FeeView.fee_token`) as this send was
+    /// last told it — `None` until it has been told anything, `Some(None)`
+    /// for "the chain's own coin".
+    last_fee_token: Option<Option<String>>,
     /// The WHOLE estimate the send machine last heard, not its charge (#686):
     /// on a floor-clamped chain two tiers charge the same wei, and a stamp of
     /// the charge alone kept the old tier's estimate in the send machine.
@@ -266,6 +281,7 @@ impl SendHost {
             window_handle,
             pending_fee: None,
             last_fee_busy: false,
+            last_fee_token: None,
             last_fee: None,
             alert: None,
             closed: false,
@@ -951,13 +967,21 @@ impl SendHost {
     }
 
     /// The card's re-quotes, mirrored into the send machine: `busy` flips
-    /// disarm the confirm, and a settled estimate replaces the one it
+    /// disarm the confirm, the coin in force names the fee row's coin while
+    /// no estimate is in hand, and a settled estimate replaces the one it
     /// pre-checked with (`GasFeeCard.onBusyChange` / `onFeeUpdate`).
     fn sync_fee_to_send(&mut self, cx: &mut Context<Self>) {
         let busy = self.speed.fee_view().busy;
         if busy != self.last_fee_busy {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
+        }
+        if let Some(fee_token) = fee_token_news(
+            self.last_fee_token.as_ref(),
+            &self.speed.fee_view().fee_token,
+        ) {
+            self.last_fee_token = Some(fee_token.clone());
+            self.dispatch(SendEvent::FeeTokenChanged { fee_token }, cx);
         }
         if let Some(fee) = self.speed.fee_view().fee.clone()
             && self.last_fee.as_ref() != Some(&fee)
@@ -1279,6 +1303,28 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+
+    /// The bridge tells the send machine the fee card's coin whenever it
+    /// changes — and once at the start, "the chain's own coin" included —
+    /// and never twice the same word.
+    #[test]
+    fn the_fee_cards_coin_is_told_once_per_change() {
+        let usdt = Some("0x55d398326f99059ff775485246999027b3197955".to_owned());
+        assert_eq!(
+            fee_token_news(None, &None),
+            Some(None),
+            "a fresh send hears it"
+        );
+        assert_eq!(fee_token_news(None, &usdt), Some(usdt.clone()));
+        assert_eq!(fee_token_news(Some(&usdt), &usdt), None, "said once");
+        assert_eq!(
+            fee_token_news(Some(&usdt), &None),
+            Some(None),
+            "back to the chain's coin"
+        );
+        assert_eq!(fee_token_news(Some(&None), &usdt), Some(usdt.clone()));
+        assert_eq!(fee_token_news(Some(&None), &None), None);
+    }
     // The sync driver's own: the host hands its fee sessions to
     // `speed_control` (069), so nothing above imports these any more.
     #[cfg(feature = "dev-fixtures")]

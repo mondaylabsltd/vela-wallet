@@ -1532,6 +1532,10 @@ struct NoticeClicks {
     report: Option<Click>,
 }
 
+/// The relay stops' "Report this" pill (issue 466), found by this id — the
+/// hook Android (`RELAY_REPORT_TAG`) and iOS (`testId`) carry for it too.
+pub const RELAY_REPORT_ID: &str = "relay-report";
+
 fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div {
     let NoticeClicks {
         action,
@@ -1600,7 +1604,7 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
     if let Some(label) = &notice.report {
         any = true;
         row = row.child(clickable(
-            "flow-notice-report",
+            RELAY_REPORT_ID,
             report,
             pill(theme, label.clone()),
         ));
@@ -4015,6 +4019,13 @@ fn receive_gate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 466: the "Report this" pill carries the phones' hook, so one
+    /// cross-platform test finds it on every shell.
+    #[test]
+    fn the_report_pill_keeps_the_phones_hook() {
+        assert_eq!(RELAY_REPORT_ID, "relay-report");
+    }
 
     /// Issue 467: a search hides rows, and each row still left is drawn —
     /// and picked — from its own entry: the one 阿豪 is under carries 阿豪's

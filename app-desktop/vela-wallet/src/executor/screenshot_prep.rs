@@ -468,6 +468,23 @@ impl<T> Tray<T> {
         self.shots.clear();
         self.refusal = None;
     }
+
+    /// The tiles, moved out to be set aside with the report they belong to
+    /// while another is on the form. The id counter stays with the tray, so
+    /// a tile added meanwhile never takes one of their ids — and a picture
+    /// still being prepared for one of them can never land on a new tile.
+    pub fn take_shots(&mut self) -> Vec<Shot<T>> {
+        self.refusal = None;
+        std::mem::take(&mut self.shots)
+    }
+
+    /// Tiles set aside by [`Tray::take_shots`] come back, in place of
+    /// whatever the tray holds now. Every id was handed out by this tray's
+    /// counter, so none is reused.
+    pub fn restore_shots(&mut self, shots: Vec<Shot<T>>) {
+        self.shots = shots;
+        self.refusal = None;
+    }
 }
 
 #[cfg(test)]

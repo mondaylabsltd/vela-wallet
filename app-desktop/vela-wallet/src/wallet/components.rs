@@ -418,6 +418,9 @@ pub fn balance_display(
     on_status: Option<BalanceToggle>,
     // Issue #443: read the balances and the incoming scan again, now.
     on_refresh: Option<BalanceToggle>,
+    // The system's Reduce Motion (`cx.reduce_motion()`): the refresh glyph
+    // stays still and its words say it is reading.
+    reduce_motion: bool,
 ) -> Div {
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
@@ -582,19 +585,34 @@ pub fn balance_display(
     // the status line: subtle ink, fuller on hover. Drawn without a press
     // behind it where a board shows its states.
     if on_refresh.is_some() || model.updated.is_some() {
-        root = root.child(
-            div()
-                .flex()
-                .child(refresh_control(theme, icons, model, on_refresh)),
-        );
+        root = root.child(div().flex().child(refresh_control(
+            theme,
+            icons,
+            model,
+            on_refresh,
+            reduce_motion,
+        )));
     }
 
     root
 }
 
-/// How long the refresh glyph takes to turn once, and in how many frames.
-const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(1000);
+/// How long the refresh glyph takes to turn once, and in how many frames:
+/// motion slow × 2 (`motion.durationSlow`, 400 ms) — the web's and iOS's
+/// pace, and the spinner's (`spinner.rs` REVOLUTION). At 1000 ms a quick
+/// refresh, held the 650 ms minimum, turned 0.65 of a revolution here and 0.8
+/// there: the same press, looking different on each platform.
+const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(800);
 const REFRESH_FRAMES: u32 = 36;
+
+/// Whether the refresh glyph turns: while a read is out — and never under
+/// Reduce Motion, where the glyph stays still and the words ("Updating…")
+/// carry the state alone, as the web's `prefers-reduced-motion` and iOS's
+/// `accessibilityReduceMotion` have it.
+#[must_use]
+pub fn refresh_turns(model: &BalanceModel, reduce_motion: bool) -> bool {
+    model.refreshing && !reduce_motion
+}
 
 /// What the refresh control says: "Updating…" while it turns (issue 462),
 /// otherwise when the figure was last read — nothing before the first read.
@@ -615,14 +633,16 @@ pub fn refresh_words(model: &BalanceModel) -> Option<SharedString> {
 /// grey status line no longer comes and goes above it either: the glyph
 /// is the same 14 square turning or still, and the words sit in a one-line
 /// slot as wide as the LONGER of the two labels — the one not shown is laid
-/// out under it, clipped, invisible.
+/// out under it, clipped, invisible. Under Reduce Motion the glyph stays
+/// still ([`refresh_turns`]); the words still change.
 fn refresh_control(
     theme: &Theme,
     icons: &mut IconCache,
     model: &BalanceModel,
     on_refresh: Option<BalanceToggle>,
+    reduce_motion: bool,
 ) -> gpui::AnyElement {
-    let glyph: gpui::AnyElement = if model.refreshing {
+    let glyph: gpui::AnyElement = if refresh_turns(model, reduce_motion) {
         let frames = icons.turning(Icon::RefreshCw, theme.fg_subtle, 14, REFRESH_FRAMES);
         div()
             .size(px(14.))
@@ -1490,5 +1510,19 @@ mod tests {
             SharedString::from("https://data.example/b.png"),
         ];
         assert!(logo_candidates(&two, WALLET_ROW_ICON).is_some());
+    }
+
+    /// Under Reduce Motion the refresh glyph stays still while a read is
+    /// out, and the words carry the state: "Updating…", then the time.
+    #[test]
+    fn under_reduce_motion_the_words_say_it_and_the_glyph_keeps_still() {
+        let en = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::for_tag("en"));
+        let turning = crate::wallet::fixtures::balance_refresh(&en, true);
+        assert!(refresh_turns(&turning, false), "it turns while it reads");
+        assert!(!refresh_turns(&turning, true), "never under Reduce Motion");
+        assert_eq!(refresh_words(&turning), Some(turning.updating.clone()));
+        let at_rest = crate::wallet::fixtures::balance_refresh(&en, false);
+        assert!(!refresh_turns(&at_rest, false), "still at rest");
+        assert!(!refresh_turns(&at_rest, true));
     }
 }
