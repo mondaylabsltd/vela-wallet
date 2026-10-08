@@ -209,7 +209,7 @@
 | 3.4 | 作为用户，我把 1 个 token 拆发给 N 个人（split） | MultiRecipientEditor 多行→1 个 MultiSend UserOp→批量回执分行 | 某行地址/金额非法；行增删 | M2(batch-send) | D2 | U + E2E | U✅ |
 | 3.5 | 作为用户，我把某链上的多个 token 全额扫给 1 个地址（sweep/multiSelect） | 从资产 sheet 预选→1 个 MultiSend N 笔 ERC20→全额 | 与 split 互斥；全额取整 | M2(batch-send) | D2 | U + E2E | U✅ |
 | 3.6 | 作为用户，我扫/粘一个 EIP-681 支付请求发款 | 解析 URI→锁定收款人/金额→缺网络走"加网络"、缺 token 造零余额占位 | 网络未知、token 未知、金额/地址非法 | M7(eip681),M5(add-network) | D1 | U + E2E | U✅ E2E✅ |
-| 3.7 | 作为用户，收款人有风险时我被要求更谨慎地确认 | 首次/合约地址→风险标签(First time/Contract)→**滑动**确认(SlideToConfirm，danger 变红) | 首次转账警告、合约 vs EOA | M3,M7(recipient-risk) | D1 | E2E + M | ✅ E2E(send-high-risk) |
+| 3.7 | 作为用户，收款人有风险时我被要求更谨慎地确认 | 首次/合约地址→风险标签(First time/Contract)→点按确认(与发送确认页同一个主按钮；谨慎靠风险标签与警告，不靠手势) | 首次转账警告、合约 vs EOA | M3,M7(recipient-risk) | D1 | E2E + M | ✅ E2E(send-high-risk) |
 
 **Epic 3 失败态：** 余额不足、原生 gas 不足、Tempo fee token 不足、bundler underfunded、gas 估算失败(best-effort)、模拟失败(无预览)、passkey 取消、签后 bundler 报错(回执转轮询)、EIP-681 三类非法。（RPC 类用 `vela.failRpc/slowRpc`；bundler underfunded 需手动断网/指向不可达端点）
 
@@ -236,7 +236,7 @@
 |----|---------|---------|----------------|---------|------|----|----|
 | 5.1 | 作为用户，我扫码/粘链接连上一个 dApp | 扫 QR/粘链接→指纹交换→连上显示 dApp 卡+账户+链+E2E 徽章(WalletPair) | 无效配对链接；连接失败→重试；重连卡住→banner+手动重连 | M8(dapp-transport/walletpair) | D5 | U + M | ✅ U(parseURL + connect SSE 状态机) |
 | 5.2 | 作为用户，dApp 请求交易时我看到人类可读意图（clear signing） | descriptor 命中→意图布局(动作词+token 卡+箭头+折叠详情)；无 descriptor→盲签回退(合约+calldata) | descriptor 解析失败→盲签；未知选择器 | M3(clear-signing,abi-decode,selector) | D3,D7 | U + E2E | U✅ E2E✅ |
-| 5.3 | 作为用户，任何无限授权都被拦下、必须我设有限额度 | approve/increaseAllowance/setApprovalForAll/permit/Permit2 皆检出→额度可编辑→**无限时确认禁用**，无旁路(含滑动) | 粘贴 uint256-max / 2^255 / 2^160-1 仍被拦 | M3(approval-guard) | — | U + M | U✅(P0) |
+| 5.3 | 作为用户，任何无限授权都被拦下、必须我设有限额度 | approve/increaseAllowance/setApprovalForAll/permit/Permit2 皆检出→额度可编辑→**无限时确认禁用**，无旁路(确认按钮置灰且点按无效) | 粘贴 uint256-max / 2^255 / 2^160-1 仍被拦 | M3(approval-guard) | — | U + M | U✅(P0) |
 | 5.4 | 作为用户，签名前我看到链上会发生什么（余额变化预览） | eth_call 回滚预检 + 资产净变化预览 + 收款人风险标签 | 模拟失败→无预览(best-effort)；received token 只 gate 不信 log(见 memory：非对称信任) | M3(tx-simulation,sim-assets) | D1 | SI + M | ✅ |
 | 5.5 | 作为用户，签名/交易被记录，我能事后只读重放 | 签名落 dApp 历史(全量 request+response)→Connections 面板事件(pending→confirmed/failed)→点开只读重放 SigningSheet | 关闭/重载不丢 pending；签后 bundler 超时→回执转轮询 | M6(dapp-history) | D6,D2 | SI + M | ✅ |
 | 5.6 | 作为用户，读取类请求不被 dApp 打爆（只读限流） | readonly-rpc-gate：6 并发/512 排队；溢出→-32005 可重试 | 队列溢出 | M5(readonly-rpc-gate) | D1 | U | ✅ |
