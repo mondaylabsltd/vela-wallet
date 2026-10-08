@@ -835,7 +835,8 @@ fun TechDetails(
                         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
                     ) {
                         when (val lead = identity.lead) {
-                            is FactLead.Token -> TokenIcon(mark = lead.mark, inline = true)
+                            // On the grey card: ringed, or the disc is the card's colour.
+                            is FactLead.Token -> TokenIcon(mark = lead.mark, inline = true, ring = true)
                             is FactLead.Identicon -> IdenticonAvatar(seed = lead.seed, size = VelaIconSize.xl, tappable = false)
                             is FactLead.Dot, null -> Unit
                         }
