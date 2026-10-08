@@ -1358,8 +1358,6 @@
    "simResultLabel": "Kết quả mô phỏng",
    "simResultNoChange": "Không có thay đổi tài sản",
    "simResultNoOther": "không có thay đổi nào khác",
-   "slideToConfirm": "Trượt để xác nhận",
-   "slideConfirmAction": "Trượt để xác nhận · {{action}}",
    "confirmSend": "Xác nhận gửi",
    "confirmSwap": "Xác nhận hoán đổi",
    "confirmDeposit": "Xác nhận gửi vào",

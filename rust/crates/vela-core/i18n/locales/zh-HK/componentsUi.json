@@ -159,8 +159,6 @@
       "simResultLabel": "模擬結果",
       "simResultNoChange": "沒有資產變動",
       "simResultNoOther": "沒有其他變動",
-      "slideToConfirm": "滑動確認",
-      "slideConfirmAction": "滑動確認 · {{action}}",
       "confirmSend": "確認傳送",
       "confirmSwap": "確認兌換",
       "confirmDeposit": "確認存入",

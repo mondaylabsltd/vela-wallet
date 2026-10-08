@@ -1,4 +1,4 @@
-//! Pure policy — may the signing slide arm, and if not, why not
+//! Pure policy — may the signing confirm be tapped, and if not, why not
 //! (spec 099 R7).
 //!
 //! Four machines have a say: the request ([`super::sign_request`], its own
@@ -7,16 +7,16 @@
 //! on top — a message has no fee to wait for, another speed's figure is not
 //! this speed's (issue 681), a request not yet read is not signable (096 F7) —
 //! and the copies drifted: iOS had two, one without the last two rules. And a
-//! shut slide said nothing: the person could not tell a held failure from a
+//! disabled confirm said nothing: the person could not tell a held failure from a
 //! fee being measured.
 //!
 //! [`confirm_state`] is the one gate. It names the first part that is shut,
 //! in the order a person would fix them, and every client draws the
 //! [`ConfirmBlock`]'s line (`componentsUi.signing.confirmBlock.*`) under the
-//! shut slide, with the action that opens it — unless the sheet already says
+//! disabled confirm, with the action that opens it — unless the sheet already says
 //! it: a short fee coin is said under the fee, where the other coins are
 //! (issue #438: "No token can pay this fee" twice, red over the fee and grey
-//! under the slide).
+//! under the confirm).
 
 use serde::{Deserialize, Serialize};
 
@@ -56,12 +56,12 @@ pub enum ConfirmBlock {
     FeeMeasuring,
     /// The fee could not be worked out: retry.
     FeeFailed,
-    /// The coin chosen for the fee is short. No line under the slide: the
+    /// The coin chosen for the fee is short. No line under the confirm: the
     /// fee section says it already, where the other coins are — "Insufficient
     /// ETH for gas fees", or, when no coin on offer can pay
     /// ([`FeeView::no_coin_pays`], issue #408), "No token can pay this fee".
     /// Every client draws that sentence whenever this block holds (the coin in
-    /// force is then provably `insufficient`), so a second copy under the slide
+    /// force is then provably `insufficient`), so a second copy under the confirm
     /// only repeated it (issue #438).
     FeeShort,
 }
@@ -85,7 +85,7 @@ pub struct ConfirmState {
     pub enabled: bool,
     /// Why not, when not.
     pub block: Option<ConfirmBlock>,
-    /// The line under the shut slide (`componentsUi.signing.confirmBlock.*`),
+    /// The line under the disabled confirm (`componentsUi.signing.confirmBlock.*`),
     /// or `None` where the sheet already says it in its own way (no request,
     /// signing in progress, the funding sheet, a refusal's own panel, a short
     /// fee coin's line under the fee).
@@ -170,7 +170,7 @@ pub fn confirm_state_of(
     if sign.is_signing || sign.is_submitting {
         return shut(ConfirmBlock::InFlight);
     }
-    // Spec 096 F7: a slide that armed under "Loading…" signed what nobody had
+    // Spec 096 F7: a confirm that was live under "Loading…" signed what nobody had
     // been shown yet.
     if clear.resolving || clear.surface == ClearSurface::Loading {
         return shut(ConfirmBlock::Reading);
@@ -211,7 +211,7 @@ pub fn confirm_state_of(
 
 /// [`confirm_state`] over the four views as the shell last received them, in
 /// JSON (UniFFI, wasm), and the speed in force as its wire name. `None` when a
-/// view does not read — the shell keeps the slide shut.
+/// view does not read — the shell keeps the confirm disabled.
 #[must_use]
 pub fn confirm_state_json(
     sign_json: &str,

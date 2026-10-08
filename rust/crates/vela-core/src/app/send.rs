@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! Open ─► SelectToken ─► EnterDetails ─► Continue{estimate ∥ treasury, 15s cap}
-//!            │ multi picker                  │ pass ─► Confirm ─slide─► lock.begin
+//!            │ multi picker                  │ pass ─► Confirm ─tap───► lock.begin
 //!            └ split editor                  └ fail/low-float ─► stay   │
 //!   Confirm: credential ─► treasury recheck ─► SubmitUserOp ─► Submitted│
 //!            (each hop is a cancel checkpoint — a passkey never          ▼
@@ -1377,7 +1377,8 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
-    /// The slide-to-confirm completed.
+    /// The confirm button was tapped. The name (and its `slide_confirm`
+    /// wire tag) predates the tap: every shell dispatches it, so it stays.
     SlideConfirm,
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
@@ -1596,7 +1597,7 @@ enum Pipeline {
     },
     /// The sign→submit is in flight. Kept alive across a Cancel-during-signing
     /// (the shell's outcome decides, exactly as TS), replaced by any newer
-    /// slide.
+    /// confirm.
     Submitting {
         id: u64,
         gen: u64,
@@ -2017,13 +2018,13 @@ pub struct SendView {
     /// fires either. A dimmed control with no sentence is a refusal the user
     /// cannot act on. `Some` exactly when `denom_toggle_shown && !enabled`.
     pub denom_toggle_reason: Option<SendUnitIssue>,
-    /// **Why** the confirm slide is disarmed, when what disarmed it is the
+    /// **Why** the confirm is disabled, when what disabled it is the
     /// money.
     ///
     /// [`SendView::can_confirm`] never looked at the amount at all: a
     /// display-currency commit landing while the confirm page is open
     /// re-denominates the field to empty (`redenominate_to_display`), and the
-    /// slider stayed armed over a figure that resolved to nothing — a
+    /// confirm stayed enabled over a figure that resolved to nothing — a
     /// zero-value transfer, signable, unexplained. The gate now asks the same
     /// question `can_continue` asks, and this is the sentence that goes with
     /// the refusal (`send.warnCannotConvert`, the key that round added).
@@ -2106,7 +2107,7 @@ pub struct SendView {
     /// all the same; a shell draws this flag and adds no reason of its own
     /// (issue 424).
     pub can_continue: bool,
-    /// The confirm slide gate, the whole of it: fee settled ∧ nothing
+    /// The confirm gate, the whole of it: fee settled ∧ nothing
     /// re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
     /// refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
     /// the same predicate; a shell adds nothing to it (issue 424).
@@ -2138,7 +2139,7 @@ pub struct SendView {
     /// list there — the registry's stablecoins and wrapped coin they hold, and
     /// tokens they added. A token contract almost never has a way to give
     /// back what is sent to it, so the form and the confirm page say so
-    /// plainly before the slide; it does not block. Not asked of a split's
+    /// plainly before the confirm; it does not block. Not asked of a split's
     /// rows.
     pub recipient_is_token_contract: bool,
     pub sim_json: Option<String>,
@@ -2467,15 +2468,15 @@ impl Send {
                     .map(|left| from_base_units(left, token.decimals))
             });
 
-        // The confirm slide's gate — and the same amount question `Continue`
+        // The confirm's gate — and the same amount question `Continue`
         // asks, which this twin never asked.
         //
         // Everything it checked was about the FEE and the pipeline; the money
         // itself was never re-examined after `Continue`. But the confirm page
         // is a page someone can sit on, and a `display_changed` commit landing
         // underneath re-denominates the field to empty
-        // (`redenominate_to_display`) — leaving a slider armed over a figure
-        // that resolves to nothing. Sliding it signed a zero-value transfer
+        // (`redenominate_to_display`) — leaving a confirm enabled over a figure
+        // that resolves to nothing. Confirming signed a zero-value transfer
         // with no warning anywhere. The batch modes carry their money in
         // `recipients`/`multi_specs`, not in `model.amount`, so they are asked
         // the same question `can_continue` asks them.
@@ -2483,7 +2484,7 @@ impl Send {
         // The whole gate, here and only here (issue #424): the shells used to
         // AND their own reasons onto it — a relay stop, a signature under way,
         // a refused submit — and did not all AND the same ones, so one client
-        // armed a slide another held. `slide_confirm` refuses on the same
+        // enabled a confirm another held. `slide_confirm` refuses on the same
         // predicate.
         let can_confirm = stage == SendStage::Confirm
             && confirm_gate_open(model)
@@ -4504,7 +4505,7 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     fee_asset_shortfall(model, token.chain_id, &[token.token_address.as_deref()])
 }
 
-/// The `Continue` / slide reading of [`fee_asset_shortfall`]: the fee coin has
+/// The `Continue` / confirm reading of [`fee_asset_shortfall`]: the fee coin has
 /// to be there, whatever the mode. A sweep is the exception it names — its fee
 /// asset is reserved out of the very line that would pay it
 /// (`reserve_native_gas` / `reserve_fee_token`), so a picked fee asset answers
@@ -4914,9 +4915,9 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     }
     // The gate `can_confirm` publishes, asked again here: a disabled control
-    // is a suggestion, and a slide from a stale frame must not sign over a
+    // is a suggestion, and a confirm from a stale frame must not sign over a
     // relay stop, a refused submit or a re-quote in flight (issue #424). A
-    // stop's own retry lowers the stop before it slides.
+    // stop's own retry lowers the stop before it confirms.
     if !confirm_gate_open(model) {
         return Command::done();
     }
@@ -4924,7 +4925,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     };
     // A fee re-quote can turn a valid amount into an unpayable same-token
-    // send — never let the slide reach signing in that state (invariant ⑧).
+    // send — never let the confirm reach signing in that state (invariant ⑧).
     if derive_same_asset_issue(model).is_some() {
         return edit_amount(model);
     }
@@ -4946,7 +4947,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
 
     // …and a re-quote can also outgrow the native balance that has to pay it
     // (issue #211). This is the last gate before the passkey, so it answers
-    // out loud rather than bouncing: the slide is on the confirm screen, and
+    // out loud rather than bouncing: the person is on the confirm screen, and
     // the amount is not what is wrong.
     if let Some(warning) = fee_asset_gate(model) {
         return alert(
@@ -4956,7 +4957,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
             },
         );
     }
-    // Synchronous single-flight lock: a second slide in the same tick is a
+    // Synchronous single-flight lock: a second confirm in the same tick is a
     // no-op (invariant ④'s acquisition half).
     let Some(gen) = model.lock.begin() else {
         return Command::done();
@@ -5045,7 +5046,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
     };
     let chain_id = token.chain_id;
 
-    // In-band: sign EXACTLY the fee the confirm slide displayed (amount +
+    // In-band: sign EXACTLY the fee the confirm screen displayed (amount +
     // recipient) — the bundler's 2× gate rejects a stale quote loudly and the
     // user re-confirms a NEW number, never a silent mismatch (invariant ①).
     let current_fee = model
@@ -5248,7 +5249,7 @@ fn retry_after_bootstrap(model: &mut Model) -> Cmd {
     clear_relay_stops(model);
     // After funding the relayer, return through the step-appropriate flow
     // (`SendScreen.tsx:214-224`): enter-details re-runs the pre-confirm
-    // pre-check; confirm re-runs the slide.
+    // pre-check; the confirm step confirms again.
     match model.step {
         SendStep::EnterDetails => handle_continue(model),
         SendStep::Confirm => slide_confirm(model),
@@ -5976,10 +5977,10 @@ fn relay_stopped(model: &Model) -> bool {
     model.treasury_bootstrap.is_some() || model.relay_unreachable.is_some()
 }
 
-/// The confirm slide's gate, less the two figure checks (a same-asset breach
-/// and a figure that stopped resolving), which the slide answers by going back
+/// The confirm's gate, less the two figure checks (a same-asset breach
+/// and a figure that stopped resolving), which the confirm answers by going back
 /// to the amount rather than by refusing. Published in `can_confirm`, and the
-/// slide refuses on it (issue #424): every reason here is already on the page
+/// confirm refuses on it (issue #424): every reason here is already on the page
 /// — the stop's own notice, the fee row re-quoting, the receipt or the error
 /// panel — so a refusal is never silent.
 fn confirm_gate_open(model: &Model) -> bool {

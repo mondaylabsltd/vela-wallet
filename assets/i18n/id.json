@@ -1358,8 +1358,6 @@
    "simResultLabel": "Hasil simulasi",
    "simResultNoChange": "Tidak ada perubahan aset",
    "simResultNoOther": "tidak ada perubahan lain",
-   "slideToConfirm": "Geser untuk konfirmasi",
-   "slideConfirmAction": "Geser untuk konfirmasi · {{action}}",
    "confirmSend": "Konfirmasi kirim",
    "confirmSwap": "Konfirmasi tukar",
    "confirmDeposit": "Konfirmasi setor",

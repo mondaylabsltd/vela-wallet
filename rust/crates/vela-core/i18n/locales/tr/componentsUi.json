@@ -159,8 +159,6 @@
       "simResultLabel": "Simülasyon sonucu",
       "simResultNoChange": "Varlık değişikliği yok",
       "simResultNoOther": "başka değişiklik yok",
-      "slideToConfirm": "Onaylamak için kaydır",
-      "slideConfirmAction": "Onaylamak için kaydır · {{action}}",
       "confirmSend": "Göndermeyi onayla",
       "confirmSwap": "Takası onayla",
       "confirmDeposit": "Yatırmayı onayla",

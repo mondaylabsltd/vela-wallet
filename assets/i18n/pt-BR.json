@@ -1362,8 +1362,6 @@
    "simResultLabel": "Resultado da simulação",
    "simResultNoChange": "Sem alterações de ativos",
    "simResultNoOther": "sem outras alterações",
-   "slideToConfirm": "Deslize para confirmar",
-   "slideConfirmAction": "Deslize para confirmar · {{action}}",
    "confirmSend": "Confirmar envio",
    "confirmSwap": "Confirmar troca",
    "confirmDeposit": "Confirmar depósito",

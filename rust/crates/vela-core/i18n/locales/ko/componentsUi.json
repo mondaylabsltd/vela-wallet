@@ -159,8 +159,6 @@
       "simResultLabel": "시뮬레이션 결과",
       "simResultNoChange": "자산 변동 없음",
       "simResultNoOther": "다른 변동 없음",
-      "slideToConfirm": "밀어서 확인",
-      "slideConfirmAction": "밀어서 확인 · {{action}}",
       "confirmSend": "보내기 확인",
       "confirmSwap": "스왑 확인",
       "confirmDeposit": "예치 확인",

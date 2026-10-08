@@ -85,13 +85,13 @@ denom_toggle_enabled: boolean,
  */
 denom_toggle_reason: SendUnitIssue | null, 
 /**
- * **Why** the confirm slide is disarmed, when what disarmed it is the
+ * **Why** the confirm is disabled, when what disabled it is the
  * money.
  *
  * [`SendView::can_confirm`] never looked at the amount at all: a
  * display-currency commit landing while the confirm page is open
  * re-denominates the field to empty (`redenominate_to_display`), and the
- * slider stayed armed over a figure that resolved to nothing — a
+ * confirm stayed enabled over a figure that resolved to nothing — a
  * zero-value transfer, signable, unexplained. The gate now asks the same
  * question `can_continue` asks, and this is the sentence that goes with
  * the refusal (`send.warnCannotConvert`, the key that round added).
@@ -184,7 +184,7 @@ fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendA
  */
 can_continue: boolean, 
 /**
- * The confirm slide gate, the whole of it: fee settled ∧ nothing
+ * The confirm gate, the whole of it: fee settled ∧ nothing
  * re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
  * refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
  * the same predicate; a shell adds nothing to it (issue 424).
@@ -213,7 +213,7 @@ payees: Array<SendPayee>, recipient_risk: SendRecipientRisk | null,
  * list there — the registry's stablecoins and wrapped coin they hold, and
  * tokens they added. A token contract almost never has a way to give
  * back what is sent to it, so the form and the confirm page say so
- * plainly before the slide; it does not block. Not asked of a split's
+ * plainly before the confirm; it does not block. Not asked of a split's
  * rows.
  */
 recipient_is_token_contract: boolean, sim_json: string | null, };

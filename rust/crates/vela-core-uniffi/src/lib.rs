@@ -576,11 +576,11 @@ pub fn explore_tabs_closed_by(tabs_json: String, scope_json: String) -> Option<S
     vela_core::app::explore_sites::tabs_closed_by_json(&tabs_json, &scope_json)
 }
 
-/// May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+/// May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
 /// clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
 /// no fee session) and the speed in force (`"fast"`…, `None` with no speed
 /// control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
-/// a view does not read, and the slide stays shut. See
+/// a view does not read, and the confirm stays disabled. See
 /// `vela_core::app::sign_confirm`.
 #[uniffi::export]
 #[must_use]

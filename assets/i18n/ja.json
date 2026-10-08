@@ -1358,8 +1358,6 @@
    "simResultLabel": "シミュレーション結果",
    "simResultNoChange": "資産の変動なし",
    "simResultNoOther": "他に変動なし",
-   "slideToConfirm": "スライドして確認",
-   "slideConfirmAction": "スライドして確認 · {{action}}",
    "confirmSend": "送金を確認",
    "confirmSwap": "スワップを確認",
    "confirmDeposit": "入金を確認",

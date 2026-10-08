@@ -1366,8 +1366,6 @@
    "simResultLabel": "Результат симуляции",
    "simResultNoChange": "Нет изменений активов",
    "simResultNoOther": "нет других изменений",
-   "slideToConfirm": "Проведите для подтверждения",
-   "slideConfirmAction": "Проведите для подтверждения · {{action}}",
    "confirmSend": "Подтвердить отправку",
    "confirmSwap": "Подтвердить обмен",
    "confirmDeposit": "Подтвердить внесение",

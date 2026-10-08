@@ -605,8 +605,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   locale's existing `addToken.labelNetwork` / `contacts.addressLabel`), and
 //   − `settingsModals.backup.registeredAs` (the footer's signing account
 //   already names the wallet). 1791 − 3 + 4 = 1792 leaves, 99 branches.
-if (PATHS.length !== 1891) fail(`expected 1891 paths (1792 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1792) fail(`expected 1792 leaf paths, got ${leafSet.size}`);
+// 1889 (issue #461, 2026-10-08): − `componentsUi.signing.{slideToConfirm,
+//   slideConfirmAction}` — the signing sheet confirms with the shells' shared
+//   primary button, labelled with the action alone ("Confirm swap", "Sign",
+//   "Back up public keys"), as the Send confirm screen always did; the slide
+//   and its "Slide to confirm ·" prefix are gone. 1790 leaves, 99 branches.
+if (PATHS.length !== 1889) fail(`expected 1889 paths (1790 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1790) fail(`expected 1790 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -159,8 +159,6 @@
       "simResultLabel": "Simulationsergebnis",
       "simResultNoChange": "Keine Vermögensänderungen",
       "simResultNoOther": "keine weiteren Änderungen",
-      "slideToConfirm": "Zum Bestätigen wischen",
-      "slideConfirmAction": "Zum Bestätigen wischen · {{action}}",
       "confirmSend": "Senden bestätigen",
       "confirmSwap": "Tausch bestätigen",
       "confirmDeposit": "Einzahlung bestätigen",

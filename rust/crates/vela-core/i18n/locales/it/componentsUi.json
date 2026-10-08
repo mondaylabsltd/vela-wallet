@@ -159,8 +159,6 @@
       "simResultLabel": "Risultato della simulazione",
       "simResultNoChange": "Nessuna variazione di asset",
       "simResultNoOther": "nessun’altra variazione",
-      "slideToConfirm": "Scorri per confermare",
-      "slideConfirmAction": "Scorri per confermare · {{action}}",
       "confirmSend": "Conferma invio",
       "confirmSwap": "Conferma scambio",
       "confirmDeposit": "Conferma deposito",
