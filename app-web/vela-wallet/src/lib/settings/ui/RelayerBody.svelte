@@ -33,16 +33,18 @@
 		panel: RelayerModel;
 		onprimary?: () => void;
 		oncopy?: () => void;
+		/**
+		 * "Report this" (issue 466): the route opens the in-app report in this
+		 * same sheet, seeded with the core's account of the stop — which
+		 * network, the treasury, what it has against what it needs — and files
+		 * it under the core's marker, so every report of one outage is one
+		 * issue. It used to be a bare link to an empty GitHub form. Absent in
+		 * the gallery.
+		 */
+		onreport?: () => void;
 	}
 
-	let { panel, onprimary, oncopy }: Props = $props();
-
-	/**
-	 * Where an out-of-gas relayer gets reported. A literal, like the feedback
-	 * link beside it: the app must not ship a support destination nobody has
-	 * confirmed, and one line moves it (to a Telegram group, say).
-	 */
-	const REPORT_URL = 'https://github.com/mondaylabsltd/vela-wallet/issues/new';
+	let { panel, onprimary, oncopy, onreport }: Props = $props();
 
 	/**
 	 * Open by default exactly when funding is the only path there is. On a
@@ -72,9 +74,7 @@
 	</div>
 
 	{#if panel.report}
-		<a class="report" href={REPORT_URL} target="_blank" rel="noopener noreferrer">
-			{panel.report.label}
-		</a>
+		<button type="button" class="report" onclick={onreport}>{panel.report.label}</button>
 		<button
 			type="button"
 			class="disclosure"
@@ -166,12 +166,14 @@
 		align-items: center;
 		justify-content: center;
 		min-height: var(--size-control-md);
+		border: none;
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-sunken);
+		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
-		text-decoration: none;
+		cursor: pointer;
 	}
 
 	.disclosure {

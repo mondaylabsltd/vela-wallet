@@ -13,7 +13,9 @@ import {
 	liveNetworkDetail,
 	liveNetworkRows,
 	liveRelayer,
+	liveRelayReport,
 	liveRpcProviders,
+	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
 	withLiveFeeSpeed,
@@ -438,6 +440,37 @@ describe('the relayer bootstrap sheet', () => {
 		expect(panel.report?.label).toBe(m.relayer.reportBtn);
 		// The funding half stays behind a disclosure: it is the operator's bill.
 		expect(panel.report?.selfFundLabel).toBe(m.relayer.selfFundToggle);
+	});
+
+	// Issue 466: "Report this" opens the in-app report in the same sheet. The
+	// wallet route carries only the rescues' slice of the corpus, so the slice
+	// holds the report's words — the same ones Settings → Send feedback reads.
+	it('opens the in-app report, with this device’s lines and the sheet’s own words', () => {
+		const rm = pickRescueMessages(m);
+		const facts = {
+			version: '0.9.7',
+			client: 'web' as const,
+			os: 'Chrome 151 on macOS',
+			commit: 'abc1234',
+			platform: 'Web · Chrome 151 on macOS',
+			language: 'en',
+			unreachable: [],
+			failures: []
+		};
+		const panel = liveRelayReport(rm, facts);
+		expect(panel.send).toBe(m.bugReport.send);
+		expect(panel.consent).toBe(m.bugReport.consent);
+		expect(panel.fallback.retry).toBe(m.common.tryAgain);
+		expect(panel.previewLines).toEqual([
+			`${m.bugReport.previewVersion}: v0.9.7 (abc1234)`,
+			`${m.bugReport.previewPlatform}: Web · Chrome 151 on macOS`,
+			`${m.bugReport.previewLanguage}: en`,
+			`${m.bugReport.previewRpc}: ${m.bugReport.previewNone}`,
+			`${m.bugReport.previewFailures}: ${m.bugReport.previewNone}`
+		]);
+		// No address among the device's own lines: the treasury rides in the
+		// report's words, which the person reads in the box above.
+		expect(panel.previewLines.join('\n')).not.toMatch(/0x[0-9a-f]{40}/i);
 	});
 
 	it('asks nobody to report a network only the person can reach', () => {

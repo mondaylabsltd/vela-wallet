@@ -37,13 +37,21 @@
 	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
 	import RelayerBody from '$lib/settings/ui/RelayerBody.svelte';
 	import RelayUnreachableBody from '$lib/settings/ui/RelayUnreachableBody.svelte';
+	import FeedbackBody from '$lib/settings/ui/FeedbackBody.svelte';
 	import {
+		feedbackLabels,
 		liveBalanceDetail,
 		liveRelayer,
+		liveRelayReport,
 		liveRelayUnreachable,
 		liveRpcFix,
 		liveUnreachable
 	} from '$lib/settings/live';
+	import { relayReportSend } from '$lib/settings/report-send.svelte';
+	import { deviceFacts } from '$lib/settings/device-facts';
+	import { fileReport } from '$lib/settings/file-report';
+	import { buildBugReport, readWorkerFailureLines } from '$lib/services/bug-report';
+	import type { SendRelayReport } from '$lib/core/generated/SendRelayReport';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
@@ -1754,7 +1762,8 @@
 	// the wallet cannot reach open their list (spec 092 — all of them, each with
 	// its RPC fix), anything else opens the breakdown. The treasury sheet opens
 	// itself, from the send core's probe.
-	type Rescue = 'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer' | 'relay-unreachable';
+	type Rescue =
+		'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer' | 'relay-unreachable' | 'relay-report';
 	let rescue = $state<Rescue | null>(null);
 	let rescueChainId = $state<number | null>(null);
 	/** The RPC fix was opened from the list: Done goes back to it. */
@@ -1797,7 +1806,9 @@
 					? rm.balanceDetail.title
 					: rescue === 'relay-unreachable'
 						? rm.relayUnreachable.title
-						: rm.relayer.title
+						: rescue === 'relay-report'
+							? rm.bugReport.title
+							: rm.relayer.title
 	);
 
 	function openRescue() {
@@ -1827,6 +1838,14 @@
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
 		if (rescue === 'relay-unreachable')
 			sendSession?.dispatch({ type: 'dismiss_relay_unreachable' });
+		// The report was this sheet's body: its ✕ closes the stop it came from
+		// too, as the stop's own ✕ would — when that stop is still up.
+		if (rescue === 'relay-report') {
+			if (relayReportFrom === 'relayer' && sendView?.treasury_bootstrap)
+				sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
+			if (relayReportFrom === 'relay-unreachable' && sendView?.relay_unreachable)
+				sendSession?.dispatch({ type: 'dismiss_relay_unreachable' });
+		}
 		// The list, or a fix opened from it: the list's re-reads stop.
 		if (rescue === 'unreachable' || fixFromList) balance.unreachableListClosed();
 		fixFromList = false;
@@ -1877,14 +1896,105 @@
 	}
 
 	// The send core says whether the treasury sheet is up; this only mirrors it.
+	// A report opened from it keeps the sheet (issue 466): the watch refreshes
+	// the stop every few seconds, and each refresh would otherwise swap the
+	// report out from under the person mid-sentence.
 	$effect(() => {
-		if (sendView?.treasury_bootstrap) rescue = 'relayer';
-		else if (rescue === 'relayer') rescue = null;
+		if (sendView?.treasury_bootstrap) {
+			if (untrack(() => rescue) !== 'relay-report') rescue = 'relayer';
+		} else if (rescue === 'relayer') rescue = null;
 	});
 	// …and the "relay can't reach this network" one (spec 098 §2).
 	$effect(() => {
-		if (sendView?.relay_unreachable) rescue = 'relay-unreachable';
-		else if (rescue === 'relay-unreachable') rescue = null;
+		if (sendView?.relay_unreachable) {
+			if (untrack(() => rescue) !== 'relay-report') rescue = 'relay-unreachable';
+		} else if (rescue === 'relay-unreachable') rescue = null;
+	});
+
+	// --- "Report this" on a relay stop (issue 466) ------------------------------
+	//
+	// Both stops on a network Vela ships offer it. It swaps THIS sheet's body
+	// for the in-app report — one sheet, never a second one stacked on it —
+	// seeded with the core's account of the stop (`SendView.relay_report`)
+	// as it stood at the press: the stop refreshes, or closes once funded,
+	// and what the person reads is what is sent. It files under the core's
+	// area and marker, so every report of one outage is one issue.
+
+	/** The core's report, as it stood when "Report this" was pressed. */
+	let relayReport = $state<SendRelayReport | null>(null);
+	/** Which stop it was pressed on — where Done goes back to. */
+	let relayReportFrom = $state<'relayer' | 'relay-unreachable' | null>(null);
+	/** The extension worker's failure lines, read when a report opens. */
+	let relayWorkerFailures = $state<string[]>([]);
+	const relayReportModel = $derived(
+		liveRelayReport(rm, deviceFacts(data.locale ?? 'en', relayWorkerFailures))
+	);
+
+	function openRelayReport(from: 'relayer' | 'relay-unreachable'): void {
+		const report = sendView?.relay_report;
+		if (!report) return;
+		relayReport = { ...report };
+		relayReportFrom = from;
+		// A report still sending keeps its words; any other starts from the
+		// core's — a filed one is finished, and one that fell back is replaced
+		// by the stop as it stands now.
+		if (!relayReportSend.sending) {
+			relayReportSend.done();
+			relayReportSend.draft.what = report.what;
+			relayReportSend.draft.steps = report.steps;
+			relayReportSend.draft.stepsOpen = report.steps !== '';
+		}
+		void readWorkerFailureLines().then((lines) => (relayWorkerFailures = lines));
+		rescue = 'relay-report';
+	}
+
+	async function sendRelayReport(typed: {
+		what: string;
+		steps: string;
+		screenshots: string[];
+	}): Promise<void> {
+		const report = relayReport;
+		if (report === null) return;
+		// Read now: the words of the page that sent, for a toast that may be
+		// shown on another page.
+		const copy = {
+			filed: rm.bugReport.successTitle,
+			view: rm.bugReport.viewIssue,
+			fellBack: rm.bugReport.fallbackTitle,
+			open: rm.bugReport.openGithub,
+			close: rm.common.close
+		};
+		const payload = buildBugReport({
+			what: typed.what,
+			steps: typed.steps,
+			area: report.area,
+			fingerprint: report.fingerprint,
+			labels: feedbackLabels(rm),
+			facts: deviceFacts(data.locale ?? 'en', relayWorkerFailures),
+			screenshots: typed.screenshots
+		});
+		await relayReportSend.send(() => fileReport(payload), copy);
+	}
+
+	/** Done on the thank-you: back to the stop while it is still up, else closed. */
+	function relayReportDone(): void {
+		relayReportSend.done();
+		rescue =
+			relayReportFrom === 'relayer' && sendView?.treasury_bootstrap
+				? 'relayer'
+				: relayReportFrom === 'relay-unreachable' && sendView?.relay_unreachable
+					? 'relay-unreachable'
+					: null;
+	}
+
+	// The report sheet is on screen, or went: an outcome that arrives while it
+	// is up is drawn in it; one that arrives after is a toast.
+	$effect(() => {
+		const open = rescue === 'relay-report';
+		relayReportSend.surface(open);
+		return () => {
+			if (open) relayReportSend.surface(false);
+		};
 	});
 </script>
 
@@ -2186,9 +2296,27 @@
 			}}
 		/>
 	{:else if rescue === 'relayer' && relayerModel !== undefined}
-		<RelayerBody panel={relayerModel} onprimary={relayerRetry} oncopy={copyRelayerAddress} />
+		<RelayerBody
+			panel={relayerModel}
+			onprimary={relayerRetry}
+			oncopy={copyRelayerAddress}
+			onreport={sendView?.relay_report ? () => openRelayReport('relayer') : undefined}
+		/>
 	{:else if rescue === 'relay-unreachable' && relayUnreachableModel !== undefined}
-		<RelayUnreachableBody panel={relayUnreachableModel} onprimary={relayUnreachableRetry} />
+		<RelayUnreachableBody
+			panel={relayUnreachableModel}
+			onprimary={relayUnreachableRetry}
+			onreport={sendView?.relay_report ? () => openRelayReport('relay-unreachable') : undefined}
+		/>
+	{:else if rescue === 'relay-report' && relayReport !== null}
+		<FeedbackBody
+			panel={relayReportModel}
+			onsend={(typed) => void sendRelayReport(typed)}
+			sending={relayReportSend.sending}
+			result={relayReportSend.result}
+			ondone={relayReportDone}
+			draft={relayReportSend.draft}
+		/>
 	{/if}
 {/snippet}
 

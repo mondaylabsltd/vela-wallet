@@ -47,7 +47,14 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { chainMeta, languageRows, markFor, currencyGlyph, PROVIDER_KEY_URLS } from './fixtures';
+import {
+	chainMeta,
+	feedbackPanel,
+	languageRows,
+	markFor,
+	currencyGlyph,
+	PROVIDER_KEY_URLS
+} from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
 	AboutModel,
@@ -61,6 +68,7 @@ import type {
 	CheckItemModel,
 	ConfirmSheetModel,
 	EndpointsModel,
+	FeedbackModel,
 	NetworkDetailModel,
 	NetworkRowModel,
 	RpcProvidersModel,
@@ -964,7 +972,7 @@ export function withFeedbackDesktop(
 }
 
 /** The corpus labels the five lines wear, in one place for both layouts. */
-export function feedbackLabels(m: SettingsMessages): EnvironmentLabels {
+export function feedbackLabels(m: Pick<SettingsMessages, 'bugReport'>): EnvironmentLabels {
 	return {
 		version: m.bugReport.previewVersion,
 		platform: m.bugReport.previewPlatform,
@@ -1177,7 +1185,12 @@ export interface RescueMessages {
 		'chainId' | 'online' | 'slow' | 'offline' | 'mismatch' | 'relayNotice'
 	>;
 	addNetwork: Pick<SettingsMessages['addNetwork'], 'checkingCompatibility'>;
-	common: Pick<SettingsMessages['common'], 'done' | 'close'>;
+	/**
+	 * The report sheet a relay stop's "Report this" swaps in (issue 466) — the
+	 * same sheet, and the same words, as Settings → Send feedback.
+	 */
+	bugReport: SettingsMessages['bugReport'];
+	common: Pick<SettingsMessages['common'], 'done' | 'close' | 'tryAgain'>;
 }
 
 /** Only what the sheets read, so the wallet page carries no more corpus than it needs. */
@@ -1196,7 +1209,8 @@ export function pickRescueMessages(m: SettingsMessages): RescueMessages {
 			relayNotice: m.networks.relayNotice
 		},
 		addNetwork: { checkingCompatibility: m.addNetwork.checkingCompatibility },
-		common: { done: m.common.done, close: m.common.close }
+		bugReport: m.bugReport,
+		common: { done: m.common.done, close: m.common.close, tryAgain: m.common.tryAgain }
 	};
 }
 
@@ -1405,8 +1419,8 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 	// from the chain id here. On a network Vela ships the operator owns that
 	// relayer; on one the person added — a devnet, an internal chain — there
 	// may be nobody else who could hold gas on it (spec 060).
-	// Whether to offer it is the decision; WHERE it goes is the component's, as
-	// it already is for the feedback link (`FeedbackBody.svelte`).
+	// Whether to offer it is the decision here; the route files it through the
+	// in-app report, with the core's own words, area and marker (issue 466).
 	const report = status.operator_served
 		? { label: m.relayer.reportBtn, selfFundLabel: m.relayer.selfFundToggle }
 		: undefined;
@@ -1460,6 +1474,17 @@ export function liveRelayUnreachable(
 		report: sheet.operator_served ? { label: m.relayUnreachable.reportBtn } : undefined,
 		primary: m.relayUnreachable.retryBtn
 	};
+}
+
+/**
+ * Issue 466: the report a relay stop's "Report this" opens — the in-app
+ * report sheet, with this device's five preview lines from the same call the
+ * payload's `environment` is built from, so the consent line stays true. Its
+ * words are the core's (`SendView.relay_report`), seeded into the draft when
+ * the button is pressed.
+ */
+export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): FeedbackModel {
+	return { ...feedbackPanel(m), previewLines: environmentLines(feedbackLabels(m), facts) };
 }
 
 // ---------------------------------------------------------------------------
