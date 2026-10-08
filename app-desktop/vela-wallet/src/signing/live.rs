@@ -80,6 +80,86 @@ pub fn confirm_enabled(
     confirm_state(sign, guard, clear, fee, speed_tier).enabled
 }
 
+/// What the signing column is about: the request, the core's refusal of it
+/// (spec 081), or the gas account it cannot pay from — the in-sheet funding
+/// swap, which replaces the request rather than sitting under it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnKind {
+    Request,
+    Refused,
+    Funding,
+}
+
+impl ColumnKind {
+    /// Read from the core's sheet: the funding swap first — a request the
+    /// core refused never reaches a pre-check, so the two never meet.
+    #[must_use]
+    pub fn of(sign: &SignView) -> Self {
+        if sign.surface == vela_core::app::sign_request::SignSurface::Funding {
+            Self::Funding
+        } else if sign.blocked.is_some() {
+            Self::Refused
+        } else {
+            Self::Request
+        }
+    }
+
+    /// What a tap on the column's armed button sends, when it is not the
+    /// approval: the top-up's "check again" asks the core to look at the gas
+    /// account again, and the request resumes on the opts it saved. `None` is
+    /// the approval, which the host builds from its own machines' reads.
+    #[must_use]
+    pub fn tap_event(self) -> Option<vela_core::app::sign_request::Event> {
+        match self {
+            Self::Funding => Some(vela_core::app::sign_request::Event::FundingCompleteTapped),
+            Self::Request | Self::Refused => None,
+        }
+    }
+}
+
+/// The bottom of the column: the fee card, the button's words, whether it is
+/// armed, and the core's note under a shut one.
+pub struct ColumnConfirm {
+    pub fee: FeeModel,
+    pub label: SharedString,
+    pub enabled: bool,
+    pub note: Option<SharedString>,
+}
+
+/// The column's confirm, by what the column is about. Only the request's
+/// own (`request`, called for it alone) reads the three-machine gate:
+///
+/// - **the top-up** has one button, "check again"
+///   (`treasuryBootstrap.retryBtn`), armed on its own terms — it is not a
+///   signature but "I have sent it, look again", and the only way forward
+///   from a top-up. The core's signing gate is shut there by design
+///   (`ConfirmBlock::Funding`), so taking it would draw the request's verb
+///   on a button that answers to nothing. No fee card: the request's fee is
+///   not what the person is being asked about;
+/// - **a refusal** offers no confirm at all — absent, not disabled, because
+///   the wallet never offered it.
+pub fn column_confirm(
+    kind: ColumnKind,
+    s: &SigningStrings,
+    request: impl FnOnce() -> ColumnConfirm,
+) -> ColumnConfirm {
+    match kind {
+        ColumnKind::Funding => ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: s.funding_check_now.clone(),
+            enabled: true,
+            note: None,
+        },
+        ColumnKind::Refused => ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: SharedString::default(),
+            enabled: false,
+            note: None,
+        },
+        ColumnKind::Request => request(),
+    }
+}
+
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681) — the
 /// core's rule.
 #[must_use]
@@ -3561,6 +3641,145 @@ mod tests {
                 .iter()
                 .any(|block| matches!(block, Block::Positive(_)))
         );
+    }
+
+    /// The top-up's "check again" is a live button that checks again. It was
+    /// drawn armed and answered to nothing: the request's confirm read ran
+    /// after the top-up's and put back the request's verb, its fee card, and
+    /// the core's signing gate — which is shut in Funding by design
+    /// (`ConfirmBlock::Funding`), so no action was ever passed.
+    #[test]
+    fn the_top_up_button_says_check_again_and_sends_it() {
+        use vela_core::app::sign_request::{
+            Event as SignEvent, SignAccountRef, SignApproveOpts, SignFundingNeeded, SignOperation,
+            SignShellResult, SignSponsorship,
+        };
+        const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let s = strings();
+
+        // A live request, approved, on a chain whose gas account is short and
+        // whose silent sponsorship was turned down.
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new();
+        host.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        host.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: ME.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        host.dispatch(SignEvent::RequestArrived {
+            id: "rid-top-up".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json:
+                r#"[{"to":"0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83","data":"0xa9059cbb"}]"#
+                    .to_owned(),
+            origin: "https://app.example".to_owned(),
+            transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: Some(ME.to_owned()),
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 1_000.0,
+            first_party: false,
+        });
+        let ops = host.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        let precheck = ops
+            .iter()
+            .find(|op| matches!(op.operation, SignOperation::CheckBundlerFunding { .. }))
+            .map(|op| op.id)
+            .unwrap_or_else(|| unreachable!("an approval asks about the gas account first"));
+        let ops = host.resolve(
+            precheck,
+            SignShellResult::PreCheck {
+                funding: Some(SignFundingNeeded {
+                    deposit_address: "0xdep0517".to_owned(),
+                    safe_address: ME.to_owned(),
+                    chain_id: 100,
+                    native_symbol: "xDAI".to_owned(),
+                    threshold_wei: "1000000000000000000".to_owned(),
+                    recommended_wei: "1100000000000000000".to_owned(),
+                    current_balance_wei: "0".to_owned(),
+                }),
+            },
+        );
+        let sponsor = ops
+            .iter()
+            .find(|op| matches!(op.operation, SignOperation::AttemptSponsorship { .. }))
+            .map(|op| op.id)
+            .unwrap_or_else(|| unreachable!("a short account asks the treasury first"));
+        let _ = host.resolve(
+            sponsor,
+            SignShellResult::Sponsorship {
+                outcome: SignSponsorship::Denied { reason: None },
+            },
+        );
+        let view = host.view();
+        assert_eq!(
+            view.surface,
+            SignSurface::Funding,
+            "the sheet swapped to the top-up"
+        );
+        let gate = confirm_state(
+            &view,
+            &crate::core_host::CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new()
+                .view(),
+            &pristine(),
+            &crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view(),
+            None,
+        );
+        assert!(
+            !gate.enabled,
+            "the signing gate is shut in a top-up — which is why it must not be read there"
+        );
+
+        let kind = ColumnKind::of(&view);
+        assert_eq!(kind, ColumnKind::Funding);
+        // What the request's own read would have said: its verb, its fee, the
+        // shut gate. None of it may reach the top-up.
+        let drawn = column_confirm(kind, &s, || ColumnConfirm {
+            fee: FeeModel::OffChain("request fee".into()),
+            label: "Confirm send".into(),
+            enabled: gate.enabled,
+            note: Some("request note".into()),
+        });
+        assert_eq!(
+            drawn.label, s.funding_check_now,
+            "treasuryBootstrap.retryBtn"
+        );
+        assert!(drawn.enabled, "armed, so the button carries its action");
+        assert!(
+            matches!(drawn.fee, FeeModel::Hidden),
+            "the request's fee card is not what a top-up asks about"
+        );
+        assert!(drawn.note.is_none());
+        assert!(
+            matches!(kind.tap_event(), Some(SignEvent::FundingCompleteTapped)),
+            "a tap asks the core to look again"
+        );
+
+        // The request itself still reads its own gate, and a refusal offers
+        // no confirm at all.
+        let request = column_confirm(ColumnKind::Request, &s, || ColumnConfirm {
+            fee: FeeModel::Hidden,
+            label: "Confirm send".into(),
+            enabled: false,
+            note: None,
+        });
+        assert_eq!(request.label, SharedString::from("Confirm send"));
+        assert!(!request.enabled);
+        assert!(ColumnKind::Request.tap_event().is_none(), "the approval");
+        let refused = column_confirm(ColumnKind::Refused, &s, || {
+            unreachable!("a refusal never reads the request's confirm")
+        });
+        assert!(refused.label.is_empty() && !refused.enabled);
     }
 
     /// The refusal that used to happen in silence.

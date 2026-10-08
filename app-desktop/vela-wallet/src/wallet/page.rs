@@ -16627,11 +16627,9 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
-        // Which of the two things this column is: the request, or the gas
-        // account it cannot pay from.
-        let mut funding = false;
-        // Spec 081: the core refused the request outright.
-        let mut refused = false;
+        // Which of the three things this column is: the request, the core's
+        // refusal of it (spec 081), or the gas account it cannot pay from.
+        let mut kind = signing_live::ColumnKind::Request;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
         // Spec 079 US7: this account signs on the Trusted Signer's page, whose
@@ -16667,19 +16665,14 @@ impl WalletPage {
             // this surface "the in-sheet funding swap (BUG-1: never a stacked
             // second modal)", and a request drawn under a top-up prompt is a
             // person deciding two things at once.
-            if host.view.surface == vela_core::app::sign_request::SignSurface::Funding {
+            kind = signing_live::ColumnKind::of(&host.view);
+            if kind == signing_live::ColumnKind::Funding {
+                // The top-up's button, label and (no) fee card are its own
+                // (`column_confirm`, below): the header and the fee card
+                // belong to the request, not to the top-up — the person is
+                // being asked for one thing here.
                 model.blocks = signing_live::funding_blocks(&host.view, &self.signing);
-                model.confirm_label = self.signing.funding_check_now.clone();
-                // Armed on its own terms: this button is not a signature, it
-                // is "I have sent it, look again". The three-machine AND
-                // governs signing, and applying it here would leave the only
-                // way out of a top-up shut.
-                model.confirm_enabled = true;
-                funding = true;
-                // The header and the fee card belong to the request, not to
-                // the top-up: the person is being asked for one thing here.
-                model.fee = signing_fixtures::FeeModel::Hidden;
-            } else if host.view.blocked.is_some() {
+            } else if kind == signing_live::ColumnKind::Refused {
                 // Spec 081: the core refused this request — it would have
                 // changed who controls the account. The refusal is the whole
                 // sheet. The decoded body, the simulation and the cap editor
@@ -16687,8 +16680,6 @@ impl WalletPage {
                 // reading them invites the question "so why can't I?", which
                 // the refusal already answers.
                 model.blocks = signing_live::status_blocks(&host.view, &self.signing);
-                refused = true;
-                model.fee = signing_fixtures::FeeModel::Hidden;
             } else {
                 // ALWAYS the core's, never "the core's if it has any". The old
                 // `if !blocks.is_empty()` left the GALLERY's blocks under a live
@@ -16778,8 +16769,10 @@ impl WalletPage {
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
             let speed_tier = Some(host.speed_view().tier);
-            if !refused {
-                model.fee = signing_live::fee_model(
+            // The top-up's "check again" and a refusal's absent confirm are
+            // the column's own; only the request reads the signing gate.
+            let confirm = signing_live::column_confirm(kind, &self.signing, || {
+                let mut fee_model = signing_live::fee_model(
                     &host.clear_view,
                     fee,
                     host.chain_id,
@@ -16792,31 +16785,35 @@ impl WalletPage {
                 // Spec 079: the speed control's own deployment read, which the
                 // fee machine never sees.
                 signing_live::fee_row_state(
-                    &mut model.fee,
+                    &mut fee_model,
                     host.fee_measuring(),
                     host.fee_unanswered(),
                     &self.signing,
                 );
-                model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-                let confirm = signing_live::confirm_state(
+                let state = signing_live::confirm_state(
                     &host.view,
                     &host.guard_view,
                     &host.clear_view,
                     fee,
                     speed_tier,
                 );
-                model.confirm_enabled = confirm.enabled;
-                model.confirm_note = confirm
-                    .key
-                    .as_deref()
-                    .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
-            } else {
-                // No confirm control at all. It is not disabled — it is
-                // absent, because the wallet never offered it.
-                model.confirm_label = gpui::SharedString::default();
-                model.confirm_enabled = false;
-            }
-            if !funding && !refused && !signing_live::off_chain(&host.clear_view) {
+                signing_live::ColumnConfirm {
+                    fee: fee_model,
+                    label: signing_live::confirm_label(&host.clear_view, &self.signing),
+                    enabled: state.enabled,
+                    note: state
+                        .key
+                        .as_deref()
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string())),
+                }
+            });
+            model.fee = confirm.fee;
+            model.confirm_label = confirm.label;
+            model.confirm_enabled = confirm.enabled;
+            model.confirm_note = confirm.note;
+            if kind == signing_live::ColumnKind::Request
+                && !signing_live::off_chain(&host.clear_view)
+            {
                 speed_tiers = host
                     .speed_view()
                     .options
@@ -16838,6 +16835,8 @@ impl WalletPage {
         }
         #[cfg(target_os = "linux")]
         let _ = cx;
+        let funding = kind == signing_live::ColumnKind::Funding;
+        let refused = kind == signing_live::ColumnKind::Refused;
 
         // Spec 079: once approved, the column is the send receipt — the form,
         // its fee and its confirm are gone from the first frame after the
@@ -16888,16 +16887,15 @@ impl WalletPage {
                 Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                     if let Some(host) = page.signing_host.as_ref() {
                         host.update(cx, |host, cx| {
-                            if funding {
+                            // What the button SAID when it was drawn, never a
+                            // later read: a "check again" must not become an
+                            // approval because the sheet moved under it.
+                            match kind.tap_event() {
                                 // "I have topped it up" — the core re-runs the
                                 // pre-check with the opts it saved, so the
                                 // request resumes rather than starting over.
-                                host.dispatch_sign(
-                                    vela_core::app::sign_request::Event::FundingCompleteTapped,
-                                    cx,
-                                );
-                            } else {
-                                host.approve(cx);
+                                Some(event) => host.dispatch_sign(event, cx),
+                                None => host.approve(cx),
                             }
                         });
                     }
