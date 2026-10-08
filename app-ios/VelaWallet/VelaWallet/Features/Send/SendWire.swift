@@ -358,6 +358,17 @@ struct SendReceiptWire: Decodable, Equatable {
     let typicalInclusionS: Int?
 }
 
+/// A relay stop's report, whole (issue #466): `what` (its first line is the
+/// title) and `steps` seed the in-app reporter, which files it under `area`
+/// with `fingerprint` — stable across balance refreshes, so one stop is one
+/// issue. Snapshotted when "Report this" is tapped.
+struct SendRelayReportWire: Decodable, Equatable {
+    let what: String
+    let steps: String
+    let area: String
+    let fingerprint: String
+}
+
 struct SendViewWire: Decodable, Equatable {
     let stage: SendStageWire
     let loading: Bool
@@ -460,6 +471,11 @@ struct SendViewWire: Decodable, Equatable {
     let treasuryBootstrap: SendTreasuryStatusWire?
     /// Spec 098 §2: the relay cannot serve this chain; the send stops here.
     let relayUnreachable: SendRelayUnreachableWire?
+    /// Issue #466: the report a relay stop's "Report this" files, built by the
+    /// core — set exactly while `treasuryBootstrap` or `relayUnreachable` is up
+    /// on a built-in chain. Optional on the wire so a hand-written view
+    /// without it decodes (as nothing to report).
+    var relayReport: SendRelayReportWire?
     /// The resolver's raw answer. Only the receipt's caption still names the
     /// recipient by it, after the money moved (as the web does); every screen
     /// before the signature draws `payees`, and `source` is never printed.
