@@ -6936,6 +6936,7 @@ impl WalletPage {
             batch_merge: None,
             notice_action: None,
             notice_dismiss: None,
+            notice_report: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -7129,6 +7130,18 @@ impl WalletPage {
                     SendEvent::DismissTreasurySheet
                 },
             ));
+            // Issue 466: "Report this" on a relay stop — the core's report as
+            // it stands at the PRESS, not at the draw (the stop's watch
+            // rewrites its figures every 10 s), into the reporter.
+            actions.notice_report = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(report) = this.send_views(cx).and_then(|(view, _)| view.relay_report)
+                    else {
+                        return;
+                    };
+                    this.open_relay_report(report, cx);
+                },
+            )));
             actions.notice_action = send.way_out.map(|way_out| match way_out {
                 flows_live::NoticeWayOut::RetryAfterBootstrap => {
                     to_host(SendEvent::RetryAfterBootstrap)

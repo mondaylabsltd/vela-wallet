@@ -2395,6 +2395,102 @@ mod treasury_tests {
         });
     }
 
+    /// Issue 466: both relay stops offer "Report this" exactly while the
+    /// core has a report for them — which it builds only on a network Vela
+    /// ships, whose relayer is the operator's. On a network the person
+    /// added there is nobody to tell, and no button.
+    #[test]
+    fn a_relay_stop_offers_report_this_only_with_the_cores_report() {
+        crate::executor::storage::tests::with_temp_state("relay-report-466", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let host = CoreHost::<SendMachine>::new();
+            let report = |fingerprint: &str| vela_core::app::send::SendRelayReport {
+                what: "Relayer out of gas on Unichain (130)".to_owned(),
+                steps: "1. Send on Unichain (130)".to_owned(),
+                area: "Send".to_owned(),
+                fingerprint: fingerprint.to_owned(),
+            };
+            let treasury = |served: bool| SendTreasuryStatus {
+                chain_id: 130,
+                address: "0xTreasury".to_owned(),
+                asset: SendTreasuryAsset::Native,
+                balance: "0".to_owned(),
+                floor: "100000000000000".to_owned(),
+                bootstrap_needed: true,
+                operator_served: served,
+                coin: None,
+            };
+            let notice_of = |view: &SendView| {
+                let inputs = SendInputs {
+                    send: view,
+                    fee: &fee,
+                    s: &s,
+                    wallet: &wallet,
+                    locale: "en-US",
+                    money: crate::wallet::live::Money::usd(),
+                    identity_name: "MultiTest",
+                    identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    speed: None,
+                    relay_sent_at_ms: None,
+                };
+                send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"))
+            };
+
+            let served = SendView {
+                treasury_bootstrap: Some(treasury(true)),
+                relay_report: Some(report("relay-gas-130")),
+                ..host.view()
+            };
+            assert_eq!(notice_of(&served).report, Some(s.funding_report.clone()));
+            let custom = SendView {
+                treasury_bootstrap: Some(treasury(false)),
+                relay_report: None,
+                ..host.view()
+            };
+            assert_eq!(notice_of(&custom).report, None);
+
+            let unreachable = |report: Option<vela_core::app::send::SendRelayReport>| SendView {
+                relay_unreachable: Some(vela_core::app::send::SendRelayUnreachable {
+                    chain_id: 130,
+                    operator_served: report.is_some(),
+                }),
+                relay_report: report,
+                ..host.view()
+            };
+            assert_eq!(
+                notice_of(&unreachable(Some(report("relay-unreachable-130")))).report,
+                Some(s.unreachable_report.clone())
+            );
+            assert_eq!(notice_of(&unreachable(None)).report, None);
+            // The corpus's own words for the two buttons, not key echoes.
+            assert!(!s.funding_report.contains("componentsUi"));
+            assert!(!s.unreachable_report.contains("componentsUi"));
+
+            // No other notice grows the button: the same-coin ceiling, say.
+            let plain = host.view();
+            assert!(
+                send_notice(
+                    &SendInputs {
+                        send: &plain,
+                        fee: &fee,
+                        s: &s,
+                        wallet: &wallet,
+                        locale: "en-US",
+                        money: crate::wallet::live::Money::usd(),
+                        identity_name: "MultiTest",
+                        identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                        speed: None,
+                        relay_sent_at_ms: None,
+                    },
+                    false
+                )
+                .is_none_or(|notice| notice.report.is_none())
+            );
+        });
+    }
+
     /// Issue #422: the stop's coin and figures are the core's. On a Xiaomi
     /// a Polygon send was asked for "0.0001 ETH" — another chain's stop, in
     /// a coin a name lookup guessed. This card writes what the core gives
@@ -2905,6 +3001,13 @@ fn build_notice(
             detail: (!sheet.operator_served).then(|| s.unreachable_hint.clone()),
             action: Some(s.unreachable_retry.clone()),
             copy: None,
+            // Issue 466: the operator is told through the reporter — only
+            // where the core built a report, which is only where the relay
+            // is Vela's (a network the build ships).
+            report: send
+                .relay_report
+                .as_ref()
+                .map(|_| s.unreachable_report.clone()),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryRelayUnreachable)));
@@ -2968,6 +3071,9 @@ fn build_notice(
             // Spec 098 §4: the address is what a person needs to fund it —
             // read off the screen it is 42 characters to retype.
             copy: Some((s.funding_copy.clone(), treasury.address.clone().into())),
+            // Issue 466: the lead says telling the operator is the fastest
+            // fix; this is how — the core's report, through the reporter.
+            report: send.relay_report.as_ref().map(|_| s.funding_report.clone()),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryAfterBootstrap)));
@@ -3014,6 +3120,7 @@ fn build_notice(
             detail,
             action,
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, way_out));
@@ -3077,6 +3184,7 @@ fn build_notice(
             ),
             action: Some(s.same_fee_edit.clone()),
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -3091,6 +3199,7 @@ fn build_notice(
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, None));
@@ -3114,6 +3223,7 @@ fn build_notice(
             detail: None,
             action: Some(s.same_fee_edit.clone()),
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -3146,6 +3256,7 @@ fn build_notice(
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: false,
         },
         None,
@@ -3570,6 +3681,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: true,
         })
     });
@@ -4469,6 +4581,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 detail: None,
                 action: None,
                 copy: None,
+                report: None,
                 error: true,
             })
         // Over the balance is said on the total line (`batch_total`), beside
@@ -4481,6 +4594,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 detail: None,
                 action: None,
                 copy: None,
+                report: None,
                 error: false,
             })
         } else {

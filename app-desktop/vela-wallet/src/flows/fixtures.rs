@@ -599,6 +599,9 @@ pub struct SendNotice {
     /// A button that copies a value, and its label — today only the
     /// relay-treasury stop's address (spec 098 §4).
     pub copy: Option<(SharedString, SharedString)>,
+    /// "Report this", on the two relay stops while the core has a report
+    /// for them (issue 466): it opens the in-app reporter seeded with it.
+    pub report: Option<SharedString>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
 }

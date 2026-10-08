@@ -152,6 +152,9 @@ pub struct PanelActions {
     pub notice_action: Option<Click>,
     /// The relay-treasury stop's "Not now" — the core's `DismissTreasurySheet`.
     pub notice_dismiss: Option<Click>,
+    /// A relay stop's "Report this" (issue 466): the in-app reporter, seeded
+    /// with the core's report as it stands at the press.
+    pub notice_report: Option<Click>,
     /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
     pub pick_group_rows: Vec<Click>,
     /// DSD2bL, live: each split row's own amount field and its remove — in the
@@ -469,8 +472,11 @@ pub fn render(
             icons,
             identicons,
             actions.advance,
-            actions.notice_action,
-            actions.notice_dismiss,
+            NoticeClicks {
+                action: actions.notice_action,
+                dismiss: actions.notice_dismiss,
+                report: actions.notice_report,
+            },
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -1489,7 +1495,7 @@ fn add_token(
     // dead-code warning nobody read. Same defect as the picker that eats a
     // file: the core said no and the screen went on looking fine.
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, None, None));
+        col = col.child(notice_card(notice, theme, NoticeClicks::default()));
     }
 
     // Nothing new to add, and the button says so rather than taking a
@@ -1509,12 +1515,21 @@ fn add_token(
 /// Amber while they are still typing, red when nothing can proceed as things
 /// stand. The action is the way out the CORE offered — never a button this
 /// file invented.
-fn notice_card(
-    notice: &SendNotice,
-    theme: &Theme,
+/// What a notice card's buttons answer to — the core's way out, leaving
+/// the stop, and "Report this" (issue 466). `None` draws that one inert.
+#[derive(Default)]
+struct NoticeClicks {
     action: Option<Click>,
     dismiss: Option<Click>,
-) -> Div {
+    report: Option<Click>,
+}
+
+fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div {
+    let NoticeClicks {
+        action,
+        dismiss,
+        report,
+    } = clicks;
     let (tint, border) = if notice.error {
         (theme.error_soft, theme.error_base)
     } else {
@@ -1558,14 +1573,27 @@ fn notice_card(
     }
     // Two ways out of the same card: the retry the core offered, and — where
     // the stop has one — leaving it. Side by side, the retry first, because
-    // that is the one a person came here to press.
-    let mut row = div().flex().gap(px(8.));
+    // that is the one a person came here to press. Wrapping: the treasury
+    // stop's four (retry, report, copy, close) do not fit the 400 column on
+    // one line in any language, and German's three did not either — the
+    // last ones ran off the card.
+    let mut row = div().flex().flex_wrap().gap(px(8.));
     let mut any = false;
     if let Some(label) = &notice.action {
         any = true;
         row = row.child(clickable(
             "flow-notice-action",
             action,
+            pill(theme, label.clone()),
+        ));
+    }
+    // Issue 466: telling whoever runs the relay — the lead says it is the
+    // fastest fix. A pill like the retry: it does something, unlike leaving.
+    if let Some(label) = &notice.report {
+        any = true;
+        row = row.child(clickable(
+            "flow-notice-report",
+            report,
             pill(theme, label.clone()),
         ));
     }
@@ -1690,7 +1718,14 @@ fn send_pick(
     // nothing to pick (078 W-04).
     if let Some(notice) = &model.lock_notice {
         let _ = (per_row, chip_clicks, select_all, cta, open_form.take());
-        return column().child(notice_card(notice, theme, notice_action, None));
+        return column().child(notice_card(
+            notice,
+            theme,
+            NoticeClicks {
+                action: notice_action,
+                ..NoticeClicks::default()
+            },
+        ));
     }
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
     let mut col = column();
@@ -2461,8 +2496,11 @@ fn send_form_parts(
             notice_card(
                 notice,
                 theme,
-                actions.notice_action.take(),
-                actions.notice_dismiss.take(),
+                NoticeClicks {
+                    action: actions.notice_action.take(),
+                    dismiss: actions.notice_dismiss.take(),
+                    report: actions.notice_report.take(),
+                },
             )
         });
     }
@@ -3089,7 +3127,7 @@ fn batch_import_parts(
         col = col.child(warning_line(theme, icons, model.rejected.clone()));
     }
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, None, None));
+        col = col.child(notice_card(notice, theme, NoticeClicks::default()));
     }
 
     // The total and the button, under a rule: the figure beside what it is
@@ -3371,8 +3409,7 @@ fn send_confirm(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     advance: Option<Click>,
-    notice_action: Option<Click>,
-    notice_dismiss: Option<Click>,
+    notice_clicks: NoticeClicks,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3450,7 +3487,7 @@ fn send_confirm(
     }
 
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, notice_action, notice_dismiss));
+        col = col.child(notice_card(notice, theme, notice_clicks));
     }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
     col.child(cta_button(
