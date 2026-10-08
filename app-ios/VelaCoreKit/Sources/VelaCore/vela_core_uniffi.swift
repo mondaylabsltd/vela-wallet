@@ -13412,7 +13412,8 @@ public func browserLoadVisit(url: String, title: String, icon: String?, mainFram
  * `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
  * `tab_navigated` and load it there), `{"type":"resume","id":…}` (a tab
  * already on that site: `tab_selected`, shown as it was left) or
- * `{"type":"new_tab"}` (`tab_opened`). `None` for input that does not read.
+ * `{"type":"new_tab"}` (`tab_opened`; never for a full strip, whose open
+ * loads in the selected tab). `None` for input that does not read.
  * See `vela_core::app::browser_tabs::open_target`.
  */
 public func browserOpenTarget(viewJson: String, shown: String?, onPage: Bool, url: String, kind: String) -> String?  {
@@ -15958,7 +15959,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_browser_open_target() != 26339) {
+    if (uniffi_vela_core_uniffi_checksum_func_browser_open_target() != 7423) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_pinned_title() != 57380) {
