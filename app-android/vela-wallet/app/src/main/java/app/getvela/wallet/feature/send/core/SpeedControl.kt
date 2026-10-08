@@ -141,6 +141,30 @@ class SpeedControl(
         val chainRead = MutableStateFlow<FeeFailure.ChainRead?>(null)
         /** The deployment read before the dispatch — as much "measuring" as the core's `busy`. */
         @Volatile var reading = false
+
+        /**
+         * The chain of the last question this session's core has APPLIED —
+         * what its view's `fee_token` is a contract on. Moves only once a view
+         * of that question is committed ([asked]), never ahead of it: a chain
+         * named before its view lands would pair it with the last question's
+         * coin.
+         */
+        val priced = MutableStateFlow<Int?>(null)
+
+        /** The last question dispatched: its event number here and its chain. */
+        @Volatile private var question: Pair<Long, Int>? = null
+
+        /** A question went to the core as event [event]: [priced] follows once it is applied. */
+        fun asked(event: Long, chainId: Int) {
+            question = event to chainId
+            follow()
+        }
+
+        private fun follow() {
+            val (event, chainId) = question ?: return
+            if (host.applied(event)) priced.value = chainId
+        }
+
         @Volatile var generation = 0L
         private var watch: Job? = null
 
@@ -152,7 +176,12 @@ class SpeedControl(
         fun start(): FeeSession {
             host.start()
             // Every commit, not every distinct view: see `CoreHost.commits`.
-            watch = scope.launch { host.commits.collect { reportQuotes() } }
+            watch = scope.launch {
+                host.commits.collect {
+                    follow()
+                    reportQuotes()
+                }
+            }
             return this
         }
 
@@ -194,6 +223,17 @@ class SpeedControl(
     val fee: StateFlow<FeeView> = inForce
         .flatMapLatest { session -> combine(session.host.view, session.chainRead, ::withChainRead) }
         .stateIn(scope, SharingStarted.Eagerly, FeeView())
+
+    /**
+     * The chain the session in force prices: the chain of the last question
+     * its core has applied ([FeeSession.priced]) — what [fee]'s `fee_token` is
+     * a contract on. `null` before any question has. The send bridge tells the
+     * card's coin only while this is the form's own chain ([FeeTokenWord]).
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val pricingChainId: StateFlow<Int?> = inForce
+        .flatMapLatest { session -> session.priced }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     /**
      * [fee] exactly as the session in force wrote it, with the shell's own
@@ -424,6 +464,7 @@ class SpeedControl(
                     session.deployed = read.deployed
                     val before = session.view.fee
                     val event = session.host.dispatchNumbered(ask.event(read.deployed, numberPreset()), FeeEvent.serializer())
+                    session.asked(event, ask.chainId)
                     tellMeasured(session)
                     Asked(session, before, event)
                 }
@@ -532,7 +573,7 @@ class SpeedControl(
             session.deployed = deployed
             session.generation = generation
             previews.add(session.start())
-            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
+            session.asked(session.host.dispatchNumbered(ask.event(deployed, numberPreset()), FeeEvent.serializer()), ask.chainId)
             tellMeasured(session)
         }
     }
