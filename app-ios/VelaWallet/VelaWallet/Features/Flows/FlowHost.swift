@@ -159,9 +159,10 @@ struct FlowHost: View {
     var onNoticeAction: (() -> Void)?
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
-    var onPickContact: ((Int) -> Void)?
-    /// A whole group from the picker, added to the split.
-    var onPickGroup: ((Int) -> Void)?
+    /// The picked person's address (issue #467), never a row position.
+    var onPickContact: ((String) -> Void)?
+    /// A whole group from the picker, by its id, added to the split.
+    var onPickGroup: ((String) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -486,9 +487,10 @@ private struct FlowSheetHost: View {
     var onNoticeAction: (() -> Void)?
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
-    var onPickContact: ((Int) -> Void)?
-    /// A whole group from the picker, added to the split.
-    var onPickGroup: ((Int) -> Void)?
+    /// The picked person's address (issue #467), never a row position.
+    var onPickContact: ((String) -> Void)?
+    /// A whole group from the picker, by its id, added to the split.
+    var onPickGroup: ((String) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -604,8 +606,8 @@ private struct FlowSheetHost: View {
             ContactPickBody(
                 model: m,
                 onScan: { onNavigate(.scan) },
-                onGroup: { index in onPickGroup?(index) },
-                onSelect: { index in onPickContact?(index) }
+                onGroup: { id in onPickGroup?(id) },
+                onSelect: { address in onPickContact?(address) }
             )
         case .feeToken(let m):
             FeeTokenBody(model: m, onSelect: { index in onPickFeeToken?(index) })

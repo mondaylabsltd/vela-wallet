@@ -1056,18 +1056,19 @@ struct ContactPickBody: View {
 
     let model: ContactPickModel
     var onScan: () -> Void = {}
-    var onGroup: (Int) -> Void = { _ in }
-    var onSelect: (Int) -> Void = { _ in }
+    /// The tapped group's id.
+    var onGroup: (String) -> Void = { _ in }
+    /// The tapped person's ADDRESS (issue #467) — never a position in a list
+    /// the core re-sorts while names resolve.
+    var onSelect: (String) -> Void = { _ in }
 
     @State private var query = ""
 
-    private var shown: [(offset: Int, element: ContactEntryModel)] {
+    private var shown: [ContactEntryModel] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        let all = Array(model.contacts.enumerated())
-        guard !trimmed.isEmpty else { return all.map { ($0.offset, $0.element) } }
-        return all
-            .filter { "\($0.element.name) \($0.element.addressDisplay)".localizedCaseInsensitiveContains(trimmed) }
-            .map { ($0.offset, $0.element) }
+        guard !trimmed.isEmpty else { return model.contacts }
+        return model.contacts
+            .filter { "\($0.name) \($0.addressDisplay)".localizedCaseInsensitiveContains(trimmed) }
     }
 
     var body: some View {
@@ -1094,8 +1095,8 @@ struct ContactPickBody: View {
 
             if !model.groups.isEmpty && query.isEmpty {
                 sectionCaption(model.groupsTitle)
-                ForEach(Array(model.groups.enumerated()), id: \.element.id) { index, group in
-                    Button { onGroup(index) } label: {
+                ForEach(model.groups) { group in
+                    Button { onGroup(group.id) } label: {
                         HStack(spacing: Tokens.Space.s12) {
                             // Two overlapping discs stand for "several people"
                             // without drawing any of them — a group has no
@@ -1128,10 +1129,10 @@ struct ContactPickBody: View {
             }
 
             sectionCaption(model.contactsTitle)
-            ForEach(shown, id: \.element.id) { entry in
+            ForEach(shown) { entry in
                 ContactPickRowView(
-                    contact: entry.element,
-                    onSelect: { onSelect(entry.offset) }
+                    contact: entry,
+                    onSelect: { onSelect(entry.address) }
                 )
             }
         }

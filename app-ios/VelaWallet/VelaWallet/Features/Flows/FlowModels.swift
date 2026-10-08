@@ -655,17 +655,27 @@ struct FillEmptyModel: Equatable {
 }
 
 /// SD2e — the contact picker.
+///
+/// Rows are keyed by what they ARE (issue #467): a group by the book's own
+/// id, a person by their address. A `UUID()` minted per build gave every row
+/// a new identity on each render — 56 rows rebuilt under the finger whenever
+/// a fee, a balance or a name landed, which can drop a tap in progress.
 struct ContactGroupModel: Identifiable {
-    let id = UUID()
+    /// The book's group id; a pick adds THIS group's members.
+    let id: String
     let name: String
     let count: String
     let colors: [Color]
 }
 
 struct ContactEntryModel: Identifiable {
-    let id = UUID()
+    var id: String { address }
     let name: String
     var group: String?
+    /// The person's full address — what a tap hands back. Never a position:
+    /// the core re-sorts the book (favourites, recency, names as they
+    /// resolve), so an index can name the neighbour by the time it lands.
+    let address: String
     let addressDisplay: String
     let identiconSeed: String
 }

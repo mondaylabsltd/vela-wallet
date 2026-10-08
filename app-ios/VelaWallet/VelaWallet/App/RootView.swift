@@ -1183,10 +1183,6 @@ struct RootView: View {
                     // answers `.sd2f` when this flag is already true, so the
                     // flag could never become true and the sheet never opened.
                     feeSheetOpen = (drawn == .sd2f)
-                    // Android's trap, avoided: its contacts machine only opened
-                    // on the contacts page, so the picker was empty. `boot` is
-                    // idempotent, so opening it from here costs nothing.
-                    if drawn == .sd2e { contacts.open(myAddress: session.view.address) }
                 }
             } else {
                 switch section {
@@ -1312,6 +1308,10 @@ struct RootView: View {
                         // as Android's contact picker, which was empty because
                         // its machine only booted on the contacts page.
                         settings.open()
+                        // …and so is the address book (issue #467): Send's
+                        // picker draws it, and a book first opened by the tap
+                        // that raised the picker was a sheet of nobody.
+                        contacts.open(myAddress: session.view.address)
                         wallet.open(address: session.view.address)
                     }
                     // The 10-minute balance refresh runs exactly while this
@@ -2514,8 +2514,15 @@ struct RootView: View {
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
                 model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
             }
-            if case .contactPick(let sheet)? = model.sheet, let book = contacts.view {
-                model.sheet = .contactPick(SendLive.contactSheet(book, on: sheet, loc: loc))
+            // The person's own book, or — while it is still being read — the
+            // drawn chrome with nobody in it. Never the drawing's people: a
+            // fixture Alice under a live form is a tap that sends nowhere
+            // anyone meant (issue #467).
+            if case .contactPick(let sheet)? = model.sheet {
+                model.sheet = .contactPick(
+                    contacts.view.map { SendLive.contactSheet($0, on: sheet, loc: loc) }
+                        ?? SendLive.contactSheetReading(on: sheet)
+                )
             }
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
@@ -2635,12 +2642,61 @@ struct RootView: View {
         feeSheetOpen = false
     }
 
-    /// Somebody was picked from the address book.
-    private func pickSendContact(_ index: Int) {
-        guard let contact = contacts.view?.contacts[safe: index] else { return }
-        recipientDraft = contact.address
-        send.pickedAddress(contact.address)
-        send.closeContactPicker()
+    /// The person icon (and a split's 从通讯录): the core's picker, over the
+    /// form (issue #467). The book is app-resident from the home; opening it
+    /// here too costs nothing (`boot` is idempotent) and covers a send that
+    /// started somewhere else, a scanned code say.
+    private func openContactPicker() {
+        contacts.open(myAddress: session.view.address)
+        send.openContactPicker(target: nil)
+    }
+
+    /// Somebody was picked from the address book — by ADDRESS (issue #467).
+    ///
+    /// The row hands back the address it was drawn for. An index into
+    /// `contacts.view` could name a neighbour by the time the tap lands: the
+    /// core re-sorts the book (favourites, recency, names as they resolve).
+    ///
+    /// A split takes the person as a new row of their own (the web's
+    /// `pickContactFor` does the same with a blank row it targets) — a
+    /// targetless pick would fill the single form's hidden recipient.
+    private func pickSendContact(_ address: String) {
+        guard let view = send.view else { return }
+        if view.splitMode {
+            // Only the person's OWN name rides along (spec 097 F), as a
+            // group's members do.
+            let name = contacts.view?.contacts
+                .first { $0.address.lowercased() == address.lowercased() }?.name
+            send.appendSplitRecipients([[
+                "id": "", "address": address, "amount": "",
+                "name": name.map { $0 as Any } ?? NSNull(),
+            ]])
+        } else {
+            recipientDraft = address
+            send.pickedAddress(address)
+        }
+        if send.view?.showContactPicker == true { send.closeContactPicker() }
+    }
+
+    /// A flow sheet went away — × or a drag, or the screen under it moved on.
+    ///
+    /// The two sheets the SEND machine raises lower its flag too: left up,
+    /// FlowHost keeps the closed sheet hidden and the door that opened it is
+    /// dead from then on (issue #467's second half). Not while the scanner is
+    /// on top — the picker's own scan row went there, and coming back from it
+    /// returns to the picker.
+    ///
+    /// The stack loses a level only for a state that IS a sheet: the scan
+    /// row's push takes the sheet away with `state` already the scanner, and
+    /// popping that would close the camera the person just opened.
+    private func flowSheetClosed(_ state: FlowStateId) {
+        if let view = send.view, let top = flows.top, sendStates.contains(top) {
+            if view.showContactPicker { send.closeContactPicker() }
+            if view.showBatchImport { send.closeBatchImport() }
+        }
+        if WalletFlowFixtures.build(state, loc: loc).sheet != nil {
+            flows.sheetClosed(state)
+        }
     }
 
     /// An assets row was tapped. The list may be narrowed to one chain, so its
@@ -2667,10 +2723,10 @@ struct RootView: View {
         }
     }
 
-    /// A whole group from the picker: its members JOIN the form, amounts
-    /// blank. The core shuts the picker itself.
-    private func pickSendGroup(_ index: Int) {
-        guard let group = contacts.view?.groups[safe: index],
+    /// A whole group from the picker, by its id: its members JOIN the form,
+    /// amounts blank. The core shuts the picker itself.
+    private func pickSendGroup(_ id: String) {
+        guard let group = contacts.view?.groups.first(where: { $0.id == id }),
               let rows = SendLive.groupRecipients(group) else { return }
         send.appendSplitRecipients(rows)
     }
@@ -2933,14 +2989,22 @@ struct RootView: View {
                     // pushed as A2 is drawn as A3 when it names a contract,
                     // and the model's state then never matched the top, so
                     // nothing popped (082 X-HISTORY, device).
-                    onSheetClosed: { _ in flows.sheetClosed(state) },
+                    onSheetClosed: { _ in flowSheetClosed(state) },
                     onNavigate: { step in
-                        // 导入表格 is the CORE's flag, not a push: the live
-                        // router derives the send journey's state from the
-                        // machine, so a pushed SD2c would be overridden back to
-                        // the form — the dead-button shape twice already found
-                        // in this flow.
-                        if step == .batchImport { openBatch() } else { flows.push(step) }
+                        // 导入表格 and the address book are the CORE's flags,
+                        // not pushes: the live router derives the send
+                        // journey's state from the machine, so a pushed SD2c or
+                        // SD2e was overridden back to the form — the
+                        // dead-button shape, found twice in this flow and then
+                        // a third time as issue #467 (the person icon opened
+                        // nothing at all).
+                        if step == .batchImport {
+                            openBatch()
+                        } else if step == .contactPick, sendStates.contains(state) {
+                            openContactPicker()
+                        } else {
+                            flows.push(step)
+                        }
                     },
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),

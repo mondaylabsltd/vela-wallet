@@ -1683,8 +1683,8 @@ enum SendLive {
     ) -> ContactPickModel {
         // The person's own groups — the drawing's two were a picture that did
         // nothing when tapped. A tap ADDS the group's members to the form
-        // (`append_split_recipients`), so the order here is the order the
-        // shell indexes into: `book.groups`.
+        // (`append_split_recipients`), named by the group's id and each person
+        // by their address (issue #467) — never by a place in the list.
         let swatches = ChainCatalog.chains.map { chainColor($0.chainId) }
         return ContactPickModel(
             title: model.title,
@@ -1694,6 +1694,7 @@ enum SendLive {
             groupsTitle: model.groupsTitle,
             groups: book.groups.enumerated().map { index, group in
                 ContactGroupModel(
+                    id: group.id,
                     name: group.name,
                     count: loc.t("contacts.groupMembers", vars: ["count": String(group.members.count)]),
                     // Two discs from the chain palette — decoration, not
@@ -1711,10 +1712,27 @@ enum SendLive {
                     group: book.groups.first { group in
                         group.members.contains { $0.address == contact.address }
                     }?.name,
+                    address: contact.address,
                     addressDisplay: AddressText.short(contact.address),
                     identiconSeed: contact.address
                 )
             }
+        )
+    }
+
+    /// The picker while the book is still being read: the drawn chrome —
+    /// title, search, the scan row — and nobody in it. Never the drawing's
+    /// people (issue #467).
+    static func contactSheetReading(on model: ContactPickModel) -> ContactPickModel {
+        ContactPickModel(
+            title: model.title,
+            closeLabel: model.closeLabel,
+            searchPlaceholder: model.searchPlaceholder,
+            scanRow: model.scanRow,
+            groupsTitle: model.groupsTitle,
+            groups: [],
+            contactsTitle: model.contactsTitle,
+            contacts: []
         )
     }
 

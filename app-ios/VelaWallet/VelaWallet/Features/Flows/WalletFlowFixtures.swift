@@ -620,11 +620,13 @@ enum WalletFlowFixtures {
             groupsTitle: loc.t("contacts.sectionGroups"),
             groups: [
                 ContactGroupModel(
+                    id: "fixture-family",
                     name: "家人",
                     count: loc.t("contacts.groupMembers", vars: ["count": "3"]),
                     colors: [ChainPalette.polygon, ChainPalette.bnb]
                 ),
                 ContactGroupModel(
+                    id: "fixture-work",
                     name: "工作",
                     count: loc.t("contacts.groupMembers", vars: ["count": "5"]),
                     colors: [ChainPalette.gnosis, ChainPalette.arbitrum]
@@ -632,9 +634,12 @@ enum WalletFlowFixtures {
             ],
             contactsTitle: loc.t("contacts.title"),
             contacts: [
-                ContactEntryModel(name: "Alice", group: "家人", addressDisplay: aliceDisplay, identiconSeed: aliceFull),
-                ContactEntryModel(name: "阿豪", addressDisplay: "0x77Bd…4F02", identiconSeed: aHaoFull),
-                ContactEntryModel(name: "hold on", addressDisplay: holdOnDisplay, identiconSeed: holdOnFull),
+                ContactEntryModel(name: "Alice", group: "家人", address: aliceFull,
+                                  addressDisplay: aliceDisplay, identiconSeed: aliceFull),
+                ContactEntryModel(name: "阿豪", address: aHaoFull,
+                                  addressDisplay: "0x77Bd…4F02", identiconSeed: aHaoFull),
+                ContactEntryModel(name: "hold on", address: holdOnFull,
+                                  addressDisplay: holdOnDisplay, identiconSeed: holdOnFull),
             ]
         )
     }
