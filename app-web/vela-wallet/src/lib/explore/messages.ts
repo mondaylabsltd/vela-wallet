@@ -38,8 +38,11 @@ export interface ExploreMessages {
 	startPage: string;
 	closeAllTabs: string;
 	closeTab: string;
-	/** Template — '{{n}} tabs open'. */
-	openTabs: string;
+	/**
+	 * "{{count}} tabs open", in each plural form this locale has
+	 * (`pluralForm`): one tab is "1 tab open", not "1 tabs open".
+	 */
+	openTabs: PluralCopy;
 	addToFavorites: string;
 	addedToFavorites: string;
 	share: string;

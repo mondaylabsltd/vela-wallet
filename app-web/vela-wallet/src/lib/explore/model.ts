@@ -176,7 +176,7 @@ export interface ResumeTabModel {
  * are the most recently used tabs with a page, three at most.
  */
 export interface ResumeSectionModel {
-	/** `explore.openTabs` filled with the number of open tabs. */
+	/** `explore.openTabs_*`, the form for the number of open tabs, filled with it. */
 	title: string;
 	/** `explore.tabs` — opens the switcher. */
 	action: string;

@@ -219,7 +219,7 @@ function resumeSection(m: ExploreMessages, strip: TabModel[]): ResumeSectionMode
 	);
 	if (withPage.length === 0) return undefined;
 	return {
-		title: fill(m.openTabs, { n: String(strip.length) }),
+		title: fill(pluralForm(m.openTabs, strip.length), { count: String(strip.length) }),
 		action: m.tabs,
 		tabs: withPage.slice(0, RESUME_SHOWN)
 	};

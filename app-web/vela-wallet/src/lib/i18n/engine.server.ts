@@ -861,7 +861,7 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 		startPage: k('explore.startPage'),
 		closeAllTabs: k('explore.closeAllTabs'),
 		closeTab: k('explore.closeTab'),
-		openTabs: k('explore.openTabs'),
+		openTabs: pluralCopy(locale, 'explore.openTabs'),
 		addToFavorites: k('explore.addToFavorites'),
 		addedToFavorites: k('explore.addedToFavorites'),
 		share: k('explore.share'),

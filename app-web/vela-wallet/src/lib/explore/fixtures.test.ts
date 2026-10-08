@@ -21,11 +21,11 @@ const IDENTICON_STUB = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const messages = resolveExploreMessages('zh');
 
 /** The plural keys: no bare value, a form per category the locale has. */
-const PLURAL_KEYS = ['siteCount'];
+const PLURAL_KEYS = ['siteCount', 'openTabs'] as const;
 
 /** Every corpus key this layer names, derived from the resolver's own output. */
 const EXPLORE_KEYS = Object.keys(resolveExploreMessages('en')).filter(
-	(k) => k !== 'nav' && k !== 'closeLabel' && !PLURAL_KEYS.includes(k)
+	(k) => k !== 'nav' && k !== 'closeLabel' && !(PLURAL_KEYS as readonly string[]).includes(k)
 );
 
 describe('explore messages', () => {
@@ -36,10 +36,12 @@ describe('explore messages', () => {
 			expect(value.trim()).not.toBe('');
 		}
 		// A plural key ships every form the locale has, each counting.
-		const forms = resolveExploreMessages(locale).siteCount.forms;
-		expect(Object.keys(forms)).toContain('_other');
-		for (const [suffix, form] of Object.entries(forms)) {
-			expect(form, `explore.siteCount${suffix} in ${locale}`).toContain('{{count}}');
+		for (const key of PLURAL_KEYS) {
+			const forms = resolveExploreMessages(locale)[key].forms;
+			expect(Object.keys(forms)).toContain('_other');
+			for (const [suffix, form] of Object.entries(forms)) {
+				expect(form, `explore.${key}${suffix} in ${locale}`).toContain('{{count}}');
+			}
 		}
 	});
 
@@ -58,6 +60,24 @@ describe('explore messages', () => {
 		const row = buildMobileState('e3', resolveExploreMessages('ru'), IDENTICON_STUB).menus
 			.groupManage.rows[0];
 		expect(row.meta).toBe('8 сайтов');
+	});
+
+	// "explore.openTabs" became plural forms with {{count}} too: the resume
+	// header's most common case, one tab, read "1 tabs open".
+	it('counts open tabs in the form the count takes', () => {
+		const count = (locale: Parameters<typeof resolveExploreMessages>[0], n: number) =>
+			fill(pluralForm(resolveExploreMessages(locale).openTabs, n), { count: String(n) });
+		expect(count('en', 1)).toBe('1 tab open');
+		expect(count('en', 4)).toBe('4 tabs open');
+		expect(count('de', 1)).toBe('1 Tab geöffnet');
+		expect(count('fr', 1)).toBe('1 onglet ouvert');
+		expect(count('ru', 1)).toBe('1 вкладка открыта');
+		expect(count('ru', 3)).toBe('3 вкладки открыты');
+		expect(count('ru', 5)).toBe('5 вкладок открыто');
+		expect(count('zh', 1)).toBe('已打开 1 个标签页');
+		// The E2 board's header, in English: four tabs.
+		const resume = buildMobileState('e2', resolveExploreMessages('en'), IDENTICON_STUB).resume;
+		expect(resume?.title).toBe('4 tabs open');
 	});
 });
 
@@ -106,7 +126,9 @@ describe('what each state is FOR', () => {
 		expect(resume).toBeDefined();
 		// The header counts EVERY tab — the start page too — which is the
 		// number the switcher holds and the browsing bar's box shows.
-		expect(resume?.title).toBe(fill(messages.openTabs, { n: String(e2.tabs.length) }));
+		expect(resume?.title).toBe(
+			fill(pluralForm(messages.openTabs, e2.tabs.length), { count: String(e2.tabs.length) })
+		);
 		expect(resume?.title).toBe('已打开 4 个标签页');
 		expect(resume?.action).toBe(messages.tabs);
 		// The rows: tabs with a page, most recent first, never more than three.
