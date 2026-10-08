@@ -57,6 +57,12 @@ data class ExploreView(
     val ready: Boolean = false,
     /** Spec 099 R2: every tab id, most recently used first — what the engine plan keeps by. */
     val recent_tabs: List<String> = emptyList(),
+    /**
+     * The home's resume rows (spec 099 navigation): the tabs that have a
+     * page, most recently used first, at most `RESUME_SHOWN` — the core's
+     * order and cap, never re-sorted or re-capped here.
+     */
+    val resumable: List<ExploreTab> = emptyList(),
 )
 
 @Serializable

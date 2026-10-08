@@ -1331,6 +1331,13 @@ class CoreWireDriftTest {
         assertStringUnion<ExploreSystemGroup>("ExploreSystemGroup")
         assertVariantsExist<ExploreEvent>("ExploreEvent")
         assertVariantFields(ExploreEvent.serializer(), "ExploreEvent")
+        // Spec 099 navigation: where 探索 lands and where an opened site goes.
+        assertStringUnion<app.getvela.wallet.feature.browser.core.ExploreEntry>("ExploreEntry")
+        assertStringUnion<app.getvela.wallet.feature.browser.core.ExploreOpenKind>("ExploreOpenKind")
+        assertVariantsExhaustive<app.getvela.wallet.feature.browser.core.ExploreLanding>("ExploreLanding")
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.browser.core.ExploreLanding.serializer(), "ExploreLanding")
+        assertVariantsExhaustive<app.getvela.wallet.feature.browser.core.ExploreOpenTarget>("ExploreOpenTarget")
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.browser.core.ExploreOpenTarget.serializer(), "ExploreOpenTarget")
         assertFieldsExist<BhistView>("BhistView")
         assertFieldsExist<BhistEntry>("BhistEntry")
         assertVariantsExhaustive<BhistOperation>("BhistOperation")

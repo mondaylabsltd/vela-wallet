@@ -59,7 +59,10 @@ class ExploreLiveTest {
         assertTrue(model.tabs[0].selected)
         assertTrue(model.tabs[1].startPage)
         assertEquals(strings.t("explore.startPage"), model.tabs[1].title)
-        assertEquals("2", model.tabCountLabel)
+        assertEquals("the bar's box counts every tab, start pages included", 2, model.browser.tabCount)
+        // The view carries no `resumable` here, so there is no resume section:
+        // the rows are the core's, never derived from the strip by this shell.
+        assertNull(model.resume)
         assertTrue("the page is a favourite", model.browser.bookmarked)
         assertTrue(model.browser.canBack)
         assertEquals("app.uniswap.org", model.browser.host)
@@ -372,8 +375,59 @@ class ExploreLiveTest {
         assertNotNull(model.empty)
         assertNull(model.favorites)
         assertTrue(model.groups.isEmpty())
-        assertNull(model.tabCountLabel)
+        assertNull("no tab with a page, no resume section", model.resume)
         assertFalse(model.browser.bookmarked)
+    }
+
+    /**
+     * Spec 099 navigation: the home's resume rows are the core's `resumable`,
+     * in its order and cap — the header counts every tab (the switcher's
+     * number) and its action is the switcher's word; a row's id is its TAB's,
+     * and it is named by the recents' own label rule.
+     */
+    @Test
+    fun `the resume section is the core's resumable, under a header that counts every tab`() {
+        val a = ExploreTab("t1", "https://app.uniswap.org/swap", "Uniswap", "app.uniswap.org")
+        val b = ExploreTab("t2", "https://polymarket.com/", "", "polymarket.com")
+        val view = ExploreView(
+            tabs = listOf(a, b, ExploreTab("t3", null, "", "")),
+            selected_tab = "t3",
+            recent_tabs = listOf("t2", "t3", "t1"),
+            // The core's order, which this shell must keep — not the strip's.
+            resumable = listOf(b, a),
+            ready = true,
+        )
+        val resume = ExploreLive.home(fallback, view, BhistView(), null, strings).resume!!
+        assertEquals(strings.t("explore.openTabs", mapOf("n" to "3")), resume.title)
+        assertEquals(strings.t("explore.tabs"), resume.action)
+        assertEquals(listOf("t2", "t1"), resume.tabs.map { it.id })
+        assertEquals("an untitled tab is said once, by its host", "polymarket.com", resume.tabs[0].name)
+        assertEquals("", resume.tabs[0].subtitle)
+        assertEquals("Uniswap", resume.tabs[1].name)
+        assertEquals("app.uniswap.org", resume.tabs[1].subtitle)
+        // Before the mirror is live there is no section — never one to correct a frame later.
+        assertNull(ExploreLive.home(fallback, view.copy(ready = false), BhistView(), null, strings).resume)
+    }
+
+    /**
+     * Spec 099 navigation: the site menu leads with Forward (the toolbar is
+     * gone) — greyed, never hidden, when there is nothing ahead; its refresh
+     * row stops a load under way; the star row says what it will do.
+     */
+    @Test
+    fun `the site menu's forward follows the page, and refresh stops a load under way`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")), selected_tab = "t1", ready = true)
+        fun menu(engine: EngineState) = ExploreLive.home(fallback, view, BhistView(), engine, strings).siteMenuSheet.items
+        val idle = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", shown = "https://app.uniswap.org/"))
+        assertEquals(listOf("forward", "refresh", "share", "copy", "favorite", "system", "close"), idle.map { it.id })
+        assertFalse("nothing ahead: greyed", idle.first().enabled)
+        assertEquals(strings.t("explore.forward"), idle.first().label)
+        assertEquals(strings.t("explore.addToFavorites"), idle.first { it.id == "favorite" }.label)
+        val ahead = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", canForward = true, shown = "https://app.uniswap.org/"))
+        assertTrue(ahead.first().enabled)
+        val loading = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", loading = true, shown = "https://app.uniswap.org/"))
+        assertEquals("the refresh row's place, so nothing under it moves", ExploreLive.STOP, loading[1].id)
+        assertEquals(strings.t("connect.dapp.stop"), loading[1].label)
     }
 
     @Test

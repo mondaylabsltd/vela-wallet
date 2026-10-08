@@ -684,10 +684,19 @@ object VelaIcons {
         strokeIcon("VelaArrowDown", "M12 5v14", "m19 12-7 7-7-7")
     }
 
-    /** The bookmark affordance in the browsing toolbar. */
+    /** The site menu's add-to-favourites row. */
     val Star: ImageVector by lazy {
         strokeIcon(
             "VelaStar",
+            "M12.00 2.70 L14.35 8.76 L20.84 9.13 L15.80 13.24 L17.47 19.52 " +
+                "L12.00 16.00 L6.53 19.52 L8.20 13.24 L3.16 9.13 L9.65 8.76 Z",
+        )
+    }
+
+    /** The same star filled (the web's `star-filled`): the page in front already is a favourite. */
+    val StarFilled: ImageVector by lazy {
+        fillIcon(
+            "VelaStarFilled",
             "M12.00 2.70 L14.35 8.76 L20.84 9.13 L15.80 13.24 L17.47 19.52 " +
                 "L12.00 16.00 L6.53 19.52 L8.20 13.24 L3.16 9.13 L9.65 8.76 Z",
         )

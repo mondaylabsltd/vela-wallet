@@ -3,20 +3,16 @@ package app.getvela.wallet.feature.explore
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -27,23 +23,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
-import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
-import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.feature.explore.components.AddressBar
-import app.getvela.wallet.feature.explore.components.BrowserToolbar
+import app.getvela.wallet.feature.explore.components.AddressBarLabels
 import app.getvela.wallet.feature.explore.components.ConnectionPanel
 import app.getvela.wallet.feature.explore.components.DemoPage
 import app.getvela.wallet.feature.explore.components.ExploreEmpty
-import app.getvela.wallet.feature.explore.components.ExploreMetrics
 import app.getvela.wallet.feature.explore.components.ExploreSearchField
 import app.getvela.wallet.feature.explore.components.ExploreTabsScreen
 import app.getvela.wallet.feature.explore.components.BrowserNotice
@@ -71,6 +63,13 @@ import app.getvela.wallet.feature.wallet.components.VelaTabBar
  * Every E-state renders from fixtures alone; what a person DOES here is local
  * state layered over the model, so swapping the model (a locale change, the
  * preview gallery's state picker) still lands.
+ *
+ * Spec 099 navigation (boards E2/E4–E7): the app's four-tab bar stays under
+ * the page, so the wallet is one tap from any dApp, and the browser draws ONE
+ * bar of its own, at the top ([AddressBar]) — still never two bars at the
+ * bottom. Where 探索 opens is the core's (`explore_landing`, handed in as
+ * [landing] for each [visit]); 探索 again while browsing is its home, the tab
+ * kept alive, and the home's resume rows bring it back in one tap.
  */
 /** Spec 044: the taps that reach the browser controller when the tab is live. A site's id is its URL. */
 class ExploreCallbacks(
@@ -104,6 +103,13 @@ class ExploreCallbacks(
     val onAddNetwork: (AddNetworkAction) -> Unit = {},
     /** Spec 100: the chain-setup tool, for a chain this wallet refuses. */
     val onChainSetupTool: () -> Unit = {},
+    /**
+     * Spec 099 navigation: the tab the switcher lights — the core's
+     * `browser_lit_tab`: the shown tab when the switcher was opened from its
+     * page, else only a selected start-page tab (a dApp left for the home is
+     * not "this tab").
+     */
+    val litTab: (onPage: Boolean) -> String? = { null },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,10 +121,26 @@ fun ExploreScreen(
     onSelectTab: (VelaTab) -> Unit = {},
     /** Spec 044: the live page, drawn where the demo page is when present. */
     page: (@Composable () -> Unit)? = null,
-    /** Spec 044: which view to open on when a live page exists. */
-    initialView: ExploreView? = null,
-    /** Spec 044: the address typed on the start page becomes a real navigation. */
+    /**
+     * Spec 099 navigation: what the core's landing shows for this [visit]
+     * (`explore_landing`: its home → [ExploreView.Start], a tab → [ExploreView.Browsing]).
+     * Re-read as the core's view changes until the person does something
+     * here; `null` is the model's own view (the gallery).
+     */
+    landing: ExploreView? = null,
+    /**
+     * One visit to 探索 — entering it from another section, re-tapping it,
+     * a page opened from outside. A new visit drops what the person did on
+     * the last one, so the landing is what shows.
+     */
+    visit: Int = 0,
+    /** Spec 044: the address typed on the start page becomes a real navigation (the core's open target decides which tab). */
     onOpenUrl: ((String) -> Unit)? = null,
+    /** An address typed into the bar of the page on screen: it loads in that page's tab. */
+    onOpenInPage: ((String) -> Unit)? = onOpenUrl,
+    /** Issue #273: a web address read by the scanner — a page handed in, which 探索 lands on. */
+    onOpenScanned: ((String) -> Unit)? = onOpenUrl,
+    /** ⋯ → 关闭网页: the TAB closes, and 探索 shows its home. */
     onClosePage: () -> Unit = {},
     /** Back inside the page; `false` when it has no history left (spec 070: system Back then leaves the page). */
     onPageBack: () -> Boolean = { false },
@@ -154,7 +176,12 @@ fun ExploreScreen(
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
 
-    var viewOverride by rememberSaveable(model.state, initialView) { mutableStateOf(initialView) }
+    // What the person did on this visit, over the landing: a resume row, the
+    // switcher, ‹ to the home. Keyed by the visit, so a re-tap of 探索 or a page
+    // opened from outside starts again from the core's landing.
+    var viewOverride by rememberSaveable(model.state, visit) { mutableStateOf<ExploreView?>(null) }
+    /** Where the switcher was opened from — Done goes back there. */
+    var tabsFrom by rememberSaveable(model.state, visit) { mutableStateOf(ExploreView.Start) }
     var sheet by remember(model.state) { mutableStateOf(model.sheet) }
     var signingUp by remember(model.state) { mutableStateOf(false) }
     /// Groups hidden HERE rather than in the fixture: hiding is something a
@@ -166,7 +193,29 @@ fun ExploreScreen(
     // page — a fixture on a live route (device-found).
     // …except a tab whose renderer died: it has no page, and shows the reload
     // panel where the page was (spec 070).
-    val view = (viewOverride ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null && !model.browser.crashed) ExploreView.Start else it }
+    val view = (viewOverride ?: landing ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null && !model.browser.crashed) ExploreView.Start else it }
+    val openTabs = {
+        tabsFrom = view
+        viewOverride = ExploreView.Tabs
+    }
+    /**
+     * The switcher's Done (and Back): to where it was opened from. From a
+     * page, that is the selected tab's page — the person may have closed the
+     * one they came from, and the core's selection is what they return to.
+     */
+    val leaveTabs = {
+        if (tabsFrom == ExploreView.Browsing) model.tabs.firstOrNull { it.selected }?.let { live?.onTabOpen(it.id) }
+        viewOverride = tabsFrom
+    }
+    /**
+     * The app's tab bar while 探索 is up. 探索 again is the way home from a
+     * page, the tab kept alive — live, the host asks the core's landing for a
+     * new visit; in the gallery the screen goes home itself.
+     */
+    val selectTab: (VelaTab) -> Unit = { tab ->
+        if (tab == VelaTab.Explore && live == null) viewOverride = ExploreView.Start
+        onSelectTab(tab)
+    }
     var scanning by rememberSaveable { mutableStateOf(false) }
     /** Which pick-one sheet is up over the connection panel: `"network"` or `"account"`. */
     var picker by remember { mutableStateOf<String?>(null) }
@@ -183,21 +232,20 @@ fun ExploreScreen(
             tabMenu = null
         }
     }
-    // Spec 070: system Back walks the page's own history first, then leaves
-    // the page for the start page — it used to leave 探索 altogether. The
+    // Spec 070 + 099 navigation: system Back walks the page's own history
+    // first, then leaves the page for 探索's home (the tab kept alive), and
+    // only from the home does it leave 探索 for the wallet (the host's). The
     // switcher goes back to where it came from. (Registered before the
     // scanner's, which wins while scanning.)
     BackHandler(enabled = !scanning && live != null && view == ExploreView.Browsing) {
         if (!onPageBack()) viewOverride = ExploreView.Start
     }
-    BackHandler(enabled = !scanning && live != null && view == ExploreView.Tabs) {
-        viewOverride = if (page != null) ExploreView.Browsing else ExploreView.Start
-    }
+    BackHandler(enabled = !scanning && live != null && view == ExploreView.Tabs) { leaveTabs() }
     BackHandler(enabled = scanning) { scanning = false }
 
     if (scanning && scanner != null) {
         scanner(
-            { url -> scanning = false; onOpenUrl?.invoke(url); viewOverride = ExploreView.Browsing },
+            { url -> scanning = false; onOpenScanned?.invoke(url); viewOverride = ExploreView.Browsing },
             { scanning = false },
         )
     } else Column(
@@ -211,9 +259,14 @@ fun ExploreScreen(
                     .weight(1f)
                     .statusBarsPadding()
                     .navigationBarsPadding(),
-                tabs = model.tabs,
+                // Live, the lit card is the core's "this tab": over the home a
+                // dApp waiting for its resume is not it.
+                tabs = live?.let { callbacks ->
+                    val lit = callbacks.litTab(tabsFrom == ExploreView.Browsing)
+                    model.tabs.map { it.copy(selected = it.id == lit) }
+                } ?: model.tabs,
                 copy = model.tabsScreen,
-                onDone = { viewOverride = if (live == null || page != null) ExploreView.Browsing else ExploreView.Start },
+                onDone = { leaveTabs() },
                 onOpen = { id -> live?.onTabOpen(id); viewOverride = ExploreView.Browsing },
                 onClose = { id -> live?.onTabClose(id) ?: run { viewOverride = ExploreView.Start } },
                 onNew = { live?.onTabNew(); viewOverride = ExploreView.Start },
@@ -224,19 +277,23 @@ fun ExploreScreen(
             ExploreView.Browsing -> {
                 AddressBar(
                     modifier = Modifier.statusBarsPadding(),
-                    host = model.browser.host,
-                    secure = model.browser.secure,
-                    secureLabel = strings.t("explore.secureSite"),
-                    closeLabel = strings.t("explore.closePage"),
-                    menuLabel = strings.t("explore.siteMenu"),
-                    onClose = { onClosePage(); viewOverride = ExploreView.Start },
+                    browser = model.browser,
+                    labels = AddressBarLabels(
+                        back = strings.t("explore.back"),
+                        account = strings.t("explore.account"),
+                        connected = strings.t("explore.connectedTag"),
+                        tabs = strings.t("explore.tabs"),
+                        menu = strings.t("explore.siteMenu"),
+                        field = strings.t("explore.addressBar"),
+                        insecure = strings.t("connect.browser.a11yInsecure"),
+                    ),
+                    // ‹ is never greyed: with no history left it is the way
+                    // to 探索's home, the tab kept alive — as 探索 again is.
+                    onBack = { if (!onPageBack()) viewOverride = ExploreView.Start },
+                    onAccount = { sheet = ExploreSheet.Connection(model.connection) },
+                    onTabs = openTabs,
                     onMenu = { sheet = model.siteMenuSheet },
-                    url = model.browser.url,
-                    insecureLabel = strings.t("connect.browser.a11yInsecure"),
-                    loading = model.browser.loading,
-                    progress = model.browser.progress,
-                    onSubmitUrl = onOpenUrl,
-                    lockShown = model.browser.lockShown,
+                    onSubmitUrl = onOpenInPage,
                 )
                 // Spec 079: the page loaded but its chain cannot be reached — said
                 // once, under the address bar, while the page stays usable.
@@ -293,20 +350,16 @@ fun ExploreScreen(
                         else -> DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
                     }
                 }
-                BrowserToolbar(
-                    modifier = Modifier.navigationBarsPadding(),
-                    browser = model.browser,
-                    backLabel = strings.t("explore.back"),
-                    forwardLabel = strings.t("explore.forward"),
-                    accountLabel = strings.t("explore.account"),
-                    connectedLabel = strings.t("explore.connectedTag"),
-                    bookmarkLabel = strings.t(if (model.browser.bookmarked) "explore.removeFromFavorites" else "explore.addToFavorites"),
-                    tabsLabel = strings.t("explore.tabs"),
-                    onAccount = { sheet = ExploreSheet.Connection(model.connection) },
-                    onTabs = { viewOverride = ExploreView.Tabs },
-                    onBack = { onPageBack() },
-                    onForward = onPageForward,
-                    onBookmark = { live?.onBookmark() },
+                // The app's own tab bar, where the browser toolbar used to be:
+                // 钱包 is one tap from any page (spec 022's "never two bars at
+                // the bottom" holds — this is the only one).
+                VelaTabBar(
+                    tabs = model.nav,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
+                    selected = VelaTab.Explore,
+                    onSelect = selectTab,
                 )
             }
 
@@ -320,10 +373,12 @@ fun ExploreScreen(
                     // "+" tile and an empty Go put the cursor in the field.
                     onBrowse = { if (live != null) runCatching { searchFocus.requestFocus() } else viewOverride = ExploreView.Browsing },
                     searchFocus = searchFocus.takeIf { live != null },
-                    onTabs = { viewOverride = ExploreView.Tabs },
+                    onTabs = openTabs,
                     onManageGroups = { sheet = model.groupManageSheet },
                     live = live,
                     onOpenSite = { url -> live?.onOpenSite(url); viewOverride = ExploreView.Browsing },
+                    // One tap on a resume row: that tab, live, as it was left.
+                    onResume = { id -> live?.onTabOpen(id); viewOverride = ExploreView.Browsing },
                     modifier = Modifier.weight(1f),
                 )
                 // Device-found on the Xiaomi (2026-09-02): without this the bar
@@ -336,7 +391,7 @@ fun ExploreScreen(
                         .fillMaxWidth()
                         .navigationBarsPadding(),
                     selected = VelaTab.Explore,
-                    onSelect = onSelectTab,
+                    onSelect = selectTab,
                 )
             }
         }
@@ -419,8 +474,12 @@ fun ExploreScreen(
                         onClose = { sheet = null },
                         onPick = { id ->
                             sheet = null
-                            live?.onSiteMenuPick(id)
-                            if (id == "close") { onClosePage(); viewOverride = ExploreView.Start }
+                            when (id) {
+                                // Closes the TAB, and 探索 shows its home.
+                                "close" -> { onClosePage(); viewOverride = ExploreView.Start }
+                                "forward" -> onPageForward()
+                                else -> live?.onSiteMenuPick(id)
+                            }
                         },
                     )
 
@@ -529,6 +588,7 @@ private fun StartPage(
     modifier: Modifier = Modifier,
     live: ExploreCallbacks? = null,
     onOpenSite: ((String) -> Unit)? = null,
+    onResume: (String) -> Unit = {},
     searchFocus: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val colors = VelaTheme.colors
@@ -544,41 +604,18 @@ private fun StartPage(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = VelaSizing.screenPaddingX),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = VelaSpacing.xl2, bottom = VelaSpacing.xl),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = model.title,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.bold,
-                fontSize = VelaTextSize.xl3,
-            )
-            model.tabCountLabel?.let { count ->
-                Box(
-                    modifier = Modifier
-                        .defaultMinSize(ExploreMetrics.tabCount, ExploreMetrics.tabCount)
-                        .border(
-                            VelaBorder.emphasis, colors.fgBase,
-                            RoundedCornerShape(VelaRadius.sm),
-                        )
-                        .clickable(onClick = onTabs),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = count,
-                        color = colors.fgBase,
-                        fontFamily = VelaFontFamily,
-                        fontWeight = VelaFontWeight.semibold,
-                        fontSize = VelaTextSize.base,
-                    )
-                }
-            }
-        }
+        // No tab count up here any more (spec 099 navigation): the resume
+        // section's header says how many tabs are open, in words, and opens
+        // the same switcher — one control per job, and not in the corner
+        // hardest to reach one-handed.
+        Text(
+            text = model.title,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.bold,
+            fontSize = VelaTextSize.xl3,
+            modifier = Modifier.padding(top = VelaSpacing.xl2, bottom = VelaSpacing.xl),
+        )
 
         ExploreSearchField(
             placeholder = model.searchPlaceholder,
@@ -587,6 +624,22 @@ private fun StartPage(
             onScan = onScan,
             focusRequester = searchFocus,
         )
+
+        // The tabs with a page, most recent first (the core's `resumable`):
+        // one tap is that tab as it was left. Only while there is one — no
+        // heading, no placeholder otherwise.
+        model.resume?.let { resume ->
+            SectionHeader(
+                title = resume.title,
+                action = resume.action,
+                onAction = onTabs,
+                actionHitTarget = true,
+                modifier = Modifier.padding(top = VelaSpacing.xl),
+            )
+            resume.tabs.forEach { tab ->
+                SiteRow(site = tab, onOpen = onResume)
+            }
+        }
 
         model.empty?.let {
             ExploreEmpty(it, onBrowse = onBrowse)

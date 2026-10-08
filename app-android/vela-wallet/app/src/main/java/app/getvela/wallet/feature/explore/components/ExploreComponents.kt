@@ -58,16 +58,15 @@ internal object ExploreMetrics {
     val rowAvatar: Dp = VelaSpacing.xl4 + VelaSpacing.md
     /** Start-page search box (mock E2: y116–163). */
     val searchField: Dp = VelaSpacing.xl5
-    /** Browsing address pill and the toolbar under the page (mock E4). */
+    /** Browsing address pill (board E4: `size.addressPill`). */
     val addressPill: Dp = VelaSpacing.xl4 + VelaSpacing.md
-    val browserBar: Dp = VelaSizing.emptyStateCircle
-    /** The boxed tab count, in the header and in the toolbar (mock E2/E4). */
+    /** The boxed tab count's inner box, in the browsing top bar (board E4: `size.tabCount`). */
     val tabCount: Dp = VelaSpacing.xl3 + VelaSpacing.xs
     /** dApp avatar in the signing header, and the chip beside it (mock CS1).  */
     val signingAvatar: Dp = VelaSizing.controlSm
     val networkChip: Dp = VelaSpacing.xl3 + VelaSpacing.xs
-    /** The identicon in a chip. */
-    val chipAvatar: Dp = VelaIconSize.base
+    /** The connected account's identicon in the browsing top bar (board E4: `icon.2xl`). */
+    val barAvatar: Dp = VelaIconSize.xl2
 }
 
 /**
