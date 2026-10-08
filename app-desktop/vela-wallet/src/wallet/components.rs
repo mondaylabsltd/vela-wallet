@@ -578,32 +578,113 @@ pub fn balance_display(
     // last read ("Updated 2m"). A deposit made from another device had no
     // sign here until the ten-minute poll or a restart; now the person can
     // ask, and can see how fresh what they are looking at is. Quiet, like
-    // the status line: subtle ink, fuller on hover.
-    if let Some(on_refresh) = on_refresh {
-        let mut refresh = div()
-            .id("balance-refresh")
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .py(px(4.))
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_subtle)
-            .cursor_pointer()
-            .hover(|el| el.text_color(theme.fg_muted))
-            .child(icon_img(
-                icons,
-                Icon::RefreshCw,
-                false,
-                theme.fg_subtle,
-                14.,
-            ));
-        if let Some(updated) = model.updated.clone() {
-            refresh = refresh.child(updated);
-        }
-        root = root.child(div().flex().child(refresh.on_click(on_refresh)));
+    // the status line: subtle ink, fuller on hover. Drawn without a press
+    // behind it where a board shows its states.
+    if on_refresh.is_some() || model.updated.is_some() {
+        root = root.child(
+            div()
+                .flex()
+                .child(refresh_control(theme, icons, model, on_refresh)),
+        );
     }
 
     root
+}
+
+/// How long the refresh glyph takes to turn once, and in how many frames.
+const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(1000);
+const REFRESH_FRAMES: u32 = 36;
+
+/// What the refresh control says: "Updating…" while it turns (issue 462),
+/// otherwise when the figure was last read — nothing before the first read.
+#[must_use]
+pub fn refresh_words(model: &BalanceModel) -> Option<SharedString> {
+    if model.refreshing {
+        Some(model.updating.clone())
+    } else {
+        model.updated.clone()
+    }
+}
+
+/// The hero's "↻ Updated 2m" (issue 462). While a read the person asked
+/// for is out the ↻ turns, the words read "Updating…", and the control
+/// takes no press: a second press would only start a second round.
+///
+/// One box for both states, so a press moves nothing — the reason the
+/// grey status line no longer comes and goes above it either: the glyph
+/// is the same 14 square turning or still, and the words sit in a one-line
+/// slot as wide as the LONGER of the two labels — the one not shown is laid
+/// out under it, clipped, invisible.
+fn refresh_control(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_refresh: Option<BalanceToggle>,
+) -> gpui::AnyElement {
+    let glyph: gpui::AnyElement = if model.refreshing {
+        let frames = icons.turning(Icon::RefreshCw, theme.fg_subtle, 14, REFRESH_FRAMES);
+        div()
+            .size(px(14.))
+            .flex_none()
+            .with_animation(
+                "balance-refresh-turn",
+                gpui::Animation::new(REFRESH_REVOLUTION).repeat(),
+                move |glyph, delta| {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        clippy::cast_precision_loss,
+                        reason = "delta is in [0, 1] and the count is 36"
+                    )]
+                    let at = ((delta * frames.len() as f32) as usize).min(frames.len() - 1);
+                    glyph.child(
+                        img(ImageSource::Render(std::sync::Arc::clone(&frames[at]))).size_full(),
+                    )
+                },
+            )
+            .into_any_element()
+    } else {
+        icon_img(icons, Icon::RefreshCw, false, theme.fg_subtle, 14.).into_any_element()
+    };
+
+    let line = theme::text_row_sub() * LINE_BODY;
+    let shown = refresh_words(model);
+    let other = if model.refreshing {
+        model.updated.clone()
+    } else {
+        Some(model.updating.clone())
+    };
+    let mut words = div()
+        .flex()
+        .flex_col()
+        .h(line)
+        .line_height(line)
+        .overflow_hidden();
+    if let Some(shown) = shown {
+        words = words.child(shown);
+    }
+    if let Some(other) = other {
+        words = words.child(div().text_color(gpui::transparent_black()).child(other));
+    }
+
+    let control = div()
+        .id("balance-refresh")
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .py(px(4.))
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_subtle)
+        .child(glyph)
+        .child(words);
+    match on_refresh.filter(|_| !model.refreshing) {
+        Some(on_refresh) => control
+            .cursor_pointer()
+            .hover(|el| el.text_color(theme.fg_muted))
+            .on_click(on_refresh)
+            .into_any_element(),
+        None => control.into_any_element(),
+    }
 }
 
 /// Desktop action pill (D1: icon + label inline). Caller chains `.on_click`.

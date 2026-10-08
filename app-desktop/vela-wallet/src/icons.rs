@@ -333,9 +333,14 @@ fn hex_of(color: Hsla) -> (String, u32) {
     (format!("#{r:02x}{g:02x}{b:02x}"), (r << 16) | (g << 8) | b)
 }
 
+/// One glyph's frames through a revolution — [`IconCache::turning`].
+pub type Turns = Arc<[Arc<RenderImage>]>;
+
 #[derive(Default)]
 pub struct IconCache {
     map: HashMap<(Icon, bool, u32, u32), Arc<RenderImage>>,
+    /// [`IconCache::turning`]'s frames, per (icon, color, size, count).
+    turns: HashMap<(Icon, u32, u32, u32), Turns>,
 }
 
 impl IconCache {
@@ -359,17 +364,51 @@ impl IconCache {
         self.map.insert(key, Arc::clone(&image));
         image
     }
+
+    /// The same glyph turned through one revolution, `frames` evenly spaced
+    /// steps clockwise from upright — what a turning glyph draws, one frame
+    /// per moment (issue 462's ↻). Rasterized once per (icon, color, size,
+    /// count): an `img` cannot be rotated at this gpui pin, and the glyph,
+    /// not a stand-in arc, is what the person pressed.
+    pub fn turning(&mut self, icon: Icon, color: Hsla, logical_px: u32, frames: u32) -> Turns {
+        let (hex, color_key) = hex_of(color);
+        let size = logical_px * RASTER_SCALE;
+        let key = (icon, color_key, size, frames);
+        if let Some(turns) = self.turns.get(&key) {
+            return Arc::clone(turns);
+        }
+        let svg = svg_document(icon, false, &hex);
+        let turns: Turns = (0..frames.max(1))
+            .map(|frame| {
+                #[allow(
+                    clippy::cast_precision_loss,
+                    reason = "a frame index and count, far inside f32's exact range"
+                )]
+                let degrees = 360. * frame as f32 / frames.max(1) as f32;
+                rasterize_turned(&svg, size, degrees).unwrap_or_else(empty_render_image)
+            })
+            .collect();
+        self.turns.insert(key, Arc::clone(&turns));
+        turns
+    }
 }
 
 pub(crate) fn rasterize(svg: &str, size: u32) -> Option<Arc<RenderImage>> {
+    rasterize_turned(svg, size, 0.)
+}
+
+/// [`rasterize`], turned `degrees` clockwise about the square's centre.
+fn rasterize_turned(svg: &str, size: u32, degrees: f32) -> Option<Arc<RenderImage>> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_str(svg, &options).ok()?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)?;
     let view = tree.size();
+    let centre = size as f32 / 2.;
     let transform = resvg::tiny_skia::Transform::from_scale(
         size as f32 / view.width(),
         size as f32 / view.height(),
-    );
+    )
+    .post_rotate_at(degrees, centre, centre);
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     render_image_from_pixmap(&pixmap)
 }
@@ -397,5 +436,42 @@ mod tests {
         assert!(alpha(12, 17) > 128, "the dot");
         assert!(alpha(12, 15) < 64, "a gap between them");
         assert_eq!(alpha(3, 3), 0, "and nothing else");
+    }
+
+    /// Issue 462's turning ↻: one revolution in even steps, the first
+    /// upright — the very glyph the control shows at rest, so the turn
+    /// starts where the press found it — and every step a turn of the one
+    /// before, not a blank and not the same picture again. (The ↻ is its
+    /// own half-turn — two arrows — so step 18 looks like step 0 again.)
+    #[test]
+    fn the_turning_glyph_starts_upright_and_turns() {
+        let mut cache = IconCache::default();
+        let color = gpui::hsla(0., 0., 0.4, 1.);
+        let frames = cache.turning(Icon::RefreshCw, color, 14, 36);
+        assert_eq!(frames.len(), 36);
+        let upright = cache.image(Icon::RefreshCw, false, color, 14);
+        let bytes = |image: &RenderImage| image.as_bytes(0).map(<[u8]>::to_vec);
+        assert_eq!(bytes(&frames[0]), bytes(&upright));
+        assert_ne!(
+            bytes(&frames[9]),
+            bytes(&upright),
+            "a quarter turn is turned"
+        );
+        assert!(
+            frames
+                .iter()
+                .zip(frames.iter().cycle().skip(1))
+                .all(|(this, next)| bytes(this) != bytes(next)),
+            "every step moves"
+        );
+        let inked = |image: &RenderImage| {
+            image
+                .as_bytes(0)
+                .is_some_and(|data| data.chunks_exact(4).any(|px| px[3] > 128))
+        };
+        assert!(frames.iter().all(|frame| inked(frame)), "no blank step");
+        // Cached: the same frames, not a second rasterization.
+        let again = cache.turning(Icon::RefreshCw, color, 14, 36);
+        assert!(Arc::ptr_eq(&frames, &again));
     }
 }

@@ -222,6 +222,10 @@ pub fn close_held(cx: &mut gpui::App) {
 /// The words a held close shows: 提交至网络… — what the window is waiting on.
 const CLOSE_HELD_WORDS: &str = "send.txSubmitting";
 
+/// How often the hero redraws while it is on screen, so "Updated <ago>"
+/// ages (issue 462): at least every 30 s, as every shell does.
+const HERO_CLOCK: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The column a held close brings forward.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HeldColumn {
@@ -723,6 +727,12 @@ pub struct WalletPage {
     /// Spec 092: the list of networks the wallet cannot reach, which the
     /// hero's status line opens while any is.
     unreachable_open: bool,
+    /// Issue 462: the hero's refresh control turns at least until this —
+    /// the press plus `REFRESH_MIN_SPIN` — however fast the core answers.
+    refresh_hold: Option<std::time::Instant>,
+    /// Issue 462: redraws the hero every `HERO_CLOCK` while it is on screen,
+    /// so "Updated now" becomes "Updated 1m" without anything else moving.
+    hero_clock: Option<gpui::Task<()>>,
     contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
@@ -1399,6 +1409,8 @@ impl WalletPage {
             contacts_query: String::new(),
             balance_detail_open: false,
             unreachable_open: false,
+            refresh_hold: None,
+            hero_clock: None,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
             send_background: Vec::new(),
@@ -3651,6 +3663,7 @@ impl WalletPage {
         let balance = self.balance_model(cx);
         let activity = self.activity_models(cx);
         let assets = self.asset_models(cx);
+        self.keep_hero_clock(cx);
 
         let pills = div()
             .flex()
@@ -3873,12 +3886,11 @@ impl WalletPage {
                         // Issue #443: read everything again, now — the balances
                         // and the incoming scan, as coming back to the window
                         // does. There was no way to ask; the next look was up to
-                        // ten minutes away.
+                        // ten minutes away. Issue 462: as the person's own read.
                         self.identity.is_some().then(|| {
-                            Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                crate::executor::balance_dashboard::refresh(cx);
-                                crate::executor::activity_feed::focus_tick(cx);
-                            })
+                            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.refresh_by_hand(cx);
+                            }))
                                 as crate::wallet::components::BalanceToggle
                         }),
                     ))
@@ -4678,7 +4690,81 @@ impl WalletPage {
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
+        // Issue 462: the core's "a read they asked for is out", held for at
+        // least the press's minimum turn.
+        model.refreshing = wallet_live::refresh_turning(
+            view.refreshing,
+            self.refresh_hold,
+            std::time::Instant::now(),
+        );
         model
+    }
+
+    /// The hero's ↻ pressed (issues #443, 462): the balances as the
+    /// person's own read (`pull: true` — the core holds `refreshing` until
+    /// this round ends) and the incoming scan, exactly what the phone's
+    /// pull-to-refresh sends. The control turns for at least
+    /// `REFRESH_MIN_SPIN`, so a round answered in a blink still shows the
+    /// press took; while it turns it takes no press.
+    fn refresh_by_hand(&mut self, cx: &mut Context<Self>) {
+        if self.identity.is_none() {
+            return;
+        }
+        let refreshing = resident::resident::<BalanceDashboard>(cx)
+            .read(cx)
+            .view()
+            .refreshing;
+        let now = std::time::Instant::now();
+        if wallet_live::refresh_turning(refreshing, self.refresh_hold, now) {
+            return;
+        }
+        let until = now + wallet_live::REFRESH_MIN_SPIN;
+        self.refresh_hold = Some(until);
+        crate::executor::balance_dashboard::pull(cx);
+        crate::executor::activity_feed::focus_tick(cx);
+        // The hold ends on a frame of its own: a round that settled inside
+        // it drew nothing after, and the glyph would turn on until the next
+        // unrelated redraw.
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(wallet_live::REFRESH_MIN_SPIN)
+                .await;
+            page.update(cx, |this, cx| {
+                if this.refresh_hold == Some(until) {
+                    this.refresh_hold = None;
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Issue 462: "Updated <ago>" ages while the hero is on screen. Nothing
+    /// else PROMISES a redraw on a clock — the balance poll is ten minutes,
+    /// and whatever else happens to redraw the page is not a contract — so
+    /// "Updated now" could read "now" until something unrelated moved.
+    /// One timer for the page's life, redrawing only while the Wallet
+    /// section is up with a session behind it; the core's short form moves
+    /// at 45 s and then by the minute, so every `HERO_CLOCK` is enough.
+    fn keep_hero_clock(&mut self, cx: &mut Context<Self>) {
+        if self.hero_clock.is_some() || self.identity.is_none() {
+            return;
+        }
+        self.hero_clock = Some(cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(HERO_CLOCK).await;
+                let alive = page.update(cx, |this, cx| {
+                    if this.section == Section::Wallet && this.identity.is_some() {
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        }));
     }
 
     /// The group rail: the person's own groups, or the mocks'.

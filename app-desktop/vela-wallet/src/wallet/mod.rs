@@ -43,6 +43,12 @@ pub struct WalletStrings {
     pub balance_stale: SharedString,
     /// Issue #443: "Updated {{ago}}" beside the hero's refresh control.
     pub last_updated: SharedString,
+    /// Issue 462: "Updating…" — the same control while a read the person
+    /// asked for is out.
+    pub updating: SharedString,
+    /// The core's short minutes, `{{n}}m` — the `<ago>` the gallery's
+    /// refresh control is drawn with.
+    pub minutes_short: String,
     /// Nothing could be read and nothing is known (spec 038): the network
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
@@ -175,6 +181,8 @@ impl WalletStrings {
             live_indicator: s("home.liveIndicator"),
             balance_stale: s("home.balanceStale"),
             last_updated: s("home.lastUpdated"),
+            updating: s("home.updating"),
+            minutes_short: raw("time.minutesShort"),
             balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
             unreachable_one: raw("assets.unreachableOne"),
