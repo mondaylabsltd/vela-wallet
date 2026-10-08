@@ -101,6 +101,7 @@ const EMPTY_SEND: SendView = {
 	fee_busy: false,
 	fee: null,
 	gas_fee_token: null,
+	fee_coin: null,
 	amount_warning: null,
 	same_asset_fee_issue: null,
 	can_continue: false,

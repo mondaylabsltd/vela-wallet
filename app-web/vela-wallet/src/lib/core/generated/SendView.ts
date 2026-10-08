@@ -3,6 +3,7 @@ import type { FeeEstimateView } from "./FeeEstimateView";
 import type { SendAddNetworkMsg } from "./SendAddNetworkMsg";
 import type { SendAmountWarning } from "./SendAmountWarning";
 import type { SendDuplicateRowView } from "./SendDuplicateRowView";
+import type { SendFeeCoin } from "./SendFeeCoin";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
@@ -176,7 +177,29 @@ multi_specs: Array<SendMultiSpecView>, show_scanner: boolean, show_contact_picke
 /**
  * Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
  */
-fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, 
+fee: FeeEstimateView | null, gas_fee_token: string | null, 
+/**
+ * The coin the form's fee row wears, whether or not a figure is beside
+ * it. The four shells each had their own answer for the frames with no
+ * estimate — a quote out, a quote that failed, a speed being measured —
+ * and drew one state three ways (an empty disc, the chain's coin, the
+ * chosen coin). In order:
+ *
+ * 1. the estimate in hand — this speed's own when it has one, otherwise
+ *    the speed just left's, which this machine keeps across a speed
+ *    change and which names the coin that will pay (the coin does not
+ *    change with the speed; the fee machine's `keep_quote_coin` keeps a
+ *    quote on screen in the coin in force);
+ * 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
+ *    [`Event::FeeTokenChanged`]), else the person's pick on this form;
+ *    named by the form's holdings;
+ * 3. the chain's own coin;
+ *
+ * on the selected token's chain, else the sweep's, else the estimate's.
+ * `None` only while no chain is known. The figure is not here: the row
+ * still shows only this speed's own (issue 681).
+ */
+fee_coin: SendFeeCoin | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, 
 /**
  * The form's button gate — the whole of it. While a relay stop is up the
  * button is that stop's retry, and pressing it sends [`Event::Continue`]

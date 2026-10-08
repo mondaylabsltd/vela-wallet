@@ -2308,6 +2308,189 @@ fn max_after_a_fee_coin_switch_does_not_reserve_the_old_coins_fee() {
 }
 
 // ===========================================================================
+// The fee row's coin: one answer for the frames with no estimate
+// ===========================================================================
+
+const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
+/// The same contract as a picker hands it on: checksummed.
+const BSC_USDT_CHECKSUMMED: &str = "0x55d398326F99059fF775485246999027B3197955";
+
+fn bnb(balance: &str) -> SendToken {
+    SendToken {
+        network: "bsc".to_owned(),
+        chain_id: 56,
+        symbol: "BNB".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(600.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+fn bsc_usdt(balance: &str) -> SendToken {
+    SendToken {
+        network: "bsc".to_owned(),
+        chain_id: 56,
+        symbol: "USDT".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: Some(BSC_USDT.to_owned()),
+        price_usd: Some(1.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// Pick `token` and settle what the pick starts — the credential, and a warm
+/// quote that FAILS: the form is left with no estimate in hand.
+fn select_with_a_failed_quote(sut: &mut Sut, token: &SendToken) {
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: token.id(),
+    });
+    assert_eq!(
+        ops,
+        vec![Op::LoadAccountCredential {
+            account_id: "cred-1".to_owned()
+        }]
+    );
+    settle_warm_quote(sut);
+}
+
+#[track_caller]
+fn assert_fee_coin(
+    view: &SendView,
+    symbol: &str,
+    contract: Option<&str>,
+    chain_id: u32,
+    why: &str,
+) {
+    let coin = view
+        .fee_coin
+        .as_ref()
+        .unwrap_or_else(|| panic!("{why}: no fee coin"));
+    assert_eq!(coin.symbol, symbol, "{why}");
+    assert_eq!(coin.contract.as_deref(), contract, "{why}");
+    assert_eq!(coin.chain_id, chain_id, "{why}");
+}
+
+#[test]
+fn with_no_chain_known_the_fee_row_names_no_coin() {
+    let sut = boot(vec![eth("2"), bnb("1")]);
+    assert_eq!(
+        sut.view().fee_coin,
+        None,
+        "nothing picked: no chain to name a coin on"
+    );
+}
+
+#[test]
+fn a_failed_quote_names_the_chains_own_coin_never_an_empty_disc() {
+    // Chain 56 is not in the shell's network list here: the registry names it.
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bnb("1"));
+    let view = sut.view();
+    assert!(view.fee.is_none(), "the quote failed");
+    assert_fee_coin(&view, "BNB", None, 56, "failed quote, nobody chose");
+
+    // Sending the USDT, the fee is still the chain's coin until someone says
+    // otherwise — never the coin being sent.
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bsc_usdt("50"));
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "sending USDT, nobody chose");
+}
+
+#[test]
+fn a_chosen_coin_names_the_row_before_any_estimate_of_it() {
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bnb("1"));
+    sut.dispatch(Event::ChooseFeeToken {
+        token: Some(BSC_USDT_CHECKSUMMED.to_owned()),
+    });
+    let view = sut.view();
+    assert!(view.fee.is_none(), "no estimate of the chosen coin yet");
+    assert_fee_coin(
+        &view,
+        "USDT",
+        Some(BSC_USDT_CHECKSUMMED),
+        56,
+        "the pick, named by the holdings (contracts compared case aside)",
+    );
+
+    // Back to the chain's coin, chosen on purpose.
+    sut.dispatch(Event::ChooseFeeToken { token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "BNB chosen");
+}
+
+#[test]
+fn the_fee_cards_coin_in_force_names_the_row_when_its_quote_failed() {
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("0.0000001")]);
+    select_with_a_failed_quote(&mut sut, &bnb("0.0000001"));
+    // Nobody chose: the card picked the coin that can pay, and its quote then
+    // failed. The sheet shows USDT selected; the row must not say BNB.
+    sut.dispatch(Event::FeeTokenChanged {
+        fee_token: Some(BSC_USDT.to_owned()),
+    });
+    assert_fee_coin(&sut.view(), "USDT", Some(BSC_USDT), 56, "the card's pick");
+
+    // The person's pick is newer than the card's word until the card speaks.
+    sut.dispatch(Event::ChooseFeeToken { token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "the person's pick");
+    sut.dispatch(Event::FeeTokenChanged { fee_token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "the card took it up");
+
+    // A word about the chain the form left never names this chain's coin.
+    let mut sut = boot(vec![bsc_usdt("50"), eth("2")]);
+    select_with_a_failed_quote(&mut sut, &bsc_usdt("50"));
+    sut.dispatch(Event::FeeTokenChanged {
+        fee_token: Some(BSC_USDT.to_owned()),
+    });
+    select_with_a_failed_quote(&mut sut, &eth("2"));
+    assert_fee_coin(
+        &sut.view(),
+        "ETH",
+        None,
+        1,
+        "a BSC contract is not Ethereum's coin",
+    );
+}
+
+#[test]
+fn a_speed_being_measured_keeps_the_coin_that_will_pay() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    // The estimate in hand is in USDC — the coin that pays.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    assert_fee_coin(&sut.view(), "USDC", Some(USDC), 1, "the estimate's coin");
+
+    // Another speed is picked and measured: the card is busy, and asking
+    // afresh it says nothing was chosen. The estimate in hand is the speed
+    // just left's, and its coin is still the one that will pay — not ETH.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeTokenChanged { fee_token: None });
+    let view = sut.view();
+    assert!(view.fee_busy);
+    assert_fee_coin(&view, "USDC", Some(USDC), 1, "measuring a new speed");
+
+    // An estimate that does not spell its coin is named by the holdings.
+    let mut unnamed = usdc_fee(1, 1_000_000);
+    if let FeeAssetView::Erc20 { symbol, .. } = &mut unnamed.fee_asset {
+        *symbol = None;
+    }
+    sut.dispatch(Event::FeeUpdated { estimate: unnamed });
+    assert_fee_coin(&sut.view(), "USDC", Some(USDC), 1, "named by the holdings");
+
+    // A native estimate names the chain's coin in the network list's words.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_000),
+    });
+    assert_fee_coin(&sut.view(), "ETH", None, 1, "the chain's own coin pays");
+}
+
+// ===========================================================================
 // Fiat input toggle (ported display math)
 // ===========================================================================
 
