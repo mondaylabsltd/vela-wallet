@@ -86,6 +86,12 @@ how a user recognises an account at a glance. Two files back it: `identicon.json
 `identicon-bulk.json` (20,000 hashes). A further 200,000-seed differential run
 lives in `npm run verify:identicon`, which regenerates rather than commits.
 
+`marks.json` is the one hand-written suite: which logo a token or a network
+wears (`app/remote_mark.rs`), pinned from the rule the four shells each used to
+copy (2026-10-08). There is no oracle to dump it from; edit it by hand, and its
+URLs are spelled out in full so a case never asks the code under test what the
+answer is.
+
 Regenerate the corpus only by re-running the dump against the TypeScript oracle,
 and review the resulting diff like code. A changed expectation means either a
 TypeScript bug was fixed (document it) or the oracle drifted (investigate).

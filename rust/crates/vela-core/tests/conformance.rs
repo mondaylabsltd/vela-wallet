@@ -43,7 +43,7 @@ struct Case {
 /// or a partial checkout would make all four surfaces report "green" over a corpus
 /// that had silently shrunk — the precise false confidence this feature exists to
 /// prevent.
-const REQUIRED_SUITES: [&str; 12] = [
+const REQUIRED_SUITES: [&str; 13] = [
     "abi",
     "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
@@ -53,6 +53,9 @@ const REQUIRED_SUITES: [&str; 12] = [
     "i18n-plural-legacy",
     "identicon",
     "identicon-bulk",
+    // Which logo a token or a network wears (`app::remote_mark`), hand-written
+    // from the four shells' rule rather than dumped from a TypeScript oracle.
+    "marks",
     "primitives",
     "safe",
     // `safe` before `safe-multi`: a prefix sorts before its extension.
@@ -573,10 +576,61 @@ fn run_case(case: &Case) -> Result<(), String> {
                 })),
             )
         }
+        // --- marks (app::remote_mark; the module needs the `crux` feature) ---
+        #[cfg(feature = "crux")]
+        "token_mark" => {
+            let address = in_opt_str(input, "token_address")?;
+            let mark = vela_core::app::remote_mark::token_mark(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+                &in_str(input, "symbol")?,
+                address.as_deref(),
+                &in_str_list(input, "named")?,
+            );
+            check_object(expect, Ok(serde_json::to_value(mark).unwrap_or_default()))
+        }
+        #[cfg(feature = "crux")]
+        "chain_mark" => {
+            let mark = vela_core::app::remote_mark::chain_mark(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+                &in_str(input, "native_symbol")?,
+            );
+            check_object(expect, Ok(serde_json::to_value(mark).unwrap_or_default()))
+        }
+        #[cfg(feature = "crux")]
+        "chain_logo_url" => check_with(
+            expect,
+            Ok(vela_core::app::remote_mark::chain_logo_url(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+            )
+            .map_or(Value::Null, Value::String)),
+        ),
         other => Err(format!(
             "no dispatch arm for fn `{other}` — add it to conformance.rs"
         )),
     }
+}
+
+/// A string input that may be JSON `null` (an absent value the function
+/// takes as `None`). Missing altogether is a malformed vector, not `None`.
+#[cfg(feature = "crux")]
+fn in_opt_str(input: &Value, key: &str) -> Result<Option<String>, String> {
+    match input.get(key) {
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(Value::Null) => Ok(None),
+        _ => Err(format!("missing string-or-null input `{key}`")),
+    }
+}
+
+#[cfg(feature = "crux")]
+fn in_u32(input: &Value, key: &str) -> Result<u32, String> {
+    input
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| format!("missing u32 input `{key}`"))
 }
 
 // ---------------------------------------------------------------------------
@@ -934,6 +988,17 @@ fn conformance_corpus() {
             }
         };
         seen_suites.push(suite.suite.clone());
+        // The marks rule lives in `app::remote_mark`, which only exists with
+        // the `crux` feature. Every CI run has it (the workspace build turns it
+        // on through vela-core-uniffi and vela-core-wasm); a crate-only run
+        // without it says so instead of counting cases it could not check.
+        if suite.suite == "marks" && !cfg!(feature = "crux") {
+            println!(
+                "conformance: the marks suite ({} cases) needs the `crux` feature — skipped",
+                suite.cases.len()
+            );
+            continue;
+        }
         for case in &suite.cases {
             total += 1;
             if let Err(e) = run_case(case) {

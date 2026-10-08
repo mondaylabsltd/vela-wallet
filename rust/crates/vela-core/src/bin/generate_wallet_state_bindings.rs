@@ -63,6 +63,7 @@ use vela_core::app::payment_request::{
 use vela_core::app::receive_watch::{
     Event as ReceiveWatchEvent, ReceiveWatchOperation, ReceiveWatchShellResult, ReceiveWatchView,
 };
+use vela_core::app::remote_mark::MarkView;
 use vela_core::app::rpc_pool::{Event as RpcEvent, RpcOperation, RpcPoolView, RpcShellResult};
 use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, SendView};
 use vela_core::app::session::{
@@ -215,6 +216,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ReadSlot::export_all(&config)?; // balanceReadPlan
     ConfirmState::export_all(&config)?; // signConfirmState (spec 099 R7)
     LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
+    MarkView::export_all(&config)?; // tokenMark, chainMark (DESIGN L, 2026-10-08)
 
     println!("wallet-state bindings written to {}", out_dir.display());
     Ok(())
