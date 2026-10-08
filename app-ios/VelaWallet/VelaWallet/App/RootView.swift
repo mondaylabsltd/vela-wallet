@@ -4132,8 +4132,6 @@ enum ThemeOverride {
     }()
 }
 
-/// The two facts the speed core hears from outside the send flow (spec 069):
-/// whether the send is still on its form, and the stored default speed.
 /// The fee card's coin into the send machine (`fee_token_changed`). Watches
 /// the coin, the chain the fee session prices, the form's chain and the
 /// journey; `SendStore.feeTokenChanged` decides whether there is anything new
@@ -4155,6 +4153,8 @@ private struct FeeTokenBridge: ViewModifier {
     }
 }
 
+/// The two facts the speed core hears from outside the send flow (spec 069):
+/// whether the send is still on its form, and the stored default speed.
 private struct SpeedBridge: ViewModifier {
     let onForm: Bool?
     let preferred: String?
