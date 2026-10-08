@@ -4042,6 +4042,20 @@ public protocol I18nProtocol: AnyObject, Sendable {
      */
     func exists(key: String, opts: TOptions) throws  -> Bool
     
+    /**
+     * The core's compact relative time in the active language — `"now"`,
+     * `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+     * home's "Updated <ago>" and anything else that says how long ago.
+     *
+     * `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+     * handing it milliseconds reads as the future, which is "now");
+     * `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+     * to UTC for local time at that moment; `date_format` the person's date
+     * preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+     * `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+     */
+    func formatRelativeTime(tsSeconds: Int64, nowMs: Int64, utcOffsetMinutes: Int32, dateFormat: String) throws  -> String
+    
     func language() throws  -> String
     
     /**
@@ -4198,6 +4212,31 @@ open func exists(key: String, opts: TOptions)throws  -> Bool  {
             self.uniffiCloneHandle(),
         FfiConverterString.lower(key),
         FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The core's compact relative time in the active language — `"now"`,
+     * `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+     * home's "Updated <ago>" and anything else that says how long ago.
+     *
+     * `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+     * handing it milliseconds reads as the future, which is "now");
+     * `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+     * to UTC for local time at that moment; `date_format` the person's date
+     * preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+     * `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+     */
+open func formatRelativeTime(tsSeconds: Int64, nowMs: Int64, utcOffsetMinutes: Int32, dateFormat: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_format_relative_time(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(tsSeconds),
+        FfiConverterInt64.lower(nowMs),
+        FfiConverterInt32.lower(utcOffsetMinutes),
+        FfiConverterString.lower(dateFormat),uniffiCallStatus
     )
 })
 }
@@ -16397,6 +16436,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_exists() != 43125) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_format_relative_time() != 35001) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_language() != 981) {
