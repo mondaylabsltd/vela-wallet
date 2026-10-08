@@ -20,6 +20,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.testTag
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -227,7 +229,18 @@ fun SigningSheetContent(
         if (!model.tech.isEmpty) {
             TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
         }
-        model.fee?.let { fee ->
+        // Nothing moves while the fee is measured again (device-found: the
+        // form jumped on every 30 s re-quote, speed pick and refresh). The
+        // line under the fee keeps its last words' height — unsaid — until a
+        // fee lands; the web's rule.
+        val feeLine = remember(model.requestKey) { HeldLine() }
+        model.fee?.let { drawn ->
+            val fee = if (drawn is FeeModel.OnChain) {
+                val line = feeLine.next(drawn.warning, drawn.measuring)
+                drawn.copy(heldWarning = line.takeIf { drawn.warning == null })
+            } else {
+                drawn
+            }
             SigningFee(
                 fee,
                 onFee = onFee,
@@ -264,18 +277,28 @@ fun SigningSheetContent(
                     .testTag(if (model.confirmAsButton) OPEN_SIGNER_TAG else CONFIRM_TAG),
             )
         }
-        // Spec 099 R7: a shut confirm never sits there without a reason.
-        if (waiting == null && action != null && !model.confirmEnabled) {
-            model.confirmBlockLine?.let { line ->
-                Text(
-                    text = line,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.sm,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        // Spec 099 R7: a shut confirm never sits there without a reason. The
+        // fee measured again shuts the confirm for a moment ("Working out the
+        // network fee…") and opens it again, and a line coming and going under
+        // a bottom-anchored sheet moved the whole form each time. Once a note
+        // has been said its line stays (the web's rule), holding the last
+        // words invisible and silent while the gate is open. A live sheet
+        // opens with one (reading, measuring), so the line is there from the
+        // first frame; a board that never shut gains no blank line.
+        val confirmNote = remember(model.requestKey) { HeldLine() }
+        val note = model.confirmBlockLine?.takeIf { !model.confirmEnabled }
+        val noteRoom = confirmNote.room(note)
+        if (waiting == null && action != null && noteRoom != null) {
+            Text(
+                text = note ?: noteRoom,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (note == null) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
+            )
         }
     }
 }
