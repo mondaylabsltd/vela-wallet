@@ -1032,7 +1032,11 @@ fun RecipientField(
                             if (sent.size > 256) sent.removeFirst()
                             onValueChange(next)
                         },
-                        maxLines = 2,
+                        // Every line the address needs, never a 2-line window that
+                        // scrolls (issue #468): beside two doors at the largest text
+                        // a 42-character address takes three lines, and the cap hid
+                        // the third — the tail a poisoned look-alike forges.
+                        maxLines = Int.MAX_VALUE,
                         textStyle = monoStyle,
                         cursorBrush = SolidColor(colors.accentBase),
                         modifier = Modifier.fillMaxWidth(),

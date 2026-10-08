@@ -660,7 +660,11 @@ object SendLive {
         lines = addressLines(view.recipient),
         identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
-        scanLabel = null,
+        // Issue #468: the QR door beside the person, as on iOS, web and
+        // desktop. It was null only because this row was written the day
+        // before Android had a scanner; its tap was already wired to
+        // `open_scanner` (FlowHost → onScanOpen), with nothing to tap.
+        scanLabel = ctx.strings.t(I18nKeys.Flows.SCAN_ARIA),
         note = recipientNote(view, ctx),
         noteWarning = view.recipient_is_token_contract,
         raw = view.recipient,

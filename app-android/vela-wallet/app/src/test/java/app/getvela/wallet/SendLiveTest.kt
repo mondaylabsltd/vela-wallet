@@ -1229,6 +1229,33 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), live.recipient!!.note)
         assertEquals(recipient, live.recipient!!.raw)
         assertTrue(live.ctaEnabled)
+        // Issue #468: the sweep's one recipient has both doors too.
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), live.recipient!!.scanLabel)
+    }
+
+    /**
+     * Issue #468: the recipient row has the QR door beside the person on all
+     * four shells. Android's was null — written before its scanner existed —
+     * so the one platform with the scanner wired had nothing to tap. The
+     * gallery's single form draws the same two doors as the live one.
+     */
+    @Test
+    fun `the recipient row has the scan door, live and drawn`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), drawn.model.recipient!!.scanLabel)
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA), drawn.model.recipient!!.pickLabel)
+
+        val live = SendLive.form(
+            drawn.model,
+            SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient),
+            FeeView(),
+            ctx(),
+        ).recipient!!
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), live.scanLabel)
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA), live.pickLabel)
+        // An empty field has its doors too: scanning is how it gets filled.
+        val empty = SendLive.form(drawn.model, SendView(stage = SendStage.EnterDetails, selected_token = xdai), FeeView(), ctx()).recipient!!
+        assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), empty.scanLabel)
     }
 
     // -- Spec 045 US3: the batch sheet ---------------------------------------
