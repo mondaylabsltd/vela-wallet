@@ -380,9 +380,13 @@ function balance(
 		status,
 		// Issue 462: the hero's refresh, drawn as live draws it in every state —
 		// two minutes after the last read, at rest (the gallery adds the turning
-		// one beside it).
+		// one beside it). H3 has never been read: the glyph alone, as live
+		// draws it before its first read settles and as the phones draw it.
 		refresh: {
-			updated: fill(m.balance.lastUpdated, { ago: fill(m.balance.ago.minutes, { n: 2 }) }),
+			updated:
+				state === 'loading'
+					? undefined
+					: fill(m.balance.lastUpdated, { ago: fill(m.balance.ago.minutes, { n: 2 }) }),
 			updating: m.balance.updating,
 			a11yIdle: m.balance.refreshBalance,
 			spinning: false
