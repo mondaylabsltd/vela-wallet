@@ -6,6 +6,7 @@ import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.flows.FeeSpeedModel
 import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
+import app.getvela.wallet.feature.flows.FactLead
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.WalletFixtures
 
@@ -25,14 +26,18 @@ object SigningFixtures {
     private const val NETWORK = "Ethereum"
     private const val FEE_VALUE = "~0.0021 ETH ≈ $5.40"
 
-    /** Token marks: brand content, exactly like the wallet's chain colours. */
+    /**
+     * The coins' marks, as the send flow's gallery draws them: the token
+     * mark over Ethereum's colour, lettered from the ticker (a gallery names
+     * no endpoint, so no logo).
+     */
     private object Mark {
-        val usdc = TokenMark("U", Color(0xFF2775CA))
-        val eth = TokenMark("E", Color(0xFF627EEA))
-        val weth = TokenMark("W", Color(0xFF8A92B2))
-        val spweth = TokenMark("S", Color(0xFF4C6FFF))
-        val usdt = TokenMark("T", Color(0xFF26A17B))
-        val contact = TokenMark("A", Color(0xFFE8572A))
+        private fun on(ticker: String) = TokenMarkModel(ticker, WalletFixtures.ChainColors.ethereum)
+        val usdc = on("USDC")
+        val eth = on("ETH")
+        val weth = on("WETH")
+        val spweth = on("spWETH")
+        val usdt = on("USDT")
     }
 
     private object Dapp {
@@ -121,8 +126,8 @@ object SigningFixtures {
             ),
         ),
         identities = listOf(
-            TechIdentity(sg("techIdentityToken"), "USD Coin", Addr.USDC_FULL, Mark.usdc),
-            TechIdentity(sg("techIdentityRecipient"), "Alice Chen", Addr.ALICE_FULL, Mark.contact),
+            TechIdentity(sg("techIdentityToken"), "USD Coin", Addr.USDC_FULL, FactLead.Token(Mark.usdc)),
+            TechIdentity(sg("techIdentityRecipient"), "Alice Chen", Addr.ALICE_FULL, FactLead.Identicon(Addr.ALICE_FULL)),
         ),
         simResult = SigningRow(sg("simResultLabel"), "−1,000 USDC · ${sg("balanceMatchesHero")}"),
         rawLabel = "${sg("techRawData")} · ${sg("byteSize", mapOf("n" to "68"))}",

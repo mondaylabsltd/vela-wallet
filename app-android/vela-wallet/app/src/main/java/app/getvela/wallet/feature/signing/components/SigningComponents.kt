@@ -56,6 +56,8 @@ import app.getvela.wallet.feature.signing.SigningRow
 import app.getvela.wallet.feature.signing.SigningTone
 import app.getvela.wallet.feature.signing.TechModel
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
+import app.getvela.wallet.feature.wallet.components.TokenIcon
+import app.getvela.wallet.feature.flows.FactLead
 
 /**
  * The signing sheet's small parts (spec 022 §3). They are grouped in one file
@@ -271,9 +273,7 @@ fun SigningAmount(
                     },
                     maxLines = 1,
                 )
-                line.token?.let {
-                    LetterAvatar(it.letter, it.tint, size = ExploreMetrics.tokenMark)
-                }
+                line.token?.let { TokenIcon(mark = it, inline = true) }
                 Text(
                     text = line.symbol,
                     color = if (line.tone == SigningTone.Neutral) colors.fgMuted else ink,
@@ -828,8 +828,10 @@ fun TechDetails(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
                     ) {
-                        identity.mark?.let {
-                            LetterAvatar(it.letter, it.tint, size = VelaSpacing.xl3)
+                        when (val lead = identity.lead) {
+                            is FactLead.Token -> TokenIcon(mark = lead.mark, inline = true)
+                            is FactLead.Identicon -> IdenticonAvatar(seed = lead.seed, size = VelaIconSize.xl, tappable = false)
+                            is FactLead.Dot, null -> Unit
                         }
                         Column(
                             Modifier.weight(1f),

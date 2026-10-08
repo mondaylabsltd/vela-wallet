@@ -33,15 +33,17 @@ enum class SigningScreenState {
 enum class SigningTone { Neutral, Accent, Success, Caution, Danger }
 
 @Immutable
-data class TokenMark(val letter: String, val tint: Color)
-
-@Immutable
 data class AmountLine(
     /** Rendered ahead of the value and coloured with it: "−", "+", or "". */
     val sign: String,
     val value: String,
     val symbol: String,
-    val token: TokenMark? = null,
+    /**
+     * The coin's mark — the send flow's token mark (`WalletLive.mark` on the
+     * request's chain): its logo over its ticker's letters. Never a first
+     * letter on a tinted disc (USDC and USDT were both "U").
+     */
+    val token: app.getvela.wallet.feature.flows.TokenMarkModel? = null,
     val fiat: String? = null,
     /** "支付" / "最少收到" / "存入资产" — the line's own small label. */
     val caption: String? = null,
@@ -141,7 +143,12 @@ data class TechIdentity(
     val role: String,
     val name: String,
     val address: String,
-    val mark: TokenMark? = null,
+    /**
+     * What stands beside it: a token's mark (`FactLead.Token`, the send
+     * flow's) or a person's identicon (`FactLead.Identicon`, from the
+     * address) — the leads a fact row draws, never a letter avatar.
+     */
+    val lead: app.getvela.wallet.feature.flows.FactLead? = null,
 )
 
 @Immutable

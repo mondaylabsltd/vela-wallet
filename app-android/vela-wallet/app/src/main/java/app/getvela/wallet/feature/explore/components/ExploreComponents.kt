@@ -66,8 +66,7 @@ internal object ExploreMetrics {
     /** dApp avatar in the signing header, and the chip beside it (mock CS1).  */
     val signingAvatar: Dp = VelaSizing.controlSm
     val networkChip: Dp = VelaSpacing.xl3 + VelaSpacing.xs
-    /** The token mark beside a hero amount, and the identicon in a chip. */
-    val tokenMark: Dp = VelaSpacing.xl2 + VelaSpacing.xs
+    /** The identicon in a chip. */
     val chipAvatar: Dp = VelaIconSize.base
 }
 
