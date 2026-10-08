@@ -1102,7 +1102,6 @@ pub struct Identity {
 struct SendBindings {
     host: gpui::Entity<SendHost>,
     token_ids: Vec<String>,
-    contact_addresses: Vec<String>,
     fee_contracts: Vec<Option<String>>,
     amount: String,
     recipient: String,
@@ -6221,11 +6220,6 @@ impl WalletPage {
         let host = self.send_host.clone()?;
         let (mut view, fee) = self.send_views(cx)?;
         self.narrow_for_picker(panel, &mut view);
-        let contact_addresses = if panel == FlowPanel::Dsd2e {
-            flows_live::contact_addresses(&resident::resident::<Contacts>(cx).read(cx).view())
-        } else {
-            Vec::new()
-        };
         let batch_rate = self.send_host.as_ref().and_then(|host| {
             host.read(cx)
                 .batch_view
@@ -6256,7 +6250,6 @@ impl WalletPage {
         Some(SendBindings {
             host,
             token_ids: flows_live::send_token_ids(&view),
-            contact_addresses,
             fee_contracts: flows_live::fee_token_contracts(&fee),
             // Shown in the person's decimal mark (078 M-04); edits are read
             // against what was shown and handed on dot-decimal.
@@ -6925,7 +6918,7 @@ impl WalletPage {
             tap_max: None,
             change_token: None,
             toggle_denom: None,
-            pick_contact_rows: Vec::new(),
+            pick_contact: None,
             fee_rows: Vec::new(),
             batch_unit: None,
             batch_paste: None,
@@ -7474,26 +7467,18 @@ impl WalletPage {
                             )
                         })
                         .collect();
-                    actions.pick_contact_rows = send
-                        .contact_addresses
-                        .into_iter()
-                        .map(|address| -> panels::Click {
-                            let host = host.clone();
-                            Box::new(
-                                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch(
-                                            SendEvent::PickedAddress {
-                                                address: address.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        host.dispatch(SendEvent::CloseContactPicker, cx);
-                                    });
-                                },
-                            )
-                        })
-                        .collect();
+                    // Issue 467: the row says WHOM — its own address — and
+                    // the core is told that, never a place in a list.
+                    let picker = host.clone();
+                    actions.pick_contact = Some(std::rc::Rc::new(
+                        move |address: &str, _: &mut Window, cx: &mut gpui::App| {
+                            let address = address.to_owned();
+                            picker.update(cx, |host, cx| {
+                                host.dispatch(SendEvent::PickedAddress { address }, cx);
+                                host.dispatch(SendEvent::CloseContactPicker, cx);
+                            });
+                        },
+                    ));
                 }
                 FlowPanel::Dsd2f => {
                     actions.fee_rows = send

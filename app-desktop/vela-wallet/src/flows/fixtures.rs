@@ -671,8 +671,12 @@ pub struct SendForm {
 pub struct ContactEntry {
     pub name: SharedString,
     pub group: Option<SharedString>,
+    /// The address as the row shows it, shortened.
     pub address: SharedString,
-    pub seed: SharedString,
+    /// The whole address: the avatar's seed, and what a press on this row
+    /// picks (issue 467) — the row names its contact, never its place in a
+    /// list the core re-sorts.
+    pub address_full: SharedString,
 }
 
 #[derive(Clone)]
@@ -1494,19 +1498,19 @@ fn contact_pick(s: &FlowStrings) -> ContactPick {
                 name: "Alice".into(),
                 group: Some("家人".into()),
                 address: ALICE_DISPLAY.into(),
-                seed: ALICE_FULL.into(),
+                address_full: ALICE_FULL.into(),
             },
             ContactEntry {
                 name: "阿豪".into(),
                 group: None,
                 address: "0x77Bd…4F02".into(),
-                seed: A_HAO_FULL.into(),
+                address_full: A_HAO_FULL.into(),
             },
             ContactEntry {
                 name: "hold on".into(),
                 group: None,
                 address: HOLD_ON_DISPLAY.into(),
-                seed: HOLD_ON_FULL.into(),
+                address_full: HOLD_ON_FULL.into(),
             },
         ],
     }

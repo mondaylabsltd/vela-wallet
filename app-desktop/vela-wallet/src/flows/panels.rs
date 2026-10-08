@@ -39,6 +39,11 @@ pub type Click = Box<ClickFn>;
 /// What a `Click` holds.
 pub type ClickFn = dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static;
 
+/// A pick that names its row by ADDRESS (issue 467): the panel hands each
+/// row's own address to it, so the press picks the person drawn under the
+/// pointer, whatever order the list was in when the listeners were made.
+pub type PickAddress = std::rc::Rc<dyn Fn(&str, &mut Window, &mut App) + 'static>;
+
 /// The steps a panel can take, as listeners the page has already bound.
 ///
 /// `None` means the affordance is inert — which is what the gallery wants, and
@@ -130,8 +135,9 @@ pub struct PanelActions {
     pub change_token: Option<Click>,
     /// DSD2L, live: ⇄ — type the amount in money, or back in the token (#197).
     pub toggle_denom: Option<Click>,
-    /// DSD2eL, live: one listener per contact row, in the book's order.
-    pub pick_contact_rows: Vec<Click>,
+    /// DSD2eL, live: a contact row's pick, given the address that row
+    /// draws (issue 467) — not one listener per index into the book.
+    pub pick_contact: Option<PickAddress>,
     /// DSD2fL, live: one listener per fee-coin row, in the relay's order.
     pub fee_rows: Vec<Click>,
     /// DSD2cL, live: the unit toggle's two halves (fiat, token).
@@ -458,7 +464,7 @@ pub fn render(
             window,
             actions.search,
             actions.open_scan,
-            actions.pick_contact_rows,
+            actions.pick_contact,
             actions.pick_group_rows,
         ),
         FlowBody::FeeToken(model) => fee_token(model, theme, icons, actions.fee_rows),
@@ -2622,13 +2628,10 @@ fn contact_pick(
     window: &Window,
     search: Option<AddressField>,
     open_scan: Option<Click>,
-    per_row: Vec<Click>,
+    pick: Option<PickAddress>,
     mut group_rows: Vec<Click>,
 ) -> Div {
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
-    // Indexed, not iterated: a search hides rows, and row N must still pick
-    // contact N.
-    let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
     let mut col = column()
         .child(flow_search(
             theme,
@@ -2741,10 +2744,7 @@ fn contact_pick(
             .child(model.contacts_title.clone()),
     );
 
-    for (i, contact) in model.contacts.iter().enumerate() {
-        if !search_matches(&query, &format!("{} {}", contact.name, contact.address)) {
-            continue;
-        }
+    for (i, contact) in drawn_contacts(model, &query) {
         // The web's `ContactPickRow` (078 F-11): a 30 avatar, the name 15
         // semibold with its group as a raised 10 tag, the address mono 11,
         // a 14 chevron; padded 12 on a button's line.
@@ -2777,7 +2777,7 @@ fn contact_pick(
             .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
             .child(crate::wallet::components::identicon_avatar(
                 identicons,
-                contact.seed.as_ref(),
+                contact.address_full.as_ref(),
                 30.,
             ))
             .child(
@@ -2804,13 +2804,36 @@ fn contact_pick(
                 theme.fg_subtle,
                 14.,
             ));
+        // Issue 467: the press carries the address this row draws. Pairing
+        // row N with listener N from another list is a race with the core,
+        // which re-sorts the book: lose it and the send goes to whoever is
+        // Nth now.
+        let press = pick.clone().map(|pick| -> Click {
+            let address = contact.address_full.to_string();
+            Box::new(move |_, window, cx| pick(&address, window, cx))
+        });
         col = col.child(clickable(
             ElementId::from(("flow-contact", i)),
-            per_row.get_mut(i).and_then(Option::take),
+            press,
             entry,
         ));
     }
     col
+}
+
+/// The book's rows a search leaves, each with its place in the book (the
+/// row's element id) — drawn, and picked, from the same entries.
+fn drawn_contacts<'a>(
+    model: &'a ContactPick,
+    query: &'a str,
+) -> impl Iterator<Item = (usize, &'a crate::flows::fixtures::ContactEntry)> + 'a {
+    model
+        .contacts
+        .iter()
+        .enumerate()
+        .filter(move |(_, contact)| {
+            search_matches(query, &format!("{} {}", contact.name, contact.address))
+        })
 }
 
 fn fee_token(
@@ -3990,6 +4013,36 @@ fn receive_gate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 467: a search hides rows, and each row still left is drawn —
+    /// and picked — from its own entry: the one 阿豪 is under carries 阿豪's
+    /// address, not the first row's.
+    #[test]
+    fn a_searched_contact_row_picks_the_address_it_draws() {
+        use crate::flows::fixtures::{A_HAO_FULL, ALICE_FULL, HOLD_ON_FULL};
+        let s = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let FlowBody::ContactPick(model) =
+            crate::flows::fixtures::body(crate::flows::FlowPanel::Dsd2e, &s)
+        else {
+            unreachable!("DSD2e is the contact picker");
+        };
+        let drawn = |query: &str| -> Vec<(usize, String)> {
+            drawn_contacts(&model, query)
+                .map(|(i, row)| (i, row.address_full.to_string()))
+                .collect()
+        };
+        assert_eq!(
+            drawn(""),
+            vec![
+                (0, ALICE_FULL.to_owned()),
+                (1, A_HAO_FULL.to_owned()),
+                (2, HOLD_ON_FULL.to_owned())
+            ]
+        );
+        assert_eq!(drawn("阿豪"), vec![(1, A_HAO_FULL.to_owned())]);
+        assert_eq!(drawn("hold"), vec![(2, HOLD_ON_FULL.to_owned())]);
+        assert!(drawn("nobody").is_empty());
+    }
 
     /// Issue 460: a failed receipt's disc holds an exclamation — the cross
     /// is the sheet's close, and a red one in the middle read as one too.

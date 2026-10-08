@@ -4350,19 +4350,10 @@ pub fn contact_pick(view: &ContactsView, s: &FlowStrings) -> ContactPick {
                     .into(),
                 group: group_of(&contact.address),
                 address: shorten(&contact.address).into(),
-                seed: contact.address.clone().into(),
+                address_full: contact.address.clone().into(),
             })
             .collect(),
     }
-}
-
-/// The addresses in the order `contact_pick` draws them.
-#[must_use]
-pub fn contact_addresses(view: &ContactsView) -> Vec<String> {
-    view.contacts
-        .iter()
-        .map(|contact| contact.address.clone())
-        .collect()
 }
 
 /// The importer's list as the sheet had it: the rows that parsed and the
@@ -6971,6 +6962,70 @@ mod tests {
             "amounts are the person's to type, ids the core's to give"
         );
         assert_eq!(groups[0][2].address, "0xcc");
+    }
+
+    /// Issue 467: every row of the picker carries the WHOLE address of the
+    /// contact it draws — what its press picks — in the core's order, so
+    /// a re-sort moves the address with its row instead of handing row N's
+    /// press to whoever is Nth now.
+    #[test]
+    fn every_contact_row_carries_its_own_address() {
+        use vela_core::app::contacts::{Contact, ContactKind, ContactSource};
+        let contact = |address: &str, name: Option<&str>| Contact {
+            address: address.to_owned(),
+            name: name.map(str::to_owned),
+            resolved_name: None,
+            resolved_source: None,
+            kind: ContactKind::Eoa,
+            favorite: false,
+            note: None,
+            tx_count: 0,
+            last_used_ms: 0.0,
+            first_seen_ms: 0.0,
+            source: ContactSource::Manual,
+        };
+        let book = |contacts: Vec<Contact>| ContactsView {
+            loaded: true,
+            sections: Vec::new(),
+            contacts,
+            groups: Vec::new(),
+            last_import: None,
+            import_failure: None,
+            import_failure_key: None,
+            export: None,
+            recipient: None,
+        };
+        let ana = "0xaaaa000000000000000000000000000000000001";
+        let bo = "0xbbbb000000000000000000000000000000000002";
+        let s = strings();
+        let rows = |view: &ContactsView| -> Vec<(String, String)> {
+            contact_pick(view, &s)
+                .contacts
+                .iter()
+                .map(|row| (row.name.to_string(), row.address_full.to_string()))
+                .collect()
+        };
+        let before = book(vec![contact(ana, Some("Ana")), contact(bo, Some("Bo"))]);
+        assert_eq!(
+            rows(&before),
+            vec![
+                ("Ana".to_owned(), ana.to_owned()),
+                ("Bo".to_owned(), bo.to_owned())
+            ]
+        );
+        // The core re-sorted (Bo was just paid): each name keeps its address.
+        let after = book(vec![contact(bo, Some("Bo")), contact(ana, Some("Ana"))]);
+        assert_eq!(
+            rows(&after),
+            vec![
+                ("Bo".to_owned(), bo.to_owned()),
+                ("Ana".to_owned(), ana.to_owned())
+            ]
+        );
+        // The row shows the short form; the press has the whole one.
+        let row = &contact_pick(&after, &s).contacts[0];
+        assert_ne!(row.address, row.address_full);
+        assert_eq!(row.address_full.as_ref(), bo);
     }
 
     /// DA1L's three modes, the web's `liveHistory`: skeletons while nothing
