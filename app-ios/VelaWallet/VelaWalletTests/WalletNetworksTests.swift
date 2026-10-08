@@ -12,6 +12,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -205,6 +206,97 @@ struct WalletNetworksTests {
                                                  loc: loc, networks: networks)
         #expect(sheet.unreachable.title == line)
         #expect(sheet.unreachable.rows.first?.name == "Vela Testnet")
+    }
+
+    /// One network, one name, in every place a flow that starts at the hero's
+    /// line reaches: the balance by network (SR3), the RPC fix its SR6 row
+    /// opens (SR2) — its title and its mark's letter — and, in Explore, the
+    /// connection panel's chip and switcher row, the chain-down notice, and a
+    /// sign-in message's chain fact. Each read the catalogue and showed the
+    /// network the person added as a bare chain id.
+    @Test func aNetworkThePersonAddedHasOneNameAcrossTheRescueAndExplore() throws {
+        let name = "Vela Testnet"
+        var view = balance([holding("VTN", chainId: Self.customChainId)])
+        view.unreachableNetworks = [UnreachableNetworkWire(
+            chainId: Self.customChainId, lastKnown: "not_read", lastSeenUsd: nil,
+            lineKey: I18nKeys.SettingsUi.notReadYet
+        )]
+        view.unreachableKey = I18nKeys.SettingsUi.unreachableOne
+        let sr6 = SettingsLive.withUnreachable(view, display: .usd, on: SettingsFixtures.build(.sr3, loc: loc),
+                                               loc: loc, networks: networks)
+        #expect(sr6.unreachable.rows.first?.name == name)
+
+        // SR3: the network's row, still being read.
+        let sr3 = SettingsLive.withBalanceDetail(view, display: .usd, on: SettingsFixtures.build(.sr3, loc: loc),
+                                                 loc: loc, networks: networks)
+        let pending = try #require(sr3.balanceDetail.pending.first { $0.id == String(Self.customChainId) })
+        #expect(pending.name == name)
+        #expect(pending.mark.letter == "V")
+        let catalogue = SettingsLive.withBalanceDetail(view, display: .usd,
+                                                       on: SettingsFixtures.build(.sr3, loc: loc), loc: loc)
+        #expect(catalogue.balanceDetail.pending.first?.name != name, "the catalogue alone could not name it")
+
+        // SR2: the fix the SR6 row opens.
+        let sr2 = SettingsLive.withRpcFix(chainId: Self.customChainId, endpoint: "https://rpc.example/7777",
+                                          on: SettingsFixtures.build(.sr2, loc: loc), loc: loc, networks: networks)
+        #expect(sr2.rpcFix.name == name)
+        #expect(sr2.rpcFix.mark.letter == "V")
+
+        // Explore: the page's network, its switcher row, the chain-down line.
+        let dbr = DbrViewWire(
+            ready: true, consent: nil,
+            tabs: [DbrTabViewWire(tab: "t1", origin: "https://app.example", connectedAddress: golden,
+                                  chainId: Self.customChainId, secure: true, crashed: false)],
+            sites: [], signing: nil, queuedSigning: 0
+        )
+        let panel = ExploreLive.connectionModel(
+            dbr: dbr, tab: dbr.tabs.first, engine: nil, identity: (name: "Me", address: golden),
+            chainIds: [1, Self.customChainId], networks: networks, loc: loc
+        )
+        #expect(panel.network.name == name)
+        #expect(panel.networks.first { $0.id == Self.customChainId }?.name == name)
+        #expect(panel.networks.first { $0.id == 1 }?.name == "Ethereum")
+        let notice = ExploreLive.chainNotice(chainId: Self.customChainId, failed: [Self.customChainId],
+                                             rateLimited: [], loc: loc, networks: networks)
+        #expect(notice == loc.t("explore.chainDown", vars: ["chain": name]))
+        #expect(ExploreLive.chainNotice(chainId: Self.customChainId, failed: [Self.customChainId],
+                                        rateLimited: [], loc: loc)?.contains(name) == false,
+                "the catalogue alone could not name it")
+
+        // A sign-in message for that network: its chain fact.
+        let message = """
+        app.example wants you to sign in with your Ethereum account:
+        \(golden)
+
+        Sign in to continue.
+
+        URI: https://app.example/login
+        Version: 1
+        Chain ID: \(Self.customChainId)
+        Nonce: abc123xyz
+        Issued At: 2026-09-14T12:00:00Z
+        """
+        let core = ClearSigningCore()
+        let answer = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "message_presented", "method": "personal_sign",
+            "params": ["0x" + message.utf8.map { String(format: "%02x", $0) }.joined(), golden],
+            "request_origin": "https://app.example",
+        ]))
+        let clear = try CoreJSON.decode(ClearSigningViewWire.self,
+                                        from: try #require(CoreJSON.object(answer)["view"] as? [String: Any]))
+        #expect(clear.message?.siwe?.chainId == Self.customChainId)
+        let context = SigningLive.Context(
+            loc: loc, chainName: name, chainDot: SettingsLive.chainColor(Self.customChainId),
+            nativeSymbol: "VTN", walletName: "Vela", walletAddress: golden,
+            chainId: Self.customChainId, origin: "https://app.example", networks: networks
+        )
+        let rows = SigningLive.blocks(clear: clear, to: nil, valueHex: nil, dataBytes: 0, context: context)
+            .compactMap { block -> [SigningRow]? in
+                if case .rows(let rows) = block { return rows }
+                return nil
+            }
+            .flatMap { $0 }
+        #expect(rows.first { $0.label == loc.t("componentsUi.signing.labelChain") }?.value == name)
     }
 
     /// A fee in the coin of a network the person added says its unit — on

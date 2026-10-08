@@ -1356,6 +1356,7 @@ struct RootView: View {
                                 wallet.balance, display: WalletLive.Display.from(settings.currency)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
+                            networks: walletNetworks,
                             loc: loc
                         ),
                         loc: loc,
@@ -1388,7 +1389,7 @@ struct RootView: View {
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
-                            rateLimited: pool.rateLimitedChains, loc: loc
+                            rateLimited: pool.rateLimitedChains, loc: loc, networks: walletNetworks
                         ),
                         onChainRetry: { retryPageChain() },
                         chainRetrying: chainRetrying,
@@ -2263,13 +2264,14 @@ struct RootView: View {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
             let display = WalletLive.Display.from(settings.currency)
-            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
+                                                   networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
                                                  networks: walletNetworks)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
-                                            on: model, loc: loc)
+                                            on: model, loc: loc, networks: walletNetworks)
         }
         return model
     }

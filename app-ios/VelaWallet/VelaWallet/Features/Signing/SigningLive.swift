@@ -864,7 +864,9 @@ enum SigningLive {
                 resultBlocks($0, native: clear.nativeValue, context: context)
             } ?? []
         case .ethSign, .messageSign:
-            return clear.message.map { messageBlocks($0, loc: loc, origin: context.origin) } ?? []
+            return clear.message.map {
+                messageBlocks($0, loc: loc, origin: context.origin, networks: context.networks)
+            } ?? []
         case .blindTypedData:
             guard let typed = clear.blindTyped else { return [] }
             var blocks: [SigningBlock] = [
@@ -1081,7 +1083,7 @@ enum SigningLive {
     }
 
     private static func messageBlocks(
-        _ message: ClearMessageViewWire, loc: Loc, origin: String?
+        _ message: ClearMessageViewWire, loc: Loc, origin: String?, networks: WalletNetworks
     ) -> [SigningBlock] {
         let signingIn = message.siwe != nil
         let danger = message.dangerClass == .ethSign || message.dangerClass == .siwePhish
@@ -1120,7 +1122,8 @@ enum SigningLive {
             if let chainId = siwe.chainId {
                 rows.append(SigningRow(
                     label: s(loc, "labelChain"),
-                    value: ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+                    // From the wallet's list, the person's own included.
+                    value: networks.meta(chainId)?.displayName ?? String(chainId)
                 ))
             }
             if let nonce = siwe.nonce, !nonce.isEmpty {

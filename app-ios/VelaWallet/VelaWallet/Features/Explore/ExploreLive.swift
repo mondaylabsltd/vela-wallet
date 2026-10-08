@@ -41,6 +41,9 @@ enum ExploreLive {
         holdings: [Int: String] = [:],
         /// Spec 079: each tab's last snapshot, by tab id.
         snapshot: (String) -> UIImage? = { _ in nil },
+        /// The wallet's networks, the person's own included — what names the
+        /// page's network in the panel, its chip and its switcher.
+        networks: WalletNetworks = .builtin,
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -55,7 +58,7 @@ enum ExploreLive {
 
         let connection = connectionModel(
             dbr: dbr, tab: tab, engine: engine, identity: identity,
-            chainIds: chainIds, holdings: holdings, loc: loc
+            chainIds: chainIds, holdings: holdings, networks: networks, loc: loc
         )
         let bookmarked = engine.map { current in
             explore.favorites.contains { $0.origin == current.origin }
@@ -277,6 +280,7 @@ enum ExploreLive {
         identity: (name: String, address: String),
         chainIds: [Int] = [],
         holdings: [Int: String] = [:],
+        networks: WalletNetworks = .builtin,
         loc: Loc
     ) -> ConnectionModel {
         // The origin that is ASKING outranks the one in front. They are
@@ -338,7 +342,7 @@ enum ExploreLive {
             switchLabel: loc.t("explore.switchAccount"),
             networkLabel: loc.t("explore.network"),
             network: (
-                name: chainName(chainId),
+                name: chainName(chainId, networks: networks),
                 dot: SettingsLive.chainColor(chainId)
             ),
             // When a site is ASKING, the one sentence is the one written for
@@ -366,7 +370,7 @@ enum ExploreLive {
             // its logo and what the account holds there (spec 079).
             networks: origin.isEmpty ? [] : chainIds.map { id in
                 NetworkChoiceModel(
-                    id: id, name: chainName(id), dot: SettingsLive.chainColor(id),
+                    id: id, name: chainName(id, networks: networks), dot: SettingsLive.chainColor(id),
                     logoUrl: Marks.chainLogoURL(id), amount: holdings[id]
                 )
             },
@@ -384,16 +388,19 @@ enum ExploreLive {
     /// first pass could not reach at all is named while the dApp still waits,
     /// not after three passes (G33). The home banner keeps `failed` alone.
     static func chainNotice(
-        chainId: Int?, failed: [Int], unreached: [Int] = [], rateLimited: [Int], loc: Loc
+        chainId: Int?, failed: [Int], unreached: [Int] = [], rateLimited: [Int], loc: Loc,
+        networks: WalletNetworks = .builtin
     ) -> String? {
         guard let chainId, failed.contains(chainId) || unreached.contains(chainId),
               !rateLimited.contains(chainId)
         else { return nil }
-        return loc.t("explore.chainDown", vars: ["chain": chainName(chainId)])
+        return loc.t("explore.chainDown", vars: ["chain": chainName(chainId, networks: networks)])
     }
 
-    private static func chainName(_ chainId: Int) -> String {
-        ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+    /// A network's name from the wallet's list, the person's own included —
+    /// the name the hero, the signing sheet's chip and Settings give it.
+    private static func chainName(_ chainId: Int, networks: WalletNetworks) -> String {
+        networks.meta(chainId)?.displayName ?? String(chainId)
     }
 
     /// The line under a site's name.
