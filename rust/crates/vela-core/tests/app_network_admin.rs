@@ -21,14 +21,15 @@ use support::DomainDriver;
 use vela_core::app::network_admin::{
     build_provider_rpc_url, clean_endpoint_value, default_endpoint, explorer_base_url,
     is_builtin_chain, is_code_deployed, is_localhost_http, p256_call_indicates_support,
-    provider_chain_ids, rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
-    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
-    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
-    NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
-    NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
+    parse_chain_data, provider_chain_ids, rank_search, Event, NetChainIndexEntry, NetCustomNetwork,
+    NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField,
+    NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind,
+    NetServiceEndpoints, NetServiceHealth, NetShellResult as Res, NetStoredEndpoints,
+    NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
     DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE,
     REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
+use vela_core::app::remote_mark::chain_logo_url;
 
 type Sut = DomainDriver<NetworkAdmin>;
 
@@ -810,6 +811,60 @@ fn custom_service_endpoints_feed_the_new_network_record() {
         networks[0].bundler_url,
         format!("https://my-relay.example/{NEW_CHAIN}")
     );
+    assert_eq!(
+        networks[0].logo_url,
+        format!("https://my-data.example/chainlogos/eip155-{NEW_CHAIN}.png")
+    );
+}
+
+/// A network's logo is the marks' one rule (`remote_mark::chain_logo_url`):
+/// the base trimmed of spaces and trailing slashes, a blank one the built-in
+/// endpoint — never `…//chainlogos/…` for a base saved with its slash.
+#[test]
+fn a_new_networks_logo_is_the_marks_one_rule() {
+    for base in [
+        "https://my-data.example/",
+        "  https://my-data.example//  ",
+        "https://my-data.example",
+    ] {
+        assert_eq!(
+            parse_chain_data(&raw_chain(), NEW_CHAIN, base).logo_url,
+            format!("https://my-data.example/chainlogos/eip155-{NEW_CHAIN}.png"),
+            "{base:?}"
+        );
+        assert_eq!(
+            Some(parse_chain_data(&raw_chain(), NEW_CHAIN, base).logo_url),
+            chain_logo_url(base, NEW_CHAIN),
+            "{base:?}"
+        );
+    }
+    assert_eq!(
+        parse_chain_data(&raw_chain(), NEW_CHAIN, "").logo_url,
+        format!("{DEFAULT_ETHEREUM_DATA_URL}/chainlogos/eip155-{NEW_CHAIN}.png"),
+        "blank is the built-in endpoint"
+    );
+
+    // Through the wizard, with the endpoint saved with its trailing slash.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![],
+        endpoints: NetStoredEndpoints {
+            ethereum_data_url: Some("https://my-data.example/".to_owned()),
+            ..Default::default()
+        },
+        provider_keys: NetProviderKeys::default(),
+    });
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    resolve_contracts_ok(&mut sut, RPC_FAST);
+    let ops = sut.dispatch(Event::AddConfirmed {
+        now_iso: NOW_ISO.to_owned(),
+    });
+    let Some(Op::WriteCustomNetworks { networks }) = ops.first() else {
+        panic!("expected the custom-network write, got {ops:?}");
+    };
     assert_eq!(
         networks[0].logo_url,
         format!("https://my-data.example/chainlogos/eip155-{NEW_CHAIN}.png")

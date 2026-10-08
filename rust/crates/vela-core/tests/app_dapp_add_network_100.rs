@@ -626,6 +626,44 @@ fn a_pages_rpc_that_names_the_chain_is_checked_like_any_other() {
     );
 }
 
+/// The saved network's logo is the marks' one rule whichever words named it
+/// — the catalog's or the page's: the endpoint saved with its trailing slash
+/// still gives one `/chainlogos/` URL.
+#[test]
+fn a_network_a_page_adds_wears_the_marks_logo_url() {
+    for from_catalog in [true, false] {
+        let mut sut = Admin::new();
+        sut.dispatch(NEvent::Started);
+        sut.resolve(NRes::StoreLoaded {
+            custom_networks: Vec::new(),
+            network_configs: vec![],
+            endpoints: NetStoredEndpoints {
+                ethereum_data_url: Some("https://data.example/".to_owned()),
+                ..Default::default()
+            },
+            provider_keys: NetProviderKeys::default(),
+        });
+        requested(&mut sut, site_ask(NEW_CHAIN, &[SITE_RPC]));
+        let rpc = if from_catalog {
+            catalog(&mut sut, Some(catalog_entry()));
+            CATALOG_RPC
+        } else {
+            catalog(&mut sut, None);
+            SITE_RPC
+        };
+        probed(&mut sut, rpc, Some(NEW_CHAIN));
+        contracts(&mut sut, rpc, true);
+        let ops = approve(&mut sut);
+        let saved = writes(&ops).expect("saved");
+        let network = saved.iter().find(|n| n.chain_id == NEW_CHAIN).unwrap();
+        assert_eq!(
+            network.logo_url,
+            format!("https://data.example/chainlogos/eip155-{NEW_CHAIN}.png"),
+            "from the catalog: {from_catalog}"
+        );
+    }
+}
+
 #[test]
 fn no_usable_rpc_from_the_page_ends_the_check() {
     let mut sut = admin();
