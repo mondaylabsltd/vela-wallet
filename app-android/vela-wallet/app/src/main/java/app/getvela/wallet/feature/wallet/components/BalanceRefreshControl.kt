@@ -25,12 +25,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -52,6 +55,11 @@ import app.getvela.wallet.feature.wallet.BalanceRefreshModel
  * the finger that tapped it. Quiet ink like the status line — a figure that
  * is fresh is the normal case.
  *
+ * **Always named.** Turning or read, the words on screen name it ("Updating…",
+ * "Updated 2m"). Before any read has settled it is the glyph alone, so it
+ * carries [BalanceRefreshModel.idleLabel] ("Refresh balance") — never a bare
+ * "Button", and never "Updating…" over a control at rest.
+ *
  * [onRefresh] `null` (the gallery) draws the control and accepts no tap.
  */
 @Composable
@@ -69,6 +77,7 @@ fun BalanceRefreshControl(
             .heightIn(min = VelaSizing.controlSm)
             .clip(RoundedCornerShape(VelaRadius.md))
             .clickable(enabled = onRefresh != null && !spinning, role = Role.Button) { onRefresh?.invoke() }
+            .semantics { if (!spinning && model.updated == null) contentDescription = model.idleLabel }
             .padding(end = VelaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
@@ -132,5 +141,9 @@ private fun Label(text: String, shown: Boolean) {
 const val BALANCE_REFRESH_TEST_TAG = "balance-refresh"
 private const val TEST_TAG = BALANCE_REFRESH_TEST_TAG
 
-/** One calm turn — the fee card's refresh turns at the same pace. */
-private const val TURN_MS = 1200
+/**
+ * One turn at the web/iOS pace (motion slow × 2 = 800 ms; the desktop's
+ * spinner turns at it too), so a press reads the same on every shell. The fee
+ * card's refresh turns at the same pace.
+ */
+private const val TURN_MS = VelaMotion.durationSlow * 2

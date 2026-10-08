@@ -163,6 +163,7 @@ object SigningFixtures {
         confirmAction = confirmAction,
         confirmEnabled = confirmEnabled,
         panelTitle = sg("signatureRequest"),
+        requestKey = state.name,
     )
 
     /**

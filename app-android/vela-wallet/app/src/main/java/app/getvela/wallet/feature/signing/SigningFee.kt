@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -56,15 +57,20 @@ fun SigningFee(
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
             SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed, onRefresh)
-            // Issue #262: the reason the confirm below is shut, said where the fix is.
-            fee.warning?.let {
+            // Issue #262: the reason the confirm below is shut, said where the
+            // fix is. While the fee is measured again the last words keep
+            // their line's height, unsaid: invisible, and silent to TalkBack.
+            (fee.warning ?: fee.heldWarning)?.let {
+                val said = fee.warning != null
                 Text(
                     text = it,
                     color = colors.errorBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.medium,
                     fontSize = VelaTextSize.sm,
-                    modifier = Modifier.padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl),
+                    modifier = Modifier
+                        .padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl)
+                        .then(if (said) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
                 )
             }
         }

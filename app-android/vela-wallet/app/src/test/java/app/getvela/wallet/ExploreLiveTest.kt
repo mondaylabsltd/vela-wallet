@@ -66,7 +66,9 @@ class ExploreLiveTest {
         // Issue #465: Manage groups is the two sections, each with its eye — no
         // "System" tag on Recent dApps, since there is nothing else to tell it from.
         assertEquals(listOf("favorites", "recent"), model.groupManageSheet.rows.map { it.id })
-        assertEquals(strings.t("explore.siteCount", mapOf("n" to "1")), model.groupManageSheet.rows[0].meta)
+        // A plural (explore.siteCount_one/_other, chosen by the core's CLDR
+        // rule): one favourite is "1 site", never "1 sites".
+        assertEquals("1 site", model.groupManageSheet.rows[0].meta)
         assertNull(model.groupManageSheet.rows[1].meta)
         assertTrue(model.groupManageSheet.rows.none { it.hidden })
         assertEquals("app.uniswap.org", model.siteMenuSheet.site.host)

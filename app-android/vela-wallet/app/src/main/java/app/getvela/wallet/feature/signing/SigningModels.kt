@@ -221,6 +221,19 @@ sealed interface FeeModel {
         /** Spec 079: the send form's refresh control, and whether a measurement is out. */
         val refreshLabel: String? = null,
         val refreshing: Boolean = false,
+        /**
+         * The figure is being measured again — a measurement is out, or the
+         * one in hand is another speed's. The line under the card keeps its
+         * last words' height meanwhile ([HeldLine]), so the sheet does not move.
+         */
+        val measuring: Boolean = false,
+        /**
+         * The last [warning], kept while the fee is measured again: its room
+         * only. The verdict is about the last quote, so it is not said —
+         * drawn invisible and silent — and it goes when a fee lands with
+         * nothing to say. Set by the sheet, never by the builder.
+         */
+        val heldWarning: String? = null,
         /** The chevron: only where a tap opens the coin list. */
         val chevron: Boolean = true,
     ) : FeeModel
@@ -317,7 +330,46 @@ data class SigningScreenModel(
      * transaction and a send look the same while they land.
      */
     val receipt: app.getvela.wallet.feature.flows.SendReceiptModel? = null,
+    /**
+     * Which request this sheet is drawing (the request's id; the gallery's
+     * state). What the sheet holds across frames — a line kept while the fee
+     * is measured again — is held per request, never carried to the next.
+     */
+    val requestKey: String = "",
 )
+
+/**
+ * A line whose room outlives its words. The signing sheet is anchored at the
+ * bottom and wraps its content, so a line that came and went with every 30 s
+ * re-quote, speed pick and refresh moved the whole form under the person's
+ * eyes (~33 px on the Xiaomi; the web measured 29). The web's rule, kept
+ * here: what is not said now is drawn invisible and silent, at the last
+ * words' height. A plain holder, not state: reading it schedules no
+ * recomposition, and the same inputs always give the same line.
+ */
+internal class HeldLine {
+    private var last: String? = null
+
+    /**
+     * The line under the fee card: [line] when there is one; while
+     * [measuring], the last one there was (to hold its room, not to say it);
+     * otherwise none — a fee landed with nothing to say lets it go.
+     */
+    fun next(line: String?, measuring: Boolean): String? {
+        if (line != null || !measuring) last = line
+        return line ?: last
+    }
+
+    /**
+     * The confirm's note: the last one said, said now or not. `null` until a
+     * note has been said — a board that never shut its confirm gains no blank
+     * line — and from then on its line stays.
+     */
+    fun room(line: String?): String? {
+        if (line != null) last = line
+        return last
+    }
+}
 
 /** The signed-in wallet's identity over the fixture's signer row. */
 fun SigningScreenModel.withIdentity(name: String, address: String): SigningScreenModel =

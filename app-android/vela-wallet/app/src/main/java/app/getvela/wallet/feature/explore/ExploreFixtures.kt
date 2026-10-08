@@ -139,7 +139,7 @@ object ExploreFixtures {
     fun groupManage(s: VelaStrings) = ExploreSheet.GroupManage(
         title = s.t("explore.manageGroups"),
         rows = listOf(
-            GroupManageRow("favorites", s.t("explore.favorites"), s.t("explore.siteCount", mapOf("n" to "8"))),
+            GroupManageRow("favorites", s.t("explore.favorites"), s.t("explore.siteCount", 8)),
             GroupManageRow("recent", s.t("explore.recent"), meta = null),
         ),
     )

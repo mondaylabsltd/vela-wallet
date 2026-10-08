@@ -332,6 +332,7 @@ object SigningLive {
             panelTitle = s.s("signatureRequest"),
             closeLabel = s.t(I18nKeys.Flow.CLOSE),
             receipt = if (refused) null else receipt(sign, blocks, ctx),
+            requestKey = request.id,
         )
     }
 
@@ -1202,6 +1203,8 @@ object SigningLive {
             },
             refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
             refreshing = fee.busy,
+            // The core's FeeMeasuring, as the gate reads it.
+            measuring = fee.busy || ofAnotherTier(fee, speed),
             chevron = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->

@@ -310,6 +310,8 @@ object I18nKeys {
          */
         const val LAST_UPDATED = "home.lastUpdated"
         const val UPDATING = "home.updating"
+        /** The same control's name while it is the glyph alone — no read has settled yet. */
+        const val REFRESH_BALANCE = "home.refreshBalance"
 
         // Sections & empty states.
         const val SECTION_ACTIVITY = "home.tabActivity"

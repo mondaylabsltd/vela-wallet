@@ -293,6 +293,7 @@ object WalletFixtures {
                 null
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),
+            idleLabel = strings.t(I18nKeys.Wallet.REFRESH_BALANCE),
             refreshing = refreshing,
         )
 

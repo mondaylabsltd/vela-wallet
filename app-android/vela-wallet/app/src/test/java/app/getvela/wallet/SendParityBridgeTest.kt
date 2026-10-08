@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowState
@@ -13,6 +14,7 @@ import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SendAccountRef
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.send.core.SendDisplayContext
+import app.getvela.wallet.feature.send.core.SendFeeCoin
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendView
 import app.getvela.wallet.feature.settings.core.CurrencyView
@@ -79,7 +81,9 @@ class SendParityBridgeTest {
         override suspend fun forChain(chainId: Int) = RpcSeeds(rpc = listOf(RpcEndpointSeed("https://chain-$chainId.example", RpcSource.Default)))
     }
 
-    private fun controller(tokens: List<BalanceToken>): SendController {
+    private val gnosis = NetNetworkRow(id = "gnosis", chain_id = 100, display_name = "Gnosis", native_symbol = "XDAI")
+
+    private fun controller(tokens: List<BalanceToken>, networks: List<NetNetworkRow> = listOf(gnosis)): SendController {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
         val pool = RpcPool(store = FakeStore(), endpoints = Endpoints(), scope = scope, transport = FakeRpcTransport { _, _ -> FakeRpcTransport.body("0x") })
@@ -91,7 +95,7 @@ class SendParityBridgeTest {
             feed = FeedExecutor(store = FakeStore(), ownAccounts = { emptyList() }),
             accountStore = AccountStore(FakeStore()),
             balances = { BalanceView(address = safe, tokens = tokens.filter { it.price_usd != null }, unpriced_tokens = tokens.filter { it.price_usd == null }) },
-            networks = { NetView(loaded = true, networks = listOf(NetNetworkRow(id = "gnosis", chain_id = 100, display_name = "Gnosis", native_symbol = "XDAI"))) },
+            networks = { NetView(loaded = true, networks = networks) },
             signer = { error("no signing in this test") },
             haptic = {},
             refreshBalances = {},
@@ -162,6 +166,51 @@ class SendParityBridgeTest {
             live.warning,
         )
     }
+
+    /**
+     * C10 on the real machines: the fee row's coin with no estimate in hand
+     * is the CORE's (`SendView.fee_coin`). This relay answers nothing, so
+     * every quote fails: BNB Chain's own coin while nobody chose — never the
+     * empty disc — and USDT the moment USDT is chosen, before (and without)
+     * any estimate of it.
+     */
+    @Test
+    fun `with no estimate the fee row wears the cores coin`() {
+        Marks.base = "https://data.example/"
+        try {
+            val usdt = "0x55d398326f99059fF775485246999027B3197955"
+            val send = controller(
+                listOf(
+                    BalanceToken(chain_id = 56, symbol = "BNB", name = "BNB", balance = "0.01", decimals = 18, price_usd = 600.0),
+                    BalanceToken(chain_id = 56, symbol = "USDT", name = "Tether USD", balance = "50", decimals = 18, token_address = usdt, price_usd = 1.0),
+                ),
+                networks = listOf(gnosis, NetNetworkRow(id = "bsc", chain_id = 56, display_name = "BNB Chain", native_symbol = "BNB")),
+            )
+            send.open(SendAccountRef(id = "cred", address = safe), SendDisplayContext(code = "USD", rate = 1.0, fiat_decimals = 2))
+            val loaded = send.settle { it.tokens.size == 2 }
+            send.selectToken(SendLive.tokenId(loaded.tokens.single { it.token_address == null }))
+            val failed = send.settle { it.stage == SendStage.EnterDetails && it.selected_token != null && !it.estimating_gas && !it.fee_busy }
+            assertNull("this relay prices nothing", failed.fee)
+            assertEquals(SendFeeCoin(symbol = "BNB", contract = null, chain_id = 56), failed.fee_coin)
+            val drawn = SendLive.form(sd2(), failed, send.fee.value, ctx()).fee
+            assertEquals(WalletLive.mark(56, "BNB", null), drawn.mark)
+            assertTrue("BNB's logo, not an empty disc", drawn.mark.logoUrls.isNotEmpty())
+
+            send.chooseFeeToken(usdt)
+            val chosen = send.settle { it.fee_coin?.contract != null }
+            assertNull(chosen.fee)
+            assertEquals("USDT", chosen.fee_coin!!.symbol)
+            assertTrue(chosen.fee_coin!!.contract.equals(usdt, ignoreCase = true))
+            assertEquals(56, chosen.fee_coin!!.chain_id)
+            val usdtRow = SendLive.form(sd2(), chosen, send.fee.value, ctx()).fee
+            assertEquals(WalletLive.mark(56, "USDT", chosen.fee_coin!!.contract), usdtRow.mark)
+            assertTrue(usdtRow.mark.logoUrls.first().startsWith("https://data.example/assets/eip155-56/"))
+        } finally {
+            Marks.base = ""
+        }
+    }
+
+    private fun sd2() = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
 
     @Test
     fun `an account holding nothing says so, not that nothing matched`() {

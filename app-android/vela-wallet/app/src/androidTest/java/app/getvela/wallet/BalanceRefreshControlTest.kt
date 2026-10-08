@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -39,7 +40,7 @@ class BalanceRefreshControlTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val model = BalanceRefreshModel(updated = "Updated 2m", updating = "Updating…")
+    private val model = BalanceRefreshModel(updated = "Updated 2m", updating = "Updating…", idleLabel = "Refresh balance")
 
     @Test
     fun itTurnsInPlaceAndRefusesASecondTap() {
@@ -71,6 +72,37 @@ class BalanceRefreshControlTest {
         compose.waitForIdle()
         assertEquals(idle, control.fetchSemanticsNode().boundsInRoot)
         control.assertIsEnabled()
+    }
+
+    /**
+     * Before any read has settled the control is the glyph alone — no words
+     * on screen. It still has a name, and the name is not "Updating…" over a
+     * control at rest; once it turns, or has read, its words name it.
+     */
+    @Test
+    fun theGlyphAloneIsStillNamed() {
+        var updated by mutableStateOf<String?>(null)
+        var spinning by mutableStateOf(false)
+        compose.setContent {
+            VelaTheme(darkTheme = false) {
+                BalanceRefreshControl(model = model.copy(updated = updated), spinning = spinning, onRefresh = { spinning = true })
+            }
+        }
+        val control = compose.onNodeWithTag(BALANCE_REFRESH_TEST_TAG)
+        control.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Refresh balance")))
+        control.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        control.assertIsEnabled()
+
+        control.performClick()
+        compose.waitForIdle()
+        control.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        control.assert(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString("Updating…"))))
+
+        updated = "Updated now"
+        spinning = false
+        compose.waitForIdle()
+        control.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        control.assert(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString("Updated now"))))
     }
 
     @Test

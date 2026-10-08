@@ -36,7 +36,7 @@ import uniffi.vela_core_uniffi.WalletKeyRecord
  * Two bridges between machines live here because both other shells keep them
  * in the shell (research D7): `estimate_fee` is answered by the live fee
  * session, and the fee session's later estimates flow back into the send
- * machine as `FeeUpdated` / `FeeBusyChanged`.
+ * machine as `FeeUpdated` / `FeeBusyChanged` / `FeeTokenChanged`.
  */
 class SendController(
     private val scope: CoroutineScope,
@@ -332,6 +332,12 @@ class SendController(
                     lastBusy = view.busy
                     dispatch(SendEvent.FeeBusyChanged(view.busy))
                 }
+                // The card's coin in force names the fee row while no
+                // estimate is in hand (SendView.fee_coin): when nobody chose,
+                // the fee machine picks a coin that can pay, and a quote that
+                // then fails leaves that coin in force with nothing else to
+                // say so.
+                tellFeeToken(view.fee_token)
                 val estimate = view.fee
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
@@ -356,6 +362,19 @@ class SendController(
 
     private fun dispatch(event: SendEvent) {
         sendHost.dispatch(event, SendEvent.serializer())
+    }
+
+    /** What this send session was last told of the fee card's coin; [open] forgets it. */
+    private val feeTokenWord = FeeTokenWord()
+
+    /**
+     * `FeeTokenChanged`, whenever the card's coin differs from what this
+     * session was last told. Under the word's lock with the dispatch, so a
+     * word can never be queued ahead of the `Open` that would wipe it while
+     * this side believes it was heard.
+     */
+    private fun tellFeeToken(feeToken: String?) = synchronized(feeTokenWord) {
+        feeTokenWord.news(feeToken)?.let(::dispatch)
     }
 
     // -- the fee bridge (research D7) ----------------------------------------------
@@ -421,7 +440,12 @@ class SendController(
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         speedControl.reset()
-        dispatch(SendEvent.Open(account = account, params = params, display = display))
+        // The core's Open starts a session that has been told nothing; the
+        // fee bridge's next word about the card's coin goes, whatever it is.
+        synchronized(feeTokenWord) {
+            feeTokenWord.forget()
+            dispatch(SendEvent.Open(account = account, params = params, display = display))
+        }
     }
 
     // -- the speed control (spec 069) -----------------------------------------------
@@ -644,6 +668,32 @@ class SendController(
                 amount_base_units = request.amountBaseUnits,
             )
         } ?: SendScan.Text(data = text.trim())
+    }
+}
+
+/**
+ * What one send session was last told of the fee card's coin in force
+ * (`FeeView.fee_token`, by `FeeTokenChanged`). The bridge tells it whenever
+ * the card's coin differs from that. A freshly opened session has been told
+ * nothing, so its first word always goes — `null`, the chain's own coin,
+ * included. Not thread-safe: the controller holds its lock.
+ */
+internal class FeeTokenWord {
+    private var told = false
+    private var token: String? = null
+
+    /** The event that tells [feeToken], or `null` when this session already knows it. */
+    fun news(feeToken: String?): SendEvent.FeeTokenChanged? {
+        if (told && token == feeToken) return null
+        told = true
+        token = feeToken
+        return SendEvent.FeeTokenChanged(feeToken)
+    }
+
+    /** A new session: nothing told yet. */
+    fun forget() {
+        told = false
+        token = null
     }
 }
 

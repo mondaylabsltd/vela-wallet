@@ -167,6 +167,20 @@ data class SendTreasuryCoin(
  * treasury probe. Not the funding sheet: gas cannot help a relay that cannot
  * reach the network. `operator_served` is the core's verdict, as above.
  */
+/**
+ * The coin the form's fee row names (`SendView.fee_coin`) — what the shell
+ * hands the core's token mark to draw, figure or no figure.
+ */
+@Serializable
+data class SendFeeCoin(
+    /** The ticker as the wallet writes it. Empty only for an ERC-20 nothing on the form names: the mark draws its logo alone. */
+    val symbol: String,
+    /** `null` = the chain's own coin. */
+    val contract: String? = null,
+    /** The chain the fee is paid on — never 0. */
+    val chain_id: Int,
+)
+
 @Serializable
 data class SendRelayUnreachable(
     val chain_id: Int,
@@ -667,6 +681,13 @@ data class SendView(
     /** Chain-guarded: never a prior network's quote. */
     val fee: FeeEstimateView? = null,
     val gas_fee_token: String? = null,
+    /**
+     * The coin the fee row wears, whether or not a figure is beside it — the
+     * core's one answer for a quote out, a quote that failed and a speed
+     * being measured (the estimate in hand, else the coin in force, else the
+     * chain's own). `null` only while no chain is known.
+     */
+    val fee_coin: SendFeeCoin? = null,
     val amount_warning: SendAmountWarning? = null,
     val same_asset_fee_issue: SendFeeIssueView? = null,
     val can_continue: Boolean = false,
@@ -1099,6 +1120,16 @@ sealed class SendEvent {
     @Serializable
     @SerialName("fee_busy_changed")
     data class FeeBusyChanged(val busy: Boolean) : SendEvent()
+
+    /**
+     * The fee card's coin in force (`FeeView.fee_token`, verbatim; `null` =
+     * the chain's own coin), sent beside [FeeBusyChanged] whenever it differs
+     * from what this send session was last told. It names the fee row's coin
+     * while no estimate is in hand; it prices and signs nothing.
+     */
+    @Serializable
+    @SerialName("fee_token_changed")
+    data class FeeTokenChanged(val fee_token: String? = null) : SendEvent()
 
     @Serializable
     @SerialName("slide_confirm")
