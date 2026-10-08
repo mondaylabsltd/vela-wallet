@@ -14471,11 +14471,11 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
- * May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+ * May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
  * clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
  * no fee session) and the speed in force (`"fast"`…, `None` with no speed
  * control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
- * a view does not read, and the slide stays shut. See
+ * a view does not read, and the confirm stays disabled. See
  * `vela_core::app::sign_confirm`.
  */
 public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?) -> String?  {
@@ -15992,7 +15992,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 51832) {
+    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 45936) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {
