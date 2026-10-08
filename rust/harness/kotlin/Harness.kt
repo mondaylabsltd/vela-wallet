@@ -256,7 +256,46 @@ fun runCase(fn: String, input: JSONObject): Any? = when (fn) {
             .put("resolved_language", st.resolvedLanguage ?: JSONObject.NULL)
             .put("languages", JSONArray(st.languages))
     }
+
+    // --- marks (app::remote_mark) ---
+    "token_mark" -> markJson(
+        tokenMark(
+            input.getString("ethereum_data_url"),
+            u32(input, "chain_id"),
+            input.getString("symbol"),
+            optStr(input, "token_address"),
+            strList(input, "named"),
+        )
+    )
+    "chain_mark" -> markJson(
+        chainMark(input.getString("ethereum_data_url"), u32(input, "chain_id"), input.getString("native_symbol"))
+    )
+    "chain_logo_url" -> chainLogoUrl(input.getString("ethereum_data_url"), u32(input, "chain_id")) ?: JSONObject.NULL
     else -> throw NoSuchElementException("no dispatch arm for fn `$fn` — add it to Harness.kt")
+}
+
+/** A `MarkView` as the vector's field-wise shape (a JSONObject, so the field-wise branch reads it). */
+fun markJson(mark: MarkView): JSONObject = JSONObject()
+    .put("glyph", mark.glyph)
+    .put("logo_urls", JSONArray(mark.logoUrls))
+    .put("badge_chain_id", mark.badgeChainId?.toLong() ?: JSONObject.NULL)
+    .put("badge_logo_url", mark.badgeLogoUrl ?: JSONObject.NULL)
+
+/** A string input that may be JSON `null`; missing altogether is malformed. */
+fun optStr(input: JSONObject, key: String): String? {
+    require(input.has(key)) { "missing string-or-null input `$key`" }
+    return if (input.isNull(key)) null else input.getString(key)
+}
+
+fun u32(input: JSONObject, key: String): UInt {
+    val n = input.getLong(key)
+    require(n in 0..UInt.MAX_VALUE.toLong()) { "u32 input `$key` out of range: $n" }
+    return n.toUInt()
+}
+
+fun strList(input: JSONObject, key: String): List<String> {
+    val arr = input.getJSONArray(key)
+    return (0 until arr.length()).map { arr.getString(it) }
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +310,7 @@ val REQUIRED_SUITES = listOf(
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "primitives", "safe", "safe-multi", "webauthn",
+    "identicon", "identicon-bulk", "marks", "primitives", "safe", "safe-multi", "webauthn",
 )
 
 /**

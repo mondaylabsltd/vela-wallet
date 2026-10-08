@@ -2461,6 +2461,72 @@ pub fn mark_miss_ttl_ms(kind: String, status: Option<u16>) -> Option<u32> {
     mark::mark_miss_ttl_ms(miss)
 }
 
+/// What a circle standing for a token or a network wears
+/// (`vela_core::app::remote_mark::MarkView`): draw `glyph`, then the first of
+/// `logo_urls` that loads over it; the corner badge only when
+/// `badge_chain_id` is set (its dot, `badge_logo_url` over it).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MarkView {
+    /// The ticker's first three characters, upper-cased: always drawn.
+    pub glyph: String,
+    /// Logo candidates, best first. Empty = the glyph alone.
+    pub logo_urls: Vec<String>,
+    /// The chain the badge names; `None` = no badge.
+    pub badge_chain_id: Option<u32>,
+    /// The badge chain's logo; `None` whenever there is no badge.
+    pub badge_logo_url: Option<String>,
+}
+
+impl From<vela_core::app::remote_mark::MarkView> for MarkView {
+    fn from(mark: vela_core::app::remote_mark::MarkView) -> Self {
+        Self {
+            glyph: mark.glyph,
+            logo_urls: mark.logo_urls,
+            badge_chain_id: mark.badge_chain_id,
+            badge_logo_url: mark.badge_logo_url,
+        }
+    }
+}
+
+/// A COIN's mark (`remote_mark::token_mark`): `ethereum_data_url` is the
+/// person's chain-data endpoint ("" = the built-in one), `token_address`
+/// `None` for the chain's native coin, `named` the logo URLs an index already
+/// gave (tried first). A native coin wears its home chain's logo, and its
+/// badge is hidden on that chain.
+#[uniffi::export]
+pub fn token_mark(
+    ethereum_data_url: String,
+    chain_id: u32,
+    symbol: String,
+    token_address: Option<String>,
+    named: Vec<String>,
+) -> MarkView {
+    vela_core::app::remote_mark::token_mark(
+        &ethereum_data_url,
+        chain_id,
+        &symbol,
+        token_address.as_deref(),
+        &named,
+    )
+    .into()
+}
+
+/// A NETWORK drawn as itself (`remote_mark::chain_mark`): network rows and
+/// facts, chain-locking notices, receive rows, the QR centre, chips. Its own
+/// logo, never a badge.
+#[uniffi::export]
+pub fn chain_mark(ethereum_data_url: String, chain_id: u32, native_symbol: String) -> MarkView {
+    vela_core::app::remote_mark::chain_mark(&ethereum_data_url, chain_id, &native_symbol).into()
+}
+
+/// `{base}/chainlogos/eip155-{chain_id}.png` on the person's chain-data
+/// endpoint ("" = the built-in one); `None` for chain 0, which names no
+/// network.
+#[uniffi::export]
+pub fn chain_logo_url(ethereum_data_url: String, chain_id: u32) -> Option<String> {
+    vela_core::app::remote_mark::chain_logo_url(&ethereum_data_url, chain_id)
+}
+
 /// A shipped network's usual time to include an operation, in seconds; `None`
 /// for a network Vela does not ship (the receipt then circles instead of
 /// drawing a promise). The dApp signing sheet's wait reads the same number as
@@ -3155,6 +3221,28 @@ mod tests_082 {
             format_signed_token_amount("0".into(), 18, "comma_dot".into()),
             None
         );
+    }
+
+    #[test]
+    fn a_mark_crosses_the_ffi_whole() {
+        let eth_on_base = token_mark(String::new(), 8453, "ETH".into(), None, Vec::new());
+        assert_eq!(eth_on_base.glyph, "ETH");
+        assert_eq!(
+            eth_on_base.logo_urls,
+            vec!["https://ethereum-data.getvela.app/chainlogos/eip155-1.png".to_owned()]
+        );
+        assert_eq!(eth_on_base.badge_chain_id, Some(8453));
+        assert_eq!(
+            eth_on_base.badge_logo_url.as_deref(),
+            Some("https://ethereum-data.getvela.app/chainlogos/eip155-8453.png")
+        );
+        let base = chain_mark("https://data.example/".into(), 8453, "ETH".into());
+        assert_eq!(
+            base.logo_urls,
+            vec!["https://data.example/chainlogos/eip155-8453.png".to_owned()]
+        );
+        assert_eq!(base.badge_chain_id, None);
+        assert_eq!(chain_logo_url(String::new(), 0), None);
     }
 
     #[test]
