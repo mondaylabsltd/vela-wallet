@@ -35,6 +35,7 @@ import app.getvela.wallet.feature.signing.components.SigningCode
 import app.getvela.wallet.feature.signing.components.SigningHeader
 import app.getvela.wallet.feature.signing.components.SigningIntent
 import app.getvela.wallet.feature.signing.components.SigningNftHero
+import app.getvela.wallet.feature.signing.components.SigningOwnHeader
 import app.getvela.wallet.feature.signing.components.SigningParty
 import app.getvela.wallet.feature.signing.components.SigningPositive
 import app.getvela.wallet.feature.signing.components.SigningRows
@@ -152,19 +153,7 @@ fun SigningSheetContent(
             .padding(bottom = VelaSpacing.xl3),
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
     ) {
-        SigningHeader(
-            name = model.dappName,
-            host = model.dappHost,
-            letter = model.dappLetter,
-            tint = model.dappTint,
-            networkName = model.networkName,
-            networkDot = model.networkDot,
-            own = model.dappOwn,
-            iconUrls = model.dappIconUrls,
-            networkLogoUrl = model.networkLogoUrl,
-            onClose = onClose,
-            closeLabel = model.closeLabel,
-        )
+        SigningSheetHeader(model, onClose)
 
         // Spec 079: approved — the receipt replaces the form, unless the
         // trusted signer's page is open, whose waiting card says more.
@@ -181,13 +170,12 @@ fun SigningSheetContent(
 
         // The universal renderer: blocks in mock order, out. Nothing here knows
         // what a swap or a permit IS — which is what lets all 33 scenarios, and
-        // the ones nobody has drawn yet, come out of one code path.
+        // the ones nobody has drawn yet, come out of one code path. (Issue
+        // #314: the wallet's own request leads with its intent — that is the
+        // header's title, so it is not among these blocks.)
         model.blocks.forEach { block ->
             when (block) {
-                // Issue #314: the wallet's own request has no figure to lead
-                // with — its intent IS the outcome, so it is the sheet's
-                // headline rather than the eyebrow over a hero.
-                is SigningBlock.Intent -> SigningIntent(block.text, block.tone, lead = model.dappOwn)
+                is SigningBlock.Intent -> SigningIntent(block.text, block.tone)
                 is SigningBlock.Amount ->
                     SigningAmount(block.line, card = block.card, note = block.note)
 
@@ -333,20 +321,37 @@ fun SigningAftercareSheet(
                 .padding(bottom = VelaSpacing.xl3),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
         ) {
-            SigningHeader(
-                name = header.dappName,
-                host = header.dappHost,
-                letter = header.dappLetter,
-                tint = header.dappTint,
-                networkName = header.networkName,
-                networkDot = header.networkDot,
-                own = header.dappOwn,
-                iconUrls = header.dappIconUrls,
-                networkLogoUrl = header.networkLogoUrl,
-                onClose = onClose,
-                closeLabel = header.closeLabel,
-            )
+            SigningSheetHeader(header, onClose)
             SendReceiptBody(model = receipt, onExplorer = onExplorer, onCta = onClose)
         }
+    }
+}
+
+/**
+ * The sheet's header, in every mode (form, receipt, aftercare): a site's —
+ * its icon, its name, the network — or the wallet's own request's one row,
+ * its title and the ✕. Either way the ✕ is there: it is the only close.
+ */
+@Composable
+private fun SigningSheetHeader(model: SigningScreenModel, onClose: (() -> Unit)?) {
+    if (model.dappOwn) {
+        SigningOwnHeader(
+            headline = model.headline.orEmpty(),
+            onClose = onClose,
+            closeLabel = model.closeLabel,
+        )
+    } else {
+        SigningHeader(
+            name = model.dappName,
+            host = model.dappHost,
+            letter = model.dappLetter,
+            tint = model.dappTint,
+            networkName = model.networkName,
+            networkDot = model.networkDot,
+            iconUrls = model.dappIconUrls,
+            networkLogoUrl = model.networkLogoUrl,
+            onClose = onClose,
+            closeLabel = model.closeLabel,
+        )
     }
 }

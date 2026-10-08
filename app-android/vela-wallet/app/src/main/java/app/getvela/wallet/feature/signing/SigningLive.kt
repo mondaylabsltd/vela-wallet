@@ -259,9 +259,10 @@ object SigningLive {
         // transaction that will never be signed, and reading them invites the
         // question "so why can't I?" — which the sentence above already answers.
         val refused = sign.blocked != null
-        // The wallet's own request (the key backup) is not a site: its own mark
-        // and name, and no host — "getvela.app" under a letter read as a stranger.
-        val own = request.transportId == WALLET_TRANSPORT
+        // The wallet's own request (the key backup) is not a site, and the core
+        // says so (`first_party`, set in the one place the backup is raised) —
+        // never this sheet, from bytes or an origin any page could send.
+        val own = sign.request?.first_party == true
         val sims = simBlocks(sim, ctx)
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
@@ -269,20 +270,26 @@ object SigningLive {
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
-        val blocks =
+        val drawn =
             if (refused) statusBlocks(sign, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
                 (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+        // The wallet's own request leads with what it does, as the header's
+        // title beside the ✕ — so that intent is not said a second time under it.
+        val lead = if (own) drawn.indexOfFirst { it is SigningBlock.Intent } else -1
+        val headline = (drawn.getOrNull(lead) as? SigningBlock.Intent)?.text
+        val blocks = if (lead >= 0) drawn.filterIndexed { index, _ -> index != lead } else drawn
         // Spec 082 RE7: the name and whether the host is said again are the
         // core's (`browserSiteLabel`); a request carries no page title, so a
         // site is named by its host, once.
         val label = if (own) null else uniffi.vela_core_uniffi.browserSiteLabel("", host)
         return fallback.copy(
-            dappName = label?.name ?: "Vela Wallet",
+            dappName = label?.name.orEmpty(),
             dappHost = label?.hostLine.orEmpty(),
             dappLetter = ExploreLive.letterOf(host),
             dappTint = ExploreLive.tintOf(host),
             dappOwn = own,
+            headline = headline,
             dappIconUrls = if (own) emptyList() else siteIconUrls(request.origin),
             networkName = ctx.chainName,
             networkDot = ctx.chainDot,
@@ -292,7 +299,9 @@ object SigningLive {
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,
-                summary = if (refused) null else clear.result?.contract_name,
+                // "· Vela passkey registry" names a contract to the person who
+                // asked for nothing but their own backup: not on their own request.
+                summary = if (refused || own) null else clear.result?.contract_name,
                 functionLabel = if (refused) null else clear.result?.let { s.s("techFunction") },
                 signature = if (refused) null else clear.result?.intent,
                 params = emptyList(),

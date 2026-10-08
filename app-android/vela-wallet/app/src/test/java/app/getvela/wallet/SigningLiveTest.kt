@@ -650,8 +650,8 @@ class SigningLiveTest {
 
     /**
      * Issue #314: the wallet's own key backup leads with its outcome. Its
-     * intent is the headline (the sheet draws `dappOwn` that way) and a
-     * simulation that moves nothing is folded into the technical details — it
+     * intent is the header's title beside the ✕ (not said again below it) and
+     * a simulation that moves nothing is folded into the technical details — it
      * was a bordered "Balance changes · No asset changes" card weighing as much
      * as the outcome. A dApp's sheet keeps the card, and a simulation that has
      * something to say is never folded away, not even on the wallet's own.
@@ -661,7 +661,11 @@ class SigningLiveTest {
         val registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
         val call = org.json.JSONObject().put("to", registry).put("data", "0xcd438f9b").put("value", "0x0")
         val params = org.json.JSONArray().put(call).toString()
-        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null), confirm_gate_open = true)
+        fun sign(firstParty: Boolean) = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null, first_party = firstParty),
+            confirm_gate_open = true,
+        )
         val backup = ClearSigningView(
             resolved = true,
             surface = ClearSurface.ClearSign,
@@ -684,11 +688,13 @@ class SigningLiveTest {
         val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
         val nothingMoves = SigningController.SimOutcome.Ready(emptyList())
         fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome) =
-            SigningLive.model(drawn, request, sign, backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+            SigningLive.model(drawn, request, sign(request == own), backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
 
         val ownSheet = sheet(own, nothingMoves)
         assertTrue(ownSheet.dappOwn)
-        assertEquals(strings.t("componentsUi.signing.intentBackUpPublicKeys"), (ownSheet.blocks.first() as SigningBlock.Intent).text)
+        assertEquals(strings.t("componentsUi.signing.intentBackUpPublicKeys"), ownSheet.headline)
+        assertTrue("the title is not said again under it", ownSheet.blocks.none { it is SigningBlock.Intent })
+        assertNull("no \"· Vela passkey registry\" on the wallet's own request", ownSheet.tech.summary)
         assertTrue("the no-change card is still on the sheet", ownSheet.blocks.none { it is SigningBlock.Balances })
         assertEquals(strings.t("componentsUi.signing.simResultLabel"), ownSheet.tech.simResult?.label)
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), ownSheet.tech.simResult?.value)
@@ -697,6 +703,9 @@ class SigningLiveTest {
         val dappSheet = sheet(request(params), nothingMoves)
         assertTrue("a dApp keeps its balance card", dappSheet.blocks.any { it is SigningBlock.Balances })
         assertNull(dappSheet.tech.simResult)
+        assertNull(dappSheet.headline)
+        assertTrue("a site's sheet keeps its intent", dappSheet.blocks.first() is SigningBlock.Intent)
+        assertEquals("Vela passkey registry", dappSheet.tech.summary)
 
         val reverts = sheet(own, SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail"))
         assertTrue("a revert is never folded away", reverts.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
@@ -739,6 +748,7 @@ class SigningLiveTest {
             rows.map { it.label to it.value },
         )
         assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
+        assertEquals("the header's title is the intent", term("intentBackUpPublicKeys"), sheet.headline)
         listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
             assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
         }

@@ -9,13 +9,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import app.getvela.wallet.core.format.amountFieldOf
 import app.getvela.wallet.core.format.cleanAmountFieldEdit
-import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.marks.RemoteLogo
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,7 +80,6 @@ fun SigningHeader(
     networkName: String,
     networkDot: Color,
     modifier: Modifier = Modifier,
-    own: Boolean = false,
     iconUrls: List<String> = emptyList(),
     networkLogoUrl: String? = null,
     /**
@@ -93,21 +95,13 @@ fun SigningHeader(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        if (own) {
-            // The wallet asking itself: its own mark, never a letter on a disc.
-            Box(
-                Modifier.size(ExploreMetrics.signingAvatar).background(colors.bgSunken, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { VelaLogo(darkTheme = VelaTheme.isDark, modifier = Modifier.size(ExploreMetrics.signingAvatar * 0.6f)) }
-        } else {
-            // The site's own icon; its initial until one lands, and when it has none.
-            RemoteLogo(urls = iconUrls, size = ExploreMetrics.signingAvatar) {
-                LetterAvatar(letter, tint, size = ExploreMetrics.signingAvatar)
-            }
+        // The site's own icon; its initial until one lands, and when it has none.
+        RemoteLogo(urls = iconUrls, size = ExploreMetrics.signingAvatar) {
+            LetterAvatar(letter, tint, size = ExploreMetrics.signingAvatar)
         }
         // Issue #438: the chain's chip sits under the name, as on iOS since
         // spec 082 RE13. Inline, the chip and the ✕ left the name ~100 dp, and
-        // "Vela Wallet" broke over two lines at the smallest system font; here
+        // a long name broke over two lines at the smallest system font; here
         // the column has the whole width between the avatar and the ✕.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             // Spec 082 RE13 (G12): two lines each and never an ellipsis — the
@@ -157,36 +151,71 @@ fun SigningHeader(
                 )
             }
         }
-        onClose?.let { close ->
-            Box(
-                modifier = Modifier
-                    .size(VelaSizing.hitTarget)
-                    .clickable(onClick = close),
-                contentAlignment = Alignment.Center,
-            ) { Icon(VelaIcons.Close, closeLabel, tint = colors.fgMuted) }
-        }
+        onClose?.let { SigningClose(it, closeLabel) }
     }
 }
 
 /**
- * The intent: the eyebrow over a hero figure — or, as [lead], the sheet's
- * headline, for a request with no figure to lead with (the wallet's own).
- * A headline is the base ink unless its tone is a warning.
+ * The header of the wallet's OWN request (the core's `first_party` — the key
+ * backup). Nobody else is asking, so there is no mark, no "Vela Wallet" and no
+ * network chip (the rows say the network): ONE row, what the request does as
+ * the sheet's title, and the ✕ — the sheet's only exit (spec 079), drawn in
+ * every mode that draws a header: the form, the receipt, the aftercare. The
+ * title wraps beside the ✕, never under it.
  */
 @Composable
-fun SigningIntent(text: String, tone: SigningTone, modifier: Modifier = Modifier, lead: Boolean = false) {
+fun SigningOwnHeader(
+    headline: String,
+    modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
+    closeLabel: String = "",
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(
+            text = headline,
+            color = VelaTheme.colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.bold,
+            fontSize = VelaTextSize.xl2,
+            modifier = Modifier
+                .weight(1f)
+                // One line sits centred on the ✕; more lines grow the row.
+                .heightIn(min = VelaSizing.hitTarget)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .semantics { heading() },
+        )
+        onClose?.let { SigningClose(it, closeLabel) }
+    }
+}
+
+/** The header's ✕, in a hit-target box: the same place on a site's sheet and the wallet's own. */
+@Composable
+private fun SigningClose(onClose: () -> Unit, label: String) {
+    Box(
+        modifier = Modifier
+            .size(VelaSizing.hitTarget)
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) { Icon(VelaIcons.Close, label, tint = VelaTheme.colors.fgMuted) }
+}
+
+/**
+ * The intent: the eyebrow over a hero figure. (The wallet's own request says
+ * its intent as the header's title instead — [SigningOwnHeader].)
+ */
+@Composable
+fun SigningIntent(text: String, tone: SigningTone, modifier: Modifier = Modifier) {
     val colors = VelaTheme.colors
-    val warns = tone == SigningTone.Caution || tone == SigningTone.Danger
     Text(
         text = text,
-        color = when {
-            lead && !warns -> colors.fgBase
-            tone == SigningTone.Neutral -> colors.fgMuted
-            else -> tone.color(colors)
-        },
+        color = if (tone == SigningTone.Neutral) colors.fgMuted else tone.color(colors),
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
-        fontSize = if (lead) VelaTextSize.xl2 else VelaTextSize.base,
+        fontSize = VelaTextSize.base,
         modifier = modifier,
     )
 }

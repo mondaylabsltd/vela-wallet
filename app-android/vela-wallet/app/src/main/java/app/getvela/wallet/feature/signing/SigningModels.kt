@@ -232,10 +232,18 @@ data class SigningScreenModel(
     val networkName: String,
     val networkDot: Color,
     /**
-     * The wallet asking ITSELF (the key backup): its own mark and name, and no
-     * host — it is not a site.
+     * The wallet asking ITSELF (the key backup) — the core's `first_party`,
+     * never read off the request's bytes or origin. There is no requester to
+     * name: no mark, no name, no network chip (its rows say the network). The
+     * header is one row, [headline] and the ✕.
      */
     val dappOwn: Boolean = false,
+    /**
+     * The wallet's own request: what it does ("备份公钥"), drawn as the
+     * header's title beside the ✕. The intent block it comes from is not
+     * repeated below. `null` for a site's request, whose header names the site.
+     */
+    val headline: String? = null,
     /** The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19). Https only. */
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
