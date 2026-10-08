@@ -394,6 +394,7 @@ export function balanceRefresh(
 						ago: agoText(at, input.now, m.balance.ago, input.language)
 					}),
 		updating: m.balance.updating,
+		a11yIdle: m.balance.refreshBalance,
 		spinning: view.refreshing || input.held
 	};
 }

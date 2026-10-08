@@ -384,6 +384,7 @@ function balance(
 		refresh: {
 			updated: fill(m.balance.lastUpdated, { ago: fill(m.balance.ago.minutes, { n: 2 }) }),
 			updating: m.balance.updating,
+			a11yIdle: m.balance.refreshBalance,
 			spinning: false
 		},
 		a11yHide: m.balance.a11yHide,

@@ -149,6 +149,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			a11yShow: k('home.a11yShowBalance'),
 			lastUpdated: k('home.lastUpdated'),
 			updating: k('home.updating'),
+			refreshBalance: k('home.refreshBalance'),
 			ago: {
 				now: k('time.now'),
 				minutes: k('time.minutesShort'),
