@@ -126,7 +126,7 @@ describe('FeeRequoteTimer', () => {
 		expect(h.pending()).toEqual([3000]);
 	});
 
-	it('stops the moment the person approves — no re-price under a committed slide', () => {
+	it('stops the moment the person approves — no re-price under a committed confirm', () => {
 		const h = harness();
 		h.timer.observe(failed('quote_unavailable'), true);
 		h.timer.observe(failed('quote_unavailable'), false); // approved: signing
@@ -209,7 +209,7 @@ describe('heldFeeFailure — the reason stays put while the sheet asks again', (
 });
 
 describe('withLostContext — a chain that could not be read is a failure the sheet says and retries', () => {
-	it('an idle view after a lost context reads as the chain read that failed, slide shut (RJ13)', () => {
+	it('an idle view after a lost context reads as the chain read that failed, confirm shut (RJ13)', () => {
 		const view = withLostContext(IDLE_FEE_VIEW, true);
 		expect(view.failed).toEqual({ chain_read: { rate_limited: false } });
 		expect(view.confirm_fee_ready).toBe(false);

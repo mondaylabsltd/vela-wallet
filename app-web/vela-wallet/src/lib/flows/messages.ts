@@ -231,13 +231,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.gasTier.fast',
 	'send.gasTier.standard',
 	'send.gasTier.slow',
-	// …and the one line under each that says what that speed BUYS. The names
-	// are a scale and nothing else now, so without these the cheap tier would
-	// read as a defect nobody picks on purpose. `rapid` gets none, for the
-	// same reason its name is not requested here.
-	'send.gasTierHintFast',
-	'send.gasTierHintStandard',
-	'send.gasTierHintSlow',
+	// No line under each name (2026-10-08): the option's own fee and gas bid
+	// say what it buys. The descriptions (`send.gasTierHint*`) belong to the
+	// Settings default-speed sheet, which shows neither figure.
 	// …and what each speed BUYS as a number: the effective gas price beside
 	// each option (issue 684). Drawn as digits alone — this names them for a
 	// screen reader, which would otherwise hear a bare "300 gwei". An existing

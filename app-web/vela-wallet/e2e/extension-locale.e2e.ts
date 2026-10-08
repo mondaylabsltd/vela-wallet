@@ -152,15 +152,14 @@ test.describe('the language a person chose, on every surface (issue 317)', () =>
 		) as Promise<AskResult>;
 		const sheet = await requestWindow(context);
 		await expect(sheet).toHaveURL(/\/zh\/request\.html\?rid=/);
-		const slider = sheet.getByRole('button', { name: /^滑动以确认/ });
-		await slider.waitFor({ state: 'visible', timeout: 30_000 });
+		const confirm = sheet.getByTestId('signing-confirm');
+		await confirm.waitFor({ state: 'visible', timeout: 30_000 });
 		await expect(sheet.getByText('签名账户')).toBeVisible();
-		await expect(sheet.getByText(/Slide to confirm|Signing account|Technical details/)).toHaveCount(
-			0
-		);
+		await expect(sheet.getByText(/Signing account|Technical details/)).toHaveCount(0);
+		// The confirm says the action, in Chinese too (issue 461: a tap, its label the action alone).
+		await expect(confirm).not.toHaveText(/[A-Za-z]/);
 		await sheet.screenshot({ path: process.env.LOCALE_SHOT ?? 'test-results/317-sheet-zh.png' });
-		await slider.focus();
-		await slider.press('Enter');
+		await confirm.click({ timeout: 30_000 });
 		const answer = await signed;
 		expect(answer.ok).toBe(true);
 		expect(String(answer.result)).toMatch(/^0x[0-9a-f]+$/);

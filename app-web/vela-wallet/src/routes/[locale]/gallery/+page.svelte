@@ -140,6 +140,15 @@
 					</div>
 				{/if}
 			{/each}
+			{#if h1s.balance.refresh !== undefined}
+				<!-- Issue 462: a read the person asked for is out — the glyph
+				     turns, the words say so, and nothing else on the hero moves. -->
+				<div class="cell" id="gallery-balance-refreshing">
+					<BalanceDisplay
+						balance={{ ...h1s.balance, refresh: { ...h1s.balance.refresh, spinning: true } }}
+					/>
+				</div>
+			{/if}
 		</section>
 
 		<section id="gallery-section-actions">

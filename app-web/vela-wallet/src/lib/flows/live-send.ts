@@ -129,17 +129,6 @@ const TIER_LABEL_KEY = {
 	slow: 'send.gasTier.slow'
 } as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
 
-/**
- * …and what each one BUYS, the line under the name (spec 068, the owner's
- * ruling). Separate from the name on purpose: the heading asks about speed, so
- * the name has to be a speed and the advantage has to be somewhere else.
- */
-const TIER_HINT_KEY = {
-	fast: 'send.gasTierHintFast',
-	standard: 'send.gasTierHintStandard',
-	slow: 'send.gasTierHintSlow'
-} as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
-
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
 export type SendClassFilter = 'all' | 'stable' | 'gas' | 'other';
 export const SEND_CLASS_FILTERS: readonly SendClassFilter[] = ['all', 'stable', 'gas', 'other'];
@@ -379,11 +368,6 @@ export function speedWords(m: WalletFlowMessages): SpeedWords {
 			fast: m[TIER_LABEL_KEY.fast],
 			standard: m[TIER_LABEL_KEY.standard],
 			slow: m[TIER_LABEL_KEY.slow]
-		},
-		hints: {
-			fast: m[TIER_HINT_KEY.fast],
-			standard: m[TIER_HINT_KEY.standard],
-			slow: m[TIER_HINT_KEY.slow]
 		}
 	};
 }

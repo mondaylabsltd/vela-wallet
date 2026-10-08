@@ -28,7 +28,7 @@ export interface SiteModel {
 	letter: string;
 	/** Brand colour behind the letter; the tile tints it down itself. */
 	tint: string;
-	/** Row-only second line (a group's blurb), absent in the tile grid. */
+	/** Row-only second line (a Recent row's host), absent in the tile grid. */
 	subtitle?: string;
 	/** Row-only trailing text — "刚刚", "昨天". Fixture content. */
 	meta?: string;
@@ -37,11 +37,14 @@ export interface SiteModel {
 /** The favourites grid mixes sites with the trailing "add" affordance. */
 export type TileModel = { kind: 'site'; site: SiteModel } | { kind: 'add'; label: string };
 
-/** `favorites` and `recent` are system groups: hideable, never deletable. */
-export type GroupKind = 'favorites' | 'recent' | 'custom';
+/**
+ * The start page's two sections — the only groups there are (issue 465: no
+ * groups of the person's own). Each can be hidden, never deleted.
+ */
+export type GroupKind = 'favorites' | 'recent';
 
 /** The trailing affordance on a group's header row. */
-export type GroupAction = 'edit' | 'clear' | 'menu';
+export type GroupAction = 'edit' | 'clear';
 
 export interface GroupModel {
 	id: string;
@@ -97,12 +100,12 @@ export interface MenuItemModel {
 	danger?: boolean;
 }
 
+/** One of the start page's two sections, in the sheet that hides and shows them. */
 export interface GroupManageRow {
-	id: string;
+	id: GroupKind;
 	title: string;
-	/** "8 个网站" / "已隐藏" — resolved by the fixture layer. */
+	/** "8 个网站" — resolved by the fixture layer; Recent has none. */
 	meta?: string;
-	system: boolean;
 	hidden: boolean;
 }
 
@@ -123,7 +126,6 @@ export interface GroupManageSheet {
 	kind: 'group-manage';
 	title: string;
 	rows: GroupManageRow[];
-	newGroup: string;
 }
 
 export interface SiteMenuSheet {

@@ -20,22 +20,15 @@ export interface ExploreMessages {
 	done: string;
 	add: string;
 	clear: string;
-	groupOptions: string;
 	manageGroups: string;
-	newGroup: string;
 	rename: string;
 	hide: string;
 	show: string;
 	delete: string;
-	moveToGroup: string;
 	openInNewTab: string;
 	removeFromFavorites: string;
-	systemGroup: string;
-	hiddenTag: string;
 	/** Template — '{{n}} sites'. */
 	siteCount: string;
-	/** Template — '{{n}} · Hidden'. */
-	hiddenCount: string;
 	tabs: string;
 	newTab: string;
 	startPage: string;

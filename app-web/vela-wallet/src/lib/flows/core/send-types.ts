@@ -18,7 +18,8 @@
  */
 
 import { chainName } from '$lib/services/networks';
-import { tokenChainId, tokenId, tokenLogoURLs, type APIToken } from '$lib/services/tokens-model';
+import { tokenChainId, tokenId, type APIToken } from '$lib/services/tokens-model';
+import { tokenLogoURLs } from '$lib/flows/marks';
 
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
@@ -182,7 +183,13 @@ export function toSendToken(token: APIToken): SendToken {
 		decimals: token.decimals,
 		token_address: token.tokenAddress,
 		price_usd: token.priceUsd,
-		logo_urls: tokenLogoURLs(token),
+		// The API's own logo first, then the core's candidates for this coin.
+		logo_urls: tokenLogoURLs(
+			tokenChainId(token),
+			token.symbol,
+			token.tokenAddress,
+			token.logo ? [token.logo] : []
+		),
 		spam: token.spam
 	};
 }

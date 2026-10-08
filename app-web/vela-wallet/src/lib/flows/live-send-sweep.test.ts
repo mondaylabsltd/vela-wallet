@@ -122,6 +122,7 @@ const BASE: SendView = {
 	receipt: null,
 	treasury_bootstrap: null,
 	relay_unreachable: null,
+	relay_report: null,
 	recipient_identity: null,
 	payees: [],
 	recipient_risk: null,

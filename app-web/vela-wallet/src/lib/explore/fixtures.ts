@@ -86,14 +86,6 @@ export const SITES = {
 		host: 'app.hyperliquid.xyz',
 		letter: 'H',
 		tint: '#50D2C1'
-	},
-	curve: { id: 'curve', name: 'Curve', host: 'curve.fi', letter: 'C', tint: '#7B7BE8' },
-	limitless: {
-		id: 'limitless',
-		name: 'Limitless',
-		host: 'limitless.exchange',
-		letter: 'L',
-		tint: '#8B6DFF'
 	}
 } satisfies Record<string, SiteModel>;
 
@@ -124,38 +116,6 @@ const RECENT_DESKTOP: SiteModel[] = [
 ];
 
 /**
- * Custom groups. Titles and blurbs are what the person typed, so they are
- * fixture content — verbatim from the mock, never translated (spec 015 rule).
- */
-const CUSTOM_GROUPS: GroupModel[] = [
-	{
-		id: 'trading',
-		title: '交易',
-		kind: 'custom',
-		action: 'menu',
-		hidden: false,
-		sites: [
-			{ ...SITES.curve, subtitle: '稳定币兑换' },
-			{ ...SITES.hyperliquid, subtitle: '永续合约交易' }
-		]
-	},
-	{
-		id: 'prediction',
-		title: '预测市场',
-		kind: 'custom',
-		action: 'menu',
-		// NOT pre-hidden: E2 and DE2 both draw this group. E3 shows it hidden
-		// because the sheet is where hiding HAPPENS — shipping it hidden made
-		// the web the only client missing a group (caught by fixtures.test.ts).
-		hidden: false,
-		sites: [
-			{ ...SITES.polymarket, subtitle: '事件预测市场' },
-			{ ...SITES.limitless, subtitle: '预测市场' }
-		]
-	}
-];
-
-/**
  * The page the browser is showing. Fixture content: this is a stand-in for a
  * real site, so its words are the site's, not the wallet's.
  */
@@ -181,6 +141,10 @@ function favoritesSection(m: ExploreMessages) {
 	return { title: m.favorites, action: m.edit, tiles };
 }
 
+/**
+ * The sections under Favorites: Recent dApps, and nothing else — there are no
+ * groups of the person's own (issue 465).
+ */
 function groups(m: ExploreMessages, recent: SiteModel[]): GroupModel[] {
 	return [
 		{
@@ -190,8 +154,7 @@ function groups(m: ExploreMessages, recent: SiteModel[]): GroupModel[] {
 			action: 'clear',
 			hidden: false,
 			sites: recent
-		},
-		...CUSTOM_GROUPS.filter((g) => !g.hidden)
+		}
 	];
 }
 
@@ -285,7 +248,6 @@ function tileMenuItems(m: ExploreMessages): MenuItemModel[] {
 	return [
 		{ id: 'new-tab', icon: 'external-link', label: m.openInNewTab },
 		{ id: 'rename', icon: 'pencil', label: m.rename },
-		{ id: 'move', icon: 'folder-plus', label: m.moveToGroup },
 		{ id: 'remove', icon: 'trash-2', label: m.removeFromFavorites, danger: true }
 	];
 }
@@ -312,34 +274,23 @@ function connectionSheet(m: ExploreMessages, identicon: Identicon): ConnectionSh
 	};
 }
 
+/**
+ * E3: the start page's two sections, each with its eye (issue 465). No grip,
+ * no trash, no "New group", and no "System" tag — with no groups of the
+ * person's own there is nothing to tell them apart from.
+ */
 function groupManageSheet(m: ExploreMessages): GroupManageSheet {
 	return {
 		kind: 'group-manage' as const,
 		title: m.manageGroups,
-		newGroup: m.newGroup,
 		rows: [
 			{
 				id: 'favorites',
 				title: m.favorites,
 				meta: fill(m.siteCount, { n: '8' }),
-				system: true,
 				hidden: false
 			},
-			{ id: 'recent', title: m.recent, meta: m.systemGroup, system: true, hidden: false },
-			{
-				id: 'trading',
-				title: CUSTOM_GROUPS[0].title,
-				meta: fill(m.siteCount, { n: '4' }),
-				system: false,
-				hidden: false
-			},
-			{
-				id: 'prediction',
-				title: CUSTOM_GROUPS[1].title,
-				meta: fill(m.hiddenCount, { n: '2' }),
-				system: false,
-				hidden: true
-			}
+			{ id: 'recent', title: m.recent, hidden: false }
 		]
 	};
 }

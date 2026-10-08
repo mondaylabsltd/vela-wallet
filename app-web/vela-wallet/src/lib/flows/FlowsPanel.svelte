@@ -76,9 +76,11 @@
 		/**
 		 * The recipient picker's two answers (spec 028 US5, wired by the contacts
 		 * session): one person from the book, or a whole group as split-mode
-		 * recipients. Optional, and the same shape `FlowsMobile` declares.
+		 * recipients. Optional, and the same shape `FlowsMobile` declares —
+		 * the person by ADDRESS, never by a place in a list the book re-sorts
+		 * (issue 467).
 		 */
-		pickContact?(index: number): void;
+		pickContact?(address: string): void;
 		pickGroup?(index: number): void;
 		/**
 		 * The split rows (spec 028 Phase 10): a row typed into, the book opened
@@ -226,7 +228,7 @@
 		<ContactPick
 			model={body.model}
 			onscan={() => (send ? send.openScanner() : go('scan'))}
-			onselect={send?.pickContact ? (i) => send.pickContact?.(i) : undefined}
+			onselect={send?.pickContact ? (address) => send.pickContact?.(address) : undefined}
 			ongroup={send?.pickGroup ? (i) => send.pickGroup?.(i) : undefined}
 		/>
 	{:else if body.kind === 'fee-token'}

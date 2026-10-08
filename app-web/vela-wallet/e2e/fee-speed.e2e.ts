@@ -857,7 +857,7 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 			.fire('eth_sendTransaction', [{ from, to, value: '0x2386f26fc10000' }])
 			.catch(() => undefined);
 	}, RECIPIENT);
-	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toBeVisible({
+	await expect(page.getByTestId('signing-confirm')).toBeVisible({
 		timeout: 25_000
 	});
 
@@ -891,13 +891,13 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 /**
  * Spec 079 (F11 — the owner: "可信签名器签完后，回到签名提示框，似乎没有任何提示"):
  * from the approval on, the dApp sheet is a STATUS, never the form with a
- * greyed slide. Send dust from a page, in the parallel space (its fixture keys
+ * greyed confirm. Send dust from a page, in the parallel space (its fixture keys
  * sign for real), on the stubbed chain: "Submitting to network…" with a live ✕,
  * then the landing, which closes by itself once the chain confirms. Lives here
  * for this file's chain and relay stubs.
  */
 /**
- * Send dust from a page in the parallel space, up to the slide armed. The
+ * Send dust from a page in the parallel space, up to the confirm armed. The
  * relay holds `eth_sendUserOperation` for 1.5 s, so "submitting" can be seen;
  * `landed()` flips the receipt from pending to landed.
  */
@@ -937,11 +937,7 @@ async function dappSendArmed(page: Page): Promise<{ land: () => void }> {
 			.then((answer) => (vela.__answer = answer))
 			.catch((error) => (vela.__error = error));
 	}, RECIPIENT);
-	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toHaveAttribute(
-		'aria-disabled',
-		'false',
-		{ timeout: 30_000 }
-	);
+	await expect(page.getByTestId('signing-confirm')).toBeEnabled({ timeout: 30_000 });
 	return { land: () => (landed = true) };
 }
 
@@ -949,28 +945,29 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 	page
 }) => {
 	const { land } = await dappSendArmed(page);
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	const confirm = page.getByTestId('signing-confirm');
 
 	// 083 H3: one call, no calldata — the page only moves the chain's own coin.
 	// The sheet says so (what, how much, to whom), exact to the wei, and not
 	// "unable to decode (0 bytes)" in red, which is what it drew before.
-	const sheet = page.getByRole('dialog').filter({ has: slider });
+	const sheet = page.getByRole('dialog').filter({ has: confirm });
 	await expect(sheet.locator('p.intent')).toHaveText(en('componentsUi.signing.intentSend'));
-	await expect(sheet.getByText('-0.000000000000000001', { exact: true })).toBeVisible();
+	// U+2212, the sheet's minus (spec 082 G19/RJ15) — never an ASCII hyphen.
+	await expect(sheet.getByText('\u22120.000000000000000001', { exact: true })).toBeVisible();
 	await expect(
 		sheet.getByText(en('componentsUi.signing.recipientLabel'), { exact: true })
 	).toBeVisible();
 	const blindHead = en('componentsUi.signing.blindDecodeWarning').split('{{')[0].trim();
 	await expect(sheet.getByText(blindHead)).toHaveCount(0);
 
-	// From here on, record every frame the sheet draws: a greyed slide must
-	// never appear, and the status must.
+	// From here on, record every frame the sheet draws: a greyed confirm must
+	// never appear (busy is never drawn as disabled), and the status must.
 	await page.evaluate(() => {
-		const seen = { dimmedSlide: false, status: [] as string[] };
+		const seen = { dimmedConfirm: false, status: [] as string[] };
 		(window as unknown as { __seen: typeof seen }).__seen = seen;
 		const look = () => {
-			if (document.querySelector('[aria-label^="Slide to confirm"][aria-disabled="true"]')) {
-				seen.dimmedSlide = true;
+			if (document.querySelector('button[data-testid="signing-confirm"]:disabled')) {
+				seen.dimmedConfirm = true;
 			}
 			const status = document.querySelector('[data-testid="signing-status"]');
 			const text = status?.textContent?.trim();
@@ -983,8 +980,7 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 			characterData: true
 		});
 	});
-	await slider.focus();
-	await slider.press('Enter');
+	await confirm.click();
 
 	const status = page.getByTestId('signing-status');
 	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });
@@ -1010,9 +1006,9 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 		.toBeTruthy();
 
 	const seen = await page.evaluate(
-		() => (window as unknown as { __seen: { dimmedSlide: boolean; status: string[] } }).__seen
+		() => (window as unknown as { __seen: { dimmedConfirm: boolean; status: string[] } }).__seen
 	);
-	expect(seen.dimmedSlide).toBe(false);
+	expect(seen.dimmedConfirm).toBe(false);
 	expect(seen.status.some((text) => text.includes(en('send.txSubmitting')))).toBe(true);
 	// 083 H3: from the approval to the passkey prompt the wallet is preparing
 	// (funding, nonce, estimate) — "Waiting for biometric" only once the prompt
@@ -1037,10 +1033,8 @@ test('a dApp send closed after approving is still answered, and no landing comes
 	page
 }) => {
 	const { land } = await dappSendArmed(page);
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
 	land();
-	await slider.focus();
-	await slider.press('Enter');
+	await page.getByTestId('signing-confirm').click();
 
 	const status = page.getByTestId('signing-status');
 	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });

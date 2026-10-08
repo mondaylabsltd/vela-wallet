@@ -12,6 +12,12 @@
 import { CHAINS, chainIdToApiNetwork, chainMeta } from './chains';
 import { loadCustomNetworks, type CustomNetworkRecord } from './records';
 
+/**
+ * A network as the services know it. Its logo is not a field: it lives on the
+ * endpoint the person chose, and the core says where (`chainLogoURL` in
+ * `$lib/flows/marks`); the built-in host spelled out here went stale the
+ * moment someone re-pointed it.
+ */
 export interface Network {
 	id: string;
 	displayName: string;
@@ -19,15 +25,12 @@ export interface Network {
 	iconLabel: string;
 	iconColor: string;
 	iconBg: string;
-	logoURL: string;
 	isL2: boolean;
 	rpcURL: string;
 	explorerURL: string;
 	bundlerURL: string;
 }
 
-/** Base URL for chain logos from ethereum-data (content, as on Expo). */
-const CHAIN_LOGO_BASE = 'https://ethereum-data.getvela.app/chainlogos';
 /** Base URL of Vela's per-chain ERC-4337 bundler. */
 const BUNDLER_BASE = 'https://vela-relay-cf.getvela.app';
 
@@ -39,7 +42,6 @@ export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
 	iconLabel: c.iconLabel,
 	iconColor: c.iconColor,
 	iconBg: c.iconBg,
-	logoURL: `${CHAIN_LOGO_BASE}/eip155-${c.chainId}.png`,
 	isL2: c.isL2,
 	rpcURL: c.rpcURL,
 	explorerURL: c.explorerURL,
@@ -102,7 +104,6 @@ export function customToNetwork(cn: CustomNetworkRecord): Network {
 		iconLabel: cn.iconLabel,
 		iconColor: cn.iconColor,
 		iconBg: cn.iconBg,
-		logoURL: cn.logoURL,
 		isL2: cn.isL2,
 		rpcURL: cn.rpcURL,
 		explorerURL: cn.explorerURL,

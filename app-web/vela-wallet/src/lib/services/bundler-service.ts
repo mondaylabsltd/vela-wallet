@@ -294,7 +294,7 @@ export async function attemptSilentSponsorship(
 
 export type SponsorProbe =
 	/** Server says the gates pass — defer the actual grant to the moment of
-	 *  maximum commitment (the confirm slide), so the treasury only ever funds
+	 *  maximum commitment (the confirm), so the treasury only ever funds
 	 *  transactions that are about to execute and recoup. */
 	| { outcome: 'eligible' }
 	/** An old server without dryRun support performed the real grant — fine,
@@ -308,7 +308,7 @@ export type SponsorProbe =
  * Ask the bundler whether sponsorship WOULD succeed, without moving money
  * (body `dryRun: true`). Lets the Send flow route denials to the funding
  * sheet at Continue (where an external deposit is still a graceful ask)
- * while delaying the actual treasury transfer to the confirm slide.
+ * while delaying the actual treasury transfer to the confirm.
  *
  * Backward compatible: a server that predates dryRun ignores the flag and
  * grants for real — mapped to 'granted', which callers treat as sponsored.

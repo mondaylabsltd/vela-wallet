@@ -12,7 +12,7 @@
  * 1. **The confirm gate is an AND.** `SignView.confirm_gate_open` says the
  *    request may be signed; `GuardView.confirm_allowed` says the cap has been
  *    chosen; `ClearSigningView.resolving` says the request is still being
- *    read (spec 096 F7). The slider arms only when all agree (and the fee,
+ *    read (spec 096 F7). The confirm opens only when all agree (and the fee,
  *    when the request has one, is ready). Its own doc in the drawn component
  *    says the shell must AND them — this is that place.
  * 2. **The ✕ is the refusal.** The 022 interaction contract draws no reject
@@ -43,7 +43,7 @@ import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { chainLogoURL } from '$lib/services/tokens-model';
+import { chainLogoURL, tokenMarkFor } from '$lib/flows/marks';
 import { browserSiteLabel, feeFailureReasonKey, signConfirmState } from '$lib/core/kernels';
 import { estimateRevertsFor } from '$lib/services/estimate-verdict';
 import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
@@ -479,7 +479,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	 * Spec 081: the core refused this request outright — it would have changed
 	 * who controls the account. Say so and stop: the decoded intent below would
 	 * describe a transaction nobody can sign, and reading it as an option is
-	 * exactly the confusion the refusal exists to prevent. The slider is closed
+	 * exactly the confusion the refusal exists to prevent. The confirm is shut
 	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
 	 */
 	if (sign.blocked) {
@@ -488,7 +488,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
-	// Spec 096 F7: still reading — a neutral "Loading…", and the slide stays
+	// Spec 096 F7: still reading — a neutral "Loading…", and the confirm stays
 	// shut (`buildSigningModel`). This said the cap editor's "Set a finite
 	// amount to continue." over an Aave supply for seconds.
 	if (clear.surface === 'loading' || clear.resolving) {
@@ -676,7 +676,7 @@ function nativeValueBlock(inputs: SigningLiveInputs, hero: boolean): Block | nul
 /**
  * NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): for the
  * moment between a speed being picked and its own figure landing, the fee in
- * hand is the previous speed's. The row says "estimating", and the slide stays
+ * hand is the previous speed's. The row says "estimating", and the confirm stays
  * shut — the core's `confirm_fee_ready` is still true then, and would sign the
  * speed the person just walked away from.
  */
@@ -725,9 +725,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	};
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
-		// own row. A sheet that drew nothing here let a person slide on a
+		// own row. A sheet that drew nothing here let a person confirm a
 		// mainnet transaction without ever being told what it costs — and the
-		// slide stays shut in both states, as it does on the phones.
+		// confirm stays shut in both states, as it does on the phones.
 		if (fee.busy || ofAnotherTier) {
 			return {
 				kind: 'onchain',
@@ -773,13 +773,16 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// thing this sheet may never say.
 	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
 		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
+	const chainId = sign.request?.chain_id ?? 1;
 	const selector =
 		inputs.feeOpen === true && fee.options.length > 1
 			? {
 					title: m.feeTokenTitle,
 					options: fee.options.map((option) => ({
 						id: option.contract ?? 'native',
-						mark: { letter: option.symbol.slice(0, 1).toUpperCase(), tint: NEUTRAL_TINT },
+						// The REQUEST's chain: the coin is paid on the chain this
+						// transaction runs on, whatever the estimate says or lacks.
+						mark: tokenMarkFor(chainId, option.symbol, option.contract),
 						name: option.symbol,
 						balance: `${amount(option.balance, option.decimals)} ${option.symbol}`,
 						fee:
@@ -798,7 +801,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 			: undefined;
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
-	// other coins are one tap away — a dark slide with no reason is issue 204.
+	// other coins are one tap away — a shut confirm with no reason is issue 204.
 	// Otherwise, spec 096 F2: the coin in force is one the transaction itself
 	// may spend, so what is left for the fee may be too little — the core's
 	// `spent_by_operation`, said while that coin is the one paying.
@@ -843,7 +846,7 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	});
 }
 
-function techModel(inputs: SigningLiveInputs): TechModel {
+function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	const { sign, clear, m } = inputs;
 	// A refused request discloses nothing (spec 081). Android and iOS hide this
 	// card entirely under a refusal; web was still putting the raw
@@ -853,7 +856,10 @@ function techModel(inputs: SigningLiveInputs): TechModel {
 	const result = sign.blocked ? null : clear.result;
 	return {
 		title: m.advancedToggle,
-		summary: result?.contract_name ?? undefined,
+		// The contract's name beside the toggle tells a site's request apart;
+		// on the wallet's own backup "· Vela passkey registry" was a stranger's
+		// term over a sheet that is otherwise plain words. It stays inside.
+		summary: own ? undefined : (result?.contract_name ?? undefined),
 		fn: undefined,
 		params: [],
 		identities: result?.contract_address
@@ -868,46 +874,6 @@ function techModel(inputs: SigningLiveInputs): TechModel {
 		raw: request ? { label: m.techRawData, hex: request.params_json } : undefined,
 		copyLabel: m.copyValue,
 		explorerLabel: m.viewOnExplorer
-	};
-}
-
-/**
- * The whole sheet. `null` while the core is showing nothing — the route
- * renders no sheet at all then, rather than an empty one.
- */
-/** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
-const PASSKEY_REGISTRY = '0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9';
-
-/**
- * The wallet's own key backup, in the person's language.
- *
- * The core's built-in results are English, like the ERC-7730 descriptors they
- * sit beside — "the words stay in the shell". For a third-party contract that is
- * the descriptor author's text and stays as written. This one is OURS, raised by
- * the wallet itself, and a sheet that was Chinese everywhere except its three
- * most important lines read as half-finished (founder, 2026-09-19). Matched on
- * the request being first-party AND the verified registry address, never on the
- * English words.
- */
-function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMessages) {
-	const result = clear.result;
-	if (!own || !result?.verified || result.contract_address?.toLowerCase() !== PASSKEY_REGISTRY)
-		return clear;
-	const labels = [m.backupRegisteredAs, m.backupAddress, m.backupPublicKeys];
-	return {
-		...clear,
-		result: {
-			...result,
-			intent: m.backupIntent,
-			fields: result.fields.map((field, index) => ({
-				...field,
-				label: labels[index] ?? field.label
-			}))
-		},
-		confirm:
-			clear.confirm.type === 'confirm_intent'
-				? { ...clear.confirm, intent: m.backupIntent }
-				: clear.confirm
 	};
 }
 
@@ -1051,7 +1017,7 @@ export function summaryOf(blocks: Block[]): string | undefined {
 
 /**
  * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
- * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
+ * the form with a greyed confirm (the owner: "可信签名器签完后，回到签名提示框，
  * 似乎没有任何提示"). Spec 082 (RA9, G22): its words follow the core's
  * `SignView.phase`, the stage the pipeline is really in:
  *
@@ -1163,8 +1129,8 @@ export function signingCloseEvent(
 /**
  * Spec 082 RJ19 (G57): the relay's own estimate of this operation says it
  * will revert. The web runs no simulation (RG6), so this is the one voice
- * that can say it before the slide — in the danger tone, under the intent.
- * The slide stays live: a warning informs, it never blocks (L-D5); a submit
+ * that can say it before the confirm — in the danger tone, under the intent.
+ * The confirm stays live: a warning informs, it never blocks (L-D5); a submit
  * then meets the relay's refusal, answered as one (RJ3).
  */
 function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[] {
@@ -1183,16 +1149,15 @@ function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[
 	return next;
 }
 
+/**
+ * The whole sheet. `null` while the core is showing nothing — the route
+ * renders no sheet at all then, rather than an empty one.
+ */
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
-	const ownRequest =
-		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
 	const inputs = {
 		...raw,
-		clear: cappedApproval(
-			localizedTerms(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.m),
-			raw.guard
-		)
+		clear: cappedApproval(localizedTerms(raw.clear, raw.m), raw.guard)
 	};
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;
@@ -1204,26 +1169,41 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// is said once, and the host line stays whenever it adds something.
 	const label = browserSiteLabel(dapp?.name ?? '', host);
 	const name = label.name;
-	const own = ownRequest;
+	// The wallet's own request (the key backup) is the shell's say-so, carried
+	// by the core (`first_party`) — never the origin: a page served from the
+	// wallet's own host could otherwise borrow the wallet's name.
+	const own = request.first_party;
 
 	// Rule 1: the gate is an AND — the request, the guard, the reading and the
 	// fee at the speed in force. Spec 099 R7: the AND is the core's
 	// (`sign_confirm::confirm_state`), the same on every client, and it says
-	// which part is shut; the line under a shut slide is its corpus key.
+	// which part is shut; the line under a shut confirm is its corpus key.
 	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
-	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
-	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
+	const drawn = withEstimateVerdict(blocksFor(inputs), inputs);
+	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(drawn), m);
+	// The wallet's own request names no requester: its intent is the header's
+	// headline, beside the ✕, and is not said a second time below it. While
+	// the reading is still out there is no intent yet; the sheet's own title
+	// holds the line until it lands.
+	const lead = own && drawn[0]?.kind === 'intent' ? drawn[0] : undefined;
+	const blocks = lead ? drawn.slice(1) : drawn;
+	const headline = own
+		? lead
+			? { text: lead.text, tone: lead.tone }
+			: { text: m.panelTitle, tone: 'neutral' as const }
+		: undefined;
 
 	return {
 		id: 'cs1',
-		// The wallet's own request (the key backup) is not a site: it wears the
-		// wallet's mark and name, and no host — `localhost:5173` under "Vela" read
-		// as a stranger borrowing the brand (founder, 2026-09-19).
+		// The wallet's own request (the key backup) is not a site, and its
+		// header says no site (`headline`): `localhost:5173` under "Vela" read
+		// as a stranger borrowing the brand (founder, 2026-09-19), and the
+		// wallet's own mark and name over its own request said nothing either.
 		dapp: own
-			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
+			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT }
 			: {
 					name,
 					host: label.host_line ?? '',
@@ -1236,8 +1216,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			dot: NEUTRAL_TINT,
 			logoUrl: chainLogoURL(request.chain_id)
 		},
+		...(headline ? { headline } : {}),
 		blocks,
-		tech: techModel(inputs),
+		tech: techModel(inputs, own),
 		techOpen: false,
 		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
 		signer: {
@@ -1246,18 +1227,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			identiconSvg: identicon(identity.address),
 			address: identity.address
 		},
-		// Spec 081: refused — no fee, no slider, one way out.
+		// Spec 081: refused — no fee, no confirm, one way out.
 		dismissOnly: sign.blocked ? m.close : undefined,
 		confirm: {
-			hint: m.slideToConfirm,
 			/*
-			 * The drawn control renders `hint · action`, so `action` is a PHRASE
-			 * ("Confirm send"), not a sentence. Falling back to
-			 * `slideConfirmAction` put its raw template on screen — the person read
-			 * "Slide to confirm · Slide to confirm · {{action}}" (spec 027 T340,
-			 * found the first time a real request reached the sheet, and the same
-			 * class as 026's `{{bytes}}`). With no intent from the core, the
-			 * generic word is the honest one.
+			 * The control's whole label is the action, a PHRASE ("Confirm
+			 * send", "Back up public keys"), never a sentence or a template: a
+			 * template fallback once put "{{action}}" on screen (spec 027 T340).
+			 * With no intent from the core, the generic word is the honest one.
 			 */
 			action:
 				clear.surface === 'plain_send' && clear.plain_send

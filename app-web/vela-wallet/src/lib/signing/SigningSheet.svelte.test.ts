@@ -31,7 +31,7 @@ function model(over: Partial<SigningModel> = {}): SigningModel {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: { label: 'Signing account', name: 'My Wallet', identiconSvg: '<svg></svg>' },
-		confirm: { hint: 'Slide to confirm', action: 'Send', enabled: true },
+		confirm: { action: 'Send', enabled: true },
 		closeLabel: 'Close',
 		panelTitle: 'Signature request',
 		...over
@@ -43,6 +43,7 @@ async function drawn(props: {
 	dismissible?: boolean;
 	onfeerefresh?: () => void;
 	onretry?: () => void;
+	onconfirm?: () => void;
 }) {
 	const onclose = vi.fn();
 	const screen = render(SigningSheet, {
@@ -51,7 +52,8 @@ async function drawn(props: {
 			dismissible: props.dismissible ?? true,
 			onclose,
 			onfeerefresh: props.onfeerefresh,
-			onretry: props.onretry
+			onretry: props.onretry,
+			onconfirm: props.onconfirm
 		}
 	});
 	await tick();
@@ -121,11 +123,11 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		closable: true
 	};
 
-	it('the form gives way to the status: no fee, no slide — never a greyed one', async () => {
-		const SLIDE = '[role="button"][aria-label^="Slide to confirm"]';
-		// The control, before the approval: the slide is there.
+	it('the form gives way to the status: no fee, no confirm — never a greyed one', async () => {
+		const CONFIRM = '[data-testid="signing-confirm"]';
+		// The control, before the approval: the confirm is there.
 		const form = await drawn({});
-		expect(form.sheet.querySelector(SLIDE)).not.toBeNull();
+		expect(form.sheet.querySelector(CONFIRM)).not.toBeNull();
 		await form.screen.unmount();
 
 		const view = await drawn({
@@ -142,7 +144,7 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		const status = view.sheet.querySelector<HTMLElement>('[data-testid="signing-status"]');
 		expect(status?.textContent).toContain('Submitting to network...');
 		expect(status?.textContent).toContain('Closing this page keeps the transaction running');
-		expect(view.sheet.querySelector(SLIDE)).toBeNull();
+		expect(view.sheet.querySelector(CONFIRM)).toBeNull();
 		expect(view.sheet.querySelector('button.refresh')).toBeNull();
 		expect(view.sheet.textContent).not.toContain('Network fee');
 		await view.screen.unmount();
@@ -207,6 +209,66 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 	});
 });
 
+/**
+ * Issue 461: the sheet confirms with a tap — the shared primary button the
+ * Send screen confirms with, full width, its label the action alone. It used
+ * to be a slide whose label read "Slide to confirm · …".
+ */
+describe('the confirm is a button (issue 461)', () => {
+	const confirmOf = (sheet: HTMLElement) =>
+		sheet.querySelector<HTMLButtonElement>('button[data-testid="signing-confirm"]');
+
+	it('says the action alone, fills the footer, and one tap confirms', async () => {
+		const onconfirm = vi.fn();
+		const view = await drawn({ onconfirm });
+		const confirm = confirmOf(view.sheet)!;
+		expect(confirm).not.toBeNull();
+		expect(confirm.textContent?.trim()).toBe('Send');
+		expect(confirm.classList.contains('primary')).toBe(true);
+		expect(confirm.disabled).toBe(false);
+		const footer = confirm.closest('.footer') as HTMLElement;
+		expect(
+			Math.abs(confirm.getBoundingClientRect().width - footer.getBoundingClientRect().width)
+		).toBeLessThanOrEqual(1);
+		confirm.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
+		expect(view.onclose).not.toHaveBeenCalled();
+		await view.screen.unmount();
+	});
+
+	it('is shut while the core’s gate is, and says why under it', async () => {
+		const onconfirm = vi.fn();
+		const view = await drawn({
+			model: model({ confirm: { action: 'Send', enabled: false, note: 'Getting the fee…' } }),
+			onconfirm
+		});
+		const confirm = confirmOf(view.sheet)!;
+		expect(confirm.disabled).toBe(true);
+		confirm.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		const note = view.sheet.querySelector('.confirm-note');
+		expect(note?.textContent).toBe('Getting the fee…');
+		expect(note!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			confirm.getBoundingClientRect().bottom
+		);
+		await view.screen.unmount();
+	});
+
+	// The side panel's column (360 − 2 × 24): the longest action in the corpus
+	// wraps inside the button, which grows; nothing is cut or spills.
+	it('wraps a long action inside itself in the side panel’s width', async () => {
+		const view = await drawn({
+			model: model({ confirm: { action: 'Резервное копирование открытых ключей', enabled: true } })
+		});
+		const confirm = confirmOf(view.sheet)!;
+		(confirm.closest('.footer') as HTMLElement).style.width = '312px';
+		await tick();
+		expect(confirm.scrollWidth).toBeLessThanOrEqual(confirm.clientWidth);
+		expect(confirm.getBoundingClientRect().width).toBeLessThanOrEqual(312.5);
+		await view.screen.unmount();
+	});
+});
+
 describe('the signing fee row (spec 079 US2)', () => {
 	const shown: FeeModel = {
 		kind: 'onchain',
@@ -241,7 +303,7 @@ describe('the signing fee row (spec 079 US2)', () => {
 		await view.screen.unmount();
 	});
 
-	it('keeps the stale note’s line standing, so the slide never moves when it speaks', async () => {
+	it('keeps the stale note’s line standing, so the confirm never moves when it speaks', async () => {
 		const quiet = await drawn({ model: model({ fee: shown }), onfeerefresh: () => {} });
 		const quietStale = quiet.sheet.querySelector<HTMLElement>('.stale')!;
 		expect(getComputedStyle(quietStale).visibility).toBe('hidden');
@@ -279,37 +341,100 @@ describe('the signing fee row (spec 079 US2)', () => {
 	});
 });
 
-// Issue 314: the wallet's own key backup read like a newspaper — its intent
-// was the small grey eyebrow a figure stands under, over a sheet with no
-// figure. The wallet's own request leads with its intent as the headline; a
-// site's sheet keeps the eyebrow its 33 drawn scenarios were built around.
-describe('the intent', () => {
-	const backup = (own: boolean) =>
+// Issue 314, then the first-party header (2026-10-08): the wallet's own key
+// backup has no requester. Its header used to repeat the wallet's mark, "Vela
+// Wallet" and the network chip over a headline that said the same thing again.
+// Now the header IS the headline, beside the ✕ — the sheet's only exit, so it
+// stays in every mode; a site's sheet keeps its requester row and the eyebrow
+// its drawn scenarios were built around.
+describe('the wallet’s own request (first-party)', () => {
+	const BACKUP = 'Back up public keys';
+	const own = (over: Partial<SigningModel> = {}) =>
 		model({
-			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)', own },
+			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
+			headline: { text: BACKUP, tone: 'success' },
 			blocks: [
-				{ kind: 'intent', text: 'Back up public keys', tone: 'success' },
-				{ kind: 'rows', rows: [{ label: 'Public keys', value: '1' }] }
-			]
+				{
+					kind: 'rows',
+					rows: [
+						{ label: 'Network', value: 'Ethereum' },
+						{ label: 'Public keys', value: '1' }
+					]
+				}
+			],
+			...over
 		});
-	const intent = (sheet: HTMLElement) => sheet.querySelector<HTMLElement>('.intent')!;
-	const size = (el: HTMLElement) => parseFloat(getComputedStyle(el).fontSize);
+	const size = (el: Element) => parseFloat(getComputedStyle(el).fontSize);
+	const box = (el: Element) => el.getBoundingClientRect();
 
-	it('leads the wallet’s own request as its headline, in the base ink', async () => {
-		const own = await drawn({ model: backup(true) });
-		const lead = intent(own.sheet);
-		expect(lead.classList.contains('lead')).toBe(true);
-		const headline = size(lead);
+	it('is one row: the headline and the ✕ — no mark, no name, no network chip', async () => {
+		const view = await drawn({ model: own() });
+		const header = view.sheet.querySelector<HTMLElement>('header.header')!;
+		const headline = header.querySelector<HTMLElement>('.headline')!;
+		expect(headline.textContent).toBe(BACKUP);
+		for (const gone of ['.site', '.who', '.name', '.network']) {
+			expect(header.querySelector(gone), gone).toBeNull();
+		}
+		expect(header.textContent).not.toContain('Vela Wallet');
+		expect(header.textContent).not.toContain('Ethereum');
+		// Side by side, on one line: the ✕ at the end of the headline's row.
+		expect(view.close).not.toBeNull();
+		const [h, x] = [box(headline), box(view.close!)];
+		expect(x.left).toBeGreaterThanOrEqual(h.right - 1);
+		expect(Math.abs((h.top + h.bottom) / 2 - (x.top + x.bottom) / 2)).toBeLessThanOrEqual(2);
+		// In the title's ink and type, larger than any site's eyebrow.
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--color-fg-base)';
 		document.body.appendChild(probe);
-		expect(getComputedStyle(lead).color).toBe(getComputedStyle(probe).color);
+		expect(getComputedStyle(headline).color).toBe(getComputedStyle(probe).color);
 		probe.remove();
-		await own.screen.unmount();
+		// The intent is not said a second time below it.
+		expect(view.sheet.querySelector('.intent')).toBeNull();
+		await view.screen.unmount();
+	});
 
-		const site = await drawn({ model: backup(false) });
-		expect(intent(site.sheet).classList.contains('lead')).toBe(false);
-		expect(size(intent(site.sheet))).toBeLessThan(headline);
+	it('keeps its ✕ when the sheet is a status', async () => {
+		const view = await drawn({
+			model: own({
+				status: { stage: 'submitting', title: 'Submitting…', captions: [], closable: true }
+			})
+		});
+		expect(view.sheet.querySelector('.headline')?.textContent).toBe(BACKUP);
+		expect(view.close).not.toBeNull();
+		view.close!.click();
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+	});
+
+	it('wraps a long headline beside the ✕ instead of cutting it', async () => {
+		const LONG = 'Резервное копирование открытых ключей в сеть Ethereum';
+		const view = await drawn({ model: own({ headline: { text: LONG, tone: 'neutral' } }) });
+		const headline = view.sheet.querySelector<HTMLElement>('.headline')!;
+		expect(headline.textContent).toBe(LONG);
+		expect(headline.scrollWidth).toBeLessThanOrEqual(headline.clientWidth);
+		expect(box(view.close!).left).toBeGreaterThanOrEqual(box(headline).right - 1);
+		await view.screen.unmount();
+	});
+
+	it('a site’s request keeps its requester row and the small eyebrow', async () => {
+		const site = await drawn({
+			model: model({
+				blocks: [
+					{ kind: 'intent', text: BACKUP, tone: 'success' },
+					{ kind: 'rows', rows: [{ label: 'Public keys', value: '1' }] }
+				]
+			})
+		});
+		expect(site.sheet.querySelector('.headline')).toBeNull();
+		expect(site.sheet.querySelector('.header .name')?.textContent).toBe('app.example');
+		expect(site.sheet.querySelector('.header .network')).not.toBeNull();
+		const eyebrow = site.sheet.querySelector<HTMLElement>('.intent')!;
+		expect(eyebrow.textContent).toBe(BACKUP);
+		const eyebrowSize = size(eyebrow);
 		await site.screen.unmount();
+
+		const ownView = await drawn({ model: own() });
+		expect(eyebrowSize).toBeLessThan(size(ownView.sheet.querySelector('.headline')!));
+		await ownView.screen.unmount();
 	});
 });

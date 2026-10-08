@@ -215,6 +215,69 @@ describe('liveTxDetail', () => {
 		expect(detail.facts[1].value).toBe('Arbitrum');
 	});
 
+	// The network fact names a NETWORK, so it wears the network's own logo —
+	// as the confirm page's does. It was the chain's letters only, and on the
+	// shells that took the coin's rule, Ethereum's logo beside "Base".
+	it('ETH sent on Base: the network fact wears Base, not Ethereum and not letters', () => {
+		const detail = liveTxDetail(item('b', { direction: 'out', chain_id: 8453 }), ctx);
+		const network = detail.facts.find((f) => f.label === fm['componentsTx.detail.labelChain']);
+		expect(network?.value).toBe('Base');
+		expect(network?.lead).toEqual({
+			kind: 'token',
+			mark: expect.objectContaining({
+				ticker: 'ETH',
+				logoUrls: ['https://ethereum-data.getvela.app/chainlogos/eip155-8453.png'],
+				badgeHidden: true
+			})
+		});
+	});
+
+	// A sweep's record names each coin's logos but not its contract: the
+	// chain's own coin still gets the core's logo after them; a token it cannot
+	// place keeps what it named — never a logo guessed from its ticker.
+	it('a sweep lists its coins with the logos the record named, the own coin’s added', () => {
+		const named = 'https://named.example/usdc.png';
+		const coin = (symbol: string, logo_urls: string[] | null) => ({
+			to: '0x' + 'cd'.repeat(20),
+			to_name: null,
+			value: '1',
+			symbol,
+			decimals: 18,
+			usd_value: 1,
+			logo_urls
+		});
+		const detail = liveTxDetail(
+			item('w', {
+				direction: 'out',
+				counterparty: null,
+				chain_id: 8453,
+				batch: {
+					kind: 'multi_select',
+					count: 3,
+					total_usd: 3,
+					transfers: [coin('ETH', null), coin('USDC', [named]), coin('DEGEN', null)],
+					ids: ['w1', 'w2', 'w3'],
+					from: '0x' + 'a1'.repeat(20),
+					chain_id: 8453,
+					timestamp: 1_700_000_000,
+					status: 'confirmed',
+					tx_hash: '0x' + 'c3'.repeat(32),
+					user_op_hash: '0xop',
+					symbol: null,
+					logo_urls: null,
+					to: '0x' + 'cd'.repeat(20),
+					to_name: null
+				}
+			}),
+			ctx
+		);
+		expect(detail.breakdown?.map((row) => [row.label, row.lead?.logoUrls])).toEqual([
+			['ETH', ['https://ethereum-data.getvela.app/chainlogos/eip155-1.png']],
+			['USDC', [named]],
+			['DEGEN', undefined]
+		]);
+	});
+
 	it('masks the money while privacy hides it', () => {
 		const detail = liveTxDetail(item('a'), { ...ctx, hidden: true });
 		expect(detail.amount).not.toContain('1.25');

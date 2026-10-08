@@ -101,7 +101,11 @@
 	     reproduced whole rather than as a floating panel. -->
 	<div class="stage">
 		<div class="frame">
-			<ExploreHome model={data.model} copy={data.copy} />
+			{#if data.settings}
+				<SettingsHome model={data.settings} />
+			{:else}
+				<ExploreHome model={data.model} copy={data.copy} />
+			{/if}
 			<SigningSheet model={data.signing} />
 		</div>
 	</div>

@@ -1,7 +1,7 @@
 /**
  * Spec 022 gates for the signing layer.
  *
- * Two of these are product contracts, not style checks: the slide is the only
+ * Two of these are product contracts, not style checks: the confirm is the only
  * confirmation, and an unlimited approval can never be confirmed as requested.
  * They are asserted here so a later refactor has to break a test to break the
  * promise.
@@ -55,10 +55,11 @@ describe('signing messages', () => {
 });
 
 describe('the catalogue (data-model.md §3)', () => {
-	it('is all 35 scenarios, each with its own id', () => {
-		// 33 in data-model.md §3, plus cs34/cs35 (032 phase 39, the cap field).
-		expect(ALL_STATES).toHaveLength(35);
-		expect(new Set(ALL_STATES).size).toBe(35);
+	it('is all 36 scenarios, each with its own id', () => {
+		// 33 in data-model.md §3, plus cs34/cs35 (032 phase 39, the cap field)
+		// and cs36 (the wallet's own backup, with no requester header).
+		expect(ALL_STATES).toHaveLength(36);
+		expect(new Set(ALL_STATES).size).toBe(36);
 	});
 
 	it.each(ALL_STATES)('%s builds, says something, and fills every template', (state) => {
@@ -74,14 +75,22 @@ describe('the catalogue (data-model.md §3)', () => {
 
 	it.each(ALL_STATES)('%s opens with an intent and never shows a reject button', (state) => {
 		const model = build(state);
-		expect(model.blocks[0].kind).toBe('intent');
+		// The wallet's own request says its intent as the header's headline,
+		// and not a second time as the first block.
+		if (model.headline) {
+			expect(model.headline.text.length).toBeGreaterThan(0);
+			expect(model.blocks.some((b) => b.kind === 'intent')).toBe(false);
+		} else {
+			expect(model.blocks[0].kind).toBe('intent');
+		}
 		expect(JSON.stringify(model)).not.toContain(messages.confirmPlain + '”');
-		expect(model.confirm.hint).toBe(messages.slideToConfirm);
+		// Issue 461: the control says the action alone — no "Slide to confirm" lead-in.
+		expect(model.confirm).not.toHaveProperty('hint');
 	});
 });
 
 describe('unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling)', () => {
-	it('cs5 opens on the requested chip, warns in danger, and may be slid', () => {
+	it('cs5 opens on the requested chip, warns in danger, and may be confirmed', () => {
 		const model = build('cs5');
 		const [editor] = blocks(model, 'allowance');
 		expect(editor.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
@@ -90,7 +99,7 @@ describe('unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling)', 
 		expect(model.confirm.enabled).toBe(true);
 	});
 
-	it('choosing a finite cap keeps the slide armed (cs6, cs8)', () => {
+	it('choosing a finite cap keeps the confirm open (cs6, cs8)', () => {
 		for (const state of ['cs6', 'cs8'] as const) {
 			const model = build(state);
 			expect(model.confirm.enabled, state).toBe(true);
@@ -158,6 +167,24 @@ describe('fee shapes', () => {
 		expect(build('cs11').fee.kind === 'onchain' && build('cs11').fee).not.toHaveProperty(
 			'selector.options'
 		);
+	});
+
+	it('cs36 is the wallet asking itself: its intent as the headline, the network as a row', () => {
+		const model = build('cs36');
+		expect(model.headline).toEqual({
+			text: messages.terms.intentBackUpPublicKeys,
+			tone: 'success'
+		});
+		// No site drew it, so no site is named — the row says the network.
+		expect(blocks(model, 'rows')[0].rows.map((r) => r.label)).toEqual([
+			messages.terms.labelNetwork,
+			messages.terms.labelAddress,
+			messages.terms.labelPublicKeys
+		]);
+		expect(model.tech.summary).toBeUndefined();
+		expect(model.confirm.action).toBe(messages.terms.intentBackUpPublicKeys);
+		// Every other board is a site's request, and has no headline.
+		expect(build('cs1').headline).toBeUndefined();
 	});
 
 	it('cs29 is cs1 with the technical panel open', () => {

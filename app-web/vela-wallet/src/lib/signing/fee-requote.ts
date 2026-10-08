@@ -2,7 +2,7 @@
  * The signing sheet asks for a failed fee again by itself (spec 079, FR-008).
  *
  * On the Xiaomi the row said "点击重试" with the relay down — and stayed that
- * way after the relay came back, with the slide shut and nothing on screen to
+ * way after the relay came back, with the confirm shut and nothing on screen to
  * say that a tap was the only way forward. Every client now re-asks on the
  * CORE's schedule (`fee_policy::requote_delay_ms`: 3 s, 6 s, then every 8 s,
  * and never for a failure a retry cannot clear — spec 082 RJ12), each re-ask
@@ -170,7 +170,7 @@ export class FeeRequoteTimer {
 		this.#handle = this.#schedule(() => {
 			this.#handle = null;
 			// Checked again at the moment it fires: the person may have
-			// approved or closed in between, and a re-quote under a slide that
+			// approved or closed in between, and a re-quote under a confirm that
 			// already committed would re-price what they signed.
 			if (!this.#open) return;
 			this.#abandoned = false;
@@ -215,7 +215,7 @@ export class FeeRequoteTimer {
  *
  * The core clears `failed` the moment a re-quote starts (`busy`), so a row
  * read straight off the view said why, then "estimating", then why again —
- * every few seconds, with the reason line (and the slide under it) jumping
+ * every few seconds, with the reason line (and the confirm under it) jumping
  * each time, and a screen reader announcing it on every cycle. So: a failure
  * sets it, a measurement in flight keeps it, an answer (a quote, or nothing
  * asked at all) clears it.
@@ -235,12 +235,12 @@ export function heldFeeFailure(
  * deployment is unknown, so nothing could be priced) is the recoverable
  * failure it is — a chain node that did not answer — rather than an idle row.
  *
- * Idle, the row drew nothing and the slide stood OPEN on a transaction whose
+ * Idle, the row drew nothing and the confirm stood OPEN on a transaction whose
  * cost nobody had been told, with nothing asking again (the extension with the
  * network down). As `ChainRead` (spec 082 RJ13 — never `quote_unavailable`,
  * which named Vela's relay for a public node's rate limit, G48) the row says
  * why in the core's words, the refresh and the timer ask again (the retry
- * re-runs the whole request, context read included), and the slide stays shut
+ * re-runs the whole request, context read included), and the confirm stays shut
  * until a quote lands. Only while nothing is being measured and nothing else
  * is in hand. `rateLimited`: the node refused for load, not for being away.
  */

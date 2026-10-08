@@ -112,6 +112,7 @@ const EMPTY_SEND: SendView = {
 	receipt: null,
 	treasury_bootstrap: null,
 	relay_unreachable: null,
+	relay_report: null,
 	recipient_identity: null,
 	payees: [],
 	recipient_risk: null,
@@ -319,6 +320,17 @@ describe('the form', () => {
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
+	});
+
+	// Issue 468: the board's single form and the live one have the same two
+	// doors on the recipient row — the book and the scanner.
+	it('draws the same recipient doors as its board', () => {
+		const board = formModel().recipient;
+		const live = liveSendForm(formModel(), inputs({})).recipient;
+		expect(live?.pickLabel).toBe(m['send.recipientPickAria']);
+		expect(live?.scanLabel).toBe(m['send.scanAria']);
+		expect(board?.pickLabel).toBe(live?.pickLabel);
+		expect(board?.scanLabel).toBe(live?.scanLabel);
 	});
 
 	// Spec 096 F12: the core found the recipient is a token's own contract.
@@ -734,7 +746,7 @@ describe('the confirm screen', () => {
 
 	// Spec 096 F12: the WBNB-to-the-WBNB-contract send said only "First time
 	// sending here". The token-contract sentence goes first.
-	it('says the recipient is a token contract before the slide', () => {
+	it('says the recipient is a token contract before the confirm', () => {
 		const single = {
 			selected_token: ETH,
 			recipient: '0x' + 'ab'.repeat(20),
@@ -1756,21 +1768,15 @@ describe('the folded speed control (spec 068)', () => {
 		expect(model.speed?.options.some((o) => o.id === 'rapid')).toBe(false);
 	});
 
-	// …and the advantage the name no longer carries, one line per option. This
-	// is what makes the slow tier a choice rather than a defect, so a row that
-	// lost it would quietly undo the rename above.
-	it('gives every option the line that says what that speed buys', () => {
+	// …and no sentence under each name (the owner's call, 2026-10-08): what a
+	// speed buys is its own fee and gas bid, beside it. The descriptions are
+	// the Settings default-speed sheet's, which shows neither figure.
+	it('gives no option a description — its fee and bid say what it buys', () => {
 		const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
-		expect(model.speed?.options.map((o) => o.detail)).toEqual([
-			m['send.gasTierHintFast'],
-			m['send.gasTierHintStandard'],
-			m['send.gasTierHintSlow']
-		]);
-		expect(model.speed?.options.map((o) => o.detail)).toEqual([
-			'First to confirm, even when the network is busy',
-			'Balanced for everyday transfers',
-			'Lowest fee, if you can wait'
-		]);
+		for (const option of model.speed?.options ?? []) {
+			expect(option).not.toHaveProperty('detail');
+		}
+		expect(Object.keys(m)).not.toContain('send.gasTierHintFast');
 	});
 
 	// Each option's figure is its OWN quote's — never one number scaled into

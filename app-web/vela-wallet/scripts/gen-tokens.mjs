@@ -215,12 +215,6 @@ const WEB_ADDITIONS = [
 	['size-browserBar', '56px', 'spec 022: browsing toolbar row, measured 56 in E4'],
 	['size-signingAvatar', '36px', 'spec 022: dApp avatar in the signing header, measured 36 in CS1'],
 	['size-networkChip', '26px', 'spec 022: the network chip beside it, measured 26 in CS1'],
-	['size-slideTrack', '56px', 'spec 022: slide-to-confirm track, measured 342x56 in CS1'],
-	[
-		'size-slideKnob',
-		'48px',
-		'spec 022: its knob; the 4px inset either side is what makes the travel W-56'
-	],
 	[
 		'size-tabCount',
 		'26px',

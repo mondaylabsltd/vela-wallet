@@ -378,6 +378,14 @@ function balance(
 		decimals: state === 'hidden' ? undefined : amount?.decimals,
 		liveText: state === 'zero-live' ? m.balance.liveIndicator : undefined,
 		status,
+		// Issue 462: the hero's refresh, drawn as live draws it in every state —
+		// two minutes after the last read, at rest (the gallery adds the turning
+		// one beside it).
+		refresh: {
+			updated: fill(m.balance.lastUpdated, { ago: fill(m.balance.ago.minutes, { n: 2 }) }),
+			updating: m.balance.updating,
+			spinning: false
+		},
 		a11yHide: m.balance.a11yHide,
 		a11yShow: m.balance.a11yShow
 	};
