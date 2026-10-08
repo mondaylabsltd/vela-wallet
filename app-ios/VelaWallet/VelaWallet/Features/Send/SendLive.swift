@@ -859,12 +859,17 @@ enum SendLive {
         return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
-    /// The coin the fee row names, in its own mark: the estimate's coin
-    /// (the one in hand, else the fee session's), on the send's chain — an
-    /// ERC-20 by its CONTRACT, which the row used to leave out, so a USDC fee
-    /// would have worn the chain's logo by the native-coin rule. With no
-    /// estimate yet, or none at all, the chain's own coin: what the web and
-    /// the desktop draw. `nil` only with no chain to name (no token chosen).
+    /// The coin the fee row names, in its own mark — the coin that will PAY,
+    /// on the send's chain, an ERC-20 by its CONTRACT (without it a USDC fee
+    /// wore the chain's logo by the native-coin rule). `nil` only with no
+    /// chain to name (no token chosen).
+    ///
+    /// The estimate in hand first — the send machine's, else the fee
+    /// session's — its symbol and its contract read from that SAME estimate.
+    /// The send machine keeps its estimate while a newly picked speed is
+    /// measured, and the coin does not change with the speed (the desktop's
+    /// `fee_coin`). With no estimate at all, the coin the fee session is
+    /// pricing in; only when that is nobody's choice, the chain's own coin.
     static func feeCoinMark(
         _ view: SendViewWire, fee: FeeViewWire?, networks: WalletNetworks
     ) -> TokenMarkModel? {
@@ -876,9 +881,29 @@ enum SendLive {
         case .erc20(let contract, _, _, let symbol)?:
             return TokenMarkModel.of(chainId: chainId, symbol: symbol ?? "TOKEN",
                                      tokenAddress: contract, color: chainColor(chainId))
-        case .native?, nil:
+        case .native?:
             return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
+        case nil:
+            guard let coin = payingCoin(view, fee: fee, chainId: chainId) else {
+                return TokenMarkModel.of(chainId: chainId, symbol: native, color: chainColor(chainId))
+            }
+            return TokenMarkModel.of(chainId: chainId, symbol: coin.symbol,
+                                     tokenAddress: coin.contract, color: chainColor(chainId))
         }
+    }
+
+    /// The ERC-20 the fee session is pricing in while no estimate is in hand
+    /// — a speed being measured, a quote out — named by the session's own
+    /// row for it, else by the form's holdings. `nil` = the chain's own coin.
+    static func payingCoin(
+        _ view: SendViewWire, fee: FeeViewWire?, chainId: Int
+    ) -> (symbol: String, contract: String)? {
+        guard let contract = fee?.feeToken, !contract.isEmpty else { return nil }
+        func same(_ other: String?) -> Bool { other?.lowercased() == contract.lowercased() }
+        let symbol = fee?.options.first { same($0.contract) }?.symbol
+            ?? ([view.selectedToken].compactMap { $0 } + view.tokens)
+                .first { $0.chainId == chainId && same($0.tokenAddress) }?.symbol
+        return (symbol ?? "TOKEN", contract)
     }
 
     /// The core's live refusal on the form: the same-asset ceiling first, then
