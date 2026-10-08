@@ -1429,11 +1429,8 @@ fun VelaNavHost(
                                     when (id) {
                                         "favorites" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, hidden)
                                         "recent" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Recent, hidden)
-                                        else -> browser.setGroupHidden(id, hidden)
                                     }
                                 },
-                                onGroupNew = { browser.createGroup(strings.t("explore.newGroup")) },
-                                onGroupDelete = { id -> browser.deleteGroup(id) },
                                 onSiteMenuPick = { id ->
                                     when (id) {
                                         "refresh" -> browser.reload()

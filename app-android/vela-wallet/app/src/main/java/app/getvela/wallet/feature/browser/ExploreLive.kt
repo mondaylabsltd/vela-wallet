@@ -164,11 +164,8 @@ object ExploreLive {
     ): ExploreScreenModel {
         val connected = tab?.connected_address != null
         val favorites = view.favorites.map { tileOf(it) }
-        val populated = favorites.isNotEmpty() || history.entries.isNotEmpty() || view.groups.isNotEmpty()
-        val groups = buildList {
-            if (!view.recent_hidden) recentGroup(history.entries, strings)?.let { add(it) }
-            addAll(customGroups(view))
-        }
+        val populated = favorites.isNotEmpty() || history.entries.isNotEmpty()
+        val groups = listOfNotNull(recentGroup(history.entries, strings).takeUnless { view.recent_hidden })
         val tabs = view.tabs.map { open ->
             TabModel(
                 id = open.id,
@@ -233,16 +230,14 @@ object ExploreLive {
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,
             tabs = tabs,
+            // Issue #465: the start page's two sections and nothing else — no
+            // groups of the person's own, so no "System" tag to tell them apart.
             groupManageSheet = ExploreSheet.GroupManage(
                 title = strings.t("explore.manageGroups"),
-                newGroup = strings.t("explore.newGroup"),
-                rows = buildList {
-                    add(GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", mapOf("n" to view.favorites.size.toString())), system = true, hidden = view.favorites_hidden))
-                    add(GroupManageRow("recent", strings.t("explore.recent"), strings.t("explore.systemGroup"), system = true, hidden = view.recent_hidden))
-                    view.groups.forEach { group ->
-                        add(GroupManageRow(group.id, group.name, strings.t("explore.siteCount", mapOf("n" to group.sites.size.toString())), system = false, hidden = group.hidden))
-                    }
-                },
+                rows = listOf(
+                    GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", mapOf("n" to view.favorites.size.toString())), hidden = view.favorites_hidden),
+                    GroupManageRow("recent", strings.t("explore.recent"), meta = null, hidden = view.recent_hidden),
+                ),
             ),
             siteMenuSheet = engine?.let { e ->
                 val secure = tab?.secure ?: false
@@ -498,18 +493,6 @@ object ExploreLive {
             sites = entries.map { siteOf(it) },
         )
     }
-
-    fun customGroups(view: ExploreView): List<GroupModel> = view.groups
-        .filter { !it.hidden }
-        .map { group ->
-            GroupModel(
-                id = group.id,
-                title = group.name,
-                kind = GroupKind.Custom,
-                action = GroupAction.Menu,
-                sites = group.sites.map { tileOf(it) },
-            )
-        }
 
     /** The avatar letter — the core's rule (spec 079): `app.uniswap.org` is "U", not "A". */
     fun letterOf(host: String): String = uniffi.vela_core_uniffi.browserSiteLetter(host)

@@ -740,17 +740,4 @@ object VelaIcons {
             "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
         )
     }
-
-    /** lucide grip-vertical — the drag handle on a reorderable group row. */
-    val GripVertical: ImageVector by lazy {
-        fillIcon(
-            "VelaGripVertical",
-            "M10 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M10 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M10 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-            "M17 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
-        )
-    }
 }
