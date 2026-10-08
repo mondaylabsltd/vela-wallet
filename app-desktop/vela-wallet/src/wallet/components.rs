@@ -12,7 +12,8 @@ use gpui::{
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
+    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_BADGE_LOGO, WALLET_BADGE_RING,
+    WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
 
 use super::fixtures::{
@@ -578,32 +579,113 @@ pub fn balance_display(
     // last read ("Updated 2m"). A deposit made from another device had no
     // sign here until the ten-minute poll or a restart; now the person can
     // ask, and can see how fresh what they are looking at is. Quiet, like
-    // the status line: subtle ink, fuller on hover.
-    if let Some(on_refresh) = on_refresh {
-        let mut refresh = div()
-            .id("balance-refresh")
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .py(px(4.))
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_subtle)
-            .cursor_pointer()
-            .hover(|el| el.text_color(theme.fg_muted))
-            .child(icon_img(
-                icons,
-                Icon::RefreshCw,
-                false,
-                theme.fg_subtle,
-                14.,
-            ));
-        if let Some(updated) = model.updated.clone() {
-            refresh = refresh.child(updated);
-        }
-        root = root.child(div().flex().child(refresh.on_click(on_refresh)));
+    // the status line: subtle ink, fuller on hover. Drawn without a press
+    // behind it where a board shows its states.
+    if on_refresh.is_some() || model.updated.is_some() {
+        root = root.child(
+            div()
+                .flex()
+                .child(refresh_control(theme, icons, model, on_refresh)),
+        );
     }
 
     root
+}
+
+/// How long the refresh glyph takes to turn once, and in how many frames.
+const REFRESH_REVOLUTION: std::time::Duration = std::time::Duration::from_millis(1000);
+const REFRESH_FRAMES: u32 = 36;
+
+/// What the refresh control says: "Updating…" while it turns (issue 462),
+/// otherwise when the figure was last read — nothing before the first read.
+#[must_use]
+pub fn refresh_words(model: &BalanceModel) -> Option<SharedString> {
+    if model.refreshing {
+        Some(model.updating.clone())
+    } else {
+        model.updated.clone()
+    }
+}
+
+/// The hero's "↻ Updated 2m" (issue 462). While a read the person asked
+/// for is out the ↻ turns, the words read "Updating…", and the control
+/// takes no press: a second press would only start a second round.
+///
+/// One box for both states, so a press moves nothing — the reason the
+/// grey status line no longer comes and goes above it either: the glyph
+/// is the same 14 square turning or still, and the words sit in a one-line
+/// slot as wide as the LONGER of the two labels — the one not shown is laid
+/// out under it, clipped, invisible.
+fn refresh_control(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_refresh: Option<BalanceToggle>,
+) -> gpui::AnyElement {
+    let glyph: gpui::AnyElement = if model.refreshing {
+        let frames = icons.turning(Icon::RefreshCw, theme.fg_subtle, 14, REFRESH_FRAMES);
+        div()
+            .size(px(14.))
+            .flex_none()
+            .with_animation(
+                "balance-refresh-turn",
+                gpui::Animation::new(REFRESH_REVOLUTION).repeat(),
+                move |glyph, delta| {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        clippy::cast_precision_loss,
+                        reason = "delta is in [0, 1] and the count is 36"
+                    )]
+                    let at = ((delta * frames.len() as f32) as usize).min(frames.len() - 1);
+                    glyph.child(
+                        img(ImageSource::Render(std::sync::Arc::clone(&frames[at]))).size_full(),
+                    )
+                },
+            )
+            .into_any_element()
+    } else {
+        icon_img(icons, Icon::RefreshCw, false, theme.fg_subtle, 14.).into_any_element()
+    };
+
+    let line = theme::text_row_sub() * LINE_BODY;
+    let shown = refresh_words(model);
+    let other = if model.refreshing {
+        model.updated.clone()
+    } else {
+        Some(model.updating.clone())
+    };
+    let mut words = div()
+        .flex()
+        .flex_col()
+        .h(line)
+        .line_height(line)
+        .overflow_hidden();
+    if let Some(shown) = shown {
+        words = words.child(shown);
+    }
+    if let Some(other) = other {
+        words = words.child(div().text_color(gpui::transparent_black()).child(other));
+    }
+
+    let control = div()
+        .id("balance-refresh")
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .py(px(4.))
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_subtle)
+        .child(glyph)
+        .child(words);
+    match on_refresh.filter(|_| !model.refreshing) {
+        Some(on_refresh) => control
+            .cursor_pointer()
+            .hover(|el| el.text_color(theme.fg_muted))
+            .on_click(on_refresh)
+            .into_any_element(),
+        None => control.into_any_element(),
+    }
 }
 
 /// Desktop action pill (D1: icon + label inline). Caller chains `.on_click`.
@@ -711,15 +793,44 @@ fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div
     lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default(), true)
 }
 
+/// A mark's logo candidates, drawn over its glyph and tried in order — the
+/// core's rule on every shell: the first that loads wins.
+///
+/// gpui's image element takes one source, so each candidate's fallback is the
+/// next candidate, in the same box: a 404 (or an answer that does not decode)
+/// moves on, and the second URL is asked for only then — the lowercase asset
+/// path the index may hold where it lacks the checksummed one. The last one
+/// falls back to nothing, so the glyph under the stack is what stays. Until
+/// 2026-10-08 only the first candidate was ever asked for.
+pub(crate) fn logo_candidates(urls: &[SharedString], side: f32) -> Option<gpui::Img> {
+    let (first, rest) = urls.split_first()?;
+    let image = img(first.clone()).size(px(side)).rounded(px(side / 2.));
+    if rest.is_empty() {
+        return Some(image);
+    }
+    let rest = rest.to_vec();
+    Some(image.with_fallback(move || {
+        logo_candidates(&rest, side)
+            .map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
+    }))
+}
+
+/// How big a chain badge is: [`WALLET_BADGE_LOGO`] when it carries the
+/// chain's logo, the plain dot's [`WALLET_BADGE`] when it has none.
+pub(crate) fn badge_side(has_logo: bool) -> f32 {
+    if has_logo {
+        WALLET_BADGE_LOGO
+    } else {
+        WALLET_BADGE
+    }
+}
+
 /// The lead circle with the endpoint's logos over it (issue 201).
 ///
-/// The logo is drawn OVER the glyph the shell would draw anyway, not instead
-/// of it: gpui renders nothing at all while a remote image is in flight or
-/// after it 404s, so a row whose only content was the picture would be a hole
-/// where an asset's identity belongs. Only the FIRST candidate is asked for —
-/// gpui's image element takes one source, and the second path exists for a
-/// checksum spelling the index may not have; a miss there simply leaves the
-/// glyph, which is the documented fallback.
+/// The logos are drawn OVER the glyph the shell would draw anyway, not
+/// instead of it: gpui renders nothing at all while a remote image is in
+/// flight or after its last candidate misses, so a row whose only content was
+/// the picture would be a hole where an asset's identity belongs.
 fn lead_circle_logos(
     theme: &Theme,
     inner: impl IntoElement,
@@ -746,27 +857,13 @@ fn lead_circle_logos(
                 .justify_center()
                 .child(inner),
         );
-    if let Some(url) = logos.logo_urls.first() {
-        circle = circle.child(
-            gpui::img(url.clone())
-                .absolute()
-                .top_0()
-                .left_0()
-                .w(px(WALLET_ROW_ICON))
-                .h(px(WALLET_ROW_ICON))
-                .rounded(px(WALLET_ROW_ICON / 2.)),
-        );
+    if let Some(stack) = logo_candidates(&logos.logo_urls, WALLET_ROW_ICON) {
+        circle = circle.child(stack.absolute().top_0().left_0());
     }
     if logos.badge_hidden {
         return circle;
     }
-    // 12, or 16 when it may carry a logo — a size a logo can be read at —
-    // ringed 1.5 in the page colour (078 H-09).
-    let side = if logos.badge_logo.is_some() {
-        16.
-    } else {
-        WALLET_BADGE
-    };
+    let side = badge_side(logos.badge_logo.is_some());
     let mut dot = div()
         .absolute()
         .bottom_0()
@@ -775,7 +872,7 @@ fn lead_circle_logos(
         .h(px(side))
         .rounded(px(side / 2.))
         .bg(badge)
-        .border(px(1.5))
+        .border(px(WALLET_BADGE_RING))
         .border_color(theme.bg_base);
     if let Some(url) = &logos.badge_logo {
         dot = dot.child(
@@ -890,12 +987,11 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
 }
 
 fn token_glyph(theme: &Theme, ticker: &str) -> Div {
-    let glyph: String = ticker.chars().take(3).collect::<String>().to_uppercase();
     div()
         .text_size(theme::text_glyph())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_muted)
-        .child(SharedString::from(glyph))
+        .child(crate::marks::glyph(ticker))
 }
 
 /// Token icon: sunken circle with a 3-letter glyph + chain badge.
@@ -1369,4 +1465,30 @@ pub fn receipt_toast(theme: &Theme, icons: &mut IconCache, text: SharedString) -
                 .text_color(theme.fg_base)
                 .child(text),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The 2026-10-08 ruling, the same on all four shells: a chain badge that
+    /// carries a logo is 16 with a 1.5 ring; only a bare colour dot is 12.
+    #[test]
+    fn a_badge_with_a_logo_is_sixteen_ringed_one_and_a_half() {
+        assert!((badge_side(true) - 16.).abs() < f32::EPSILON);
+        assert!((badge_side(false) - 12.).abs() < f32::EPSILON);
+        assert!((WALLET_BADGE_RING - 1.5).abs() < f32::EPSILON);
+    }
+
+    /// Every candidate becomes a layer to try, and no candidates draw no
+    /// picture at all — the glyph beneath is the whole mark.
+    #[test]
+    fn no_candidates_leave_the_glyph_alone() {
+        assert!(logo_candidates(&[], WALLET_ROW_ICON).is_none());
+        let two = [
+            SharedString::from("https://data.example/a.png"),
+            SharedString::from("https://data.example/b.png"),
+        ];
+        assert!(logo_candidates(&two, WALLET_ROW_ICON).is_some());
+    }
 }

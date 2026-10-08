@@ -36,23 +36,23 @@ fn tone_of(risk: ClearRisk) -> Tone {
     }
 }
 
-/// May the slide fire?
+/// May the confirm fire?
 ///
 /// **Three machines, ANDed**, and the core's own doc says so: `SignView`'s
 /// `confirm_gate_open` is "this machine's own approval gate" and "the shell
 /// must AND it with `GuardView.confirm_allowed` and
-/// `FeeView.confirm_fee_ready`". Taking any one of them alone arms a slide
-/// over an unpriced fee, or over an unlimited approval nobody capped — each
+/// `FeeView.confirm_fee_ready`". Taking any one of them alone arms the
+/// confirm over an unpriced fee, or over an unlimited approval nobody capped — each
 /// of which is a signature the person did not agree to.
 ///
 /// **The fee's say includes its speed** (spec 069): between a tap and that
 /// speed's own figure landing, the core's `confirm_fee_ready` is still true on
-/// the speed just left, and the slide must not sign it. `speed_tier` is the
+/// the speed just left, and the confirm must not sign it. `speed_tier` is the
 /// tier in force; `None` is a sheet with no speed control.
 ///
 /// **A signature has no fee to wait for** (the phones' rule, `SigningLive`):
-/// nothing is quoted for a message, so a fee gate over one is a slide that
-/// never opens.
+/// nothing is quoted for a message, so a fee gate over one is a confirm
+/// that never opens.
 ///
 /// Spec 099 R7: every one of those rules is the core's now
 /// (`sign_confirm::confirm_state`), the same on every client, and it says
@@ -68,7 +68,7 @@ pub fn confirm_state(
     vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
 }
 
-/// Whether the slide may arm ([`confirm_state`]).
+/// Whether the confirm may arm ([`confirm_state`]).
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
@@ -1240,8 +1240,8 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     let mut out = Vec::new();
 
     // The gas account cannot pay. The full top-up flow is the send column's
-    // and is not wired here yet (phase 29 records it); saying WHY the slide
-    // will not move is the half that must not wait for it.
+    // and is not wired here yet (phase 29 records it); saying WHY the confirm
+    // will not arm is the half that must not wait for it.
     if let Some(funding) = sign.funding.as_ref() {
         out.push(Block::Warning {
             tone: Tone::Caution,
@@ -1768,12 +1768,19 @@ pub fn fee_model(
                             )
                         };
                         FeeTokenOption {
-                            mark: (
-                                SharedString::from(
-                                    option.symbol.chars().take(1).collect::<String>(),
+                            // The send flow's fee-coin mark, on the REQUEST's
+                            // chain: the coin's logo (a native coin wears its
+                            // own chain's) over the drawn ticker.
+                            mark: crate::flows::fixtures::TokenMark {
+                                ticker: SharedString::from(option.symbol.clone()),
+                                badge: crate::flows::live::chain_tint(chain_id),
+                                logos: crate::marks::token_logos(
+                                    chain_id,
+                                    &option.symbol,
+                                    option.contract.as_deref(),
+                                    &[],
                                 ),
-                                crate::flows::live::chain_tint(chain_id),
-                            ),
+                            },
                             name: SharedString::from(option.symbol.clone()),
                             balance: SharedString::from(format!(
                                 "{} {}",
@@ -1872,7 +1879,7 @@ pub fn no_coin_pays_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedS
 }
 
 /// Issue #262: a wallet with 0 ETH and some USDT on mainnet was quoted in
-/// ETH. The core shuts the slide in exactly that case — quoted, not
+/// ETH. The core shuts the confirm in exactly that case — quoted, not
 /// ready, and the coin it was quoted in cannot pay — and this is the sentence
 /// that says why, in the send screen's words.
 #[must_use]
@@ -2001,7 +2008,27 @@ pub fn dapp_identity(origin: &str) -> (SharedString, SharedString, SharedString)
     )
 }
 
-/// The words on the slide, as the core graded them.
+/// What "Technical details" names as the thing it folds: the contract being
+/// called — except on the wallet's own request (`first_party`), where
+/// "· Vela passkey registry" named a contract to somebody who asked nobody,
+/// and the toggle is the bare "Technical details". The registry still shows,
+/// by name and address, once the section is open.
+#[must_use]
+pub fn tech_summary(clear: &ClearSigningView, first_party: bool) -> Option<SharedString> {
+    if first_party {
+        return None;
+    }
+    clear
+        .result
+        .as_ref()?
+        .contract_name
+        .clone()
+        .map(SharedString::from)
+}
+
+/// The words on the confirm, as the core graded them: the action alone
+/// ("Confirm swap", "Sign", "Approve", "备份公钥", …) — a tap needs no
+/// "Slide to confirm ·" telling it how (issue #461).
 ///
 /// `Confirm` is never "Approve" — the core's own note says that verb belongs
 /// only to an actual token approval, which is `approval_guard`'s surface. The
@@ -2028,10 +2055,7 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
             _ => intent_term.and_then(|term| s.terms.get(&term).cloned()),
         },
     };
-    match action {
-        Some(action) => SharedString::from(format!("{} · {action}", s.slide_to_confirm)),
-        None => SharedString::from(format!("{} · {}", s.slide_to_confirm, s.confirm_plain)),
-    }
+    action.unwrap_or_else(|| s.confirm_plain.clone())
 }
 
 #[cfg(test)]
@@ -2122,6 +2146,149 @@ mod tests {
             intent_term: None,
             terms_off_chain: false,
         }
+    }
+
+    /// The wallet's own key backup as the REAL core reads it: the registry's
+    /// `register` call (the core's own fixture — the bytes the backup
+    /// replays) on `chain_id`, which needs nothing fetched.
+    fn registry_backup_reading(chain_id: u32) -> ClearSigningView {
+        use vela_core::app::clear_signing::{ClearLocale, Event};
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex"
+        );
+        let hex = std::fs::read_to_string(path).unwrap_or_else(|e| unreachable!("{path}: {e}"));
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let ops = host.dispatch(Event::ResolveTransaction {
+            to: Some(vela_core::registry_backup::REGISTRY.to_owned()),
+            data: Some(format!("0x{}", hex.trim())),
+            value: Some("0x0".to_owned()),
+            chain_id,
+            locale: ClearLocale::default(),
+        });
+        assert!(ops.is_empty(), "the backup reads with nothing to fetch");
+        host.view()
+    }
+
+    /// Issue #461: the confirm is a tap, and its words are the action alone —
+    /// "Sign", "Confirm swap", "Confirm" — never "Slide to confirm · …"
+    /// telling a button how to be pressed.
+    #[test]
+    fn the_confirm_says_the_action_alone() {
+        use vela_core::app::clear_signing::ClearConfirm;
+        let s = strings();
+        let mut clear = view(result(Vec::new()));
+        clear.confirm = ClearConfirm::Sign;
+        assert_eq!(confirm_label(&clear, &s), s.sign_label);
+        clear.confirm = ClearConfirm::Confirm;
+        assert_eq!(confirm_label(&clear, &s), s.confirm_plain);
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "swap".to_owned(),
+            intent_term: None,
+        };
+        assert_eq!(confirm_label(&clear, &s), s.confirm_swap);
+        // An intent the shell has no words for reads the neutral verb.
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "frobnicate".to_owned(),
+            intent_term: None,
+        };
+        assert_eq!(confirm_label(&clear, &s), s.confirm_plain);
+    }
+
+    /// The gallery's cs36 is the live column's backup, not a drawing of what
+    /// somebody remembered: the real core's reading, localized and built as
+    /// the column builds it, draws the same blocks — the headline intent, then
+    /// Network / Address / Public keys with the same values, tones and faces —
+    /// and the same confirm, in English and in Chinese.
+    #[test]
+    fn the_drawn_backup_is_the_live_backup() {
+        fn shape(blocks: &[Block]) -> Vec<String> {
+            blocks
+                .iter()
+                .map(|block| match block {
+                    Block::Intent { text, tone } => format!("intent {text} {tone:?}"),
+                    Block::Rows(rows) => rows
+                        .iter()
+                        .map(|(label, value, tone, mono)| {
+                            format!("row {label}={value} {tone:?} mono={mono}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" | "),
+                    Block::Party { label, name, .. } => format!("party {label} {name}"),
+                    Block::Sentence { text, .. } => format!("sentence {text}"),
+                    Block::Warning { text, .. } => format!("warning {text}"),
+                    Block::Positive(text) => format!("positive {text}"),
+                    _ => "another block".to_owned(),
+                })
+                .collect()
+        }
+        for lang in ["en", "zh"] {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language(lang));
+            let reading = registry_backup_reading(1);
+            let live = blocks(&localized_terms(&reading, &s), &RequestFacts::default(), &s);
+            let drawn = crate::signing::fixtures::build("cs36", &s);
+            assert_eq!(shape(&drawn.blocks), shape(&live), "{lang}");
+            assert_eq!(drawn.confirm_label, confirm_label(&reading, &s), "{lang}");
+            assert!(drawn.first_party, "the wallet's own request");
+        }
+    }
+
+    /// "Technical details" names the contract it folds — but not on the
+    /// wallet's own request, where "· Vela passkey registry" names a contract
+    /// to somebody who asked nobody. The same reading from a site keeps it:
+    /// first-party is the request's fact, never the bytes'.
+    #[test]
+    fn the_wallets_own_request_folds_its_details_under_the_bare_toggle() {
+        let backup = registry_backup_reading(1);
+        assert_eq!(tech_summary(&backup, true), None);
+        assert_eq!(
+            tech_summary(&backup, false).as_deref(),
+            Some("Vela passkey registry"),
+            "a site sending the same bytes still sees whose contract it is"
+        );
+    }
+
+    /// The wallet's own key backup speaks the reader's language through the
+    /// core's terms alone: its intent, then Network / Address / Public keys,
+    /// in that order. Nothing relabels by position — that swap put
+    /// "Registered as" over whichever row came first, which is the Network
+    /// row now. The confirm says the intent too, not a generic "Confirm".
+    #[test]
+    fn the_key_backup_reads_in_the_readers_language_through_the_terms() {
+        let zh = SigningStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let rows_of = |chain_id: u32| {
+            let shown = localized_terms(&registry_backup_reading(chain_id), &zh);
+            let drawn = blocks(&shown, &RequestFacts::default(), &zh);
+            let intent = match drawn.first() {
+                Some(Block::Intent { text, .. }) => text.to_string(),
+                _ => unreachable!("the backup opens with its intent"),
+            };
+            let rows: Vec<(String, String)> = drawn
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Rows(rows) => Some(rows.clone()),
+                    _ => None,
+                })
+                .flatten()
+                .map(|row| (row.0.to_string(), row.1.to_string()))
+                .collect();
+            (intent, rows)
+        };
+        let (intent, rows) = rows_of(1);
+        assert_eq!(intent, "备份公钥");
+        let labels: Vec<&str> = rows.iter().map(|(label, _)| label.as_str()).collect();
+        assert_eq!(labels, ["网络", "地址", "公钥数量"]);
+        assert_eq!(rows[0].1, "Ethereum", "the network the header chip said");
+        assert_eq!(rows[2].1, "3");
+        assert_eq!(
+            confirm_label(&registry_backup_reading(1), &zh).as_ref(),
+            "备份公钥",
+            "the confirm says what it does, and nothing else"
+        );
+        // The rehearsal chain names itself the same way.
+        let (_, base) = rows_of(8453);
+        assert_eq!(base[0], ("网络".to_owned(), "Base".to_owned()));
     }
 
     fn view(result: ClearSignResult) -> ClearSigningView {
@@ -2230,7 +2397,7 @@ mod tests {
                 && rows[0].1 == "−1.000000000000000001 xDAI"
         )));
         let label = confirm_label(&clear, &s);
-        assert!(label.ends_with(s.confirm_plain.as_ref()), "{label}");
+        assert_eq!(label, s.confirm_plain, "{label}");
         assert!(
             !label.contains(s.confirm_send.as_ref()),
             "no one call's verb: {label}"
@@ -2603,9 +2770,9 @@ mod tests {
     }
 
     /// Spec 096 F7: every machine says yes, and the request is still being
-    /// read — the slide stays shut until it is.
+    /// read — the confirm stays shut until it is.
     #[test]
-    fn the_slide_waits_for_the_reading() {
+    fn the_confirm_waits_for_the_reading() {
         let mut sign =
             crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
         let mut guard =
@@ -3090,13 +3257,14 @@ mod tests {
             ),
             ("Referral code", "abc")
         );
-        assert!(
-            confirm_label(&clear, &s).ends_with("授权"),
-            "the slide says the word too"
+        assert_eq!(
+            confirm_label(&clear, &s).as_ref(),
+            "授权",
+            "the confirm says the word too"
         );
         assert_eq!(
             shown.confirm, clear.confirm,
-            "the slide switches on the English intent itself"
+            "the confirm switches on the English intent itself"
         );
     }
 
@@ -3499,7 +3667,7 @@ mod tests {
         assert!(status_blocks(&pristine_sign(), &s).is_empty());
     }
 
-    /// The slide is three machines' answer, ANDed.
+    /// The confirm is three machines' answer, ANDed.
     ///
     /// The core's own doc says so, and each one alone is a different way to
     /// arm a signature nobody agreed to: without the fee's, over a price
@@ -3532,7 +3700,7 @@ mod tests {
             }
             assert!(
                 !confirm_enabled(&s, &g, &clear, &f, None),
-                "any one machine withholding shuts the slide ({drop_one})"
+                "any one machine withholding shuts the confirm ({drop_one})"
             );
         }
 
@@ -3547,7 +3715,7 @@ mod tests {
 
     /// Spec 069: between a speed being tapped and its own figure landing, the
     /// core's gate is still open — on the speed just left. The row says
-    /// "estimating" and the slide stays shut; the figure lands, both follow.
+    /// "estimating" and the confirm stays shut; the figure lands, both follow.
     #[test]
     fn another_speeds_fee_neither_shows_nor_signs() {
         use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView};
@@ -3962,7 +4130,7 @@ mod fee_tests {
 
     /// Spec 082 RJ13 (G48, DX-G14): with no fault set, Ethereum's public
     /// node rate-limited the deployment read and the row said "can't reach
-    /// Vela — check your network" over a shut slide. It is the chain's node,
+    /// Vela — check your network" over a shut confirm. It is the chain's node,
     /// rate-limited, and the row says so ("被限流 · 正在自动重试"); a node out
     /// of reach names its chain; neither blames Vela.
     #[test]
@@ -4073,6 +4241,88 @@ mod fee_tests {
             }
             _ => unreachable!("an open fee row lists its coins"),
         }
+    }
+
+    /// The fee coins wear their own marks — the send flow's fee-coin sheet's,
+    /// on the REQUEST's chain — not a letter on a disc: USDC and USDT were
+    /// both "U". A native coin wears its own chain's logo (ETH on Base is
+    /// still Ethereum's, with Base as the badge), a token its endpoint logo
+    /// with the lowercase path second, and the drawn ticker stays beneath as
+    /// the fallback.
+    #[test]
+    fn the_fee_coins_wear_their_own_logos() {
+        crate::executor::storage::tests::with_temp_state("signing-fee-marks", || {
+            let s = strings();
+            let clear =
+                crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new()
+                    .view();
+            let usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+            let usdt = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+            let fee = quoted(
+                vec![
+                    option("ETH", None, false, true),
+                    option("USDC", Some(usdc), false, false),
+                    option("USDT", Some(usdt), false, false),
+                ],
+                true,
+            );
+            let options = |chain_id: u32| match fee_model(
+                &clear,
+                &fee,
+                chain_id,
+                true,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            ) {
+                FeeModel::OnChain {
+                    selector: Some((_, options)),
+                    ..
+                } => options,
+                _ => unreachable!("an open fee row lists its coins"),
+            };
+            let mainnet = options(1);
+            let tickers: Vec<&str> = mainnet.iter().map(|o| o.mark.ticker.as_ref()).collect();
+            assert_eq!(
+                tickers,
+                ["ETH", "USDC", "USDT"],
+                "the glyph under each logo"
+            );
+            let eth = &mainnet[0].mark.logos;
+            assert!(
+                eth.logo_urls[0].ends_with("/chainlogos/eip155-1.png"),
+                "{eth:?}"
+            );
+            assert!(eth.badge_hidden, "ETH on Ethereum: no badge repeating it");
+            let usdc_logos = &mainnet[1].mark.logos;
+            assert!(
+                usdc_logos.logo_urls[0].ends_with(
+                    "/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png"
+                ),
+                "{usdc_logos:?}"
+            );
+            assert!(
+                usdc_logos.logo_urls[1].ends_with(&format!("/assets/eip155-1/{usdc}/logo.png")),
+                "the lowercase path is the second candidate"
+            );
+            assert!(!usdc_logos.badge_hidden);
+            assert_ne!(
+                mainnet[1].mark.logos, mainnet[2].mark.logos,
+                "USDC and USDT are two coins, not one \"U\""
+            );
+            let base = options(8453);
+            let eth_on_base = &base[0].mark.logos;
+            assert!(eth_on_base.logo_urls[0].ends_with("/chainlogos/eip155-1.png"));
+            assert!(!eth_on_base.badge_hidden);
+            assert!(
+                eth_on_base
+                    .badge_logo
+                    .as_ref()
+                    .is_some_and(|badge| badge.ends_with("/chainlogos/eip155-8453.png")),
+                "the request's chain is the badge"
+            );
+        });
     }
 
     /// Issue #408, as reported: 0 ETH and 0.754189 USDT against ~0.001334 ETH
@@ -4340,8 +4590,8 @@ mod fee_tests {
         assert_eq!(fee_tap(&unreachable), FeeTap::Requote);
     }
 
-    /// Issue #262: quoted in a coin the wallet cannot pay with, the slide is
-    /// shut — and the sheet says why, in the send screen's words.
+    /// Issue #262: quoted in a coin the wallet cannot pay with, the confirm
+    /// is shut — and the sheet says why, in the send screen's words.
     #[test]
     fn a_fee_the_quoted_coin_cannot_pay_says_so() {
         let s = strings();

@@ -274,28 +274,15 @@ pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
         .justify_center()
         .text_size(theme::text_label())
         .text_color(theme.fg_muted)
-        .child(SharedString::from(
-            mark.ticker
-                .chars()
-                .take(3)
-                .collect::<String>()
-                .to_uppercase(),
-        ));
-    // The logo over the glyph, never instead of it (issue 201): gpui draws
+        .child(crate::marks::glyph(&mark.ticker));
+    // The logos over the glyph, never instead of it (issue 201): gpui draws
     // nothing at all while a remote image is in flight, and an inline mark
-    // that blinks out is worse than one that never changed.
-    let Some(url) = mark.logos.logo_urls.first() else {
-        return circle;
-    };
-    circle.child(
-        gpui::img(url.clone())
-            .absolute()
-            .top_0()
-            .left_0()
-            .w(px(INLINE_MARK))
-            .h(px(INLINE_MARK))
-            .rounded(px(INLINE_MARK / 2.)),
-    )
+    // that blinks out is worse than one that never changed. Every candidate
+    // is tried, in the core's order.
+    match crate::wallet::components::logo_candidates(&mark.logos.logo_urls, INLINE_MARK) {
+        Some(stack) => circle.child(stack.absolute().top_0().left_0()),
+        None => circle,
+    }
 }
 
 /// The most characters a mono value is drawn with (spec 082 G50): a
@@ -1177,9 +1164,11 @@ pub fn fee_speed_note(theme: &Theme, text: &SharedString) -> Div {
         .child(text.clone())
 }
 
-/// One option, opened, on TWO lines: its name and its own fee; then what the
-/// speed buys and its gas bid. It was three — the bid alone on line two, the
-/// description on line three — which left a hole under every name.
+/// One option, opened: its name and its own fee; then, where the chain has
+/// one, its gas bid as the whole second line, trailing under the fee. No
+/// description of what the speed buys — the figures say it, for this
+/// transaction (only the Settings default-speed sheet, with no figures,
+/// describes the tiers).
 ///
 /// Selected reads in the text colour, semibold, with a text-colour tick: the
 /// accent is for moving money and submitting, not for a choice (the design
@@ -1213,32 +1202,16 @@ pub fn fee_speed_option(
                 .child(option.value.clone()),
         );
     // Named, because an unnamed "3,244 wei" under a fee reads as a second
-    // charge; held open empty while the set is measuring, so the row does not
-    // lose its width and regain it. The UI face throughout — a monospace bid
-    // beside proportional text read as a different kind of thing.
-    let bid = speed.gas_price_line.then(|| {
+    // charge. The UI face throughout — a monospace bid beside proportional
+    // text read as a different kind of thing.
+    let second = speed.gas_price_line.then(|| {
         div()
-            .flex_none()
             .flex()
-            .gap(px(6.))
-            .min_h(px(14.))
-            .children(option.gas_price.as_ref().map(|gas| {
-                div()
-                    .flex()
-                    .gap(px(6.))
-                    .child(speed.gas_price_label.clone())
-                    .child(gas.clone())
-            }))
+            .justify_end()
+            .text_size(theme::text_label())
+            .text_color(theme.fg_subtle)
+            .child(bid_line(speed, option))
     });
-    let second = div()
-        .flex()
-        .items_start()
-        .gap(px(8.))
-        .text_size(theme::text_label())
-        .text_color(theme.fg_subtle)
-        // The description wraps under itself; the bid is never the one cut.
-        .child(div().flex_1().min_w(px(0.)).child(option.detail.clone()))
-        .children(bid);
     div()
         .flex()
         .items_start()
@@ -1255,7 +1228,7 @@ pub fn fee_speed_option(
                 .flex_1()
                 .min_w(px(0.))
                 .child(first)
-                .child(second),
+                .children(second),
         )
         .child(
             div().w(px(14.)).pt(px(2.)).children(
@@ -1264,6 +1237,29 @@ pub fn fee_speed_option(
                     .then(|| icon_img(icons, Icon::Check, false, theme.fg_base, 14.)),
             ),
         )
+}
+
+/// The gas bid line's one child. While the set is measuring the option has
+/// no bid yet, and the line is held open by its own label in no ink — the
+/// same words in the same face, so the same height — so the options do not
+/// shrink and regrow on every pick or refresh. It was the description that
+/// held the line before; with it gone, an empty line would collapse.
+fn bid_line(speed: &FeeSpeedModel, option: &FeeSpeedOption) -> Div {
+    let (words, inked) = bid_words(speed, option);
+    div()
+        .flex()
+        .gap(px(6.))
+        .when(!inked, |line| line.text_color(gpui::transparent_black()))
+        .children(words)
+}
+
+/// The bid line's words and whether they are inked ([`bid_line`]): the
+/// label and the bid, or — measuring — the label alone, in no ink.
+fn bid_words(speed: &FeeSpeedModel, option: &FeeSpeedOption) -> (Vec<SharedString>, bool) {
+    match option.gas_price.as_ref() {
+        Some(gas) => (vec![speed.gas_price_label.clone(), gas.clone()], true),
+        None => (vec![speed.gas_price_label.clone()], false),
+    }
 }
 
 /// DSD2bL's split row: one of N people, what they get, and the way to drop them.
@@ -1657,6 +1653,52 @@ pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The speed picker's second line is the gas bid alone, and it never
+    /// collapses: while a tier is measuring (no bid yet) the line holds its
+    /// own label in no ink — the same words in the same face, so the same
+    /// height — and when the bid lands the same label leads it, inked. No
+    /// option carries a description of what its speed buys any more.
+    #[test]
+    fn a_measuring_speed_holds_its_bid_line() {
+        let speed = FeeSpeedModel {
+            label: "Speed".into(),
+            value: "Fast".into(),
+            open: true,
+            once_note: "For this transaction only".into(),
+            free_note: None,
+            single_note: None,
+            gas_price_label: "Gas Bid".into(),
+            gas_price_line: true,
+            options: Vec::new(),
+        };
+        let measuring = FeeSpeedOption {
+            label: "Fast".into(),
+            value: "…".into(),
+            gas_price: None,
+            selected: true,
+        };
+        let measured = FeeSpeedOption {
+            gas_price: Some("3,244 ~ 9,000 wei".into()),
+            ..measuring.clone()
+        };
+        let (held, inked) = bid_words(&speed, &measuring);
+        assert!(!inked, "nothing to read yet, so nothing drawn");
+        assert_eq!(
+            held,
+            vec![speed.gas_price_label.clone()],
+            "but the line is held"
+        );
+        let (shown, inked) = bid_words(&speed, &measured);
+        assert!(inked);
+        assert_eq!(
+            shown,
+            vec![
+                speed.gas_price_label.clone(),
+                SharedString::from("3,244 ~ 9,000 wei")
+            ]
+        );
+    }
 
     /// Spec 082 G50: a mono value is drawn shortened in the middle, head and
     /// tail kept; anything that already fits is left whole.

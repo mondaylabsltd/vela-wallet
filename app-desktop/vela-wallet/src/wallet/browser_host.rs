@@ -1687,7 +1687,6 @@ mod tests {
     ) -> vela_core::app::explore_sites::ExploreView {
         vela_core::app::explore_sites::ExploreView {
             favorites: Vec::new(),
-            groups: Vec::new(),
             tabs: tabs
                 .iter()
                 .map(|(id, url)| vela_core::app::explore_sites::ExploreTab {
@@ -2746,6 +2745,7 @@ mod tests {
                 requested_address: None,
                 request_ts_ms: None,
                 now_ms: 1_000.0,
+                first_party: false,
             });
             let ops = sign.dispatch(SignEvent::ApproveTapped {
                 opts: SignApproveOpts::default(),

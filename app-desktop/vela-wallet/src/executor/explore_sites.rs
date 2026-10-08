@@ -72,7 +72,7 @@ fn stored() -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_core::app::explore_sites::{ExploreGroup, ExploreSite};
+    use vela_core::app::explore_sites::{ExploreSite, ExploreSystemGroup};
 
     fn site(origin: &str) -> ExploreSite {
         ExploreSite {
@@ -91,23 +91,65 @@ mod tests {
         storage::tests::with_temp_state("explore-roundtrip", || {
             let doc = ExploreDoc {
                 favorites: vec![site("https://curve.fi")],
-                groups: vec![ExploreGroup {
-                    id: "g-1".to_owned(),
-                    name: "Trading".to_owned(),
-                    members: vec!["https://curve.fi".to_owned()],
-                    hidden: false,
-                    created_ms: 1_757_000_000_000.0,
-                }],
                 ..ExploreDoc::default()
             };
             write_doc(&doc);
 
             let raw = stored().unwrap_or_else(|| unreachable!("nothing was written"));
             assert!(
-                raw.get("favorites").is_some() && raw.get("groups").is_some(),
+                raw.get("favorites").is_some(),
                 "the stored shape is the document's own field names"
             );
             assert_eq!(read_doc(), Some(doc));
+        });
+    }
+
+    /// Issue 465: a document a build with custom groups wrote still opens,
+    /// every favourite with it — a group only ever listed sites that were
+    /// already favourites — and the next write leaves the groups behind.
+    #[test]
+    fn a_document_with_groups_keeps_every_favourite_and_drops_the_groups() {
+        storage::tests::with_temp_state("explore-groups-465", || {
+            let before = serde_json::json!({
+                "favorites": [{
+                    "origin": "https://curve.fi", "url": "https://curve.fi/app",
+                    "host": "curve.fi", "name": "Curve", "renamed": true,
+                    "added_ms": 1_757_000_000_000.0_f64
+                }, {
+                    "origin": "https://app.uniswap.org", "url": "https://app.uniswap.org/",
+                    "host": "app.uniswap.org", "name": "Uniswap", "renamed": false,
+                    "added_ms": 1_757_000_000_001.0_f64
+                }],
+                "groups": [{
+                    "id": "g-1", "name": "Trading", "members": ["https://curve.fi"],
+                    "hidden": false, "created_ms": 1_757_000_000_002.0_f64
+                }],
+                "tabs": [], "selected_tab": null, "hidden_system": ["recent"]
+            });
+            if storage::write_value(EXPLORE_KEY, before).is_err() {
+                unreachable!("could not seed");
+            }
+            let doc =
+                read_doc().unwrap_or_else(|| unreachable!("the grouped document was refused"));
+            assert_eq!(
+                doc.favorites
+                    .iter()
+                    .map(|site| site.origin.as_str())
+                    .collect::<Vec<_>>(),
+                ["https://curve.fi", "https://app.uniswap.org"],
+                "every favourite, the grouped one included"
+            );
+            assert_eq!(doc.favorites[0].name, "Curve", "its own name kept");
+            assert_eq!(
+                doc.hidden_system,
+                [ExploreSystemGroup::Recent],
+                "a hidden section stays hidden"
+            );
+
+            write_doc(&doc);
+            let raw = stored().unwrap_or_else(|| unreachable!("nothing was written"));
+            assert!(raw.get("groups").is_none(), "the groups are gone: {raw}");
+            assert_eq!(read_doc(), Some(doc), "and nothing else moved");
         });
     }
 
@@ -163,7 +205,7 @@ mod tests {
                 unreachable!("could not seed");
             }
             let doc = read_doc().unwrap_or_else(|| unreachable!("a partial document was refused"));
-            assert!(doc.tabs.is_empty() && doc.groups.is_empty());
+            assert!(doc.tabs.is_empty() && doc.hidden_system.is_empty());
         });
     }
 }

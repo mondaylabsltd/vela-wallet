@@ -43,6 +43,12 @@ pub struct WalletStrings {
     pub balance_stale: SharedString,
     /// Issue #443: "Updated {{ago}}" beside the hero's refresh control.
     pub last_updated: SharedString,
+    /// Issue 462: "Updating…" — the same control while a read the person
+    /// asked for is out.
+    pub updating: SharedString,
+    /// The core's short minutes, `{{n}}m` — the `<ago>` the gallery's
+    /// refresh control is drawn with.
+    pub minutes_short: String,
     /// Nothing could be read and nothing is known (spec 038): the network
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
@@ -175,6 +181,8 @@ impl WalletStrings {
             live_indicator: s("home.liveIndicator"),
             balance_stale: s("home.balanceStale"),
             last_updated: s("home.lastUpdated"),
+            updating: s("home.updating"),
+            minutes_short: raw("time.minutesShort"),
             balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
             unreachable_one: raw("assets.unreachableOne"),
@@ -275,6 +283,28 @@ impl WalletStrings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 463: the empty Activity's caption is the corpus's new sentence,
+    /// and it reaches this shell — what is sent shows here, what is received
+    /// shows in the balance. The old one promised incoming payments in this
+    /// list, which a receive on most chains never puts there.
+    #[test]
+    fn the_empty_activity_says_what_it_shows() {
+        for (tag, caption) in [
+            (
+                "en",
+                "What you send shows up here. Money you receive shows in your balance.",
+            ),
+            ("zh", "你发出的交易会显示在这里，收到的钱会计入余额。"),
+            (
+                "ja",
+                "送金はここに表示されます。受け取ったお金は残高に反映されます。",
+            ),
+        ] {
+            let s = WalletStrings::resolve(&Loc::for_tag(tag));
+            assert_eq!(s.empty_activity_caption.as_ref(), caption, "{tag}");
+        }
+    }
 
     /// SC-004 discipline from spec 007, applied to the wallet keys: none may
     /// echo in the locales the visual pass uses.

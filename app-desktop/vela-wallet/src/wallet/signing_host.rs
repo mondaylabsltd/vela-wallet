@@ -134,7 +134,7 @@ impl Requoter {
         now_ms: f64,
     ) -> Vec<RequoteStep> {
         if !on_form {
-            // Nothing re-prices under a slide that has gone.
+            // Nothing re-prices under a confirm that has gone.
             *self = Self::default();
             return Vec::new();
         }
@@ -444,7 +444,7 @@ pub struct SigningHost {
     /// Spec 079: when this column first saw the operation accepted — the
     /// receipt's ring starts here until the tracker has its own clock.
     pub seen_submitted_ms: Option<f64>,
-    /// The person approved this request (the slide, or the button that opens
+    /// The person approved this request (the confirm, or the button that opens
     /// the Trusted Signer's page). A close after this refuses nothing.
     pub approved: bool,
     /// Spec 079: automatic re-quotes since the last good quote, and the
@@ -640,23 +640,7 @@ impl SigningHost {
             cx,
         );
 
-        self.dispatch_sign(
-            SignEvent::RequestArrived {
-                id: request.id.clone(),
-                method: request.method.clone(),
-                params_json: request.params_json.clone(),
-                origin: request.origin.clone(),
-                transport_id: request.transport_id.clone(),
-                dedicated_transport: true,
-                per_request_chain: Some(request.chain_id),
-                dapp: None,
-                granted_address: request.granted_address.clone(),
-                requested_address: None,
-                request_ts_ms: None,
-                now_ms: now,
-            },
-            cx,
-        );
+        self.dispatch_sign(arrival_of(request, now), cx);
 
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder.
@@ -725,7 +709,7 @@ impl SigningHost {
         // An indeterminate deployment read never reaches the core: guessing
         // "deployed" ships an operation without initCode, and guessing
         // "undeployed" attaches one to a live account. No quote is better
-        // than a wrong one — the slide stays shut, which is what
+        // than a wrong one — the confirm stays shut, which is what
         // `confirm_fee_ready: false` means.
         speed_control::ask(
             self,
@@ -844,7 +828,7 @@ impl SigningHost {
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
-        // Nothing re-prices under a slide that has gone.
+        // Nothing re-prices under a confirm that has gone.
         self.requoter = Requoter::default();
         self.requote_seq += 1;
         let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
@@ -1361,7 +1345,7 @@ impl SigningHost {
             self.seen_submitted_ms = Some(now_ms());
         }
         // A free upgrade is decided only while the person can still choose —
-        // never under a slide that has already gone.
+        // never under a confirm that has already gone.
         let on_form = self.view.surface == vela_core::app::sign_request::SignSurface::Sheet
             && !self.view.is_signing
             && !self.view.is_submitting;
@@ -1408,11 +1392,10 @@ impl SigningHost {
         // The ceremony came back with no signature — dismissed, a QR nobody
         // scanned, a phone that never connected — and the core kept the
         // request, unanswered (083).
-        // The form is the person's again: not approved, and a slide that can
-        // be slid, where the committed knob used to stay stuck at the end.
+        // The form is the person's again: not approved, and its confirm can
+        // be tapped again.
         if was_running && self.back_on_form() {
             self.approved = false;
-            crate::signing::components::reset_slide();
             if let Some(stop) = self.ctx.take_phone_stop() {
                 self.phone_stop = Some(stop);
             }
@@ -1731,7 +1714,7 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
 
 /// What the record keeps of the sheet's "Balance changes" (083 F1): the
 /// judgments this column drew there (`sim_blocks`), exactly as they stood
-/// when the slide fired — the one account of the operation's money that no
+/// when the confirm fired — the one account of the operation's money that no
 /// page wrote, and the one Activity shows for it. Nothing when the
 /// simulation could not answer, or had not yet: the sheet showed no lines,
 /// so the record keeps none and the row draws as it always has.
@@ -1740,6 +1723,31 @@ fn approved_changes(
     unavailable: bool,
 ) -> Option<Vec<vela_core::app::token_trust::TrustSimJudgment>> {
     (!unavailable && !sim.is_empty()).then(|| sim.to_vec())
+}
+
+/// The request, as the signing machine is told it arrived.
+///
+/// `first_party` is the ONE place this shell says a request is the wallet's
+/// own: it rode [`WALLET_TRANSPORT`], which only the wallet's own code (the
+/// key backup) ever opens a column on. It is the transport's fact, never the
+/// reading's — any site can submit the same registry calldata, and that site
+/// keeps its header.
+fn arrival_of(request: &IncomingRequest, now_ms: f64) -> SignEvent {
+    SignEvent::RequestArrived {
+        id: request.id.clone(),
+        method: request.method.clone(),
+        params_json: request.params_json.clone(),
+        origin: request.origin.clone(),
+        transport_id: request.transport_id.clone(),
+        dedicated_transport: true,
+        per_request_chain: Some(request.chain_id),
+        dapp: None,
+        granted_address: request.granted_address.clone(),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms,
+        first_party: request.transport_id == WALLET_TRANSPORT,
+    }
 }
 
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
@@ -1974,6 +1982,48 @@ mod tests {
         );
     }
 
+    /// The wallet's own request is the only first-party one, and the core
+    /// hears so from the transport it rode — a site submitting the very same
+    /// registry call over the browser is still a site.
+    #[test]
+    fn only_the_wallets_own_transport_arrives_first_party() {
+        let wallet = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let request = |transport: &str| IncomingRequest {
+            id: format!("{transport}-1"),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: format!(
+                r#"[{{"from":"{wallet}","to":"{}","value":"0x0","data":"0xabcdef"}}]"#,
+                vela_core::registry_backup::REGISTRY
+            ),
+            origin: "https://getvela.app".to_owned(),
+            transport_id: transport.to_owned(),
+            chain_id: 1,
+            granted_address: None,
+        };
+        for (transport, own) in [(WALLET_TRANSPORT, true), (BROWSER_TRANSPORT, false)] {
+            let mut sign = CoreHost::<SignRequest>::new();
+            sign.dispatch(SignEvent::NetworksChanged { chain_ids: vec![1] });
+            sign.dispatch(SignEvent::AccountsChanged {
+                accounts: vec![SignAccountRef {
+                    address: wallet.to_owned(),
+                    credential_id: "cred0".to_owned(),
+                }],
+                active_index: 0,
+            });
+            let arrival = arrival_of(&request(transport), 1_000.0);
+            let SignEvent::RequestArrived { first_party, .. } = &arrival else {
+                unreachable!("an arrival is a RequestArrived")
+            };
+            assert_eq!(*first_party, own, "{transport}");
+            sign.dispatch(arrival);
+            assert_eq!(
+                sign.view().request.map(|request| request.first_party),
+                Some(own),
+                "{transport}: the sheet reads what the shell said"
+            );
+        }
+    }
+
     /// The requoter against a relay that is down until `up_at` and then
     /// answers `answer_ms` after each ask; while down, an ask either fails
     /// at once (refused) or hangs for good (black-holed — a connection made
@@ -2134,7 +2184,7 @@ mod tests {
         assert!(requoter.due(None, false, true, 26_000.0).is_empty());
     }
 
-    /// Never under a slide that has gone, never over a measurement the
+    /// Never under a confirm that has gone, never over a measurement the
     /// person started, never for a failure no retry fixes, and nothing to do
     /// when the quote is good.
     #[test]
@@ -2163,7 +2213,7 @@ mod tests {
                 .is_empty()
         );
 
-        // Scheduled, then the slide goes: the timer finds nothing to do.
+        // Scheduled, then the confirm goes: the timer finds nothing to do.
         let mut requoter = Requoter::default();
         let _ = requoter.observe(unreachable, false, true, 0.0);
         assert!(requoter.due(unreachable, false, false, 3_000.0).is_empty());
@@ -2378,6 +2428,7 @@ mod tests {
             requested_address: None,
             request_ts_ms: None,
             now_ms: 1_000.0,
+            first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),
@@ -3072,6 +3123,7 @@ mod approve_tests {
             requested_address: None,
             request_ts_ms: None,
             now_ms: 0.0,
+            first_party: false,
         });
         let signing = sign.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),
@@ -3190,8 +3242,7 @@ mod approve_tests {
     }
 
     /// 083: a ceremony that comes back unsigned gives the form back — the
-    /// column then un-approves and resets the slide, which stayed stuck at
-    /// the end — and a failure does not: the page has its answer.
+    /// column then un-approves, and its confirm can be tapped again — and a failure does not: the page has its answer.
     #[test]
     fn only_an_unsigned_ceremony_gives_the_form_back() {
         use vela_core::app::sign_request::SignSubmitOutcome;
@@ -3370,7 +3421,7 @@ mod approve_tests {
             let mut sign = CoreHost::<SignRequest>::new();
             let submit = approved_to_its_signature(&mut sign);
             stopped(&mut sign, submit, error);
-            assert!(sign.view().confirm_gate_open, "the slide can go again");
+            assert!(sign.view().confirm_gate_open, "the confirm can go again");
             // A stop the column had not taken yet is not carried into the
             // new approval: `dispatch_sign` resets the prompt first.
             ctx.prompt_reset();
@@ -3445,7 +3496,7 @@ mod approve_tests {
 
     /// An unpriced sheet approves with no quote rather than a zero.
     ///
-    /// It cannot be reached — the slide is shut without `confirm_fee_ready` —
+    /// It cannot be reached — the confirm is shut without `confirm_fee_ready` —
     /// but a zero here would be a fee claim, and the submit would sign it.
     #[test]
     fn an_unpriced_sheet_carries_no_quote_at_all() {
