@@ -25,7 +25,13 @@ import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { formatDate, groupDigits, numberSeparators } from '$lib/services/locale-format';
+import { formatRelativeTime } from '$lib/core/kernels';
+import {
+	formatDate,
+	groupDigits,
+	numberSeparators,
+	resolvedFormatKeys
+} from '$lib/services/locale-format';
 import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
 import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
 import { shortenAddress } from './identity';
@@ -336,24 +342,25 @@ export function unreachableLine(
 }
 
 /**
- * The core's compact relative time (`I18n::format_relative_time`) on this
- * device's clock: under 45 s "now", under an hour "{{n}}m", under a day
- * "{{n}}h" — the same thresholds and rounding, and the same clamp (a time
- * ahead of the clock is "now"). Past a day the core names the weekday from a
- * table the web client does not carry, so this writes the date in the
- * person's preset, the core's own last branch. A read is at most ten minutes
- * old while the page is open (the poll), so that branch is a wake from sleep.
+ * "now" / "2m" / "3h" / a weekday / the date — the core's compact relative
+ * time (`formatRelativeTime`, the rule the phones and the desktop ask too),
+ * on this device's clock and zone, in the person's date preset. `language`
+ * is the page's locale, which names the weekday.
  */
 export function agoText(
 	atMs: number,
 	nowMs: number,
-	words: WalletMessages['balance']['ago']
+	words: WalletMessages['balance']['ago'],
+	language: string
 ): string {
-	const diff = Math.max(0, Math.floor(nowMs / 1000) - Math.floor(atMs / 1000));
-	if (diff < 45) return words.now;
-	if (diff < 3_600) return fill(words.minutes, { n: Math.round(diff / 60) });
-	if (diff < 86_400) return fill(words.hours, { n: Math.round(diff / 3_600) });
-	return formatDate(atMs);
+	return formatRelativeTime(
+		atMs,
+		nowMs,
+		-new Date(atMs).getTimezoneOffset(),
+		resolvedFormatKeys().date,
+		language,
+		words
+	);
 }
 
 /** What the page holds for the hero's refresh control (issue 462). */
@@ -362,6 +369,8 @@ export interface BalanceRefreshInput {
 	now: number;
 	/** A press's minimum spin (650 ms) is still running (`RefreshHold`). */
 	held: boolean;
+	/** The page's locale: it names the weekday once a read is a day old. */
+	language: string;
 }
 
 /**
@@ -381,7 +390,9 @@ export function balanceRefresh(
 		updated:
 			at === null
 				? undefined
-				: fill(m.balance.lastUpdated, { ago: agoText(at, input.now, m.balance.ago) }),
+				: fill(m.balance.lastUpdated, {
+						ago: agoText(at, input.now, m.balance.ago, input.language)
+					}),
 		updating: m.balance.updating,
 		spinning: view.refreshing || input.held
 	};

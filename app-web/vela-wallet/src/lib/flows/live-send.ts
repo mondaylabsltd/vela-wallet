@@ -267,6 +267,39 @@ function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	return feeLine(parts, feeUnitPriceUsd(parts.contract, fee.chain_id, inputs), inputs.currency);
 }
 
+/**
+ * The coin the fee row names, for its mark: the coin that will PAY.
+ *
+ * The figure is this speed's or none (issue 681), but the coin does not change
+ * with the speed. While a newly picked speed is measured there is no estimate
+ * of its own, and the row used to fall back to the chain's own coin — for that
+ * moment a USDC fee wore ETH's logo. So the coin comes from this speed's
+ * estimate when there is one (the mark and the figure are then one coin), else
+ * from the fee option in force (`selected`, the core's choice), else from the
+ * estimate in hand, which names the same coin at the speed just left. Only
+ * with none of those is it the chain's own coin.
+ */
+function feeCoin(
+	quote: FeeEstimateView | null,
+	inHand: FeeEstimateView | null,
+	options: FeeView['options'],
+	chainId: number
+): { symbol: string; contract: string | null } {
+	const ofEstimate = (estimate: FeeEstimateView) => ({
+		symbol: feeSymbol(estimate, options),
+		contract: estimate.fee_asset.type === 'erc20' ? estimate.fee_asset.token : null
+	});
+	if (quote) return ofEstimate(quote);
+	const selected = options.find((option) => option.selected);
+	// The chain's own coin is named as an estimate of it names it (`feeSymbol`).
+	if (selected)
+		return selected.contract === null
+			? { symbol: nativeSymbol(chainId), contract: null }
+			: { symbol: selected.symbol, contract: selected.contract };
+	if (inHand) return ofEstimate(inHand);
+	return { symbol: nativeSymbol(chainId), contract: null };
+}
+
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
 	const inHand = send.fee ?? fee.fee;
@@ -296,18 +329,14 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 					inputs.currency
 				)
 			: null;
-	const chainId = send.selected_token?.chain_id ?? quote?.chain_id ?? 1;
-	const symbol = quote ? feeSymbol(quote, fee.options) : nativeSymbol(chainId);
+	const chainId = send.selected_token?.chain_id ?? inHand?.chain_id ?? 1;
+	const coin = feeCoin(quote, inHand, fee.options, chainId);
 	return {
 		// A figure the relay did not quote — a local fallback from defaults —
 		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
 		// the core carries the fact as `quoted`; the label is where it shows.
 		label: quote && !quote.quoted ? m['send.feeTokenEstimate'] : m['componentsUi.gas.networkFee'],
-		mark: tokenMarkFor(
-			chainId,
-			symbol,
-			quote?.fee_asset.type === 'erc20' ? quote.fee_asset.token : null
-		),
+		mark: tokenMarkFor(chainId, coin.symbol, coin.contract),
 		// A figure in hand stays on screen while a re-quote is out (spec 028
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for

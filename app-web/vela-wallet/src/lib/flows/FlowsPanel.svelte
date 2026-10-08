@@ -84,7 +84,8 @@
 		pickGroup?(index: number): void;
 		/**
 		 * The split rows (spec 028 Phase 10): a row typed into, the book opened
-		 * for one row — or for a NEW row when `index` is null — and the
+		 * for one row — or for the split as a whole when `index` is null, where
+		 * the core puts the pick in the first empty row or a new one — and the
 		 * picker's class chips.
 		 */
 		recipientRowChanged?(index: number, patch: { address?: string; amount?: string }): void;

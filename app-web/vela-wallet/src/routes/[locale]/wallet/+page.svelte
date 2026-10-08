@@ -937,19 +937,12 @@
 						);
 						sendSession?.dispatch({ type: 'recipients_changed', recipients: rows });
 					},
-					// The book, for one row — or for a new one appended for it. The
-					// core's `picker_target` puts the pick where it was asked for.
+					// The book, for one row — or, with no row named (the split's "from
+					// contacts"), for the split as a whole. Where the pick lands is the
+					// core's (`apply_picked_address`): the row named, else the first row
+					// with no address yet, else a new row at the end.
 					pickContactFor: (index: number | null) => {
-						const rows = sendView?.recipients ?? [];
-						let target = index === null ? undefined : rows[index]?.id;
-						if (target === undefined) {
-							const row = blankRecipient();
-							target = row.id;
-							sendSession?.dispatch({
-								type: 'recipients_changed',
-								recipients: [...rows, row]
-							});
-						}
+						const target = index === null ? null : (sendView?.recipients[index]?.id ?? null);
 						sendSession?.dispatch({ type: 'open_contact_picker', target });
 					},
 					// The person the tapped row was drawn for, by address (issue 467) —
@@ -1524,7 +1517,7 @@
 			selectedAssetId === null
 				? undefined
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
-		refresh: { now: refreshClock, held: refreshHold.held }
+		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' }
 	});
 	const liveHome = $derived(
 		identity === null
