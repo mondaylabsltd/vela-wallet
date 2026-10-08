@@ -22,7 +22,7 @@
     "liveIndicator": "Trực tiếp · đang chờ thanh toán",
     "emptyNoActivityNetwork": "Chưa có hoạt động trên mạng này",
     "emptyNoActivity": "Chưa có hoạt động nào",
-    "emptySubtitle": "Các khoản thanh toán nhận được sẽ hiển thị tại đây theo thời gian thực.",
+    "emptySubtitle": "Giao dịch bạn gửi sẽ hiển thị tại đây. Tiền bạn nhận được sẽ hiển thị trong số dư.",
     "invalidQrTitle": "QR không hợp lệ",
     "invalidQrBody": "Vui lòng quét một địa chỉ Ethereum hoặc URI kết nối hợp lệ.",
     "switchAccountTitle": "Chuyển tài khoản",

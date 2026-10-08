@@ -212,7 +212,7 @@
   "liveIndicator": "Live · wartet auf Zahlungen",
   "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
   "emptyNoActivity": "Noch keine Aktivität",
-  "emptySubtitle": "Eingehende Zahlungen erscheinen hier in Echtzeit.",
+  "emptySubtitle": "Was Sie senden, erscheint hier. Erhaltenes Geld sehen Sie in Ihrem Guthaben.",
   "invalidQrTitle": "Ungültiger QR-Code",
   "invalidQrBody": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
   "switchAccountTitle": "Konto wechseln",

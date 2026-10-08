@@ -22,7 +22,7 @@
     "liveIndicator": "Canlı · ödemeler dinleniyor",
     "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
     "emptyNoActivity": "Henüz etkinlik yok",
-    "emptySubtitle": "Gelen ödemeler burada anlık olarak görünecek.",
+    "emptySubtitle": "Gönderdikleriniz burada görünür. Aldığınız para bakiyenize yansır.",
     "invalidQrTitle": "Geçersiz QR",
     "invalidQrBody": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
     "switchAccountTitle": "Hesap Değiştir",

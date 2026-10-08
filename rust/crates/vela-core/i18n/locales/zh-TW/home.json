@@ -37,7 +37,7 @@
     "liveIndicator": "即時 · 正在監聽款項",
     "emptyNoActivityNetwork": "此網路上沒有任何動態",
     "emptyNoActivity": "尚無任何動態",
-    "emptySubtitle": "收到的款項會即時顯示在這裡。",
+    "emptySubtitle": "你送出的交易會顯示在這裡，收到的款項會計入餘額。",
     "invalidQrTitle": "QR 無效",
     "invalidQrBody": "請掃描有效的以太坊地址或連線 URI。",
     "switchAccountTitle": "切換帳戶",

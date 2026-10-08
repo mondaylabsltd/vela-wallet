@@ -37,7 +37,7 @@
     "liveIndicator": "即時 · 正在等候付款",
     "emptyNoActivityNetwork": "此網絡暫無活動",
     "emptyNoActivity": "暫無活動",
-    "emptySubtitle": "收到的付款會即時顯示於此。",
+    "emptySubtitle": "你發出的交易會顯示於此，收到的款項會計入餘額。",
     "invalidQrTitle": "QR 無效",
     "invalidQrBody": "請掃描有效的以太坊地址或連接 URI。",
     "switchAccountTitle": "切換帳戶",

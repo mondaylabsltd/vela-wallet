@@ -227,7 +227,7 @@
   "liveIndicator": "Live · in ascolto dei pagamenti",
   "emptyNoActivityNetwork": "Nessuna attività su questa rete",
   "emptyNoActivity": "Ancora nessuna attività",
-  "emptySubtitle": "I pagamenti in arrivo appariranno qui in tempo reale.",
+  "emptySubtitle": "Qui compare ciò che invii. Il denaro che ricevi si vede nel tuo saldo.",
   "invalidQrTitle": "QR non valido",
   "invalidQrBody": "Scansiona un indirizzo Ethereum o un URI di connessione valido.",
   "switchAccountTitle": "Cambia account",

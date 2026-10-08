@@ -22,7 +22,7 @@
     "liveIndicator": "Ao vivo · aguardando pagamentos",
     "emptyNoActivityNetwork": "Nenhuma atividade nesta rede",
     "emptyNoActivity": "Nenhuma atividade ainda",
-    "emptySubtitle": "Os pagamentos recebidos vão aparecer aqui em tempo real.",
+    "emptySubtitle": "O que você envia aparece aqui. O dinheiro que você recebe aparece no seu saldo.",
     "invalidQrTitle": "QR inválido",
     "invalidQrBody": "Escaneie um endereço Ethereum ou um URI de conexão válido.",
     "switchAccountTitle": "Trocar de conta",

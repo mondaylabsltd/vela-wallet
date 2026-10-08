@@ -22,7 +22,7 @@
     "liveIndicator": "ライブ · 入金を待機中",
     "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
     "emptyNoActivity": "まだアクティビティはありません",
-    "emptySubtitle": "入金があると、ここにリアルタイムで表示されます。",
+    "emptySubtitle": "送金はここに表示されます。受け取ったお金は残高に反映されます。",
     "invalidQrTitle": "無効な QR コード",
     "invalidQrBody": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
     "switchAccountTitle": "アカウントを切り替える",

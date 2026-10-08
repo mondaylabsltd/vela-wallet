@@ -22,7 +22,7 @@
     "liveIndicator": "Live · memantau pembayaran",
     "emptyNoActivityNetwork": "Belum ada aktivitas di jaringan ini",
     "emptyNoActivity": "Belum ada aktivitas",
-    "emptySubtitle": "Pembayaran masuk akan muncul di sini secara real-time.",
+    "emptySubtitle": "Yang Anda kirim akan muncul di sini. Uang yang Anda terima tampil di saldo Anda.",
     "invalidQrTitle": "QR Tidak Valid",
     "invalidQrBody": "Pindai alamat Ethereum atau URI koneksi yang valid.",
     "switchAccountTitle": "Ganti Akun",

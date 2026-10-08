@@ -22,7 +22,7 @@
     "liveIndicator": "실시간 · 입금 대기 중",
     "emptyNoActivityNetwork": "이 네트워크에 활동 내역이 없습니다",
     "emptyNoActivity": "아직 활동 내역이 없습니다",
-    "emptySubtitle": "입금 내역이 실시간으로 여기에 표시됩니다.",
+    "emptySubtitle": "보낸 내역은 여기에 표시됩니다. 받은 금액은 잔액에 반영됩니다.",
     "invalidQrTitle": "잘못된 QR",
     "invalidQrBody": "올바른 이더리움 주소 또는 연결 URI를 스캔하세요.",
     "switchAccountTitle": "계정 전환",
