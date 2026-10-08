@@ -184,14 +184,16 @@ enum ExploreLive {
 
     /// Manage groups: exactly Favorites and Recent dApps, each with its eye
     /// (issue #465). Recent carries no second word — "System" said nothing
-    /// once every row is one.
+    /// once every row is one. Favorites counts its sites by the PLURAL key
+    /// (`explore.siteCount_*`): "1 site", "3 сайта", "5 сайтов" — the single
+    /// "{{n}} sites" read "1 sites".
     static func groupManage(explore: ExploreViewWire, loc: Loc) -> ExploreSheet {
         .groupManage(
             title: loc.t("explore.manageGroups"),
             rows: [
                 GroupManageRow(
                     id: "favorites", title: loc.t("explore.favorites"),
-                    meta: loc.t("explore.siteCount", vars: ["n": String(explore.favorites.count)]),
+                    meta: loc.t("explore.siteCount", count: explore.favorites.count),
                     hidden: explore.favoritesHidden
                 ),
                 GroupManageRow(
