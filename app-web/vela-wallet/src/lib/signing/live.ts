@@ -44,6 +44,7 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
+import { tokenMarkFor } from '$lib/flows/marks';
 import { browserSiteLabel, feeFailureReasonKey, signConfirmState } from '$lib/core/kernels';
 import { estimateRevertsFor } from '$lib/services/estimate-verdict';
 import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
@@ -773,13 +774,16 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// thing this sheet may never say.
 	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
 		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
+	const chainId = sign.request?.chain_id ?? 1;
 	const selector =
 		inputs.feeOpen === true && fee.options.length > 1
 			? {
 					title: m.feeTokenTitle,
 					options: fee.options.map((option) => ({
 						id: option.contract ?? 'native',
-						mark: { letter: option.symbol.slice(0, 1).toUpperCase(), tint: NEUTRAL_TINT },
+						// The REQUEST's chain: the coin is paid on the chain this
+						// transaction runs on, whatever the estimate says or lacks.
+						mark: tokenMarkFor(chainId, option.symbol, option.contract),
 						name: option.symbol,
 						balance: `${amount(option.balance, option.decimals)} ${option.symbol}`,
 						fee:

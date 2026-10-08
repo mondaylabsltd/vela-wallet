@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import PositiveNote from './PositiveNote.svelte';
 	import FeeSpeedRow from '$lib/flows/ui/FeeSpeedRow.svelte';
 	import FeeRefreshButton from '$lib/flows/ui/FeeRefreshButton.svelte';
@@ -50,7 +50,14 @@
 					disabled={option.insufficient === true}
 					onclick={() => onpick?.(option.id)}
 				>
-					<LetterAvatar letter={option.mark.letter} tint={option.mark.tint} size={32} />
+					<!-- The send form's fee-coin mark: the coin's logo over its ticker. -->
+					<TokenIcon
+						ticker={option.mark.ticker}
+						badgeColor={option.mark.badgeColor}
+						logoUrls={option.mark.logoUrls}
+						badgeLogoUrl={option.mark.badgeLogoUrl}
+						badgeHidden={option.mark.badgeHidden}
+					/>
 					<span class="who">
 						<span class="name">{option.name}</span>
 						<span class="balance">{option.balance}</span>
@@ -226,9 +233,10 @@
 	}
 
 	.option-reason {
-		/* The option's padding, its mark (32, `--space-4xl`) and the gap after it. */
+		/* The option's padding, its mark (TokenIcon's row size, twice
+		   `--space-2xl`) and the gap after it. */
 		margin: 0 var(--space-md) var(--space-sm)
-			calc(var(--space-md) + var(--space-4xl) + var(--space-lg));
+			calc(var(--space-md) + var(--space-2xl) * 2 + var(--space-lg));
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: 500;

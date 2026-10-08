@@ -175,7 +175,13 @@ export interface TechModel {
 
 export interface FeeTokenOption {
 	id: string;
-	mark: TokenMark;
+	/**
+	 * The coin's real mark — the send form's fee-coin sheet's, by the same
+	 * rule (`tokenMarkFor`): its logo over its drawn ticker, the chain badge
+	 * unless it is the chain's own coin. A first letter on a disc drew USDC
+	 * and USDT as the same "U".
+	 */
+	mark: TokenMarkModel;
 	name: string;
 	balance: string;
 	fee: string;
@@ -189,7 +195,7 @@ export interface FeeTokenOption {
 	reason?: string;
 }
 
-import type { FeeSpeedModel, ReceiptStage } from '$lib/flows/model';
+import type { FeeSpeedModel, ReceiptStage, TokenMarkModel } from '$lib/flows/model';
 
 export type FeeModel =
 	| {

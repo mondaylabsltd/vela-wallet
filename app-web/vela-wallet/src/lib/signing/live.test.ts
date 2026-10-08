@@ -30,6 +30,7 @@ import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
+import { tokenMarkFor } from '$lib/flows/marks';
 import {
 	approveOptsOf,
 	buildSigningModel,
@@ -1373,6 +1374,23 @@ describe('the fee coin can be switched, as it can when sending', () => {
 			['0x' + '6b'.repeat(20), 'DAI', '~1.27 DAI', false, true]
 		]);
 		expect(fee.selector.options[1].balance).toBe('42 USDC');
+	});
+
+	// The send form's fee-coin marks, by the same rule (`tokenMarkFor`): a
+	// first letter on a disc drew USDC and USDT alike as "U". Priced on the
+	// REQUEST's chain — never a chain the estimate happens to name, or none.
+	it('marks every coin with its own logo, on the request’s chain', () => {
+		const onBase = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 8453 } };
+		const fee = feeOf({ sign: onBase, fee: two, feeOpen: true });
+		if (fee.kind !== 'onchain' || !fee.selector) throw new Error('no selector');
+		const [eth, usdc] = fee.selector.options;
+		expect(eth.mark).toEqual(tokenMarkFor(8453, 'ETH', null));
+		expect(usdc.mark).toEqual(tokenMarkFor(8453, 'USDC', '0x' + 'a0'.repeat(20)));
+		expect(usdc.mark.ticker).toBe('USDC');
+		expect(usdc.mark.logoUrls?.[0]).toContain('eip155-8453');
+		// The coin on its own chain wears its logo once; a token wears its chain's badge.
+		expect(usdc.mark.badgeHidden).toBe(false);
+		expect(usdc.mark.badgeLogoUrl).toContain('eip155-8453');
 	});
 
 	it('with one coin there is nothing to choose, so nothing opens', () => {

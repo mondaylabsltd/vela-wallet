@@ -10,7 +10,7 @@
  * NOT know what a transaction does.
  */
 import { SITES } from '$lib/explore/fixtures';
-import { IDENTITY } from '$lib/wallet/fixtures';
+import { CHAIN_COLORS, IDENTITY } from '$lib/wallet/fixtures';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
@@ -1201,7 +1201,9 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				options: [
 					{
 						id: 'eth',
-						mark: T.eth,
+						// The send sheet's marks, drawn as their glyphs (fixtures
+						// fetch nothing); ETH on Ethereum wears no badge.
+						mark: { ticker: 'ETH', badgeColor: CHAIN_COLORS.ethereum, badgeHidden: true },
 						name: 'ETH',
 						balance: `${m.feeBalance} 0.0689`,
 						fee: `~0.0021 ETH`,
@@ -1209,7 +1211,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 					},
 					{
 						id: 'usdc',
-						mark: T.usdc,
+						mark: { ticker: 'USDC', badgeColor: CHAIN_COLORS.ethereum },
 						name: 'USDC',
 						balance: `${m.feeBalance} 1,240.00`,
 						fee: `~5.55 USDC`,
