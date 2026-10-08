@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "È tutto aggiornato.",
     "balanceDetailViewHint": "Vedi dettagli",
     "lastUpdated": "Aggiornato {{ago}}",
+    "updating": "Aggiornamento in corso…",
     "rescanButton": "Riscansiona",
     "rescanTitle": "Riscansiona l'attività recente",
     "rescanSubtitle": "Manca un pagamento? Interroga direttamente la blockchain per i trasferimenti recenti.",

@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "Her şey güncel.",
     "balanceDetailViewHint": "Ayrıntıları gör",
     "lastUpdated": "Güncellendi {{ago}}",
+    "updating": "Güncelleniyor…",
     "tabActivity": "Etkinlik",
     "tabAssets": "Varlıklar",
     "tabConnections": "Bağlantılar",

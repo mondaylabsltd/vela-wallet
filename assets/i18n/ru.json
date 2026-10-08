@@ -205,6 +205,7 @@
   "balanceDetailEmpty": "Всё актуально.",
   "balanceDetailViewHint": "Показать подробности",
   "lastUpdated": "Обновлено {{ago}}",
+  "updating": "Обновляем…",
   "rescanButton": "Пересканировать",
   "rescanTitle": "Пересканировать недавнюю активность",
   "rescanSubtitle": "Не хватает платежа? Запросите недавние переводы напрямую из блокчейна.",

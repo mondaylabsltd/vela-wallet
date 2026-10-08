@@ -982,7 +982,16 @@ pub struct BalanceView {
     /// Every money surface (feed amounts, holdings, switcher, receipt toast)
     /// masks on this together — a leak in one defeats the mask everywhere.
     pub hidden: bool,
+    /// A refresh the PERSON asked for is out: true from the dispatch of
+    /// `RefreshRequested { pull: true }` (the pull gesture, the hero's
+    /// "↻ Updated <ago>" control — both send `force: true, pull: true`)
+    /// until that round settles or errors; reset by an account switch. The
+    /// polls and focus refreshes (`pull: false`) never set it. While it
+    /// holds, the control spins and reads `home.updating` (issue #462); the
+    /// 650 ms minimum spin is the shell's to hold.
     pub refreshing: bool,
+    /// When the last round SETTLED (an errored round does not move it) — the
+    /// `<ago>` of `home.lastUpdated`.
     pub last_refreshed_at_ms: Option<f64>,
     /// USD-sorted holdings for the Assets tab.
     pub tokens: Vec<BalanceToken>,

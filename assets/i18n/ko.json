@@ -205,6 +205,7 @@
   "balanceDetailEmpty": "모두 최신 상태입니다.",
   "balanceDetailViewHint": "자세히 보기",
   "lastUpdated": "업데이트: {{ago}}",
+  "updating": "업데이트 중…",
   "tabActivity": "활동",
   "tabAssets": "자산",
   "tabConnections": "연결",

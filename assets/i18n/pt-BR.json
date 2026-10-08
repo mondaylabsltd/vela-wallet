@@ -205,6 +205,7 @@
   "balanceDetailEmpty": "Está tudo atualizado.",
   "balanceDetailViewHint": "Ver detalhes",
   "lastUpdated": "Atualizado {{ago}}",
+  "updating": "Atualizando…",
   "tabActivity": "Atividade",
   "tabAssets": "Ativos",
   "tabConnections": "Conexões",

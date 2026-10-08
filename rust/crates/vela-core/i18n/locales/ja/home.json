@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "すべて最新です。",
     "balanceDetailViewHint": "詳細を表示",
     "lastUpdated": "更新: {{ago}}",
+    "updating": "更新中…",
     "tabActivity": "アクティビティ",
     "tabAssets": "資産",
     "tabConnections": "接続",

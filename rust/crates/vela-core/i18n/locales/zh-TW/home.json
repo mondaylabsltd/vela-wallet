@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "一切都是最新的。",
     "balanceDetailViewHint": "查看詳情",
     "lastUpdated": "上次更新 · {{ago}}",
+    "updating": "更新中…",
     "rescanButton": "重新掃描",
     "rescanTitle": "重新掃描近期動態",
     "rescanSubtitle": "沒收到某筆款項？直接向區塊鏈重新查詢近期轉帳。",

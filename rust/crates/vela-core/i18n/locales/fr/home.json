@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "Tout est à jour.",
     "balanceDetailViewHint": "Voir les détails",
     "lastUpdated": "Mis à jour {{ago}}",
+    "updating": "Mise à jour…",
     "tabActivity": "Activité",
     "tabAssets": "Actifs",
     "tabConnections": "Connexions",

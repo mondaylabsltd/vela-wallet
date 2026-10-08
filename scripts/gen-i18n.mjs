@@ -610,8 +610,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   primary button, labelled with the action alone ("Confirm swap", "Sign",
 //   "Back up public keys"), as the Send confirm screen always did; the slide
 //   and its "Slide to confirm ·" prefix are gone. 1790 leaves, 99 branches.
-if (PATHS.length !== 1889) fail(`expected 1889 paths (1790 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1790) fail(`expected 1790 leaf paths, got ${leafSet.size}`);
+// 1890 (issue #462, 2026-10-08): + `home.updating` — every shell draws the
+//   same "↻ Updated <ago>" control under the total, and while the refresh a
+//   person asked for is out (`BalanceView.refreshing`) its label reads
+//   "Updating…" with the glyph spinning. No existing key said exactly that
+//   (`home.balanceStale` is a sentence about some balances, not a label).
+//   1791 leaves, 99 branches.
+if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -1187,6 +1187,57 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
     assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
 }
 
+/// Issue #462: the hero's "↻ Updated <ago>" control sends exactly the pull
+/// above, and reads "Updating…" while `refreshing` holds. It holds through a
+/// poll's round that was already out (that round is not the one asked for),
+/// and it ends on an error as on a settle — the label's time then stays at
+/// the last round that did settle.
+#[test]
+fn the_refresh_control_spins_until_its_own_round_ends() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "5", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW));
+    // A poll's round is out when the person taps.
+    sut.dispatch(Event::RefreshRequested {
+        force: false,
+        pull: false,
+    });
+    assert!(!sut.view().refreshing, "a poll never spins the control");
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: true,
+    });
+    assert!(sut.view().refreshing);
+    // The poll's round lands first: still updating.
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "5", Some(1.0))],
+        failed_chain_ids: vec![],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![],
+        now_ms: NOW + 1.0,
+    });
+    assert!(sut.view().refreshing, "the person's own round is still out");
+    assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
+    // The person's round errors: the spin ends, and "Updated <ago>" keeps the
+    // round that did land.
+    sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: true,
+    });
+    assert!(!sut.view().refreshing);
+    assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
+}
+
 #[test]
 fn polls_never_run_backgrounded_but_focus_reloads() {
     let mut sut = booted(

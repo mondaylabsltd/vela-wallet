@@ -15,6 +15,7 @@
     "balanceDetailEmpty": "Semuanya sudah terbaru.",
     "balanceDetailViewHint": "Lihat detail",
     "lastUpdated": "Diperbarui {{ago}}",
+    "updating": "Memperbarui…",
     "tabActivity": "Aktivitas",
     "tabAssets": "Aset",
     "tabConnections": "Koneksi",
