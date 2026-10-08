@@ -872,46 +872,6 @@ function techModel(inputs: SigningLiveInputs): TechModel {
 }
 
 /**
- * The whole sheet. `null` while the core is showing nothing — the route
- * renders no sheet at all then, rather than an empty one.
- */
-/** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
-const PASSKEY_REGISTRY = '0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9';
-
-/**
- * The wallet's own key backup, in the person's language.
- *
- * The core's built-in results are English, like the ERC-7730 descriptors they
- * sit beside — "the words stay in the shell". For a third-party contract that is
- * the descriptor author's text and stays as written. This one is OURS, raised by
- * the wallet itself, and a sheet that was Chinese everywhere except its three
- * most important lines read as half-finished (founder, 2026-09-19). Matched on
- * the request being first-party AND the verified registry address, never on the
- * English words.
- */
-function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMessages) {
-	const result = clear.result;
-	if (!own || !result?.verified || result.contract_address?.toLowerCase() !== PASSKEY_REGISTRY)
-		return clear;
-	const labels = [m.backupRegisteredAs, m.backupAddress, m.backupPublicKeys];
-	return {
-		...clear,
-		result: {
-			...result,
-			intent: m.backupIntent,
-			fields: result.fields.map((field, index) => ({
-				...field,
-				label: labels[index] ?? field.label
-			}))
-		},
-		confirm:
-			clear.confirm.type === 'confirm_intent'
-				? { ...clear.confirm, intent: m.backupIntent }
-				: clear.confirm
-	};
-}
-
-/**
  * The core's words in the reader's language. A clear-signing result is
  * English — a descriptor's intent and labels, the "Unlimited" a threshold
  * prints — and the core names the ones it recognises (`intent_term`,
@@ -1183,16 +1143,15 @@ function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[
 	return next;
 }
 
+/**
+ * The whole sheet. `null` while the core is showing nothing — the route
+ * renders no sheet at all then, rather than an empty one.
+ */
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
-	const ownRequest =
-		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
 	const inputs = {
 		...raw,
-		clear: cappedApproval(
-			localizedTerms(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.m),
-			raw.guard
-		)
+		clear: cappedApproval(localizedTerms(raw.clear, raw.m), raw.guard)
 	};
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;
@@ -1204,7 +1163,10 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// is said once, and the host line stays whenever it adds something.
 	const label = browserSiteLabel(dapp?.name ?? '', host);
 	const name = label.name;
-	const own = ownRequest;
+	// The wallet's own request (the key backup) is the shell's say-so, carried
+	// by the core (`first_party`) — never the origin: a page served from the
+	// wallet's own host could otherwise borrow the wallet's name.
+	const own = request.first_party;
 
 	// Rule 1: the gate is an AND — the request, the guard, the reading and the
 	// fee at the speed in force. Spec 099 R7: the AND is the core's

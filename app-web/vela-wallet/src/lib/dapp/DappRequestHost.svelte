@@ -338,7 +338,9 @@
 			granted_address: grantedAddress,
 			requested_address: null,
 			request_ts_ms: null,
-			now_ms: Date.now()
+			now_ms: Date.now(),
+			// A site's request is never the wallet's own, whatever its words.
+			first_party: false
 		});
 	}
 

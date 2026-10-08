@@ -231,11 +231,6 @@ export interface SigningMessages {
 	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
 	 */
 	terms: Record<string, string>;
-	/** The wallet's own key backup, in the person's language (the core's built-in result is English). */
-	backupIntent: string;
-	backupRegisteredAs: string;
-	backupAddress: string;
-	backupPublicKeys: string;
 	/**
 	 * Spec 077: the landing a submitted transaction shows, in the SEND
 	 * receipt's own words. Borrowed rather than written again so the two

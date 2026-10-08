@@ -1082,10 +1082,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
-		backupIntent: k('settingsModals.backup.intent'),
-		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
-		backupAddress: k('contacts.addressLabel'),
-		backupPublicKeys: k('settingsModals.backup.publicKeys'),
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

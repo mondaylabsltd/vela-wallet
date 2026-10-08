@@ -58,7 +58,8 @@ const REQUEST = {
 	origin: 'https://app.example',
 	dapp: null,
 	chain_id: 1,
-	signer_address: identity.address
+	signer_address: identity.address,
+	first_party: false
 };
 
 const OPEN_SIGN: SignView = {
@@ -1557,6 +1558,72 @@ describe("localizedTerms — the core names the word, the sheet says it in the r
 
 	it('every term the core can name has a word in this locale', () => {
 		for (const term of CLEAR_TERMS) expect(zh.terms[term], term).toBeTruthy();
+	});
+});
+
+/**
+ * The wallet's own key backup (spec 062), read by the REAL core: every word on
+ * it is a core term, so the sheet says it in the reader's language with no
+ * relabel of its own — and it is the wallet's own because the request says so
+ * (`first_party`), never because of its bytes or its origin.
+ */
+describe("the wallet's own backup, as the core reads it", () => {
+	const REGISTRY = '0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9';
+	const DATA = `0x${readFileSync('../../rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex', 'utf8').trim()}`;
+	const backup = (first_party: boolean): SignView => ({
+		...OPEN_SIGN,
+		request: {
+			...REQUEST,
+			first_party,
+			params_json: JSON.stringify([{ to: REGISTRY, data: DATA, value: '0x0' }])
+		}
+	});
+
+	function coreView(): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(
+				JSON.stringify({
+					type: 'resolve_transaction',
+					to: REGISTRY,
+					data: DATA,
+					value: '0x0',
+					chain_id: 1,
+					locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	it('names the network, the address and the keys in the reader’s words, and confirms with the intent', () => {
+		const zh = resolveSigningMessages('zh');
+		const model = buildSigningModel(inputs({ m: zh, sign: backup(true), clear: coreView() }))!;
+		expect(model.blocks[0]).toMatchObject({
+			kind: 'intent',
+			text: zh.terms.intentBackUpPublicKeys
+		});
+		const rows = model.blocks.find((b) => b.kind === 'rows');
+		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
+			[zh.terms.labelNetwork, 'Ethereum'],
+			[zh.terms.labelAddress, '0x88cCA0…266894'],
+			[zh.terms.labelPublicKeys, '3']
+		]);
+		expect(model.confirm.action).toBe(zh.terms.intentBackUpPublicKeys);
+		expect(zh.terms.intentBackUpPublicKeys).not.toBe('Back up public keys');
+	});
+
+	it('is the wallet’s own only when the request says so — a site sending the same bytes stays a site', () => {
+		const clear = coreView();
+		expect(buildSigningModel(inputs({ sign: backup(true), clear }))!.dapp).toMatchObject({
+			name: 'Vela Wallet',
+			own: true
+		});
+		const site = buildSigningModel(inputs({ sign: backup(false), clear }))!.dapp;
+		expect(site.own).toBeUndefined();
+		expect(site.name).toBe('app.example');
 	});
 });
 
