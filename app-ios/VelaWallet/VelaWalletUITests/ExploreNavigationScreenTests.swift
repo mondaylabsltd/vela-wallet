@@ -98,8 +98,12 @@ final class ExploreNavigationScreenTests: XCTestCase {
         XCTAssertTrue(app.buttons["explore.bar.back"].waitForExistence(timeout: 5),
                       "Done did not return to the page it was opened from")
 
-        // 探索 while browsing: the home.
-        app.buttons["探索"].firstMatch.tap()
+        // 探索 while browsing: the home. It is the selected tab and still a
+        // button that can be pressed — for VoiceOver too, the way home.
+        let explore = app.buttons["探索"].firstMatch
+        XCTAssertTrue(explore.isSelected, "探索 is not marked selected under a page")
+        XCTAssertTrue(explore.isEnabled, "the selected 探索 cannot be pressed")
+        explore.tap()
         XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 5),
                       "探索 while browsing did not return to the home")
 
