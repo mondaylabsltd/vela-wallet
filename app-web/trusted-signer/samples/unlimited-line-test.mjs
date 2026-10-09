@@ -26,7 +26,8 @@ const ACCOUNT = '0x' + 'aa'.repeat(20);
 const SPENDER = '0x' + 'bb'.repeat(20);
 const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
 const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3';
-const ctx = { account: ACCOUNT, chainId: 1, now: 1_700_000_000_000 };
+// As the apps send it: over the URL, answered to the wallet (spec 102 R7).
+const ctx = { account: ACCOUNT, chainId: 1, now: 1_700_000_000_000, channel: 'url', callback: 'velawallet://sign-result' };
 
 const word = (n) => BigInt(n).toString(16).padStart(64, '0');
 const approve = (amount) => ns.resolve({

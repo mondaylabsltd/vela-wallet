@@ -263,8 +263,11 @@ window.VelaCS = window.VelaCS || {};
 
   // --- 2. native app: URL fragment in, callback link out ----------------------
   //
-  // The apps' callback is `velawallet://sign-result`; tests use a loopback
-  // http address.
+  // The apps' callback is `velawallet://sign-result`, and it is the only
+  // address this channel ever sends to (spec 102 R7, `resolve.answersToWallet`):
+  // any site can open this page with a link of its own, so an answer — or
+  // even a refusal code — sent to whatever the link names would go to
+  // whoever wrote the link.
 
   function fromUrlFragment(options) {
     var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -289,8 +292,13 @@ window.VelaCS = window.VelaCS || {};
       // A live page navigates; a page being closed cannot. `sendBeacon` exists
       // for exactly that moment, and without it "closing refuses" would be a
       // promise this channel silently breaks.
+      //
+      // The wallet's address or nowhere. The card has already refused a
+      // request whose answer would go anywhere else (resolve.js); this is the
+      // same rule where the bytes leave, so nothing reaches a stranger even
+      // if a refusal were ever missed upstream.
       function answer(query, closing) {
-        if (!callback) return;
+        if (!ns.resolve.answersToWallet({ channel: 'url', callback: callback })) return;
         var url = callbackUrl(query);
         if (closing && navigator.sendBeacon && navigator.sendBeacon(url)) return;
         location.href = url;

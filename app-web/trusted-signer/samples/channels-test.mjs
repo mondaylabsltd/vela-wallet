@@ -7,7 +7,6 @@
 //
 //   CHROME_BIN=… SB=… node samples/channels-test.mjs
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
 import { createServer as createTcpServer, connect as tcpConnect } from 'node:net';
 import { createHash, webcrypto } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, readdirSync } from 'node:fs';
@@ -19,8 +18,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const SB = process.env.SB;
 const TLS_PORT = 8443;
-const LOOPBACK_PORT = 8477;
 const CDP = 9390;
+// Where the apps take the answer (`trusted_signer::CALLBACK_URL`), and the only
+// address the page sends one to (spec 102 R7). The browser hands it to the OS;
+// here it is caught on its way out, as DevTools sees the navigation.
+const WALLET_CALLBACK = 'velawallet://sign-result';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const b64url = (s) => Buffer.from(s).toString('base64url');
@@ -60,16 +62,15 @@ function check(name, pass, detail) {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
-// The native app's side of the loopback callback.
-let callbackHit = null;
-const loopback = createServer((request, response) => {
-  const url = new URL(request.url, `http://127.0.0.1:${LOOPBACK_PORT}`);
-  // The navigation also asks for /favicon.ico; only the callback path counts.
-  if (url.pathname === '/vela') callbackHit = url;
-  response.writeHead(200, { 'content-type': 'text/html' });
-  response.end('<p>you can close this tab</p>');
-});
-loopback.listen(LOOPBACK_PORT, '127.0.0.1');
+/** The answer a page handed to `velawallet://`, as the OS would receive it. */
+async function answerOf(page, timeoutMs = 12000) {
+  for (let waited = 0; waited < timeoutMs; waited += 200) {
+    const url = page.navigations.find((u) => u.startsWith(WALLET_CALLBACK + '?'));
+    if (url) return new URL(url);
+    await sleep(200);
+  }
+  return null;
+}
 
 const profile = mkdtempSync(join(tmpdir(), 'channels-'));
 const tls = spawn('python3', [join(SB, 'tls-serve.py'), root, String(TLS_PORT), join(SB, 'cert.pem'), join(SB, 'key.pem')], { stdio: 'ignore' });
@@ -88,8 +89,10 @@ class Page {
     this.ws = ws;
     this.id = 0;
     this.pending = new Map();
+    this.navigations = [];
     ws.addEventListener('message', (event) => {
       const message = JSON.parse(event.data);
+      if (message.method === 'Page.frameRequestedNavigation') this.navigations.push(message.params.url);
       if (message.id && this.pending.has(message.id)) {
         const { resolve, reject } = this.pending.get(message.id);
         this.pending.delete(message.id);
@@ -109,6 +112,7 @@ class Page {
     const page = new Page(ws);
     page.targetId = tab.id;
     await page.send('Runtime.enable');
+    await page.send('Page.enable');
     return page;
   }
 
@@ -188,11 +192,11 @@ try {
   const login = fixtures.cases.find((c) => c.code === 'CS19');
   const transfer = fixtures.cases.find((c) => c.code === 'CS1');
 
-  // === 1. URL fragment in, loopback callback out ============================
+  // === 1. URL fragment in, the answer out to velawallet:// =================
   {
     const payload = JSON.stringify({ intent: login.intent, context: login.context });
     const url = 'https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload) +
-      '&cb=' + b64url(`http://127.0.0.1:${LOOPBACK_PORT}/vela`) + '&t=tok-123';
+      '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-123';
     const page = await Page.open(url);
     await page.addAuthenticator();
     await sleep(1200);
@@ -208,11 +212,9 @@ try {
     check('url: the one-time token is scrubbed from history', !(await page.ev('location.hash')).includes('tok-123'));
 
     await page.ev('window.__slider.__confirm()', true);
-    const gotCallback = await (async () => {
-      for (let i = 0; i < 60; i++) { if (callbackHit) return true; await sleep(200); }
-      return false;
-    })();
-    check('url: the loopback callback was called', gotCallback, callbackHit ? callbackHit.pathname : '—');
+    const callbackHit = await answerOf(page);
+    check('url: the answer went to velawallet://sign-result', !!callbackHit,
+      callbackHit ? callbackHit.href.slice(0, 48) + '…' : page.navigations.join(' ').slice(0, 120));
     if (callbackHit) {
       check('url: the callback carries the one-time token back', callbackHit.searchParams.get('t') === 'tok-123');
       const result = JSON.parse(Buffer.from(callbackHit.searchParams.get('result'), 'base64url').toString());
@@ -222,9 +224,12 @@ try {
     }
   }
 
-  // === 2. postMessage, same browser =========================================
+  // === 2. postMessage, same browser: refused for a signature ===============
+  //
+  // postMessage answers whoever opened the page, and any site can (spec 102
+  // R7). So a signature asked this way is refused even from a Vela origin;
+  // the opener hears "refused" at once, and no passkey prompt is raised.
   {
-    callbackHit = null;
     const opener = await Page.open('https://getvela.app/samples/dapp-sim.html?lang=en');
     await sleep(600);
     await opener.ev('window.__openSigner()', true);
@@ -240,31 +245,36 @@ try {
       await signer.send('Runtime.enable');
       await signer.addAuthenticator();
 
-      const ready = await waitFor(signer, '!!window.__slider');
-      check('post: intent arrived over postMessage and rendered', ready);
+      const ready = await waitFor(signer, "!!document.querySelector('.sheet') && !!window.__velaState && window.__velaState.phase === 'refused'");
+      check('post: intent arrived over postMessage, rendered, and refused', ready && !(await signer.ev('!!window.__slider')),
+        String(await signer.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')")).slice(0, 100));
       check('post: the requester origin is treated as VERIFIED',
         !(await signer.ev("[...document.querySelectorAll('.warning')].some(w => /self-reported/.test(w.textContent))")));
 
-      await signer.ev('window.__slider.__confirm()', true);
       const answered = await waitFor(opener, '!!window.__answer', 12000);
-      check('post: the result reached the opener', answered,
-        answered ? String(await opener.ev('window.__answer.signature')).slice(0, 18) + '…' : '—');
+      check('post: the opener heard "refused", never a signature', answered &&
+        (await opener.ev('window.__answer.error')) === 'refused' && !(await opener.ev('!!window.__answer.signature')),
+        answered ? JSON.stringify(await opener.ev('window.__answer')).slice(0, 60) : '—');
     }
   }
 
   // === 3. a transaction must be refused, not signed =========================
   {
+    // Answered to the wallet, so the refusal below is the digest's and not
+    // the answer address's (spec 102 R7 refuses a request with none).
     const payload = JSON.stringify({ intent: transfer.intent, context: transfer.context });
-    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload));
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload) +
+      '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-3');
     await page.addAuthenticator();
     await sleep(1200);
     const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
     const why = await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')");
-    check('refusal: a transaction is not signed with a guessed digest', refused, why.slice(0, 90) + '…');
+    check('refusal: a transaction is not signed with a guessed digest',
+      refused && /will not sign a guessed digest/.test(why) && !/sends a signature only to the Vela wallet/.test(why),
+      why.slice(0, 90) + '…');
   }
   // === 3b. a transaction WITH its assembled operation =======================
   {
-    callbackHit = null;
     const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
     const ALICE = '0xaF5e8917831Ef08A64e18b2Cde9f8f5d32c7b3e1';
     const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
@@ -294,7 +304,7 @@ try {
 
     const payload = JSON.stringify({ intent, context });
     const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload) +
-      '&cb=' + b64url(`http://127.0.0.1:${LOOPBACK_PORT}/vela`) + '&t=tx-1');
+      '&cb=' + b64url(WALLET_CALLBACK) + '&t=tx-1');
     await page.addAuthenticator();
     await sleep(1200);
 
@@ -305,11 +315,8 @@ try {
       /SafeOp/.test(String(await page.ev("document.querySelector('.tech-body') && document.querySelector('.tech-body').textContent"))));
 
     await page.ev('window.__slider.__confirm()', true);
-    const got = await (async () => {
-      for (let i = 0; i < 60; i++) { if (callbackHit) return true; await sleep(200); }
-      return false;
-    })();
-    check('tx: the signature came back', got);
+    const callbackHit = await answerOf(page);
+    check('tx: the signature came back', !!callbackHit && callbackHit.searchParams.get('t') === 'tx-1');
     if (callbackHit) {
       const result = JSON.parse(Buffer.from(callbackHit.searchParams.get('result'), 'base64url').toString());
       check('tx: it signed the SafeOp digest', result.digestKind === 'SafeOp', result.digest.slice(0, 20) + '…');
@@ -321,7 +328,6 @@ try {
 
   // === 3c. the operation does not contain what the site asked for ===========
   {
-    callbackHit = null;
     const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
     const ALICE = '0xaF5e8917831Ef08A64e18b2Cde9f8f5d32c7b3e1';
     const ATTACKER = '0x9A8b7C6d5E4F3a2B1c0D9e8F7a6B5c4D3e2F1a09';
@@ -344,7 +350,7 @@ try {
       params: [{ to: USDC, value: '0x0', data: asked }],
     };
     const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
-      b64url(JSON.stringify({ intent, context })));
+      b64url(JSON.stringify({ intent, context })) + '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-tamper');
     await sleep(1400);
 
     const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
@@ -391,7 +397,7 @@ try {
       params: [{ version: '1.0', chainId: '0x1', from: SAFE, calls: [{ to: USDC, value: '0x0', data: asked }] }],
     };
     const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
-      b64url(JSON.stringify({ intent, context })));
+      b64url(JSON.stringify({ intent, context })) + '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-tamper');
     await sleep(1400);
     const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
     const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
@@ -418,7 +424,6 @@ try {
 } finally {
   chrome.kill();
   tls.kill();
-  loopback.close();
   try { rmSync(profile, { recursive: true, force: true }); } catch { /* ignore */ }
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} checks passed`);
