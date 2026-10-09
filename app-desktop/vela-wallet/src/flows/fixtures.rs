@@ -703,7 +703,6 @@ pub struct ContactEntry {
 #[derive(Clone)]
 pub struct ContactPick {
     pub search_placeholder: SharedString,
-    pub scan_row: SharedString,
     pub groups_title: SharedString,
     pub groups: Vec<(SharedString, SharedString, Hsla, Hsla)>,
     pub contacts_title: SharedString,
@@ -1530,7 +1529,6 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
 fn contact_pick(s: &FlowStrings) -> ContactPick {
     ContactPick {
         search_placeholder: s.pick_contact_search.clone(),
-        scan_row: s.scan_to_fill.clone(),
         groups_title: s.contacts_groups.clone(),
         groups: vec![
             (

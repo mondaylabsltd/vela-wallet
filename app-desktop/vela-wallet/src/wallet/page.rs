@@ -7172,6 +7172,7 @@ impl WalletPage {
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
             pick_recipient_rows: Vec::new(),
+            scan_recipient_rows: Vec::new(),
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
             search: None,
@@ -7498,9 +7499,16 @@ impl WalletPage {
                             }),
                         });
                         if let Some(id) = send.recipients.get(index).map(|r| r.id.clone()) {
+                            actions.pick_recipient_rows.push(to_host(
+                                SendEvent::OpenContactPicker {
+                                    target: Some(id.clone()),
+                                },
+                            ));
+                            // …and its own scan (issue 471): the code lands
+                            // in THIS row, as the pick above does.
                             actions
-                                .pick_recipient_rows
-                                .push(to_host(SendEvent::OpenContactPicker { target: Some(id) }));
+                                .scan_recipient_rows
+                                .push(to_host(SendEvent::OpenScanner { target: Some(id) }));
                         }
                     }
                     for (index, focus) in send.split_focuses.iter().enumerate() {
@@ -7663,14 +7671,14 @@ impl WalletPage {
                     actions.advance = Some(to_host(SendEvent::Continue));
                     // The recipient field's scan (078 F-01). The scanner is the
                     // CORE's state, as on the web: `OpenScanner` raises it and
-                    // `ScanResolved` fills the form and takes it down.
-                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
+                    // `ScanResolved` fills the form and takes it down. No
+                    // target: the single field, or the first empty split row.
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner { target: None }));
                 }
                 FlowPanel::Dsd2e => {
-                    // The picker's "scan to fill" row opens the same scanner;
-                    // the scan IS the pick, and the core closes the picker with
-                    // it (issue #270).
-                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
+                    // The picker is the book only (issue 471): its "scan to
+                    // fill" row is gone, every recipient row has its own scan.
+                    actions.open_scan = None;
                     // A pick lands in the field AND closes the sheet. The core
                     // at this branch point leaves the sheet up after
                     // `PickedAddress`; spec 028's core closes it itself, after

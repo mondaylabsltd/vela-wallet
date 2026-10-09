@@ -1359,7 +1359,42 @@ pub struct RecipientRowActions {
     /// The row's address, typed (078 F-06) — and the book for this row.
     pub address: Option<crate::flows::panels::AddressField>,
     pub pick: Option<crate::flows::panels::Click>,
+    /// This row's own scan (issue 471): the code lands in THIS row — the
+    /// core's `OpenScanner { target }`, as `pick` is `OpenContactPicker`.
+    pub scan: Option<crate::flows::panels::Click>,
     pub remove: Option<crate::flows::panels::Click>,
+}
+
+/// A split row's two doors, side by side: the book, then a code (issue 471)
+/// — the single recipient field's pair, a size down to sit in the row.
+fn row_doors(
+    icons: &mut IconCache,
+    theme: &Theme,
+    index: usize,
+    pick: Option<crate::flows::panels::Click>,
+    scan: Option<crate::flows::panels::Click>,
+) -> Div {
+    let door = |icons: &mut IconCache, id: &'static str, glyph: Icon, action| {
+        crate::flows::panels::clickable(
+            gpui::ElementId::from((id, index)),
+            action,
+            div()
+                .p(px(4.))
+                .rounded_full()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .child(icon_img(icons, glyph, false, theme.fg_muted, 14.)),
+        )
+    };
+    // Both, always: live each is bound to its row; on the drawn board they
+    // are the same two glyphs with nothing behind them, so the board shows
+    // the row the person gets.
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .child(door(icons, "split-pick", Icon::NavContacts, pick))
+        .child(door(icons, "split-scan", Icon::QrCode, scan))
 }
 
 pub fn recipient_card(
@@ -1375,6 +1410,7 @@ pub fn recipient_card(
         amount,
         address,
         pick,
+        scan,
         remove,
     } = row;
     // Live, the row is also where the person is typed (the web's
@@ -1406,19 +1442,7 @@ pub fn recipient_card(
                     .child(text)
                     .on_click(move |_, window, cx| focus.focus(window, cx)),
             );
-            if let Some(pick) = pick {
-                reading = reading.child(crate::flows::panels::clickable(
-                    gpui::ElementId::from(("split-pick", index)),
-                    Some(pick),
-                    div().p(px(4.)).rounded_full().child(icon_img(
-                        icons,
-                        Icon::NavContacts,
-                        false,
-                        theme.fg_muted,
-                        14.,
-                    )),
-                ));
-            }
+            reading = reading.child(row_doors(icons, theme, index, pick, scan));
             reading.into_any_element()
         }
         Some(field) => {
@@ -1444,32 +1468,28 @@ pub fn recipient_card(
                     window,
                     field.on_change,
                 ));
-            if let Some(pick) = pick {
-                well = well.child(crate::flows::panels::clickable(
-                    gpui::ElementId::from(("split-pick", index)),
-                    Some(pick),
-                    div().p(px(4.)).rounded_full().child(icon_img(
-                        icons,
-                        Icon::NavContacts,
-                        false,
-                        theme.fg_muted,
-                        14.,
-                    )),
-                ));
-            }
+            well = well.child(row_doors(icons, theme, index, pick, scan));
             well.into_any_element()
         }
-        None => match &recipient.address {
-            Some(address) => {
-                recipient_who(theme, recipient.name.clone(), address.clone()).into_any_element()
-            }
-            None => div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_mono_address())
-                .text_color(theme.fg_base)
-                .child(recipient.name.clone())
-                .into_any_element(),
-        },
+        // The drawn card: who it is, and the row's two doors beside it as the
+        // live row has them at rest (issue 471) — inert here.
+        None => {
+            let text = match &recipient.address {
+                Some(address) => recipient_who(theme, recipient.name.clone(), address.clone()),
+                None => div()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_mono_address())
+                    .text_color(theme.fg_base)
+                    .child(recipient.name.clone()),
+            };
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .child(text)
+                .child(row_doors(icons, theme, index, pick, scan))
+                .into_any_element()
+        }
     };
     // A raised card padded 12, as the web's `RecipientCard` (078 F-11); its
     // wells are the page colour inside it.

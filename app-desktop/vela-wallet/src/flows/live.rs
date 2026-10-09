@@ -4627,7 +4627,6 @@ pub fn contact_pick(view: &ContactsView, s: &FlowStrings) -> ContactPick {
     };
     ContactPick {
         search_placeholder: s.pick_contact_search.clone(),
-        scan_row: s.scan_to_fill.clone(),
         groups_title: s.contacts_groups.clone(),
         groups: view
             .groups

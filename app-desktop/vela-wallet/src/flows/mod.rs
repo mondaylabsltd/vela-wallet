@@ -397,7 +397,6 @@ pub struct FlowStrings {
     // Send · contact picker.
     pub pick_contact_title: SharedString,
     pub pick_contact_search: SharedString,
-    pub scan_to_fill: SharedString,
     pub contacts_groups: SharedString,
     pub contacts_title: SharedString,
     pub group_members: String,
@@ -1027,7 +1026,6 @@ impl FlowStrings {
 
             pick_contact_title: s("send.pickContactTitle"),
             pick_contact_search: s("send.pickContactSearch"),
-            scan_to_fill: s("send.scanToFill"),
             contacts_groups: s("contacts.sectionGroups"),
             contacts_title: s("contacts.title"),
             group_members: raw("contacts.groupMembers"),
