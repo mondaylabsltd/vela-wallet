@@ -517,6 +517,7 @@ fn forward(
         status: entry.status,
         tx_hash: entry.tx_hash,
         now_ms,
+        refusal: None,
     })
 }
 

@@ -3106,6 +3106,7 @@ fn op_tracked(status: TrackStatus, tx_hash: Option<&str>, now_ms: f64) -> Event 
         status,
         tx_hash: tx_hash.map(str::to_owned),
         now_ms,
+        refusal: None,
     }
 }
 
@@ -3627,6 +3628,7 @@ fn only_this_op_s_verdict_after_its_post_answers() {
         status: TrackStatus::Confirmed,
         tx_hash: Some(LANDED_TX.to_owned()),
         now_ms: 20_000.0,
+        refusal: None,
     });
     assert!(ops.is_empty(), "another op: {ops:?}");
 }
@@ -5334,4 +5336,80 @@ fn only_a_transaction_of_the_same_account_on_the_same_chain_waits() {
     sut.dispatch(in_flight(ACCT0, 1));
     sut.dispatch(Arrive::global("req-c", "personal_sign", r#"["0x68656c6c6f","0x0"]"#).event());
     assert!(sut.view().confirm_gate_open, "a signature takes no nonce");
+}
+
+// ===========================================================================
+// PR 2 note 9: the sheet says why the relay did not take it
+// ===========================================================================
+
+/// A submit-time refusal names its sentence on the sheet: another operation
+/// of the account holding the nonce is "waiting for your last transaction"
+/// (and retryable, as on Send); any other refusal the plain refused line; a
+/// failure that was no refusal, none.
+#[test]
+fn a_submit_time_refusal_says_why_on_the_sheet() {
+    use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+    use vela_core::app::tx_tracker::REFUSED_KEY;
+    use vela_core::user_op::PREVIOUS_PENDING_DETAIL;
+
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-r1", PREVIOUS_PENDING_DETAIL);
+    let view = sut.view();
+    assert_eq!(
+        view.failure_refusal_key.as_deref(),
+        Some(PREVIOUS_PENDING_KEY)
+    );
+    assert!(view.failure_retryable && !view.failure_refused);
+
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-r2", "Could not estimate gas");
+    assert_eq!(sut.view().failure_refusal_key, None, "no refusal");
+
+    let mut sut = submitting("req-r3");
+    written_ahead(&mut sut, "req-r3");
+    sut.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::Failed {
+                message: "AA23 reverted".to_owned(),
+                refused: true,
+                signer: None,
+            },
+            now_ms: 9_000.0,
+        },
+    );
+    let view = sut.view();
+    assert!(view.failure_refused);
+    assert_eq!(view.failure_refusal_key.as_deref(), Some(REFUSED_KEY));
+    // It goes with the error it qualifies.
+    sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(sut.view().failure_refusal_key, None);
+}
+
+/// A refusal the tracker reaches after the submit is told by its reason —
+/// the fee sentence only for `fee_below_market`, "went first" for
+/// `nonce_used`, else the plain refusal (the tracker entry's `refusal`).
+#[test]
+fn a_refusal_after_the_submit_is_told_by_its_reason() {
+    use vela_core::app::tx_tracker::{
+        RefusalReason, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+    };
+    for (reason, key) in [
+        (Some(RefusalReason::NonceUsed), REFUSED_NONCE_KEY),
+        (Some(RefusalReason::FeeBelowMarket), REFUSED_FEES_KEY),
+        (Some(RefusalReason::SimulationFailed), REFUSED_KEY),
+        (None, REFUSED_KEY),
+    ] {
+        let mut sut = n4_submitted("rid-n9");
+        sut.dispatch(Event::OpTracked {
+            user_op_hash: LOCAL_OP.to_owned(),
+            status: TrackStatus::Rejected,
+            tx_hash: None,
+            now_ms: 12_000.0,
+            refusal: reason,
+        });
+        let view = sut.view();
+        assert!(view.failure_refused);
+        assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{reason:?}");
+    }
 }
