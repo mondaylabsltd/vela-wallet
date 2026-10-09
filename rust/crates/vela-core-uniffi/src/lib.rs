@@ -2155,6 +2155,9 @@ pub struct TrackStatusAnswer {
     pub stage: Option<String>,
     /// The bundle transaction the relay names, when it has one.
     pub tx_hash: Option<String>,
+    /// Why the relay refused it (`rejection_reason`, relay contract §2) —
+    /// the tracker's `Status.rejection_reason`, passed through as it is.
+    pub rejection_reason: Option<String>,
 }
 
 /// The relay's status answer — its `result`, or the whole JSON-RPC body — or
@@ -2166,6 +2169,7 @@ pub fn parse_user_op_status(json: String) -> Option<TrackStatusAnswer> {
         status: snake_name(&answer.status),
         stage: answer.stage,
         tx_hash: answer.tx_hash,
+        rejection_reason: answer.rejection_reason,
     })
 }
 
@@ -3184,6 +3188,24 @@ mod tests_082 {
         assert_eq!(answer.tx_hash.as_deref(), Some(RELAY));
         assert!(parse_user_op_status(r#"{"status":"pending"}"#.into()).is_none());
         assert!(parse_user_op_status(r#"{"error":{"code":-32601}}"#.into()).is_none());
+        assert_eq!(answer.rejection_reason, None, "only on a refusal");
+    }
+
+    /// PR 2 note 5: the relay's `rejection_reason` reaches the phones through
+    /// the one parser, so no shell reads the raw body beside it.
+    #[test]
+    fn the_status_parser_carries_the_rejection_reason() {
+        let answer = parse_user_op_status(
+            json!({"jsonrpc": "2.0", "id": 1, "result": {
+                "status": "rejected",
+                "last_executor_stage": "nonce",
+                "rejection_reason": "nonce_used",
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(answer.status, "rejected");
+        assert_eq!(answer.rejection_reason.as_deref(), Some("nonce_used"));
     }
 
     fn entry(status: &str, outcome: &str, tx_hash: Option<&str>) -> String {
