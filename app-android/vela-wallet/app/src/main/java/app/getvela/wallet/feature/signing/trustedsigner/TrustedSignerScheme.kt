@@ -8,8 +8,8 @@ import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
 import uniffi.vela_core_uniffi.TrustedSignerRefusal
 import uniffi.vela_core_uniffi.trustedSignerCallbackToken
+import uniffi.vela_core_uniffi.SignerPageAdmission
 import uniffi.vela_core_uniffi.trustedSignerParseCallback
-import uniffi.vela_core_uniffi.trustedSignerUrlLaunch
 import uniffi.vela_core_uniffi.trustedSignerVerify
 import uniffi.vela_core_uniffi.trustedSignerVerifyCeremony
 import java.security.SecureRandom
@@ -44,10 +44,21 @@ import java.util.concurrent.ConcurrentHashMap
  * connection. A URL carries exactly one request, so a create's member proof is
  * a second visit. That is the honest cost of the transport, and [ask] never
  * pretends otherwise.
+ *
+ * **Only a checked page opens** (spec 102 R6). The URL is built by the
+ * admission the integrity check returned (`SignerPageAdmission.urlLaunch`) —
+ * the version that was checked, at the address that was checked — and no
+ * other function can build one. A page whose check did not admit it is not
+ * opened at all: the request comes back [TrustedSignerAnswer.Unchecked], with
+ * the line that says why.
  */
 class TrustedSignerScheme(
-    /** The page to open — a `signer_origin`, or the person's own from Settings. */
+    /** The page — the account's venue, or the custom domain's page a ceremony runs on. */
     private val base: String,
+    /** Spec 102 R6: an admission that opens [base] now (checking first when none is fresh), or `null`. */
+    private val admit: suspend () -> SignerPageAdmission?,
+    /** Why [base] did not open, when [admit] said no: the check's own line. */
+    private val refusal: () -> uniffi.vela_core_uniffi.SignerIntegrityLine,
     /** Open [url] in a Custom Tab over the app; `false` when nothing is on screen to open it from. */
     private val openPage: (url: String) -> Boolean,
     private val timeoutMs: Long,
@@ -56,6 +67,7 @@ class TrustedSignerScheme(
     private val onOpened: (url: String) -> Unit = {},
     /** The page the answer must have come from, for a ceremony's origin check. */
     private val signerOrigin: String = base,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : TrustedSignerWire {
 
     /** The request in flight: its one-time token and the URL that carries it. */
@@ -86,10 +98,13 @@ class TrustedSignerScheme(
         // and no answer to the first request can be read as the second's.
         val token = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(ByteArray(16).also(random::nextBytes))
-        val url = runCatching { trustedSignerUrlLaunch(base, ask.requestJson, token) }
+        // R6: the checked page, or nothing. A stale check is run again here,
+        // so a person pressing Open after a day away is not refused for it.
+        val admission = admit() ?: return TrustedSignerAnswer.Unchecked(refusal())
+        val url = runCatching { admission.urlLaunch(ask.requestJson, token, clock().toULong()) }
             .getOrElse { error ->
-                VelaLog.failure("trustedsigner", "the request could not be put in a URL", error)
-                return TrustedSignerAnswer.Unreachable(error.toString())
+                VelaLog.failure("trustedsigner", "the checked page would not take the request", error)
+                return TrustedSignerAnswer.Unchecked(refusal())
             }
         // `null` is how a cancel settles the wait, so it stays one shape.
         val waiting = CompletableDeferred<String?>()

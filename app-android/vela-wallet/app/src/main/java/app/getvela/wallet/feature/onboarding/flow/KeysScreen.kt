@@ -48,7 +48,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
-import app.getvela.wallet.feature.onboarding.core.AddBlocked
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 
@@ -72,7 +71,16 @@ fun ColumnScope.KeysScreen(
     needsSecondKey: Boolean,
     busy: Boolean,
     addMethods: List<KeyMethod> = KeyMethod.entries,
-    addBlocked: AddBlocked? = null,
+    /**
+     * Spec 102: the page chosen with "Use my own signing page" (its address,
+     * whose keys it reaches, its integrity line) — `null` while the keys are
+     * made in the app.
+     */
+    signingPage: app.getvela.wallet.feature.settings.components.SigningPageItemModel? = null,
+    /** Spec 102: a page may still be chosen — only before the first key. */
+    canChoosePage: Boolean = false,
+    onChooseOwnPage: () -> Unit = {},
+    onClearOwnPage: () -> Unit = {},
     onAddKey: (KeyMethod) -> Unit,
     onConfirmKey: (Int) -> Unit,
     onRemoveKey: (Int) -> Unit,
@@ -218,10 +226,20 @@ fun ColumnScope.KeysScreen(
         }
 
         if (pickerShown) {
-            AddMethodPicker(allowed = addMethods, blocked = addBlocked) { method ->
+            AddMethodPicker(
+                allowed = addMethods,
+                signingPage = signingPage,
+                canChoosePage = canChoosePage,
+                onChooseOwnPage = onChooseOwnPage,
+                onClearOwnPage = onClearOwnPage,
+            ) { method ->
                 pickerOpen = false
                 onAddKey(method)
             }
+        } else if (signingPage != null) {
+            // The page every key of this wallet is made on, said under the
+            // list even when the picker is folded away.
+            OwnPageEntry(chosen = signingPage, onOpen = {}, onClear = null, clearLabel = "")
         }
 
         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
@@ -287,8 +305,6 @@ private fun KeyRow(
                 Icon(
                     imageVector = when (key.kind) {
                         KeyMethod.SecurityKey -> VelaIcons.Link2
-                        // Spec 075: a page you read — the web's lucide `eye`.
-                        KeyMethod.TrustedSigner -> VelaIcons.Eye
                         else -> VelaIcons.Wallet
                     },
                     contentDescription = null,
@@ -372,28 +388,27 @@ private fun KeyBadge(synced: Boolean) {
 }
 
 /**
- * The four ways to mint a founding key.
+ * Where a founding key is minted — the three places a key lives — and, before
+ * the first key, "Use my own signing page" (spec 102).
  *
  * Unlike the browser, this client OWNS the picker — Credential Manager shows the
  * providers it knows about, not a this-device / nearby-device / security-key
  * choice — so the person's selection here is honoured at the ceremony rather
- * than merely recorded.
+ * than merely recorded. The list IS `KeyMethod`: three places, no fourth.
  *
- * All four routes are live: platform (this device), scan (mint the key on a
- * phone over caBLE), a security key, and — spec 075 — the Trusted Signer, a page
- * the person reads which runs the ceremony itself. The list IS `KeyMethod`, so
- * a route the core gains appears here without a second list to keep in step.
- *
- * [allowed] narrows it once the set has a key: every key in a wallet belongs to
- * the same relying party, so a route that would mint for a different one cannot
- * add to THIS set. Such a row stays visible and dimmed, with [blocked]'s
- * sentence under the list — a row that vanished could not say that the Clear
- * Signer's page is a setting the person can change.
+ * The own-page entry is not a place: it says WHERE the keys will belong (a
+ * page on the person's own domain mints them there, R3), and so it is offered
+ * only while no key exists — the first key commits the set to one domain.
+ * Once a page is chosen the entry shows it, with its domain and integrity
+ * line, and a ✕ back to the app.
  */
 @Composable
 private fun AddMethodPicker(
     allowed: List<KeyMethod>,
-    blocked: AddBlocked?,
+    signingPage: app.getvela.wallet.feature.settings.components.SigningPageItemModel?,
+    canChoosePage: Boolean,
+    onChooseOwnPage: () -> Unit,
+    onClearOwnPage: () -> Unit,
     onPick: (KeyMethod) -> Unit,
 ) {
     val strings = LocalVelaStrings.current
@@ -445,40 +460,14 @@ private fun AddMethodPicker(
                 }
             }
         }
-        // Two paragraphs, never one joined string: what this wallet's keys
-        // belong to is always the reason; naming the configured page is only
-        // sometimes true, and it is the half a person can act on. Joining them
-        // would also put a space after a full stop that already ends a line in
-        // Chinese (device-found, 2026-09-23).
-        if (blocked != null) {
-            val reason = @Composable { text: String ->
-                Text(
-                    text = text,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.sm,
-                    lineHeight = VelaLeading.normal * VelaTextSize.sm,
-                    modifier = Modifier.padding(top = VelaSpacing.sm),
-                )
-            }
-            reason(
-                strings.t(
-                    I18nKeys.Create.METHOD_BLOCKED_HINT,
-                    mapOf("party" to blocked.relyingParty),
-                ),
+        if (signingPage != null || canChoosePage) {
+            HorizontalDivider(color = colors.borderBase, thickness = VelaBorder.hairline)
+            OwnPageEntry(
+                chosen = signingPage,
+                onOpen = onChooseOwnPage,
+                onClear = onClearOwnPage.takeIf { canChoosePage },
+                clearLabel = strings.t(I18nKeys.Create.REMOVE_KEY_BTN),
             )
-            blocked.page?.let { page ->
-                reason(
-                    strings.t(
-                        I18nKeys.Create.METHOD_BLOCKED_SIGNER,
-                        mapOf(
-                            "page" to page,
-                            "pageParty" to blocked.pageRelyingParty.orEmpty(),
-                            "party" to blocked.relyingParty,
-                        ),
-                    ),
-                )
-            }
         }
     }
 }

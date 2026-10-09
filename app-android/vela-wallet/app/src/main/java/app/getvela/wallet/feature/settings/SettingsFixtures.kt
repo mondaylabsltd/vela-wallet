@@ -240,13 +240,14 @@ object SettingsFixtures {
                     subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SUBTITLE),
                     value = s.t(I18nKeys.Flows.GAS_TIER_FAST),
                 ),
-                // Spec 071: which Trusted Signer page opens, next to how sends are priced.
+                // Spec 102: the signing pages this device keeps, next to how
+                // sends are priced. Which one an account signs on is the
+                // account's own "Where you review and sign".
                 SettingsRowModel(
-                    id = SIGNER_PAGE_ROW,
-                    title = s.t("settings.signing.pageTitle"),
-                    icon = SettingsIcon.Globe,
-                    subtitle = s.t("settings.signing.pageSubtitle"),
-                    value = s.t("settings.signing.pageOfficial"),
+                    id = SIGNING_PAGES_ROW,
+                    title = s.t("settings.signing.title"),
+                    icon = SettingsIcon.FileText,
+                    subtitle = s.t("settings.signing.subtitle"),
                 ),
                 SettingsRowModel(
                     id = "storage",
@@ -760,8 +761,8 @@ object SettingsFixtures {
 
     const val FEE_SPEED_ROW = "fee-speed"
 
-    /** The Settings row of the Trusted Signer page (spec 071). */
-    const val SIGNER_PAGE_ROW = "signer-page"
+    /** The Settings row of Signing pages (spec 102). */
+    const val SIGNING_PAGES_ROW = "signing-pages"
 
 
     /**

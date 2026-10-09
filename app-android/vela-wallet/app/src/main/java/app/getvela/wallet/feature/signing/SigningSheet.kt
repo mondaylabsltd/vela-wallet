@@ -32,6 +32,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.flows.SendReceiptBody
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
+import app.getvela.wallet.feature.signing.components.HandoffCard
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
 import app.getvela.wallet.feature.signing.components.SigningCard
@@ -259,22 +260,31 @@ fun SigningSheetContent(
         // no confirm control at all, not a disabled one, because the wallet
         // never offered it.
         val action = model.confirmAction
+        val handoff = model.handoff
         if (waiting != null) {
             TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
+        } else if (handoff != null && action != null) {
+            // Spec 102 D4: the account reviews and signs on its page — the
+            // card says where, with which key and what is trusted about the
+            // page, and its Open is the consent that goes there.
+            HandoffCard(
+                handoff,
+                enabled = model.confirmEnabled,
+                onOpen = onConfirm,
+                modifier = Modifier.testTag(OPEN_SIGNER_TAG),
+            )
         } else if (action != null) {
             // Issue #461: a tap, like the Send screen's Confirm — the same
             // button, saying the action alone ("确认兑换", "签名", "备份公钥").
             // Shut (dimmed) only while the core says so; once approved, the
-            // receipt takes the form's place, so busy never looks shut. An
-            // account whose key is behind the Trusted Signer goes to its page
-            // instead (spec 079), whose own confirmation is the consent.
+            // receipt takes the form's place, so busy never looks shut.
             VelaPrimaryButton(
-                text = if (model.confirmAsButton) model.confirmButtonLabel else action,
+                text = action,
                 onClick = onConfirm,
                 enabled = model.confirmEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag(if (model.confirmAsButton) OPEN_SIGNER_TAG else CONFIRM_TAG),
+                    .testTag(CONFIRM_TAG),
             )
         }
         // Spec 099 R7: a shut confirm never sits there without a reason. The
@@ -304,9 +314,31 @@ fun SigningSheetContent(
 }
 
 /**
- * Spec 071: the Trusted Signer's waiting card on its own, for a signature no
- * signing sheet is showing (a send the person started). Swiping it away is
- * the same as Cancel.
+ * Spec 102 D4: the hand-off card on its own, for a signature no signing sheet
+ * is showing (a send the person started): where, with which key, what is
+ * trusted about the page, and Open. Swiping it away is the same as Cancel.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HandoffSheet(model: HandoffModel, onOpen: () -> Unit, onCancel: () -> Unit, cancel: String) {
+    VelaModalSheet(
+        onDismissRequest = onCancel,
+        containerColor = VelaTheme.colors.bgRaised,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl3),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            HandoffCard(model, enabled = model.integrity.opens, onOpen = onOpen)
+            app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(cancel, onCancel, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * Spec 071: the waiting card on its own, for a signature no signing sheet is
+ * showing (a send the person started). Swiping it away is the same as Cancel.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -947,3 +947,57 @@ fun TrustedSignerWaiting(
         app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(model.cancel, onCancel, Modifier.fillMaxWidth())
     }
 }
+
+/**
+ * Spec 102 D4: the hand-off card. The account reviews and signs on a page, so
+ * this card says only what Vela knows and the page cannot: where it goes (the
+ * page's address), which key the person will confirm with, and what is
+ * trusted about the page — its integrity line, or why it will not open. Open
+ * is the consent that goes there, enabled only when [enabled] (the line opens
+ * and the request may be confirmed).
+ */
+@Composable
+fun HandoffCard(
+    model: app.getvela.wallet.feature.signing.HandoffModel,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+            .padding(VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            Icon(
+                imageVector = app.getvela.wallet.core.designsystem.components.VelaIcons.Eye,
+                contentDescription = null,
+                tint = colors.accentBase,
+                modifier = Modifier.padding(top = VelaSpacing.xs).size(VelaIconSize.base),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    model.title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.lg,
+                )
+                Text(model.page, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+        }
+        if (model.keyLine.isNotBlank()) {
+            Text(model.keyLine, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+        }
+        app.getvela.wallet.feature.settings.components.IntegrityLine(model.integrity)
+        app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+            text = model.open,
+            onClick = onOpen,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}

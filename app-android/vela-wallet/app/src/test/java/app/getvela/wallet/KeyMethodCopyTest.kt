@@ -10,6 +10,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,7 +62,7 @@ class KeyMethodCopyTest {
 
     /**
      * Every row resolves to words in both choosers — never a bare key — and
-     * the Trusted Signer keeps the signing sheet's own two sentences (spec 075).
+     * there are three places, each its own words (spec 102: no fourth row).
      */
     @Test
     fun `every row has words in both choosers`() {
@@ -75,10 +76,23 @@ class KeyMethodCopyTest {
                 }
             }
         }
-        assertEquals(
-            strings.t("componentsUi.signing.trustedSignerBody"),
-            methodCopy(KeyMethod.TrustedSigner, KeyChooser.SignIn, strings).second,
-        )
-        assertEquals(4, KeyMethod.entries.map { methodCopy(it, KeyChooser.SignIn, strings).first }.toSet().size)
+        assertEquals(3, KeyMethod.entries.map { methodCopy(it, KeyChooser.SignIn, strings).first }.toSet().size)
+        // The fourth method's words are gone from the core: nothing can draw it.
+        assertNull(uniffi.vela_core_uniffi.keyMethodWords("trusted_signer", "sign_in", "other"))
+    }
+
+    /**
+     * Spec 102: "Use my own signing page" has words of its own — the venue's,
+     * not a key place's — and so do the two venues of "Where you review and
+     * sign", in every chooser that draws them.
+     */
+    @Test
+    fun `the own page entry and the venues have their own words`() {
+        val strings = strings("en")
+        val (title, line) = app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(strings)
+        assertEquals("Use my own signing page", title)
+        assertEquals("Advanced: keys live on your page's domain and sign only there", line)
+        assertEquals("In Vela", strings.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("On a trusted page", strings.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
     }
 }

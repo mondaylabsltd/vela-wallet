@@ -33,6 +33,9 @@ enum class SettingsScreenState {
 /** Which page the settings surface is showing (`Home` plus the pushed pages). */
 enum class SettingsPage {
     Home, Networks, NetworkDetail, AddNetwork, RpcProviders, Endpoints, Storage, About,
+
+    /** Spec 102: the signing pages this device keeps — official first, each with its integrity line. */
+    SigningPages,
 }
 
 /** Which sheet is over it. `None` is a real state, not an absence of one. */
@@ -55,8 +58,14 @@ enum class SettingsOverlay {
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
 
-    /** Spec 071: which Trusted Signer page the wallet opens. */
-    SignerPage,
+    /** Spec 102: this account's "Where you review and sign". */
+    Venue,
+
+    /** Spec 102: "Add a page" — an address, and an optional name. */
+    AddSigningPage,
+
+    /** Spec 102: one saved page — its name, and the way to remove it. */
+    EditSigningPage,
 
 
     /** Spec 072: removing a custom network asks first. */
@@ -86,6 +95,8 @@ data class CalloutModel(val tone: CalloutTone, val text: String)
 enum class SettingsIcon {
     Contacts, Feedback, Globe, Coins, Hash, Calendar, Clock,
     Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload, LogOut,
+    /** Spec 102: where you review and sign (the web's lucide `eye`), and the signing pages. */
+    Eye, FileText,
     /** Settings → Community: the brands' own monochrome marks. */
     BrandX, BrandTelegram, BrandDiscord,
 }
@@ -192,22 +203,64 @@ data class SelectSheetModel(
 )
 
 /**
- * Spec 071: the Trusted Signer page's sheet — the address, why an address typed
- * was refused, and whether the page can use this wallet's passkeys.
+ * Spec 102: Settings → Signing pages — the official page first, then the ones
+ * this person added, each with whose keys it reaches and its integrity line.
+ * Which page an ACCOUNT signs on is that account's own choice ([VenueModel]).
  */
 @Immutable
-data class SignerPageModel(
+data class SigningPagesModel(
     val title: String = "",
     val subtitle: String = "",
-    /** The address in force, as the field starts. */
-    val value: String = "",
-    /** `settings.signing.pageInvalid` / `pageInsecure` for the last address typed. */
-    val error: String? = null,
-    /** `settings.signing.pageForeign` when the page is off `getvela.app`. */
-    val foreign: String? = null,
+    val rows: List<app.getvela.wallet.feature.settings.components.SigningPageItemModel> = emptyList(),
+    /** "Add a page". */
+    val add: String = "",
+    /** The add sheet's field label and placeholder. */
+    val addressLabel: String = "",
+    val addressPlaceholder: String = "https://",
+    val nameLabel: String = "",
+    /** `pageInvalid` / `pageInsecure` / `pageDuplicate` for the last address typed; nothing was stored. */
+    val addError: String? = null,
     val save: String = "",
-    /** "Use the official page" — `null` when it already is. */
-    val reset: String? = null,
+    val remove: String = "",
+    /** The askTrust line's answer (the version is the line's). */
+    val trust: String = "",
+    /** The list has been read; edits are offered only then. */
+    val loaded: Boolean = false,
+)
+
+/**
+ * Spec 102: "Where you review and sign" — one account's signing venue on this
+ * device. [row] is the settings row (its value the venue in force); the sheet
+ * lists every venue the core offers ([choices], R1/R2), the blocked ones
+ * dimmed with their reason. Changing it never touches a key.
+ */
+@Immutable
+data class VenueModel(
+    val row: SettingsRowModel,
+    val title: String,
+    val subtitle: String,
+    /** "Keys on getvela.app" — the account's signing domain, said on the sheet. */
+    val domainLine: String,
+    val choices: List<VenueChoiceModel>,
+    /** "On a trusted page" and its line — the heading over the page choices. */
+    val pageSection: String,
+    val pageSectionBody: String,
+    /** "Signing pages" — the way to the list where pages are added. */
+    val manage: String,
+)
+
+@Immutable
+data class VenueChoiceModel(
+    /** The venue as the core wrote it — handed back on a pick, never rebuilt. */
+    val venueJson: String,
+    val title: String,
+    /** The line under the title ("Vela's own signing sheet", "A zero-dependency page …"). */
+    val body: String,
+    /** A page choice's own row (address, domain, integrity line); `null` for Vela's sheet. */
+    val page: app.getvela.wallet.feature.settings.components.SigningPageItemModel?,
+    val selected: Boolean,
+    /** R1: why this venue cannot reach the account's keys; the row is disabled. */
+    val reason: String?,
 )
 
 @Immutable
@@ -622,6 +675,8 @@ data class WalletKeysModel(
     val note: String?,
     val rows: List<WalletKeyRowModel>,
     val backup: SettingsRowModel?,
+    /** Spec 102: "Keys on {{domain}}" — only for a wallet on its own signing domain. */
+    val domain: String? = null,
     /** Under the backup: PUBLIC keys only; private keys never leave the device. */
     val backupExplain: String,
     val copyLabel: String,
@@ -686,8 +741,10 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
-    /** Spec 071: the Trusted Signer page's sheet. */
-    val signerPage: SignerPageModel = SignerPageModel(),
+    /** Spec 102: Settings → Signing pages. */
+    val signingPages: SigningPagesModel = SigningPagesModel(),
+    /** Spec 102: the account's "Where you review and sign"; `null` until an account is known. */
+    val venue: VenueModel? = null,
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,
     val timeSheet: SelectSheetModel,

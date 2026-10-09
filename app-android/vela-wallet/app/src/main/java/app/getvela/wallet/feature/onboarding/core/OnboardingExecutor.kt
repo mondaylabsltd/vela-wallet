@@ -51,13 +51,19 @@ class OnboardingExecutor(
     private val store: AccountStore,
     private val deps: Deps,
     /**
-     * Spec 075: the Trusted Signer, when this surface can open one. A ceremony
-     * whose `method` is `trusted_signer` runs THERE instead of on the platform's
-     * sheet — the page derives the challenge, shows what is being signed, and
-     * runs the WebAuthn ceremony itself. `null` on surfaces with no way to
-     * open a page (previews, the gallery).
+     * Spec 102 R3: the signing page, when this surface can open one. A
+     * ceremony whose operation names a `page` runs THERE instead of on the
+     * platform's sheet — only that page can mint or use a custom domain's
+     * keys. `null` on surfaces with no way to open a page (previews, the
+     * gallery).
      */
     private val trustedSigner: TrustedSignerCeremonies? = null,
+    /**
+     * The corpus, for the few sentences a ceremony that cannot reach its page
+     * is told in (`componentsUi.signing.*`). English-free by default: the
+     * key itself, which a test can read.
+     */
+    private val words: (key: String) -> String = { it },
 ) {
     /** The two operations whose outside world is the user interface itself. */
     interface Deps {
@@ -72,8 +78,8 @@ class OnboardingExecutor(
         suspend fun complete(mode: JSONObject)
 
         /**
-         * Spec 075: the wallet's name, as the Trusted Signer page shows it
-         * ("create a key for 〈name〉"). Empty when the flow has none yet.
+         * The wallet's name, as the signing page shows it ("create a key for
+         * 〈name〉"). Empty when the flow has none yet.
          */
         fun walletName(): String = ""
     }
@@ -125,10 +131,12 @@ class OnboardingExecutor(
 
             "register_passkey" -> {
                 val method = KeyMethod.of(operation.optString("method", KeyMethod.Platform.wire))
-                // Spec 075: the Trusted Signer mints the key on its own page and
-                // the core hands back the machine's own `Registration` — which
-                // carries `signer_origin`, so the key remembers where it lives.
-                val wire = if (method == KeyMethod.TrustedSigner) {
+                // Spec 102 R3: a custom-domain wallet's key is minted on its
+                // page (the op names it), and the core hands back the machine's
+                // own `Registration` — which carries `signer_origin`, so the
+                // key remembers where it lives. `method` rides along as the
+                // place the page hints the browser to.
+                val wire = if (pageOf(operation) != null) {
                     registered(onPage(operation))
                 } else {
                     val registration = passkey.register(
@@ -151,11 +159,11 @@ class OnboardingExecutor(
 
             "sign_proof" -> {
                 val wire = operation.optString("method")
-                // The route the person signed in with. Recovery's second
+                // The place the person signed in with. Recovery's second
                 // signature over caBLE goes back to the same phone; one made
-                // on a Trusted Signer page goes back to that page.
+                // on a custom domain's page goes back to that page (R3).
                 val method = if (wire.isEmpty()) KeyMethod.Platform else KeyMethod.of(wire)
-                val proof = if (method == KeyMethod.TrustedSigner) {
+                val proof = if (pageOf(operation) != null) {
                     asserted(onPage(operation))
                 } else {
                     passkey.assert(
@@ -189,17 +197,15 @@ class OnboardingExecutor(
                 // exactly this credential, assemble the proof in the core. The
                 // publish later replays it without another prompt.
                 // The rpId is the KEY's, not this app's. A key minted on a
-                // Trusted Signer page belongs to that page's domain — a browser
-                // lets a page mint passkeys for nothing else — so asking the
+                // custom domain's page belongs to that domain — a browser lets
+                // a page mint passkeys for nothing else — so asking the
                 // registry under `getvela.app` for a key that lives on
                 // `localhost` returns a challenge the page could not have
-                // derived, and the wallet then refuses its own key's proof
-                // ("the Trusted Signer's answer does not match this request").
-                // Found on the phone 2026-09-22 and again over BLE the next
-                // day; the rule is the core's so no shell reads it differently.
-                val keyRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(
-                    operation.optString("signer_origin").ifEmpty { null },
-                ) ?: passkey.relyingPartyId
+                // derived, and the wallet then refuses its own key's proof.
+                // Spec 102: the op's `page` is that domain's page; the rule
+                // that folds it to an rpId is the core's.
+                val keyRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(pageOf(operation))
+                    ?: passkey.relyingPartyId
                 val challenge = registry.memberChallenge(
                     groupPublicKey = operation.optString("group_public_key_hex"),
                     publicKey = operation.optString("public_key_hex"),
@@ -207,13 +213,13 @@ class OnboardingExecutor(
                     rpId = keyRpId,
                 )
                 val memberWire = operation.optString("method")
-                // The route that minted this key confirms it — a key created
+                // The place that minted this key confirms it — a key created
                 // on the phone over caBLE is confirmed on that phone, one
-                // created on a Trusted Signer page on that page.
+                // created on a custom domain's page on that page.
                 val memberMethod =
                     if (memberWire.isEmpty()) KeyMethod.Platform else KeyMethod.of(memberWire)
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(challenge))
-                val assertion = if (memberMethod == KeyMethod.TrustedSigner) {
+                val assertion = if (pageOf(operation) != null) {
                     // The page fetches its own challenge from the registry for
                     // the inputs it displays; the core refuses the answer
                     // unless it equals the one the WALLET fetched here.
@@ -238,10 +244,11 @@ class OnboardingExecutor(
             "authenticate_passkey" -> {
                 val wire = operation.optString("method")
                 val method = if (wire.isEmpty()) KeyMethod.Platform else KeyMethod.of(wire)
-                // Spec 075: the page asks the person to pick their key and
+                // Spec 102 R3: signing in on a custom domain's page — the page
+                // asks the browser for a key on the place `method` names and
                 // signs a challenge IT derived (`vela-signin-…`), so a sign-in
                 // can never be a transaction hash in disguise.
-                val proof = if (method == KeyMethod.TrustedSigner) {
+                val proof = if (pageOf(operation) != null) {
                     asserted(onPage(operation))
                 } else {
                     passkey.assert(passkey.random(CHALLENGE_BYTES), null, method = method).toWire()
@@ -362,22 +369,13 @@ class OnboardingExecutor(
         }
 
         val metadataHex = operation.optString("metadata_hex")
-        // One relying party for the whole unit (ruling, 2026-09-23). The
-        // contract stores a single `rpId` per unit and every member's proof
-        // carries `sha256(rpId)` from its OWN authenticator, so a set spread
-        // across sites could never be proved. The core decides it, and refuses
-        // a mixed set here rather than writing a unit nobody can prove.
-        val unitRpId = try {
-            uniffi.vela_core_uniffi.trustedSignerUnitRpId(
-                members.map { it.signerOrigin.ifEmpty { null } },
-                passkey.relyingPartyId,
-            )
-        } catch (error: Exception) {
-            throw RegistryFailure(
-                error.message ?: "these keys belong to different sites",
-                network = false,
-            )
-        }
+        // One relying party for the whole unit (ruling, 2026-09-23): the
+        // contract stores a single `rpId` per unit. Spec 102: a set is minted
+        // for ONE domain from its first key on, so the unit's rpId is the
+        // op's page's domain (a custom-domain wallet) or the wallet's own —
+        // the core folds it (`registry_rp_id`), no member carries a page.
+        val page = pageOf(operation)
+        val unitRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(page) ?: passkey.relyingPartyId
         // Issue #409: the publish is the create's last step, and these three
         // lines split it — the challenge, the write's acceptance, and the
         // landing (the on-chain receipt the core waits for before "Wallet
@@ -407,14 +405,12 @@ class OnboardingExecutor(
                         network = false,
                     )
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(memberChallenge))
-                // Spec 075: a wallet signed into through the Trusted Signer proves
-                // its members there too — the key is behind that page and no
-                // provider on this device holds it. `RegistryPublishMember`
-                // carries no `signer_origin`, so the page comes from the stored
-                // key record instead; an unknown key falls back to the person's
-                // own page, which is right for a `getvela.app` key and the only
-                // guess available for anything else.
-                val assertion = if (method == KeyMethod.TrustedSigner) {
+                // Spec 102 R3: a custom-domain wallet proves its members on
+                // its page (the op's `page`) — the keys are behind it and no
+                // provider on this device holds them. The page is told the
+                // place (`method`) and the key's transports, so the browser
+                // goes straight to it.
+                val assertion = if (page != null) {
                     assertionOf(
                         asserted(
                             onPage(
@@ -423,8 +419,10 @@ class OnboardingExecutor(
                                     .put("credential_id", member.credentialIdHex)
                                     .put("public_key_hex", member.publicKeyHex)
                                     .put("attestation_hex", member.attestationHex)
+                                    .put("transports", member.transports)
+                                    .put("method", method.wire)
                                     .put("group_public_key_hex", groupPublicKey)
-                                    .put("signer_origin", signerOriginOf(member.credentialIdHex)),
+                                    .put("page", page),
                                 expectedMemberChallenge = bytes,
                             ),
                         ),
@@ -504,11 +502,14 @@ class OnboardingExecutor(
         data class AwaitLanding(val taskId: String) : AfterRegister
     }
 
-    // -- spec 075: the Trusted Signer as a passkey route -----------------------
+    // -- spec 102 R3: a ceremony on a custom domain's page ---------------------
 
     /**
-     * Run this operation's ceremony on the Trusted Signer instead of on the
-     * platform's sheet.
+     * Run this operation's ceremony on its page instead of on the platform's
+     * sheet — the page the core named in the op (`page`), which it names only
+     * for a wallet on a custom domain (R3: a `getvela.app` ceremony runs in the
+     * app, where the challenge is random or derived and there is nothing to
+     * preview).
      *
      * The request is the CORE's (`trustedSignerCeremonyRequest` over the
      * operation's own wire JSON), so nothing here decides what the page is
@@ -516,36 +517,12 @@ class OnboardingExecutor(
      * judged. [expectedMemberChallenge] is the registry challenge this
      * executor fetched, which a member proof's answer must match exactly.
      */
-    /**
-     * The Trusted Signer page a stored key lives behind, or empty.
-     *
-     * A lookup of a fact this device wrote down, not a decision: the create and
-     * sign-in machines stamped `signer_origin` on the key record, and the one
-     * operation that needs it (`registry_publish`'s live member proof) does not
-     * carry it.
-     */
-    private suspend fun signerOriginOf(credentialIdHex: String): String {
-        val accounts = runCatching { store.loadAccounts() }.getOrNull() ?: return ""
-        for (index in 0 until accounts.length()) {
-            val keys = accounts.optJSONObject(index)?.optJSONArray("keys") ?: continue
-            for (at in 0 until keys.length()) {
-                val key = keys.optJSONObject(at) ?: continue
-                if (key.optString("credential_id").equals(credentialIdHex, ignoreCase = true)) {
-                    return key.optString("signer_origin")
-                }
-            }
-        }
-        return ""
-    }
-
     private suspend fun onPage(
         operation: JSONObject,
         expectedMemberChallenge: ByteArray? = null,
     ): TrustedSignerCeremonyOutcome {
-        val signer = trustedSigner ?: throw PasskeyFailure(
-            FailureKind.NotSupported,
-            "The Trusted Signer cannot be opened here",
-        )
+        val page = pageOf(operation) ?: throw PasskeyFailure(FailureKind.Other, words(SIGNER_DOWN))
+        val signer = trustedSigner ?: throw PasskeyFailure(FailureKind.NotSupported, words(SIGNER_DOWN))
         val operationJson = operation.toString()
         val id = toHex(passkey.random(CEREMONY_ID_BYTES), false)
         // A member proof needs the registry's deployment, because the page
@@ -563,16 +540,12 @@ class OnboardingExecutor(
             deps.walletName(),
             registry.baseUrl,
             deployment,
-        ) ?: throw PasskeyFailure(
-            FailureKind.Other,
-            "This step cannot run on the Trusted Signer",
-        )
+        ) ?: throw PasskeyFailure(FailureKind.Other, words(SIGNER_REFUSED))
         return signer.run(
             requestJson = request,
             operationJson = operationJson,
             expectedMemberChallenge = expectedMemberChallenge,
-            // Spec 075: the page the key lives behind, when the core named one.
-            signerOrigin = operation.optString("signer_origin"),
+            page = page,
         )
     }
 
@@ -584,12 +557,12 @@ class OnboardingExecutor(
      */
     private fun registered(outcome: TrustedSignerCeremonyOutcome): JSONObject = when (outcome) {
         is TrustedSignerCeremonyOutcome.Registered -> wire(outcome.registrationJson)
-        else -> throw PasskeyFailure(FailureKind.Other, "The Trusted Signer did not create a key")
+        else -> throw PasskeyFailure(FailureKind.Other, words(SIGNER_MISMATCH))
     }
 
     private fun asserted(outcome: TrustedSignerCeremonyOutcome): JSONObject = when (outcome) {
         is TrustedSignerCeremonyOutcome.Asserted -> wire(outcome.assertionJson)
-        else -> throw PasskeyFailure(FailureKind.Other, "The Trusted Signer did not sign")
+        else -> throw PasskeyFailure(FailureKind.Other, words(SIGNER_MISMATCH))
     }
 
     /**
@@ -599,7 +572,7 @@ class OnboardingExecutor(
      * `JSONException` nobody on this path catches.
      */
     private fun wire(json: String): JSONObject = runCatching { JSONObject(json) }.getOrElse {
-        throw PasskeyFailure(FailureKind.Other, "The Trusted Signer's answer could not be read")
+        throw PasskeyFailure(FailureKind.Other, words(SIGNER_MISMATCH))
     }
 
     /** The machine's `Assertion` wire, back as the shell's own value. */
@@ -685,6 +658,17 @@ class OnboardingExecutor(
 
         /** Spec 075: the request id the page echoes back. */
         private const val CEREMONY_ID_BYTES = 8
+
+        /**
+         * Spec 102 R3: the page a ceremony runs on — the op's `page`, which the
+         * core sets only for a custom-domain wallet. `null`: in the app.
+         */
+        fun pageOf(operation: JSONObject): String? = operation.nullableString("page")
+
+        /** The corpus lines a ceremony that could not finish on its page is told in. */
+        const val SIGNER_DOWN = "componentsUi.signing.signerDown"
+        const val SIGNER_REFUSED = "componentsUi.signing.trustedSignerRefused"
+        const val SIGNER_MISMATCH = "componentsUi.signing.trustedSignerMismatch"
 
         /**
          * The result variant an operation owes when its execution threw.
@@ -798,20 +782,20 @@ private fun JSONArray?.strings(): List<String> =
     if (this == null) emptyList() else (0 until length()).map { optString(it) }
 
 /**
- * Spec 075: the Trusted Signer, as onboarding sees it — one passkey ceremony on
- * a page, and its verdict.
+ * Spec 102 R3: a ceremony on a custom domain's signing page, as onboarding
+ * sees it — one passkey ceremony on [page], and its verdict.
  *
  * A port rather than the channel itself, so the onboarding executor keeps
- * knowing nothing about Custom Tabs, loopback sockets or relays. A refusal is
- * a [PasskeyFailure], which is the vocabulary [OnboardingExecutor.failureFor]
- * already classifies every ceremony's failure in: a closed page is
- * `Cancelled`, anything else carries the sentence to show.
+ * knowing nothing about Custom Tabs, the integrity check or callbacks. A
+ * refusal is a [PasskeyFailure], which is the vocabulary
+ * [OnboardingExecutor.failureFor] already classifies every ceremony's failure
+ * in: a closed page is `Cancelled`, anything else carries the sentence to show.
  */
 fun interface TrustedSignerCeremonies {
     suspend fun run(
         requestJson: String,
         operationJson: String,
         expectedMemberChallenge: ByteArray?,
-        signerOrigin: String,
+        page: String,
     ): uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 }

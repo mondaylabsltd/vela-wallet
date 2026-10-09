@@ -1,6 +1,5 @@
 package app.getvela.wallet.feature.onboarding.flow
 
-import app.getvela.wallet.feature.onboarding.core.AddBlocked
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.CreateStage
 import app.getvela.wallet.feature.onboarding.core.CreateView
@@ -42,6 +41,37 @@ data class StateFixture(val group: String, val code: String, val fixture: Fixtur
 
 object FlowFixtures {
 
+    /** Spec 102: a self-hosted signing page, and the domain its keys belong to. */
+    const val OWN_PAGE = "https://sign.example.com/"
+    const val OWN_DOMAIN = "sign.example.com"
+
+    /**
+     * The chosen page as the boards draw it — a fixture line ("matches … ·
+     * checked 14:02"), since a gallery checks nothing.
+     */
+    fun ownPageItem(view: CreateView, strings: app.getvela.wallet.core.i18n.VelaStrings) =
+        view.signingPage?.let { url ->
+            app.getvela.wallet.feature.settings.SettingsLive.pageItem(
+                url = url,
+                name = "",
+                domain = view.signingDomain,
+                official = false,
+                line = uniffi.vela_core_uniffi.SignerIntegrityLine(
+                    state = uniffi.vela_core_uniffi.SignerIntegrityState.TRUSTED_HERE,
+                    version = "6ffe9ef2",
+                    checkedAtMs = FIXTURE_CHECKED_AT.toULong(),
+                    key = "componentsUi.signing.integrity.trusted",
+                    opens = true,
+                ),
+                s = strings,
+            )
+        }
+
+    /** 2026-10-09 14:02 local — a fixed "checked" time for the boards. */
+    val FIXTURE_CHECKED_AT: Long = java.util.Calendar.getInstance().apply {
+        set(2026, java.util.Calendar.OCTOBER, 9, 14, 2, 0)
+    }.timeInMillis
+
     /** A funded-looking address; the identicon and the strip both derive from it. */
     const val FIXTURE_ADDRESS = "0x44EEC06897ff7ab8C7f16819511A64bA168A6D33"
 
@@ -76,9 +106,6 @@ object FlowFixtures {
         confirmed: Boolean = true,
         synced: Boolean = true,
     ): CreateKeyRow {
-        // A page's key reports `platform` too — the ceremony ran in a browser —
-        // but the vault holding it is not this device's, and the row must not
-        // claim one (spec 075).
         val platformKey = method == KeyMethod.Platform || method == KeyMethod.Hybrid
         return CreateKeyRow(
             name = name,
@@ -152,31 +179,30 @@ object FlowFixtures {
                 keys = listOf(key("Everyday wallet"), key("Key 2", confirmed = false)),
             ),
         )
-        // Spec 075: a wallet's keys all belong to one relying party. Both ways
-        // the picker narrows, because both are a dimmed row plus a sentence —
-        // and the sentence is the only thing that tells a person what to do.
+        // Spec 102: three places, and — until the first key commits the set
+        // to one domain — "Use my own signing page". Once a page is chosen the
+        // entry IS that page: its domain and its integrity line.
         flow(
-            "keys · signer page elsewhere",
+            "keys · own page offered",
+            base().copy(stage = CreateStage.AddKeys, canChoosePage = true),
+        )
+        flow(
+            "keys · own page chosen",
             base().copy(
                 stage = CreateStage.AddKeys,
-                keys = listOf(key("Everyday wallet", synced = false)),
-                needsSecondKey = true,
-                addMethods = listOf(KeyMethod.Platform, KeyMethod.Hybrid, KeyMethod.SecurityKey),
-                addBlocked = AddBlocked(
-                    relyingParty = "getvela.app",
-                    page = "http://localhost:8140/sign.html",
-                    pageRelyingParty = "localhost",
-                ),
+                canChoosePage = true,
+                signingDomain = OWN_DOMAIN,
+                signingPage = OWN_PAGE,
             ),
         )
         flow(
             "keys · a page's own set",
             base().copy(
                 stage = CreateStage.AddKeys,
-                keys = listOf(key("Everyday wallet", method = KeyMethod.TrustedSigner, synced = false)),
+                keys = listOf(key("Everyday wallet", synced = false)),
                 needsSecondKey = true,
-                addMethods = listOf(KeyMethod.TrustedSigner),
-                addBlocked = AddBlocked(relyingParty = "sign.example.com", page = null, pageRelyingParty = null),
+                signingDomain = OWN_DOMAIN,
+                signingPage = OWN_PAGE,
             ),
         )
         flow(

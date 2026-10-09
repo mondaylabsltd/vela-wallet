@@ -1,16 +1,8 @@
 package app.getvela.wallet
 
-import app.getvela.wallet.core.crux.CoreHost
-import app.getvela.wallet.core.crux.JsonShell
-import app.getvela.wallet.core.crux.asBridge
-import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
-import app.getvela.wallet.feature.settings.core.SignPrefEvent
-import app.getvela.wallet.feature.settings.core.SignPrefExecutor
-import app.getvela.wallet.feature.settings.core.SignPrefOperation
-import app.getvela.wallet.feature.settings.core.SignPrefShellResult
-import app.getvela.wallet.feature.settings.core.SignPrefView
+import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerAnswer
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerAsk
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerCallbacks
@@ -21,17 +13,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import uniffi.vela_core_uniffi.SignerIntegrityState
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
-import uniffi.vela_core_uniffi.SignPrefCore
 import uniffi.vela_core_uniffi.WalletKeyRecord
 import java.math.BigInteger
 import java.security.KeyPair
@@ -46,9 +38,11 @@ import java.util.zip.Inflater
 import kotlin.concurrent.thread
 
 /**
- * The phones' Trusted Signer channel (specs 071 and 076), end to end over the
- * channel the app actually has: the request goes out in the launch URL's
- * fragment, and a test "page" answers it the way the real page does — by
+ * The phones' signing-page channel (specs 071, 076 and 102), end to end over
+ * the channel the app actually has: the page is CHECKED first (the official
+ * deployment's committed `dist/` bytes, served by [OfficialDist]), the request
+ * goes out in the launch URL's fragment of exactly the version that was
+ * checked, and a test "page" answers it the way the real page does — by
  * navigating to `velawallet://sign-result?t=…&result=…` with a WebAuthn
  * assertion signed by a real P-256 key. The core does the judging.
  *
@@ -69,8 +63,15 @@ class TrustedSignerChannelTest {
     /** How many times the wallet was brought back over the page. */
     private val broughtBack = java.util.concurrent.atomic.AtomicInteger(0)
 
-    private fun channel(timeoutMs: Long = 20_000L, reachable: Boolean = true, page: (Visit) -> Unit) = TrustedSignerChannel(
-        signerUrl = { "https://sign.getvela.app/" },
+    private val official = "https://sign.getvela.app/"
+
+    private fun channel(
+        timeoutMs: Long = 20_000L,
+        reachable: Boolean = true,
+        checks: SignerPageChecks = OfficialDist.checks(),
+        page: (Visit) -> Unit,
+    ) = TrustedSignerChannel(
+        checks = checks,
         openPage = { url ->
             thread { page(Visit(url)) }
             true
@@ -97,7 +98,7 @@ class TrustedSignerChannelTest {
             assertEquals("personal_sign", visit.request.getJSONObject("intent").getString("method"))
             visit.answer(answer(signer))
         }
-        val assertion = onThisDevice { channel.sign(request, digest, keys) }
+        val assertion = onThisDevice { channel.sign(request, digest, keys, official) }
         assertEquals("112233", assertion.credentialIdHex)
         assertTrue("DER, as the Safe envelope takes", assertion.signatureDerHex.startsWith("30"))
     }
@@ -112,7 +113,7 @@ class TrustedSignerChannelTest {
         // (measured — `SignResultActivity.bringTheWalletBack`). What this class
         // owes is ending the flow, which is what releases the page at all.
         val channel = channel { visit -> visit.answer(answer(signer)) }
-        onThisDevice { channel.sign(request, digest, keys) }
+        onThisDevice { channel.sign(request, digest, keys, official) }
         assertEquals("the flow is over after a standalone signature", TrustedSignerChannel.State.Idle, channel.state.value)
         assertTrue("the flow never ended", broughtBack.get() > 0)
     }
@@ -127,8 +128,10 @@ class TrustedSignerChannelTest {
             seen += visit.url
             visit.answer(answer(signer))
         }
-        onThisDevice { channel.sign(request, digest, keys) }
+        onThisDevice { channel.sign(request, digest, keys, official) }
         val url = seen.take()
+        // R6: the URL opened is the version that was checked, at the address that was checked.
+        assertTrue("the checked version is what opens: $url", url.startsWith(OfficialDist.LAUNCH_URL + "?"))
         assertTrue("the page is asked for by URL: $url", url.contains("ch=url"))
         assertTrue("the request is in the fragment: $url", url.contains("#i="))
         assertEquals("nothing of the request may be in the query", -1, url.substringBefore('#').indexOf("i="))
@@ -143,13 +146,13 @@ class TrustedSignerChannelTest {
                 !TrustedSignerCallbacks.deliver(callback("some-other-token", answer(signer))),
             )
         }
-        assertEquals("timeout", failureOf { channel.sign(request, digest, keys) }.message)
+        assertEquals("timeout", failureOf { channel.sign(request, digest, keys, official) }.message)
     }
 
     @Test
     fun `a page closed without answering was closed without signing`() {
         val channel = channel { visit -> visit.refuse("user_rejected") }
-        val failure = failureOf { channel.sign(request, digest, keys) }
+        val failure = failureOf { channel.sign(request, digest, keys, official) }
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("closed", channel.notice.value)
     }
@@ -158,7 +161,7 @@ class TrustedSignerChannelTest {
     fun `a signature by a key the wallet does not hold is refused and nothing is returned`() {
         val stranger = keyPair()
         val channel = channel { visit -> visit.answer(answer(stranger)) }
-        val failure = failureOf { channel.sign(request, digest, keys) }
+        val failure = failureOf { channel.sign(request, digest, keys, official) }
         // The request stays open (contract §5): a cancelled ceremony, the reason on the notice.
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("mismatch", channel.notice.value)
@@ -170,25 +173,25 @@ class TrustedSignerChannelTest {
         // only an assertion over exactly the digest THIS wallet computed is
         // taken, so the transport carries the answer and authorises nothing.
         val channel = channel { visit -> visit.answer(answer(signer, over = ByteArray(32) { 0x01 })) }
-        assertEquals(FailureKind.Cancelled, failureOf { channel.sign(request, digest, keys) }.kind)
+        assertEquals(FailureKind.Cancelled, failureOf { channel.sign(request, digest, keys, official) }.kind)
         assertEquals("mismatch", channel.notice.value)
     }
 
     @Test
     fun `the page's own refusal is told as the page's`() {
         val channel = channel { visit -> visit.refuse("refused") }
-        assertEquals("refused", failureOf { channel.sign(request, digest, keys) }.message)
+        assertEquals("refused", failureOf { channel.sign(request, digest, keys, official) }.message)
     }
 
     @Test
     fun `cancel and the five-minute clock both end the wait`() {
         lateinit var cancelling: TrustedSignerChannel
         cancelling = channel { Thread.sleep(200); cancelling.cancel() }
-        assertEquals(FailureKind.Cancelled, failureOf { cancelling.sign(request, digest, keys) }.kind)
+        assertEquals(FailureKind.Cancelled, failureOf { cancelling.sign(request, digest, keys, official) }.kind)
         assertEquals(TrustedSignerChannel.State.Idle, cancelling.state.value)
 
         val waiting = channel(timeoutMs = 300L) { }
-        assertEquals("timeout", failureOf { waiting.sign(request, digest, keys) }.message)
+        assertEquals("timeout", failureOf { waiting.sign(request, digest, keys, official) }.message)
     }
 
     /** Spec 079: a tab closed on a page that never loaded is told as that, and the request stays open. */
@@ -200,7 +203,7 @@ class TrustedSignerChannelTest {
         runBlocking {
             for ((ch, expectUnreachable) in listOf(down to true, up to false)) {
                 val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-                scope.launch { runCatching { ch.sign(request, digest, keys) } }
+                scope.launch { runCatching { ch.sign(request, digest, keys, official) } }
                 val waiting = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } }
                 ch.personReturned()
                 val after = ch.state.value as TrustedSignerChannel.State.Waiting
@@ -225,8 +228,11 @@ class TrustedSignerChannelTest {
         val second = ByteArray(32) { 0xcd.toByte() }
         val tokens = java.util.concurrent.CopyOnWriteArrayList<String>()
         var over = digest
+        val checks = OfficialDist.checks()
         val wire = TrustedSignerScheme(
-            base = "https://sign.getvela.app/",
+            base = official,
+            admit = { checks.ensure(official) },
+            refusal = { checks.line(official) },
             openPage = { url ->
                 val visit = Visit(url)
                 tokens += visit.token
@@ -256,8 +262,11 @@ class TrustedSignerChannelTest {
     @Test
     fun `an answer that arrives after its request gave up settles nothing`() {
         val late = java.util.concurrent.LinkedBlockingQueue<Visit>()
+        val checks = OfficialDist.checks()
         val wire = TrustedSignerScheme(
-            base = "https://sign.getvela.app/",
+            base = official,
+            admit = { checks.ensure(official) },
+            refusal = { checks.line(official) },
             openPage = { url -> late += Visit(url); true },
             timeoutMs = 300L,
             random = SecureRandom(),
@@ -275,8 +284,11 @@ class TrustedSignerChannelTest {
     @Test
     fun `a cancel that arrives before the request is waiting still ends it`() {
         var opened = 0
+        val checks = OfficialDist.checks()
         val wire = TrustedSignerScheme(
-            base = "https://sign.getvela.app/",
+            base = official,
+            admit = { checks.ensure(official) },
+            refusal = { checks.line(official) },
             openPage = { opened += 1; true },
             timeoutMs = 20_000L,
             random = SecureRandom(),
@@ -293,56 +305,73 @@ class TrustedSignerChannelTest {
         assertEquals("no page was opened", 0, opened)
     }
 
-    // --- the preference ------------------------------------------------------
+    // --- spec 102: only a checked page opens, and the hand-off card ----------
 
-    private val scopes = mutableListOf<CoroutineScope>()
-
-    @After
-    fun tearDown() = scopes.forEach { it.cancel() }
-
-    private fun prefHost(store: KeyValueStore): CoreHost<SignPrefView> {
-        val executor = SignPrefExecutor(store)
-        return CoreHost(
-            bridge = SignPrefCore().asBridge(),
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it },
-            initial = SignPrefView(),
-            serializer = SignPrefView.serializer(),
-            perform = JsonShell.perform(SignPrefOperation.serializer(), SignPrefShellResult.serializer(), executor::perform),
-            escapedFailure = JsonShell.escapedFailure(
-                SignPrefOperation.serializer(),
-                SignPrefShellResult.serializer(),
-                fallback = SignPrefShellResult.Stored(),
-                answer = executor::neutralAnswer,
-            ),
-            onFault = { error -> throw AssertionError("shell fault: $error", error) },
+    /** R6: a check that cannot complete opens nothing — and says why, in the line's words. */
+    @Test
+    fun `a page whose check could not run is not opened, and the line says why`() {
+        var opened = 0
+        val unreachable = SignerPageChecks(fetch = { SignerPageChecks.Fetched.Unreachable }, store = FakeStore())
+        val channel = TrustedSignerChannel(
+            checks = unreachable,
+            openPage = { opened += 1; true },
+            bringBack = {},
+            words = { words.copy(unchecked = { line -> line.key }) },
         )
+        val failure = failureOf { channel.sign(request, digest, keys, official) }
+        assertEquals(FailureKind.Cancelled, failure.kind)
+        assertEquals("componentsUi.signing.integrity.couldNotCheck", channel.notice.value)
+        assertEquals("nothing opened", 0, opened)
     }
 
-    private fun <V : Any> CoreHost<V>.settle(predicate: (V) -> Boolean): V =
-        runBlocking { withTimeout(10_000L) { view.first(predicate) } }
+    /** R6: bytes that are not the version the URL names are refused — a replaced build. */
+    @Test
+    fun `a replaced build is refused and nothing opens`() {
+        var opened = 0
+        val tampered = SignerPageChecks(
+            fetch = { url ->
+                if (url.endsWith("index.json")) OfficialDist.fetch(url)
+                else SignerPageChecks.Fetched.Body(200, "<html>not the page</html>".toByteArray())
+            },
+            store = FakeStore(),
+        )
+        val channel = TrustedSignerChannel(checks = tampered, openPage = { opened += 1; true }, bringBack = {}, words = { words.copy(unchecked = { it.key }) })
+        failureOf { channel.sign(request, digest, keys, official) }
+        assertEquals("componentsUi.signing.integrity.mismatch", channel.notice.value)
+        assertEquals(SignerIntegrityState.MISMATCH, tampered.line(official).state)
+        assertEquals(0, opened)
+    }
 
     /**
-     * `sign_pref` keeps the Trusted Signer page only (founder, 2026-09-26). A
-     * default method an older build stored stays where it is, unread and never
-     * rewritten: how a signature is routed is the account's sign-in key.
+     * D4: a signature no sheet is showing raises the hand-off card first —
+     * where, and with which key — and the page opens only on its Open. A
+     * Cancel there opens nothing.
      */
     @Test
-    fun `the signer page reaches the store, a page a browser would not sign on does not, and an old default method is left alone`() {
-        val store = FakeStore(mapOf("vela.signMethod" to "security_key", KeyValueStore.Keys.TRUSTED_SIGNER_URL to "https://my.signer.test/"))
-        val host = prefHost(store)
-        host.start()
-        host.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
-        assertEquals("https://my.signer.test/", host.settle { !it.signer_url_is_default }.signer_url)
-        host.dispatch(SignPrefEvent.SignerUrlSubmitted("http://192.168.1.4/"), SignPrefEvent.serializer())
-        assertEquals("insecure", host.settle { it.signer_url_error != null }.signer_url_error)
-        host.dispatch(SignPrefEvent.SignerUrlSubmitted("http://127.0.0.1:8140"), SignPrefEvent.serializer())
-        val chosen = host.settle { it.signer_url == "http://127.0.0.1:8140/" }
-        assertEquals(false, chosen.signer_uses_wallet_passkeys)
-        runBlocking { withTimeout(10_000L) { while (store.values[KeyValueStore.Keys.TRUSTED_SIGNER_URL] != "http://127.0.0.1:8140/") kotlinx.coroutines.delay(20) } }
-        host.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
-        host.settle { it.signer_url_is_default }
-        runBlocking { withTimeout(10_000L) { while (store.values.containsKey(KeyValueStore.Keys.TRUSTED_SIGNER_URL)) kotlinx.coroutines.delay(20) } }
-        assertEquals("security_key", store.values["vela.signMethod"])
+    fun `the hand-off card waits for Open, and a Cancel there opens nothing`() {
+        var opened = 0
+        val cancelled = channel { opened += 1 }
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val signing = scope.launch { runCatching { cancelled.sign(request, digest, keys, official, key = "Savings", askFirst = true) } }
+            val card = withTimeout(5_000) { cancelled.state.first { it is TrustedSignerChannel.State.Handoff } }
+            assertEquals(TrustedSignerChannel.State.Handoff(official, "Savings"), card)
+            cancelled.cancel()
+            withTimeout(5_000) { signing.join() }
+            scope.cancel()
+        }
+        assertEquals("a cancelled card opens nothing", 0, opened)
+        assertEquals("closed", cancelled.notice.value)
+
+        val opening = channel { visit -> visit.answer(answer(signer)) }
+        val assertion = runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val signed = scope.async { opening.sign(request, digest, keys, official, key = "Savings", askFirst = true) }
+            withTimeout(5_000) { opening.state.first { it is TrustedSignerChannel.State.Handoff } }
+            opening.open()
+            withTimeout(20_000) { signed.await() }.also { scope.cancel() }
+        }
+        assertEquals("112233", assertion.credentialIdHex)
     }
 
     // --- the test page ------------------------------------------------------

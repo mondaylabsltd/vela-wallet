@@ -9,7 +9,7 @@ import uniffi.vela_core_uniffi.LoginCore
 import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.FeeSpeedCore
 import uniffi.vela_core_uniffi.FeeTierPrefCore
-import uniffi.vela_core_uniffi.SignPrefCore
+import uniffi.vela_core_uniffi.SigningPagesCore
 import uniffi.vela_core_uniffi.ManageTokensCore
 import uniffi.vela_core_uniffi.ApprovalGuardCore
 import uniffi.vela_core_uniffi.BatchImportCore
@@ -150,6 +150,6 @@ fun FeeTierPrefCore.asBridge(): CoreBridge =
 fun FeeSpeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
-// Spec 071: the Trusted Signer page.
-fun SignPrefCore.asBridge(): CoreBridge =
+// Spec 102: Settings → Signing pages.
+fun SigningPagesCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)

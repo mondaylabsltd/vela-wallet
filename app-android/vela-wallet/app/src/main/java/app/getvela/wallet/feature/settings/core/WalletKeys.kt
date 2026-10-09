@@ -35,19 +35,16 @@ class WalletKeys(
         NotRegistered,
     }
 
-    /** One key as the account record holds it, in founding order. */
     /**
-     * Spec 075: [signerOrigin] is the Trusted Signer page this key lives behind,
-     * empty when it lives on an authenticator this device can reach itself.
-     * Without it the core cannot tell a key minted on a page from the built-in
-     * passkey — a page runs the ceremony in a browser and so reports
-     * `platform` (the device pass of 2026-09-22).
+     * One key as the account record holds it, in founding order. Spec 102: no
+     * page — a key is captioned by where it LIVES (this device, a phone, a USB
+     * key), never by the page it was made on; the core reads the place from
+     * the key's own report.
      */
     data class DeviceKey(
         val publicKeyHex: String,
         val name: String,
         val transports: String,
-        val signerOrigin: String = "",
         /** How the core finds the sign-in key's row: by this credential, then by its public key. */
         val credentialId: String = "",
     )
@@ -60,8 +57,6 @@ class WalletKeys(
         val publicKeyHex: String,
         /** base64url, as the registry explorer prints it; empty from the device. */
         val credentialId: String = "",
-        /** Spec 075: the Trusted Signer page this key lives behind; empty when none. */
-        val signerOrigin: String = "",
         /** The registry's 20-byte attestation summary, `0x`-hex; empty from the device. */
         val attestationHex: String = "",
         /** The authenticator verified the person at registration; `null` = nobody can vouch. */
@@ -73,9 +68,9 @@ class WalletKeys(
     data class Result(val source: Source, val rows: List<Row>)
 
     /**
-     * [signInCredential]: the credential of the account's sign-in route
-     * (`signInRoute(record).credential_id`), empty for a record without one —
-     * its row comes back marked `signs_here`.
+     * [signInCredential]: the credential of the account's key route
+     * (`signing_plan(record).key.credential_id`), empty for a record without
+     * one — its row comes back marked `signs_here`.
      */
     suspend fun read(address: String, device: List<DeviceKey>, signInCredential: String): Result {
         val deviceJson = JSONArray().apply {
@@ -85,8 +80,7 @@ class WalletKeys(
                         .put("credential_id", it.credentialId)
                         .put("public_key_hex", it.publicKeyHex)
                         .put("name", it.name)
-                        .put("transports", it.transports)
-                        .put("signer_origin", it.signerOrigin),
+                        .put("transports", it.transports),
                 )
             }
         }.toString()
@@ -140,7 +134,6 @@ class WalletKeys(
                 synced = synced,
                 publicKeyHex = key.optString("public_key_hex"),
                 credentialId = key.optString("credential_id"),
-                signerOrigin = key.optString("signer_origin"),
                 attestationHex = key.optString("attestation_hex"),
                 userVerified = if (key.isNull("user_verified")) null else key.optBoolean("user_verified"),
                 signsHere = key.optBoolean("signs_here"),

@@ -83,8 +83,8 @@ const val ANDROID_UNLOCK = "other"
  * A method's title and line in the person's words, as the core decides them for
  * [chooser] (`keyMethodWords`, 087 F01/F02) — the create picker, the sign-in
  * sheet and the QR card cannot disagree. The sign-in sheet's phone row scans;
- * it never says "create". The Trusted Signer's two lines are the signing
- * sheet's own (spec 075), named by the core.
+ * it never says "create". Three places; "Use my own signing page" is not one
+ * of them (spec 102 — its words are `venueWords("own_page")`).
  */
 fun methodCopy(
     method: KeyMethod,
@@ -95,10 +95,6 @@ fun methodCopy(
     val words = keyMethodWords(method.wire, chooser.wire, unlock) ?: return method.wire to ""
     return strings.t(words.titleKey) to (words.lineName ?: words.lineKey?.let { strings.t(it) }.orEmpty())
 }
-
-/** The Trusted Signer's own words (`componentsUi.signing.*`), one spelling. */
-const val TRUSTED_SIGNER_TITLE = "componentsUi.signing.trustedSignerTitle"
-const val TRUSTED_SIGNER_BODY = "componentsUi.signing.trustedSignerBody"
 
 /**
  * The provider line under a key's name.
@@ -115,9 +111,6 @@ fun providerLineFor(method: KeyMethod): String = when (method) {
     KeyMethod.Platform -> I18nKeys.Create.PROVIDER_PLATFORM
     KeyMethod.Hybrid -> I18nKeys.Create.PROVIDER_GENERIC
     KeyMethod.SecurityKey -> I18nKeys.Create.PROVIDER_SECURITY_KEY
-    // The page is what holds it — the row says so rather than naming a vault
-    // this device cannot see.
-    KeyMethod.TrustedSigner -> TRUSTED_SIGNER_TITLE
 }
 
 /**

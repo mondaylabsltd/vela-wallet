@@ -82,12 +82,28 @@ object SigningLive {
         val track: app.getvela.wallet.feature.send.core.TrackEntryView? = null,
         /** Spec 079: the chain's usual inclusion time (the core's table), for the receipt's ring. */
         val typicalS: Int? = null,
-        /** Spec 079: this account signs on the Trusted Signer's page — its slide is the one consent. */
-        val trustedSignerRoute: Boolean = false,
+        /**
+         * Spec 102 D4: this account reviews and signs on a page — the sheet is
+         * the hand-off card (where, with which key, the page's integrity line)
+         * and its Open goes there. `null`: in Vela.
+         */
+        val handoff: Handoff? = null,
         /** The number preset's wire name the signed deltas are written in (spec 082 RJ15). */
         val numberPreset: String = app.getvela.wallet.core.format.Formats.current.resolvedNumber().wire,
         /** The screen's clock, ms since the epoch: the core's landing pace is read at it (spec 099 R6). */
         val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
+    )
+
+    /** Spec 102 D4: the page an account signs on, the key it confirms with, and that page's line now. */
+    data class Handoff(val page: String, val key: String, val line: uniffi.vela_core_uniffi.SignerIntegrityLine)
+
+    /** The hand-off card's words (D4) — shared by the dApp sheet and a send's own card. */
+    fun handoffModel(handoff: Handoff, strings: VelaStrings): HandoffModel = HandoffModel(
+        title = strings.s("handoffTitle"),
+        keyLine = if (handoff.key.isBlank()) "" else strings.s("handoffKey", mapOf("key" to handoff.key)),
+        page = handoff.page.substringAfter("://").trimEnd('/'),
+        integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings),
+        open = strings.s("openSigner"),
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -270,10 +286,16 @@ object SigningLive {
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        // Spec 102 D4: a page venue's sheet does not repeat the preview — the
+        // page is the authority. What stays is what only Vela can decide
+        // before it hands off: an approval's amount (the guard), and the fee.
+        val handoff = ctx.handoff?.takeIf { !refused }
         val drawn =
             if (refused) statusBlocks(sign, s)
+            else if (handoff != null) statusBlocks(sign, s, ctx.trustedSignerWaiting) + guardBlocks(guard, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
                 (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+        val hidePreview = refused || handoff != null
         // The wallet's own request leads with what it does, as the header's
         // title beside the ✕ — so that intent is not said a second time under it.
         val lead = if (own) drawn.indexOfFirst { it is SigningBlock.Intent } else -1
@@ -296,20 +318,21 @@ object SigningLive {
             networkLogoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(ctx.chainId),
             trustedSignerWait = trustedSignerWait(ctx),
             trustedSignerNotice = ctx.trustedSignerNotice,
+            handoff = handoff?.let { handoffModel(it, s) },
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,
                 // "· Vela passkey registry" names a contract to the person who
                 // asked for nothing but their own backup: not on their own request.
-                summary = if (refused || own) null else clear.result?.contract_name,
-                functionLabel = if (refused) null else clear.result?.let { s.s("techFunction") },
-                signature = if (refused) null else clear.result?.intent,
+                summary = if (hidePreview || own) null else clear.result?.contract_name,
+                functionLabel = if (hidePreview) null else clear.result?.let { s.s("techFunction") },
+                signature = if (hidePreview) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
-                simResult = quietSim?.takeIf { !refused }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
-                rawLabel = if (!refused && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
+                simResult = quietSim?.takeIf { !hidePreview }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
+                rawLabel = if (!hidePreview && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
                 rawHex = when {
-                    refused -> null
+                    hidePreview -> null
                     wholeBatch -> request.paramsJson
                     else -> facts?.second?.takeIf { dataBytes > 0 }
                 },
@@ -322,10 +345,9 @@ object SigningLive {
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
-            confirmAsButton = !refused && ctx.trustedSignerRoute,
-            confirmButtonLabel = s.s("openSigner"),
             confirmAction = if (refused) null else confirmLabel(clear, s),
-            confirmEnabled = !refused && confirm.enabled,
+            // D4: Open is enabled only when the page's check says it opens.
+            confirmEnabled = !refused && confirm.enabled && (handoff == null || handoff.line.opens),
             // Spec 099 R7: a shut confirm says why, in the core's line for the
             // part that is shut — none under a refusal, which has no confirm.
             confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { s.t(it) },

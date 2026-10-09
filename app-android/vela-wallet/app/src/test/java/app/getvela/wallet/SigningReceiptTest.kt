@@ -48,19 +48,44 @@ class SigningReceiptTest {
     private fun entry(status: TrackStatus, outcome: TrackOutcome, txHash: String? = null, relaySentAtMs: Double? = 1.0) =
         TrackEntryView(user_op_hash = op, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0, outcome = outcome, relay_sent_at_ms = relaySentAtMs)
 
+    /**
+     * Spec 102 D4: an account whose venue is a page gets the hand-off card —
+     * where, with which key, what is trusted about the page, and Open — and
+     * the sheet does not repeat the preview: the page is the authority.
+     */
     @Test
-    fun `an account that signs on the Trusted Signer's page gets a button, not a second slide`() {
+    fun `an account that signs on a page gets the hand-off card, not a second preview`() {
         val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
         val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val clear = app.getvela.wallet.feature.signing.core.ClearSigningView()
         val guard = app.getvela.wallet.feature.signing.core.GuardView()
         val fee = app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true)
-        val slide = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx)
-        assertTrue(!slide.confirmAsButton)
-        val button = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(trustedSignerRoute = true))
-        assertTrue(button.confirmAsButton)
-        assertEquals(strings.t("componentsUi.signing.openSigner"), button.confirmButtonLabel)
+        val inVela = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx)
+        assertNull(inVela.handoff)
+
+        val opens = uniffi.vela_core_uniffi.SignerIntegrityLine(
+            uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "0ba8ee8c", 1_760_000_000_000uL,
+            "componentsUi.signing.integrity.matches", true,
+        )
+        val handoff = SigningLive.Handoff("https://sign.getvela.app/", "Savings", opens)
+        val card = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff))
+        val model = card.handoff!!
+        assertEquals("Review and sign on your trusted page", model.title)
+        assertEquals("Confirm with Savings", model.keyLine)
+        assertEquals("sign.getvela.app", model.page)
+        assertTrue(model.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertEquals(strings.t("componentsUi.signing.openSigner"), model.open)
+        assertTrue(card.confirmEnabled)
+        // No preview: the decoded request is the page's to show.
+        assertTrue(card.blocks.none { it is SigningBlock.Intent || it is SigningBlock.Code || it is SigningBlock.Sentence })
+        assertTrue(card.tech.isEmpty)
+
+        // A page whose check did not admit it: the card says why, and Open stays shut.
+        val refused = opens.copy(state = uniffi.vela_core_uniffi.SignerIntegrityState.COULD_NOT_CHECK, key = "componentsUi.signing.integrity.couldNotCheck", opens = false, checkedAtMs = null)
+        val shut = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff.copy(line = refused)))
+        assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
+        assertTrue(!shut.confirmEnabled)
     }
 
     @Test

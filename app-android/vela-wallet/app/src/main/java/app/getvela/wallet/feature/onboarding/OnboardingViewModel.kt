@@ -10,8 +10,6 @@ import androidx.lifecycle.viewModelScope
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.crux.CoreDriver
 import app.getvela.wallet.core.crux.asBridge
-import app.getvela.wallet.core.data.KeyValueStore
-import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.HybridCeremony
@@ -27,6 +25,7 @@ import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.onboarding.core.UsbSecurityKeyCeremony
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -365,13 +364,50 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         )
         createDriver = driver
         driver.dispatch(event("start"))
-        // Spec 075: WHICH Trusted Signer page Settings names decides whether that
-        // route can mint a key this set would accept — a key made on a page
-        // belongs to that page's domain, and a wallet's keys all belong to one.
-        // The core cannot read the store, so the shell tells it.
+    }
+
+    /**
+     * Spec 102: "Use my own signing page" — create this wallet on [url] (a
+     * saved signing page), and so on that page's domain; `null` goes back to
+     * the app. Only before the first key: the core refuses it after, because
+     * the first key commits the set to one domain.
+     */
+    fun chooseSigningPage(url: String?) {
+        markCreateTap("signing page", "page" to (url ?: "-"))
+        send(
+            createDriver,
+            JSONObject().put("type", "signing_page_chosen").put("url", url ?: JSONObject.NULL),
+        )
+    }
+
+    // -- spec 102: "Use my own signing page" ----------------------------------
+
+    /** The saved signing pages (official first) — what "Use my own signing page" picks from. */
+    val signingPages get() = container.settings.signingPages
+
+    /** Every page's integrity check, by base address. */
+    val signerChecks get() = container.signerPages.checks
+
+    /** The integrity line for [url] now. */
+    fun signerLine(url: String) = container.signerPages.line(url)
+
+    /** The picker came up: read the list, and check every page on it. */
+    fun checkSigningPages() {
+        container.settings.refreshSigningPages()
+        container.settings.signingPages.value.pages.forEach { row ->
+            viewModelScope.launch { runCatching { container.signerPages.ensure(row.url) } }
+        }
+    }
+
+    /** "Add a page" from the picker: the core refuses an unusable or duplicate address. */
+    fun addSigningPage(url: String) {
+        container.settings.addSigningPage(url)
+        // Checked as soon as it is listed, so its row says what is trusted about it.
         viewModelScope.launch {
-            val page = VelaStore(getApplication()).read(KeyValueStore.Keys.TRUSTED_SIGNER_URL).orEmpty()
-            send(driver, JSONObject().put("type", "signer_page_changed").put("url", page))
+            val listed = kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                container.settings.signingPages.first { view -> view.pages.size > 1 && view.add_error == null }
+            }
+            listed?.pages?.lastOrNull()?.let { runCatching { container.signerPages.ensure(it.url) } }
         }
     }
 
@@ -446,8 +482,17 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         driver.dispatch(event("start"))
     }
 
-    fun signIn(method: KeyMethod = KeyMethod.Platform) =
-        send(loginDriver, JSONObject().put("type", "sign_in").put("method", method.wire))
+    /**
+     * Sign in with a key on [method]'s place — on [page] (spec 102, "Use my
+     * own signing page") when one was chosen, which the core runs on that page
+     * only for a custom domain (R3).
+     */
+    fun signIn(method: KeyMethod = KeyMethod.Platform, page: String? = null) =
+        send(
+            loginDriver,
+            JSONObject().put("type", "sign_in").put("method", method.wire)
+                .put("page", page ?: JSONObject.NULL),
+        )
 
     /**
      * Start a sign-in, creating the machine if the last one finished.
@@ -457,13 +502,13 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * button dead forever after a completed sign-in, if `complete` did not drop
      * the finished machine.
      */
-    fun beginSignIn(method: KeyMethod = KeyMethod.Platform) {
-        // Spec 075: a new attempt is a new flow. A previous one that ended in
-        // a failure the person read and dismissed may still hold a page open;
-        // this attempt opens its own.
+    fun beginSignIn(method: KeyMethod = KeyMethod.Platform, page: String? = null) {
+        // A new attempt is a new flow. A previous one that ended in a failure
+        // the person read and dismissed may still hold a page open; this
+        // attempt opens its own.
         container.trustedSigner.endFlow()
         startLogin()
-        signIn(method)
+        signIn(method, page)
     }
 
     // -- prompts -------------------------------------------------------------
@@ -571,18 +616,19 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 /**
-                 * Spec 075: what the Trusted Signer's card says the key is for.
-                 * The create machine holds the name the person typed; a
-                 * sign-in has none yet, which is the honest answer.
+                 * What the signing page's card says the key is for. The create
+                 * machine holds the name the person typed; a sign-in has none
+                 * yet, which is the honest answer.
                  */
                 override fun walletName(): String = createView?.name.orEmpty()
             },
-            // Spec 075: a `trusted_signer` ceremony runs on the page, not on the
-            // platform's sheet. The channel throws a PasskeyFailure for every
-            // refusal, which the executor's failure contract already answers.
-            trustedSigner = { requestJson, operationJson, expected, signerOrigin ->
-                container.trustedSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
+            // Spec 102 R3: a ceremony whose op names a page runs there, not on
+            // the platform's sheet. The channel throws a PasskeyFailure for
+            // every refusal, which the executor's failure contract answers.
+            trustedSigner = { requestJson, operationJson, expected, page ->
+                container.trustedSigner.ceremony(requestJson, operationJson, expected, page)
             },
+            words = { key -> strings?.t(key) ?: container.i18nRuntime.t(key) },
         )
     }
 

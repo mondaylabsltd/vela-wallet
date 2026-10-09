@@ -72,8 +72,21 @@ interface KeyValueStore {
         /** The default transaction speed (spec 068; Android's since 069). Survives sign-out. */
         const val FEE_TIER = "vela.feeTier"
 
-        /** The Trusted Signer page (spec 071). Survives sign-out. */
+        /**
+         * Spec 071's single "Trusted Signer page". Spec 102 reads it once —
+         * `SigningPagesCore` imports it as a saved page — and then removes it.
+         */
         const val TRUSTED_SIGNER_URL = "vela.trustedSignerUrl"
+
+        /** Spec 102: the signing pages this device keeps (official never stored). Survives sign-out. */
+        const val SIGNING_PAGES = "vela.signingPages"
+
+        /**
+         * Spec 076 FR-009 / FR-010: page versions this person trusted, and
+         * blocked, ON THIS DEVICE (JSON arrays of sha256 hex). Never synced.
+         */
+        const val SIGNER_PAGE_TRUSTED = "vela.signerPage.trusted"
+        const val SIGNER_PAGE_BLOCKED = "vela.signerPage.blocked"
 
         /**
          * Spec 075's cross-device pairing service, RETIRED with the channel

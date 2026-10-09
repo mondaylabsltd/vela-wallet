@@ -29,7 +29,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_core_uniffi.WalletKeyRecord
-import uniffi.vela_core_uniffi.signInRoute
+import app.getvela.wallet.feature.signing.trustedsigner.SigningPlan
 import uniffi.vela_dev_fixtures.fixtureAccounts
 import uniffi.vela_dev_fixtures.fixtureAssert
 import uniffi.vela_dev_fixtures.fixtureMultiAddress
@@ -168,30 +168,94 @@ class SignInKeySigningTest {
         assertEquals(listOf(Ceremony(first, "internal", KeyMethod.Platform, first)), ceremonies)
     }
 
+    /** What a fake page was asked: the request, the keys it may use, the page, the card's key and whether it asked first. */
+    private data class PageAsk(val request: JSONObject, val keys: List<String>, val page: String, val key: String, val askFirst: Boolean)
+
+    private fun pageRecording(asked: MutableList<PageAsk>) = object : TrustedSigner {
+        override suspend fun sign(requestJson: String, digest: ByteArray, keys: List<WalletKeyRecord>, page: String, key: String, askFirst: Boolean): Assertion {
+            asked += PageAsk(JSONObject(requestJson), keys.map { it.credentialId }, page, key, askFirst)
+            val signed = fixtureAssert(digest, keys.map { it.credentialId }, 0u)
+            return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "")
+        }
+    }
+
+    /**
+     * Spec 102 migration: an account a ≤ 0.9.7 build signed in through a
+     * self-hosted page (`signed_in_with.method = trusted_signer`, a custom
+     * origin) is now a wallet on that domain, locked to that page — it signs
+     * there, allowing that key alone, and the page is told which key and where
+     * it lives (R5).
+     */
     @Test
-    fun `an account signed in through the Trusted Signer signs on that page, allowing that key alone`() = runBlocking<Unit> {
+    fun `an account from a self-hosted page signs on that page, allowing that key alone, with its route`() = runBlocking<Unit> {
         val second = keyset[1].credentialIdHex
         val store = storeWith(record(signedIn(1, "trusted_signer").put("signer_origin", "https://my.signer.test")))
-        val asked = CopyOnWriteArrayList<Triple<JSONObject, List<String>, String>>()
-        val page = object : TrustedSigner {
-            override suspend fun sign(requestJson: String, digest: ByteArray, keys: List<WalletKeyRecord>, signerOrigin: String): Assertion {
-                asked += Triple(JSONObject(requestJson), keys.map { it.credentialId }, signerOrigin)
-                val signed = fixtureAssert(digest, keys.map { it.credentialId }, 0u)
-                return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "")
-            }
-        }
-        spine(store, page).signMessage(
+        val asked = CopyOnWriteArrayList<PageAsk>()
+        spine(store, pageRecording(asked)).signMessage(
             100, safe, digest,
             intent = TrustedSignerIntent("personal_sign", JSONArray().put("0x68656c6c6f").put(safe).toString(), "https://app.test"),
         )
         assertTrue("no platform ceremony: $ceremonies", ceremonies.isEmpty())
-        val (request, keys, origin) = asked.single()
-        assertEquals("https://my.signer.test", origin)
-        assertEquals(listOf(second), keys)
-        val allow = request.getJSONObject("context").getJSONArray("allowCredentials")
+        val ask = asked.single()
+        assertEquals("https://my.signer.test/", ask.page)
+        assertEquals(listOf(second), ask.keys)
+        // A send's spine raises the hand-off card itself: no sheet drew one.
+        assertTrue(ask.askFirst)
+        val context = ask.request.getJSONObject("context")
+        val allow = context.getJSONArray("allowCredentials")
         assertEquals(1, allow.length())
         val expected = Base64.getUrlEncoder().withoutPadding().encodeToString(second.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
         assertEquals(expected, allow.getString(0))
+        val route = context.getJSONObject("keyRoute")
+        assertEquals(expected, route.getString("credentialId"))
+    }
+
+    /**
+     * Spec 102 R4: a `getvela.app` account whose venue is the official page
+     * signs there — never natively — and the dApp sheet's spine (which drew
+     * the hand-off card itself) does not ask for a second card.
+     */
+    @Test
+    fun `an account whose venue is the official page signs there, and a sheet that drew the card is not asked again`() = runBlocking<Unit> {
+        val first = keyset[0].credentialIdHex
+        val record = record(signedIn(0, "platform").put("transports", "internal"))
+            .put("signing_domain", "getvela.app")
+            .put("signing_venue", JSONObject().put("type", "page").put("url", "https://sign.getvela.app/"))
+        val asked = CopyOnWriteArrayList<PageAsk>()
+        val sheet = UserOpSpine(
+            relay = RelayClient(FakeRelayPort(), builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
+            accounts = StoreAccountPort(AccountStore(storeWith(record))),
+            signer = { passkey },
+            trustedSigner = { pageRecording(asked) },
+            handoffShown = true,
+        )
+        sheet.signMessage(
+            100, safe, digest,
+            intent = TrustedSignerIntent("personal_sign", JSONArray().put("0x68656c6c6f").put(safe).toString(), "https://app.test"),
+        )
+        assertTrue("no native ceremony on a page venue: $ceremonies", ceremonies.isEmpty())
+        val ask = asked.single()
+        assertEquals("https://sign.getvela.app/", ask.page)
+        assertEquals(listOf(first), ask.keys)
+        assertFalse(ask.askFirst)
+        // The card's key: the key's own name in the record, else its place.
+        assertEquals(
+            app.getvela.wallet.feature.signing.trustedsigner.VenueWords.keyLabel(keyset[0].name, KeyMethod.Platform) { it },
+            ask.key,
+        )
+    }
+
+    /** R1: a custom-domain account whose page this device does not know signs nothing, and says why. */
+    @Test
+    fun `an account no venue here can reach signs nothing`() = runBlocking<Unit> {
+        val record = record(signedIn(0, "platform"))
+            .put("signing_domain", "example.com")
+            .put("signing_venue", JSONObject().put("type", "in_vela"))
+        val refused = runCatching { spine(storeWith(record), pageRecording(CopyOnWriteArrayList())).signMessage(100, safe, digest) }
+            .exceptionOrNull() as UserOpSpine.Refused
+        val failure = refused.failure as UserOpSpine.Failure.Signer
+        assertEquals("settings.venue.blockedApp", failure.message)
+        assertTrue("nothing was signed: $ceremonies", ceremonies.isEmpty())
     }
 
     /**
@@ -215,11 +279,11 @@ class SignInKeySigningTest {
         assertEquals(keyset.size, held.getJSONArray("keys").length())
         assertEquals(keyset[1].credentialIdHex, held.getJSONObject("signed_in_with").getString("credential_id"))
 
-        // …and what the spine hands the core is that record, whole.
-        val route = JSONObject(signInRoute(StoreAccountPort(accounts).accountJson(safe)!!)!!)
-        assertEquals(keyset[1].credentialIdHex, route.getString("credential_id"))
-        assertEquals("security_key", route.getString("method"))
-        assertEquals("usb,nfc,ble", route.getString("transports"))
+        // …and what the spine hands the core is that record, whole: the plan's key route.
+        val plan = SigningPlan.of(StoreAccountPort(accounts).accountJson(safe))!!
+        assertEquals(keyset[1].credentialIdHex, plan.credentialId)
+        assertEquals(KeyMethod.SecurityKey, plan.method)
+        assertEquals("usb,nfc,ble", plan.transports)
     }
 
     /**
@@ -249,8 +313,58 @@ class SignInKeySigningTest {
             held
         }
         assertEquals(keyset.size, written.getJSONArray("keys").length())
-        val key = written.getJSONObject("signed_in_with")
+        // Spec 102: the key is `sign_in_key`, and older builds still find a
+        // `signed_in_with` copy naming its place (D-1).
+        val key = written.getJSONObject("sign_in_key")
         assertEquals(keyset[1].credentialIdHex, key.getString("credential_id"))
         assertEquals("hybrid", key.getString("method"))
+        assertEquals("hybrid", written.getJSONObject("signed_in_with").getString("method"))
+        assertEquals("getvela.app", written.getString("signing_domain"))
+    }
+
+    /**
+     * Spec 102 (P2-09): "Where you review and sign" goes to the real session
+     * machine by address. A venue that reaches the account's keys is saved on
+     * the record (the session view carries it); one that cannot is refused by
+     * the core and nothing is written.
+     */
+    @Test
+    fun `choosing where you review and sign saves the venue, and an unreachable one changes nothing`() = runBlocking<Unit> {
+        val store = FakeStore(
+            mapOf(
+                "vela.accounts" to JSONArray().put(record(signedIn(0, "platform"))).toString(),
+                "vela.activeAccountIndex" to "0",
+            ),
+        )
+        val session = SessionController(AccountStore(store), scope)
+        session.boot()
+        withTimeout(10_000) { session.view.first { !it.loading && it.hasWallet } }
+        assertEquals("""{"type":"in_vela"}""", JSONObject(session.view.value.activeRow!!.signingVenueJson).toString())
+
+        session.chooseSigningVenue(safe, """{"type":"page","url":"https://sign.getvela.app/"}""")
+        val chosen = withTimeout(10_000) {
+            session.view.first { JSONObject(it.activeRow!!.signingVenueJson).optString("type") == "page" }
+        }
+        assertEquals("https://sign.getvela.app/", JSONObject(chosen.activeRow!!.signingVenueJson).getString("url"))
+        val saved = withTimeout(10_000) {
+            var held = JSONArray(store.values.getValue("vela.accounts")).getJSONObject(0)
+            while (held.optJSONObject("signing_venue")?.optString("type") != "page") {
+                delay(20)
+                held = JSONArray(store.values.getValue("vela.accounts")).getJSONObject(0)
+            }
+            held
+        }
+        assertEquals("getvela.app", saved.getString("signing_domain"))
+        // …and the spine now signs there.
+        assertEquals("https://sign.getvela.app/", SigningPlan.of(saved.toString())!!.page)
+
+        // A page on another domain cannot reach this account's keys: refused, nothing written.
+        session.chooseSigningVenue(safe, """{"type":"page","url":"https://sign.example.com/"}""")
+        delay(300)
+        assertEquals("https://sign.getvela.app/", JSONObject(session.view.value.activeRow!!.signingVenueJson).getString("url"))
+        assertEquals(
+            "https://sign.getvela.app/",
+            JSONArray(store.values.getValue("vela.accounts")).getJSONObject(0).getJSONObject("signing_venue").getString("url"),
+        )
     }
 }

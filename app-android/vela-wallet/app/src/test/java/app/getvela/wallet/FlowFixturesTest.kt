@@ -44,7 +44,8 @@ class FlowFixturesTest {
             "name · draft waiting" to Screen.Name,
             "keys · one, needs a second" to Screen.Keys,
             "keys · two, ready" to Screen.Keys,
-            "keys · signer page elsewhere" to Screen.Keys,
+            "keys · own page offered" to Screen.Keys,
+            "keys · own page chosen" to Screen.Keys,
             "keys · a page's own set" to Screen.Keys,
             "keys · unconfirmed row" to Screen.Keys,
             "keys · at the cap" to Screen.Keys,
@@ -158,25 +159,39 @@ class FlowFixturesTest {
             assertTrue(submitLabelToI18n(it).startsWith("onboarding."))
         }
         KeyMethod.entries.forEach { method ->
-            val home = if (method == KeyMethod.TrustedSigner) "componentsUi.signing." else "onboarding."
-            assertTrue(providerLineFor(method).startsWith(home))
+            assertTrue(providerLineFor(method).startsWith("onboarding."))
         }
     }
 
     /**
-     * Spec 075: the fourth route, everywhere the three appear.
+     * Spec 102: three places a key lives, and no fourth.
      *
      * The create key picker, "add another key" and the sign-in sheet all draw
-     * `KeyMethod.entries` — so this list IS what each of them shows, and a
-     * route added to the core appears in all three or in none.
+     * `KeyMethod.entries` — so this list IS what each of them shows. The
+     * signing page is where a person reviews and signs (the account's venue),
+     * not a place a key lives: a `trusted_signer` from anywhere is unknown.
      */
     @Test
-    fun everyChooserOffersTheFourRoutes() {
-        assertEquals(
-            listOf("platform", "hybrid", "security_key", "trusted_signer"),
-            KeyMethod.entries.map { it.wire },
-        )
-        assertEquals(KeyMethod.TrustedSigner, KeyMethod.of("trusted_signer"))
+    fun everyChooserOffersTheThreePlacesAndNoFourth() {
+        assertEquals(listOf("platform", "hybrid", "security_key"), KeyMethod.entries.map { it.wire })
+        assertTrue(runCatching { KeyMethod.of("trusted_signer") }.isFailure)
+    }
+
+    /**
+     * Spec 102: "Use my own signing page" is offered beside the three until
+     * the first key, and a chosen page is drawn as that page — its domain and
+     * integrity line — with the CreateView's own fields, nothing invented.
+     */
+    @Test
+    fun theOwnPageBoardsCarryTheCoresFields() {
+        val (_, offered) = flows().first { it.first == "keys · own page offered" }
+        assertTrue(offered.canChoosePage)
+        assertEquals(null, offered.signingPage)
+        val (_, chosen) = flows().first { it.first == "keys · own page chosen" }
+        assertEquals(FlowFixtures.OWN_PAGE, chosen.signingPage)
+        assertEquals(FlowFixtures.OWN_DOMAIN, chosen.signingDomain)
+        val (_, set) = flows().first { it.first == "keys · a page's own set" }
+        assertTrue("the first key commits the set: no page may be chosen", !set.canChoosePage)
     }
 
     /** The cap fixture sits exactly at the core's `MAX_MULTI_KEYS`, not near it. */

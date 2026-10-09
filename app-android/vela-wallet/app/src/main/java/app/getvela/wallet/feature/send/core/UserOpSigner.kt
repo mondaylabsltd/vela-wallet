@@ -50,8 +50,9 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
 }
 
 /**
- * The Trusted Signer (spec 071): a separate page decodes the request from
- * the operation's own bytes, derives the digest itself and runs the ceremony.
+ * The signing page (specs 071, 102): a separate page decodes the request from
+ * the operation's own bytes, derives the digest itself and runs the ceremony —
+ * for an account whose signing venue is that page.
  *
  * [requestJson] is the core's `trustedSignerRequest`, [digest] the challenge the
  * passkey path would sign, [keys] the account's. The answer comes back already
@@ -62,15 +63,18 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
  */
 interface TrustedSigner {
     /**
-     * [signerOrigin] is spec 075: a key minted or found through the Clear
-     * Signer lives behind ONE page, and that is the page to open — empty means
-     * the person's own page from Settings.
+     * Sign on [page] — the account's venue (`signing_plan`'s, R4), always
+     * named: there is no page "from Settings" any more. [key] is what the
+     * hand-off card says the person confirms with; [askFirst] raises that card
+     * and waits for its Open (`false` when the caller's own sheet drew it).
      */
     suspend fun sign(
         requestJson: String,
         digest: ByteArray,
         keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>,
-        signerOrigin: String = "",
+        page: String,
+        key: String = "",
+        askFirst: Boolean = false,
     ): Assertion
 
     /**

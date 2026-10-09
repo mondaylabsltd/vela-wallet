@@ -255,9 +255,13 @@ data class SettingsActions(
     /** The RPC fix sheet's URL being typed, and its Save & Retry / Done. */
     val onRpcFixField: (String) -> Unit = {},
     val onRpcFixPrimary: () -> Unit = {},
-    /** Spec 071: the Trusted Signer page, as typed, and back to the official one. */
-    val onSignerUrlSave: (String) -> Unit = {},
-    val onSignerUrlReset: () -> Unit = {},
+    /** Spec 102: "Where you review and sign" — a venue the core offered, as it wrote it. */
+    val onVenuePick: (venueJson: String) -> Unit = {},
+    /** Spec 102: Settings → Signing pages — add, rename, remove, and trust a custom page's own build. */
+    val onSigningPageAdd: (url: String, name: String) -> Unit = { _, _ -> },
+    val onSigningPageRename: (url: String, name: String) -> Unit = { _, _ -> },
+    val onSigningPageRemove: (url: String) -> Unit = {},
+    val onSigningPageTrust: (url: String, version: String) -> Unit = { _, _ -> },
     /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
     val onPageShown: (SettingsPage) -> Unit = {},
     /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
@@ -302,6 +306,8 @@ fun SettingsRoute(
     LaunchedEffect(page) { actions.onPageShown(page) }
     // Spec 072: the network a trash tap asked about, until the sheet answers.
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
+    // Spec 102: the saved signing page whose sheet is open.
+    var editingPage by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
     LaunchedEffect(overlay) { actions.onOverlayShown(overlay) }
     // The storage row waiting on an answer, and the warning its group carries
@@ -352,7 +358,8 @@ fun SettingsRoute(
                 "language" -> overlay = SettingsOverlay.Language
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
-                SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
+                SettingsFixtures.SIGNING_PAGES_ROW -> page = SettingsPage.SigningPages
+                SettingsLive.VENUE_ROW -> overlay = SettingsOverlay.Venue
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -441,8 +448,15 @@ fun SettingsRoute(
             actions.onRpcFixPrimary()
             if (close) overlay = SettingsOverlay.None
         },
-        onSignerUrlSave = actions.onSignerUrlSave,
-        onSignerUrlReset = actions.onSignerUrlReset,
+        onVenuePick = { venue -> actions.onVenuePick(venue); overlay = SettingsOverlay.None },
+        onVenueManage = { overlay = SettingsOverlay.None; page = SettingsPage.SigningPages },
+        editingPage = editingPage,
+        onSigningPageAddOpen = { overlay = SettingsOverlay.AddSigningPage },
+        onSigningPageEdit = { url -> editingPage = url; overlay = SettingsOverlay.EditSigningPage },
+        onSigningPageAdd = actions.onSigningPageAdd,
+        onSigningPageRename = { name -> editingPage?.let { actions.onSigningPageRename(it, name) } },
+        onSigningPageRemove = { editingPage?.let(actions.onSigningPageRemove) },
+        onSigningPageTrust = actions.onSigningPageTrust,
         onFeedbackOpened = actions.onFeedbackOpened,
         onVersionTap = {
             if (versionTaps.tap(debugMode.mode)) {
@@ -572,8 +586,15 @@ fun SettingsScreen(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
-    onSignerUrlSave: (String) -> Unit = {},
-    onSignerUrlReset: () -> Unit = {},
+    onVenuePick: (String) -> Unit = {},
+    onVenueManage: () -> Unit = {},
+    editingPage: String? = null,
+    onSigningPageAddOpen: () -> Unit = {},
+    onSigningPageEdit: (String) -> Unit = {},
+    onSigningPageAdd: (String, String) -> Unit = { _, _ -> },
+    onSigningPageRename: (String) -> Unit = {},
+    onSigningPageRemove: () -> Unit = {},
+    onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
     /** Spec 091: a tap on About's version — the hidden entry. */
     onVersionTap: () -> Unit = {},
     /** Spec 091: About's debug-mode switch, turned. */
@@ -674,6 +695,9 @@ fun SettingsScreen(
                             onAddNetwork = { onRow("add-network") },
                             onVersionTap = onVersionTap,
                             onDebugMode = onDebugMode,
+                            onSigningPageAddOpen = onSigningPageAddOpen,
+                            onSigningPageEdit = onSigningPageEdit,
+                            onSigningPageTrust = onSigningPageTrust,
                         )
                     }
                 }
@@ -711,8 +735,12 @@ fun SettingsScreen(
                 onAccountSecondary = onAccountSecondary,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
-                onSignerUrlSave = onSignerUrlSave,
-                onSignerUrlReset = onSignerUrlReset,
+                onVenuePick = onVenuePick,
+                onVenueManage = onVenueManage,
+                editingPage = editingPage,
+                onSigningPageAdd = onSigningPageAdd,
+                onSigningPageRename = onSigningPageRename,
+                onSigningPageRemove = onSigningPageRemove,
             )
         }
     }
@@ -727,6 +755,7 @@ private fun pageHeader(model: SettingsScreenModel, page: SettingsPage): Pair<Str
         SettingsPage.Endpoints -> model.endpoints.title to null
         SettingsPage.Storage -> model.storage.title to model.storage.subtitle
         SettingsPage.About -> model.about.title to null
+        SettingsPage.SigningPages -> model.signingPages.title to model.signingPages.subtitle
         SettingsPage.Home -> model.title to null
     }
 
@@ -789,6 +818,9 @@ private fun SettingsHomeBody(
 
     // Under the account it belongs to (spec 062): which keys, then their backup.
     model.keys?.let { VelaWalletKeysBlock(it, onRow) }
+    // Spec 102: where this account's transactions and messages are reviewed
+    // and signed — the account's own setting, beside its keys.
+    model.venue?.let { venue -> VelaSettingsRow(row = venue.row, divider = false, onClick = onRow) }
 
     model.sections.forEach { section ->
         if (section.label != null) {
@@ -909,9 +941,19 @@ private fun SettingsPageBody(
     onAddNetwork: () -> Unit = {},
     onVersionTap: () -> Unit = {},
     onDebugMode: (Boolean) -> Unit = {},
+    onSigningPageAddOpen: () -> Unit = {},
+    onSigningPageEdit: (String) -> Unit = {},
+    onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
 ) {
     val colors = VelaTheme.colors
     when (page) {
+        SettingsPage.SigningPages -> SigningPagesPageBody(
+            model = model.signingPages,
+            onAdd = onSigningPageAddOpen,
+            onEdit = onSigningPageEdit,
+            onTrust = onSigningPageTrust,
+        )
+
         SettingsPage.Networks -> {
             model.networks.forEach { row ->
                 VelaNetworkRow(
@@ -1430,8 +1472,12 @@ internal fun SettingsSheet(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
-    onSignerUrlSave: (String) -> Unit = {},
-    onSignerUrlReset: () -> Unit = {},
+    onVenuePick: (String) -> Unit = {},
+    onVenueManage: () -> Unit = {},
+    editingPage: String? = null,
+    onSigningPageAdd: (String, String) -> Unit = { _, _ -> },
+    onSigningPageRename: (String) -> Unit = {},
+    onSigningPageRemove: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1491,12 +1537,17 @@ internal fun SettingsSheet(
                 SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
                     onSheetSelect(SettingsOverlay.FeeSpeed, it)
                 }
-                SettingsOverlay.SignerPage -> SignerPageSheetBody(
-                    model.signerPage,
-                    onSave = onSignerUrlSave,
-                    onReset = onSignerUrlReset,
-                    onDone = onDismiss,
-                )
+                SettingsOverlay.Venue -> model.venue?.let { VenueSheetBody(it, onPick = onVenuePick, onManage = onVenueManage) }
+                SettingsOverlay.AddSigningPage -> AddSigningPageSheetBody(model.signingPages, onSave = onSigningPageAdd, onDone = onDismiss)
+                SettingsOverlay.EditSigningPage -> editingPage?.let { url ->
+                    EditSigningPageSheetBody(
+                        model.signingPages,
+                        url = url,
+                        onRename = onSigningPageRename,
+                        onRemove = onSigningPageRemove,
+                        onDone = onDismiss,
+                    )
+                }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)
                 }
@@ -1582,7 +1633,7 @@ private fun SheetCloseRow() {
 }
 
 @Composable
-private fun SheetTitle(title: String, subtitle: String? = null) {
+internal fun SheetTitle(title: String, subtitle: String? = null) {
     val colors = VelaTheme.colors
     val close = LocalSheetClose.current
     // Only the TITLE shares its line with the ✕ (it wraps beside it, never
@@ -2355,56 +2406,6 @@ private fun FeedbackField(value: String, placeholder: String, minLines: Int, ena
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder },
         )
-    }
-}
-
-/**
- * Spec 071: the Trusted Signer page. The address is checked by the core, not
- * here: a refused one leaves the old page in force and says why under the
- * field; an accepted one closes the sheet.
- */
-@Composable
-private fun SignerPageSheetBody(model: SignerPageModel, onSave: (String) -> Unit, onReset: () -> Unit, onDone: () -> Unit) {
-    val colors = VelaTheme.colors
-    var text by remember(model.value) { mutableStateOf(model.value) }
-    var saving by remember { mutableStateOf(false) }
-    LaunchedEffect(model.value, model.error) {
-        if (saving) {
-            saving = false
-            if (model.error == null) onDone()
-        }
-    }
-    SheetTitle(model.title, model.subtitle)
-    VelaUrlField(
-        label = model.title,
-        value = text,
-        tone = if (model.error != null) SettingsTone.Error else SettingsTone.Neutral,
-        onValueChange = { text = it },
-    )
-    model.error?.let {
-        Spacer(modifier = Modifier.height(VelaSpacing.md))
-        Text(it, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
-    }
-    model.foreign?.let {
-        Spacer(modifier = Modifier.height(VelaSpacing.lg))
-        VelaCallout(CalloutModel(tone = CalloutTone.Warning, text = it))
-    }
-    Spacer(modifier = Modifier.height(VelaSpacing.xl))
-    VelaPrimaryButton(
-        model.save,
-        onClick = {
-            if (text.trim() == model.value) {
-                onDone()
-            } else {
-                saving = true
-                onSave(text)
-            }
-        },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    model.reset?.let {
-        Spacer(modifier = Modifier.height(VelaSpacing.md))
-        VelaSecondaryButton(it, onClick = onReset, modifier = Modifier.fillMaxWidth())
     }
 }
 
