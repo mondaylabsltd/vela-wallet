@@ -73,9 +73,12 @@ pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
 /// which is why the page renders this over everything rather than inside a
 /// step.
 ///
-/// **No buttons.** There is nothing to press here — the answer is on the desk,
-/// and a Cancel would only be a second way to do what walking away already does
-/// (the exchange times out and reports it).
+/// **One button, and only where it works.** The answer is on the desk, so
+/// there is nothing to press to go on — but the card covers the window for as
+/// long as a key waits, so it carries Cancel at the bottom whenever the wait
+/// can be stopped (`TouchRequest::cancellable`), and no button at all when it
+/// cannot: a Cancel that hid the card and left the ceremony running behind it
+/// would be worse than none.
 pub fn touch_card(
     theme: &Theme,
     loc: &Loc,
@@ -466,8 +469,11 @@ pub fn signin_method_card(
 /// own white quiet-zone box, the one place in this file that names a literal
 /// colour on purpose.
 ///
-/// **No buttons.** The answer is the phone; there is nothing to press. It clears
-/// itself the moment the tunnel is up.
+/// **Cancel at the bottom, nothing else** (the house pattern for ceremony
+/// sheets, issue 480: no ✕). The answer is the phone, so there is nothing to
+/// press to go on, and the card clears itself the moment the tunnel is up —
+/// but it waits up to ninety seconds over a scrim that swallows every press,
+/// so Cancel (and Escape) is the way out.
 ///
 /// **Its line is the caller's.** The create card's "create it on a nearby
 /// device" is false over a signature (083 W19) and over a sign-in (083 W16);
