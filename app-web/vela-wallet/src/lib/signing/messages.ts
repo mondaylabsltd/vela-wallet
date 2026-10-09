@@ -16,6 +16,29 @@
  */
 
 import type { SpeedWords } from '$lib/flows/speed-control';
+import type { SettingsMessages } from '$lib/settings/messages';
+
+/**
+ * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
+ * the web opens no signing page, so no live page here draws the card, and
+ * these strings stay out of `SigningMessages` (which every page with a
+ * signing host carries). The apps draw the same card from the same keys.
+ */
+export interface HandoffMessages {
+	/** "Review and sign on your trusted page". */
+	title: string;
+	/** "Confirm with {{key}}". */
+	key: string;
+	/** Open — the sheet's "Continue to signing page". */
+	open: string;
+	/** After Open: "Waiting for the signing page…", where to look, and the way back. */
+	waiting: string;
+	waitingHint: string;
+	reopen: string;
+	/** The official page's label. */
+	official: string;
+	integrity: SettingsMessages['integrity'];
+}
 
 export interface SigningMessages {
 	panelTitle: string;

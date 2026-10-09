@@ -79,7 +79,7 @@ const INTEGRITY_FIELD = (key: string): keyof SettingsMessages['integrity'] | und
 export function integrityLineModel(
 	line: Pick<IntegrityLine, 'key' | 'version'>,
 	time: string,
-	m: Words
+	m: Pick<Words, 'integrity'>
 ): IntegrityLineModel | undefined {
 	const field = INTEGRITY_FIELD(line.key);
 	if (field === undefined) return undefined;

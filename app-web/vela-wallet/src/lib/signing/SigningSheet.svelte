@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
+	import HandoffCard from './ui/HandoffCard.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -48,6 +49,8 @@
 		onclosestart?: () => void;
 		/** Spec 096 F8: "Try again" on a failure that sent nothing. */
 		onretry?: () => void;
+		/** Spec 102 (D4): Open on the hand-off card — the apps' only; absent on the web. */
+		onopenpage?: () => void;
 	}
 
 	let {
@@ -63,7 +66,8 @@
 		onspeedpick,
 		onfeerefresh,
 		onclosestart,
-		onretry
+		onretry,
+		onopenpage
 	}: Props = $props();
 
 	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
@@ -93,7 +97,10 @@
 		closeDisabled={!dismissible}
 		onclose={onclose && !model.dismissOnly ? closeNow : undefined}
 	/>
-	{#if model.status}
+	{#if model.handoff}
+		<!-- Spec 102 (D4): reviewed on the trusted page — a hand-off, not a preview. -->
+		<HandoffCard handoff={model.handoff} onopen={onopenpage} />
+	{:else if model.status}
 		<div class="status" data-testid="signing-status" aria-live="polite">
 			<StatusHero
 				stage={model.status.stage}

@@ -23,7 +23,7 @@ import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
-import type { SigningMessages } from '$lib/signing/messages';
+import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
@@ -338,6 +338,22 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 }
 
 /** The serializable strings the settings screens render (spec 023). */
+/** Spec 102 (D4): the hand-off card's words — for the gallery's boards only. */
+export function resolveHandoffMessages(locale: Locale): HandoffMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, key);
+	return {
+		title: k('componentsUi.signing.handoffTitle'),
+		key: k('componentsUi.signing.handoffKey'),
+		open: k('componentsUi.signing.openSigner'),
+		waiting: k('componentsUi.signing.trustedSignerWaiting'),
+		waitingHint: k('componentsUi.signing.trustedSignerWaitingHint'),
+		reopen: k('componentsUi.signing.trustedSignerReopen'),
+		official: k('settings.signing.pageOfficial'),
+		integrity: resolveSettingsMessages(locale).integrity
+	};
+}
+
 export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
