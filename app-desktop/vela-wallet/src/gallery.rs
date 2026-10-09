@@ -127,8 +127,9 @@ pub fn send_state_pin(
     };
     let failures = || crate::signing::fixtures::fee_failures();
     let failed_fee = match want.trim() {
-        "fee-down" => Some(failures().down),
-        "fee-internal" => Some(failures().internal),
+        // Continue's alert stands over the row that failed the same way.
+        "fee-down" | "alert-down" => Some(failures().down),
+        "fee-internal" | "alert-internal" => Some(failures().internal),
         "fee-retrying" => Some(failures().retrying),
         "fee-tap" => Some(failures().tap),
         _ => None,
@@ -224,7 +225,9 @@ pub fn send_state_pin(
 /// `VELA_SEND_STATE=alert-down|alert-internal|alert-other` — with
 /// `VELA_PAGE=gallery`: Continue's alert when its estimate failed, worded by
 /// its cause (PR 2 note 13) — the chain out of reach (the mock's Ethereum by
-/// name), a fault inside Vela, or any other failure's general sentence.
+/// name), a fault inside Vela, or any other failure's general sentence. Over
+/// the form (`VELA_FLOW=DSD2`) the first two stand over the fee row failed
+/// the same way ([`send_state_pin`]).
 pub fn send_alert_pin() -> Option<vela_core::app::send::SendAlertKind> {
     use vela_core::app::send::SendEstimateFailure;
     let want = crate::dev_env::var!("VELA_SEND_STATE")?;
