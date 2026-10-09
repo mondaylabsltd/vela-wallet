@@ -64,7 +64,7 @@ const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
 const cm = resolveContactsMessages('en');
 const sm = resolveSettingsMessages('en');
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const NOW = 1_700_000_000_000;
 

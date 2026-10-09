@@ -94,7 +94,7 @@ describe('the live picker before the book is read', () => {
 	/** A live page with a send open and no book: `contactPick` absent. */
 	const unread: FlowsLiveInputs = {
 		balance: BALANCE,
-		currency: { code: 'USD', rate: 1, committed: true },
+		currency: { code: 'USD', rate: 1, committed: true, pending: null },
 		m: resolveWalletMessages('en'),
 		emptyCopy: undefined,
 		feed: null,

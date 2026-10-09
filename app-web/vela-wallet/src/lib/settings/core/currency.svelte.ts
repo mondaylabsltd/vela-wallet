@@ -21,8 +21,10 @@ import {
 } from './currency-executor';
 
 /** The machine's own initial view — USD/1, mirrored until the core rules.
- *  `rate: null` elsewhere is "cannot price"; the pristine USD pair is 1. */
-const INITIAL: CurrencyView = { code: 'USD', rate: 1, committed: false };
+ *  `rate: null` elsewhere is "cannot price"; the pristine USD pair is 1.
+ *  Uncommitted, so no money figure is drawn in it (the core's rule), and
+ *  nothing is pending: the stored choice has not been read yet. */
+const INITIAL: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: null };
 
 class Currency {
 	view = $state<CurrencyView>(INITIAL);

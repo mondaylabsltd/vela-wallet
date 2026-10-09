@@ -529,7 +529,9 @@ export function withLiveCurrency(
 			...section,
 			// The phone's row says the code alone — the drawn ST1 shape, and the
 			// width a phone row has; the desktop's row carries the sample too.
-			rows: section.rows.map((row) => (row.id === 'currency' ? { ...row, value: view.code } : row))
+			rows: section.rows.map((row) =>
+				row.id === 'currency' ? { ...row, value: chosenCurrency(view) ?? '' } : row
+			)
 		})),
 		currencySheet: {
 			...model.currencySheet,
@@ -597,12 +599,26 @@ export interface LiveCurrencyCatalog {
 }
 
 /**
+ * The currency the person CHOSE, as Settings names it: the committed code, or
+ * — while nothing is committed yet — the stored choice whose rate is on its
+ * way (`CurrencyView.pending`). `null` while even that is unknown: the
+ * uncommitted view's own `code` is the USD placeholder, never the person's,
+ * and a row that read "USD" and then "CNY" is the jump the core's rule ends.
+ */
+export function chosenCurrency(view: CurrencyView): string | null {
+	return view.committed ? view.code : view.pending;
+}
+
+/**
  * "USD · $1,234.56" — the code and a sample in it, once a rate is committed;
  * the code alone while the currency cannot be priced (024's rule: a defaulted
- * 1 under a ¥ is a lie).
+ * 1 under a ¥ is a lie) or while its rate is still on its way; nothing at all
+ * before the choice is known.
  */
 function currencyRowValue(view: CurrencyView): string {
-	return view.rate === null ? view.code : `${view.code} · ${moneyText(1234.56, view)}`;
+	const code = chosenCurrency(view);
+	if (code === null) return '';
+	return !view.committed || view.rate === null ? code : `${code} · ${moneyText(1234.56, view)}`;
 }
 
 function liveCurrencyRows(
@@ -611,7 +627,7 @@ function liveCurrencyRows(
 	catalog?: LiveCurrencyCatalog
 ): SelectRowModel[] {
 	if (catalog === undefined || catalog.codes.length === 0) {
-		return drawn.map((row) => ({ ...row, selected: row.id === view.code }));
+		return drawn.map((row) => ({ ...row, selected: row.id === chosenCurrency(view) }));
 	}
 	return catalog.codes.map((code) => ({
 		id: code,
@@ -619,7 +635,7 @@ function liveCurrencyRows(
 		glyph: currencyGlyph(code),
 		caption:
 			currencyDisplayName(code, catalog.locale) ?? drawn.find((row) => row.id === code)?.caption,
-		selected: code === view.code
+		selected: code === chosenCurrency(view)
 	}));
 }
 

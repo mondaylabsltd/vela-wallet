@@ -69,7 +69,14 @@ import { loadCore } from '$lib/core/client';
 
 beforeAll(() => loadCore());
 
-vi.mock('$lib/settings/core/currency.svelte', () => ({ currency: { view: {} } }));
+vi.mock('$lib/settings/core/currency.svelte', () => ({
+	currency: {
+		view: {},
+		boot: async () => {
+			fake.currencyBoots += 1;
+		}
+	}
+}));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', () => ({ explorerBaseURL: () => null }));
 vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
@@ -198,6 +205,8 @@ class Fake {
 	calls: unknown[] | null = null;
 	quoted = 0;
 	disposed = 0;
+	/** How many times this host asked the display-currency store to boot. */
+	currencyBoots = 0;
 	trackerEntries: any[] = [];
 	trackerListeners = new Set<() => void>();
 	trackerChanged(): void {
@@ -293,6 +302,23 @@ afterEach(() => {
 	panelSurface.stop();
 	delete (globalThis as { chrome?: unknown }).chrome;
 	fake = new Fake();
+});
+
+/**
+ * The sheet prices what it shows in the display currency, and no money figure
+ * is drawn until that currency is the person's (the core's rule,
+ * `CurrencyView.committed`). The wallet and Settings routes boot the store
+ * themselves; the extension's request window mounts only this host — so the
+ * host boots it, or that window's figures would wait for ever.
+ */
+describe('the host boots the display currency it prices in', () => {
+	it('asks the store to boot when it mounts, before any request', async () => {
+		const view = mount();
+		flushSync();
+		await tick();
+		expect(fake.currencyBoots).toBe(1);
+		await view.screen.unmount();
+	});
 });
 
 /**

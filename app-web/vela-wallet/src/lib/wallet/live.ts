@@ -176,9 +176,40 @@ export function fixedTwo(value: number): [string, string] {
 }
 
 /**
+ * What stands where a money figure WILL be, while the display currency is not
+ * the person's yet.
+ *
+ * The core's rule (`CurrencyView.committed`): while it is false the pair on
+ * the wire is the USD/1 placeholder, and no money figure is drawn in it — a
+ * home that showed "$1,234" for a few seconds and then jumped to "¥8,876" is
+ * what this rule ends (the 102 device run). The hero keeps its skeleton
+ * (`liveBalance`); every other figure is this mark, from `moneyText`, so no
+ * surface has to remember the rule and the line it stands on is already the
+ * height the figure will be. The figure appears once, in the right money.
+ */
+export const MONEY_PENDING = '…';
+
+/**
+ * The currency a figure is — or will be — counted in, for a surface that
+ * names it apart from the figure (the hero's "Total · CNY").
+ *
+ * Committed: the code the figure is really in — the display currency, or USD
+ * when it could not be priced (`moneyParts` degrades the same way). Not yet:
+ * the person's stored choice on its way (`CurrencyView.pending`), and nothing
+ * at all while even that is unknown — never the placeholder's "USD".
+ */
+export function figureCurrency(currency: CurrencyView): string | undefined {
+	if (!currency.committed) return currency.pending ?? undefined;
+	return currency.rate !== null ? currency.code : 'USD';
+}
+
+/**
  * A USD amount in the display currency: converted at the committed rate, or
  * the USD figure itself when the shell could not price the currency —
  * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
+ *
+ * Pure formatting: whether a figure may be drawn at all (`committed`) is
+ * `moneyText`'s and `liveBalance`'s to rule, before they come here.
  */
 export function moneyParts(
 	usd: number,
@@ -198,6 +229,8 @@ export function moneyParts(
 }
 
 export function moneyText(usd: number, currency: CurrencyView): string {
+	// Not the person's currency yet: no figure, in any money (`MONEY_PENDING`).
+	if (!currency.committed) return MONEY_PENDING;
 	const parts = moneyParts(usd, currency);
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
@@ -438,10 +471,19 @@ export function liveBalance(
 	if (view.hidden) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			currency: figureCurrency(currency),
 			state: 'hidden',
 			integer: BALANCE_MASK
 		};
+	}
+
+	// The display currency is not the person's yet (`CurrencyView.committed`):
+	// the skeleton, whatever the balance already knows. The cached total is
+	// ready in milliseconds and the rate takes a round trip, so this is the
+	// frame that drew "$1,234" and then jumped to "¥8,876". The label names
+	// the stored choice on its way (`pending`) or no currency at all.
+	if (!currency.committed) {
+		return { ...base, currency: figureCurrency(currency), state: 'loading' };
 	}
 
 	// The core withholds the display total while the skeleton shows; the
@@ -455,7 +497,7 @@ export function liveBalance(
 	if (total === null || view.unreachable) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			currency: figureCurrency(currency),
 			state: 'loading',
 			// Spec 038 finding 15: a first launch with no network is
 			// "unreachable" over the skeleton, never a settled-looking $0 —

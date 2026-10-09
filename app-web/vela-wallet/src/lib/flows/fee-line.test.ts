@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { feeAmountText, feeLine, feeLineParts } from './fee-line';
 
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const PARTS = { coin: '0.001329 AVAX', symbol: 'AVAX', units: 0.001329, contract: null };
 
 describe('feeLineParts', () => {
@@ -24,8 +24,17 @@ describe('feeLineParts', () => {
 	});
 
 	it('states dollars AS dollars when the display currency has no rate — never a rate of 1', () => {
-		const unpriced = { code: 'EUR', rate: null, committed: false };
+		// The core's unpriceable pair: committed, with no rate.
+		const unpriced = { code: 'EUR', rate: null, committed: true, pending: null };
 		expect(feeLineParts(PARTS, 9, unpriced).fiat).toBe('≈ $0.01');
+	});
+
+	// The core's rule (`CurrencyView.committed`): while the display currency
+	// is still the USD/1 placeholder, no money figure is drawn in it — a fee
+	// that read "≈ $0.01" and then "≈ ¥0.07" is the jump the rule ends.
+	it('draws no money figure before the display currency is the person’s', () => {
+		const placeholder = { code: 'USD', rate: 1, committed: false, pending: 'CNY' };
+		expect(feeLineParts(PARTS, 9, placeholder)).toEqual({ coin: '0.001329 AVAX', fiat: '≈ …' });
 	});
 });
 

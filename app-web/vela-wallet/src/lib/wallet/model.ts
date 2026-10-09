@@ -30,7 +30,13 @@ export type BalanceStateKind = 'normal' | 'zero-live' | 'loading' | 'hidden';
 
 export interface BalanceModel {
 	label: string;
-	currency: string;
+	/**
+	 * The currency the figure is (or will be) in, drawn after the label.
+	 * Absent while it is not known yet — the display currency has not
+	 * committed and no stored choice is on its way — so the label never names
+	 * the placeholder's "USD" and then changes its mind.
+	 */
+	currency?: string;
 	state: BalanceStateKind;
 	/** e.g. "$1,383" — absent while loading. */
 	integer?: string;

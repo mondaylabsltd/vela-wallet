@@ -38,7 +38,7 @@ const identity: WalletIdentity = {
 	address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
 	identiconSvg: '<svg/>'
 };
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 const USDT: SendToken = {
 	network: 'eth-mainnet',
@@ -518,7 +518,7 @@ describe('the form', () => {
 		it("is the FIGURE's currency, not the display currency that moved under it", () => {
 			// Typed in yuan; the display currency has since become euros. "€"
 			// over these digits would be a relabel — the same number, a new unit.
-			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true });
+			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true, pending: null });
 			expect(figure?.adornment).toEqual({ prefix: '¥' });
 			expect(figure?.denomLabel).toBe('CNY');
 		});
@@ -1648,13 +1648,14 @@ describe('the fee row says what the fee costs', () => {
 	it('converts into the display currency, at the committed rate only', () => {
 		const model = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: 2, committed: true }
+			currency: { code: 'EUR', rate: 2, committed: true, pending: null }
 		});
 		expect(model.fee.value).toBe('0.000091 BNB');
 		expect(model.fee.valueFiat).toBe('≈ €0.11');
 		const unpriced = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: null, committed: false }
+			// The core's unpriceable pair: committed, with no rate.
+			currency: { code: 'EUR', rate: null, committed: true, pending: null }
 		});
 		expect(unpriced.fee.value).toBe('0.000091 BNB');
 		expect(unpriced.fee.valueFiat).toBe('≈ $0.05');

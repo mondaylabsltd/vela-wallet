@@ -18,6 +18,9 @@ import {
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
+	chosenCurrency,
+	withLiveCurrency,
+	withLiveCurrencyDesktop,
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
 	withLiveNetworks,
@@ -25,7 +28,7 @@ import {
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { fill } from '$lib/wallet/messages';
-import { FeeTierPrefCore } from '$lib/core/client';
+import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
@@ -377,7 +380,7 @@ describe('liveAccountsSheet', () => {
 			}
 		}
 	];
-	const usd = { code: 'USD', rate: 1, committed: true };
+	const usd = { code: 'USD', rate: 1, committed: true, pending: null };
 
 	it('is the whole sheet from the session and the balance core alone', async () => {
 		const { liveAccountsSheet } = await import('./live');
@@ -563,8 +566,8 @@ describe('the relayer bootstrap sheet', () => {
 // ---------------------------------------------------------------------------
 
 describe('the unreachable-networks list (spec 092)', () => {
-	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
-	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true };
+	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };
 	const row = (
 		chain_id: number,
 		line_key: string,
@@ -666,6 +669,66 @@ describe('the unreachable-networks list (spec 092)', () => {
 // ---------------------------------------------------------------------------
 // Spec 068 — the stored default transaction speed
 // ---------------------------------------------------------------------------
+
+/**
+ * The display currency's row (the core's rule, `CurrencyView.committed`): the
+ * uncommitted view's `code` is the USD/1 placeholder, not the person's
+ * choice. The row read "USD" for a moment and then "CNY"; it now names the
+ * stored choice on its way (`pending`) or nothing, and prices no sample
+ * until the rate is in.
+ */
+describe('the currency row, before and after the core commits', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const CNY_ON_ITS_WAY: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: 'CNY' };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };
+	const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true, pending: null };
+	const phoneRow = (view: CurrencyView) =>
+		withLiveCurrency(buildMobileState('st1', m, IDENTICON), view)
+			.sections.flatMap((section) => section.rows)
+			.find((r) => r.id === 'currency');
+	const phoneTicked = (view: CurrencyView) =>
+		withLiveCurrency(buildMobileState('st1', m, IDENTICON), view)
+			.currencySheet.rows.filter((r) => r.selected)
+			.map((r) => r.id);
+	/** What the rate sources can price, as the wide menu lists it. */
+	const CATALOG = { codes: ['USD', 'CNY', 'JPY'], locale: 'en' };
+	const wideRow = (view: CurrencyView) =>
+		withLiveCurrencyDesktop(
+			buildDesktopState('dst3', m, IDENTICON),
+			view,
+			CATALOG
+		).localization.rows.find((r) => r.id === 'currency');
+
+	it('the core’s own first view is the uncommitted placeholder, with nothing pending', () => {
+		const core = new DisplayCurrencyCore();
+		const first = JSON.parse(core.view()) as CurrencyView;
+		core.free();
+		expect(first).toEqual({ code: 'USD', rate: 1, committed: false, pending: null });
+		// Nothing is named, nothing is ticked, nothing is priced.
+		expect(chosenCurrency(first)).toBeNull();
+		expect(phoneRow(first)?.value).toBe('');
+		expect(phoneTicked(first)).toEqual([]);
+		expect(wideRow(first)?.value).toBe('');
+	});
+
+	it('a stored choice on its way is named — and ticked — without a sample in dollars', () => {
+		expect(chosenCurrency(CNY_ON_ITS_WAY)).toBe('CNY');
+		expect(phoneRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
+		expect(phoneTicked(CNY_ON_ITS_WAY)).toEqual(['CNY']);
+		expect(wideRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
+		expect(wideRow(CNY_ON_ITS_WAY)?.options?.filter((o) => o.selected).map((o) => o.id)).toEqual(
+			['CNY']
+		);
+	});
+
+	it('committed: the code, and on the wide row a sample in it', () => {
+		expect(phoneRow(CNY)?.value).toBe('CNY');
+		expect(phoneTicked(CNY)).toEqual(['CNY']);
+		expect(wideRow(CNY)?.value).toBe('CNY · ¥8,641.92');
+		// Unpriceable is committed too: the code alone, never a rate of 1.
+		expect(wideRow(UNPRICED_JPY)?.value).toBe('JPY');
+	});
+});
 
 describe('the default transaction speed, live (spec 068)', () => {
 	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;

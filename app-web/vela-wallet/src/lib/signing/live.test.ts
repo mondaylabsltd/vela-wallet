@@ -181,7 +181,7 @@ function inputs(over: Partial<SigningLiveInputs> = {}): SigningLiveInputs {
 		clear: DECODED,
 		guard: INITIAL_GUARD_VIEW,
 		fee: QUOTED_FEE,
-		currency: { code: 'USD', rate: 1, committed: true },
+		currency: { code: 'USD', rate: 1, committed: true, pending: null },
 		m,
 		identity,
 		identicon,
@@ -1999,7 +1999,7 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		expect(fiat).toContain('1,000,000,000,000,000,000,000,000');
 		// The display currency, converted — not "$" over a euro figure.
 		const eur = buildSigningModel(
-			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true } })
+			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true, pending: null } })
 		)!.blocks.find((b) => b.kind === 'amount');
 		const euros = eur?.kind === 'amount' ? (eur.line.fiat ?? '') : '';
 		expect(euros).not.toContain('$');

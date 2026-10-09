@@ -32,7 +32,7 @@ import {
 
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const IDENTICON = () => '<svg></svg>';
 
 function token(

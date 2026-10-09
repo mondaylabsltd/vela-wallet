@@ -27,7 +27,11 @@
 </script>
 
 <div class="balance">
-	<p class="label">{balance.label} · {balance.currency}</p>
+	<!-- The currency is named once it is known (`BalanceModel.currency`): the
+	     label never says the placeholder's "USD" and then changes its mind. -->
+	<p class="label">
+		{balance.currency === undefined ? balance.label : `${balance.label} · ${balance.currency}`}
+	</p>
 
 	{#if balance.state === 'loading'}
 		<SkeletonRow kind="block" />

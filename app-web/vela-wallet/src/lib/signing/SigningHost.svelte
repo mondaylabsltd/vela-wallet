@@ -390,6 +390,12 @@
 	);
 	onMount(() => {
 		void speedControl.boot();
+		// The sheet prices what it shows in the display currency, and no money
+		// figure is drawn until that currency is the person's
+		// (`CurrencyView.committed`). The wallet and Settings routes boot the
+		// store themselves; the extension's request window has only this host,
+		// and without this its figures would wait for ever. Idempotent.
+		void currency.boot();
 		return () => speedControl.dispose();
 	});
 

@@ -18,7 +18,7 @@ import { liveChainRows, withLiveWalletDesktop } from './live';
 
 const m = resolveWalletMessages('en');
 const IDENTICON = () => '<svg></svg>';
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 function token(chain_id: number, symbol: string): BalanceToken {
 	return {
