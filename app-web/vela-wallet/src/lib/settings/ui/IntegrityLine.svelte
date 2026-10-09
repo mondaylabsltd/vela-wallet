@@ -99,6 +99,9 @@
 	.version {
 		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
+		/* The mono face's own metrics must not grow its line: the two lines'
+		   room is the verdict's whole height, with or without a version. */
+		line-height: 1;
 		color: var(--color-fg-base);
 	}
 
