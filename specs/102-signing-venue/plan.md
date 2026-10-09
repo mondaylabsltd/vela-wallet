@@ -1,0 +1,323 @@
+# Implementation Plan: 102 — Where you review and sign: in Vela, or on a page you trust
+
+**Branch**: `102-signing-venue` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
+**Design**: [research.md](research.md) · [data-model.md](data-model.md)
+
+## Summary
+
+The Trusted Signer stops being a fourth key method and becomes what the code always said it was:
+**where a person reviews and signs**. Every account has a key PLACE (this device / phone or tablet /
+USB key — three, no fourth), a signing VENUE chosen per account on this device (in Vela, or a saved
+trusted page), and a signing DOMAIN (the RP ID its keys live under). All rules are in `vela-core`
+(Phase 1, this branch): the model and the migration of today's records; R1/R2 reachability with
+reasons; R3 ceremony routing; R4 the venue for transactions and messages; R5 the key route the page
+is told; R6 one rule for the page that is checked AND opened, enforced. The shells (Phase 2) and the
+page (Phase 3) draw and carry it.
+
+## Technical context
+
+- **Core** (`rust/crates/vela-core`): new `signing_venue.rs` (R1–R5, `SigningPlan`), new
+  `trusted_signer/launch.rs` (R6), new `app/signing_pages.rs` (replaces `app/sign_pref.rs`); changed
+  `app/mod.rs` (Account, SignInKey, KeyMethod, the migration reader and the compatibility writer),
+  `app/{create_wallet,login,session,shell,method_words}.rs`, `wallet_keys.rs`, `trusted_signer.rs`,
+  `trusted_signer/{ceremony,integrity}.rs` (`ENFORCE = true`; `BUILD_ALLOWED`/`LAUNCH` untouched).
+- **Bindings**: UniFFI (`vela-core-uniffi`: `signing_plan`, `signing_venue_choices`,
+  `signing_page_domain`, `venue_words`, `SignerPageTarget`, `signer_page_admit` →
+  `SignerPageAdmission`, `SigningPagesCore`; Swift bindings regenerated and committed), wasm
+  (`signingPlan`, `signingVenueChoices`, `signingVenueBlock`, `signingPageDomain`, `venueWords`,
+  `SigningPagesCore`; `rust/pkg-web` + `assets/wasm` rebuilt), TS (`gen-core-types`: three mirrors).
+- **Desktop**: the integrity checker (`executor/signer_integrity.rs`) is ported onto the rule in this
+  phase (see R6 below); the rest of the desktop is Phase 2 and does not compile until then.
+- **Constraints**: i18n residency under `SC005_BUDGET` 145,400 without a budget move; old builds keep
+  WORKING on new records ([[vela-alpha-no-backcompat]]); never write `trusted_signer`; never touch
+  `app-web/trusted-signer` or `integrity.rs` `BUILD_ALLOWED`/`LAUNCH` here (Phase 0 is another branch).
+
+## The rules, and where each lives
+
+| Rule | Core | Test |
+|---|---|---|
+| R1 reachability, with reasons | `signing_venue::reachability`, `VenueBlock::key` | `signing_venue::tests::every_venue_against_every_domain` (5 venues × 3 domains), `app_session::a_venue_that_cannot_reach_the_keys_is_refused` |
+| R2 locked to its domain; several pages, one active | `venue_choices`, `locked_to_page`, `default_venue`, `Account::choose_venue` | `the_choices_an_account_has`, `an_active_page_that_is_not_saved_is_still_listed`, `a_custom_origin_account_migrates_locked_to_its_page` |
+| R3 ceremonies in the app for `getvela.app`, on the page otherwise | `ceremony_page`; ops' `page` field (create/login) | `a_ceremony_runs_on_a_page_only_for_a_custom_domain`, `app_create_wallet::{a_custom_page_mints_and_confirms_every_key, the_official_page_mints_in_the_app_and_becomes_the_venue}`, `app_login::{a_custom_page_sign_in_is_saved_on_its_domain, signing_in_on_the_official_page_runs_in_the_app_and_keeps_the_page}` |
+| R4 venue for transactions and messages | `venue_for`, `Account::signing_plan` | `the_venue_applies_to_transactions_and_messages`, `the_plan_is_venue_domain_and_key` |
+| R5 key route (credential + transports + hints) | `KeyRoute`, `Account::key_route`, `trusted_signer::request` (`keyRoute`, narrowed `allowCredentials`), ceremony `place`/`hints` | `the_request_names_the_key_to_use_and_where_it_lives`, `a_ceremony_tells_the_page_where_the_key_lives`, uniffi `the_request_carries_the_key_route` |
+| R6 one URL checked and opened; failed/missing check refuses | `launch::{target, admit, CheckedPage}`, `ENFORCE = true` | `signing_venue_102::{the_launch_url_is_the_checked_version, a_failed_or_missing_check_opens_nothing, bytes_that_are_not_the_version_named_are_refused, a_stale_check_opens_nothing_until_it_is_run_again, the_desktops_checker_works_through_the_rule, …}`, uniffi `a_phone_opens_only_the_version_it_checked` |
+| Migration | `Account`'s reader (`migrate`, `settle_venue`), writer (`signed_in_with` copy) | `signing_venue_102::*migrates*` against `tests/fixtures/spec102/` (official-page, custom-origin, app-only, empty signer_origin, two pre-sign-in-key records) incl. what a ≤ 0.9.7 build routes on the rewritten record |
+| No fourth method | `KeyMethod` (3), `method_words`, `wallet_keys` | `there_is_no_fourth_row`, `there_is_no_page_route_any_more`, `a_row_is_captioned_by_where_its_key_lives` |
+
+### R6, and the desktop's checker
+
+`launch::target(base, index, trusted, blocked)` → the version and the ONE url; shells fetch exactly
+`target.url()`, hash it (`integrity::hash_page`), `launch::admit(...)`. Only an admitted
+`CheckedPage` builds a launch URL (`url_launch`/`ws_launch`); the free `trusted_signer::url_launch`
+and `ws_launch` are gone, so "desktop signatures open the core's fixed LAUNCH path, not the checked
+one" (research §3) can no longer be written. The desktop's checker keeps its shape — fetch the
+index, pick, fetch by hash, hash, rule — but each step is now the rule's: `check(base)` runs
+`launch::target` + `fetch_and_hash(target.url())` + `launch::admit` and leaves the admitted page in
+memory; `checked_page(base, now)` replaces `open_url(base)` (which fell back to the unchecked bare
+address); `line(base, now)` is the hand-off card's integrity line. An index that cannot be fetched is
+logged and the launch version asked for directly (it no longer short-circuits to "could not
+check"). Ported in `app-desktop/vela-wallet/src/executor/signer_integrity.rs`; compiles clean in
+isolation (the crate does not until Phase 2); its unit tests run once the desktop compiles. The same
+flow, against the committed `dist/` bytes, is the core test `the_desktops_checker_works_through_the_rule`.
+
+## API changes each shell must make (Phase 2)
+
+Wire summary every shell shares:
+
+| Was | Now |
+|---|---|
+| `sign_in_route(account) → {credential_id, transports, method, signer_origin?}` | `signing_plan(account) → {domain, venue, blocked?, key?: {credential_id, method, transports, hints}}` |
+| `sign_route(keys, "auto")` → page route for page keys | `sign_route` answers places only (`auto` → none); the venue is the plan's |
+| `KeyMethod` `trusted_signer` | gone: events with it no longer deserialize; ops never carry it |
+| op `method == trusted_signer` ⇒ run the ceremony on a page | op `page: Some(url)` ⇒ run it on that page (R3); `method` is the place, pass it as hints |
+| `SignProof/SignMemberProof.signer_origin` | `.page`; also new on `RegisterPasskey`, `AuthenticatePasskey`, `RegistryPublish`; `RegistryPublishMember.signer_origin` gone — the unit's rpId is `registry_rp_id(RegistryPublish.page)` ?? the wallet's own |
+| `CreateWalletEvent::signer_page_changed {url}` (sent from Settings' page) | `signing_page_chosen {url?}` — only from "Use my own signing page", before the first key |
+| `CreateView.{key_relying_party, key_signer_origin, add_blocked}` | `.{signing_domain, signing_page?, can_choose_page}`; `add_methods` is always the three |
+| `LoginEvent::sign_in {method}` | `sign_in {method, page?}` |
+| — | `SessionEvent::signing_venue_chosen {address, venue}` |
+| `SignPrefCore` (`read_stored`/`write_signer_url`, `vela.trustedSignerUrl`) | `SigningPagesCore` (`read_stored` → `stored {pages_json?, legacy_url?}`; `write_pages {pages, remove_legacy_url?}`; `vela.signingPages`) |
+| `trusted_signer_url_launch(base, req, token)` / `ws_launch` | `SignerPageTarget::choose(base, index?, trusted, blocked)` → fetch `url()` → `signer_page_admit(target, hash?, failure, trusted, blocked, off, checked_at_ms)` → `SignerPageAdmission.{opens, line(now), verdict, url_launch(req, token, now), ws_launch}` |
+| `TrustedSignerInput` | + `key_route_json` (the plan's `key`, passed through) |
+| `key_method_words("trusted_signer", …)` | `None`; `venue_words("in_vela" \| "page" \| "own_page")` for the venue rows and the chooser entry |
+| `wallet_keys_step` rows `method: "trusted_signer"`, `signer_origin` | `method` is the place; no `signer_origin`; show the account's `signing_domain` for a custom-domain account |
+| `signer_page_enforced()` false | true |
+| `Account.signed_in_with` | `sign_in_key` + `signing_domain` + `signing_venue` (the record still carries a `signed_in_with` copy for older builds — never read it) |
+
+### Desktop — `app-desktop/vela-wallet/src` (Rust; ~120 compile errors in ~20 files today)
+
+1. **Ceremony routing** — `executor/mod.rs:132,161,232,268` and `executor/registry.rs:1033,1138`:
+   branch on `op.page.is_some()`, not `method == TrustedSigner`; the page is `op.page` itself (drop
+   the Settings fallback in `executor/trusted_signer.rs:956-978` `signer_page_for` and
+   `:1088-1092` `member_proof`); member-challenge rpId `registry_rp_id(op.page)` (`executor/mod.rs:210-213`);
+   unit rpId `registry_rp_id(RegistryPublish.page)` (`executor/registry.rs:995-998`). Open the page
+   only via `signer_integrity::checked_page(page, now)` (check first when `None`).
+2. **Signature routing** — replace `route_of`/`Route::TrustedSigner`/`page_to_follow`/`page_key`
+   (`executor/send.rs:113-230`), `SignContext::new` (`executor/sign_request.rs:187-249`) and
+   `follow_sign_in` (callers `wallet/money.rs:296`, `wallet/signing_host.rs:588`) with
+   `account.signing_plan()`: `venue = page` → the hand-off card and `CheckedPage::url_launch`;
+   `in_vela` → native with `plan.key` (credential + transports); no `key` → `first_key_route` as
+   today; `blocked` → refuse with `VenueBlock::key()`. `wallet/page.rs:16892` (`signs_on_page`) and
+   `:17551-17557` (the open-signer button) read the plan.
+3. **Request** — `executor/trusted_signer.rs:818` `RequestInput { key_route: plan.key.as_ref(), .. }`;
+   `:717` `SchemeLine::ask` launches through the `CheckedPage`.
+4. **Integrity** — `prime_in_background` (`executor/trusted_signer.rs:590`) checks every page in use
+   (accounts' venues + saved pages), not only the Settings URL; `signer_integrity::line` on the card;
+   `trusted_signer_e2e.rs` (ignored) builds its launch from a `CheckedPage`.
+5. **Settings** — replace `executor/sign_pref.rs` and `wallet/page.rs:11305-11457` (`settings_signing`,
+   the URL field, `signer_page_draft/focus` at `:1021,:1028`) with Settings → Signing pages
+   (`SigningPages` machine; `storage.rs` `KEY_SIGNING_PAGES = "vela.signingPages"`, keep
+   `KEY_TRUSTED_SIGNER_URL` for the one-time import) and the account's "Where you review and sign"
+   (`venue_choices` + `SessionEvent::SigningVenueChosen`). `settings/mod.rs:361-370` (`nav_signing`
+   used `trustedSignerTitle`/`Body`, `settings.signing.page*`).
+6. **Choosers** — `hardware.rs:160-175` drop TrustedSigner from `CREATE_ROUTES`/`SIGNIN_ROUTES`; add
+   the "Use my own signing page" entry (`venue_words("own_page")`, picks a saved page, shows its
+   domain + integrity line) → `CreateEvent::SigningPageChosen` (`onboarding.rs:322` replaces
+   `SignerPageChanged`) / `LoginEvent::SignIn { page }` (`onboarding.rs:339`);
+   `onboarding_flow.rs:949,1025-1044` (`add_blocked` captions gone; show `signing_domain`),
+   `:166` provider-line arm, `passkey_icons.rs:52` Eye arm, `hardware.rs:273`/`onboarding_flow.rs:974`
+   element ids, `gallery.rs:79-250` fixtures, `loc.rs:503-504` (`methodBlocked*`).
+7. **Keys list** — `wallet/page.rs:9512-9547` (DeviceKey without `signer_origin`; `key_route()` for
+   the "signs here" credential), `:9963-9993,:20184-20212` (no page holder/detail row; show the
+   domain for a custom-domain account).
+8. **Cards' titles** — `signing/trusted_signer.rs:43,131` used `trustedSignerTitle` → `handoffTitle`;
+   waiting/closed/refused/mismatch/timeout keys are unchanged (values reworded).
+9. **Test literals** — `Account { … }` gains `sign_in_key/signing_domain/signing_venue`
+   (`session.rs:254`, `wallet/money.rs:1789,2538`, `wallet/signing_host.rs:3339`,
+   `executor/{send.rs:817, sign_request.rs:1165, identity.rs:482, user_op.rs:1390, storage.rs:996}`,
+   `wallet/page.rs:20756`); `SignInKey` has no `signer_origin`; `Assertion.signer_origin` unchanged.
+
+### Android — `app-android/vela-wallet/app/src/main/java/app/getvela/wallet` (Kotlin, UniFFI)
+
+1. `feature/onboarding/core/CoreViews.kt:71-88` — `KeyMethod` loses `TrustedSigner` (`of()` throws on
+   unknown: keep it so); `:135-139,160-163,199-208` read `signing_domain`/`signing_page`/
+   `can_choose_page` instead of `add_blocked`.
+2. Choosers — `flow/SignInMethodSheet.kt:76-80`, `flow/KeysScreen.kt:393-481` (and `:289-291` Eye,
+   `:465-475` `methodBlocked*`): three rows + the "Use my own signing page" entry;
+   `OnboardingViewModel.kt:368-375` stops sending `signer_page_changed` from the raw store key,
+   sends `signing_page_chosen` from the entry; `:449-450` `sign_in {method, page}`.
+3. `feature/onboarding/core/OnboardingExecutor.kt:126-253, 346-441, 527-603` — route by op `page`
+   (not `method`), rpId from `page`, publish members by `RegistryPublish.page` (today it looks the
+   page up in the stored record, `signerOriginOf`); `PasskeyExecutor.kt:815-818` drop the arm;
+   `RegistryClient.kt:557-569` `PublishMember.signerOrigin` → unit rpId from the op.
+4. Signatures — `feature/send/core/UserOpSpine.kt:77-146` (`routeFor`/`routeOf`): `signingPlan`
+   instead of `signInRoute`/`signRoute(AUTO)`; page venue → hand-off card; pass
+   `key_route_json = plan.key`; `feature/signing/core/SigningController.kt:537-542` reads the plan
+   (one decision, not two). `SendController.kt:765-814` (`pagesOf`, `keyRoutesJson` with
+   `signer_origin`) go.
+5. **Integrity (new on phones)** — `trustedsigner/TrustedSignerScheme.kt:89` launches through
+   `SignerPageAdmission.urlLaunch`; add the fetch: `SignerPageTarget.choose(page, index?, trusted,
+   blocked)` → GET `url()` (plain HTTPS, no WebView) → `signerPageHash` → `signerPageAdmit`; check
+   when the card opens if none is fresh; draw `line(now)`; Open enabled only when `opens()`.
+   `TrustedSignerChannel.kt:284-290` (drops a self-hosted sub-path) goes with it: the page is the
+   plan's venue URL.
+6. Settings — `feature/settings/core/SignPrefWire.kt`, `SignPrefExecutor.kt`, `SettingsController.kt:204-230`,
+   `SettingsLive.kt:87-122`, `SettingsFixtures.kt:245-249`, `SettingsModels.kt:199-206`,
+   `SettingsScreen.kt:355,1494-1495,2367`, `core/crux/CoreBridge.kt:12,154`,
+   `navigation/VelaNavHost.kt:2121-2416`, `VelaWalletApplication.kt:356,453,834` →
+   `SigningPagesCore` (+ `vela.signingPages`; `VelaStore.kt:76` key kept for the import) and the
+   account's venue setting (`signingVenueChoices` + `SessionEvent.signing_venue_chosen`).
+7. Keys list — `feature/settings/SettingsLive.kt:1001-1028`, `core/WalletKeys.kt:36-143`,
+   `VelaWalletApplication.kt:622-648`: no page holder/detail, `credential_id` from `plan.key`.
+8. Strings — `VelaWalletApplication.kt:361-364`, `SigningLive.kt:114-123,326`: keys unchanged
+   (reworded); `I18nKeys.kt:133-134` `methodBlocked*` and `FlowCopy.kt:100-120`
+   (`trustedSignerTitle`/`TRUSTED_SIGNER_BODY`) retired. Hard-coded English at
+   `UserOpSpine.kt:134,144,272`, `OnboardingExecutor.kt:547-602` → corpus.
+9. Dead code to delete rather than migrate: `TrustedSignerEnvelope.kt`.
+10. Tests — `FlowFixturesTest.kt:160-179`, `KeyMethodCopyTest.kt:67-82`, `RegistryBackupTest.kt:146`,
+    `TrustedSignerRouteTest.kt`, `TrustedSignerChannelTest.kt`, `CoreWireDriftTest.kt:878-882`,
+    `SettingsLiveTest.kt:789-807`, testDebug `SignInKeySigningTest.kt`, `TrustedSignerCeremonyTest.kt`,
+    `DappSignMachineTest.kt`, `SendMachineTest.kt` (`signed_in_with` fixtures → `sign_in_key`).
+
+### iOS — `app-ios/VelaWallet/VelaWallet` (Swift, UniFFI; `vela_core_uniffi.swift` already regenerated)
+
+1. `Features/Onboarding/Core/CoreViews.swift:59-64` — `KeyMethod` loses `.trustedSigner`
+   (`CaseIterable` feeds both choosers); `:102-137` decode `signing_domain`/`signing_page`/
+   `can_choose_page` (iOS decode failures are swallowed — `OnboardingModel.swift:313` — so a wrong
+   field silently freezes the create screen: check it).
+2. Choosers — `WelcomeScreen.swift:86-133`, `CreatePanel.swift:415-499` (+ `:297-302, :474-485`
+   `methodBlocked*`): three rows + "Use my own signing page"; `OnboardingModel.swift:324` sends
+   `signing_page_chosen` from the entry (not `signer_page_changed` at `startCreate`), `:394`
+   `sign_in {method, page}`; `FlowCopy.swift:104-131`, `UsbCeremonyPrompts.swift:327-338` drop the
+   fourth arm.
+3. `Features/Onboarding/Core/OnboardingExecutor.swift:118-215, 315-375, 458-521` — route by op
+   `page`; rpId from `page`; publish by `RegistryPublish.page` (today it builds the string
+   "trusted_signer" per member, `:517`); `RegistryClient.swift:64-77`.
+4. Signatures — `Core/UserOpSpine.swift:73-96, 148, 572-685` and `Features/Send/SendExecutor.swift:768-837`:
+   `signingPlan` instead of `signInRoute`/`signRoute("auto")`; `SignRouteWire` → plan decode;
+   `key_route_json`; `Features/Signing/Core/SigningController.swift:385-390` reads the plan.
+5. **Integrity (new on phones)** — `Features/Signing/TrustedSigner/TrustedSignerChannel.swift:232-287`
+   and `TrustedSigner.swift:194-246`: fetch + `SignerPageTarget`/`signerPageAdmit` as Android;
+   launch via `SignerPageAdmission.urlLaunch`; `TrustedSigner.swift:246` (sub-path drop) goes.
+6. Settings — `Features/Settings/SignPrefExecutor.swift`, `SettingsWire.swift:353-390`,
+   `SettingsStore.swift:28-176`, `SettingsLive.swift:676-716`, `SettingsModels.swift:52,195-205,686`,
+   `SettingsScreen.swift:564,602`, `SettingsSheet.swift:106-108,287-297`, `SettingsFixtures.swift:196-197,595`,
+   `App/RootView.swift:367-376,3580-3584,3689-3690`, `Core/VelaStore.swift:79` → `SigningPagesCore`
+   + venue setting. (`scripts/check-event-payloads.mjs` already flags `SignPrefExecutor.swift:33,43`.)
+7. Keys list — `SettingsLive.swift:486-533`, `Core/WalletKeys.swift:45-217`.
+8. Strings — `I18nKeys.swift:86-87,194-220` (retired keys; the 16 `trustedSignerWhere…` constants
+   are already dead), `TrustedSigner.swift:137-140`, `TrustedSignerSheets.swift:57-64`,
+   `SigningLive.swift:110-113,321`; hard-coded English `UserOpSpine.swift:577-608`,
+   `OnboardingExecutor.swift:465` → corpus.
+9. Tests — `TrustedSignerRouteTests`, `SignInRouteTests`, `TrustedSignerTests` (+ the
+   `recordJson(signedInWith:)` callers in 8 files), `FlowFixturesTests`, `RegistryBackupTests`,
+   `TrustedSignerOneSlideTests`, `EraseDeviceTests`, UI tests `TrustedSignerChooserDeviceTests`,
+   `TrustedSignerDeviceTests`.
+
+### Web — `app-web/vela-wallet` (SvelteKit + wasm; never opens a page)
+
+1. Generated types are regenerated in this phase (`src/lib/{onboarding,session,core}/generated`):
+   `KeyMethod` has three members; `SignPref*`/`AddBlocked` are gone; `SigningPages*`, `SigningPlan`,
+   `SigningVenue`, `VenueChoice`, `VenueBlock`, `KeyRoute`, `IntegrityLine` are new.
+2. `trusted_signer` handling to delete: `ui/onboarding/v2/{AddMethodPicker.svelte:52-60,
+   KeysScreen.svelte:106-116, DoneScreen.svelte:105-110, PasskeyProviderMark.svelte:69-75}`,
+   `onboarding/passkey-icons.ts:181-207`, `onboarding/core/copy.ts:129-167`,
+   `settings/live.ts:1549-1649`, `signing/sign-challenge.ts:49-102` (no more throw-on-page: a
+   `getvela.app` account whose venue is a page signs natively on the web, which has no hand-off),
+   `analytics/methods.ts`, `onboarding/v2-fixtures.ts:79-220`.
+3. Wasm calls — `core/kernels.ts:653-755`: `signInRoute` → `signingPlan` (`SignInRoute` type →
+   `SigningPlan`); drop `trustedSignerUsesWalletPasskeys` (unused); `services/wallet-keys.ts:15-124`
+   (`WalletKeyRow` hand-written type loses `signer_origin`, `deviceKeys` stops sending it).
+4. `SignPrefCore` → `SigningPagesCore` (`core/client.ts:77,116`, `settings/core/sign-pref*.ts`,
+   `routes/[locale]/settings/+page.svelte:50,173,399-406`); `ui/onboarding/v2/CreateFlow.svelte:28,127-137`
+   stops sending `signer_page_changed`.
+5. Onboarding executor — `onboarding/core/executor.ts:61-173` (`sign_member_proof`/`registry_publish`
+   rpId from op `page`), `publish.ts:125-135`; `routes/[locale]/+page.svelte:153-210` `sign_in`.
+6. Account handling — `onboarding/core/storage.ts:99-149` (`normaliseAccount`) passes the whole
+   record through (it rebuilt `signed_in_with`/`signer_origin` by hand); `services/accounts.ts:14-30`.
+7. Strings — `i18n/messages.ts:148-155`, `settings/messages.ts:94-112,555-564`,
+   `i18n/engine.server.ts:427-440` (retired keys).
+8. Tests — `copy.test.ts`, `add-method-picker.svelte.test.ts`, `passkey-route.test.ts:58-60`,
+   `sign-challenge.test.ts`, `ethereum-backup-row.test.ts`, `wallet-keys.test.ts`, `storage.test.ts`,
+   `sign-pref.test.ts`, `e2e/welcome-layout.e2e.ts:123-141` (already expects four rows against three).
+9. Docs (getvela.app) describing the Trusted Signer as a key method or a Settings field:
+   `clear-signing-self-host.md`, `self-hosting.md`, `security-audits.md`, `bybit-attack.md`,
+   `whitepaper.md` (en, zh, and the other 13 locales).
+
+## Phase 2 tasks — each shell
+
+- [ ] P2-01 [all] Build against the new API (list above); delete the fourth key method everywhere.
+- [ ] P2-02 [all] Create / sign-in choosers: three places + "Use my own signing page" (picks a saved
+  page; shows its domain and integrity line; `signing_page_chosen` / `sign_in {page}`).
+- [ ] P2-03 [desktop, android, ios] Ceremonies route by the op's `page` (R3); rpIds from it.
+- [ ] P2-04 [desktop, android, ios] Signatures route by `signing_plan` (R4); `key_route_json` (R5).
+- [ ] P2-05 [desktop, android, ios] The hand-off card (D4): `handoffTitle`, "Confirm with {{key}}"
+  (the key's name, or its place's title), the integrity line, Open (enabled iff `opens`);
+  waiting / closed / refused / mismatch / timeout as today (reworded strings).
+- [ ] P2-06 [android, ios] The integrity check on the phones (T034): fetch `SignerPageTarget.url()`
+  over plain HTTPS, hash, admit; re-check when stale; launch only through the admission.
+- [ ] P2-07 [desktop] Wire the ported checker: `checked_page` for every launch, check every page in
+  use at start and when stale, `line()` on the card.
+- [ ] P2-08 [all] Settings → Signing pages (`SigningPagesCore`; add / rename / remove; official first;
+  each row's domain and integrity line); the 071 URL field removed.
+- [ ] P2-09 [all] Account settings → "Where you review and sign" (`signing_venue_choices`; disabled
+  rows with `VenueBlock` reasons; custom-domain accounts locked; `signing_venue_chosen`).
+- [ ] P2-10 [all] Keys list: captions by place, never "Trusted Signer"; a custom-domain account
+  shows its domain (`settings.signing.keysOn`).
+- [ ] P2-11 [web] The web opens no page (owner, 2026-09-23): a page venue on a `getvela.app` account
+  signs natively there; a custom-domain account cannot sign on the web — say why with
+  `signingVenueBlock(domain, {"type":"in_vela"})`.
+- [ ] P2-12 [all] Tests per list above; `scripts/check-event-payloads.mjs` green; iOS/Android
+  hard-coded English moved to the corpus; getvela.app docs updated.
+
+## Phase 3 tasks — the page (`app-web/trusted-signer`, after Phase 0's fix lands)
+
+- [ ] P3-01 Read `context.keyRoute` (`credentialId`, `place`, `transports`, `hints`): `get()` with that
+  one credential, its transports, and `hints` — no generic chooser.
+- [ ] P3-02 Ceremonies: read `place`/`hints` (create: `authenticatorAttachment` + `hints`;
+  proofs: `transports` + `hints`).
+- [ ] P3-03 Intent-first layout (the page is the authority; the app shows only the hand-off card).
+- [ ] P3-04 15 languages (from the corpus, compiled into the hashed bytes), the zh member-challenge
+  text corrected (it is computed locally).
+- [ ] P3-05 Rebuild reproducibly → new hash at the FRONT of `BUILD_ALLOWED`; deploy `dist/`; move
+  `LAUNCH` only after the deploy (the index keeps an undeployed hash from being chosen).
+
+## Gates (run on this branch)
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all --check` (rust) | clean |
+| `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` | clean |
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,796 passed, 0 failed, 2 ignored |
+| `cargo build --target wasm32-unknown-unknown -p vela-core-wasm` | ok |
+| `node rust/scripts/gen-core-types.mjs --check` / `gen-onboarding-types.mjs --check` | current |
+| `node rust/scripts/build-web.mjs --check` | current (wasm 4,799,932 B) |
+| `node rust/scripts/verify-web.mjs` | 51,391 cases green |
+| `./rust/scripts/smoke-kotlin.sh` | 51,346 cases green + onboarding bridge |
+| `./rust/scripts/build-ios-xcframework.sh` + `smoke-swift.sh` | bindings regenerated and committed; 51,346 cases green |
+| `node scripts/gen-i18n.mjs` (pins 1905 = 1804 + 101), `npm --prefix scripts run dump:vectors`, `lint-i18n-corpus`, `verify-i18n-parity` | regenerated; no new defects; 77,060 comparisons, 0 divergences |
+| `tests/i18n_residency.rs` | ja + en **144,269 B** runtime-JSON route (was 144,803), 139,979 B compiled route (was 140,545), budget 145,400 unmoved; reduction 85.9 % |
+| `app-desktop/vela-wallet/scripts/check-windows.sh` | ok |
+| `scripts/check-event-payloads.mjs` | 2 mismatches — iOS `SignPrefExecutor.swift:33,43`, Phase 2 by design |
+| desktop `cargo check` / Android / iOS / web builds | not run to green — Phase 2 (the shells do not compile against the new API) |
+
+## Decisions taken in Phase 1 — for the owner
+
+- **D-1 Older builds.** `trusted_signer` is never written. A `getvela.app` account's record carries a
+  `signed_in_with` copy naming the key's PLACE, so a ≤ 0.9.7 build signs it natively — usable, but
+  in Vela even when the account's venue is the page. A custom-domain account carries no copy, so an
+  older build follows the keys' `signer_origin` to the page ("keep writing signer_origin").
+- **D-2 Empty `signer_origin`** on a Trusted Signer sign-in migrates to the OFFICIAL page (as the
+  spec says), although ≤ 0.9.7 meant "the page Settings names" — which could have been custom.
+- **D-3 Defaults and sign-out.** A new account (and any sign-in in the app) starts **in Vela**; the
+  venue lives in the account record, so sign-out forgets it and a later sign-in starts in Vela again
+  (a custom-domain account is re-locked to the page it signed in on). Saved pages survive sign-out.
+- **D-4 A check vouches for 24 h** (`MAX_CHECK_AGE_MS`); after that the page is checked again before
+  it opens, and the card says "checking".
+- **D-5 `ENFORCE` is on now** in the core (it bites once a shell wires the admission). Safe across
+  Phase 0's new hash: a version is only chosen from what the deployed index lists, or `LAUNCH`.
+- **D-6 The official page opens `/b/<sha>/sign`, a custom one `/b/<sha>/sign.html`** — and that same
+  string is fetched for the check. The bytes at `/b/<sha>/` must BE that version (stricter than 076:
+  another accepted version served there is refused).
+- **D-7 A custom page's index may propose an unknown version**, which can only end in "trust this
+  version on this device?" — how a self-hoster's own build gets trusted. Never on the official page.
+- **D-8 "Use my own signing page" with a `getvela.app` page** runs the ceremonies in the app (R3) and
+  makes that page the new account's venue.
+- **D-9 The key route narrows the page's `allowCredentials` to the sign-in key.**
+- **D-10 Naming** (open item): EN "signing page" / "trusted page", zh 签名页 / 可信签名页,
+  "Where you review and sign" / 在哪里预览并签名. The corpus no longer says "Trusted Signer".
+- **D-11 Residency.** Room came from the retired fourth-method/URL-field strings and three dead
+  duplicates in `onboarding.create` (`alertNotDiscoverable{Title,Body}`, `verifyStuckHint` — read by
+  no client); the budget did not move.
+- **D-12 Removing a saved page changes no account** (its venue still names it, and the venue list
+  still shows it as active).
