@@ -953,6 +953,13 @@ struct RootView: View {
                     leaveSettings()
                 }
             }
+            // The account in front moved — a pick in a switcher (the home's,
+            // Explore's, Settings'), the one in front removed, another signed
+            // in. Every account-scoped store follows it here, whatever moved
+            // it (`followAccountInFront`).
+            .onChange(of: session.view.address) { _, address in
+                followAccountInFront(address)
+            }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
                     router.path.removeAll()
@@ -3898,12 +3905,32 @@ struct RootView: View {
                 addresses: records.compactMap { $0["address"] as? String },
                 active: address
             )
-            // Everything account-scoped starts again: the book, the balances,
-            // the feed. A switch that left the previous account's money on
-            // screen would be the worst thing this control could do.
-            contacts.open(myAddress: address)
-            wallet.refresh(pull: true)
+            // Everything account-scoped starts again — the book, the
+            // balances, the feed — when the session's address moves
+            // (`followAccountInFront`), not here: a refresh sent from here
+            // re-read the PREVIOUS account, the one the stores were still
+            // pointed at.
         }
+    }
+
+    /// Every account-scoped store, pointed at the account in front: the
+    /// balances and assets (`account_changed`), the activity feed
+    /// (`account_switched`) and the address book. Each is a no-op for the
+    /// account it already reads.
+    ///
+    /// The home opened them only when it APPEARED (its `.task`), and the
+    /// switcher only told the book and asked for a refresh — so a switch
+    /// made over the home changed the name in the header and left the
+    /// previous account's balance, assets and activity under it, refresh or
+    /// not (iPhone pass 2026-10-09). Removing the account in front and
+    /// signing another in over the home did the same. Android keys these on
+    /// the address (`LaunchedEffect(session.address)`), the web on an
+    /// `$effect` over it, and the desktop rebuilds the page.
+    private func followAccountInFront(_ address: String) {
+        guard !address.isEmpty else { return }
+        wallet.open(address: address)
+        activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
+        contacts.open(myAddress: address)
     }
 
     /// The home switcher closed. The balance core is told, so it stops
