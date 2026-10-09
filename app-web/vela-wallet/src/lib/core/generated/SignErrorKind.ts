@@ -3,4 +3,4 @@
 /**
  * Semantic error vocabulary — the shell owns the words (i18n keys only).
  */
-export type SignErrorKind = "user_rejected" | "wallet_switched_chains" | "unsupported_chain" | "unauthorized_account" | "invalid_params" | "unsupported_capability" | "unlimited_approval" | "self_call_blocked" | "funding_cancelled" | "submit_failed" | "stale_fee_quote" | "signer_unavailable" | "signer_not_discoverable" | "signer_failed";
+export type SignErrorKind = "user_rejected" | "wallet_switched_chains" | "unsupported_chain" | "unauthorized_account" | "invalid_params" | "unsupported_capability" | "unlimited_approval" | "self_call_blocked" | "funding_cancelled" | "submit_failed" | "stale_fee_quote" | "signer_unavailable" | "signer_not_discoverable" | "signer_failed" | "venue_blocked";

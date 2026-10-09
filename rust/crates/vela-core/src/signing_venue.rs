@@ -31,7 +31,12 @@
 //! - **R4** [`venue_for`] — the venue applies to transactions and messages;
 //!   a ceremony follows R3.
 //! - **R5** [`KeyRoute`] — the page is told which key to use and where it
-//!   lives, so the browser goes straight to it instead of asking again.
+//!   lives, so the browser goes straight to it instead of asking again; and
+//!   the person is told which key they will confirm with ([`KeyLabel`]).
+//! - **The web** ([`venue_choices_on_web`], [`SigningPlan::on_web`]) opens no
+//!   page at all (owner, 2026-09-23): a page row is disabled there with its
+//!   reason ([`VenueBlock::NotOnWeb`]), a `getvela.app` account signs in Vela,
+//!   and a custom-domain account cannot sign there and says why.
 //!
 //! What this does NOT claim: the domain is shared (D2), so a page as venue
 //! assures *what you see is what you sign*; it does not stop a fully
@@ -157,16 +162,22 @@ pub enum VenueBlock {
     /// The page lives on `page_domain` and the account's keys on `domain`: a
     /// browser lets a page use only the passkeys of its own site.
     PageOnOtherDomain { page_domain: String, domain: String },
+    /// The web wallet opens no signing page (owner, 2026-09-23): pages open
+    /// from the Vela apps. Never an R1 answer — only the web's choices and
+    /// plan ([`venue_choices_on_web`], [`SigningPlan::on_web`]) give it.
+    NotOnWeb,
 }
 
 impl VenueBlock {
-    /// The corpus key of the reason line. `{{domain}}` always, and for a page
-    /// `{{pageDomain}}` too.
+    /// The corpus key of the reason line: `{{domain}}` for
+    /// [`Self::AppCannotReach`], `{{pageDomain}}` and `{{domain}}` for
+    /// [`Self::PageOnOtherDomain`], nothing for [`Self::NotOnWeb`].
     #[must_use]
     pub const fn key(&self) -> &'static str {
         match self {
             Self::AppCannotReach { .. } => "settings.venue.blockedApp",
             Self::PageOnOtherDomain { .. } => "settings.venue.blockedPage",
+            Self::NotOnWeb => "settings.venue.blockedWeb",
         }
     }
 }
@@ -212,6 +223,42 @@ pub struct SigningPage {
     /// The person's label; empty ⇒ the shell names it by its host.
     #[serde(default)]
     pub name: String,
+    /// Versions of THIS page the person trusted on this device ("Trust this
+    /// version?", spec 076 FR-009): lowercase sha256 hex. What a shell passes
+    /// as `trusted` when it checks this page — and only this page: trusting a
+    /// self-hoster's build vouches for that deployment, not for every page
+    /// that might serve the same bytes. Never set for the official page (the
+    /// official page is never stored, and nothing is ever asked about it).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted: Vec<String>,
+}
+
+impl SigningPage {
+    /// A saved page at `url` (normalised by the caller) with no trust yet.
+    #[must_use]
+    pub fn new(url: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            name: name.into(),
+            trusted: Vec::new(),
+        }
+    }
+}
+
+/// The versions the person trusted for the page at `url` on this device —
+/// what a shell passes as `trusted` to `launch::target` and `launch::admit`
+/// when it checks that page. Empty for the official page and for a page that
+/// is not saved.
+#[must_use]
+pub fn trusted_versions(saved: &[SigningPage], url: &str) -> Vec<String> {
+    if trusted_signer::integrity::is_official(url) {
+        return Vec::new();
+    }
+    saved
+        .iter()
+        .find(|page| same_page(&page.url, url))
+        .map(|page| page.trusted.clone())
+        .unwrap_or_default()
 }
 
 /// One row of "Where you review and sign" (R1, R2).
@@ -272,6 +319,26 @@ pub fn venue_choices(
             official,
         })
         .collect()
+}
+
+/// [`venue_choices`] as the web draws them: the web wallet opens no page, so
+/// every page row an R1 reason does not already block is blocked with
+/// [`VenueBlock::NotOnWeb`] — drawn disabled, with "Signing pages open from
+/// the Vela apps". R1's reason wins where both hold: it is true everywhere,
+/// and an app would refuse that row too.
+#[must_use]
+pub fn venue_choices_on_web(
+    domain: &str,
+    active: &SigningVenue,
+    saved: &[SigningPage],
+) -> Vec<VenueChoice> {
+    let mut rows = venue_choices(domain, active, saved);
+    for row in &mut rows {
+        if matches!(row.venue, SigningVenue::Page { .. }) && row.blocked.is_none() {
+            row.blocked = Some(VenueBlock::NotOnWeb);
+        }
+    }
+    rows
 }
 
 /// The venue an account falls back to when none was chosen, or when the one
@@ -393,9 +460,78 @@ pub fn hints_of(method: &str) -> &'static [&'static str] {
     }
 }
 
+/// The corpus key of a key place's title — "This device", "Phone or tablet",
+/// "USB security key" — by its wire name. The same keys the choosers' rows
+/// carry (`app::method_words`); anything else reads as this device, the place
+/// a key with no record of where it lives was always looked for.
+#[must_use]
+pub fn place_title_key(method: &str) -> &'static str {
+    match method {
+        "hybrid" => "onboarding.create.methodHybridTitle",
+        "security_key" => "onboarding.create.methodSecurityKeyTitle",
+        _ => "onboarding.create.methodPlatformTitle",
+    }
+}
+
+/// The name of the key a person confirms with — "Confirm with {key}" on the
+/// hand-off card, and wherever else a signature names its key (spec 102).
+///
+/// The key's own label when the person gave it one that is not the wallet's
+/// name; otherwise the place it lives. A founding key is labelled with the
+/// wallet's name, and the card already has a "Signing account" row that says
+/// it — "Confirm with Savings" under "Signing account · Savings" names nothing
+/// new, where "Confirm with Phone or tablet" tells the person which device to
+/// reach for.
+///
+/// The shell draws `name` when it is set, else the translation of
+/// `place_key`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct KeyLabel {
+    /// The key's own label, drawn as it is. `None` when it has none, or its
+    /// label is the wallet's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The corpus key of the key's place — always set, so a shell has a
+    /// caption (and an icon) even when it draws `name`.
+    pub place_key: String,
+}
+
+impl Default for KeyLabel {
+    fn default() -> Self {
+        Self::of(None, "", "platform")
+    }
+}
+
+impl KeyLabel {
+    /// The label of a key named `key_name` (none, or empty, for a key with no
+    /// label) that lives on `method`, in a wallet named `wallet_name`.
+    #[must_use]
+    pub fn of(key_name: Option<&str>, wallet_name: &str, method: &str) -> Self {
+        let wallet = wallet_name.trim().to_lowercase();
+        let name = key_name
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && name.to_lowercase() != wallet)
+            .map(str::to_owned);
+        Self {
+            name,
+            place_key: place_title_key(method).to_owned(),
+        }
+    }
+
+    /// The words, given the shell's translator for `place_key`.
+    #[must_use]
+    pub fn text(&self, translate: impl FnOnce(&str) -> String) -> String {
+        match &self.name {
+            Some(name) => name.clone(),
+            None => translate(&self.place_key),
+        }
+    }
+}
+
 /// How an account signs on this device, in one answer: its signing domain,
 /// the venue its transactions and messages go to (already checked against R1),
-/// and the key route (R5).
+/// the key route (R5), and the name of that key as the person reads it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SigningPlan {
@@ -412,6 +548,33 @@ pub struct SigningPlan {
     /// written before the sign-in key was kept, which signs as it always did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<KeyRoute>,
+    /// "Confirm with {key}" — the key's name as the person reads it
+    /// ([`KeyLabel`]): its own label when that is not the wallet's name, else
+    /// its place. Always set: a record with no sign-in key names the place of
+    /// its first key.
+    #[serde(default)]
+    pub key_label: KeyLabel,
+}
+
+impl SigningPlan {
+    /// This plan as the web wallet carries it out. The web opens no page
+    /// (owner, 2026-09-23): a `getvela.app` account whose venue is a page
+    /// signs in Vela there (its keys are the web's own), and a custom-domain
+    /// account cannot sign there at all — [`Self::blocked`] says why
+    /// ([`VenueBlock::NotOnWeb`]: its keys answer only on its page, and pages
+    /// open from the apps), and its venue is left as it is.
+    #[must_use]
+    pub fn on_web(mut self) -> Self {
+        if self.blocked.is_some() {
+            return self;
+        }
+        if is_app_domain(&self.domain) {
+            self.venue = SigningVenue::InVela;
+        } else {
+            self.blocked = Some(VenueBlock::NotOnWeb);
+        }
+        self
+    }
 }
 
 #[cfg(test)]
@@ -517,28 +680,13 @@ mod tests {
     #[test]
     fn the_choices_an_account_has() {
         let saved = [
-            SigningPage {
-                url: "https://sign.example.com".to_owned(),
-                name: "Mine".to_owned(),
-            },
-            SigningPage {
-                url: "https://sign.example.com/backup/".to_owned(),
-                name: String::new(),
-            },
+            SigningPage::new("https://sign.example.com".to_owned(), "Mine".to_owned()),
+            SigningPage::new("https://sign.example.com/backup/".to_owned(), String::new()),
             // The official page saved again, and a duplicate: listed once.
-            SigningPage {
-                url: "https://SIGN.getvela.app".to_owned(),
-                name: "dup".to_owned(),
-            },
-            SigningPage {
-                url: "https://sign.example.com/".to_owned(),
-                name: "dup".to_owned(),
-            },
+            SigningPage::new("https://SIGN.getvela.app".to_owned(), "dup".to_owned()),
+            SigningPage::new("https://sign.example.com/".to_owned(), "dup".to_owned()),
             // Not a page at all: never offered.
-            SigningPage {
-                url: "ftp://x".to_owned(),
-                name: String::new(),
-            },
+            SigningPage::new("ftp://x".to_owned(), String::new()),
         ];
         let app = venue_choices(APP_DOMAIN, &SigningVenue::InVela, &saved);
         let shape: Vec<(bool, bool, bool)> = app

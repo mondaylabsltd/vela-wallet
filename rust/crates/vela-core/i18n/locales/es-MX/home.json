@@ -53,7 +53,6 @@
     "rescanFailed": "No se pudo conectar con {{names}}. Corrige su RPC desde el banner de inicio o consulta un explorador de bloques.",
     "rescanAgain": "Escanear de nuevo",
     "rescanClose": "Listo",
-    "rescanNativeNote": "Las monedas nativas (ETH, BNB, MATIC…) recibidas en algunas redes pueden no detectarse aquí. Tu saldo sigue siendo correcto: abre un explorador de bloques para ver el registro completo.",
     "rescanExplorerTitle": "Consulta directamente en un explorador de bloques",
     "connClear": "Borrar",
     "connClearTitle": "¿Borrar la actividad de la conexión?",
