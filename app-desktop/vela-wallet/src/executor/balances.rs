@@ -63,7 +63,7 @@ use vela_core::app::balance_dashboard::{
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 
 use crate::executor::abi::{self, Call3, McResult};
-use crate::executor::chain_tokens::{self, ChainTokenData, DexInfo, StableToken};
+use crate::executor::chain_tokens::{self, ChainTokenData, DexInfo, IndexDoc, StableToken};
 use crate::executor::pool::{self, PoolError};
 use crate::executor::{chainlink, custom_tokens, token_trust};
 
@@ -404,32 +404,44 @@ fn custom_price(
     None
 }
 
-/// One chain's tokens, priced as far as this cut can price them.
+/// Was this chain read at all (PR 2 polish)? Not when the index document is
+/// UNREAD and the chain has no native coin (the core's plan has no native
+/// slot — Tempo): its money is the registry's stablecoins, none of which
+/// could be named, so "holds nothing" would be a guess that reads as $0.00.
+/// It fails like a chain that did not answer — its last holdings stand, and
+/// it is listed as unreachable. An index that answered "no such document"
+/// (404) is an answer, and a chain with a native coin read that coin.
+fn not_read(doc: &IndexDoc, plan: &[ReadSlot]) -> bool {
+    *doc == IndexDoc::Unread && !plan.iter().any(|slot| slot.kind == ReadKind::Native)
+}
+
+/// One chain's tokens, priced as far as this cut can price them — or, for a
+/// chain that was not read ([`not_read`]), the miss.
 fn chain_tokens_for(
     chain_id: u32,
+    doc: &IndexDoc,
     wallet_symbol: &str,
     address: &str,
     native_raw: &str,
     mainnet_prices: &HashMap<String, f64>,
-) -> Vec<BalanceToken> {
-    let data = chain_tokens::fetch(chain_id);
-    let stables: Vec<StableToken> = data.as_ref().map(|d| d.stables.clone()).unwrap_or_default();
-    let wrapped = data.as_ref().and_then(|d| d.wrapped_native.clone());
-    let dex = data.as_ref().and_then(|d| d.dex.clone());
+) -> Result<Vec<BalanceToken>, Miss> {
+    let data = doc.data();
+    let stables: Vec<StableToken> = data.map(|d| d.stables.clone()).unwrap_or_default();
+    let wrapped = data.and_then(|d| d.wrapped_native.clone());
+    let dex = data.and_then(|d| d.dex.clone());
     // The wallet's own name for the coin wins over the index's. The index calls
     // Gnosis's coin "XDAI" and every other screen in this app calls it "xDAI";
     // two spellings of one coin across two screens is a bug the person sees.
     let native_symbol = if wallet_symbol.is_empty() {
-        data.as_ref()
-            .map_or_else(|| "ETH".to_owned(), |d| d.native_symbol.clone())
+        data.map_or_else(|| "ETH".to_owned(), |d| d.native_symbol.clone())
     } else {
         wallet_symbol.to_owned()
     };
-    let native_name = data.as_ref().map_or_else(
+    let native_name = data.map_or_else(
         || native_symbol.clone(),
         |d: &ChainTokenData| d.native_name.clone(),
     );
-    let native_decimals = data.as_ref().map_or(18, |d| d.native_decimals);
+    let native_decimals = data.map_or(18, |d| d.native_decimals);
 
     // Which balances this chain's read covers is the core's (spec 082 RE9):
     // the native coin unless the chain has none, the registry stablecoins,
@@ -438,6 +450,9 @@ fn chain_tokens_for(
     // them. A chain with no native coin is still READ, for reachability — it
     // simply has no row to show for it.
     let plan = read_plan_for(chain_id, &stables, wrapped.as_deref());
+    if not_read(doc, &plan) {
+        return Err(Miss::Unreachable);
+    }
     let mut calls: Vec<Call3> = Vec::new();
     let mut slots: Vec<Slot> = Vec::with_capacity(plan.len());
     for planned in plan {
@@ -655,7 +670,7 @@ fn chain_tokens_for(
             spam: false,
         });
     }
-    tokens
+    Ok(tokens)
 }
 
 /// Tell the `token_trust` session what this fetch just learned.
@@ -689,9 +704,10 @@ fn inform_token_trust(address: &str, tokens: &[BalanceToken]) {
                 .filter_map(|token| token.token_address.clone())
                 .collect(),
         );
-        // Cached for 30 minutes, so this is a map lookup on every fetch after
-        // the first.
-        if let Some(data) = chain_tokens::fetch(chain_id) {
+        // The round just asked the index for every chain it read, so this is
+        // a map lookup — and a chain whose index was unread then has no facts
+        // now, rather than another wait for the same index.
+        if let Some(data) = chain_tokens::cached(chain_id) {
             token_trust::registry_tokens(
                 chain_id,
                 data.stables
@@ -804,33 +820,28 @@ pub fn fetch_all_streaming(address: &str, arrived: &Arc<ChainSink>) -> Fetched {
             .spawn(move || {
                 // The index is asked for beside the balance, not after it:
                 // the two are independent, and the web asks for them without
-                // waiting on each other. `chain_tokens::fetch` caches, so the
-                // read inside `chain_tokens_for` is the answer this warmed.
+                // waiting on each other. Its answer — document, none, or
+                // unread (PR 2 polish) — is what `chain_tokens_for` reads.
                 let index = thread::Builder::new()
                     .name(format!("vela-index-{chain_id}"))
-                    .spawn(move || {
-                        let _ = chain_tokens::fetch(chain_id);
-                    })
+                    .spawn(move || chain_tokens::fetch_doc(chain_id))
                     .ok();
-                let result = match native_read(chain_id, &address) {
-                    Ok(raw) => {
-                        if let Some(index) = index {
-                            let _ = index.join();
-                        }
-                        let prices = mainnet_prices.wait();
-                        let found = chain_tokens_for(chain_id, &symbol, &address, &raw, prices);
-                        // Reported from this thread, the moment this chain is
-                        // in — not after the others — and never after the
-                        // settle.
-                        if let Ok(settled) = settled.lock()
-                            && !*settled
-                        {
-                            arrived(found.clone());
-                        }
-                        Ok(found)
+                let result = native_read(chain_id, &address).and_then(|raw| {
+                    let doc = index
+                        .and_then(|index| index.join().ok())
+                        .unwrap_or_else(|| chain_tokens::fetch_doc(chain_id));
+                    let prices = mainnet_prices.wait();
+                    let found = chain_tokens_for(chain_id, &doc, &symbol, &address, &raw, prices)?;
+                    // Reported from this thread, the moment this chain is
+                    // in — not after the others — and never after the
+                    // settle.
+                    if let Ok(settled) = settled.lock()
+                        && !*settled
+                    {
+                        arrived(found.clone());
                     }
-                    Err(miss) => Err(miss),
-                };
+                    Ok(found)
+                });
                 let _ = tx.send((chain_id, result));
             });
         if spawned.is_ok() {
@@ -1050,6 +1061,47 @@ mod tests {
                 read_plan(chain_id, &[], None, &[]).is_empty(),
                 "chain {chain_id} settles gas in a TIP-20 stablecoin"
             );
+        }
+    }
+
+    /// PR 2 polish: Tempo has no native coin — its money is the registry's
+    /// stablecoins. With the index unread, none of them could be named, so
+    /// the chain was not read: it fails like a chain that did not answer
+    /// (its holdings carried, listed unreachable), never "answered, holds
+    /// nothing" — the $0.00 a person read as their money gone. An index that
+    /// answered (a document, or a 404) is an answer, and a chain with a
+    /// native coin read that coin whatever the index said.
+    #[test]
+    fn tempo_with_its_index_unread_was_not_read() {
+        let data = chain_tokens::IndexDoc::Doc(ChainTokenData {
+            native_name: String::new(),
+            native_symbol: String::new(),
+            native_decimals: 18,
+            stables: Vec::new(),
+            wrapped_native: None,
+            dex: None,
+        });
+        for chain_id in vela_core::app::fee_policy::TEMPO_CHAIN_IDS {
+            let plan = read_plan(chain_id, &[], None, &[]);
+            assert!(not_read(&IndexDoc::Unread, &plan), "chain {chain_id}");
+            assert!(!not_read(&IndexDoc::Absent, &plan), "chain {chain_id}");
+            assert!(!not_read(&data, &plan), "chain {chain_id}");
+            // Through the read itself: the miss, before any call goes out.
+            crate::executor::storage::tests::with_temp_state("tempo-unread", || {
+                let read = chain_tokens_for(
+                    chain_id,
+                    &IndexDoc::Unread,
+                    "",
+                    "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    "0",
+                    &HashMap::new(),
+                );
+                assert_eq!(read, Err(Miss::Unreachable), "chain {chain_id}");
+            });
+        }
+        for chain_id in [1, 100, 8453] {
+            let plan = read_plan(chain_id, &[], None, &[]);
+            assert!(!not_read(&IndexDoc::Unread, &plan), "chain {chain_id}");
         }
     }
 
@@ -1315,7 +1367,9 @@ mod tests {
             let raw =
                 native_raw(100, GOLDEN).unwrap_or_else(|| unreachable!("Gnosis did not answer"));
             let prices = chainlink::prices();
-            let tokens = chain_tokens_for(100, "xDAI", GOLDEN, &raw, &prices);
+            let doc = chain_tokens::fetch_doc(100);
+            let tokens = chain_tokens_for(100, &doc, "xDAI", GOLDEN, &raw, &prices)
+                .unwrap_or_else(|_| unreachable!("Gnosis was read"));
 
             let gno = tokens
                 .iter()
@@ -1354,7 +1408,9 @@ mod tests {
             let raw = native_raw(100, GOLDEN)
                 .unwrap_or_else(|| unreachable!("Gnosis did not answer eth_getBalance"));
             let prices = chainlink::prices();
-            let tokens = chain_tokens_for(100, "xDAI", GOLDEN, &raw, &prices);
+            let doc = chain_tokens::fetch_doc(100);
+            let tokens = chain_tokens_for(100, &doc, "xDAI", GOLDEN, &raw, &prices)
+                .unwrap_or_else(|_| unreachable!("Gnosis was read"));
 
             for token in &tokens {
                 println!(
