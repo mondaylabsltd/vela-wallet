@@ -1143,6 +1143,80 @@ fn hidden_survives_restart_via_hydrate() {
     assert!(!sut.view().hidden);
 }
 
+/// The switcher is money too: while hidden it carries no figure — not the
+/// hero's total pinned at open (which the hero never showed), not a cached
+/// row, not a live refresh — and the cached total is withheld like the hero's.
+/// They are kept, and come back the moment privacy is turned off.
+#[test]
+fn hidden_withholds_the_switcher_and_the_cached_total() {
+    let mut sut = booted(
+        ADDR_A,
+        Some(90.0),
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "100", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.resolve(Res::BalanceCacheWritten);
+    sut.dispatch(Event::PrivacyToggled);
+    let view = sut.view();
+    assert_eq!(view.cached_total_usd, None, "a figure, withheld");
+    assert_eq!(view.display_total_usd, None);
+
+    sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
+    });
+    sut.resolve(Res::BalanceCacheWritten);
+    sut.resolve(Res::CachedBalancesLoaded {
+        balances: vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0,
+        }],
+    });
+    sut.resolve(Res::AccountAssetsFetched {
+        address: ADDR_B.to_owned(),
+        tokens: Some(vec![token(1, "ETH", "56", Some(1.0))]),
+    });
+    let view = sut.view();
+    assert!(view.switcher.open, "the switcher still opens, rows and all");
+    assert!(view.switcher.hidden);
+    assert!(
+        view.switcher.balances.is_empty(),
+        "no row, and no total, carries a figure: {:?}",
+        view.switcher.balances
+    );
+    assert!(
+        !serde_json::to_string(&view).unwrap().contains("56"),
+        "no switcher figure leaves the core"
+    );
+
+    // Shown again: everything the switcher learned meanwhile is there.
+    sut.dispatch(Event::PrivacyToggled);
+    let view = sut.view();
+    assert!(!view.switcher.hidden);
+    assert_eq!(view.cached_total_usd, Some(100.0), "the settled total");
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 100.0
+    }));
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_B.to_owned(),
+        usd: 56.0
+    }));
+}
+
+/// A shell that predates `switcher.hidden` still decodes the view.
+#[test]
+fn the_switcher_hidden_flag_defaults_on_the_wire() {
+    let sut = booted(ADDR_A, None, settled(ADDR_A, vec![], vec![], vec![]));
+    let mut json = serde_json::to_value(sut.view()).unwrap();
+    json["switcher"].as_object_mut().unwrap().remove("hidden");
+    let view: BalanceView = serde_json::from_value(json).unwrap();
+    assert!(!view.switcher.hidden);
+}
+
 // ===========================================================================
 // Machine — invariant ⑨: refresh cadence rules
 // ===========================================================================

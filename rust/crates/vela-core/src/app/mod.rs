@@ -68,6 +68,7 @@ pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
 pub mod payment_request;
+pub mod privacy;
 pub mod receive_watch;
 pub mod remote_mark;
 pub mod rpc_pool;

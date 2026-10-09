@@ -930,7 +930,15 @@ pub enum BalanceNotice {
 pub struct BalanceSwitcherView {
     pub open: bool,
     pub loading: bool,
+    /// Every account's figure — EMPTY while the balance is hidden: the
+    /// switcher's rows and its total are money, and they are withheld here,
+    /// not masked downstream ([`super::privacy`]). The figures are kept and
+    /// come back the moment privacy is turned off.
     pub balances: Vec<BalanceCacheEntry>,
+    /// The balance is hidden: every row and the total draw the mask. Without
+    /// it an empty `balances` would read as "still loading".
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 /// What the wallet last knew about a network it cannot reach now (spec 092).
@@ -979,8 +987,13 @@ pub struct BalanceView {
     /// `Some` only when partial AND the silent retries are exhausted
     /// (invariant ③).
     pub notice: Option<BalanceNotice>,
-    /// Every money surface (feed amounts, holdings, switcher, receipt toast)
-    /// masks on this together — a leak in one defeats the mask everywhere.
+    /// Balance privacy is on. Every money surface masks on this together — a
+    /// leak in one defeats the mask everywhere. The rule, and the surfaces
+    /// that stay visible on purpose (Send, the signing sheet, Receive), are
+    /// [`super::privacy`]'s. While it holds, this view WITHHOLDS the hero's
+    /// figure, `cached_total_usd`, the switcher's figures and an unreachable
+    /// network's last-seen worth; `tokens` keep their amounts, because Send
+    /// draws from them — the holdings, Assets and detail surfaces mask them.
     pub hidden: bool,
     /// A refresh the PERSON asked for is out: true from the dispatch of
     /// `RefreshRequested { pull: true }` (the pull gesture, the hero's
@@ -1013,6 +1026,9 @@ pub struct BalanceView {
     pub unreachable_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
+    /// The last total this account settled on, painted under a skeleton
+    /// until the live one lands. `None` while the balance is hidden — a
+    /// figure, withheld like the hero's.
     pub cached_total_usd: Option<f64>,
     pub switcher: BalanceSwitcherView,
 }
@@ -1172,11 +1188,22 @@ impl App for BalanceDashboard {
             unreachable_networks,
             unreachable_key,
             holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
-            cached_total_usd: model.cached_total,
+            cached_total_usd: if model.hidden {
+                None
+            } else {
+                model.cached_total
+            },
             switcher: BalanceSwitcherView {
                 open: model.switcher_open,
                 loading: model.switcher_pending > 0,
-                balances: model.switcher_balances.clone(),
+                // The active row is pinned to the hero's figure at open —
+                // which, while hidden, is a figure the hero never showed.
+                balances: if model.hidden {
+                    Vec::new()
+                } else {
+                    model.switcher_balances.clone()
+                },
+                hidden: model.hidden,
             },
         }
     }

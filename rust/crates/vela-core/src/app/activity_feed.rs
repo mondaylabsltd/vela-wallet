@@ -450,6 +450,14 @@ pub struct FeedItem {
     /// keeps its own "status · site/contract/chain" rule.
     #[serde(default)]
     pub subtitle: Vec<FeedLine>,
+    /// The row's own figure is money, so it draws as the mask while the
+    /// balance is hidden ([`super::privacy::figure_maskable`]): an amount, a
+    /// batch's count, a capped allowance. `false` for an unlimited allowance
+    /// (a risk to see) and for a row with no figure. Decided in the view;
+    /// what the model holds is not read. A dApp row's `received` masks
+    /// whenever the balance is hidden, whatever this says.
+    #[serde(default)]
+    pub figure_maskable: bool,
 }
 
 /// One part of a row's second line (spec 093).
@@ -953,6 +961,14 @@ pub struct FeedView {
     /// `None` while balance privacy is on — invariant ④ enforced here, not
     /// in the shell.
     pub toast: Option<FeedToast>,
+    /// Balance privacy is on ([`Event::PrivacyChanged`]) — the same flag as
+    /// `BalanceView::hidden`, carried here so every surface drawn from this
+    /// view (home Activity, History, a contact's page, a transfer's and a dApp
+    /// row's detail) masks on the feed's own word. The rule is
+    /// [`super::privacy`]'s: each row's figure by `figure_maskable`, a dApp
+    /// row's "received" and every detail figure always.
+    #[serde(default)]
+    pub hidden: bool,
     /// The corpus key of History's empty line (spec 082 RG5):
     /// [`HISTORY_EMPTY_ALL`] with no chain filter, [`HISTORY_EMPTY_FILTERED`]
     /// with one. Whether the list is loading or empty stays the shell's.
@@ -1117,6 +1133,7 @@ impl App for ActivityFeed {
             history_empty_key: history_empty_key(model.chain_filter).to_owned(),
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
             contact_rows,
+            hidden: model.privacy_hidden,
         }
     }
 }
@@ -1126,6 +1143,7 @@ impl App for ActivityFeed {
 /// recipient named the same.
 fn presented(model: &Model, item: &FeedItem) -> FeedItem {
     let mut out = item.clone();
+    out.figure_maskable = super::privacy::figure_maskable(&out);
     if let Some(addr) = &out.counterparty {
         if let Some(name) = model.alias_map.get(&addr.to_lowercase()) {
             out.alias = Some(name.clone());
@@ -1510,6 +1528,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
         subtitle: Vec::new(),
+        figure_maskable: false,
     }
 }
 
@@ -1536,6 +1555,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
         subtitle: Vec::new(),
+        figure_maskable: false,
     }
 }
 
@@ -1757,6 +1777,7 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
             ..described
         }),
         subtitle: Vec::new(),
+        figure_maskable: false,
     }
 }
 
@@ -1795,6 +1816,7 @@ fn signature_item(t: &FeedTxRecord) -> FeedItem {
             ..described
         }),
         subtitle: Vec::new(),
+        figure_maskable: false,
     }
 }
 
@@ -2639,6 +2661,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         batch: Some(batch),
         dapp: None,
         subtitle: Vec::new(),
+        figure_maskable: false,
     })
 }
 
