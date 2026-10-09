@@ -114,6 +114,188 @@
       "hidden": true,
       "history_empty_key": "history.emptyTitle",
       "home_empty_key": "home.emptyNoActivity",
+      "home_rows": [
+        {
+          "day_start_ms": 1699920000000.0,
+          "id": "day-1699920000000",
+          "timestamp": 1699999940.0,
+          "type": "header"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": null,
+            "chain_id": 1,
+            "counterparty": "0xcccccccccccccccccccccccccccccccccccccccc",
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699920000000.0,
+            "decimals": 6,
+            "direction": "in",
+            "figure_maskable": true,
+            "id": "received",
+            "kind": "receive",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "address": "0xcccccccccccccccccccccccccccccccccccccccc",
+                "name": null,
+                "type": "from"
+              }
+            ],
+            "symbol": "USDT",
+            "timestamp": 1699999940.0,
+            "tx_hash": "0xadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad",
+            "usd_value": 289.5,
+            "value": "289.5"
+          },
+          "type": "item"
+        },
+        {
+          "day_start_ms": 1699833600000.0,
+          "id": "day-1699833600000",
+          "timestamp": 1699913600.0,
+          "type": "header"
+        },
+        {
+          "item": {
+            "alias": "Bea",
+            "batch": null,
+            "chain_id": 1,
+            "counterparty": "0xdddddddddddddddddddddddddddddddddddddddd",
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "sent",
+            "kind": "send",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "address": "0xdddddddddddddddddddddddddddddddddddddddd",
+                "name": "Bea",
+                "type": "to"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913600.0,
+            "tx_hash": "0xabababababababababababababababababababababababababababababababab",
+            "usd_value": 163.25,
+            "value": "163.25"
+          },
+          "type": "item"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": null,
+            "chain_id": 100,
+            "counterparty": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "counterparty_role": "contract",
+            "dapp": {
+              "action": "call",
+              "allowance": null,
+              "changes": [
+                {
+                  "decimals": 6,
+                  "direction": "out",
+                  "symbol": "USDC",
+                  "value": "237.5",
+                  "verified": true
+                },
+                {
+                  "decimals": 18,
+                  "direction": "in",
+                  "symbol": "xDAI",
+                  "value": "128.75",
+                  "verified": true
+                }
+              ],
+              "contract_call": true,
+              "estimated": true,
+              "facts": [
+                {
+                  "site": "swap.example",
+                  "type": "site"
+                },
+                {
+                  "chain_id": 100,
+                  "type": "network"
+                },
+                {
+                  "address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "name": null,
+                  "type": "contract"
+                },
+                {
+                  "type": "balance_changes"
+                },
+                {
+                  "timestamp": 1699913000.0,
+                  "type": "date"
+                }
+              ],
+              "intent": null,
+              "intent_term": "intentContractCall",
+              "off_chain": false,
+              "place": "swap.example",
+              "received": {
+                "decimals": 18,
+                "direction": "in",
+                "symbol": "xDAI",
+                "value": "128.75",
+                "verified": true
+              },
+              "site": "swap.example",
+              "technical": [
+                {
+                  "operation": {
+                    "type": "contract_interaction"
+                  },
+                  "type": "operation"
+                },
+                {
+                  "content": "call_data",
+                  "type": "content"
+                },
+                {
+                  "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+                  "type": "hash"
+                },
+                {
+                  "hash": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+                  "type": "user_op_hash"
+                }
+              ]
+            },
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "swap",
+            "kind": "dapp_tx",
+            "priced": true,
+            "site": "swap.example",
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "chain_id": 100,
+                "type": "network"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913000.0,
+            "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+            "usd_value": 237.5,
+            "value": "237.5"
+          },
+          "type": "item"
+        }
+      ],
       "new_item_id": "received",
       "rows": [
         {
@@ -822,6 +1004,188 @@
       "hidden": false,
       "history_empty_key": "history.emptyTitle",
       "home_empty_key": "home.emptyNoActivity",
+      "home_rows": [
+        {
+          "day_start_ms": 1699920000000.0,
+          "id": "day-1699920000000",
+          "timestamp": 1699999940.0,
+          "type": "header"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": null,
+            "chain_id": 1,
+            "counterparty": "0xcccccccccccccccccccccccccccccccccccccccc",
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699920000000.0,
+            "decimals": 6,
+            "direction": "in",
+            "figure_maskable": true,
+            "id": "received",
+            "kind": "receive",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "address": "0xcccccccccccccccccccccccccccccccccccccccc",
+                "name": null,
+                "type": "from"
+              }
+            ],
+            "symbol": "USDT",
+            "timestamp": 1699999940.0,
+            "tx_hash": "0xadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad",
+            "usd_value": 289.5,
+            "value": "289.5"
+          },
+          "type": "item"
+        },
+        {
+          "day_start_ms": 1699833600000.0,
+          "id": "day-1699833600000",
+          "timestamp": 1699913600.0,
+          "type": "header"
+        },
+        {
+          "item": {
+            "alias": "Bea",
+            "batch": null,
+            "chain_id": 1,
+            "counterparty": "0xdddddddddddddddddddddddddddddddddddddddd",
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "sent",
+            "kind": "send",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "address": "0xdddddddddddddddddddddddddddddddddddddddd",
+                "name": "Bea",
+                "type": "to"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913600.0,
+            "tx_hash": "0xabababababababababababababababababababababababababababababababab",
+            "usd_value": 163.25,
+            "value": "163.25"
+          },
+          "type": "item"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": null,
+            "chain_id": 100,
+            "counterparty": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "counterparty_role": "contract",
+            "dapp": {
+              "action": "call",
+              "allowance": null,
+              "changes": [
+                {
+                  "decimals": 6,
+                  "direction": "out",
+                  "symbol": "USDC",
+                  "value": "237.5",
+                  "verified": true
+                },
+                {
+                  "decimals": 18,
+                  "direction": "in",
+                  "symbol": "xDAI",
+                  "value": "128.75",
+                  "verified": true
+                }
+              ],
+              "contract_call": true,
+              "estimated": true,
+              "facts": [
+                {
+                  "site": "swap.example",
+                  "type": "site"
+                },
+                {
+                  "chain_id": 100,
+                  "type": "network"
+                },
+                {
+                  "address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "name": null,
+                  "type": "contract"
+                },
+                {
+                  "type": "balance_changes"
+                },
+                {
+                  "timestamp": 1699913000.0,
+                  "type": "date"
+                }
+              ],
+              "intent": null,
+              "intent_term": "intentContractCall",
+              "off_chain": false,
+              "place": "swap.example",
+              "received": {
+                "decimals": 18,
+                "direction": "in",
+                "symbol": "xDAI",
+                "value": "128.75",
+                "verified": true
+              },
+              "site": "swap.example",
+              "technical": [
+                {
+                  "operation": {
+                    "type": "contract_interaction"
+                  },
+                  "type": "operation"
+                },
+                {
+                  "content": "call_data",
+                  "type": "content"
+                },
+                {
+                  "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+                  "type": "hash"
+                },
+                {
+                  "hash": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+                  "type": "user_op_hash"
+                }
+              ]
+            },
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "swap",
+            "kind": "dapp_tx",
+            "priced": true,
+            "site": "swap.example",
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "chain_id": 100,
+                "type": "network"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913000.0,
+            "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+            "usd_value": 237.5,
+            "value": "237.5"
+          },
+          "type": "item"
+        }
+      ],
       "new_item_id": "received",
       "rows": [
         {

@@ -118,6 +118,13 @@ pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
 
+/// How many items the wallet home's Activity draws (issue 469): the newest
+/// three, so Assets stays in reach under them. "All" opens History, which
+/// draws every row. One number for every shell — it was meant since spec 015
+/// ("the home stops at three") and never coded, so each home listed the
+/// whole feed.
+pub const HOME_ACTIVITY_ITEMS: usize = 3;
+
 /// How old a pending record with no operation hash may be and still be drawn
 /// pending (087 F04): three times the longest any client keeps a submit open
 /// ([`super::sign_request::PAGE_WAIT_CAP_MS`], the desktop page's ten
@@ -951,8 +958,17 @@ pub struct Model {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeedView {
-    /// Date headers + items, chain-filtered, in render order.
+    /// Date headers + items, chain-filtered, in render order. History draws
+    /// these, every one.
     pub rows: Vec<FeedRow>,
+    /// The wallet home's Activity (issue 469): the first
+    /// [`HOME_ACTIVITY_ITEMS`] items of `rows` and the day headers over them
+    /// — nothing else. The same rows, worded and filtered the same, so a row
+    /// on the home is the row History opens with; never a header with no row
+    /// under it. A fresh send or receipt is the newest item, so it is always
+    /// here (and `new_item_id` names one of these).
+    #[serde(default)]
+    pub home_rows: Vec<FeedRow>,
     /// Raw account-scoped records for the detail sheet
     /// (`loadActivityTransactions`).
     pub transactions: Vec<FeedTxRecord>,
@@ -1070,6 +1086,11 @@ impl App for ActivityFeed {
         // (`useHomeController.ts:543-563`).
         let mut rows = Vec::new();
         let mut last_day: Option<f64> = None;
+        // The home's cut, taken in the same pass: everything up to (and
+        // including) the HOME_ACTIVITY_ITEMS-th item — headers included,
+        // because each one precedes an item it heads.
+        let mut home_len = 0;
+        let mut items_seen = 0;
         for item in &model.items {
             if let Some(chain) = model.chain_filter {
                 if item.chain_id != chain {
@@ -1087,7 +1108,12 @@ impl App for ActivityFeed {
             let mut out = presented(model, item);
             out.subtitle = subtitle_of(&out);
             rows.push(FeedRow::Item { item: out });
+            items_seen += 1;
+            if items_seen <= HOME_ACTIVITY_ITEMS {
+                home_len = rows.len();
+            }
         }
+        let home_rows = rows[..home_len].to_vec();
 
         let contact_rows = model
             .contact_filter
@@ -1127,6 +1153,7 @@ impl App for ActivityFeed {
 
         FeedView {
             rows,
+            home_rows,
             transactions: model.records.clone(),
             new_item_id: model.celebration.as_ref().map(|c| c.item_id.clone()),
             toast,

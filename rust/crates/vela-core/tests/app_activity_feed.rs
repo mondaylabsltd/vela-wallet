@@ -17,7 +17,8 @@ use vela_core::app::activity_feed::{
     FeedBatchKind, FeedCounterpartyRole, FeedDappChange, FeedDappContent, FeedDappOperation,
     FeedDirection, FeedFact, FeedItem, FeedLine, FeedOperation as Op, FeedRow,
     FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView, HISTORY_EMPTY_ALL,
-    HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED, UNFOLLOWED_AFTER_MS,
+    HISTORY_EMPTY_FILTERED, HOME_ACTIVITY_ITEMS, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
+    UNFOLLOWED_AFTER_MS,
 };
 use vela_core::app::clear_signing::ClearTerm;
 use vela_core::app::dapp_activity::{DappAction, DappSummary};
@@ -1185,6 +1186,120 @@ fn chain_filter_regroups_headers_over_the_filtered_list() {
 
     sut.dispatch(Event::ChainFilterChanged { chain_id: None });
     assert_eq!(sut.view().rows.len(), 5, "unfiltered again");
+}
+
+// ---------------------------------------------------------------------------
+// Issue #469 — the home draws the newest three; History draws every row
+// ---------------------------------------------------------------------------
+
+fn item_ids(rows: &[FeedRow]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| match row {
+            FeedRow::Item { item } => Some(item.id.clone()),
+            FeedRow::Header { .. } => None,
+        })
+        .collect()
+}
+
+fn header_days(rows: &[FeedRow]) -> Vec<f64> {
+    rows.iter()
+        .filter_map(|row| match row {
+            FeedRow::Header { day_start_ms, .. } => Some(*day_start_ms),
+            FeedRow::Item { .. } => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_home_draws_the_newest_three_and_history_every_row() {
+    assert_eq!(HOME_ACTIVITY_ITEMS, 3);
+    // Two today, two yesterday, one the day before.
+    let mut sut = boot(vec![
+        recv("a", "0xBob", "1", "USDT", 200_000.0),
+        recv("b", "0xBob", "2", "USDT", 190_000.0),
+        recv("c", "0xBob", "3", "USDT", 110_000.0),
+        recv("d", "0xBob", "4", "USDT", 100_000.0),
+        send("e", "0xU1", "0xCafe", "5", 10_000.0),
+    ]);
+    drain_aliases(&mut sut);
+    let view = sut.view();
+
+    assert_eq!(item_ids(&view.rows), ["a", "b", "c", "d", "e"]);
+    assert_eq!(item_ids(&view.home_rows), ["a", "b", "c"]);
+    // Only the days the three fall on — "the day before" heads nothing here.
+    assert_eq!(
+        header_days(&view.home_rows),
+        [day_of(200_000.0), day_of(110_000.0)]
+    );
+    // The same rows, in the same order, as History's first five.
+    assert_eq!(view.home_rows[..], view.rows[..view.home_rows.len()]);
+    // Never a header with no row under it.
+    assert!(matches!(view.home_rows.last(), Some(FeedRow::Item { .. })));
+}
+
+#[test]
+fn a_short_feed_is_drawn_whole_on_the_home() {
+    let mut sut = boot(vec![
+        recv("a", "0xBob", "1", "USDT", 200_000.0),
+        recv("b", "0xBob", "2", "USDT", 100_000.0),
+    ]);
+    drain_aliases(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.home_rows, view.rows);
+
+    let empty = boot(vec![]).view();
+    assert!(empty.rows.is_empty());
+    assert!(empty.home_rows.is_empty());
+}
+
+#[test]
+fn the_home_cut_follows_the_chain_filter() {
+    let on_base = |id: &str, ts: f64| recv(id, "0xBob", "1", "USDT", ts); // 8453
+    let on_mainnet = |id: &str, ts: f64| {
+        let mut r = recv(id, "0xBob", "1", "USDT", ts);
+        r.chain_id = 1;
+        r
+    };
+    let mut sut = boot(vec![
+        on_mainnet("m1", 300_000.0),
+        on_base("b1", 290_000.0),
+        on_mainnet("m2", 280_000.0),
+        on_base("b2", 200_000.0),
+        on_base("b3", 100_000.0),
+        on_base("b4", 10_000.0),
+    ]);
+    drain_aliases(&mut sut);
+    assert_eq!(item_ids(&sut.view().home_rows), ["m1", "b1", "m2"]);
+
+    sut.dispatch(Event::ChainFilterChanged {
+        chain_id: Some(8453),
+    });
+    let view = sut.view();
+    assert_eq!(item_ids(&view.home_rows), ["b1", "b2", "b3"]);
+    assert_eq!(item_ids(&view.rows), ["b1", "b2", "b3", "b4"]);
+}
+
+#[test]
+fn a_new_receipt_glows_on_the_home() {
+    let older = vec![
+        recv("r1", "0xBob", "5", "USDT", 100_000.0),
+        recv("r2", "0xBob", "6", "USDT", 90_000.0),
+        recv("r3", "0xBob", "7", "USDT", 80_000.0),
+    ];
+    let sut = celebrated(older, recv("new", "0xBob", "9", "USDT", 200_000.0));
+    let view = sut.view();
+    let glowing = view.new_item_id.clone().expect("a celebration");
+    assert_eq!(item_ids(&view.home_rows).first(), Some(&glowing));
+    assert_eq!(item_ids(&view.home_rows), ["new", "r1", "r2"]);
+}
+
+#[test]
+fn a_feed_from_before_469_decodes_with_no_home_rows() {
+    let view = boot(vec![recv("a", "0xBob", "1", "USDT", 200_000.0)]).view();
+    let mut json = serde_json::to_value(&view).unwrap();
+    json.as_object_mut().unwrap().remove("home_rows");
+    let back: FeedView = serde_json::from_value(json).unwrap();
+    assert!(back.home_rows.is_empty());
 }
 
 // ---------------------------------------------------------------------------
