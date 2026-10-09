@@ -108,9 +108,11 @@ enum BalanceCoreScene {
     static let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
     /// `failedChain` failed this round: inside Vela (`internal_chain_ids`), or
-    /// its nodes did not answer. Gnosis and Base answered with holdings.
+    /// its nodes did not answer. Gnosis and Base answered with holdings —
+    /// unless `everyChain`: then every chain asked failed the same way, with
+    /// nothing cached, and nothing at all is known.
     @MainActor
-    static func view(failedChain: Int = 1, internalFault: Bool) -> BalanceViewWire? {
+    static func view(failedChain: Int = 1, internalFault: Bool, everyChain: Bool = false) -> BalanceViewWire? {
         let core = BalanceDashboardCore()
         guard let opened = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
             "type": "account_changed", "address": address,
@@ -127,13 +129,15 @@ enum BalanceCoreScene {
                 "spam": false,
             ],
         ]
+        let read = [failedChain, 100, 8453]
+        let failed = everyChain ? read : [failedChain]
         guard let settled = try? CoreJSON.object(core.resolveEffect(effectId: fetchId, resultJson: CoreJSON.string([
             "type": "fetch_settled", "address": address, "pull": false,
-            "tokens": tokens,
-            "failed_chain_ids": [failedChain],
+            "tokens": everyChain ? [] : tokens,
+            "failed_chain_ids": failed,
             "rate_limited_chain_ids": [Int](),
-            "read_chain_ids": [failedChain, 100, 8453],
-            "internal_chain_ids": internalFault ? [failedChain] : [Int](),
+            "read_chain_ids": read,
+            "internal_chain_ids": internalFault ? failed : [Int](),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ]))), let view = settled["view"] as? [String: Any]
         else { return nil }

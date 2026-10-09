@@ -97,6 +97,17 @@ struct CoreRoundTests {
         #expect(row.refreshing, "the measuring sign turns while the core re-asks")
         #expect(row.failNote == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Gnosis"]))
         #expect(row.tapRetries)
+
+        // Between re-asks nothing is measuring: the sign is still, and the
+        // reason and the dash stay — nothing on the row moves.
+        let failed = try feeView(down.failed)
+        let between = SendLive.form(
+            try sendView(stage: "enter_details"), fee: failed, display: .usd,
+            on: drawn, loc: loc, speed: speed
+        ).fee
+        #expect(!between.refreshing, "the measuring sign turned with nothing out")
+        #expect(between.value == row.value)
+        #expect(between.failNote == row.failNote)
     }
 
     /// The confirm: the fee row's own figure and reason, and the one line
@@ -284,6 +295,27 @@ struct CoreRoundTests {
         ).balanceDetail
         let row = try #require(detail.pending.first { $0.id == "1" })
         #expect(row.status == loc.t("componentsUi.gas.reasonInternal"))
+    }
+
+    /// Every chain's read failed, nothing cached (PR 2 integration): no
+    /// settled "$0.00" and no "Deposit your first asset" under the reason —
+    /// the skeleton, and Vela's own sentence when the fault was its own, else
+    /// the request that never arrived.
+    @Test func homeWithNothingReadIsASkeletonAndItsReason() throws {
+        let home = WalletFixtures.buildMobileState(.h1, loc: loc)
+        let faulted = try #require(BalanceCoreScene.view(internalFault: true, everyChain: true))
+        #expect(faulted.unreachable == true, "every chain failed and nothing is known")
+        let hero = WalletLive.balance(faulted, fallback: home.balance, loc: loc)
+        #expect(hero.state == .loading)
+        #expect(hero.integer == nil, "a figure was drawn over nothing read")
+        #expect(hero.status?.text == loc.t("componentsUi.gas.reasonInternal"))
+        let section = WalletLive.assetsSection(faulted, rows: [], fallback: home.assetsSection)
+        #expect(section.mode == .loading, "\"nothing here\" is a claim nobody could make")
+
+        let down = try #require(BalanceCoreScene.view(internalFault: false, everyChain: true))
+        #expect(down.unreachable == true)
+        #expect(WalletLive.balance(down, fallback: home.balance, loc: loc).status?.text
+                == loc.t("onboarding.common.networkBody"))
     }
 
     // MARK: - The corpus

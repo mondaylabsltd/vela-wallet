@@ -210,11 +210,15 @@ enum I18nKeys {
         static let refused = "componentsUi.signing.refused"
         static let wentFirst = "componentsUi.signing.wentFirst"
         static let rejectedFees = "send.txRejectedFees"
+        /// The home's line over a balance nothing could be read for
+        /// (`BalanceView.unreachable`, no `internal_key`) — Android's and the
+        /// web's own words for it.
+        static let balanceUnreachable = "onboarding.common.networkBody"
 
         static let all = [
             feeRetrying, feeFailed, estimateFailed, reasonChainDown, reasonInternal,
             alertEstimateFailedTitle, alertEstimateFailedBody, alertEstimateChainDownBody,
-            previousPending, refused, wentFirst, rejectedFees,
+            previousPending, refused, wentFirst, rejectedFees, balanceUnreachable,
         ]
     }
 

@@ -136,12 +136,16 @@ enum WalletLive {
     /// rows when there are rows, the skeleton while the first read is out or
     /// the balance is unknown — "nothing here" is a claim, never made before
     /// anybody looked — and the drawn empty state (存入您的第一笔资产) once the
-    /// core has looked and found nothing.
+    /// core has looked and found nothing. Nothing could be read at all
+    /// (`unreachable`) is no "nothing here" either: the skeleton stays, under
+    /// the hero's reason (PR 2 integration — "Deposit your first asset" under
+    /// Vela's own error line).
     static func assetsSection(_ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel) -> SectionModel {
         SectionModel(
             title: fallback.title,
             action: fallback.action,
-            mode: !rows.isEmpty ? .rows : (view.holdingsLoading || view.balanceUnknown ? .loading : .empty),
+            mode: !rows.isEmpty ? .rows
+                : (view.holdingsLoading || view.balanceUnknown || view.unreachable == true ? .loading : .empty),
             empty: fallback.empty
         )
     }
@@ -186,6 +190,12 @@ enum WalletLive {
     private static func state(_ view: BalanceViewWire) -> BalanceStateKind {
         if view.hidden { return .hidden }
         if view.balanceUnknown { return .loading }
+        // **Unreachable is not zero** (spec 038 finding 15): nothing could be
+        // read and nothing is known — a fetch that threw, or (PR 2) a round
+        // in which every chain it asked failed — with no cache. The core's
+        // total is 0 then; a settled-looking "$0.00" (and "Deposit your first
+        // asset") under the reason was the bug. A skeleton and the reason.
+        if view.unreachable == true { return .loading }
         guard let total = view.displayTotalUsd ?? view.cachedTotalUsd else { return .loading }
         return total == 0 ? .zeroLive : .normal
     }
@@ -205,6 +215,11 @@ enum WalletLive {
         // Ethereum" for a fault that never asked Ethereum anything.
         if let loc, let key = view.internalKey {
             return BalanceStatusModel(kind: .warning, text: loc.t(key))
+        }
+        // Nothing could be read at all: the request never arrived — the
+        // reason under the skeleton, as the web and Android heroes say it.
+        if let loc, view.unreachable == true {
+            return BalanceStatusModel(kind: .warning, text: loc.t(I18nKeys.CoreRound.balanceUnreachable))
         }
         // Spec 092: networks the wallet cannot reach come first — every one,
         // held or not, said without "RPC"; the line opens their list.

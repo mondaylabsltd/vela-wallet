@@ -845,6 +845,15 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and whether the fee failed (`FeeView.failure`, a re-ask after
+                // one included): the send machine holds the confirm on it and
+                // drops the figure it kept, so the confirm never opens between
+                // the core's re-asks on a figure the fee machine discarded.
+                // Said again to every new journey.
+                .modifier(FeeFailedBridge(
+                    said: FeeFailedBridge.Said(failed: fees.view?.failure != nil, journey: send.journey),
+                    tell: { failed in send.feeFailedChanged(failed) }
+                ))
                 // …and the card's coin in force, which names the fee row's coin
                 // while no estimate is in hand (`SendView.fee_coin`).
                 .modifier(FeeTokenBridge(
@@ -4074,6 +4083,22 @@ private struct FeeTokenBridge: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
+}
+
+/// Whether the fee session's fee failed, into the send machine
+/// (`fee_failed_changed`) — on every change, and to every new journey.
+private struct FeeFailedBridge: ViewModifier {
+    struct Said: Equatable {
+        let failed: Bool
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.failed) }
     }
 }
 
