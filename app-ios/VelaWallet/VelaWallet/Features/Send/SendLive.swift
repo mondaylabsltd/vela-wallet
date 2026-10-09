@@ -990,7 +990,10 @@ enum SendLive {
                     "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
                 }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
-                        ? loc.t("send.estimatingFee") : "—")
+                        ? loc.t("send.estimatingFee") : "—"),
+                // The coin's figure and its price in the person's currency:
+                // a second line between the two, never a figure cut short.
+                wraps: true
             ),
         ]
         // The speed, but only when it was CHOSEN for this send, or taken

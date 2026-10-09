@@ -115,6 +115,9 @@ struct FactRowView: View {
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
                 .lineLimit(1)
+                // A value that wraps takes what the label leaves, rather than
+                // squeezing the label to "预估…".
+                .layoutPriority(fact.wraps ? 1 : 0)
             Spacer(minLength: Tokens.Space.s8)
             if fact.lines.isEmpty, let detail = fact.detail {
                 // A name over whose word it is and the address it stands for
@@ -164,7 +167,15 @@ struct FactRowView: View {
     /// branch on the view rather than on the role.
     @ViewBuilder private var value: some View {
         let text = Text(verbatim: fact.value)
-        if fact.mono {
+        if fact.wraps {
+            Text(verbatim: Self.unbreakable(fact.value))
+                .typeRole(Typography.body.scaled(textScale))
+                .foregroundStyle(fact.danger ? theme.errorBase : theme.fgBase)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if fact.mono {
             text
                 .monoRole(Typography.monoAddressDetail.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
@@ -177,6 +188,16 @@ struct FactRowView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+    }
+
+    /// `value` with the only line break it may take between its ` · ` parts,
+    /// after the dot: every space INSIDE a part — between a figure and its
+    /// unit, "≈ $0.55" — is a no-break space, so a line can never end inside
+    /// "~0.000173 BNB". It reads the same, aloud too.
+    static func unbreakable(_ value: String) -> String {
+        value.components(separatedBy: " · ")
+            .map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }
+            .joined(separator: "\u{00A0}· ")
     }
 
     /// Several values under one label (spec 093: a dApp's balance changes),
