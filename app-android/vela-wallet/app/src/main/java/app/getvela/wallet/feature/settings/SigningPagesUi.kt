@@ -29,6 +29,7 @@ import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
+import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
@@ -111,7 +112,8 @@ private fun TrustAnswer(label: String, onClick: () -> Unit) {
         fontWeight = VelaFontWeight.semibold,
         fontSize = VelaTextSize.base,
         modifier = Modifier
-            .padding(start = VelaSizing.hitTarget, bottom = VelaSpacing.md)
+            // Under the row's words: past the glyph and its gap.
+            .padding(start = VelaIconSize.lg + VelaSpacing.lg, bottom = VelaSpacing.md)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = VelaSpacing.sm),
     )
