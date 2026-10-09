@@ -1189,19 +1189,6 @@ pub fn confirm_button(
     crate::flows::panels::cta_button(CONFIRM_ID, theme, label, armed(enabled), action)
 }
 
-/// The confirm when the account signs on the Trusted Signer's page (spec 079
-/// US7): the same button, saying it goes there — the page asks for the one
-/// consent. Armed on the same terms: `action` is only ever passed when the
-/// three machines agreed.
-pub fn open_signer_button(
-    theme: &Theme,
-    label: SharedString,
-    enabled: bool,
-    action: Option<crate::flows::panels::Click>,
-) -> Div {
-    crate::flows::panels::cta_button("signing-open-signer", theme, label, armed(enabled), action)
-}
-
 /// The gas top-up's one action, "check again" (`treasuryBootstrap.retryBtn`):
 /// a plain button, armed on its own terms — it is not a signature, it is
 /// "I have sent it, look again", and the only way forward from a top-up.

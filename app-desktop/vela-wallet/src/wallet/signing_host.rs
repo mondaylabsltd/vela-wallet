@@ -38,7 +38,6 @@ use vela_core::app::clear_signing::{
 use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeFailure, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
-use vela_core::app::sign_pref::SignPref;
 use vela_core::app::sign_request::{
     Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignQuotedFee, SignRequest,
     SignShellResult, SignView,
@@ -492,6 +491,12 @@ impl SigningHost {
         Arc::clone(&self.ctx.trusted_signer)
     }
 
+    /// Spec 102 D4: the hand-off card's facts, when this account reviews and
+    /// signs on a trusted page (or nothing here can reach its keys).
+    pub fn handoff(&self) -> Option<crate::executor::send::Handoff> {
+        self.ctx.handoff()
+    }
+
     /// Something on the Trusted Signer's channel changed: hand the browser the
     /// page if a ceremony asked for it, and redraw.
     fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
@@ -578,14 +583,10 @@ impl SigningHost {
         })
         .detach();
         speed_control::reset(&mut host, cx);
-        // Where this request signs is the account's sign-in route (founder,
-        // 2026-09-26); the Trusted Signer's page, when it is one, as Settings
-        // names it right now.
-        let page = crate::resident::resident::<SignPref>(cx)
-            .read(cx)
-            .view()
-            .signer_url;
-        host.ctx.follow_sign_in(&page);
+        // Where this request is reviewed and signed is the account's venue
+        // (spec 102): its trusted page, or Vela's own sheet — with the key it
+        // was created or signed in with (founder, 2026-09-26).
+        host.ctx.follow_venue();
         // Spec 082 RJ4: the answer to the page follows what the tracker knows
         // of the op this request submitted.
         let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
@@ -3349,7 +3350,9 @@ mod approve_tests {
                 transports: "hybrid".to_owned(),
                 signer_origin: None,
             }],
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
         };
         SignContext::new(&account, CeremonyChannel::new().ceremony(0))
     }

@@ -8,7 +8,9 @@
 
 pub mod components;
 pub mod fixtures;
+pub mod integrity;
 pub mod live;
+pub mod pages;
 pub mod status;
 pub mod trusted_signer;
 

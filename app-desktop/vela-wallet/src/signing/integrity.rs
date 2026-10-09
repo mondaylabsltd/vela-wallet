@@ -1,0 +1,259 @@
+//! The integrity line (spec 102 R6) — the one sentence that backs the word
+//! "trusted" wherever a signing page is named: the hand-off card, Settings →
+//! Signing pages, the choosers' own-page entry and the account's venue rows.
+//!
+//! What it says is the core's (`trusted_signer::launch::IntegrityLine`: a
+//! state, a short version, when it was checked, the corpus key and whether the
+//! page may open). What is here is drawing it: the words with their version
+//! and time filled in, a tone, and a board that redraws a screen when a check
+//! it is showing finishes.
+//!
+//! Wording, per the spec: "matches Vela's published build list · checked
+//! <time>", never "certified untampered" — the check catches a build replaced
+//! for everyone, not a server that serves one person other bytes.
+
+use gpui::{
+    App, AppContext as _, Div, Entity, Global, ParentElement as _, SharedString, Styled as _, div,
+    px,
+};
+
+use vela_core::trusted_signer::launch::{IntegrityLine, IntegrityState};
+
+use crate::executor::signer_integrity;
+use crate::icons::{Icon, IconCache};
+use crate::loc::Loc;
+use crate::signing::Tone;
+use crate::theme::{self, Theme};
+
+/// The screens' handle on the checks: reading it during a frame is what makes
+/// that frame's window redraw when a check finishes (gpui redraws a window
+/// when an entity it read notifies).
+pub struct Board;
+
+struct BoardHandle(Entity<Board>);
+
+impl Global for BoardHandle {}
+
+/// The board, made — and wired to the checks' announcements — on first use.
+fn board(cx: &mut App) -> Entity<Board> {
+    if let Some(handle) = cx.try_global::<BoardHandle>() {
+        return handle.0.clone();
+    }
+    let board = cx.new(|_| Board);
+    cx.set_global(BoardHandle(board.clone()));
+    let mut finished = signer_integrity::subscribe();
+    let listening = board.downgrade();
+    cx.spawn(async move |cx| {
+        use futures::StreamExt as _;
+        while finished.next().await.is_some() {
+            let Some(board) = listening.upgrade() else {
+                break;
+            };
+            board.update(cx, |_, cx| cx.notify());
+        }
+    })
+    .detach();
+    board
+}
+
+/// The line for `page` now — and, when nothing vouches for the page and no
+/// check is running, a check started in the background (its result redraws
+/// whoever read this). Never blocks.
+pub fn line(page: &str, cx: &mut App) -> IntegrityLine {
+    let board = board(cx);
+    let _ = board.read(cx);
+    signer_integrity::check_in_background(page);
+    signer_integrity::line(page, crate::executor::now_ms() as u64)
+}
+
+/// "Check again" on a refused line: forget the refusal, and check.
+pub fn recheck(page: &str, cx: &mut App) {
+    signer_integrity::forget_refusal(page);
+    let _ = line(page, cx);
+}
+
+/// The line's sentence, its `{{version}}` and `{{time}}` filled — the time
+/// on this machine's clock, in the person's time format ("checked 14:32").
+#[must_use]
+pub fn text(loc: &Loc, line: &IntegrityLine) -> SharedString {
+    let time = line
+        .checked_at_ms
+        .map(|at| clock(at, loc.language()))
+        .unwrap_or_default();
+    loc.t_texts(
+        &line.key,
+        &[("version", line.version.as_str()), ("time", time.as_str())],
+    )
+}
+
+/// A check's moment as the line states it: the time of day, in the format
+/// the person chose (a check vouches for a day at most, so the hour says it).
+fn clock(at_ms: u64, locale: &str) -> String {
+    #[allow(clippy::cast_precision_loss, reason = "epoch milliseconds")]
+    let civil = crate::executor::local_civil(at_ms as f64);
+    vela_core::l10n::datetime::format_time(
+        &civil,
+        crate::executor::format_prefs::current().time,
+        locale,
+    )
+}
+
+/// How the line is coloured: good news green, a check under way quiet, a
+/// question for the person amber, a page that will not open red.
+#[must_use]
+pub fn tone(line: &IntegrityLine) -> Tone {
+    match line.state {
+        IntegrityState::Matches | IntegrityState::TrustedHere => Tone::Success,
+        IntegrityState::Checking => Tone::Neutral,
+        IntegrityState::Unchecked | IntegrityState::AskToTrust => Tone::Caution,
+        IntegrityState::Mismatch
+        | IntegrityState::Blocked
+        | IntegrityState::CouldNotCheck
+        | IntegrityState::NoVersion
+        | IntegrityState::AllBlocked => Tone::Danger,
+    }
+}
+
+/// The mark beside the line: a tick, a clock, or a warning.
+#[must_use]
+pub fn icon(tone: Tone) -> Icon {
+    match tone {
+        Tone::Success => Icon::Check,
+        Tone::Neutral | Tone::Accent => Icon::Clock,
+        Tone::Caution => Icon::TriangleAlert,
+        Tone::Danger => Icon::CircleAlert,
+    }
+}
+
+/// The tone's ink.
+#[must_use]
+pub fn ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
+    match tone {
+        Tone::Success => theme.success_base,
+        Tone::Neutral => theme.fg_muted,
+        Tone::Accent => theme.accent,
+        Tone::Caution => theme.warning_base,
+        Tone::Danger => theme.error_base,
+    }
+}
+
+/// The line as a row: its mark and its sentence, wrapping under itself.
+pub fn row(theme: &Theme, icons: &mut IconCache, said: SharedString, tone: Tone) -> Div {
+    let colour = ink(theme, tone);
+    div()
+        .flex()
+        .items_start()
+        .gap(px(8.))
+        .child(
+            div()
+                .flex_none()
+                .pt(px(2.))
+                .child(crate::wallet::components::icon_img(
+                    icons,
+                    icon(tone),
+                    false,
+                    colour,
+                    14.,
+                )),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(if tone == Tone::Neutral {
+                    theme.fg_muted
+                } else {
+                    colour
+                })
+                .child(said),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vela_core::trusted_signer::integrity::{NoVersion, Verdict};
+
+    fn admitted(at: u64) -> IntegrityLine {
+        IntegrityLine::of(
+            &Verdict::Open,
+            vela_core::trusted_signer::integrity::LAUNCH,
+            Some(at),
+        )
+    }
+
+    /// The sentence names the version and the time, and never echoes a key
+    /// or leaves a placeholder — in every language this build ships.
+    #[test]
+    fn every_line_reads_whole_in_every_language() {
+        let lines = [
+            IntegrityLine::checking(),
+            admitted(1_760_000_000_000),
+            IntegrityLine::of(
+                &Verdict::Refused {
+                    actual: "ab".repeat(32),
+                    expected: Vec::new(),
+                },
+                "",
+                None,
+            ),
+            IntegrityLine::no_version(NoVersion::NothingPublishedThisWalletKnows),
+            IntegrityLine::no_version(NoVersion::EverythingUsableIsBlocked),
+        ];
+        for (tag, loc) in Loc::every_language() {
+            for line in &lines {
+                let said = text(&loc, line);
+                assert_ne!(said.as_ref(), line.key, "{tag}: `{}` echoed", line.key);
+                assert!(!said.contains("{{"), "{tag}: a placeholder left in {said}");
+            }
+            let said = text(&loc, &lines[1]);
+            assert!(
+                said.contains(&lines[1].version),
+                "{tag}: no version in {said}"
+            );
+        }
+    }
+
+    /// "Matches the published list" is the only good news, and it says so in
+    /// green; a refusal is never drawn as anything but a refusal.
+    #[test]
+    fn the_tone_follows_whether_the_page_opens() {
+        assert_eq!(tone(&admitted(1)), Tone::Success);
+        assert_eq!(tone(&IntegrityLine::checking()), Tone::Neutral);
+        for state in [
+            IntegrityState::Mismatch,
+            IntegrityState::Blocked,
+            IntegrityState::CouldNotCheck,
+            IntegrityState::NoVersion,
+            IntegrityState::AllBlocked,
+        ] {
+            assert!(!state.opens());
+            let line = IntegrityLine {
+                state,
+                version: String::new(),
+                checked_at_ms: None,
+                key: state.key().to_owned(),
+                opens: false,
+            };
+            assert_eq!(tone(&line), Tone::Danger, "{state:?}");
+        }
+    }
+
+    /// The words never claim more than the check can support.
+    #[test]
+    fn the_words_never_say_certified_or_untampered() {
+        let loc = Loc::for_tag("en");
+        for state in [
+            IntegrityState::Matches,
+            IntegrityState::TrustedHere,
+            IntegrityState::Checking,
+        ] {
+            let said = loc.t(state.key()).to_lowercase();
+            for claim in ["certif", "untamper", "guarantee", "verified safe"] {
+                assert!(!said.contains(claim), "{said}");
+            }
+        }
+    }
+}

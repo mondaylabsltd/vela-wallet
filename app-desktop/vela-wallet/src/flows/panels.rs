@@ -3518,6 +3518,35 @@ fn send_confirm(
     if let Some(notice) = &model.notice {
         col = col.child(notice_card(notice, theme, notice_clicks));
     }
+    // Spec 102 D4: signed on the account's trusted page — say where, with
+    // which key, and how the page's check went, right above the button that
+    // goes there. The facts above are the person's own send, not a preview
+    // of somebody else's request; the page is where it is reviewed.
+    if let Some(handoff) = &model.handoff {
+        col = col.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(icon_img(icons, Icon::Eye, false, theme.info_base, 16.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(handoff.title.clone()),
+                        ),
+                )
+                .child(crate::signing::trusted_signer::handoff_facts(
+                    theme, icons, handoff, None,
+                )),
+        );
+    }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
     col.child(cta_button(
         "flow-confirm-cta",
