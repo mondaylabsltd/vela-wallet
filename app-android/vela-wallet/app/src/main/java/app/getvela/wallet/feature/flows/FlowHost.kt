@@ -539,18 +539,27 @@ class SendCallbacks(
 )
 
 /**
- * Spec 102 D4: a send on a page venue, at its hand-off — the card the confirm
- * draws where its button was ([card]: where, with which key, what is trusted
- * about the page; its Open and Trust), and the way out ([cancel]). The fee is
- * the confirm's own row above it, so the card carries none (a fee is on
- * screen once).
+ * Spec 102 D4: a send on a page venue — the card the confirm draws where its
+ * button was ([card]: where, with which key, what is trusted about the page;
+ * its Open and Trust). The fee is the confirm's own row above it, so the card
+ * carries none (a fee is on screen once).
+ *
+ * The card is there from the moment the confirm is (as on iOS and the
+ * desktop): the person sees which page and what was checked about it before
+ * anything starts, and its Open — 去签名页确认 — is the confirm's one button.
+ * [live]: the attempt is under way and its own hand-off is up; only then is
+ * there a way out ([cancel]) and the confirm's notice steps aside. [enabled]:
+ * the confirm's own gate (a signature under way, a relay stop), beside the
+ * page's check.
  */
 class SendHandoff(
     val card: app.getvela.wallet.feature.signing.HandoffModel,
-    val cancel: String,
+    val cancel: String?,
     val onOpen: () -> Unit,
     val onCancel: () -> Unit,
     val onTrust: () -> Unit,
+    val enabled: Boolean = true,
+    val live: Boolean = true,
 )
 
 /** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */

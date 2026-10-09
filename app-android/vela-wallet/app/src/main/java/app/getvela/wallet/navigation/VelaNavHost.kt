@@ -1154,25 +1154,57 @@ fun VelaNavHost(
                         onDispose { sendConfirmUp = false }
                     }
                     val sendHandoffChecks by application.container.signerPages.checks.collectAsStateWithLifecycle()
-                    val sendHandoff = (trustedSignerState as? TrustedSignerChannel.State.Handoff)
-                        ?.takeIf { onConfirmPage }
-                        ?.let { card ->
-                            sendHandoffChecks.size // read: a landed check redraws the line
-                            app.getvela.wallet.feature.flows.SendHandoff(
-                                card = app.getvela.wallet.feature.signing.SigningLive.handoffModel(
-                                    app.getvela.wallet.feature.signing.SigningLive.Handoff(
-                                        page = card.page,
-                                        key = card.key,
-                                        line = application.container.signerPages.line(card.page),
-                                    ),
-                                    strings,
-                                ),
-                                cancel = strings.t("common.cancel"),
-                                onOpen = trustedSigner::open,
-                                onCancel = trustedSigner::cancel,
-                                onTrust = { returnScope.launch { runCatching { application.container.signerPages.trust(card.page) } } },
-                            )
+                    // The account's venue, read when the confirm comes up: on a
+                    // page, the card stands in the button's place from the start
+                    // (as on iOS and the desktop) — which page, with which key,
+                    // and its check, before anything starts — and its Open
+                    // (去签名页确认) is the confirm.
+                    val planHandoff by produceState<app.getvela.wallet.feature.send.core.UserOpSpine.Handoff?>(null, onConfirmPage, session.address) {
+                        value = if (onConfirmPage) runCatching { send.handoffFor(session.address) }.getOrNull() else null
+                    }
+                    LaunchedEffect(planHandoff?.page) {
+                        planHandoff?.page?.let { page -> runCatching { application.container.signerPages.ensure(page) } }
+                    }
+                    val attemptCard = (trustedSignerState as? TrustedSignerChannel.State.Handoff)?.takeIf { onConfirmPage }
+                    // Open was already chosen on this card: the attempt's own
+                    // hand-off is the same card, so it opens rather than asking
+                    // a second time.
+                    var openWhenHandedOff by remember(onConfirmPage) { mutableStateOf(false) }
+                    LaunchedEffect(attemptCard, openWhenHandedOff) {
+                        if (openWhenHandedOff && attemptCard != null) {
+                            openWhenHandedOff = false
+                            trustedSigner.open()
                         }
+                    }
+                    val shownCard = attemptCard?.let { app.getvela.wallet.feature.send.core.UserOpSpine.Handoff(it.page, it.key) }
+                        ?: planHandoff?.takeIf { onConfirmPage }
+                    val sendHandoff = shownCard?.let { card ->
+                        sendHandoffChecks.size // read: a landed check redraws the line
+                        val live = attemptCard != null && !openWhenHandedOff
+                        app.getvela.wallet.feature.flows.SendHandoff(
+                            card = app.getvela.wallet.feature.signing.SigningLive.handoffModel(
+                                app.getvela.wallet.feature.signing.SigningLive.Handoff(
+                                    page = card.page,
+                                    key = card.key,
+                                    line = application.container.signerPages.line(card.page),
+                                ),
+                                strings,
+                            ),
+                            cancel = if (live) strings.t("common.cancel") else null,
+                            onOpen = if (attemptCard != null) {
+                                trustedSigner::open
+                            } else {
+                                {
+                                    openWhenHandedOff = true
+                                    send.slideConfirm()
+                                }
+                            },
+                            onCancel = trustedSigner::cancel,
+                            onTrust = { returnScope.launch { runCatching { application.container.signerPages.trust(card.page) } } },
+                            enabled = attemptCard != null || (sendView.can_confirm && !openWhenHandedOff),
+                            live = live,
+                        )
+                    }
                     FlowHost(
                         model = flowModel,
                         sendHandoff = sendHandoff,
