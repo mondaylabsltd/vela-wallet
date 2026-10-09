@@ -36,6 +36,13 @@ sealed interface Fixture {
 
     /** The "insert your security key" waiter, with and without the OTG hint. */
     data class InsertKey(val otgLooksOff: Boolean) : Fixture
+
+    /**
+     * "Phone or tablet · scan a code" (issue #480). No board drew it — it was
+     * only ever seen mid-ceremony, on a device — so a sheet too tall for a
+     * tablet or a landscape window (#447) had nowhere to be noticed.
+     */
+    data class CableQr(val chooser: KeyChooser) : Fixture
 }
 
 data class StateFixture(val group: String, val code: String, val fixture: Fixture)
@@ -298,7 +305,16 @@ object FlowFixtures {
         add(StateFixture("Usb prompts", "usb pin · retry", Fixture.UsbPin(retries = 5, isRetry = true)))
         add(StateFixture("Usb prompts", "insert key", Fixture.InsertKey(otgLooksOff = false)))
         add(StateFixture("Usb prompts", "insert key · otg off", Fixture.InsertKey(otgLooksOff = true)))
+        add(StateFixture("Phone or tablet", "scan a code · create", Fixture.CableQr(KeyChooser.Create)))
+        add(StateFixture("Phone or tablet", "scan a code · sign in", Fixture.CableQr(KeyChooser.SignIn)))
     }
+
+    /**
+     * A code the SIZE of a real hybrid one (`FIDO:/` and ~170 digits) for the
+     * scan-a-code boards. It opens no ceremony: its digits are a count, not a
+     * handshake.
+     */
+    val CABLE_PAYLOAD: String = "FIDO:/" + (0 until 168).joinToString("") { ((it * 7 + 3) % 10).toString() }
 
     fun byCode(code: String): StateFixture? = all.firstOrNull { it.code == code }
 }

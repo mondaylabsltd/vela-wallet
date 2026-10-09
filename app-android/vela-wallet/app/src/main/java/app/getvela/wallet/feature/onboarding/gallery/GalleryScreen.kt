@@ -135,6 +135,12 @@ fun GalleryScreen(initialDarkTheme: Boolean) {
                 onCancel = { selectedCode = null },
             )
 
+            is Fixture.CableQr -> app.getvela.wallet.feature.onboarding.flow.CableQrSheet(
+                payload = FlowFixtures.CABLE_PAYLOAD,
+                chooser = fixture.chooser,
+                onCancel = { selectedCode = null },
+            )
+
             // A flow step covers the list entirely, as it does in production —
             // it IS a full screen there, and showing it in a card would be a
             // picture of a layout the app never draws.
