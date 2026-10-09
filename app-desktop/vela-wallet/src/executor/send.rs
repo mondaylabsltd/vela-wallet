@@ -39,13 +39,13 @@ use vela_core::app::send::{
     SendToken, SendTokenMeta, SendTxRecord,
 };
 use vela_core::app::{Account, KeyMethod};
+use vela_core::signing_venue::{KeyRoute, SigningVenue, VenueBlock};
 use vela_core::user_op::WalletKey;
-use vela_core::wallet_keys::{DeviceKey, SignRoute};
 
 use crate::diag::vlog;
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
-use crate::executor::user_op::{self, QuotedFee, Signer};
+use crate::executor::user_op::{self, QuotedFee, SignFn, Signer};
 use crate::executor::{abi, balances, identity, pool, relay, storage};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -87,19 +87,29 @@ pub struct SendContext {
     /// Raised by the sign closure the instant the prompt opens; the host
     /// polls it and dispatches `SigningStarted` once.
     pub signing_started: Arc<AtomicBool>,
-    /// Spec 075: the Trusted Signer page this account signs on — empty for
-    /// the page Settings names — or `None` when a passkey signs here.
-    pub signer_page: Option<String>,
-    /// The one key that page may sign with: the sign-in key. `None` for a
-    /// record from before it, whose every founding key may answer there.
-    pub page_key: Option<String>,
-    /// The account's name: the Trusted Signer's page points the person at a
-    /// passkey with it.
+    /// Spec 102: the trusted page this account reviews and signs on — its
+    /// venue (R4), already checked to reach its keys (R1) — or `None` when it
+    /// signs in Vela.
+    pub venue_page: Option<String>,
+    /// Spec 102 R1: nothing on this device can reach this account's keys (a
+    /// custom-domain account whose page is unknown here). Nothing is signed;
+    /// the sheet says why.
+    pub venue_block: Option<VenueBlock>,
+    /// Spec 102 R5: the key this account signs with and where it lives — the
+    /// page is told it, so the browser goes straight to that key and offers no
+    /// other. `None` for a record from before the sign-in key, whose every
+    /// founding key may answer.
+    pub key_route: Option<KeyRoute>,
+    /// The account's name: the page points the person at a passkey with it.
     pub account_name: Option<String>,
-    /// The Trusted Signer (spec 071): whether this send goes to it, and its
-    /// waiting sheet. The host swaps in the channel it listens to and then
-    /// hands it the page ([`Self::follow_sign_in`]); the one made here routes
-    /// nothing.
+    /// The sign-in key's own label, when it has one apart from the wallet's
+    /// name — what the hand-off card's "Confirm with …" names before it falls
+    /// back to the key's place.
+    pub key_name: Option<String>,
+    /// The trusted page's channel (spec 071): whether this send goes to a
+    /// page, and its waiting sheet. The host swaps in the channel it listens
+    /// to and then points it at the venue ([`Self::follow_venue`]); the one
+    /// made here routes nothing.
     pub trusted_signer: Arc<trusted_signer::Channel>,
     /// The core's word that this payment's records are on disk and the
     /// tracker holds them (spec 082 RJ1): `ClearToPost` fills it, and the
@@ -107,82 +117,148 @@ pub struct SendContext {
     pub clearance: Arc<user_op::Clearance>,
 }
 
-/// Where a signature goes — the core's route, in this shell's vocabulary.
+/// What the hand-off card (spec 102 D4) is about: the page this request is
+/// reviewed and signed on, the key it is confirmed with — and, when nothing
+/// on this device can reach the account's keys, why.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Route {
-    /// A ceremony this machine runs, pinned to one credential.
-    Passkey(String, KeyMethod),
-    /// Spec 075: the Trusted Signer, at this page — empty for the page
-    /// Settings names.
-    TrustedSigner(String),
+pub struct Handoff {
+    /// The venue page; `None` exactly when [`Self::block`] is set.
+    pub page: Option<String>,
+    pub block: Option<VenueBlock>,
+    /// The key's own label, or `None` to name it by its place.
+    pub key_name: Option<String>,
+    pub key_place: KeyMethod,
 }
 
-/// The core's answer as this shell routes it; `None` for a method this build
-/// does not know.
-fn route_of(route: SignRoute) -> Option<Route> {
-    Some(match route.method.as_str() {
-        "platform" => Route::Passkey(route.credential_id, KeyMethod::Platform),
-        "hybrid" => Route::Passkey(route.credential_id, KeyMethod::Hybrid),
-        "security_key" => Route::Passkey(route.credential_id, KeyMethod::SecurityKey),
-        vela_core::trusted_signer::METHOD => Route::TrustedSigner(route.signer_origin),
-        _ => return None,
-    })
-}
-
-/// The page the Trusted Signer channel is pointed at: the account's own, or
-/// the page Settings names when its route names none.
-pub fn page_to_follow(signer_page: Option<&str>, settings_page: &str) -> Option<String> {
-    signer_page.map(|page| {
-        if page.is_empty() {
-            settings_page.to_owned()
-        } else {
-            page.to_owned()
-        }
-    })
+/// A key place by its wire name; `None` for anything else.
+fn place_of(method: &str) -> Option<KeyMethod> {
+    KeyMethod::ALL
+        .into_iter()
+        .find(|place| place.name() == method)
 }
 
 impl SendContext {
-    /// From the stored account (founder, 2026-09-26): the key it was created
-    /// or signed in with, over the route that reached it — chosen there and
-    /// never asked again. A record from before that was kept signs as it
-    /// always did: the route its first key recorded when it was minted, or
-    /// the page that key lives behind.
+    /// From the stored account's signing plan (spec 102): where it reviews
+    /// and signs (its venue, R4), and the key it was created or signed in with
+    /// over the place that reached it (R5) — chosen there and never asked
+    /// again (founder, 2026-09-26). A record from before the sign-in key signs
+    /// as it always did: the place its first key recorded when it was minted.
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         let keys = user_op::key_set_of(account);
-        let (legacy_method, legacy_pinned) = first_key_route(account, &keys);
-        let sign_in = account.sign_in_route();
-        let page_key = sign_in
+        let plan = account.signing_plan();
+        let (key_method, pinned_credential) = plan
+            .key
             .as_ref()
-            .filter(|route| route.method == vela_core::trusted_signer::METHOD)
-            .map(|route| route.credential_id.clone());
-        let route = sign_in
-            .or_else(|| vela_core::wallet_keys::sign_route(&device_keys_of(account), "auto"))
-            .and_then(route_of);
-        let (key_method, pinned_credential, signer_page) = match route {
-            Some(Route::Passkey(credential, method)) => (method, Some(credential), None),
-            Some(Route::TrustedSigner(page)) => (legacy_method, legacy_pinned, Some(page)),
-            None => (legacy_method, legacy_pinned, None),
+            .and_then(|route| {
+                place_of(&route.method).map(|place| (place, Some(route.credential_id.clone())))
+            })
+            .unwrap_or_else(|| first_key_route(account, &keys));
+        let venue_page = match (&plan.blocked, &plan.venue) {
+            (None, SigningVenue::Page { url }) => Some(url.clone()),
+            _ => None,
         };
+        let key_name = pinned_credential
+            .as_deref()
+            .and_then(|credential| {
+                account
+                    .keys
+                    .iter()
+                    .find(|key| key.credential_id.eq_ignore_ascii_case(credential))
+            })
+            .map(|key| key.name.trim().to_owned())
+            .filter(|name| !name.is_empty() && *name != account.name.trim());
         Self {
             keys,
             key_method,
             pinned_credential,
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
-            signer_page,
-            page_key,
+            venue_page,
+            venue_block: plan.blocked,
+            key_route: plan.key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
+            key_name,
             trusted_signer: trusted_signer::Channel::new().0,
             clearance: Arc::new(user_op::Clearance::default()),
         }
     }
 
-    /// Point the Trusted Signer channel at this account's page when it signs
-    /// on one. The host calls it once it has swapped in the channel it listens
-    /// to; `settings_page` stands in for a route that names no page.
-    pub fn follow_sign_in(&self, settings_page: &str) {
-        self.trusted_signer
-            .choose(page_to_follow(self.signer_page.as_deref(), settings_page));
+    /// The hand-off card's facts, when this account reviews and signs on a
+    /// page — or cannot sign here at all. `None` in Vela: the sheet is
+    /// Vela's own.
+    #[must_use]
+    pub fn handoff(&self) -> Option<Handoff> {
+        handoff_of(
+            self.venue_page.as_deref(),
+            self.venue_block.as_ref(),
+            self.key_name.as_deref(),
+            self.key_method,
+        )
+    }
+
+    /// Point the trusted page's channel at this account's venue — the page,
+    /// or none for Vela's own sheet. The host calls it once it has swapped in
+    /// the channel it listens to.
+    pub fn follow_venue(&self) {
+        self.trusted_signer.choose(self.venue_page.clone());
+    }
+
+    /// Who signs: the account's page when that is its venue, nobody when its
+    /// keys are out of reach, else the passkey `native` runs.
+    pub fn signer<'a>(&'a self, ask: &'a Ask, native: SignFn<'a>) -> Signer<'a> {
+        signer_for(
+            self.trusted_signer.chosen(),
+            self.venue_block.as_ref(),
+            self.key_route.as_ref(),
+            ask,
+            &self.trusted_signer,
+            native,
+        )
+    }
+}
+
+/// [`SendContext::handoff`], for the contexts that copy its fields.
+#[must_use]
+pub fn handoff_of(
+    page: Option<&str>,
+    block: Option<&VenueBlock>,
+    key_name: Option<&str>,
+    key_place: KeyMethod,
+) -> Option<Handoff> {
+    if page.is_none() && block.is_none() {
+        return None;
+    }
+    Some(Handoff {
+        page: page.filter(|_| block.is_none()).map(str::to_owned),
+        block: block.cloned(),
+        key_name: key_name.map(str::to_owned),
+        key_place,
+    })
+}
+
+/// The one rule every signing path routes by (spec 102 R1, R4): blocked ⇒
+/// nothing signs and the channel says why; a page venue ⇒ the page; else the
+/// native ceremony. `page` is the channel's own, so the screen and the
+/// executor read the same answer.
+pub fn signer_for<'a>(
+    page: Option<String>,
+    block: Option<&'a VenueBlock>,
+    key_route: Option<&'a KeyRoute>,
+    ask: &'a Ask,
+    channel: &'a trusted_signer::Channel,
+    native: SignFn<'a>,
+) -> Signer<'a> {
+    if let Some(block) = block {
+        return Signer::Unreachable { channel, block };
+    }
+    match page {
+        Some(page) => Signer::TrustedSigner {
+            ask,
+            page,
+            channel,
+            key_route,
+        },
+        None => Signer::Passkey(native),
     }
 }
 
@@ -209,23 +285,6 @@ fn first_key_route(account: &Account, keys: &[WalletKey]) -> (KeyMethod, Option<
         _ => keys.first().map(|key| key.credential_id.clone()),
     };
     (method, pinned)
-}
-
-/// The founding keys as the core's `sign_route` reads them. Spec 075: each
-/// with the page it lives behind, untouched — dropping it would make the
-/// route forget where the key is.
-fn device_keys_of(account: &Account) -> Vec<DeviceKey> {
-    account
-        .keys
-        .iter()
-        .map(|key| DeviceKey {
-            credential_id: key.credential_id.clone(),
-            public_key_hex: key.public_key_hex.clone(),
-            name: key.name.clone(),
-            transports: key.transports.clone(),
-            signer_origin: key.signer_origin.clone(),
-        })
-        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -665,16 +724,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                 // The person's own send: no site asked, so the page is told
                 // the operation's calls (contract §1).
                 let ask = Ask::own(ctx.account_name.clone());
-                let page = ctx.trusted_signer.chosen();
-                let signer = match &page {
-                    Some(page) => Signer::TrustedSigner {
-                        ask: &ask,
-                        page,
-                        channel: &ctx.trusted_signer,
-                        only: ctx.page_key.as_deref(),
-                    },
-                    None => Signer::Passkey(&mut sign),
-                };
+                let signer = ctx.signer(&ask, &mut sign);
                 // RJ1 (G34): signed and hashed — every recipient's record is
                 // written and handed to the tracker before a byte goes out.
                 let before_post = |user_op_hash: &str, submit_block: Option<u64>| {
@@ -829,16 +879,17 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: SigningVenue::InVela,
         }
     }
 
     fn signed_in(mut account: Account, credential: &str, method: KeyMethod) -> Account {
-        account.signed_in_with = Some(SignInKey {
+        account.sign_in_key = Some(SignInKey {
             credential_id: credential.to_owned(),
             method,
             transports: String::new(),
-            signer_origin: None,
         });
         account
     }
@@ -847,11 +898,9 @@ mod tests {
         crate::ceremony::CeremonyChannel::new().ceremony(0)
     }
 
-    const SETTINGS_PAGE: &str = "https://sign.getvela.app/";
-
     /// Founder, 2026-09-26: the key the account signed in with signs, over the
     /// route it took — not the first key, not where a key was registered, and
-    /// never a choice made at signing time.
+    /// never a choice made at signing time. In Vela: no page.
     #[test]
     fn the_account_signs_with_its_sign_in_key() {
         let ctx = SendContext::new(
@@ -865,8 +914,9 @@ mod tests {
             "pinned, even on a security key: only this key signs"
         );
         assert_eq!(ctx.keys.len(), 3, "every key still verifies");
-        ctx.follow_sign_in(SETTINGS_PAGE);
+        ctx.follow_venue();
         assert_eq!(ctx.trusted_signer.chosen(), None);
+        assert_eq!(ctx.venue_block, None);
 
         // A synced passkey registered as `internal`, reached here by a scan.
         let ctx = SendContext::new(
@@ -875,30 +925,39 @@ mod tests {
         );
         assert_eq!(ctx.key_method, KeyMethod::Hybrid);
         assert_eq!(ctx.pinned_credential.as_deref(), Some("cred0"));
+        // R5: the route the page would be told names that key and its place.
+        let route = ctx.key_route.unwrap_or_else(|| unreachable!("a route"));
+        assert_eq!(route.credential_id, "cred0");
+        assert_eq!(route.method, "hybrid");
+        assert_eq!(route.hints, ["hybrid"]);
     }
 
-    /// Signed in through the Trusted Signer: every signature goes to that
-    /// page, and to the page Settings names when the sign-in named none.
+    /// Spec 102 R4: an account whose venue is a trusted page signs every
+    /// transaction and message there — the venue, not the key, decides — and
+    /// its key route tells the page which key.
     #[test]
-    fn a_trusted_signer_sign_in_signs_on_its_page() {
-        let mut through_page = signed_in(account("internal", 1), "cred0", KeyMethod::TrustedSigner);
-        let ctx = SendContext::new(&through_page, ceremony());
-        ctx.follow_sign_in("http://localhost:8140/");
+    fn a_page_venue_signs_on_its_page() {
+        let mut on_page = signed_in(account("internal", 2), "cred1", KeyMethod::Platform);
+        on_page.signing_venue = SigningVenue::official();
+        let ctx = SendContext::new(&on_page, ceremony());
+        ctx.follow_venue();
         assert_eq!(
             ctx.trusted_signer.chosen().as_deref(),
-            Some("http://localhost:8140/")
+            Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL)
         );
-
-        if let Some(key) = through_page.signed_in_with.as_mut() {
-            key.signer_origin = Some("https://sign.example.test".to_owned());
-        }
-        let ctx = SendContext::new(&through_page, ceremony());
-        ctx.follow_sign_in(SETTINGS_PAGE);
         assert_eq!(
-            ctx.trusted_signer.chosen().as_deref(),
-            Some("https://sign.example.test")
+            ctx.key_route
+                .as_ref()
+                .map(|route| route.credential_id.as_str()),
+            Some("cred1")
         );
         assert_eq!(ctx.account_name.as_deref(), Some("Wallet"));
+
+        // The same account, its venue changed back: in Vela, no page.
+        on_page.signing_venue = SigningVenue::InVela;
+        let ctx = SendContext::new(&on_page, ceremony());
+        ctx.follow_venue();
+        assert_eq!(ctx.trusted_signer.chosen(), None);
     }
 
     /// A record from before the sign-in key, or one naming a key the wallet
@@ -918,7 +977,7 @@ mod tests {
         let vault = SendContext::new(&account("internal", 3), ceremony());
         assert_eq!(vault.key_method, KeyMethod::Platform);
         assert_eq!(vault.pinned_credential.as_deref(), Some("cred0"));
-        vault.follow_sign_in(SETTINGS_PAGE);
+        vault.follow_venue();
         assert_eq!(vault.trusted_signer.chosen(), None);
 
         let stranger = SendContext::new(
@@ -927,6 +986,10 @@ mod tests {
         );
         assert_eq!(stranger.key_method, KeyMethod::Platform);
         assert_eq!(stranger.pinned_credential.as_deref(), Some("cred0"));
+        assert_eq!(
+            stranger.key_route, None,
+            "no route to a key it does not hold"
+        );
 
         // A legacy record: one projected key, a security key.
         let legacy = SendContext::new(&account("", 0), ceremony());
@@ -934,18 +997,57 @@ mod tests {
         assert_eq!(legacy.key_method, KeyMethod::SecurityKey);
     }
 
-    /// Spec 075, for a record without a sign-in key: a first key minted behind
-    /// somebody's page is reachable nowhere else, so it still signs there.
+    /// A record written before 102, with no sign-in key and its first key
+    /// minted behind somebody's page: the core's reader makes that page its
+    /// venue (the keys are reachable nowhere else), so it still signs there.
     #[test]
     fn a_first_key_behind_a_page_still_signs_there() {
-        let mut hosted = account("internal", 2);
-        hosted.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
-        let ctx = SendContext::new(&hosted, ceremony());
-        ctx.follow_sign_in(SETTINGS_PAGE);
+        let mut hosted =
+            serde_json::to_value(account("internal", 2)).unwrap_or_else(|e| unreachable!("{e}"));
+        for field in [
+            "sign_in_key",
+            "signing_domain",
+            "signing_venue",
+            "signed_in_with",
+        ] {
+            if let Some(record) = hosted.as_object_mut() {
+                record.remove(field);
+            }
+        }
+        hosted["keys"][0]["signer_origin"] = "https://sign.example.test".into();
+        let read: Account = serde_json::from_value(hosted).unwrap_or_else(|e| unreachable!("{e}"));
+        let ctx = SendContext::new(&read, ceremony());
+        ctx.follow_venue();
         assert_eq!(
             ctx.trusted_signer.chosen().as_deref(),
-            Some("https://sign.example.test")
+            Some("https://sign.example.test/")
         );
+    }
+
+    /// R1: a custom-domain account whose page this device does not know is
+    /// signed by nothing — no page, no native prompt (the app cannot reach
+    /// those keys) — and the reason travels to the sheet.
+    #[test]
+    fn keys_nothing_here_can_reach_sign_nothing() {
+        let mut stranded = signed_in(account("internal", 1), "cred0", KeyMethod::Platform);
+        stranded.signing_domain = "sign.example.com".to_owned();
+        let ctx = SendContext::new(&stranded, ceremony());
+        ctx.follow_venue();
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+        assert_eq!(
+            ctx.venue_block,
+            Some(VenueBlock::AppCannotReach {
+                domain: "sign.example.com".to_owned()
+            })
+        );
+        let ask = Ask::own(None);
+        let mut native = |_: &[u8]| -> Result<vela_core::app::Assertion, passkey::PasskeyFailure> {
+            unreachable!("a native prompt for keys the app cannot reach")
+        };
+        assert!(matches!(
+            ctx.signer(&ask, &mut native),
+            Signer::Unreachable { .. }
+        ));
     }
 
     /// A holding goes to the send machine wearing its logo candidates — the

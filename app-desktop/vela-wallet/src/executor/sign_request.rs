@@ -43,13 +43,14 @@ use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
 use vela_core::app::{Account, Assertion, KeyMethod};
+use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{NOT_SENT_DAPP_DETAIL, WalletKey};
 
 use crate::diag::{short, vlog};
 use crate::executor::landing::{self, Landing};
 use crate::executor::passkey::{self, Ceremony, PasskeyFailure};
 use crate::executor::trusted_signer::{self, Ask};
-use crate::executor::user_op::{CeremonyEdge, Signer};
+use crate::executor::user_op::{CeremonyEdge, SignFn, Signer};
 use crate::executor::{now_ms, relay, storage, user_op};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -96,11 +97,13 @@ pub struct SignContext {
     pub keys: Vec<WalletKey>,
     pub key_method: KeyMethod,
     pub pinned_credential: Option<String>,
-    /// Spec 075: the Trusted Signer page this account signs on, and the one
-    /// key it may sign with there, as
-    /// [`crate::executor::send::SendContext::signer_page`] and `page_key`.
-    pub signer_page: Option<String>,
-    pub page_key: Option<String>,
+    /// Spec 102: where this account reviews and signs, as
+    /// [`crate::executor::send::SendContext`] has it — its trusted page (or
+    /// none), why its keys are out of reach (or not), and the key route.
+    pub venue_page: Option<String>,
+    pub venue_block: Option<VenueBlock>,
+    pub key_route: Option<KeyRoute>,
+    pub key_name: Option<String>,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -182,14 +185,35 @@ impl SignContext {
         }
     }
 
-    /// Point the Trusted Signer channel at this account's page when it signs
-    /// on one — see [`crate::executor::send::SendContext::follow_sign_in`].
-    pub fn follow_sign_in(&self, settings_page: &str) {
-        self.trusted_signer
-            .choose(crate::executor::send::page_to_follow(
-                self.signer_page.as_deref(),
-                settings_page,
-            ));
+    /// Point the trusted page's channel at this account's venue — see
+    /// [`crate::executor::send::SendContext::follow_venue`].
+    pub fn follow_venue(&self) {
+        self.trusted_signer.choose(self.venue_page.clone());
+    }
+
+    /// The hand-off card's facts — see
+    /// [`crate::executor::send::SendContext::handoff`].
+    #[must_use]
+    pub fn handoff(&self) -> Option<crate::executor::send::Handoff> {
+        crate::executor::send::handoff_of(
+            self.venue_page.as_deref(),
+            self.venue_block.as_ref(),
+            self.key_name.as_deref(),
+            self.key_method,
+        )
+    }
+
+    /// Who signs this request — the one rule
+    /// ([`crate::executor::send::signer_for`]).
+    fn signer<'a>(&'a self, ask: &'a Ask, native: SignFn<'a>) -> Signer<'a> {
+        crate::executor::send::signer_for(
+            self.trusted_signer.chosen(),
+            self.venue_block.as_ref(),
+            self.key_route.as_ref(),
+            ask,
+            &self.trusted_signer,
+            native,
+        )
     }
 
     /// This request as the Trusted Signer's page is told it (contract §1): a
@@ -244,8 +268,10 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
-            signer_page: send.signer_page,
-            page_key: send.page_key,
+            venue_page: send.venue_page,
+            venue_block: send.venue_block,
+            key_route: send.key_route,
+            key_name: send.key_name,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             signature_done: Arc::new(AtomicBool::new(false)),
@@ -476,16 +502,7 @@ fn sign_and_submit(
         })
     };
     let ask = ctx.ask(method, params_json);
-    let page = ctx.trusted_signer.chosen();
-    let signer = match &page {
-        Some(page) => Signer::TrustedSigner {
-            ask: &ask,
-            page,
-            channel: &ctx.trusted_signer,
-            only: ctx.page_key.as_deref(),
-        },
-        None => Signer::Passkey(&mut sign),
-    };
+    let signer = ctx.signer(&ask, &mut sign);
     let edges = |edge: CeremonyEdge| sink.send(ceremony_event(id, edge));
     let asked = || ctx.still_asked();
     // RJ1 (G34): signed, hashed and the head read — the core writes the
@@ -606,16 +623,7 @@ fn sign_message(
         })
     };
     let ask = ctx.ask(method, params_json);
-    let page = ctx.trusted_signer.chosen();
-    let signer = match &page {
-        Some(page) => Signer::TrustedSigner {
-            ask: &ask,
-            page,
-            channel: &ctx.trusted_signer,
-            only: ctx.page_key.as_deref(),
-        },
-        None => Signer::Passkey(&mut sign),
-    };
+    let signer = ctx.signer(&ask, &mut sign);
     let asked = || ctx.still_asked();
     match user_op::sign_message(
         chain_id,
@@ -1160,7 +1168,19 @@ mod tests {
 
     fn context_signed_in(
         site: Option<&str>,
-        signed_in_with: Option<vela_core::app::SignInKey>,
+        sign_in_key: Option<vela_core::app::SignInKey>,
+    ) -> SignContext {
+        context_on(
+            site,
+            sign_in_key,
+            vela_core::signing_venue::SigningVenue::InVela,
+        )
+    }
+
+    fn context_on(
+        site: Option<&str>,
+        sign_in_key: Option<vela_core::app::SignInKey>,
+        signing_venue: vela_core::signing_venue::SigningVenue,
     ) -> SignContext {
         let account = Account {
             id: "cred0".to_owned(),
@@ -1175,7 +1195,9 @@ mod tests {
                 transports: "internal".to_owned(),
                 signer_origin: None,
             }],
-            signed_in_with,
+            sign_in_key,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue,
         };
         let mut ctx = SignContext::new(
             &account,
@@ -1196,26 +1218,34 @@ mod tests {
                 credential_id: "cred0".to_owned(),
                 method: KeyMethod::Hybrid,
                 transports: String::new(),
-                signer_origin: None,
             }),
         );
         assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Hybrid));
-        ctx.follow_sign_in("https://sign.getvela.app/");
+        ctx.follow_venue();
         assert_eq!(ctx.trusted_signer.chosen(), None);
 
-        let through_page = context_signed_in(
+        // Spec 102 R4: the account's venue is the official page — the site's
+        // request goes there, told the sign-in key (R5).
+        let through_page = context_on(
             None,
             Some(vela_core::app::SignInKey {
                 credential_id: "cred0".to_owned(),
-                method: KeyMethod::TrustedSigner,
+                method: KeyMethod::Platform,
                 transports: String::new(),
-                signer_origin: None,
             }),
+            vela_core::signing_venue::SigningVenue::official(),
         );
-        through_page.follow_sign_in("https://sign.getvela.app/");
+        through_page.follow_venue();
         assert_eq!(
             through_page.trusted_signer.chosen().as_deref(),
             Some("https://sign.getvela.app/")
+        );
+        assert_eq!(
+            through_page
+                .key_route
+                .as_ref()
+                .map(|route| route.method.as_str()),
+            Some("platform")
         );
 
         // A record from before the sign-in key: the first key, as always.

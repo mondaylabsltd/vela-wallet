@@ -75,12 +75,13 @@ pub mod relay;
 /// A bug report's screenshots: decoded, upright, scaled, re-encoded bare (078).
 pub mod screenshot_prep;
 pub mod send;
-pub mod sign_pref;
 /// The signing panel's seven operations.
 ///
 pub mod sign_request;
-/// Spec 076: is the Trusted Signer's page the page it is supposed to be?
+/// Spec 076 / 102 R6: is a signing page the page it is supposed to be?
 pub mod signer_integrity;
+/// Spec 102: Settings → Signing pages — the pages this device keeps.
+pub mod signing_pages;
 pub mod sim;
 pub mod single_flight;
 pub mod storage;
@@ -94,9 +95,9 @@ pub mod user_op;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use vela_core::app::FailureKind;
 use vela_core::app::session::{SessionOperation, SessionShellResult};
 use vela_core::app::shell::{ProofPurpose, ShellOperation, ShellResult};
-use vela_core::app::{FailureKind, KeyMethod};
 use vela_core::l10n::datetime::Civil;
 use vela_core::primitives;
 use vela_core::registry_proof::{build_member_proof, group_public_key_from_seed};
@@ -120,17 +121,19 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             supported: passkey::supported(),
         },
 
-        // Spec 075: the Trusted Signer is a peer of the three authenticator
-        // routes, so it is answered HERE, before the ceremony reaches any
-        // cable. The verdict comes back in the same result variant, which is
-        // what keeps the machines from being able to tell the routes apart.
+        // Spec 102 R3: a ceremony whose op names a page runs on THAT page — a
+        // wallet on the person's own signing domain, whose keys only its page
+        // can mint or use. It is answered HERE, before the ceremony reaches
+        // any cable, and in the same result variant, so the machines cannot
+        // tell where it ran. `method` is where the key lives either way.
         ShellOperation::RegisterPasskey {
             name,
             exclude_credential_ids,
             method,
+            page: _,
         } => {
-            if *method == KeyMethod::TrustedSigner {
-                trusted_signer_ceremony(operation, None, ceremony)
+            if let Some(page) = trusted_signer::page_of(operation) {
+                trusted_signer_ceremony(operation, page, None, ceremony)
             } else {
                 match passkey::register(name, exclude_credential_ids, *method, ceremony) {
                     Ok(registration) => ShellResult::PasskeyRegistered {
@@ -154,12 +157,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             // show no QR.
             method,
             purpose,
-            // Spec 075: read by `trusted_signer::run_ceremony` — the page the
-            // key lives behind, which is where its proof has to be signed.
-            signer_origin: _,
+            // Spec 102 R3: the custom-domain wallet's page, where its proof
+            // has to be signed (`trusted_signer::page_of`). `None`: in the app.
+            page: _,
         } => {
-            if *method == KeyMethod::TrustedSigner {
-                trusted_signer_ceremony(operation, None, ceremony)
+            if let Some(page) = trusted_signer::page_of(operation) {
+                trusted_signer_ceremony(operation, page, None, ceremony)
             } else {
                 match passkey::assert(
                     &challenge_for(*purpose),
@@ -204,12 +207,13 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             transports: _,
             method,
             group_public_key_hex,
-            // Spec 075: as on `SignProof` — the page the key was minted
-            // behind, read by `trusted_signer::run_ceremony`, and the relying
+            // Spec 102 R3: as on `SignProof` — the page the key was just
+            // minted on, where its membership is confirmed, and the relying
             // party this member's challenge must be fetched under.
-            signer_origin,
+            page: _,
         } => {
-            let member_rp = vela_core::trusted_signer::registry_rp_id(signer_origin.as_deref())
+            let page = trusted_signer::page_of(operation);
+            let member_rp = vela_core::trusted_signer::registry_rp_id(page)
                 .unwrap_or_else(|| passkey::RELYING_PARTY.to_owned());
             // Mixed failure modes: the challenge fetch and the ceremony can each
             // fail, and the core branches differently on the two. Classify by
@@ -229,9 +233,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                     // Spec 075: the page fetches its OWN member challenge and
                     // must agree with these bytes; the core refuses an answer
                     // over anything else.
-                    Ok(bytes) if *method == KeyMethod::TrustedSigner => {
-                        trusted_signer_ceremony(operation, Some(&bytes), ceremony)
-                    }
+                    Ok(bytes) if page.is_some() => trusted_signer_ceremony(
+                        operation,
+                        page.unwrap_or_default(),
+                        Some(&bytes),
+                        ceremony,
+                    ),
                     Ok(bytes) => {
                         match passkey::assert(&bytes, Some(credential_id), *method, ceremony) {
                             Err(failure) => passkey_failed(failure),
@@ -261,12 +268,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
         // The method is the person's sign-in choice, and now it routes: the scan
         // method signs in through a phone over caBLE, every other method through
         // the plugged-in security key. `passkey::assert` owns the branch.
-        ShellOperation::AuthenticatePasskey { method } => {
-            // Spec 075: on this route the CHALLENGE is the page's too — it
-            // derives `vela-signin-<ms>-<hex>` itself, so the wallet's random
-            // 32 bytes never leave this process.
-            if *method == KeyMethod::TrustedSigner {
-                trusted_signer_ceremony(operation, None, ceremony)
+        ShellOperation::AuthenticatePasskey { method, page: _ } => {
+            // Spec 102 R3: on the person's own page the CHALLENGE is the
+            // page's too — it derives `vela-signin-<ms>-<hex>` itself, so the
+            // wallet's random 32 bytes never leave this process.
+            if let Some(page) = trusted_signer::page_of(operation) {
+                trusted_signer_ceremony(operation, page, None, ceremony)
             } else {
                 match passkey::assert(&passkey::random(32), None, *method, ceremony) {
                     Ok(assertion) => ShellResult::PasskeyAuthenticated {
@@ -317,12 +324,14 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             group_public_key_hex,
             method,
             answer_when_accepted,
+            page,
         } => published(registry::publish(
             metadata_hex,
             members,
             group_seed_hex,
             group_public_key_hex,
             *method,
+            page.as_deref(),
             *answer_when_accepted,
             ceremony,
         )),
@@ -457,20 +466,21 @@ pub fn session_blocks(operation: &SessionOperation) -> bool {
 // The small conversions
 // ---------------------------------------------------------------------------
 
-/// Spec 075: one passkey ceremony on the Trusted Signer's page rather than on
-/// the OS sheet — a create, a sign-in, a proof, a member proof.
+/// Spec 102 R3: one passkey ceremony on the person's own signing page rather
+/// than on the OS sheet — a create, a sign-in, a proof, a member proof, for a
+/// wallet on a custom signing domain.
 ///
 /// The verdict is reported in the SAME result variant a platform ceremony's
 /// would be (`PasskeyRegistered`, `PasskeyAuthenticated`, `ProofSigned`,
 /// `MemberProofSigned`), and a refusal in the same `PasskeyFailed` — the
-/// machines branch on the route nowhere, which is what makes this a fourth
-/// route and not a fourth flow.
+/// machines branch on where it ran nowhere.
 ///
 /// `expected_member_challenge` is the bytes the WALLET fetched from the
 /// registry for this member; the page fetches its own and the core refuses an
 /// answer over anything else.
 fn trusted_signer_ceremony(
     operation: &ShellOperation,
+    page: &str,
     expected_member_challenge: Option<&[u8]>,
     ceremony: &Ceremony,
 ) -> ShellResult {
@@ -479,6 +489,7 @@ fn trusted_signer_ceremony(
     let last = trusted_signer::ends_the_flow(operation);
     let answered = trusted_signer::run_ceremony(
         operation,
+        page,
         expected_member_challenge,
         &registry::registry_url(),
         &ceremony.trusted_signer,

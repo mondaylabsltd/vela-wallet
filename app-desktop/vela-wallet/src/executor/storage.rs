@@ -47,9 +47,12 @@ pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
 /// The default transaction speed (spec 068, on the desktop since 069). A bare
 /// tier name — `fast` / `standard` / `slow` — judged by the core, never here.
 pub const KEY_FEE_TIER: &str = "vela.feeTier";
-/// The Trusted Signer's page, when the person chose one; absent is the
-/// official page.
+/// Spec 071's one "Trusted Signer page" — read once by `signing_pages`,
+/// imported as a saved page, then removed. Nothing else reads it (spec 102).
 pub const KEY_TRUSTED_SIGNER_URL: &str = "vela.trustedSignerUrl";
+/// Spec 102: Settings → Signing pages — the pages this person saved, the
+/// official one never among them (`[{ "url", "name" }]`). Survives sign-out.
+pub const KEY_SIGNING_PAGES: &str = "vela.signingPages";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
@@ -1008,7 +1011,9 @@ pub(crate) mod tests {
                     signer_origin: None,
                 })
                 .collect(),
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
         }
     }
 
@@ -1019,17 +1024,16 @@ pub(crate) mod tests {
     fn the_sign_in_key_comes_back_and_signs() {
         with_temp_state("sign-in-key-round-trip", || {
             let mut record = account("cred0", 2);
-            record.signed_in_with = Some(vela_core::app::SignInKey {
+            record.sign_in_key = Some(vela_core::app::SignInKey {
                 credential_id: "cred1".to_owned(),
                 method: vela_core::app::KeyMethod::SecurityKey,
                 transports: String::new(),
-                signer_origin: None,
             });
             if save_account(&record).is_err() {
                 unreachable!("save");
             }
             let loaded = load_accounts().unwrap_or_default();
-            assert_eq!(loaded[0].signed_in_with, record.signed_in_with);
+            assert_eq!(loaded[0].sign_in_key, record.sign_in_key);
 
             let context = crate::executor::send::SendContext::new(
                 &loaded[0],
@@ -1040,21 +1044,14 @@ pub(crate) mod tests {
         });
     }
 
-    /// Spec 075: a key that lives behind a signer page must come back
-    /// remembering which one.
-    ///
-    /// The field is written by the create and the sign-in that minted or
-    /// found the key, and read to decide where the NEXT signature goes. A
-    /// record that loses it on a rewrite leaves a key reachable only through
-    /// somebody's own deployment being routed to a platform sheet that cannot
-    /// see it — a wallet that has quietly forgotten where its key is. Written
-    /// on its own key, absent when there is none, and carried through to the
-    /// route the signing sheet follows.
+    /// Spec 075: a key minted behind a signing page comes back remembering
+    /// which one — spec 102 still writes it, because it is what an OLDER build
+    /// routes by. Written on its own key, absent when there is none.
     #[test]
     fn a_key_behind_a_page_comes_back_remembering_it() {
         with_temp_state("signer-origin-round-trip", || {
             let mut record = account("cred0", 2);
-            record.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
+            record.keys[0].signer_origin = Some("https://sign.getvela.app".to_owned());
             if save_account(&record).is_err() {
                 unreachable!("save");
             }
@@ -1062,30 +1059,59 @@ pub(crate) mod tests {
             // On disk: the field is there, and only on the key that has one.
             let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
             let keys = raw[0]["keys"].as_array().cloned().unwrap_or_default();
-            assert_eq!(keys[0]["signer_origin"], "https://sign.example.test");
+            assert_eq!(keys[0]["signer_origin"], "https://sign.getvela.app");
             assert!(
                 keys[1].get("signer_origin").is_none(),
                 "an ordinary key carries no page: {}",
                 keys[1]
             );
-
             let loaded = load_accounts().unwrap_or_default();
             assert_eq!(
                 loaded[0].keys[0].signer_origin.as_deref(),
-                Some("https://sign.example.test")
+                Some("https://sign.getvela.app")
             );
             assert_eq!(loaded[0].keys[1].signer_origin, None);
+        });
+    }
 
-            // And through to the route the signing sheet follows: a record
-            // from before the sign-in key signs where its first key lives.
+    /// Spec 102: where an account reviews and signs, and the domain its keys
+    /// live under, come back from disk — and the next signature goes there. A
+    /// record that dropped its venue on a rewrite would quietly move a person
+    /// off the page they chose; one that dropped a custom domain would route
+    /// keys only that page can reach to a sheet that cannot see them.
+    #[test]
+    fn an_accounts_venue_and_domain_come_back_and_route() {
+        with_temp_state("signing-venue-round-trip", || {
+            let mut record = account("cred0", 2);
+            record.signing_domain = "sign.example.test".to_owned();
+            record.signing_venue =
+                vela_core::signing_venue::SigningVenue::page("https://sign.example.test/")
+                    .unwrap_or_else(|| unreachable!("a page"));
+            if save_account(&record).is_err() {
+                unreachable!("save");
+            }
+            let loaded = load_accounts().unwrap_or_default();
+            assert_eq!(loaded[0].signing_domain, "sign.example.test");
+            assert_eq!(loaded[0].signing_venue, record.signing_venue);
+            // Every key of a custom-domain account carries its page, so an
+            // older build follows it there too.
+            assert!(
+                loaded[0]
+                    .keys
+                    .iter()
+                    .all(|key| key.signer_origin.as_deref() == Some("https://sign.example.test")),
+                "{:?}",
+                loaded[0].keys
+            );
+
             let context = crate::executor::send::SendContext::new(
                 &loaded[0],
                 crate::ceremony::CeremonyChannel::new().ceremony(0),
             );
-            context.follow_sign_in("https://sign.getvela.app/");
+            context.follow_venue();
             assert_eq!(
                 context.trusted_signer.chosen().as_deref(),
-                Some("https://sign.example.test")
+                Some("https://sign.example.test/")
             );
         });
     }

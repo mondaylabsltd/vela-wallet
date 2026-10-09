@@ -1,17 +1,22 @@
-//! The Trusted Signer on the desktop: the page answers over **`velawallet://`**
-//! (specs 071, 075 and 076).
+//! The trusted signing page on the desktop: the page answers over
+//! **`velawallet://`** (specs 071, 075, 076 and 102).
 //!
-//! The fourth passkey route is a page, not a key. `app-web/trusted-signer`,
-//! opened in the person's default browser, is told a request, derives what it
-//! signs itself, runs the ceremony and answers. This file is the desktop's end
-//! of that conversation and nothing more:
+//! Spec 102: the page is where a person REVIEWS and signs — an account's
+//! signing venue — not a place a key lives. `app-web/trusted-signer`, opened in
+//! the person's default browser, is told a request (and which key to use, R5),
+//! derives what it signs itself, runs the ceremony and answers. This file is
+//! the desktop's end of that conversation and nothing more:
 //!
 //! - the request is the core's (`trusted_signer::request` for a signature,
 //!   `trusted_signer::ceremony::request` for a create / sign-in / proof);
 //! - it rides out in the launch URL's **fragment** — never its query, which a
 //!   server would see and log — and the answer comes back as a
 //!   `velawallet://sign-result?…` the OS hands this app
-//!   (`trusted_signer::url_launch`, then `parse_callback`);
+//!   (`CheckedPage::url_launch`, then `parse_callback`);
+//! - the page opened is the page that was CHECKED (R6): a launch URL is built
+//!   only from the integrity check's admitted page
+//!   (`signer_integrity::checked_page`), and a page whose check failed — or
+//!   never ran and cannot — is not opened at all ([`NotOpened`]);
 //! - whether an answer is this wallet's signature over this request
 //!   (`trusted_signer::verify`) or a ceremony the page was allowed to run
 //!   (`ceremony::verify`) is the core's.
@@ -66,8 +71,10 @@ use serde_json::Value;
 
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::shell::ShellOperation;
-use vela_core::app::{Assertion, FailureKind, RegistryPublishMember};
+use vela_core::app::{Assertion, FailureKind, KeyMethod, RegistryPublishMember};
 use vela_core::primitives::{to_base64url, to_hex};
+use vela_core::signing_venue::{KeyRoute, VenueBlock};
+use vela_core::trusted_signer::launch::{CheckedPage, IntegrityLine};
 use vela_core::trusted_signer::{
     self, RequestInput, TrustedSignerError, Verified, ceremony as core_ceremony, verify, ws,
 };
@@ -97,6 +104,22 @@ pub enum Refusal {
     Mismatch,
     /// Nothing came back in time.
     TimedOut,
+    /// The page was never opened (spec 102): its check did not admit it, or
+    /// nothing here can reach the account's keys. [`Channel::not_opened`]
+    /// says which, in the words the card draws.
+    NotOpened,
+}
+
+/// Why a page was not opened at all (spec 102) — said on the card instead of
+/// any of the four endings above, because no page was ever there to end.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NotOpened {
+    /// R6: the page's check did not admit it — the integrity line says why
+    /// ("couldn't check the page, so it won't open", "isn't on Vela's
+    /// published build list", …).
+    Integrity(IntegrityLine),
+    /// R1: no venue on this device can reach the account's keys.
+    Venue(VenueBlock),
 }
 
 impl Refusal {
@@ -123,6 +146,9 @@ impl Refusal {
             Self::Refused => "componentsUi.signing.trustedSignerRefused",
             Self::Mismatch => "componentsUi.signing.trustedSignerMismatch",
             Self::TimedOut => "componentsUi.signing.trustedSignerTimeout",
+            // Drawn from `Channel::not_opened` whenever it is known; this is
+            // the sentence for a channel that lost it.
+            Self::NotOpened => "componentsUi.signing.integrity.couldNotCheck",
         }
     }
 }
@@ -133,8 +159,7 @@ impl Refusal {
 
 #[derive(Default)]
 struct State {
-    /// The page this request goes to, when the person chose the Trusted Signer
-    /// for it.
+    /// The page this request goes to, when the account's venue is a page.
     chosen: Option<String>,
     /// The wallet's name, for the page's `context.walletName`.
     wallet_name: Option<String>,
@@ -149,6 +174,8 @@ struct State {
     /// How the last attempt ended without an answer, until the person has read
     /// it.
     ended: Option<Refusal>,
+    /// Why the page was not opened, when that is how it ended.
+    not_opened: Option<NotOpened>,
     /// An attempt owns this channel's surfaces from the moment it opens a
     /// page until it is done.
     claimed: bool,
@@ -201,9 +228,10 @@ impl Channel {
 
     // -- the screen's half ----------------------------------------------------
 
-    /// This request's "Sign with": `Some(page)` routes it to the Trusted Signer
-    /// at that page, `None` to a passkey. A new choice clears the last
-    /// attempt's sentence — it answered a question nobody is asking now.
+    /// Where this request is reviewed and signed (spec 102): `Some(page)` —
+    /// the account's venue is that trusted page — or `None`, in Vela. A new
+    /// choice clears the last attempt's sentence — it answered a question
+    /// nobody is asking now.
     pub fn choose(&self, page: Option<String>) {
         self.with(|state| {
             state.chosen = page;
@@ -212,7 +240,7 @@ impl Channel {
         self.announce();
     }
 
-    /// The page this request goes to, when it goes to the Trusted Signer.
+    /// The page this request goes to, when the account's venue is a page.
     #[must_use]
     pub fn chosen(&self) -> Option<String> {
         self.with(|state| state.chosen.clone())
@@ -291,10 +319,30 @@ impl Channel {
         self.with(|state| state.ended)
     }
 
+    /// Why the page was not opened, when the last attempt ended that way.
+    #[must_use]
+    pub fn not_opened(&self) -> Option<NotOpened> {
+        self.with(|state| {
+            state
+                .not_opened
+                .clone()
+                .filter(|_| state.ended == Some(Refusal::NotOpened))
+        })
+    }
+
     /// The person read the sentence.
     pub fn forget(&self) {
-        self.with(|state| state.ended = None);
+        self.with(|state| {
+            state.ended = None;
+            state.not_opened = None;
+        });
         self.announce();
+    }
+
+    /// The page will not be opened, and why — told before the attempt ends,
+    /// so the card that ending raises already has its sentence.
+    pub(crate) fn refuse_open(&self, why: NotOpened) {
+        self.with(|state| state.not_opened = Some(why));
     }
 
     /// The screen that owned this channel is gone: a wait stops now, and none
@@ -406,6 +454,7 @@ impl Channel {
             state.waiting = Some(url);
             state.open = open;
             state.ended = None;
+            state.not_opened = None;
             state.unreachable = false;
             true
         });
@@ -560,42 +609,57 @@ fn open_line(
     Ok(Box::new(SchemeLine::open(page)) as Box<dyn Line>)
 }
 
-/// The Trusted Signer page from Settings, or the official one.
-#[must_use]
-pub fn signer_url() -> String {
-    crate::executor::storage::read_value(crate::executor::storage::KEY_TRUSTED_SIGNER_URL)
-        .ok()
-        .flatten()
-        .as_ref()
-        .and_then(Value::as_str)
-        .and_then(|text| trusted_signer::signer_url(text).ok())
-        .unwrap_or_else(|| trusted_signer::DEFAULT_SIGNER_URL.to_owned())
-}
-
-/// Look at the signer page in the background, and remember which version was
-/// chosen (spec 076 FR-007).
-///
-/// **Why a thread and not the launch path.** The launch path must not wait on
-/// the network: a person pressing Sign would wait out an HTTP round trip, and
-/// the first version of this made three unit tests take five minutes. So the
-/// check runs here, off to one side, and `open_url` reads what it left.
+/// Check every signing page this device may open, in the background (spec
+/// 076 FR-007, spec 102 R6): the official page, the saved ones, and every
+/// account's venue — so a person pressing Open finds the page already
+/// checked, and Settings and the choosers already have its line.
 ///
 /// **Why at start and not at signing time.** FR-007 wants the check decoupled
 /// in time from signing, so a server cannot tell "a verification request just
 /// arrived, the next navigation is the target". Running it when the app opens
-/// is the simplest shape of that.
-///
-/// Nothing here can refuse anything yet: `ENFORCE` is false until the page is
-/// published at the official address, so this logs and remembers.
+/// is the simplest shape of that. A check that is too old by the time a page
+/// is opened is run again first, on the launch path ([`launchable`]).
 pub fn prime_in_background() {
-    std::thread::spawn(|| {
-        let base = signer_url();
-        let verdict = crate::executor::signer_integrity::check(&base);
-        eprintln!(
-            "[vela-wallet] {}",
-            crate::executor::signer_integrity::describe(&verdict)
-        );
-    });
+    for page in pages_in_use() {
+        crate::executor::signer_integrity::check_in_background(&page);
+    }
+}
+
+/// The official page, every saved page, and every account's venue, each once.
+fn pages_in_use() -> Vec<String> {
+    use crate::executor::signer_integrity::key_of;
+    let mut pages = vec![key_of(trusted_signer::DEFAULT_SIGNER_URL)];
+    let saved = crate::executor::signing_pages::saved();
+    let venues = crate::executor::storage::load_accounts()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|account| account.signing_venue.page_url().map(str::to_owned));
+    for page in saved.into_iter().map(|page| page.url).chain(venues) {
+        let page = key_of(&page);
+        if !pages.contains(&page) {
+            pages.push(page);
+        }
+    }
+    pages
+}
+
+/// The checked page to open for `base` — the version that was checked, at
+/// the address that was checked (R6). When nothing fresh vouches for it, it is
+/// checked now (this runs on the ceremony's own thread, never the window's);
+/// a check that does not admit it opens nothing, and its line says why.
+fn launchable(base: &str) -> Result<CheckedPage, IntegrityLine> {
+    use crate::executor::signer_integrity;
+    let now = || crate::executor::now_ms() as u64;
+    if let Some(page) = signer_integrity::checked_page(base, now()) {
+        return Ok(page);
+    }
+    let verdict = signer_integrity::check(base);
+    crate::diag::vlog!(
+        "signer page",
+        "{}",
+        signer_integrity::unprefixed(&signer_integrity::describe(&verdict))
+    );
+    signer_integrity::checked_page(base, now()).ok_or_else(|| signer_integrity::line(base, now()))
 }
 
 // ---------------------------------------------------------------------------
@@ -667,8 +731,9 @@ pub fn deliver_callback(url: &str) -> bool {
 /// code has to reach the network, which is what makes it work under the
 /// published page's `default-src 'none'`.
 struct SchemeLine {
-    /// The signer page this visit opens — already resolved to the version the
-    /// check knows about (`signer_integrity::open_url`).
+    /// The signing page this visit opens, as the account or the ceremony
+    /// names it — each request launches the version its check admitted
+    /// ([`launchable`]).
     page: String,
     url: String,
     token: String,
@@ -714,12 +779,30 @@ impl Line for SchemeLine {
         // can then be read as this one's, because this one's name is new.
         forget_answer(&self.token);
         self.token = to_base64url(&passkey::random(16));
-        self.url = trusted_signer::url_launch(
-            &self.page.clone(),
-            request,
-            trusted_signer::CALLBACK_URL,
-            &self.token,
-        );
+        // R6: the URL is the checked page's, and only an admitted check
+        // builds one. A page nothing vouches for is not opened.
+        let launched = launchable(&self.page).and_then(|page| {
+            page.url_launch(
+                request,
+                trusted_signer::CALLBACK_URL,
+                &self.token,
+                crate::executor::now_ms() as u64,
+            )
+            .map_err(|_| IntegrityLine::checking())
+        });
+        self.url = match launched {
+            Ok(url) => url,
+            Err(line) => {
+                crate::diag::vlog!(
+                    "trusted signer",
+                    "page {} not opened: {}",
+                    crate::diag::host_of(&self.page),
+                    line.key
+                );
+                channel.refuse_open(NotOpened::Integrity(line));
+                return Err(Refusal::NotOpened);
+            }
+        };
         if !channel.begin(self.url.clone(), true) {
             return Err(Refusal::Closed);
         }
@@ -806,6 +889,7 @@ impl Ask {
         chain_id: u32,
         account: &str,
         keys: &[WalletKey],
+        key_route: Option<&KeyRoute>,
         operation: Option<(&UserOperation, &[MultiSendCall])>,
     ) -> Value {
         let credential_ids: Vec<String> =
@@ -825,6 +909,9 @@ impl Ask {
             account,
             account_name: self.account_name.as_deref(),
             credential_ids_hex: &credential_ids,
+            // R5: the page offers that one key, with its transports and the
+            // browser's hints, instead of asking where the passkey is.
+            key_route,
             user_op: operation.map(|(op, _)| op),
             calls: operation.map_or(&[][..], |(_, calls)| calls),
             // Spec 079: the desktop's only dApp source is its own browser
@@ -873,6 +960,14 @@ pub fn sign(
     }
 }
 
+/// Spec 102 R1: nothing on this device can reach the account's keys — no
+/// page is opened and no prompt raised. The screen is told why; the core hears
+/// a cancelled passkey, so the request stays open.
+pub fn unreachable(channel: &Channel, block: VenueBlock) -> PasskeyFailure {
+    channel.refuse_open(NotOpened::Venue(block));
+    gave_up(channel, Refusal::NotOpened)
+}
+
 /// Tell the screen how it ended, and the core that a passkey was cancelled.
 fn gave_up(channel: &Channel, refusal: Refusal) -> PasskeyFailure {
     channel.end(Some(refusal));
@@ -916,13 +1011,14 @@ pub use vela_core::trusted_signer::ceremony::Answer;
 /// and `last` ends it.
 pub fn run_ceremony(
     operation: &ShellOperation,
+    page: &str,
     expected_member_challenge: Option<&[u8]>,
     registry: &str,
     channel: &Channel,
     last: bool,
 ) -> Option<Result<Answer, PasskeyFailure>> {
     let ceremony = core_ceremony::Ceremony::of(operation)?;
-    let page = signer_page_for(operation);
+    let page = trusted_signer::signer_url(page).unwrap_or_else(|_| page.to_owned());
     let wallet_name = match &ceremony {
         // The first key's name IS the wallet's name, and it is the only name
         // this side knows at create time.
@@ -940,41 +1036,23 @@ pub fn run_ceremony(
     ))
 }
 
-/// Which page this operation's key lives behind.
+/// The page a ceremony operation runs on (spec 102 R3): the op's own `page`
+/// — `Some` only for a wallet on a custom signing domain, whose keys only its
+/// page can mint or use. `None`: the ceremony runs in the app.
 ///
-/// **What a key records is an ORIGIN, not a page** — `verify_registration`
-/// stamps `origin_of(signer_origin)`, because an origin is what decides the
-/// rpId and therefore which keys the page can reach at all. A launch URL needs
-/// more than that: a page served under a path (`http://localhost:8140/
-/// clearsigning/`, the shape the core's own tests pin) would be launched at
-/// `<origin>/sign.html` and 404.
-///
-/// So the person's page from Settings wins whenever it is the SAME origin —
-/// which is every ordinary case, including a self-hosted one they configured.
-/// A key recorded behind some other origin is launched from that origin and
-/// nothing else is known about it; see this module's note in the report.
-fn signer_page_for(operation: &ShellOperation) -> String {
-    let named = match operation {
-        ShellOperation::SignProof { signer_origin, .. }
-        | ShellOperation::SignMemberProof { signer_origin, .. } => signer_origin.clone(),
+/// The page is the one the person chose ("Use my own signing page"), path
+/// and all — a page served under a path (`http://localhost:8140/
+/// clearsigning/`) is launched there, never at its origin's root.
+#[must_use]
+pub fn page_of(operation: &ShellOperation) -> Option<&str> {
+    match operation {
+        ShellOperation::RegisterPasskey { page, .. }
+        | ShellOperation::AuthenticatePasskey { page, .. }
+        | ShellOperation::SignProof { page, .. }
+        | ShellOperation::SignMemberProof { page, .. } => page.as_deref(),
         _ => None,
-    };
-    let settings = signer_url();
-    let base = match named.filter(|origin| !origin.is_empty()) {
-        None => settings,
-        Some(origin) if same_page(&origin, &settings) => settings,
-        Some(origin) => origin,
-    };
-    // Spec 076: open the version that was CHECKED, at its content-addressed
-    // path, not whatever the address's root happens to serve. Opening
-    // `<base>/sign.html` while the check fetched `<base>/b/<hash>/sign.html`
-    // means "verified" would refer to bytes the browser never loaded (owner,
-    // 2026-09-23: 「路径缺少了 /b/sha256/」).
-    //
-    // Falls back to the address as typed when no published version can be
-    // chosen — a deployment that serves a single page, or one that publishes
-    // nothing this build knows.
-    crate::executor::signer_integrity::open_url(&base)
+    }
+    .filter(|page| !page.trim().is_empty())
 }
 
 /// Two addresses that reach the same page, as the channel judges it: the
@@ -1068,12 +1146,13 @@ fn ceremony_on_flow(
 /// `expected_challenge` is the bytes THIS wallet was given for this member;
 /// the page fetches its own and the core refuses an answer over anything else.
 ///
-/// `signer_origin` is the member's OWN page, which the core now carries on
-/// every publish member. A key minted on somebody's own deployment is
-/// reachable nowhere else, so falling back to whichever page Settings names
-/// would refuse a re-publish that has no other way to run.
+/// `page` is the publish's own (`RegistryPublish.page`, spec 102 R3): the
+/// custom-domain wallet's page, the only place its keys answer. `method` is
+/// where the key lives, told to the page as hints (R5).
 pub fn member_proof(
     member: &RegistryPublishMember,
+    page: &str,
+    method: KeyMethod,
     group_public_key_hex: &str,
     expected_challenge: &[u8],
     registry: &str,
@@ -1084,12 +1163,10 @@ pub fn member_proof(
         public_key_hex: member.public_key_hex.clone(),
         attestation_hex: member.attestation_hex.clone(),
         group_public_key_hex: group_public_key_hex.to_owned(),
+        method,
+        transports: member.transports.clone(),
     };
-    let page = member
-        .signer_origin
-        .as_deref()
-        .filter(|origin| !origin.is_empty())
-        .map_or_else(signer_url, str::to_owned);
+    let page = trusted_signer::signer_url(page).unwrap_or_else(|_| page.to_owned());
     let wallet_name = channel.wallet_name();
     // Not the last: a publish signs its members in a row, and the caller ends
     // the visit once they are all in.
@@ -1186,6 +1263,12 @@ pub(crate) mod tests {
             .sign_prehash(&prehash)
             .unwrap_or_else(|e| unreachable!("{e}"));
         (authenticator_data, client, signature.to_bytes().to_vec())
+    }
+
+    /// The official page, checked and admitted — so an attempt launches it
+    /// without reaching the network (spec 102 R6: nothing else launches).
+    pub(crate) fn admitted() {
+        crate::executor::signer_integrity::admit_for_tests(PAGE);
     }
 
     /// Wait for an attempt on `channel` to hand the screen its page.
@@ -1315,6 +1398,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_cancel_does_not_outlive_its_own_attempt() {
+        admitted();
         let (channel, _changed) = Channel::new();
         let first = {
             let channel = Arc::clone(&channel);
@@ -1361,6 +1445,7 @@ pub(crate) mod tests {
     /// callback — never a query, which a server would see and log.
     #[test]
     fn the_launch_url_hides_the_request_from_the_server() {
+        admitted();
         let (channel, _changed) = Channel::new();
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -1387,6 +1472,7 @@ pub(crate) mod tests {
     /// goes on rather than ending on a stranger's word.
     #[test]
     fn a_callback_with_another_token_answers_nothing() {
+        admitted();
         let (channel, _changed) = Channel::new();
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -1423,6 +1509,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_cancelled_wait_is_a_cancelled_passkey_and_a_sentence() {
+        admitted();
         let (channel, _changed) = Channel::new();
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -1484,6 +1571,7 @@ pub(crate) mod tests {
             100,
             &op.sender,
             &keys,
+            None,
             Some((&op, &calls)),
         );
         assert_eq!(own["intent"]["method"], "wallet_sendCalls");
@@ -1505,7 +1593,7 @@ pub(crate) mod tests {
             origin: "https://app.uniswap.org".to_owned(),
             account_name: None,
         }
-        .request(100, &op.sender, &keys, Some((&op, &calls)));
+        .request(100, &op.sender, &keys, None, Some((&op, &calls)));
         assert_eq!(site["intent"]["method"], "eth_sendTransaction");
         assert_eq!(site["intent"]["origin"], "https://app.uniswap.org");
         assert_eq!(site["intent"]["params"][0]["to"], calls[0].to.as_str());
@@ -1515,101 +1603,106 @@ pub(crate) mod tests {
         );
     }
 
-    /// Which page a proof goes to: the one the key was found behind, and the
-    /// person's own page from Settings for everything else.
-    ///
-    /// **A recorded `signer_origin` is an origin, and a launch URL is not.**
-    /// A key found behind the page Settings names is launched from that page,
-    /// PATH AND ALL — an origin alone would send a self-hosted page under a
-    /// path to `<origin>/sign.html`, which is a 404 and a five-minute wait.
+    /// Spec 102 R3: a ceremony runs on the page its op names — and only then.
+    /// A `getvela.app` wallet's ops carry none, and run in the app.
     #[test]
-    fn a_proof_goes_to_the_page_its_key_lives_behind() {
-        // Its own store: `signer_url()` reads storage, and another test in this
-        // file installs a temp state with a self-hosted address. Without a
-        // scope of its own this test read whichever store happened to be
-        // installed when it ran — a race that was latent until an unrelated
-        // test changed the timing and made it fail. A test that depends on
-        // ambient state is not testing what it says it is.
-        crate::executor::storage::tests::with_temp_state("trusted-signer-proof-page", || {
-            use vela_core::app::KeyMethod;
-            use vela_core::app::shell::ProofPurpose;
-            let proof = |origin: Option<&str>| ShellOperation::SignProof {
-                credential_id: "aabb".to_owned(),
-                transports: String::new(),
-                method: KeyMethod::TrustedSigner,
-                purpose: ProofPurpose::Verify,
-                signer_origin: origin.map(str::to_owned),
-            };
-            // A key behind somebody else's page: all this side knows is the origin.
-            assert_eq!(
-                signer_page_for(&proof(Some("https://sign.example.test"))),
-                "https://sign.example.test"
-            );
-            // A key behind the page Settings names — the ordinary case — is
-            // launched from the Settings URL, which is the one with the path.
-            assert_eq!(
-                signer_page_for(&proof(Some("https://sign.getvela.app"))),
-                signer_url()
-            );
-            assert_eq!(signer_page_for(&proof(None)), signer_url());
-            let anywhere = ShellOperation::AuthenticatePasskey {
-                method: KeyMethod::TrustedSigner,
-            };
-            assert_eq!(signer_page_for(&anywhere), signer_url());
-        });
+    fn a_ceremony_runs_on_the_page_its_op_names() {
+        use vela_core::app::shell::ProofPurpose;
+        const HOSTED: &str = "http://localhost:8140/clearsigning/";
+        let proof = |page: Option<&str>| ShellOperation::SignProof {
+            credential_id: "aabb".to_owned(),
+            transports: String::new(),
+            method: KeyMethod::Hybrid,
+            purpose: ProofPurpose::Verify,
+            page: page.map(str::to_owned),
+        };
+        assert_eq!(page_of(&proof(Some(HOSTED))), Some(HOSTED));
+        assert_eq!(page_of(&proof(None)), None);
+        assert_eq!(page_of(&proof(Some("  "))), None, "an empty page is none");
+        let sign_in = ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::SecurityKey,
+            page: Some(HOSTED.to_owned()),
+        };
+        assert_eq!(page_of(&sign_in), Some(HOSTED));
+        let create = ShellOperation::RegisterPasskey {
+            name: "w".to_owned(),
+            exclude_credential_ids: Vec::new(),
+            method: KeyMethod::Platform,
+            page: None,
+        };
+        assert_eq!(page_of(&create), None);
+        assert_eq!(page_of(&ShellOperation::CheckPasskeySupport), None);
     }
 
-    /// **A self-hosted page under a path.** The core records an ORIGIN on a
-    /// key, because an origin is what decides the rpId; a launch URL needs the
-    /// path too. `http://localhost:8140/clearsigning/` — the shape the core's
-    /// own tests pin — records as `http://localhost:8140`, and launching from
-    /// that alone asks for `/sign.html` at a server that serves the page at
-    /// `/clearsigning/sign.html`: a 404, then a five-minute wait with nothing
-    /// to say. The person's own page wins whenever it is the same origin, and
-    /// the visit the create opened is the visit the member proof rides on.
+    /// **A self-hosted page under a path** is launched under its path, at the
+    /// version its check admitted — `http://localhost:8140/clearsigning/` opens
+    /// `…/clearsigning/b/<sha256>/sign.html`, never `<origin>/sign.html` (a
+    /// 404 and a five-minute wait with nothing to say).
     #[test]
     fn a_self_hosted_page_under_a_path_keeps_its_path() {
-        use vela_core::app::KeyMethod;
-        use vela_core::app::shell::ProofPurpose;
-        crate::executor::storage::tests::with_temp_state("trusted-signer-hosted-path", || {
-            const HOSTED: &str = "http://localhost:8140/clearsigning/";
-            let _ = crate::executor::storage::write_value(
-                crate::executor::storage::KEY_TRUSTED_SIGNER_URL,
-                Value::String(HOSTED.to_owned()),
-            );
-            assert_eq!(
-                signer_url(),
-                HOSTED,
-                "Settings holds the page with its path"
-            );
+        const HOSTED: &str = "http://localhost:8140/clearsigning/";
+        crate::executor::signer_integrity::admit_for_tests(HOSTED);
+        let (channel, _changed) = Channel::new();
+        let attempt = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), HOSTED, &DIGEST, &keys(), &channel))
+        };
+        let url = page_of_channel(&channel);
+        assert!(
+            url.starts_with("http://localhost:8140/clearsigning/b/")
+                && url.contains("/sign.html?ch=url#i="),
+            "not the checked page under its path: {url}"
+        );
+        channel.cancel();
+        let _ = attempt.join();
+        // And it is the SAME visit, however the origin was written.
+        assert!(same_page(HOSTED, "http://localhost:8140"));
+    }
 
-            let proof = ShellOperation::SignProof {
-                credential_id: "aabb".to_owned(),
-                transports: String::new(),
-                method: KeyMethod::TrustedSigner,
-                purpose: ProofPurpose::Verify,
-                // What a key minted on that page actually records.
-                signer_origin: Some("http://localhost:8140".to_owned()),
-            };
-            let page = signer_page_for(&proof);
-            assert_eq!(page, HOSTED, "the path was dropped");
+    /// R6: a page whose check did not admit it is NOT opened — no URL is
+    /// handed to the browser, the attempt ends at once, and the card has the
+    /// integrity line that says why.
+    #[test]
+    fn a_page_whose_check_failed_opens_nothing() {
+        // Nothing listens here: the index and the page both fail to fetch.
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|addr| addr.port())
+            .unwrap_or(1);
+        let base = format!("http://127.0.0.1:{closed}/");
+        let (channel, _changed) = Channel::new();
+        let failure = sign(&json!({}), &base, &DIGEST, &keys(), &channel)
+            .err()
+            .unwrap_or_else(|| unreachable!("a page nobody checked signed"));
+        assert_eq!(failure.kind, FailureKind::Cancelled);
+        assert_eq!(channel.take_page(), None, "a refused page was handed out");
+        assert!(!channel.waiting());
+        assert_eq!(channel.ended(), Some(Refusal::NotOpened));
+        let Some(NotOpened::Integrity(line)) = channel.not_opened() else {
+            unreachable!("no reason given: {:?}", channel.not_opened())
+        };
+        assert!(!line.opens);
+        assert_eq!(line.key, "componentsUi.signing.integrity.couldNotCheck");
+        // Read, it is gone; the next attempt starts clean.
+        channel.forget();
+        assert_eq!(channel.not_opened(), None);
+    }
 
-            // The launch URL the visit would open, built by the core that builds
-            // it — no socket, no browser. The property under test is the PATH.
-            let launch = trusted_signer::url_launch(
-                &page,
-                &serde_json::json!({ "t": "req" }),
-                trusted_signer::CALLBACK_URL,
-                "token",
-            );
-            assert!(
-                launch.starts_with("http://localhost:8140/clearsigning/sign.html?ch=url#i="),
-                "the launch URL is a 404: {launch}"
-            );
-            // And it is the SAME visit the create opened, so nothing is torn
-            // down between the two ceremonies.
-            assert!(same_page(HOSTED, "http://localhost:8140"));
-        });
+    /// R5: the request names the key to use and where it lives, so the
+    /// browser goes straight to it — and offers only that key.
+    #[test]
+    fn the_request_names_the_key_and_where_it_lives() {
+        let keys = keys();
+        let route = KeyRoute::new(&keys[1].credential_id, "security_key", "usb,nfc");
+        let request = Ask::own(None).request(100, "0xabc", &keys, Some(&route), None);
+        let context = &request["context"];
+        assert_eq!(context["keyRoute"]["place"], "security_key", "{context}");
+        assert_eq!(context["keyRoute"]["hints"][0], "security-key");
+        assert_eq!(
+            context["allowCredentials"].as_array().map(Vec::len),
+            Some(1),
+            "only the sign-in key is offered: {context}"
+        );
     }
 
     /// One page visit is one ORIGIN. The create's launch URL and the origin

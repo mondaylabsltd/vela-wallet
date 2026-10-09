@@ -296,10 +296,10 @@ pub struct Ceremony {
     /// Has the person dismissed that QR? Polled by the scan, which is the one
     /// open-ended wait a hybrid ceremony has.
     pub cancelled: CancelProbe,
-    /// Spec 075: the Trusted Signer's own channel to the screen — where the
-    /// page is, the page to open, the pairing code to confirm, and how the
-    /// last attempt ended. A ceremony with `method = trusted_signer` runs
-    /// there instead of on any authenticator this machine can reach.
+    /// The trusted page's own channel to the screen (spec 075) — the page to
+    /// open, that it is being waited on, and how the last attempt ended. Spec
+    /// 102 R3: a ceremony whose op names a `page` runs there instead of on any
+    /// authenticator this machine can reach.
     pub trusted_signer: Arc<crate::executor::trusted_signer::Channel>,
     /// The app window the Windows dialog parents itself to.
     ///
@@ -437,18 +437,16 @@ fn win_failure(error: vela_passkey_win::WinError) -> PasskeyFailure {
 /// picker.
 ///
 /// `Hybrid` never reaches here — `register` and `assert` hand it to the app's
-/// own caBLE client before the Windows half is consulted. Neither does
-/// `TrustedSigner` (spec 075): `executor::perform` answers it before any
-/// ceremony starts. Both map to the security key only so the match is total,
-/// which is also what the non-Windows path does with a method it did not
-/// route away — there, anything left over runs the one USB ceremony.
+/// own caBLE client before the Windows half is consulted. It maps to the
+/// security key only so the match is total, which is also what the
+/// non-Windows path does with a method it did not route away — there,
+/// anything left over runs the one USB ceremony. (A ceremony on a signing
+/// page, spec 102 R3, never gets here: `executor::perform` answers it first.)
 #[cfg(windows)]
 fn win_attachment(method: KeyMethod) -> vela_passkey_win::Attachment {
     match method {
         KeyMethod::Platform => vela_passkey_win::Attachment::ThisDevice,
-        KeyMethod::SecurityKey | KeyMethod::Hybrid | KeyMethod::TrustedSigner => {
-            vela_passkey_win::Attachment::SecurityKey
-        }
+        KeyMethod::SecurityKey | KeyMethod::Hybrid => vela_passkey_win::Attachment::SecurityKey,
     }
 }
 
