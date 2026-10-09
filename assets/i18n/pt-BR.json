@@ -1387,6 +1387,8 @@
    "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
    "refused": "A rede recusou — nada foi enviado.",
    "wentFirst": "Outra transação desta conta passou antes — nada foi enviado.",
+   "notSentTitle": "Ainda não enviada",
+   "notSentBody": "Sua transação anterior nesta rede ainda está sendo processada. Tente de novo quando ela terminar.",
    "unknownOutcome": "Ainda sem confirmação após 24 horas.",
    "openSigner": "Confirmar na página de assinatura",
    "signerDown": "A página de assinatura não abriu. Verifique sua conexão.",
@@ -1412,6 +1414,7 @@
     "feeMeasuring": "Calculando a taxa de rede…",
     "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
     "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
+    "feeWouldFail": "Falharia se fosse enviada assim.",
     "previousPending": "Aguardando sua transação anterior nesta rede terminar…"
    }
   },
@@ -1493,6 +1496,7 @@
    "deployedNo": "Não (primeira tx)",
    "estimating": "Estimando...",
    "estimateFailed": "Toque para tentar de novo",
+   "payWithAnotherCoin": "Pagar com outra moeda",
    "feeToken": "Token da taxa",
    "paidWith": "Pago com {{symbol}}",
    "rowBalance": "Saldo",

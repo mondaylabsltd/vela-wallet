@@ -1383,6 +1383,8 @@
    "maybeSent": "이미 전송되었을 수 있습니다. Vela가 계속 확인합니다. 다시 보내지 마세요.",
    "refused": "네트워크가 거부했습니다 — 아무것도 전송되지 않았습니다.",
    "wentFirst": "이 계정의 다른 거래가 먼저 처리되었습니다 — 아무것도 전송되지 않았습니다.",
+   "notSentTitle": "아직 전송되지 않았습니다",
+   "notSentBody": "이 네트워크의 이전 거래가 아직 처리 중입니다. 끝난 뒤 다시 시도하세요.",
    "unknownOutcome": "24시간이 지나도 확인되지 않았습니다.",
    "openSigner": "서명 페이지에서 확인",
    "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요.",
@@ -1408,6 +1410,7 @@
     "feeMeasuring": "네트워크 수수료 계산 중…",
     "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도",
     "feeRetrying": "아직 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중…",
+    "feeWouldFail": "이대로 보내면 실패합니다.",
     "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…"
    }
   },
@@ -1489,6 +1492,7 @@
    "deployedNo": "아니요 (첫 거래)",
    "estimating": "예상하는 중...",
    "estimateFailed": "눌러서 다시 시도",
+   "payWithAnotherCoin": "다른 코인으로 결제",
    "feeToken": "수수료 토큰",
    "paidWith": "{{symbol}}(으)로 결제",
    "rowBalance": "잔액",

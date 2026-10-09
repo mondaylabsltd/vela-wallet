@@ -221,6 +221,8 @@
       "maybeSent": "Möglicherweise schon gesendet. Vela prüft weiter – bitte nicht erneut senden.",
       "refused": "Das Netzwerk hat sie abgelehnt – es wurde nichts gesendet.",
       "wentFirst": "Eine andere Transaktion dieses Kontos war schneller – es wurde nichts gesendet.",
+      "notSentTitle": "Noch nicht gesendet",
+      "notSentBody": "Deine vorige Transaktion in diesem Netzwerk wird noch verarbeitet. Versuche es erneut, sobald sie fertig ist.",
       "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
       "openSigner": "Auf der Signaturseite bestätigen",
       "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung.",
@@ -246,6 +248,7 @@
         "feeMeasuring": "Netzwerkgebühr wird berechnet…",
         "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
         "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
+        "feeWouldFail": "So gesendet würde sie fehlschlagen.",
         "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…"
       }
     },
@@ -327,6 +330,7 @@
       "deployedNo": "Nein (erste Tx)",
       "estimating": "Wird geschätzt …",
       "estimateFailed": "Zum erneuten Versuch tippen",
+      "payWithAnotherCoin": "Mit einem anderen Coin zahlen",
       "feeToken": "Gebühren-Token",
       "paidWith": "Mit {{symbol}} bezahlt",
       "rowBalance": "Guthaben",

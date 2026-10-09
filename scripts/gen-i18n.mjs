@@ -735,8 +735,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.gas.reasonInternal` is reworded in place (it now also
 //   stands on the home and in that alert, where nothing is retrying).
 //   1766 + 2 = 1768 leaves, 101 branches.
-if (PATHS.length !== 1869) fail(`expected 1869 paths (1768 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1768) fail(`expected 1768 leaf paths, got ${leafSet.size}`);
+// 1873 (correctness batch polish, 2026-10-10): the relay turning a submit
+//   back because the account's previous transaction still holds the nonce
+//   is "not sent yet", said calmly — not "Failed" over the held confirm's
+//   "waiting…" line: + `componentsUi.signing.notSent{Title,Body}` (the
+//   sheet's and Send's). A fee the relay answered would fail says what a
+//   tap on its row does: + `componentsUi.gas.payWithAnotherCoin` (the
+//   row's figure; the tap opens the coins), + `componentsUi.signing
+//   .confirmBlock.feeWouldFail` (the line under the held confirm, a fact
+//   asking for no tap — `feeFailed`'s "tap it to retry" was untrue there).
+//   1768 + 4 = 1772 leaves, 101 branches.
+if (PATHS.length !== 1873) fail(`expected 1873 paths (1772 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1772) fail(`expected 1772 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

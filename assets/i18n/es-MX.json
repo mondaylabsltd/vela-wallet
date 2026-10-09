@@ -1387,6 +1387,8 @@
    "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
    "refused": "La red la rechazó; no se envió nada.",
    "wentFirst": "Otra transacción de esta cuenta pasó primero; no se envió nada.",
+   "notSentTitle": "Aún no se envió",
+   "notSentBody": "Tu transacción anterior en esta red todavía se está procesando. Vuelve a intentarlo cuando termine.",
    "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
    "openSigner": "Confirmar en la página de firma",
    "signerDown": "No se abrió la página de firma. Revisa tu conexión.",
@@ -1412,6 +1414,7 @@
     "feeMeasuring": "Calculando la comisión de red…",
     "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
     "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
+    "feeWouldFail": "Fallaría si se envía así.",
     "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
    }
   },
@@ -1493,6 +1496,7 @@
    "deployedNo": "No (primera tx)",
    "estimating": "Estimando...",
    "estimateFailed": "Toca para reintentar",
+   "payWithAnotherCoin": "Pagar con otra moneda",
    "feeToken": "Token de comisión",
    "paidWith": "Pagado con {{symbol}}",
    "rowBalance": "Saldo",

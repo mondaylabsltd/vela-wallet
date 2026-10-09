@@ -1435,6 +1435,8 @@
    "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
    "refused": "The network refused it — nothing was sent.",
    "wentFirst": "Another transaction from this account went first — nothing was sent.",
+   "notSentTitle": "Not sent yet",
+   "notSentBody": "Your previous transaction on this network is still being processed. Try again once it's done.",
    "unknownOutcome": "Still unconfirmed after 24 hours.",
    "openSigner": "Continue to signing page",
    "signerDown": "Couldn't open the signing page. Check your connection.",
@@ -1460,6 +1462,7 @@
     "feeMeasuring": "Working out the network fee…",
     "feeFailed": "Couldn't work out the fee. Tap it to retry",
     "feeRetrying": "Couldn't work out the fee yet. Retrying…",
+    "feeWouldFail": "This would fail if sent as it is.",
     "previousPending": "Waiting for your last transaction on this network…"
    }
   },
@@ -1493,6 +1496,7 @@
    "estFee": "Network fee",
    "estimating": "Estimating...",
    "estimateFailed": "Tap to retry",
+   "payWithAnotherCoin": "Pay with another coin",
    "gasPrice": "Gas Price",
    "gasPriceUserOp": "Gas Price (UserOp)",
    "networkFee": "Network fee",

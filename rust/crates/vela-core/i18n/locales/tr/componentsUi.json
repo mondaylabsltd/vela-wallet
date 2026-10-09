@@ -221,6 +221,8 @@
       "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
       "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
       "wentFirst": "Bu hesabın başka bir işlemi önce gitti — hiçbir şey gönderilmedi.",
+      "notSentTitle": "Henüz gönderilmedi",
+      "notSentBody": "Bu ağdaki önceki işleminiz hâlâ işleniyor. Tamamlandığında yeniden deneyin.",
       "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
       "openSigner": "İmza sayfasında onayla",
       "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin.",
@@ -246,6 +248,7 @@
         "feeMeasuring": "Ağ ücreti hesaplanıyor…",
         "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
         "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
+        "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
         "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…"
       }
     },
@@ -327,6 +330,7 @@
       "deployedNo": "Hayır (ilk işlem)",
       "estimating": "Tahmin ediliyor...",
       "estimateFailed": "Yeniden denemek için dokun",
+      "payWithAnotherCoin": "Başka bir coin ile öde",
       "feeToken": "Ücret token'ı",
       "paidWith": "{{symbol}} ile ödendi",
       "rowBalance": "Bakiye",

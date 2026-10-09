@@ -221,6 +221,8 @@
       "maybeSent": "送信された可能性があります。Vela が確認を続けます。再送信しないでください。",
       "refused": "ネットワークに拒否されました。何も送信されていません。",
       "wentFirst": "このアカウントの別の取引が先に処理されました。何も送信されていません。",
+      "notSentTitle": "まだ送信されていません",
+      "notSentBody": "このネットワークでの前の取引がまだ処理中です。完了してからもう一度お試しください。",
       "unknownOutcome": "24 時間経っても未確認です。",
       "openSigner": "署名ページで確認",
       "signerDown": "署名ページを開けません。接続を確認してください。",
@@ -246,6 +248,7 @@
         "feeMeasuring": "ネットワーク手数料を計算中…",
         "feeFailed": "手数料を計算できません。タップで再試行",
         "feeRetrying": "手数料をまだ計算できません。自動で再試行しています…",
+        "feeWouldFail": "このまま送信すると失敗します。",
         "previousPending": "このネットワークでの前の取引の完了を待っています…"
       }
     },
@@ -327,6 +330,7 @@
       "deployedNo": "未デプロイ（初回の取引）",
       "estimating": "見積もり中...",
       "estimateFailed": "タップして再試行",
+      "payWithAnotherCoin": "別のコインで支払う",
       "feeToken": "手数料トークン",
       "paidWith": "{{symbol}} で支払い",
       "rowBalance": "残高",
