@@ -121,8 +121,8 @@ final class SigningVenueScreenshotTests: XCTestCase {
                     // there — never "check the request and sign it there".
                     let zh = look.lang == "zh"
                     let hint = state == "ceremony-waiting"
-                        ? (zh ? "在你的签名页上创建钥匙" : "Create your key on your signing page")
-                        : (zh ? "在你的签名页上登录" : "Sign in on your signing page")
+                        ? (zh ? "在签名页上创建钥匙" : "Create a key on the signing page")
+                        : (zh ? "在签名页上登录" : "Sign in on the signing page")
                     XCTAssertTrue(app.staticTexts[hint].exists, "\(state) \(look): no \(hint)")
                     let signature = zh ? "请在打开的页面上核对这笔请求，并在那里签名。"
                         : "Check the request on the page that opened, and sign it there."

@@ -141,7 +141,7 @@ struct TrustedSignerUnreachableTests {
     }
 
     /// A ceremony waiting on its page says what it is doing there — its own
-    /// title as the hint ("在你的签名页上创建钥匙") — never the signature's
+    /// title as the hint ("在签名页上创建钥匙") — never the signature's
     /// "check the request and sign it there": a key being made has no
     /// request to check. A page that never opened still says only that.
     @Test func aWaitingCeremonySaysItsOwnTitleNotTheSignaturesHint() throws {
@@ -155,10 +155,10 @@ struct TrustedSignerUnreachableTests {
         ))
         let creating = TrustedSignerSheetModel.copy(unreachable: false, ceremonyTitle: zh.t(create), loc: zh)
         #expect(creating.title == "正在等待签名页…")
-        #expect(creating.hint == "在你的签名页上创建钥匙")
+        #expect(creating.hint == "在签名页上创建钥匙")
         let signingIn = TrustedSignerSheetModel.copy(unreachable: false, ceremonyTitle: en.t(signIn), loc: en)
         #expect(signingIn.title == "Waiting for the signing page…")
-        #expect(signingIn.hint == "Sign in on your signing page")
+        #expect(signingIn.hint == "Sign in on the signing page")
         for copy in [creating, signingIn] {
             #expect(copy.hint != zh.t("componentsUi.signing.trustedSignerWaitingHint"))
             #expect(copy.hint != en.t("componentsUi.signing.trustedSignerWaitingHint"))

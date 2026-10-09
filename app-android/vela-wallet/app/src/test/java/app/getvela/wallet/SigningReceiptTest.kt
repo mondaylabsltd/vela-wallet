@@ -149,7 +149,7 @@ class SigningReceiptTest {
         )
         // Desktop's line, every shell's: the card waits, and says what for.
         assertEquals("Waiting for the signing page…", create?.title)
-        assertEquals("Create your key on your signing page", create?.hint)
+        assertEquals("Create a key on the signing page", create?.hint)
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create?.key)
         val signature = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true))
         assertEquals("Waiting for the signing page…", signature?.title)

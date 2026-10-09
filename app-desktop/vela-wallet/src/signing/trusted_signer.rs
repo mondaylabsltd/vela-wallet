@@ -466,7 +466,7 @@ pub fn handoff_card(
 /// the page, 「确认方式 | 这台设备」 while one signs in or proves — so the
 /// person knows which device to reach for before the browser asks. A
 /// ceremony has no request to check, so its card says what is being done
-/// there instead — `heading`, its own title ("Create your key on your
+/// there instead — `heading`, its own title ("Create a key on the
 /// signing page") — never "check the request and sign it". `None` for a
 /// signature, whose key the hand-off card already named.
 ///

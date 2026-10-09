@@ -187,10 +187,10 @@ class SigningFixturesTest {
         val en = enStrings()
         val create = SigningFixtures.standaloneCeremony(SigningScreenState.CS43, en)!!
         assertEquals("Waiting for the signing page…", create.title)
-        assertEquals("Create your key on your signing page", create.hint)
+        assertEquals("Create a key on the signing page", create.hint)
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create.key)
         val signIn = SigningFixtures.standaloneCeremony(SigningScreenState.CS44, en)!!
-        assertEquals("Sign in on your signing page", signIn.hint)
+        assertEquals("Sign in on the signing page", signIn.hint)
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "This device"), signIn.key)
         val zh = zhStrings()
         assertEquals(

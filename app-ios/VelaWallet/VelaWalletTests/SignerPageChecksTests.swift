@@ -433,10 +433,10 @@ struct HandoffCardTests {
         let create = try #require(trustedSignerCeremonyTitleKey(
             operationJson: #"{"type":"register_passkey","name":"Mine","page":"\#(page)"}"#
         ))
-        #expect(loc.t(create) == "Create your key on your signing page")
+        #expect(loc.t(create) == "Create a key on the signing page")
         let card = HandoffCardModel.build(page: page, keyLabel: nil, line: SignerPageChecks.checking,
                                           loc: loc, title: loc.t(create))
-        #expect(card.title == "Create your key on your signing page")
+        #expect(card.title == "Create a key on the signing page")
         #expect(trustedSignerCeremonyTitleKey(operationJson: #"{"type":"nothing"}"#) == nil)
     }
 

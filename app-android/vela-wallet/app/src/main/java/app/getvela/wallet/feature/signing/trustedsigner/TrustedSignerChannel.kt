@@ -148,8 +148,8 @@ class TrustedSignerChannel(
 
     /**
      * The request in flight's own title, when it is a key ceremony: the
-     * core's `trustedSignerCeremonyTitleKey` — "Create your key on your
-     * signing page", "Sign in on…", "Confirm with your key on…" — instead of
+     * core's `trustedSignerCeremonyTitleKey` — "Create a key on the
+     * signing page", "Sign in on…", "Confirm with the key on…" — instead of
      * a signature's wait. Set per request: one flow can be a create and then
      * its member proof.
      */

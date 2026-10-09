@@ -77,7 +77,7 @@ final class TrustedSignerSheetModel {
     ///
     /// `ceremonyTitle` is a ceremony's own title (create / sign in / confirm,
     /// `trustedSignerCeremonyTitleKey`): while a ceremony waits on its page,
-    /// that is the hint — "在你的签名页上创建钥匙" — never the signature's
+    /// that is the hint — "在签名页上创建钥匙" — never the signature's
     /// "check the request and sign it there", which a key being made has
     /// nothing to match. `nil`: a signature.
     static func copy(unreachable: Bool, ceremonyTitle: String? = nil, loc: Loc) -> Copy {

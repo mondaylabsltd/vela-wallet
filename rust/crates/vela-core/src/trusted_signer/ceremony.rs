@@ -137,7 +137,7 @@ impl Ceremony {
 
     /// The corpus key of the title a shell draws while this ceremony waits on
     /// the page (spec 102 core round) — not the hand-off card's "Review and
-    /// sign on your trusted signing page": a ceremony has nothing to review,
+    /// sign on a trusted signing page": a ceremony has nothing to review,
     /// and the person is making a key, signing in, or confirming with one.
     ///
     /// - create a key (the first, or another) → `ceremonyCreate`;

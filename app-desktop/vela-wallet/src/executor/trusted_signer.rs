@@ -310,8 +310,8 @@ impl Channel {
     }
 
     /// The title of the cards this attempt raises (the wait, how it ended):
-    /// a ceremony's own — "Create your key on your signing page", "Sign in on
-    /// your signing page", "Confirm with your key on your signing page" —
+    /// a ceremony's own — "Create a key on the signing page", "Sign in on
+    /// the signing page", "Confirm with the key on the signing page" —
     /// else the hand-off's, for a signature.
     #[must_use]
     pub fn title_key(&self) -> &'static str {
@@ -1759,7 +1759,7 @@ pub(crate) mod tests {
     }
 
     /// Core round 12: a ceremony's cards say what the person is doing on the
-    /// page — "Sign in on your signing page" — not the hand-off's "review and
+    /// page — "Sign in on the signing page" — not the hand-off's "review and
     /// sign"; a signature's say the hand-off's again.
     #[test]
     fn a_ceremonys_cards_carry_its_own_title() {
