@@ -5,11 +5,15 @@
 //! **The hand-off (D4).** When an account reviews and signs on a trusted page,
 //! the app does not draw the request a second time — the page is the
 //! authority, and two previews of one transaction left people asking which
-//! one to believe. The card says only what the page cannot: where it is, the
-//! key the person will confirm with, and one integrity line that backs the
-//! word "trusted" ("Version 0ba8ee8c · matches Vela's published build list ·
-//! checked 14:32", or why the page will not open). Open is enabled only when
-//! that line says the page may open.
+//! one to believe. The card says only what the page cannot: the key the
+//! person will confirm with (a row, 「确认方式 | 手机或平板」, as the sheet's
+//! "Signing account" row is drawn), where the page is, and one integrity line
+//! that backs the word "trusted" ("Version 0ba8ee8c · matches Vela's
+//! published build list · checked 14:32", or why the page will not open).
+//! Open is enabled only when that line says the page may open. The fee is
+//! not the card's: each screen that hands off (the dApp sheet, the send's
+//! confirm) keeps its own fee and speed rows above it, so the fee is said
+//! once per screen.
 //!
 //! The page does the work in a browser, so while it has the request the
 //! wallet shows that it is waiting — with the one thing the browser cannot do
@@ -53,21 +57,14 @@ pub type Click = Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>
 /// The hand-off card, worded.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HandoffModel {
-    /// "Review and sign on your trusted page".
+    /// "Review and sign on a trusted signing page".
     pub title: SharedString,
     /// The page's host — WHAT is trusted, named. `None` when nothing can
     /// open (the account's keys are out of reach).
     pub page: Option<SharedString>,
-    /// "Confirm with YubiKey 5C", "Confirm with Phone or tablet" — the
-    /// plan's key label (D-17).
-    pub key: SharedString,
-    /// Where that key lives, for its mark.
-    pub place: KeyMethod,
-    /// The fee the person chose on the sheet, and its speed — one quiet row
-    /// under the key (core round 5). `None` when the sheet has no settled fee
-    /// for the speed in force (a message, a fee still measuring), or when the
-    /// screen already shows the fee above the card (the send's own confirm).
-    pub fee: Option<HandoffFeeRow>,
+    /// 「确认方式 | YubiKey 5C」, "Confirm with | Phone or tablet" — the plan's
+    /// key label (D-17), as a row.
+    pub key: KeyRow,
     /// The integrity line and its tone; `None` when no page is involved.
     pub integrity: Option<(SharedString, Tone)>,
     /// Why nothing on this device can sign for the account (R1).
@@ -86,15 +83,29 @@ pub struct HandoffModel {
     pub recheck_label: SharedString,
 }
 
-/// The hand-off's fee row, worded: "Network fee", the figure as the sheet's
-/// folded fee row draws it ("0.0012 USDC · ≈$0.01"), and — where the network
-/// offers more than one — the speed it is priced at ("Standard"), on its own
-/// quiet line so a narrow column never breaks the figure.
+/// A key row, worded (spec 102 integration): 「确认方式 | 手机或平板」 /
+/// "Confirm with | YubiKey 5C" — or, while a ceremony on a page makes the
+/// key, 「新钥匙存在 | 这台设备」 / "New key on | This device". The label is
+/// the core's (`KeyLabel::label_key`, the page's own `field.confirmWith` /
+/// `field.keyOn`); the value the key's own name, else its place's title. A
+/// row, not a sentence, so no language has to inflect a place inside one.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HandoffFeeRow {
+pub struct KeyRow {
     pub label: SharedString,
-    pub figure: SharedString,
-    pub speed: Option<SharedString>,
+    pub value: SharedString,
+    /// Where the key lives, for its mark.
+    pub place: KeyMethod,
+}
+
+impl KeyRow {
+    #[must_use]
+    pub fn of(loc: &Loc, label: &KeyLabel) -> Self {
+        Self {
+            label: loc.t(&label.label_key),
+            value: SharedString::from(label.text(|key| loc.t(key).to_string())),
+            place: place_of_label(label),
+        }
+    }
 }
 
 /// The place a key label names, for its mark: the place whose title key it
@@ -108,48 +119,55 @@ pub fn place_of_label(label: &KeyLabel) -> KeyMethod {
 }
 
 /// The words of a venue refusal (R1, and the web's), resolved once and
-/// filled per refusal — the core names the key (`VenueBlock::key`), this
-/// fills its domains. Kept as templates so a screen whose strings are
+/// filled per refusal — the whole sentence is the core's: which line
+/// (`VenueBlock::key`) and which fact fills which placeholder
+/// (`VenueBlock::vars`). Kept as templates so a screen whose strings are
 /// resolved ahead (the send flow's) can say any refusal without a `Loc`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VenueBlockWords {
-    app: String,
-    page: String,
-    web: String,
+    /// Each line a refusal can say, by its corpus key.
+    lines: Vec<(&'static str, String)>,
 }
 
 impl VenueBlockWords {
     #[must_use]
     pub fn resolve(loc: &Loc) -> Self {
-        let template = |block: VenueBlock| loc.t(block.key()).to_string();
-        Self {
-            app: template(VenueBlock::AppCannotReach {
+        // One refusal of each kind, only to learn the keys their lines are
+        // under — the values come from the refusal being said.
+        let kinds = [
+            VenueBlock::AppCannotReach {
                 domain: String::new(),
-            }),
-            page: template(VenueBlock::PageOnOtherDomain {
+            },
+            VenueBlock::PageOnOtherDomain {
                 page_domain: String::new(),
                 domain: String::new(),
-            }),
-            web: template(VenueBlock::NotOnWeb),
+            },
+            VenueBlock::NotOnWeb,
+        ];
+        Self {
+            lines: kinds
+                .iter()
+                .map(|block| (block.key(), loc.t(block.key()).to_string()))
+                .collect(),
         }
     }
 
-    /// The sentence for `block`, its domains filled.
+    /// The sentence for `block`: its line, with the values the core names
+    /// for it.
     #[must_use]
     pub fn say(&self, block: &VenueBlock) -> SharedString {
-        SharedString::from(match block {
-            VenueBlock::AppCannotReach { domain } => {
-                crate::signing::fill(&self.app, &[("domain", domain)])
-            }
-            VenueBlock::PageOnOtherDomain {
-                page_domain,
-                domain,
-            } => crate::signing::fill(
-                &self.page,
-                &[("pageDomain", page_domain), ("domain", domain)],
-            ),
-            VenueBlock::NotOnWeb => self.web.clone(),
-        })
+        let key = block.key();
+        let template = self
+            .lines
+            .iter()
+            .find(|(line, _)| *line == key)
+            .map_or(key, |(_, template)| template.as_str());
+        let vars = block.vars();
+        let vars: Vec<(&str, &str)> = vars
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect();
+        SharedString::from(crate::signing::fill(template, &vars))
     }
 }
 
@@ -175,7 +193,6 @@ pub fn page_host(url: &str) -> String {
 /// board's, for the venue page).
 #[must_use]
 pub fn handoff_model(loc: &Loc, handoff: &Handoff, line: Option<&IntegrityLine>) -> HandoffModel {
-    let key = handoff.key_label.text(|key| loc.t(key).to_string());
     let blocked = handoff.block.as_ref().map(|block| block_words(loc, block));
     let integrity = line
         .filter(|_| blocked.is_none())
@@ -190,9 +207,7 @@ pub fn handoff_model(loc: &Loc, handoff: &Handoff, line: Option<&IntegrityLine>)
             .as_deref()
             .filter(|_| blocked.is_none())
             .map(|page| SharedString::from(page_host(page))),
-        key: loc.t_texts("componentsUi.signing.handoffKey", &[("key", key.as_str())]),
-        place: place_of_label(&handoff.key_label),
-        fee: None,
+        key: KeyRow::of(loc, &handoff.key_label),
         refused: line
             .is_some_and(|line| !line.opens && line.state != IntegrityState::Checking && !asks),
         trust_label: asks.then(|| loc.t("settings.signing.pageTrust")),
@@ -201,23 +216,6 @@ pub fn handoff_model(loc: &Loc, handoff: &Handoff, line: Option<&IntegrityLine>)
         opens,
         open_label: loc.t("componentsUi.signing.openSigner"),
         recheck_label: loc.t("common.tryAgain"),
-    }
-}
-
-/// The hand-off's fee row: `label`, the sheet's own folded fee line for the
-/// quote in force (`figure`, drawn by the sheet's formatter) and the speed the
-/// core's `HandoffFee` names, if it names one.
-#[must_use]
-pub fn handoff_fee_row(
-    loc: &Loc,
-    label: SharedString,
-    fee: &vela_core::app::sign_confirm::HandoffFee,
-    figure: &str,
-) -> HandoffFeeRow {
-    HandoffFeeRow {
-        label,
-        figure: SharedString::from(figure.to_owned()),
-        speed: fee.tier_key.as_deref().map(|tier| loc.t(tier)),
     }
 }
 
@@ -254,9 +252,51 @@ fn line_action(
         .on_click(on_click)
 }
 
-/// The card's facts, on one sunken panel: where the page is, the key, the
-/// fee the person chose, and the integrity line — the things that make
-/// "trusted" mean something.
+/// The key row, drawn as the sheet's own label|value rows are (its
+/// 「签名账户 | 名字」 / "Signing account | name" row): the label in the quiet
+/// ink on the left, the key on the right in the body ink, its place's mark
+/// beside it where that row has the account's identicon.
+pub fn key_row(theme: &Theme, icons: &mut IconCache, row: &KeyRow) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(12.))
+        .child(
+            div()
+                .flex_none()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(row.label.clone()),
+        )
+        .child(
+            div()
+                .min_w(px(0.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .child(div().flex_none().child(icon_img(
+                    icons,
+                    place_icon(row.place),
+                    false,
+                    theme.fg_muted,
+                    16.,
+                )))
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .truncate()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(row.value.clone()),
+                ),
+        )
+}
+
+/// What the card says under its title: the key row, then — on one sunken
+/// panel — where the page is and the integrity line, the two things that
+/// make "trusted" mean something. The send's confirm draws it under its own
+/// title; the hand-off card under its eye.
 pub fn handoff_facts(
     theme: &Theme,
     icons: &mut IconCache,
@@ -293,69 +333,24 @@ pub fn handoff_facts(
                 .child(page.clone()),
         ));
     }
-    rows.push(fact(
-        icon_img(icons, place_icon(model.place), false, theme.fg_muted, 16.).into_any_element(),
-        div()
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_base)
-            .child(model.key.clone()),
-    ));
-    if let Some(fee) = &model.fee {
-        let value = div()
-            .flex_1()
-            .min_w(px(0.))
-            .flex()
-            .flex_col()
-            .items_end()
-            .gap(px(2.))
-            .child(
-                div()
-                    .text_right()
-                    .text_color(theme.fg_base)
-                    .child(fee.figure.clone()),
-            )
-            .children(fee.speed.clone().map(|speed| {
-                div()
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_muted)
-                    .child(speed)
-            }));
-        rows.push(fact(
-            icon_img(icons, Icon::Coins, false, theme.fg_muted, 16.).into_any_element(),
-            div()
-                .flex()
-                .items_start()
-                .justify_between()
-                .gap(px(12.))
-                .text_size(theme::text_row_sub())
-                .child(
-                    div()
-                        .flex_none()
-                        .text_color(theme.fg_muted)
-                        .child(fee.label.clone()),
-                )
-                .child(value),
-        ));
-    }
     if let Some(blocked) = &model.blocked {
         rows.push(fact(
             icon_img(icons, Icon::CircleAlert, false, theme.error_base, 16.).into_any_element(),
             div()
                 .text_size(theme::text_row_sub())
-                .line_height(gpui::relative(1.4))
+                .line_height(gpui::relative(integrity::LINE_HEIGHT))
                 .text_color(theme.error_base)
                 .child(blocked.clone()),
         ));
     }
     if let Some((said, tone)) = &model.integrity {
         let colour = integrity::ink(theme, *tone);
-        let mut words = div().flex().flex_col().gap(px(6.)).child(
-            div()
-                .text_size(theme::text_row_sub())
-                .line_height(gpui::relative(1.4))
-                .text_color(integrity::words_ink(theme, *tone))
-                .child(said.clone()),
-        );
+        let mut words = div().flex().flex_col().gap(px(6.)).child(integrity::words(
+            theme,
+            said.clone(),
+            *tone,
+            model.trust_label.is_none() && !model.refused,
+        ));
         if let (Some(on_trust), Some(label)) = (on_trust, model.trust_label.clone()) {
             words = words.child(line_action(
                 theme,
@@ -388,7 +383,12 @@ pub fn handoff_facts(
             row
         });
     }
-    panel
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(12.))
+        .child(key_row(theme, icons, &model.key))
+        .child(panel)
 }
 
 /// The hand-off card (D4): the eye — this is where you LOOK — the title, the
@@ -461,22 +461,47 @@ pub fn handoff_card(
 /// "Waiting for the signing page…" — over the flow while the page has the
 /// request: check it there, and sign it there.
 ///
+/// `key` is a key ceremony's row (spec 102 integration, the core's
+/// `Ceremony::key_label`): 「新钥匙存在 | 手机或平板」 while a key is made on
+/// the page, 「确认方式 | 这台设备」 while one signs in or proves — so the
+/// person knows which device to reach for before the browser asks. A
+/// ceremony has no request to check, so its card says what is being done
+/// there instead — `heading`, its own title ("Create your key on your
+/// signing page") — never "check the request and sign it". `None` for a
+/// signature, whose key the hand-off card already named.
+///
 /// `unreachable` (spec 082 RD13, W16): the person came back and the page
 /// could not be reached — the card says so (`signerDown`), with Retry first
 /// and Cancel; the request and its five-minute clock stay.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the card's words, its key row, and what each of its buttons does"
+)]
 pub fn waiting_card(
     theme: &Theme,
+    icons: &mut IconCache,
     loc: &Loc,
     heading: SharedString,
+    key: Option<&KeyRow>,
     unreachable: bool,
     on_reopen: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
+    let key = key.map(|key| {
+        div()
+            .w_full()
+            .py(px(12.))
+            .border_t_1()
+            .border_b_1()
+            .border_color(theme.divider)
+            .child(key_row(theme, icons, key))
+    });
     if unreachable {
         return card(theme)
             .items_center()
             .child(title(theme, heading))
             .child(body(theme, loc.t("componentsUi.signing.signerDown")))
+            .children(key)
             .child(
                 div()
                     .w_full()
@@ -525,8 +550,13 @@ pub fn waiting_card(
         ))
         .child(body(
             theme,
-            loc.t("componentsUi.signing.trustedSignerWaitingHint"),
+            if key.is_some() {
+                heading
+            } else {
+                loc.t("componentsUi.signing.trustedSignerWaitingHint")
+            },
         ))
+        .children(key)
         .child(
             div()
                 .w_full()
@@ -656,14 +686,16 @@ mod tests {
         );
         let model = handoff_model(&loc, &handoff, Some(&admitted));
         assert_eq!(model.page.as_deref(), Some("sign.getvela.app"));
-        assert!(
-            model
-                .key
-                .contains(&*loc.t("onboarding.create.methodSecurityKeyTitle"))
+        // A row: "Confirm with | USB security key", never a sentence.
+        assert_eq!(
+            model.key.label,
+            loc.t("componentsUi.signing.confirmWithLabel")
         );
-        assert_eq!(model.place, KeyMethod::SecurityKey);
-        assert_eq!(model.fee, None, "a fee row is the sheet's to add");
-        assert!(!model.key.contains("{{"), "{}", model.key);
+        assert_eq!(
+            model.key.value,
+            loc.t("onboarding.create.methodSecurityKeyTitle")
+        );
+        assert_eq!(model.key.place, KeyMethod::SecurityKey);
         assert!(model.opens);
         let (said, tone) = model
             .integrity
@@ -705,23 +737,23 @@ mod tests {
             key_label: KeyLabel::of(Some("YubiKey 5C"), "Savings", "security_key"),
             ..handoff.clone()
         };
-        assert!(
+        assert_eq!(
             handoff_model(&loc, &named, Some(&admitted))
                 .key
-                .contains("YubiKey 5C")
+                .value
+                .as_ref(),
+            "YubiKey 5C"
         );
         let wallets = Handoff {
             key_label: KeyLabel::of(Some("Savings"), "Savings", "hybrid"),
             ..handoff.clone()
         };
         let model = handoff_model(&loc, &wallets, Some(&admitted));
-        assert!(!model.key.contains("Savings"), "{}", model.key);
-        assert!(
-            model
-                .key
-                .contains(&*loc.t("onboarding.create.methodHybridTitle"))
+        assert_eq!(
+            model.key.value,
+            loc.t("onboarding.create.methodHybridTitle")
         );
-        assert_eq!(model.place, KeyMethod::Hybrid);
+        assert_eq!(model.key.place, KeyMethod::Hybrid);
 
         // Out of reach: the reason, no page, no line, never armed.
         let stranded = Handoff {
@@ -773,43 +805,42 @@ mod tests {
         }
     }
 
-    /// Core round 5: the fee row restates the speed by its name, and only
-    /// where the network offers more than one.
+    /// The key row reads as the signing page's own field does — the label
+    /// and the place, no spaces stitched around a CJK place — and a key
+    /// ceremony's row is the core's: "New key on" while a key is made, "Confirm
+    /// with" while one signs in or proves, by its place, never a name.
     #[test]
-    fn the_fee_row_names_the_speed_it_was_priced_at() {
-        use vela_core::app::fee_policy::FeeEstimateView;
-        use vela_core::app::fee_policy::FeeTier;
-        use vela_core::app::sign_confirm::HandoffFee;
-        let loc = Loc::for_tag("en");
-        let estimate = FeeEstimateView {
-            chain_id: 100,
-            total_wei: "1".to_owned(),
-            max_fee_per_gas: "1".to_owned(),
-            network_fee_per_gas: "1".to_owned(),
-            relayer_fee_per_gas: "0".to_owned(),
-            bundler_gas_price: "1".to_owned(),
-            in_band_gas_basis: "0".to_owned(),
-            effective_gas_price: None,
-            max_gas_price: None,
-            total_gas: "1".to_owned(),
-            deployed: true,
-            tier: FeeTier::Standard,
-            quoted: true,
-            fee_asset: vela_core::app::fee_policy::FeeAssetView::Native,
-            fee_recipient: None,
+    fn the_key_row_is_a_label_and_a_value() {
+        use vela_core::trusted_signer::ceremony::Ceremony;
+        let zh = Loc::for_tag("zh");
+        let row = KeyRow::of(&zh, &KeyLabel::of(None, "储蓄", "hybrid"));
+        assert_eq!(row.label.as_ref(), "确认方式");
+        assert_eq!(row.value.as_ref(), "手机或平板");
+
+        let create = Ceremony::RegisterPasskey {
+            name: "储蓄".to_owned(),
+            exclude_credential_ids: Vec::new(),
+            method: KeyMethod::Hybrid,
         };
-        let fee = |tier: Option<FeeTier>| HandoffFee {
-            fee: estimate.clone(),
-            tier,
-            tier_key: tier.map(|_| "send.gasTier.standard".to_owned()),
+        let row = KeyRow::of(&zh, &create.key_label());
+        assert_eq!(row.label.as_ref(), "新钥匙存在");
+        assert_eq!(row.value.as_ref(), "手机或平板");
+        assert_eq!(row.place, KeyMethod::Hybrid);
+
+        let sign_in = Ceremony::AuthenticatePasskey {
+            method: KeyMethod::SecurityKey,
         };
-        let figure = "0.0012 USDC · ≈$0.01";
-        let label = loc.t("componentsUi.gas.networkFee");
-        let row = handoff_fee_row(&loc, label.clone(), &fee(Some(FeeTier::Standard)), figure);
-        assert_eq!(row.label, label);
-        assert_eq!(row.figure.as_ref(), figure);
-        assert_eq!(row.speed, Some(loc.t("send.gasTier.standard")));
-        assert_eq!(handoff_fee_row(&loc, label, &fee(None), figure).speed, None);
+        let en = Loc::for_tag("en");
+        let row = KeyRow::of(&en, &sign_in.key_label());
+        assert_eq!(row.label, en.t("componentsUi.signing.confirmWithLabel"));
+        assert_eq!(row.value, en.t("onboarding.create.methodSecurityKeyTitle"));
+        let label = create.key_label();
+        for (tag, loc) in Loc::every_language() {
+            let row = KeyRow::of(&loc, &label);
+            assert_ne!(row.label.as_ref(), label.label_key, "{tag}: echoed");
+            assert_ne!(row.value.as_ref(), label.place_key, "{tag}: echoed");
+            assert!(!row.label.is_empty() && !row.value.is_empty(), "{tag}");
+        }
     }
 
     #[test]
@@ -830,7 +861,9 @@ mod tests {
         let loc = Loc::from_env();
         for key in [
             "componentsUi.signing.handoffTitle",
-            "componentsUi.signing.handoffKey",
+            // The key row's two labels (spec 102 integration).
+            "componentsUi.signing.confirmWithLabel",
+            "componentsUi.signing.newKeyOnLabel",
             "componentsUi.signing.openSigner",
             "componentsUi.signing.trustedSignerWaiting",
             "componentsUi.signing.trustedSignerWaitingHint",

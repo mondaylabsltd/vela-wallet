@@ -102,10 +102,10 @@ pub struct SendContext {
     pub key_route: Option<KeyRoute>,
     /// The account's name: the page points the person at a passkey with it.
     pub account_name: Option<String>,
-    /// "Confirm with {key}" — the plan's name for the key this account signs
-    /// with (spec 102, D-17): its own label when that is not the wallet's
-    /// name, else the place it lives. The core's, never read off the record
-    /// here.
+    /// The key row — 「确认方式 | {key}」 / "Confirm with | {key}" — the
+    /// plan's name for the key this account signs with (spec 102, D-17): its
+    /// own label when that is not the wallet's name, else the place it lives.
+    /// The core's, never read off the record here.
     pub key_label: KeyLabel,
     /// The trusted page's channel (spec 071): whether this send goes to a
     /// page, and its waiting sheet. The host swaps in the channel it listens

@@ -900,10 +900,16 @@ impl OnboardingPage {
         }
         let card = if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
+            // A key ceremony on the page names its key, as the page does.
+            let key = channel
+                .ceremony_key()
+                .map(|key| trusted_signer_cards::KeyRow::of(&self.loc, &key));
             trusted_signer_cards::waiting_card(
                 theme,
+                &mut self.icons.borrow_mut(),
                 &self.loc,
                 self.loc.t(channel.title_key()),
+                key.as_ref(),
                 channel.unreachable(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),

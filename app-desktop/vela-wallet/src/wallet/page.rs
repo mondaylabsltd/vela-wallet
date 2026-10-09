@@ -6472,11 +6472,17 @@ impl WalletPage {
         let card = if channel.waiting() {
             let unreachable = channel.unreachable();
             let heading = self.loc.t(channel.title_key());
+            // A key ceremony on the page names its key, as the page does.
+            let key = channel
+                .ceremony_key()
+                .map(|key| signing_trusted_signer::KeyRow::of(&self.loc, &key));
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_trusted_signer::waiting_card(
                 theme,
+                &mut self.icons,
                 &self.loc,
                 heading,
+                key.as_ref(),
                 unreachable,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
@@ -6723,6 +6729,24 @@ impl WalletPage {
         );
     }
 
+    /// A panel's mock — and the send's mock confirm handed off when the
+    /// gallery pins a hand-off (`VELA_HANDOFF`): the confirm's own fee rows
+    /// above the card, the card with none.
+    fn mock_flow_body(&self, panel: FlowPanel) -> flow_fixtures::FlowBody {
+        match (
+            flow_fixtures::body(panel, &self.flow_strings),
+            crate::gallery::handoff_pin(),
+        ) {
+            (flow_fixtures::FlowBody::SendConfirm(confirm), Some((handoff, line))) => {
+                flow_fixtures::FlowBody::SendConfirm(flows_live::with_handoff(
+                    confirm,
+                    signing_trusted_signer::handoff_model(&self.loc, &handoff, Some(&line)),
+                ))
+            }
+            (body, _) => body,
+        }
+    }
+
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
     ///
     /// Not every panel has a live source yet — Send is 032's, and the scanner
@@ -6734,7 +6758,7 @@ impl WalletPage {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
         let Some(identity) = self.identity.clone() else {
-            return flow_fixtures::body(panel, &self.flow_strings);
+            return self.mock_flow_body(panel);
         };
         match panel {
             FlowPanel::Dt1 | FlowPanel::Dt4 => {
@@ -6938,7 +6962,7 @@ impl WalletPage {
                         }
                     }
                 }
-                None => flow_fixtures::body(panel, &self.flow_strings),
+                None => self.mock_flow_body(panel),
             },
             // Spec 032 phase 5: the importer reads its own machine, which the
             // host opens when the send machine shows the sheet.
@@ -10200,14 +10224,17 @@ impl WalletPage {
                     .px(px(8.))
                     .py(px(2.))
                     .rounded_full()
-                    .bg(theme.info_soft)
+                    // D7: the venue header's own quiet tag, not a tinted chip.
+                    .bg(theme.bg_sunken)
+                    .border_1()
+                    .border_color(theme.divider)
                     .text_size(theme::text_label())
-                    .text_color(theme.info_base)
+                    .text_color(theme.fg_muted)
                     .child(icon_img(
                         &mut self.icons,
                         Icon::Lock,
                         false,
-                        theme.info_base,
+                        theme.fg_subtle,
                         11.,
                     ))
                     .child(keys_on),
@@ -17739,6 +17766,21 @@ impl WalletPage {
         let funding = kind == signing_live::ColumnKind::Funding;
         let refused = kind == signing_live::ColumnKind::Refused;
 
+        // The mock column, handed off when the gallery pins one
+        // (`VELA_HANDOFF`), with the pinned check's line — never a live one.
+        #[cfg(not(target_os = "linux"))]
+        let mock = self.signing_host.is_none();
+        #[cfg(target_os = "linux")]
+        let mock = true;
+        let pinned_line = if mock && handoff.is_none() {
+            crate::gallery::handoff_pin().map(|(pinned, line)| {
+                handoff = Some(pinned);
+                line
+            })
+        } else {
+            None
+        };
+
         // Spec 079: once approved, the column is the send receipt — the form,
         // its fee and its confirm are gone from the first frame after the
         // approval, not when the core closes the sheet ninety seconds later.
@@ -17812,44 +17854,13 @@ impl WalletPage {
         if kind == signing_live::ColumnKind::Request
             && let Some(handoff) = handoff.as_ref()
         {
-            let line = handoff
-                .page
-                .as_deref()
-                .map(|page| crate::signing::integrity::line(page, cx));
-            let mut card = signing_trusted_signer::handoff_model(&self.loc, handoff, line.as_ref());
-            // Core round 5: the fee the sheet settled, and its speed — one
-            // quiet row, read from the SAME fee session and speed control the
-            // sheet drives (`sign_confirm::handoff_fee`), drawn by the sheet's
-            // own fee formatter. None for a message, or a fee not settled for
-            // the speed in force (the confirm gate keeps Open shut then).
-            #[cfg(not(target_os = "linux"))]
-            if let Some(host) = self.signing_host.as_ref() {
-                let currency = self.money(cx);
-                let host = host.read(cx);
-                let fee = (!signing_live::off_chain(&host.clear_view))
-                    .then(|| {
-                        vela_core::app::sign_confirm::handoff_fee(
-                            Some(host.fee_view()),
-                            Some(host.speed_view()),
-                        )
-                    })
-                    .flatten();
-                if let Some(fee) = fee {
-                    let figure = flows_live::fee_line(
-                        Some(&fee.fee),
-                        None,
-                        host.fee_view(),
-                        &self.locale,
-                        &currency,
-                    );
-                    card.fee = Some(signing_trusted_signer::handoff_fee_row(
-                        &self.loc,
-                        self.signing.fee_label.clone(),
-                        &fee,
-                        &figure,
-                    ));
-                }
-            }
+            let line = pinned_line.clone().or_else(|| {
+                handoff
+                    .page
+                    .as_deref()
+                    .map(|page| crate::signing::integrity::line(page, cx))
+            });
+            let card = signing_trusted_signer::handoff_model(&self.loc, handoff, line.as_ref());
             let on_recheck: Option<signing_trusted_signer::Click> =
                 handoff.page.clone().map(|page| {
                     Box::new(
@@ -17875,11 +17886,26 @@ impl WalletPage {
                     .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
                     .map(|note| (note, true))
             });
+            // The fee is said once on this screen, and it is the sheet's own
+            // row: the fee and its speed — with their controls — stay above the
+            // card (D-18: chosen here, before the page opens; the page signs
+            // the operation they priced), and the card carries no fee row. Then
+            // who signs, the row the card's key row reads beside.
+            let fee_block =
+                self.signing_fee_block(theme, &model.fee, signing_speed.as_ref(), &speed_tiers, cx);
             return div()
                 .flex()
                 .flex_col()
                 .gap(px(16.))
                 .children(signing_components::header(theme, &model))
+                .children(fee_block)
+                .child(signing_components::signer_row(
+                    theme,
+                    &mut self.identicons,
+                    model.signer_label.clone(),
+                    model.signer_name.clone(),
+                    &model.signer_seed,
+                ))
                 .child(signing_trusted_signer::handoff_card(
                     theme,
                     &mut self.icons,
@@ -18204,51 +18230,13 @@ impl WalletPage {
             }
             column = column.child(row_divider(theme)).child(section);
         }
-        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
-        if let Some(fee) = signing_components::fee(
+        column = column.children(self.signing_fee_block(
             theme,
-            &mut self.icons,
             &model.fee,
-            on_fee,
-            on_fee_pick,
-            on_fee_refresh,
-        ) {
-            let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
-            if let Some(speed) = &signing_speed {
-                // The same control, the same clicks, as the send form's.
-                #[cfg(not(target_os = "linux"))]
-                let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
-                    |page, _: &gpui::ClickEvent, _, cx| {
-                        if let Some(host) = page.signing_host.as_ref() {
-                            host.update(cx, |host, cx| host.toggle_speed(cx));
-                        }
-                    },
-                )));
-                #[cfg(not(target_os = "linux"))]
-                let picks: Vec<panels::Click> = speed_tiers
-                    .iter()
-                    .map(|tier| {
-                        let tier = *tier;
-                        Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
-                            if let Some(host) = page.signing_host.as_ref() {
-                                host.update(cx, |host, cx| host.pick_speed(tier, cx));
-                            }
-                        })) as panels::Click
-                    })
-                    .collect();
-                #[cfg(target_os = "linux")]
-                let (toggle, picks): (Option<panels::Click>, Vec<panels::Click>) =
-                    (None, Vec::new());
-                fee_block = fee_block.child(panels::speed_control(
-                    theme,
-                    &mut self.icons,
-                    speed,
-                    toggle,
-                    picks,
-                ));
-            }
-            column = column.child(fee_block);
-        }
+            signing_speed.as_ref(),
+            &speed_tiers,
+            cx,
+        ));
         column = column
             .child(signing_components::signer_row(
                 theme,
@@ -18329,6 +18317,66 @@ impl WalletPage {
             );
         }
         column
+    }
+
+    /// The sheet's fee row and, under it, the speed control (spec 069) —
+    /// the same control, the same clicks, as the send form's. `None` where
+    /// the request has no fee row (`FeeModel::Hidden`). Drawn in Vela and in
+    /// the hand-off alike: the fee and its speed are chosen here before the
+    /// page opens (D-18), and the page signs the operation they priced.
+    fn signing_fee_block(
+        &mut self,
+        theme: &Theme,
+        fee: &signing_fixtures::FeeModel,
+        speed: Option<&flow_fixtures::FeeSpeedModel>,
+        speed_tiers: &[vela_core::app::fee_policy::FeeTier],
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
+        let fee = signing_components::fee(
+            theme,
+            &mut self.icons,
+            fee,
+            on_fee,
+            on_fee_pick,
+            on_fee_refresh,
+        )?;
+        let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
+        if let Some(speed) = speed {
+            #[cfg(not(target_os = "linux"))]
+            let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
+                |page, _: &gpui::ClickEvent, _, cx| {
+                    if let Some(host) = page.signing_host.as_ref() {
+                        host.update(cx, |host, cx| host.toggle_speed(cx));
+                    }
+                },
+            )));
+            #[cfg(not(target_os = "linux"))]
+            let picks: Vec<panels::Click> = speed_tiers
+                .iter()
+                .map(|tier| {
+                    let tier = *tier;
+                    Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
+                        if let Some(host) = page.signing_host.as_ref() {
+                            host.update(cx, |host, cx| host.pick_speed(tier, cx));
+                        }
+                    })) as panels::Click
+                })
+                .collect();
+            #[cfg(target_os = "linux")]
+            let (toggle, picks): (Option<panels::Click>, Vec<panels::Click>) = {
+                let _ = speed_tiers;
+                (None, Vec::new())
+            };
+            fee_block = fee_block.child(panels::speed_control(
+                theme,
+                &mut self.icons,
+                speed,
+                toggle,
+                picks,
+            ));
+        }
+        Some(fee_block)
     }
 
     /// The fee row's tap, and one listener per fee coin in the relay's order

@@ -73,7 +73,7 @@ use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::shell::ShellOperation;
 use vela_core::app::{Assertion, FailureKind, KeyMethod, RegistryPublishMember};
 use vela_core::primitives::{to_base64url, to_hex};
-use vela_core::signing_venue::KeyRoute;
+use vela_core::signing_venue::{KeyLabel, KeyRoute};
 use vela_core::trusted_signer::launch::{CheckedPage, IntegrityLine};
 use vela_core::trusted_signer::{
     self, RequestInput, TrustedSignerError, Verified, ceremony as core_ceremony, verify, ws,
@@ -186,6 +186,10 @@ struct State {
     /// (`Ceremony::title_key`: create / sign in / confirm) — `None` for a
     /// signature, which is the hand-off's "review and sign".
     ceremony_title: Option<&'static str>,
+    /// That ceremony's key row (`Ceremony::key_label`): "New key on | This
+    /// device" while a key is made, "Confirm with | Phone or tablet" while one
+    /// signs in or proves — `None` for a signature.
+    ceremony_key: Option<KeyLabel>,
 }
 
 /// What one screen and its Trusted Signer attempts say to each other.
@@ -314,6 +318,14 @@ impl Channel {
                 .ceremony_title
                 .unwrap_or("componentsUi.signing.handoffTitle")
         })
+    }
+
+    /// The key row of the ceremony this attempt runs on the page — the
+    /// core's (`Ceremony::key_label`), drawn on its waiting card — or `None`
+    /// for a signature.
+    #[must_use]
+    pub fn ceremony_key(&self) -> Option<KeyLabel> {
+        self.with(|state| state.ceremony_key.clone())
     }
 
     /// The URL this wait is on — for the check the window's return runs.
@@ -459,10 +471,13 @@ impl Channel {
         self.with(|state| state.claimed = false);
     }
 
-    /// What this attempt is, for its cards' title: a ceremony's title key,
-    /// or `None` for a signature.
-    fn entitle(&self, ceremony_title: Option<&'static str>) {
-        self.with(|state| state.ceremony_title = ceremony_title);
+    /// What this attempt is, for its cards: a ceremony's title key and key
+    /// row, or `None` for a signature.
+    fn entitle(&self, ceremony: Option<&core_ceremony::Ceremony>) {
+        self.with(|state| {
+            state.ceremony_title = ceremony.map(core_ceremony::Ceremony::title_key);
+            state.ceremony_key = ceremony.map(core_ceremony::Ceremony::key_label);
+        });
     }
 
     /// An attempt starts waiting on `url`; `open` hands it to the browser.
@@ -1117,7 +1132,7 @@ fn ceremony_on_flow(
     };
     // A ceremony has nothing to review: its cards say what the person is
     // doing on the page (spec 102 core round 12).
-    channel.entitle(Some(ceremony.title_key()));
+    channel.entitle(Some(ceremony));
     // The flow's visit, when it is a visit to this same page; otherwise a new
     // one, and the old one is told goodbye rather than left open.
     let mut open = channel.take_flow();
@@ -1763,8 +1778,21 @@ pub(crate) mod tests {
         assert!(matches!(ended, Some(Err(_))), "a page nobody checked ran");
         assert_eq!(channel.ended(), Some(Refusal::NotOpened));
         assert_eq!(channel.title_key(), "componentsUi.signing.ceremonySignIn");
+        // …and its key row, the core's: the place it signs in with.
+        assert_eq!(
+            channel.ceremony_key(),
+            Some(vela_core::signing_venue::KeyLabel::of_ceremony(
+                "security_key",
+                false
+            ))
+        );
         let _ = sign(&json!({}), &base, &DIGEST, &keys(), &channel);
         assert_eq!(channel.title_key(), "componentsUi.signing.handoffTitle");
+        assert_eq!(
+            channel.ceremony_key(),
+            None,
+            "a signature's key is the card's"
+        );
     }
 
     /// R5: the request names the key to use and where it lives, so the

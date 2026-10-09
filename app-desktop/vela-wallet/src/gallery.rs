@@ -70,13 +70,17 @@ enum Fixture {
         crate::executor::trusted_signer::Refusal,
         Option<crate::executor::trusted_signer::NotOpened>,
     ),
-    /// Spec 102 D4: the hand-off card, with its page's integrity line and —
-    /// for a transaction — the fee row the sheet settled (label, value).
+    /// Spec 102 D4: the hand-off card, with its page's integrity line. No
+    /// fee row: every screen that hands off keeps its own fee and speed rows
+    /// above the card (`VELA_HANDOFF` draws the card on those screens).
     Handoff(
         crate::executor::send::Handoff,
         vela_core::trusted_signer::launch::IntegrityLine,
-        Option<(&'static str, &'static str)>,
     ),
+    /// The wait while a page has the request — for a key ceremony, with the
+    /// key row the core names for it (`Ceremony::key_label`); `true` when
+    /// the page could not be reached.
+    TrustedSignerWaiting(Option<vela_core::trusted_signer::ceremony::Ceremony>, bool),
     /// Spec 102: the sign-in chooser — three places and "Use a trusted
     /// signing page", or (with a page) that page heading the places.
     SignIn(Option<String>),
@@ -91,6 +95,52 @@ enum Fixture {
             vela_core::trusted_signer::launch::IntegrityLine,
         )>,
     ),
+}
+
+/// `VELA_HANDOFF=checking|matches|asks|refused|named` — with `VELA_PAGE=gallery`
+/// and a mock signing column (`VELA_SIGNING_STATE`) or the send's mock confirm
+/// (`VELA_FLOW=DSD3`), the screen hands off to Vela's official page (a
+/// self-hosted one for `asks` and `named`) with that integrity line, so the
+/// hand-off can be looked at where it is drawn — the screen's own fee rows
+/// above the card — without a request, a page or a check. Same env-pin
+/// family as `VELA_SIGNING_STATE` and `VELA_FLOW`.
+pub fn handoff_pin() -> Option<(
+    crate::executor::send::Handoff,
+    vela_core::trusted_signer::launch::IntegrityLine,
+)> {
+    let want = crate::dev_env::var!("VELA_HANDOFF")?;
+    let place = |method: &str| vela_core::signing_venue::KeyLabel::of(None, "", method);
+    let official = |line| {
+        Some((
+            crate::executor::send::Handoff {
+                page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
+                block: None,
+                key_label: place("hybrid"),
+            },
+            line,
+        ))
+    };
+    let own = |key_label, line| {
+        Some((
+            crate::executor::send::Handoff {
+                page: Some(OWN_PAGE.to_owned()),
+                block: None,
+                key_label,
+            },
+            line,
+        ))
+    };
+    match want.trim() {
+        "checking" => official(vela_core::trusted_signer::launch::IntegrityLine::checking()),
+        "matches" => official(official_checked()),
+        "refused" => official(could_not_check()),
+        "asks" => own(place("security_key"), asks_to_trust()),
+        "named" => own(
+            vela_core::signing_venue::KeyLabel::of(Some("YubiKey 5C"), "Savings", "security_key"),
+            own_checked(),
+        ),
+        _ => None,
+    }
 }
 
 /// A check that admitted `version` — "matches Vela's published build list"
@@ -492,28 +542,20 @@ fn entries() -> Vec<Entry> {
         block: None,
         key_label: by_place("hybrid"),
     };
-    // What the sheet settled before the hand-off: the fee in its coin, its
-    // fiat, and the speed it is priced at.
-    const FEE: Option<(&str, &str)> = Some(("componentsUi.gas.networkFee", "0.0012 USDC · ≈$0.01"));
     signer(
         "hand-off · matches",
-        Fixture::Handoff(official_handoff.clone(), official_checked(), FEE),
+        Fixture::Handoff(official_handoff.clone(), official_checked()),
     );
     signer(
         "hand-off · checking",
         Fixture::Handoff(
             official_handoff.clone(),
             vela_core::trusted_signer::launch::IntegrityLine::checking(),
-            FEE,
         ),
     );
     signer(
         "hand-off · could not check",
-        Fixture::Handoff(official_handoff.clone(), could_not_check(), FEE),
-    );
-    signer(
-        "hand-off · a message, no fee",
-        Fixture::Handoff(official_handoff.clone(), official_checked(), None),
+        Fixture::Handoff(official_handoff.clone(), could_not_check()),
     );
     signer(
         "hand-off · self-hosted, named key",
@@ -528,7 +570,6 @@ fn entries() -> Vec<Entry> {
                 ),
             },
             own_checked(),
-            FEE,
         ),
     );
     signer(
@@ -540,7 +581,6 @@ fn entries() -> Vec<Entry> {
                 key_label: by_place("security_key"),
             },
             asks_to_trust(),
-            FEE,
         ),
     );
     signer(
@@ -554,8 +594,49 @@ fn entries() -> Vec<Entry> {
                 key_label: by_place("platform"),
             },
             vela_core::trusted_signer::launch::IntegrityLine::checking(),
-            None,
         ),
+    );
+    // A key ceremony on a self-hosted page: its own title, and the key row
+    // the core names for it — "New key on" while a key is made, "Confirm
+    // with" while one signs in.
+    signer(
+        "ceremony · create a key",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::RegisterPasskey {
+                    name: "Savings".to_owned(),
+                    exclude_credential_ids: Vec::new(),
+                    method: KeyMethod::Hybrid,
+                },
+            ),
+            false,
+        ),
+    );
+    signer(
+        "ceremony · sign in",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::AuthenticatePasskey {
+                    method: KeyMethod::SecurityKey,
+                },
+            ),
+            false,
+        ),
+    );
+    signer(
+        "ceremony · sign in, page down",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::AuthenticatePasskey {
+                    method: KeyMethod::SecurityKey,
+                },
+            ),
+            true,
+        ),
+    );
+    signer(
+        "waiting · a signature",
+        Fixture::TrustedSignerWaiting(None, false),
     );
     signer("sign in · methods", Fixture::SignIn(None));
     signer(
@@ -953,19 +1034,9 @@ impl GalleryView {
             }
             // On the signing column's own surface and width, as the wallet
             // draws it beside a request.
-            Fixture::Handoff(handoff, line, fee) => {
-                let mut model =
+            Fixture::Handoff(handoff, line) => {
+                let model =
                     crate::signing::trusted_signer::handoff_model(&self.loc, handoff, Some(line));
-                // The fee row in the corpus's words: the label, the figure
-                // the sheet's formatter would draw, and the speed's name.
-                model.fee =
-                    fee.map(
-                        |(label, figure)| crate::signing::trusted_signer::HandoffFeeRow {
-                            label: self.loc.t(label),
-                            figure: SharedString::from(figure),
-                            speed: Some(self.loc.t("send.gasTier.standard")),
-                        },
-                    );
                 let on_open: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 let on_recheck: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 let on_trust: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
@@ -984,6 +1055,27 @@ impl GalleryView {
                         Some(on_recheck),
                         Some(on_trust),
                     ))
+            }
+            // Bare, like the ended card: a ceremony's own title on the card
+            // that has one (page down), its key row on both.
+            Fixture::TrustedSignerWaiting(ceremony, unreachable) => {
+                let key = ceremony.as_ref().map(|ceremony| {
+                    crate::signing::trusted_signer::KeyRow::of(&self.loc, &ceremony.key_label())
+                });
+                let heading = self.loc.t(ceremony.as_ref().map_or(
+                    "componentsUi.signing.handoffTitle",
+                    vela_core::trusted_signer::ceremony::Ceremony::title_key,
+                ));
+                crate::signing::trusted_signer::waiting_card(
+                    theme,
+                    &mut self.icons.borrow_mut(),
+                    &self.loc,
+                    heading,
+                    key.as_ref(),
+                    *unreachable,
+                    |_, _, _| {},
+                    |_, _, _| {},
+                )
             }
             Fixture::SignIn(page) => {
                 let row = page.as_deref().map(|url| {
