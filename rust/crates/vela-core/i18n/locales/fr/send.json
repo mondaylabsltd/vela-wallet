@@ -152,7 +152,6 @@
     "multiSendSameRecipient": "Tous les jetons vont à la même adresse",
     "pickContactTitle": "Choisir un contact",
     "pickContactSearch": "Rechercher un contact ou coller une adresse",
-    "scanToFill": "Scanner pour remplir l’adresse",
     "feeTokenHint": "Paie les frais de réseau de ce transfert. L’estimation suit le réseau en temps réel.",
     "feeTokenEstimate": "Frais estimés",
     "batchRateHint": "Les montants de la feuille sont lus en {{code}} et convertis en {{sym}} à ce taux.",

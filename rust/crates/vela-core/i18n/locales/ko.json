@@ -69,7 +69,7 @@
       "pageAdd": "직접 배포한 서명 페이지 추가",
       "pageDuplicate": "이미 저장된 페이지입니다.",
       "keysOn": "키 위치: {{domain}}",
-      "pageSelfHosted": "직접 배포한 서명 페이지 · {{domain}}",
+      "pageSelfHosted": "직접 배포한 서명 페이지 · {{domain}}",
       "pageTrust": "이 버전 신뢰",
       "pageRename": "이름 변경",
       "pageRemove": "제거",

@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "모든 토큰이 같은 주소로 전송됩니다",
     "pickContactTitle": "연락처 선택",
     "pickContactSearch": "연락처 검색 또는 주소 붙여넣기",
-    "scanToFill": "스캔해서 주소 채우기",
     "feeTokenHint": "이 전송의 네트워크 수수료로 쓰입니다. 예상액은 현재 네트워크 상황을 실시간으로 따릅니다.",
     "feeTokenEstimate": "예상 수수료",
     "batchRateHint": "시트의 금액은 {{code}}로 읽고, 이 환율로 {{sym}}으로 환산합니다.",

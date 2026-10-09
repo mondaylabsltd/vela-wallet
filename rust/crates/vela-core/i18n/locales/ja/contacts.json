@@ -2,7 +2,6 @@
   "contacts": {
     "title": "連絡先",
     "manageSubtitle": "保存済みアドレスと最近の送付先",
-    "pickerTitle": "送付先を選択",
     "searchPlaceholder": "名前・ENS・アドレスで検索",
     "filterAll": "すべて",
     "sectionFavorites": "お気に入り",
@@ -11,7 +10,6 @@
     "empty": "連絡先はまだありません",
     "emptyHint": "よく使うアドレスを追加すれば、送金のたびに貼り付ける必要がなくなります。ファイルから既存の連絡先を取り込むこともできます。",
     "emptyPicker": "送付先がまだありません",
-    "pickerEmptyHint": "アドレスを貼り付けるか QR をスキャンして、すぐに送金できます。",
     "noResults": "「{{query}}」に一致する結果はありません",
     "useTyped": "このアドレスを使う",
     "addTitle": "新しい連絡先",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} 回送付",
     "savedTag": "保存済み",
     "savedContact": "保存済みの連絡先",
-    "scanToAdd": "アドレスをスキャン",
     "sectionGroups": "グループ",
     "groupMembers": "{{count}} 名のメンバー",
     "groupNew": "新しいグループ",
@@ -77,7 +74,6 @@
     "recentActivity": "最近のやり取り",
     "viewAllActivity": "すべてのやり取りを見る",
     "deleteContact": "連絡先を削除",
-    "actionQr": "QRコード",
     "edit": "編集"
   }
 }

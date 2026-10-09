@@ -69,7 +69,7 @@
       "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
       "pageDuplicate": "Halaman itu sudah disimpan.",
       "keysOn": "Kunci di {{domain}}",
-      "pageSelfHosted": "Di-host sendiri · {{domain}}",
+      "pageSelfHosted": "Di-host sendiri · {{domain}}",
       "pageTrust": "Percayai versi ini",
       "pageRename": "Ganti nama",
       "pageRemove": "Hapus",

@@ -65,7 +65,8 @@
       "unableToVerify": "Không thể xác minh — yêu cầu RPC thất bại",
       "retry": "Thử lại",
       "addNetworkBtn": "Thêm mạng",
-      "incompatibleHint": "Một số hợp đồng bắt buộc chưa được triển khai trên chain này.\nDùng công cụ Vela Wallet Chain Setup để triển khai, sau đó quay lại và kiểm tra lại.",
+      "incompatibleHint": "Mạng này chưa có một số hợp đồng mà Vela cần. Công cụ Chain Setup cho biết thiếu những hợp đồng nào và ai có thể triển khai.",
+      "noP256Hint": "Mạng này không xác minh được chữ ký passkey: mạng không có bộ xác minh P-256 (EIP-7951 / RIP-7212 tại 0x100), và chỉ đội ngũ của chính mạng đó mới thêm được. Ví Vela không hoạt động ở đây. Đừng gửi tiền đến địa chỉ Vela của bạn trên mạng này: tiền sẽ bị kẹt lại.",
       "openChainSetupTool": "Mở công cụ Chain Setup",
       "recheck": "Kiểm tra lại",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Không hợp lệ"
     },
     "backup": {
-      "title": "Sao lưu khóa công khai lên Ethereum",
-      "backedUp": "Đã sao lưu lên Ethereum",
-      "notBackedUp": "Chưa sao lưu",
-      "couldNotCheck": "Không kiểm tra được",
-      "explain": "Chỉ khóa công khai được công bố, để có thể tìm và dựng lại ví này từ Ethereum. Khóa riêng không bao giờ rời khỏi thiết bị của bạn."
+      "title": "Sao chép bản ghi của ví này sang Ethereum",
+      "backedUp": "Đã sao chép sang Ethereum",
+      "notBackedUp": "Chưa sao chép (không bắt buộc)",
+      "couldNotCheck": "Không kiểm tra được. Chạm để thử lại.",
+      "cannotCopy": "Ví cũ này không sao chép được",
+      "explain": "Bản ghi của ví trên Gnosis là công khai: địa chỉ và tên ví, cùng tên, khóa công khai, ID thông tin xác thực và kiểu trình xác thực của từng khóa. Thiết bị có một trong các passkey của bạn tìm ra ví này nhờ bản ghi đó. Tại đây, một bản sao cũng được lưu lên Ethereum. Đây là một giao dịch Ethereum: bạn xác nhận bằng passkey và trả phí mạng bằng một coin bạn có trên Ethereum. Bản sao không thể chuyển tiền và không lấy lại được passkey đã mất."
     },
     "keys": {
       "title": "Khóa",

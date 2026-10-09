@@ -69,7 +69,7 @@
       "pageAdd": "添加自己部署的签名页",
       "pageDuplicate": "这个页面已经保存过了。",
       "keysOn": "钥匙在 {{domain}}",
-      "pageSelfHosted": "自己部署的签名页 · {{domain}}",
+      "pageSelfHosted": "自己部署的签名页 · {{domain}}",
       "pageTrust": "信任这个版本",
       "pageRename": "重命名",
       "pageRemove": "移除",

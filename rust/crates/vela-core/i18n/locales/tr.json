@@ -69,7 +69,7 @@
       "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
       "pageDuplicate": "Bu sayfa zaten kayıtlı.",
       "keysOn": "Anahtarlar: {{domain}}",
-      "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
+      "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
       "pageTrust": "Bu sürüme güven",
       "pageRename": "Yeniden adlandır",
       "pageRemove": "Kaldır",

@@ -69,7 +69,7 @@
       "pageAdd": "Ajouter une page de signature auto-hébergée",
       "pageDuplicate": "Cette page est déjà enregistrée.",
       "keysOn": "Clés sur {{domain}}",
-      "pageSelfHosted": "Auto-hébergée · {{domain}}",
+      "pageSelfHosted": "Auto-hébergée · {{domain}}",
       "pageTrust": "Faire confiance à cette version",
       "pageRename": "Renommer",
       "pageRemove": "Retirer",

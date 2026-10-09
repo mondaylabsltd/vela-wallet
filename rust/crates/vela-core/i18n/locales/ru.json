@@ -69,7 +69,7 @@
       "pageAdd": "Добавить свою страницу подписи",
       "pageDuplicate": "Эта страница уже сохранена.",
       "keysOn": "Ключи на {{domain}}",
-      "pageSelfHosted": "Своя страница · {{domain}}",
+      "pageSelfHosted": "Своя страница · {{domain}}",
       "pageTrust": "Доверять этой версии",
       "pageRename": "Переименовать",
       "pageRemove": "Убрать",

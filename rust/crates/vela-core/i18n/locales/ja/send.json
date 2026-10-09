@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "すべてのトークンが同じアドレスに送られます",
     "pickContactTitle": "連絡先を選ぶ",
     "pickContactSearch": "連絡先を検索、またはアドレスを貼り付け",
-    "scanToFill": "スキャンしてアドレスを入力",
     "feeTokenHint": "この送金のネットワーク手数料に使われます。見積もりはネットワークの状況に合わせて変わります。",
     "feeTokenEstimate": "手数料の目安",
     "batchRateHint": "表の金額は {{code}} として読み取り、このレートで {{sym}} に換算します。",

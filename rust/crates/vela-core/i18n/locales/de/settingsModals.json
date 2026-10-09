@@ -65,7 +65,8 @@
       "unableToVerify": "Überprüfung nicht möglich — RPC-Anfrage fehlgeschlagen",
       "retry": "Erneut versuchen",
       "addNetworkBtn": "Netzwerk hinzufügen",
-      "incompatibleHint": "Einige erforderliche Contracts sind auf dieser Chain noch nicht bereitgestellt.\nNutzen Sie das Vela-Wallet-Chain-Setup-Tool, um sie bereitzustellen, und prüfen Sie dann erneut.",
+      "incompatibleHint": "Einige Contracts, die Vela braucht, gibt es in diesem Netzwerk noch nicht. Das Chain-Setup-Tool zeigt, welche fehlen und wer sie bereitstellen kann.",
+      "noP256Hint": "Dieses Netzwerk kann keine Passkey-Signaturen prüfen: Es hat keinen P-256-Verifier (EIP-7951 / RIP-7212 bei 0x100), und nur das Team des Netzwerks selbst kann einen hinzufügen. Vela-Wallets funktionieren hier nicht. Senden Sie kein Geld an Ihre Vela-Adresse in diesem Netzwerk. Es säße dort fest.",
       "openChainSetupTool": "Chain-Setup-Tool öffnen",
       "recheck": "Erneut prüfen",
       "chainIdLabel": "Chain-ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Ungültig"
     },
     "backup": {
-      "title": "Öffentliche Schlüssel auf Ethereum sichern",
-      "backedUp": "Auf Ethereum gesichert",
-      "notBackedUp": "Noch nicht gesichert",
-      "couldNotCheck": "Prüfung nicht möglich",
-      "explain": "Veröffentlicht werden nur die öffentlichen Schlüssel, damit dieses Wallet über Ethereum gefunden und wiederhergestellt werden kann. Private Schlüssel verlassen Ihre Geräte nie."
+      "title": "Wallet-Eintrag auf Ethereum kopieren",
+      "backedUp": "Auf Ethereum kopiert",
+      "notBackedUp": "Noch nicht kopiert (optional)",
+      "couldNotCheck": "Prüfung nicht möglich. Zum Wiederholen tippen.",
+      "cannotCopy": "Dieses ältere Wallet kann nicht kopiert werden",
+      "explain": "Der Eintrag Ihres Wallets auf Gnosis ist öffentlich: Adresse und Name sowie zu jedem Schlüssel Name, öffentlicher Schlüssel, Credential-ID und Authenticator-Modell. Ein Gerät mit einem Ihrer Passkeys findet dieses Wallet darüber. Hier wird eine Kopie davon auch auf Ethereum abgelegt. Das ist eine Ethereum-Transaktion: Sie bestätigen sie mit einem Passkey und zahlen die Netzwerkgebühr mit einem Coin, den Sie auf Ethereum halten. Die Kopie kann kein Geld bewegen und keinen verlorenen Passkey zurückholen."
     },
     "keys": {
       "title": "Schlüssel",

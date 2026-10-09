@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "Tüm tokenlar aynı adrese gider",
     "pickContactTitle": "Kişi seç",
     "pickContactSearch": "Kişi ara ya da adres yapıştır",
-    "scanToFill": "Adresi doldurmak için tara",
     "feeTokenHint": "Bu transferin ağ ücretini öder. Tahmin, ağı gerçek zamanlı izler.",
     "feeTokenEstimate": "Tahmini ücret",
     "batchRateHint": "Tablodaki tutarlar {{code}} olarak okunur ve bu kurla {{sym}} birimine çevrilir.",

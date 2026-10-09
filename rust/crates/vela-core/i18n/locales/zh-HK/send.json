@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "多幣發送嘅時候，收款人係同一個地址",
     "pickContactTitle": "揀個聯絡人",
     "pickContactSearch": "搵聯絡人或者貼個地址",
-    "scanToFill": "掃碼填地址",
     "feeTokenHint": "用嚟俾呢筆轉賬嘅網絡費，個估算跟住而家個網絡即時計",
     "feeTokenEstimate": "估算費用",
     "batchRateHint": "表格金額按 {{code}} 讀取，匯入時按此匯率換算為 {{sym}}",

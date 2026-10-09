@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Danh bạ",
     "manageSubtitle": "Địa chỉ đã lưu & người nhận gần đây",
-    "pickerTitle": "Chọn người nhận",
     "searchPlaceholder": "Tìm tên, ENS hoặc địa chỉ",
     "filterAll": "Tất cả",
     "sectionFavorites": "Yêu thích",
@@ -11,7 +10,6 @@
     "empty": "Chưa có liên hệ nào",
     "emptyHint": "Thêm các địa chỉ hay dùng để khỏi phải dán lại mỗi lần chuyển. Bạn cũng có thể nhập danh bạ có sẵn từ tệp.",
     "emptyPicker": "Chưa có người nhận nào",
-    "pickerEmptyHint": "Dán một địa chỉ hoặc quét mã QR để gửi ngay.",
     "noResults": "Không có kết quả cho “{{query}}”",
     "useTyped": "Dùng địa chỉ này",
     "addTitle": "Liên hệ mới",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} lần gửi",
     "savedTag": "Đã lưu",
     "savedContact": "Liên hệ đã lưu",
-    "scanToAdd": "Quét địa chỉ",
     "sectionGroups": "Nhóm",
     "groupMembers": "{{count}} thành viên",
     "groupNew": "Nhóm mới",
@@ -77,7 +74,6 @@
     "recentActivity": "Giao dịch gần đây",
     "viewAllActivity": "Xem tất cả giao dịch",
     "deleteContact": "Xóa liên hệ",
-    "actionQr": "Mã QR",
     "edit": "Sửa"
   }
 }

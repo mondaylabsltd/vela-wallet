@@ -65,7 +65,8 @@
       "unableToVerify": "Tidak dapat memverifikasi — permintaan RPC gagal",
       "retry": "Coba Lagi",
       "addNetworkBtn": "Tambah Jaringan",
-      "incompatibleHint": "Beberapa kontrak yang diperlukan belum di-deploy di chain ini.\nGunakan alat Vela Wallet Chain Setup untuk men-deploy-nya, lalu kembali dan periksa ulang.",
+      "incompatibleHint": "Beberapa kontrak yang dibutuhkan Vela belum ada di jaringan ini. Alat Chain Setup menunjukkan mana yang kurang dan siapa yang bisa men-deploy-nya.",
+      "noP256Hint": "Jaringan ini tidak dapat memeriksa tanda tangan passkey: tidak ada verifier P-256 (EIP-7951 / RIP-7212 di 0x100), dan hanya tim jaringan itu sendiri yang bisa menambahkannya. Dompet Vela tidak bisa dipakai di sini. Jangan kirim uang ke alamat Vela Anda di jaringan ini; uangnya akan tertahan.",
       "openChainSetupTool": "Buka Chain Setup Tool",
       "recheck": "Periksa ulang",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Tidak valid"
     },
     "backup": {
-      "title": "Cadangkan kunci publik ke Ethereum",
-      "backedUp": "Sudah dicadangkan di Ethereum",
-      "notBackedUp": "Belum dicadangkan",
-      "couldNotCheck": "Tidak dapat memeriksa",
-      "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda."
+      "title": "Salin catatan dompet ini ke Ethereum",
+      "backedUp": "Sudah disalin ke Ethereum",
+      "notBackedUp": "Belum disalin (opsional)",
+      "couldNotCheck": "Tidak dapat memeriksa. Ketuk untuk coba lagi.",
+      "cannotCopy": "Dompet lama ini tidak dapat disalin",
+      "explain": "Catatan dompet Anda di Gnosis bersifat publik: alamat dan namanya, serta untuk setiap kunci namanya, kunci publik, ID kredensial, dan model autentikatornya. Perangkat yang memiliki salah satu passkey Anda menemukan dompet ini lewat catatan itu. Di sini salinannya juga disimpan di Ethereum. Ini satu transaksi Ethereum: Anda mengonfirmasinya dengan passkey dan membayar biaya jaringannya dengan koin yang Anda miliki di Ethereum. Salinan ini tidak dapat memindahkan uang atau mengembalikan passkey yang hilang."
     },
     "keys": {
       "title": "Kunci",

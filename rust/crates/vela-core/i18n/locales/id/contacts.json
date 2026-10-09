@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Kontak",
     "manageSubtitle": "Alamat tersimpan & penerima terbaru",
-    "pickerTitle": "Pilih penerima",
     "searchPlaceholder": "Cari nama, ENS, atau alamat",
     "filterAll": "Semua",
     "sectionFavorites": "Favorit",
@@ -11,7 +10,6 @@
     "empty": "Belum ada kontak",
     "emptyHint": "Tambahkan alamat yang sering dipakai agar tak perlu menempel ulang saat mengirim. Anda juga bisa mengimpor kontak dari file.",
     "emptyPicker": "Belum ada penerima",
-    "pickerEmptyHint": "Tempel alamat atau pindai QR untuk langsung mengirim.",
     "noResults": "Tidak ada hasil untuk “{{query}}”",
     "useTyped": "Gunakan alamat ini",
     "addTitle": "Kontak baru",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} kiriman",
     "savedTag": "Tersimpan",
     "savedContact": "Kontak tersimpan",
-    "scanToAdd": "Pindai alamat",
     "sectionGroups": "Grup",
     "groupMembers": "{{count}} anggota",
     "groupNew": "Grup baru",
@@ -77,7 +74,6 @@
     "recentActivity": "Aktivitas terakhir",
     "viewAllActivity": "Lihat semua aktivitas",
     "deleteContact": "Hapus kontak",
-    "actionQr": "Kode QR",
     "edit": "Edit"
   }
 }

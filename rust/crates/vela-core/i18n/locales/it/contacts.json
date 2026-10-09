@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Contatti",
     "manageSubtitle": "Indirizzi salvati e destinatari recenti",
-    "pickerTitle": "Scegli il destinatario",
     "searchPlaceholder": "Cerca nome, ENS o indirizzo",
     "filterAll": "Tutti",
     "sectionFavorites": "Preferiti",
@@ -11,7 +10,6 @@
     "empty": "Ancora nessun contatto",
     "emptyHint": "Aggiungi gli indirizzi che usi spesso: niente più incolla a ogni invio. Puoi anche importare contatti da un file.",
     "emptyPicker": "Ancora nessun destinatario",
-    "pickerEmptyHint": "Incolla un indirizzo o scansiona un QR per inviare subito.",
     "noResults": "Nessun risultato per «{{query}}»",
     "useTyped": "Usa questo indirizzo",
     "addTitle": "Nuovo contatto",
@@ -35,7 +33,6 @@
     "sends_other": "{{count}} invii",
     "savedTag": "Salvato",
     "savedContact": "Contatto salvato",
-    "scanToAdd": "Scansiona indirizzo",
     "sectionGroups": "Gruppi",
     "groupMembers": "{{count}} membri",
     "groupNew": "Nuovo gruppo",
@@ -78,7 +75,6 @@
     "recentActivity": "Attività recente",
     "viewAllActivity": "Vedi tutta l'attività",
     "deleteContact": "Elimina contatto",
-    "actionQr": "Codice QR",
     "edit": "Modifica"
   }
 }

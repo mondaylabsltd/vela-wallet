@@ -65,7 +65,8 @@
       "unableToVerify": "Unable to verify — RPC request failed",
       "retry": "Retry",
       "addNetworkBtn": "Add Network",
-      "incompatibleHint": "Some required contracts are not yet deployed on this chain.\nUse the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.",
+      "incompatibleHint": "Some contracts Vela needs aren't on this network yet. Chain Setup shows which ones and who can deploy them.",
+      "noP256Hint": "This network can't check passkey signatures: it has no P-256 verifier (EIP-7951 / RIP-7212 at 0x100), and only the network's own team can add one. Vela wallets can't work here. Don't send money to your Vela address on this network. It would be stuck.",
       "openChainSetupTool": "Open Chain Setup Tool",
       "recheck": "Re-check",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Invalid"
     },
     "backup": {
-      "title": "Back up public keys to Ethereum",
-      "backedUp": "Backed up on Ethereum",
-      "notBackedUp": "Not backed up yet",
-      "couldNotCheck": "Could not check",
-      "explain": "Only public keys are published, so this wallet can be found and rebuilt from Ethereum. Private keys never leave your devices."
+      "title": "Copy this wallet's record to Ethereum",
+      "backedUp": "Copied to Ethereum",
+      "notBackedUp": "Not copied yet (optional)",
+      "couldNotCheck": "Couldn't check. Tap to try again.",
+      "cannotCopy": "This older wallet can't be copied",
+      "explain": "Your wallet's record on Gnosis is public: its address and name, and for each key its name, public key, credential ID and authenticator model. A device with one of your passkeys finds this wallet through it. This puts a copy on Ethereum too. It's one Ethereum transaction: you confirm it with a passkey and pay its network fee in a coin you hold on Ethereum. The copy can't move money or bring back a lost passkey."
     },
     "keys": {
       "title": "Keys",

@@ -726,6 +726,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the relay's `nonce_used`), + `componentsUi.gas.reason{ChainDown,
 //   Internal}` (issue #483: the fee row's own sentences).
 //   1814 − 54 + 6 = 1766 leaves, 101 branches.
+// 1867 (UI batch, 2026-10-10): − `send.scanToFill` (issue #471: the scan
+//   moved from the contact picker to each recipient row, which says
+//   `send.scanAria`), − `contacts.actionQr` (issue #479: a contact's page
+//   offers Send only), − `contacts.{pickerTitle,pickerEmptyHint,scanToAdd}`
+//   (no reader in the core or any shell — git grep). + `settingsModals.
+//   backup.cannotCopy` (a record from before registry V13 can never be
+//   copied: a calm end, not a retry), + `componentsUi.signing.
+//   labelWalletName` (the copy's sheet names what goes public),
+//   + `settingsModals.addNetwork.noP256Hint` (no P-256 verifier: nothing to
+//   deploy, money would be stuck), + `onboarding.common.insertKeyAppleSheet
+//   {,Hint}` (iOS: a key that does not answer over USB goes through Apple's
+//   sheet). 1766 − 5 + 5 = 1766 leaves, 101 branches.
 if (PATHS.length !== 1867) fail(`expected 1867 paths (1766 leaf + 101 branch), got ${PATHS.length}`);
 if (leafSet.size !== 1766) fail(`expected 1766 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);

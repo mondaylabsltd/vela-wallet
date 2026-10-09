@@ -65,7 +65,8 @@
       "unableToVerify": "Vérification impossible — la requête RPC a échoué",
       "retry": "Réessayer",
       "addNetworkBtn": "Ajouter le réseau",
-      "incompatibleHint": "Certains contrats requis ne sont pas encore déployés sur cette chaîne.\nUtilisez l'outil Vela Wallet Chain Setup pour les déployer, puis revenez et revérifiez.",
+      "incompatibleHint": "Certains contrats dont Vela a besoin ne sont pas encore sur ce réseau. L'outil Chain Setup indique lesquels et qui peut les déployer.",
+      "noP256Hint": "Ce réseau ne peut pas vérifier les signatures des clés d'accès : il n'a pas de vérificateur P-256 (EIP-7951 / RIP-7212 à 0x100), et seule l'équipe du réseau peut en ajouter un. Les portefeuilles Vela ne peuvent pas fonctionner ici. N'envoyez pas d'argent à votre adresse Vela sur ce réseau : il y resterait bloqué.",
       "openChainSetupTool": "Ouvrir l'outil Chain Setup",
       "recheck": "Revérifier",
       "chainIdLabel": "Chain ID : {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Invalide"
     },
     "backup": {
-      "title": "Sauvegarder les clés publiques sur Ethereum",
-      "backedUp": "Sauvegardées sur Ethereum",
-      "notBackedUp": "Pas encore sauvegardées",
-      "couldNotCheck": "Vérification impossible",
-      "explain": "Seules les clés publiques sont publiées, afin de pouvoir retrouver et reconstruire ce portefeuille depuis Ethereum. Les clés privées ne quittent jamais vos appareils."
+      "title": "Copier l'enregistrement de ce portefeuille sur Ethereum",
+      "backedUp": "Copié sur Ethereum",
+      "notBackedUp": "Pas encore copié (facultatif)",
+      "couldNotCheck": "Vérification impossible. Touchez pour réessayer.",
+      "cannotCopy": "Cet ancien portefeuille ne peut pas être copié",
+      "explain": "L'enregistrement de votre portefeuille sur Gnosis est public : son adresse et son nom, et pour chaque clé son nom, sa clé publique, son identifiant d'identification et le modèle d'authentificateur. Un appareil qui a l'une de vos clés d'accès retrouve ce portefeuille grâce à lui. Ici, une copie est aussi enregistrée sur Ethereum. C'est une transaction Ethereum : vous la confirmez avec une clé d'accès et payez ses frais de réseau avec une crypto détenue sur Ethereum. La copie ne peut ni déplacer d'argent ni récupérer une clé d'accès perdue."
     },
     "keys": {
       "title": "Clés",

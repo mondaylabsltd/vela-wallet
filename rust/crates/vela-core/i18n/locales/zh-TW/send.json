@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "多幣發送時收款人為同一位址",
     "pickContactTitle": "選擇聯絡人",
     "pickContactSearch": "搜尋聯絡人或貼上位址",
-    "scanToFill": "掃碼填入位址",
     "feeTokenHint": "用來支付這筆轉帳的網路費，費用按目前網路即時估算",
     "feeTokenEstimate": "預估費用",
     "batchRateHint": "表格金額按 {{code}} 讀取，匯入時按此匯率換算為 {{sym}}",

@@ -69,7 +69,7 @@
       "pageAdd": "Adicionar página de assinatura hospedada por você",
       "pageDuplicate": "Essa página já está salva.",
       "keysOn": "Chaves em {{domain}}",
-      "pageSelfHosted": "Hospedada por você · {{domain}}",
+      "pageSelfHosted": "Hospedada por você · {{domain}}",
       "pageTrust": "Confiar nesta versão",
       "pageRename": "Renomear",
       "pageRemove": "Remover",

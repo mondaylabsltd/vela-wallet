@@ -69,7 +69,7 @@
       "pageAdd": "新增自行部署的簽名頁",
       "pageDuplicate": "這個頁面已經儲存過了。",
       "keysOn": "金鑰在 {{domain}}",
-      "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
+      "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
       "pageTrust": "信任這個版本",
       "pageRename": "重新命名",
       "pageRemove": "移除",

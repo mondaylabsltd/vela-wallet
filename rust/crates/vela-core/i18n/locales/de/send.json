@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "Alle Token gehen an dieselbe Adresse",
     "pickContactTitle": "Kontakt wählen",
     "pickContactSearch": "Kontakte suchen oder Adresse einfügen",
-    "scanToFill": "Scannen, um die Adresse einzutragen",
     "feeTokenHint": "Zahlt die Netzwerkgebühr dieser Überweisung. Die Schätzung folgt dem Netzwerk in Echtzeit.",
     "feeTokenEstimate": "Geschätzte Gebühr",
     "batchRateHint": "Beträge in der Tabelle werden als {{code}} gelesen und zu diesem Kurs in {{sym}} umgerechnet.",

@@ -69,7 +69,7 @@
       "pageAdd": "セルフホストの署名ページを追加",
       "pageDuplicate": "このページは保存済みです。",
       "keysOn": "キーは {{domain}}",
-      "pageSelfHosted": "セルフホスト · {{domain}}",
+      "pageSelfHosted": "セルフホスト · {{domain}}",
       "pageTrust": "このバージョンを信頼",
       "pageRename": "名前を変更",
       "pageRemove": "削除",

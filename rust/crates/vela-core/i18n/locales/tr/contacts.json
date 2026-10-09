@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Kişiler",
     "manageSubtitle": "Kayıtlı adresler ve son alıcılar",
-    "pickerTitle": "Alıcı seç",
     "searchPlaceholder": "İsim, ENS veya adres ara",
     "filterAll": "Tümü",
     "sectionFavorites": "Favoriler",
@@ -11,7 +10,6 @@
     "empty": "Henüz kişi yok",
     "emptyHint": "Sık kullandığınız adresleri ekleyin; gönderirken tekrar yapıştırmanız gerekmez. Dosyadan mevcut kişileri de aktarabilirsiniz.",
     "emptyPicker": "Henüz alıcı yok",
-    "pickerEmptyHint": "Hemen göndermek için bir adres yapıştırın veya QR tarayın.",
     "noResults": "“{{query}}” ile eşleşen sonuç yok",
     "useTyped": "Bu adresi kullan",
     "addTitle": "Yeni kişi",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} gönderim",
     "savedTag": "Kayıtlı",
     "savedContact": "Kayıtlı kişi",
-    "scanToAdd": "Adres tara",
     "sectionGroups": "Gruplar",
     "groupMembers": "{{count}} üye",
     "groupNew": "Yeni grup",
@@ -77,7 +74,6 @@
     "recentActivity": "Son işlemler",
     "viewAllActivity": "Tüm işlemleri gör",
     "deleteContact": "Kişiyi sil",
-    "actionQr": "QR kodu",
     "edit": "Düzenle"
   }
 }

@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Контакты",
     "manageSubtitle": "Сохранённые адреса и недавние получатели",
-    "pickerTitle": "Выберите получателя",
     "searchPlaceholder": "Имя, ENS или адрес",
     "filterAll": "Все",
     "sectionFavorites": "Избранное",
@@ -11,7 +10,6 @@
     "empty": "Контактов пока нет",
     "emptyHint": "Сохраняйте частые адреса, чтобы не вставлять их каждый раз. Можно также импортировать контакты из файла.",
     "emptyPicker": "Пока нет получателей",
-    "pickerEmptyHint": "Вставьте адрес или отсканируйте QR, чтобы отправить сразу.",
     "noResults": "Нет совпадений по запросу «{{query}}»",
     "useTyped": "Использовать этот адрес",
     "addTitle": "Новый контакт",
@@ -36,7 +34,6 @@
     "sends_other": "{{count}} отправок",
     "savedTag": "Сохранён",
     "savedContact": "Сохранённый контакт",
-    "scanToAdd": "Сканировать адрес",
     "sectionGroups": "Группы",
     "groupMembers_one": "{{count}} участник",
     "groupMembers_few": "{{count}} участника",
@@ -83,7 +80,6 @@
     "recentActivity": "Недавняя активность",
     "viewAllActivity": "Вся активность",
     "deleteContact": "Удалить контакт",
-    "actionQr": "QR-код",
     "edit": "Изменить"
   }
 }

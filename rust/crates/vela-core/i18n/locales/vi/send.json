@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "Mọi token đều được gửi tới cùng một địa chỉ",
     "pickContactTitle": "Chọn liên hệ",
     "pickContactSearch": "Tìm liên hệ hoặc dán địa chỉ",
-    "scanToFill": "Quét mã để điền địa chỉ",
     "feeTokenHint": "Dùng để trả phí mạng cho lần chuyển này. Ước tính bám theo mạng theo thời gian thực.",
     "feeTokenEstimate": "Phí ước tính",
     "batchRateHint": "Số tiền trong bảng được đọc theo {{code}} và quy đổi sang {{sym}} theo tỷ giá này.",

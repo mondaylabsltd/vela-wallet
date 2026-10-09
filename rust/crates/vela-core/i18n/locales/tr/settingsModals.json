@@ -65,7 +65,8 @@
       "unableToVerify": "Doğrulanamıyor — RPC isteği başarısız oldu",
       "retry": "Yeniden Dene",
       "addNetworkBtn": "Ağ Ekle",
-      "incompatibleHint": "Bu zincirde gerekli bazı sözleşmeler henüz dağıtılmamış.\nBunları dağıtmak için Vela Wallet Chain Setup aracını kullanın, ardından geri dönüp yeniden kontrol edin.",
+      "incompatibleHint": "Vela'nın ihtiyaç duyduğu bazı sözleşmeler bu ağda henüz yok. Chain Setup aracı hangilerinin eksik olduğunu ve kimlerin dağıtabileceğini gösterir.",
+      "noP256Hint": "Bu ağ geçiş anahtarı imzalarını doğrulayamaz: P-256 doğrulayıcısı yok (0x100'de EIP-7951 / RIP-7212) ve bunu yalnızca ağın kendi ekibi ekleyebilir. Vela cüzdanları burada çalışmaz. Bu ağdaki Vela adresinize para göndermeyin; orada takılı kalır.",
       "openChainSetupTool": "Chain Setup Aracını Aç",
       "recheck": "Yeniden kontrol et",
       "chainIdLabel": "Zincir ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Geçersiz"
     },
     "backup": {
-      "title": "Açık anahtarları Ethereum'a yedekle",
-      "backedUp": "Ethereum'a yedeklendi",
-      "notBackedUp": "Henüz yedeklenmedi",
-      "couldNotCheck": "Kontrol edilemedi",
-      "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz."
+      "title": "Cüzdan kaydını Ethereum'a kopyala",
+      "backedUp": "Ethereum'a kopyalandı",
+      "notBackedUp": "Henüz kopyalanmadı (isteğe bağlı)",
+      "couldNotCheck": "Kontrol edilemedi. Tekrar denemek için dokunun.",
+      "cannotCopy": "Bu eski cüzdan kopyalanamaz",
+      "explain": "Cüzdanınızın Gnosis'teki kaydı herkese açıktır: adresi ve adı, her anahtar için de adı, açık anahtarı, kimlik bilgisi kimliği ve doğrulayıcı modeli. Geçiş anahtarlarınızdan birine sahip bir cihaz bu cüzdanı onun sayesinde bulur. Burada bir kopyası Ethereum'a da kaydedilir. Bu tek bir Ethereum işlemidir: bir geçiş anahtarıyla onaylarsınız ve ağ ücretini Ethereum'da tuttuğunuz bir coin ile ödersiniz. Kopya para taşıyamaz ve kaybolan bir geçiş anahtarını geri getiremez."
     },
     "keys": {
       "title": "Anahtarlar",

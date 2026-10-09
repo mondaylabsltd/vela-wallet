@@ -65,7 +65,8 @@
       "unableToVerify": "Impossibile verificare — richiesta RPC non riuscita",
       "retry": "Riprova",
       "addNetworkBtn": "Aggiungi rete",
-      "incompatibleHint": "Alcuni contratti necessari non sono ancora stati deployati su questa rete.\nEseguine il deploy con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
+      "incompatibleHint": "Alcuni contratti di cui Vela ha bisogno non sono ancora su questa rete. Lo strumento Chain Setup mostra quali mancano e chi può deployarli.",
+      "noP256Hint": "Questa rete non può verificare le firme delle passkey: non ha un verificatore P-256 (EIP-7951 / RIP-7212 a 0x100), e solo il team della rete può aggiungerlo. I wallet Vela qui non funzionano. Non inviare denaro al tuo indirizzo Vela su questa rete: resterebbe bloccato.",
       "openChainSetupTool": "Apri Chain Setup Tool",
       "recheck": "Ricontrolla",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -92,11 +93,12 @@
       "invalid": "Non valido"
     },
     "backup": {
-      "title": "Esegui il backup delle chiavi pubbliche su Ethereum",
-      "backedUp": "Salvate su Ethereum",
-      "notBackedUp": "Non ancora salvate",
-      "couldNotCheck": "Impossibile verificare",
-      "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi."
+      "title": "Copia il record di questo wallet su Ethereum",
+      "backedUp": "Copiato su Ethereum",
+      "notBackedUp": "Non ancora copiato (facoltativo)",
+      "couldNotCheck": "Impossibile verificare. Tocca per riprovare.",
+      "cannotCopy": "Questo wallet meno recente non si può copiare",
+      "explain": "Il record del tuo wallet su Gnosis è pubblico: indirizzo e nome e, per ogni chiave, nome, chiave pubblica, ID della credenziale e modello di autenticatore. Un dispositivo con una delle tue passkey trova questo wallet grazie a esso. Qui se ne salva una copia anche su Ethereum. È una transazione Ethereum: la confermi con una passkey e paghi la commissione di rete con una moneta che hai su Ethereum. La copia non può spostare denaro né recuperare una passkey persa."
     },
     "keys": {
       "title": "Chiavi",

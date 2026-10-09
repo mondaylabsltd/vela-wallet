@@ -149,7 +149,6 @@
     "multiSendSameRecipient": "Semua token dikirim ke alamat yang sama",
     "pickContactTitle": "Pilih kontak",
     "pickContactSearch": "Cari kontak atau tempel alamat",
-    "scanToFill": "Pindai untuk mengisi alamat",
     "feeTokenHint": "Dipakai untuk membayar biaya jaringan transfer ini. Perkiraannya mengikuti jaringan secara real time.",
     "feeTokenEstimate": "Perkiraan biaya",
     "batchRateHint": "Nominal di lembar dibaca sebagai {{code}} dan dikonversi ke {{sym}} dengan kurs ini.",
