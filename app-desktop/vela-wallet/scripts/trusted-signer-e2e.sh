@@ -5,9 +5,11 @@
 #
 # What runs: the desktop's own attempt (`executor::trusted_signer`) builds the
 # request with the core and hands over the launch URL — the request in the
-# fragment, the answer address `velawallet://sign-result`; headless Chrome
-# opens it on `app-web/trusted-signer/src/` served from this checkout at
-# http://localhost:<port>/src/; a CDP virtual authenticator plays the vault,
+# fragment, the answer address `velawallet://sign-result`; this checkout's
+# `app-web/trusted-signer/dist/` is served at http://localhost:<port>/ and
+# checked first, as the app checks a page (spec 102 R6), and headless Chrome
+# opens the version that check admitted (`/b/<sha256>/sign.html`, with the
+# app's `lang=`); a CDP virtual authenticator plays the vault,
 # the page's slide is confirmed through its automation hook, and the page's
 # navigation to `velawallet://sign-result?…` is caught through DevTools and
 # delivered as the OS would (`deliver_callback`). The wallet then verifies
