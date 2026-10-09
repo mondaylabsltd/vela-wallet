@@ -5343,27 +5343,31 @@ fn only_a_transaction_of_the_same_account_on_the_same_chain_waits() {
 // ===========================================================================
 
 /// A submit-time refusal names its sentence on the sheet: another operation
-/// of the account holding the nonce is "waiting for your last transaction"
-/// (and retryable, as on Send); any other refusal the plain refused line; a
-/// failure that was no refusal, none.
+/// of the account holding the nonce is "not sent yet" — its own calm title
+/// over "your previous transaction is still being processed", never
+/// "Failed" over the held confirm's "waiting…" line — and retryable, as on
+/// Send; any other refusal the plain refused line; a failure that was no
+/// refusal, none.
 #[test]
 fn a_submit_time_refusal_says_why_on_the_sheet() {
-    use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+    use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
     use vela_core::app::tx_tracker::REFUSED_KEY;
     use vela_core::user_op::PREVIOUS_PENDING_DETAIL;
 
     let mut sut = boot();
     failed_before_sending(&mut sut, "rid-r1", PREVIOUS_PENDING_DETAIL);
     let view = sut.view();
-    assert_eq!(
-        view.failure_refusal_key.as_deref(),
-        Some(PREVIOUS_PENDING_KEY)
-    );
+    assert_eq!(view.failure_refusal_key.as_deref(), Some(NOT_SENT_BODY_KEY));
+    assert!(view.failure_not_sent, "said calmly, as not sent yet");
     assert!(view.failure_retryable && !view.failure_refused);
+    // Try again clears it with the failure.
+    sut.dispatch(Event::RetryTapped);
+    assert!(!sut.view().failure_not_sent);
 
     let mut sut = boot();
     failed_before_sending(&mut sut, "rid-r2", "Could not estimate gas");
     assert_eq!(sut.view().failure_refusal_key, None, "no refusal");
+    assert!(!sut.view().failure_not_sent, "a failure, said as one");
 
     let mut sut = submitting("req-r3");
     written_ahead(&mut sut, "req-r3");

@@ -8537,15 +8537,20 @@ fn only_the_same_account_on_the_same_chain_waits() {
 
 /// The relay refused the submit because another transaction of the account
 /// holds the nonce (another device, one this device could not follow):
-/// nothing was sent, and it says so — not the generic failure.
+/// nothing was sent, and it says so — not the generic failure, and calmly:
+/// no error buzz for something that did not go wrong.
 #[test]
 fn a_held_nonce_refusal_says_the_previous_transaction_is_pending() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
     slide_to_submit(&mut sut);
-    sut.resolve(Res::SubmitFailed {
+    let ops = sut.resolve(Res::SubmitFailed {
         failure: SendSubmitFailure::PreviousPending,
     });
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::Haptic { .. })),
+        "not sent yet is no failure: {ops:?}"
+    );
     let view = sut.view();
     assert_eq!(view.tx_status, SendTxStatus::Error);
     assert_eq!(view.tx_error, Some(SendTxErrorKey::PreviousPending));

@@ -81,6 +81,21 @@ pub enum ConfirmBlock {
 /// still going through — under a held confirm, the dApp sheet's and Send's.
 pub const PREVIOUS_PENDING_KEY: &str = "componentsUi.signing.confirmBlock.previousPending";
 
+/// The title when the relay would not take an operation because the
+/// account's previous one on this network still holds the nonce, at submit
+/// (`RelayRejection::NonceHeld`): "Not sent yet". Nothing failed and nothing
+/// was sent, so it is said calmly — never "Failed", never in the failure's
+/// colour — on the signing sheet ([`super::sign_request::SignView::failure_not_sent`])
+/// and on Send's confirm (`SendTxErrorKey::PreviousPending`), with Try again.
+pub const NOT_SENT_TITLE_KEY: &str = "componentsUi.signing.notSentTitle";
+
+/// The sentence under [`NOT_SENT_TITLE_KEY`]: "Your previous transaction on
+/// this network is still being processed. Try again once it's done." The
+/// held confirm's own line ([`PREVIOUS_PENDING_KEY`], "Waiting for your last
+/// transaction…") is a wait in progress; this one follows a submit that was
+/// turned back, and says what to do.
+pub const NOT_SENT_BODY_KEY: &str = "componentsUi.signing.notSentBody";
+
 /// What the gate decides from: the four views as the shell last had them,
 /// and the speed in force (`None` — no speed control).
 #[derive(Clone, Debug, Serialize, Deserialize)]

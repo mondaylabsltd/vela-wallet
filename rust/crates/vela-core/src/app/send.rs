@@ -1647,9 +1647,12 @@ pub enum SendTxErrorKey {
     Generic,
     /// The relay refused the submit because another transaction of this
     /// account holds the nonce (`RelayRejection::NonceHeld`, from another
-    /// device, or one this device could not follow): nothing was sent. The
-    /// line is [`super::sign_confirm::PREVIOUS_PENDING_KEY`]'s; "Try again"
-    /// waits for it like any held confirm.
+    /// device, or one this device could not follow): nothing was sent, and
+    /// nothing went wrong. Said calmly, as the signing sheet says it — the
+    /// title [`super::sign_confirm::NOT_SENT_TITLE_KEY`] ("Not sent yet")
+    /// over [`super::sign_confirm::NOT_SENT_BODY_KEY`], with no failure
+    /// styling and no error haptic; "Try again" waits for it like any held
+    /// confirm.
     PreviousPending,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
@@ -7060,17 +7063,14 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
         }
         SendSubmitFailure::PreviousPending => {
             // Not a failure of the network: the account's previous
-            // transaction still holds the nonce. Said as such, and "Try
-            // again" waits for it like any held confirm.
+            // transaction still holds the nonce. Said as such — "Not sent
+            // yet", calmly, with no error buzz: nothing was sent and nothing
+            // went wrong — and "Try again" waits for it like any held
+            // confirm.
             model.tx = SendTxStatus::Error;
             model.tx_error = Some(SendTxErrorKey::PreviousPending);
             model.lock.end(gen);
-            fire(
-                model,
-                SendOperation::Haptic {
-                    kind: SendHapticKind::Error,
-                },
-            )
+            render()
         }
         SendSubmitFailure::VenueBlocked { block } => {
             // Spec 102: not a failure of the network or the relay — this

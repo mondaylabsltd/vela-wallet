@@ -1838,9 +1838,10 @@ pub struct SignView {
     /// the sheet (PR 2 note 9), drawn under the failure — the one field for
     /// both ways a refusal arrives:
     /// - at submit, the relay's answer: another operation of the account
-    ///   holds the nonce → `componentsUi.signing.confirmBlock.previousPending`
-    ///   (retryable, as on Send); any other refusal →
-    ///   `componentsUi.signing.refused`;
+    ///   holds the nonce → `componentsUi.signing.notSentBody`
+    ///   ([`super::sign_confirm::NOT_SENT_BODY_KEY`], under
+    ///   [`Self::failure_not_sent`]'s calm title; retryable, as on Send); any
+    ///   other refusal → `componentsUi.signing.refused`;
     /// - after it, the tracker's verdict ([`Event::OpTracked`]'s `refusal`):
     ///   its reason's sentence (`tx_tracker::refusal_key` — the fee sentence
     ///   only for `fee_below_market`, "went first" for `nonce_used`).
@@ -1848,6 +1849,17 @@ pub struct SignView {
     /// `None` for a failure that was no refusal. `#[serde(default)]`.
     #[serde(default)]
     pub failure_refusal_key: Option<String>,
+    /// The failure on the sheet is no failure: the relay turned the operation
+    /// back at submit because the account's previous one on this network
+    /// still holds the nonce. Nothing was sent and nothing went wrong, so the
+    /// sheet says it calmly — the title
+    /// [`super::sign_confirm::NOT_SENT_TITLE_KEY`] ("Not sent yet") in place
+    /// of "Failed", over [`Self::failure_refusal_key`]'s sentence, with no
+    /// failure styling (no red mark, no error haptic) — and offers Try again
+    /// ([`Self::failure_retryable`]). `#[serde(default)]`: a reader that
+    /// predates it reads `false`.
+    #[serde(default)]
+    pub failure_not_sent: bool,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
     /// Present when the request was refused because it would have changed who
@@ -2132,6 +2144,8 @@ impl App for SignRequest {
                 .as_ref()
                 .and(model.sign_error_refusal_key)
                 .map(str::to_owned),
+            failure_not_sent: model.sign_error.is_some()
+                && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
             blocked: model.blocked.clone(),
@@ -4022,7 +4036,7 @@ fn on_submit_outcome(
             let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
             model.sign_error_refused = refused && model.sign_error.is_some();
             model.sign_error_refusal_key = if previous_pending {
-                Some(super::sign_confirm::PREVIOUS_PENDING_KEY)
+                Some(super::sign_confirm::NOT_SENT_BODY_KEY)
             } else if model.sign_error_refused {
                 Some(super::tx_tracker::REFUSED_KEY)
             } else {
