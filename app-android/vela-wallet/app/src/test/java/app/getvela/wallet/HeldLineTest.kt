@@ -29,6 +29,22 @@ class HeldLineTest {
         assertEquals("Insufficient ETH", line.next("Insufficient ETH", measuring = true))
     }
 
+    /**
+     * The first figure, on an account with nothing to pay from (iPhone pass
+     * 2026-10-09, the backup sheet): the core says so while the figure is
+     * measured, and its line's room is held from then — the landing moves
+     * nothing. Without that word, nothing is held before a line was said.
+     */
+    @Test
+    fun `before any line was said, the core's reserve is held while measuring`() {
+        val line = HeldLine()
+        assertEquals("held from the first measurement", noCoin, line.next(null, measuring = true, reserve = noCoin))
+        assertEquals("the figure lands as the line held for it", noCoin, line.next(noCoin, measuring = false))
+        assertEquals(noCoin, line.next(null, measuring = true))
+        assertNull("not measuring: a reserve is no line", HeldLine().next(null, measuring = false, reserve = noCoin))
+        assertNull("no word from the core: nothing held", HeldLine().next(null, measuring = true))
+    }
+
     @Test
     fun `the confirm note's room is the last note's, said now or not`() {
         val note = HeldLine()
