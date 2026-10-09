@@ -67,8 +67,24 @@ Rules (owned by vela-core; shells draw):
 - `signer_origin` = a custom origin → signing domain = that host, venue locked to that page; the page is added to the saved list.
 - `signer_origin` keeps being written so older builds still route to the page. New fields default safely when an older build reads them. Nothing changes in the registry or on-chain.
 
+## Owner rulings after Phase 1–3 (2026-10-09)
+
+- **Naming (D6).** "My own signing page" is only for a page the person deployed. A trusted signing page is either **Vela's official page** or **one you deployed yourself**. Wording: the venue choice is 「在可信签名页预览并签名」 / "Review and sign on a trusted signing page"; the create / sign-in entry is 「使用可信签名页」 / "Use a trusted signing page", whose list shows 「Vela 官方签名页」 / "Vela's official signing page" and 「自己部署的签名页 · <domain>」 / "Self-hosted · <domain>"; adding one is 「添加自己部署的签名页」 / "Add a self-hosted signing page". The setting itself: 「在哪里预览并签名」 / "Where you review and sign".
+- **The page looks like the app's signing sheet (D7).** Same palettes (light/dark), type, rows, fee block, pill confirm button; one accent (the primary on the confirm button); no chain chips or tinted badges; warnings in the app's styles. "Too colourful" was the owner's verdict on the Phase 3 build.
+
+## Core round after Phase 2 (gaps the shells hit)
+
+1. Record trust in an unknown version of a self-hosted page ("Trust this version on this device?" — event + strings).
+2. `checked <time>` wording/format from the core (one rule for every shell).
+3. `key_label()` — the "Confirm with {key}" name.
+4. A stale check shows "checking" while it re-runs; checks refresh in the background before they expire.
+5. The hand-off card keeps a compact fee + speed row (the fee is chosen in the app before the hand-off).
+6. The launch URL carries the app's language (`lang=`).
+7. A corpus reason for venues the web cannot use; a `venue_blocked` failure kind for a sign-time refusal (translated).
+8. plan.md: on the web, P2-08 is not wired and P2-09 is read-only.
+9. The renaming in D6 (15 locales).
+
 ## Open items
 
-- Name: keep 可信签名器, or name the venue by what it is ("在可信页面签名")? Proposed: the setting is "在哪里预览并签名"; the page is "可信签名页".
 - iOS subdomain RP-ID behaviour for a future vault mode (device check needed) — out of scope here.
 - Public monitor that fetches every `/b/*` and compares to `dist/` — nice to have, not blocking.
