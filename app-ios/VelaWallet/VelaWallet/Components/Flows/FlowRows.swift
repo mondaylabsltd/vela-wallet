@@ -169,7 +169,7 @@ struct FactRowView: View {
         let text = Text(verbatim: fact.value)
         if fact.wraps {
             Text(verbatim: Self.unbreakable(fact.value))
-                .typeRole(Typography.body.scaled(textScale))
+                .typeRole(Typography.body.literal.scaled(textScale))
                 .foregroundStyle(fact.danger ? theme.errorBase : theme.fgBase)
                 .multilineTextAlignment(.trailing)
                 .lineLimit(2)
@@ -182,8 +182,9 @@ struct FactRowView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         } else {
+            // A name that may be a short address ("0x14fB…eA5c"): as written.
             text
-                .typeRole(Typography.body.scaled(textScale))
+                .typeRole(Typography.body.literal.scaled(textScale))
                 .foregroundStyle(fact.danger ? theme.errorBase : theme.fgBase)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -509,7 +510,7 @@ struct ContactPickRowView: View {
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     HStack(spacing: Tokens.Space.s4) {
                         Text(verbatim: contact.name)
-                            .typeRole(Typography.rowTitle.scaled(textScale))
+                            .typeRole(Typography.rowTitle.literal.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
                             .lineLimit(1)
                         if let group = contact.group {
