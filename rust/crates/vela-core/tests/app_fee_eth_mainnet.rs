@@ -772,3 +772,45 @@ fn the_minimum_holds_on_the_published_path() {
     assert!(settlement * per_gas < 10_000_000_000_000);
     assert_eq!(quoted.total_wei, 10_000_000_000_000, "0.00001 ETH");
 }
+
+/// The block-time tick re-asks the relay, so the quote that is signed carries
+/// at most one block of drift — the `drift_allowance` the published price is
+/// built on.
+#[test]
+fn a_quote_on_ethereum_is_priced_again_every_slot() {
+    let op = measured_ops().remove(0);
+    let mut sut = Sut::new();
+    sut.0.dispatch(Event::QuoteRequested {
+        chain_id: CHAIN,
+        account: SAFE.to_owned(),
+        deployed: true,
+        public_key_available: true,
+        tier: FeeTier::Standard,
+        calls: op.calls.clone(),
+        fee_token: None,
+        auto_fee_token: false,
+        number: NumberPreset::CommaDot,
+    });
+    sut.quiet();
+    sut.0.resolve(Res::GasPrice {
+        eth_gas_price: Some(BASE.to_string()),
+        base_fee: Some(BASE.to_string()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.0.resolve(Res::BundlerQuote {
+        quote: Some(new_row(FeeTier::Standard, BASE)),
+    });
+    sut.0.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row()]),
+    });
+    sut.quiet();
+    let ops = sut.0.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "114894".to_owned(),
+            pre_verification_gas: "101613".to_owned(),
+            settlement_gas: Some(settlement_gas(op.used).to_string()),
+        },
+    });
+    assert_eq!(ops, vec![Op::StartTtl { ms: 12_000 }]);
+}

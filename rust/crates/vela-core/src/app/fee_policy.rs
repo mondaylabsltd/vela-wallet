@@ -160,13 +160,42 @@ pub const fn min_gas_price_wei(chain_id: u32) -> u128 {
     }
 }
 
-/// Quote TTL. The inventory's `Timer(8s/30s TTL)`: the 8s response cache is
-/// the shell's; this 30s marks a *displayed* quote stale so the surface can
-/// offer a refresh. Staleness is advisory — it does not disable confirm,
-/// because today's UI does not either; the submit-side guards
-/// (`tempo_quote_is_stale`, the bundler's in-band gate) reject a genuinely
-/// expired quote loudly.
-const QUOTE_TTL_MS: u32 = 30_000;
+/// The shortest wait between two pricings of a quote on screen.
+pub const REQUOTE_INTERVAL_MIN_MS: u32 = 6_000;
+/// The longest.
+pub const REQUOTE_INTERVAL_MAX_MS: u32 = 30_000;
+/// Ethereum and its public testnets (Sepolia, Holešky, Hoodi): a block every
+/// 12-second slot.
+const TWELVE_SECOND_SLOT_CHAINS: [u32; 4] = [1, 11_155_111, 17_000, 560_048];
+
+/// How long a quote on screen stays as it is before the machine prices the
+/// same operation again: the chain's block time, held to
+/// [`REQUOTE_INTERVAL_MIN_MS`]–[`REQUOTE_INTERVAL_MAX_MS`] — 12 s on Ethereum.
+///
+/// A signed in-band fee is never re-priced before it goes out, so all the
+/// drift it must survive is the market's move between the quote and the
+/// submit. The relay's published price carries a `drift_allowance` of ONE
+/// block of EIP-1559 rise ([`IN_BAND_PRICE`]); a quote kept on screen longer
+/// than that is priced again instead of signed, which is what lets the
+/// allowance stay that small. The shell's timer answers
+/// [`FeeOperation::StartTtl`] after this long and the machine prices again in
+/// the background: the figure on screen stays confirmable while it does, and
+/// is replaced when the new one lands. A background pricing that fails leaves
+/// a figure older than a block, which is priced again at once — visibly, so
+/// the confirm waits for it — and a second failure takes the figure away
+/// (see [`Origin::Tick`]).
+///
+/// Every other network Vela ships makes a block in 6 s or less
+/// (`network_admin::BUILTIN_CHAINS`), and a network somebody added has no
+/// known block time; both take the shortest wait.
+pub fn requote_interval_ms(chain_id: u32) -> u32 {
+    let block_ms = if TWELVE_SECOND_SLOT_CHAINS.contains(&chain_id) {
+        12_000
+    } else {
+        0
+    };
+    block_ms.clamp(REQUOTE_INTERVAL_MIN_MS, REQUOTE_INTERVAL_MAX_MS)
+}
 
 // Tempo gas model (`src/services/tempo.ts`, constants kept verbatim).
 /// Tempo mainnet (4217) + Moderato testnet (42431) (`tempo.ts:33`).
@@ -216,8 +245,12 @@ pub const TEMPO_SPLIT_SAFETY_BPS: u128 = 300;
 /// (`pimlico_getUserOperationGasPrice` returns slow, standard and fast
 /// together), so a shell holds the whole answer per chain and every tier's
 /// session reads its row from it — three speed rows, one request.
-
-pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 15_000;
+///
+/// Shorter than [`REQUOTE_INTERVAL_MIN_MS`], so that every pricing of a quote
+/// on screen (one per block, [`requote_interval_ms`]) reads the chain and the
+/// relay again instead of the answer the previous one held; the three tier
+/// sessions priced at the same moment still share one read.
+pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 5_000;
 
 /// How long a shell may hold the relay's simulation of one exact operation
 /// (`EstimateUserOpGas`: chain, account, deployed, the calls byte for byte).
@@ -1110,7 +1143,8 @@ const BPS: u128 = 10_000;
 /// - `drift_allowance`: none. The gap between a tier's cap and the relay's
 ///   inclusion floor (1.125 × the base fee) already absorbs a quote's drift —
 ///   a base fee 33% higher at `slow` and `standard`, 56% at `fast`, before a
-///   cent more is needed.
+///   cent more is needed — and [`requote_interval_ms`] keeps the quote on
+///   screen a block young.
 /// - `cap_bps[tier]`: the tier's submit cap over the NEXT block's base fee
 ///   (the relay's `SubmissionTier::base_fee_bps`). `tip[tier]` is the tip the
 ///   relay signs the tier with — the median over 20 blocks of each block's
@@ -1847,6 +1881,15 @@ struct RequestCtx {
 /// surfaces its failure; a refresh swallows it (the old quote keeps showing,
 /// `GasFeeCard.handleRefresh`'s `catch {}`); a chip-switch reverts the
 /// selection (`handleFeeTokenSelect`'s `catch → onFeeTokenChange(prev)`).
+///
+/// [`Origin::Tick`] and [`Origin::Catchup`] keep the quote on screen young
+/// ([`requote_interval_ms`]). A tick prices again in the background: nothing
+/// on screen changes until it lands, the figure stays confirmable meanwhile,
+/// and it is never `busy`. A tick that fails leaves a figure older than a
+/// block, which may no longer be signed as it stands: it is priced again at
+/// once, as a catch-up — `busy`, so every confirm waits for it — and a
+/// catch-up that fails too takes the figure away and says so, rather than
+/// leave a quote on screen that the relay may refuse.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum Origin {
     #[default]
@@ -1855,6 +1898,11 @@ enum Origin {
     Select {
         previous: Option<String>,
     },
+    /// The block-time re-pricing, in the background.
+    Tick,
+    /// The figure on screen is older than a block: priced again before
+    /// anything signs it.
+    Catchup,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2179,12 +2227,31 @@ impl App for FeePolicy {
             }
             Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
             Event::Requote => {
+                if model.ctx.is_none() {
+                    return Command::done();
+                }
+                // A background re-pricing is already doing what was asked:
+                // it becomes the refresh the person sees.
+                if ticking(model) {
+                    model.origin = if model.stale {
+                        Origin::Catchup
+                    } else {
+                        Origin::Refresh
+                    };
+                    return render();
+                }
                 // `GasFeeCard.handleRefresh`: ignored while one is running.
-                if model.ctx.is_none() || is_busy(&model.phase) {
+                if is_busy(&model.phase) {
                     return Command::done();
                 }
                 model.attempt += 1;
-                model.origin = Origin::Refresh;
+                // A figure already older than a block is not kept on a
+                // failed refresh ([`Origin::Catchup`]).
+                model.origin = if model.stale {
+                    Origin::Catchup
+                } else {
+                    Origin::Refresh
+                };
                 begin_pipeline(model)
             }
             Event::SelectFeeAsset { token } => select_fee_asset(model, token),
@@ -2195,6 +2262,7 @@ impl App for FeePolicy {
                 // never reads 0. A native estimate survives, as today.
                 model.attempt += 1; // in-flight card work is abandoned
                 model.pending = Pending::default();
+                model.origin = Origin::Initial;
                 model.fee_token = None;
                 if matches!(
                     model.estimate.as_ref().map(|e| &e.fee_asset),
@@ -2217,6 +2285,7 @@ impl App for FeePolicy {
                 model.attempt += 1;
                 model.form_chain_id = Some(chain_id);
                 model.pending = Pending::default();
+                model.origin = Origin::Initial;
                 model.quotes.clear();
                 model.fee_token = None;
                 model.phase = if model.estimate.is_some() {
@@ -2226,12 +2295,21 @@ impl App for FeePolicy {
                 };
                 render()
             }
+            // The shell says the figure is old (the app resumed after a long
+            // background): it is priced again before anything signs it.
             Event::QuoteExpired => {
-                if model.phase != Phase::Quoted {
+                if ticking(model) {
+                    model.stale = true;
+                    model.origin = Origin::Catchup;
+                    return render();
+                }
+                if model.phase != Phase::Quoted || model.ctx.is_none() {
                     return Command::done();
                 }
                 model.stale = true;
-                render()
+                model.attempt += 1;
+                model.origin = Origin::Catchup;
+                begin_pipeline(model)
             }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
@@ -2246,7 +2324,9 @@ impl App for FeePolicy {
     }
 
     fn view(&self, model: &Model) -> FeeView {
-        let busy = is_busy(&model.phase);
+        // The background re-pricing is not "busy": the figure on screen is
+        // the one in force, and confirmable, until the new one lands.
+        let busy = is_busy(&model.phase) && model.origin != Origin::Tick;
         let failed = match &model.phase {
             Phase::Failed(kind) => Some(*kind),
             _ => None,
@@ -2406,9 +2486,16 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             model.pending.inner_floor = Some(floor);
             try_price(model)
         }
+        // One block on (`requote_interval_ms`): the same operation is priced
+        // again in the background, the figure on screen staying confirmable
+        // until the new one lands.
         (Phase::Quoted, FeeShellResult::TtlElapsed) => {
-            model.stale = true;
-            render()
+            if model.ctx.is_none() || model.estimate.is_none() {
+                return Command::done();
+            }
+            model.attempt += 1;
+            model.origin = Origin::Tick;
+            begin_pipeline(model)
         }
         // The run did not price in time (spec 094 S9): it ends here, and
         // whatever it was still waiting for is dropped when it comes.
@@ -2745,7 +2832,7 @@ fn advance_generic(
     // coins are measured against the static model — above a plain transfer's
     // real gas, so a coin that passes here pays for real. `price_generic`
     // checks again on the real figure.
-    if model.auto_fee_token {
+    if picks_coin(model) {
         let measured = measured_for(ctx, model.measured.as_deref());
         if let Some(choice) = static_auto_pick(ctx, &rows, measured, provisional, &model.refused) {
             model.fee_token = choice;
@@ -3332,7 +3419,7 @@ fn advance_tempo(
     let static_gas = tempo_expected_gas(ctx.deployed, sub_call_count);
     // Every Tempo fee coin is a TIP-20 stablecoin and the default one is
     // often not held at all: nobody chose, so pay in one that is.
-    if model.auto_fee_token {
+    if picks_coin(model) {
         // Tempo weighs coins by the calls alone (spec 083 leaves it as it was).
         let spend = Spend::new(&ctx.calls, None);
         let fee_for = |row: &ParsedQuote| {
@@ -3531,7 +3618,7 @@ fn price_generic(
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    if model.auto_fee_token {
+    if picks_coin(model) {
         // The real gas is in: the coin picked on the static model must still
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
@@ -3654,7 +3741,7 @@ fn price_tempo(
             fee_token,
             ..
         },
-    ) = (model.auto_fee_token, &mut plan)
+    ) = (picks_coin(model), &mut plan)
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
@@ -3732,7 +3819,45 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.phase = Phase::Quoted;
     model.stale = false;
     model.origin = Origin::Initial;
-    requests(model, vec![FeeOperation::StartTtl { ms: QUOTE_TTL_MS }])
+    resume_ticking(model)
+}
+
+/// Wait one [`requote_interval_ms`] before pricing the quote on screen again.
+fn resume_ticking(model: &Model) -> Command<FeeEffect, Event> {
+    let chain_id = model.ctx.as_ref().map_or(0, |ctx| ctx.chain_id);
+    requests(
+        model,
+        vec![FeeOperation::StartTtl {
+            ms: requote_interval_ms(chain_id),
+        }],
+    )
+}
+
+/// Whether this run may choose the fee coin for the person. Never in the
+/// background ([`Origin::Tick`]): the figure on screen stays confirmable
+/// while a tick runs, and its coin must not change under it — a tick whose
+/// coin no longer pays fails, and the catch-up that follows chooses again.
+fn picks_coin(model: &Model) -> bool {
+    model.auto_fee_token && model.origin != Origin::Tick
+}
+
+/// Whether the background re-pricing is running.
+fn ticking(model: &Model) -> bool {
+    model.origin == Origin::Tick && is_busy(&model.phase)
+}
+
+/// Stop a background re-pricing so something the person did can act on the
+/// figure on screen instead; `true` when one was stopped. The caller resumes
+/// the ticking once it is done ([`resume_ticking`]).
+fn cancel_tick(model: &mut Model) -> bool {
+    if !ticking(model) {
+        return false;
+    }
+    model.attempt += 1;
+    model.pending = Pending::default();
+    model.phase = Phase::Quoted;
+    model.origin = Origin::Initial;
+    true
 }
 
 /// A pipeline step failed. What happens depends on who started the run:
@@ -3763,6 +3888,30 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
             } else {
                 Phase::Failed(kind)
             };
+        }
+        // The background re-pricing failed: the figure on screen is now
+        // older than a block, which is older than the drift its price
+        // allows for. It is priced again at once, as a catch-up the confirm
+        // waits for.
+        Origin::Tick => {
+            if model.estimate.is_none() {
+                model.phase = Phase::Failed(kind);
+                return render();
+            }
+            keep_quote_coin(model);
+            model.stale = true;
+            model.attempt += 1;
+            model.origin = Origin::Catchup;
+            return begin_pipeline(model);
+        }
+        // Older than a block and it could not be priced again: nothing on
+        // screen may be signed. The figure goes, the failure is said, and the
+        // shell's retry asks again.
+        Origin::Catchup => {
+            model.estimate = None;
+            model.charge = None;
+            model.stale = false;
+            model.phase = Phase::Failed(kind);
         }
     }
     render()
@@ -3823,6 +3972,12 @@ fn refused_by_relay(
     ctx: &RequestCtx,
     plan: &PricePlan,
 ) -> Command<FeeEffect, Event> {
+    // The relay now says the operation on screen fails: the background run
+    // becomes one the person sees before it tries another coin, so no coin
+    // changes under a figure that is still confirmable.
+    if model.origin == Origin::Tick {
+        model.origin = Origin::Catchup;
+    }
     model.refused.push(model.fee_token.clone());
     if model.auto_fee_token {
         if let Some(next) = next_coin_to_try(model, ctx) {
@@ -3832,9 +3987,11 @@ fn refused_by_relay(
     if let Some(landing) = landing_coin(model, ctx) {
         model.fee_token = landing;
     }
-    if model.origin == Origin::Refresh {
+    if matches!(model.origin, Origin::Refresh | Origin::Catchup) {
         model.estimate = None;
         model.stale = false;
+        // An answer, not an outage: said as the failure it is.
+        model.origin = Origin::Refresh;
     }
     fail(model, FeeFailure::WouldFail)
 }
@@ -3930,6 +4087,20 @@ fn estimate_in(
 ///   pay now — the simulation may have shown what the calls could not.
 /// - Gathering or estimating: the run reads it when it prices.
 fn balance_changes_measured(
+    model: &mut Model,
+    changes: &[FeeBalanceChange],
+) -> Command<FeeEffect, Event> {
+    // Weighed against the figure on screen, as a chip tap is: a background
+    // re-pricing stops for it and resumes after.
+    let cancelled = cancel_tick(model);
+    let command = balance_changes_measured_now(model, changes);
+    if cancelled && model.phase == Phase::Quoted {
+        return Command::all([command, resume_ticking(model)]);
+    }
+    command
+}
+
+fn balance_changes_measured_now(
     model: &mut Model,
     changes: &[FeeBalanceChange],
 ) -> Command<FeeEffect, Event> {
@@ -4063,6 +4234,17 @@ fn switch_estimate(model: &mut Model, option: &ParsedQuote) -> bool {
 /// shared gas basis — no RPC; an unknown one (and EVERY Tempo one) falls back
 /// to a full re-estimate whose failure reverts the selection.
 fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffect, Event> {
+    // A tap acts on the figure on screen: a background re-pricing stops for
+    // it, and resumes once the tap has been answered locally.
+    let cancelled = cancel_tick(model);
+    let command = select_fee_asset_now(model, token);
+    if cancelled && model.phase == Phase::Quoted {
+        return Command::all([command, resume_ticking(model)]);
+    }
+    command
+}
+
+fn select_fee_asset_now(model: &mut Model, token: Option<String>) -> Command<FeeEffect, Event> {
     // Spec 083 fee: an operation the relay answered would fail has no figure
     // to switch locally, but the coins stay choosable — the pick is priced
     // from the start, and a failure reverts it.
