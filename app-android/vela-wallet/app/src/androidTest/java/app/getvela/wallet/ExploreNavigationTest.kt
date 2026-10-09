@@ -11,11 +11,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,6 +35,7 @@ import app.getvela.wallet.feature.explore.ExploreScreenState
 import app.getvela.wallet.feature.explore.ExploreView
 import app.getvela.wallet.feature.wallet.components.VelaTab
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -215,6 +222,42 @@ class ExploreNavigationTest {
         hasPage = true
         coming = false
         compose.onNodeWithContentDescription(back).assertExists()
+    }
+
+    /**
+     * A resume row names an open tab by its host, and a host too long for the
+     * row is cut from its START, as the pill cuts it: the registrable domain
+     * at its end stays. Recent dApps rows keep their end cut.
+     */
+    @Test
+    fun aResumeRowCutsALongHostFromItsStart() {
+        val base = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+        val phishing = "app.uniswap.org.secure-wallet-login-verification.evil.xyz"
+        val resume = base.resume!!
+        val model = base.copy(
+            resume = resume.copy(tabs = listOf(resume.tabs.first().copy(host = phishing, subtitle = phishing)) + resume.tabs.drop(1)),
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    ExploreScreen(model = model, live = live, landing = ExploreView.Start, onPageBack = { false })
+                }
+            }
+        }
+        val host = layoutOf(compose.onNodeWithText(phishing, useUnmergedTree = true))
+        assertEquals(TextOverflow.StartEllipsis, host.layoutInput.overflow)
+        // Wider than its row, so it is cut — at the start (the platform reports
+        // a head cut on no line, so the width is what says it happened).
+        assertTrue("the phishing host is wider than its row", host.multiParagraph.intrinsics.maxIntrinsicWidth > host.size.width)
+        val recent = compose.onNodeWithText(ExploreFixtures.hyperliquid.host, useUnmergedTree = true)
+        recent.performScrollTo()
+        assertEquals(TextOverflow.Ellipsis, layoutOf(recent).layoutInput.overflow)
+    }
+
+    private fun layoutOf(node: SemanticsNodeInteraction): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        return results.single()
     }
 
     @Test

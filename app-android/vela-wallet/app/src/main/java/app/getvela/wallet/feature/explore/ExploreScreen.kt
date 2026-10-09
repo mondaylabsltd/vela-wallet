@@ -652,7 +652,8 @@ private fun StartPage(
                 modifier = Modifier.padding(top = VelaSpacing.xl),
             )
             resume.tabs.forEach { tab ->
-                SiteRow(site = tab, onOpen = onResume)
+                // The host cut from its start, like the pill: the end names the site.
+                SiteRow(site = tab, onOpen = onResume, hostLine = true)
             }
         }
 
