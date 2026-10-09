@@ -468,7 +468,7 @@ struct BrowserWireDriftTests {
                 wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
                 relay: relay, accounts: accounts,
                 spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
-                store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+                store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
                 ports: SigningController.Ports(knownChains: { [1] })
             )
             var incoming = SigningController.Incoming(

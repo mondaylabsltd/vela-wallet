@@ -168,6 +168,18 @@
 	<array>
 		<string>fetch</string>
 	</array>
+	<!--
+	  ONE scene (issue #483). The app is iPhone-only and its object graph is
+	  app-wide (`AppGraph`, owned by the App struct): a second window would
+	  draw a second root over the same graph — one request pool, one tracker,
+	  one browser core over one store — and nothing in the app was built for
+	  two roots driving them at once. The generated manifest said YES.
+	-->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>app.getvela.VelaWallet.tracker</string>

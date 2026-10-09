@@ -69,20 +69,25 @@ final class FeeStore {
         /// one that can, and `feeToken` is only where it falls back to. Part
         /// of the operation, so every preview replays it.
         let autoFeeToken: Bool
+        /// The fee machine reads the account's deployment itself, first
+        /// (issue #483): its failure is the fee's own, said on the row, the
+        /// footer and the retry, and read again on every retry. `deployed` is
+        /// then only a placeholder.
+        var readDeployment = false
 
         /// The operation, tier aside — `calls` compared as the JSON the core
         /// reads, which is exact.
         func sameOperation(_ other: Ask) -> Bool {
             chainId == other.chainId && account == other.account && deployed == other.deployed
                 && publicKeyAvailable == other.publicKeyAvailable && feeToken == other.feeToken
-                && autoFeeToken == other.autoFeeToken
+                && autoFeeToken == other.autoFeeToken && readDeployment == other.readDeployment
                 && CoreJSON.string(["c": calls]) == CoreJSON.string(["c": other.calls])
         }
 
         func at(_ tier: String) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
                 publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
-                feeToken: feeToken, autoFeeToken: autoFeeToken)
+                feeToken: feeToken, autoFeeToken: autoFeeToken, readDeployment: readDeployment)
         }
 
         /// The same operation in the coin the person tapped: from here on it
@@ -90,13 +95,13 @@ final class FeeStore {
         func paying(_ token: String?) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
                 publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
-                feeToken: token, autoFeeToken: false)
+                feeToken: token, autoFeeToken: false, readDeployment: readDeployment)
         }
 
         /// `number`: the resolved preset the core writes a coin's shortfall
         /// in (issue #408) — the one `configureSpeed` was last given.
         func event(number: String) -> String {
-            CoreJSON.string([
+            var event: [String: Any] = [
                 "type": "quote_requested",
                 "chain_id": chainId,
                 "account": account,
@@ -107,7 +112,9 @@ final class FeeStore {
                 "fee_token": feeToken.map { $0 as Any } ?? NSNull(),
                 "auto_fee_token": autoFeeToken,
                 "number": number,
-            ])
+            ]
+            if readDeployment { event["read_deployment"] = true }
+            return CoreJSON.string(event)
         }
     }
 
@@ -339,7 +346,8 @@ final class FeeStore {
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
         feeToken: String?,
-        autoFeeToken: Bool = false
+        autoFeeToken: Bool = false,
+        readDeployment: Bool = false
     ) async -> FeeViewWire? {
         generation += 1
         let mine = generation
@@ -366,7 +374,8 @@ final class FeeStore {
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
-            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken,
+            readDeployment: readDeployment
         )
         return await withCheckedContinuation { continuation in
             var resumed = false
@@ -389,12 +398,14 @@ final class FeeStore {
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
         feeToken: String?,
-        autoFeeToken: Bool = false
+        autoFeeToken: Bool = false,
+        readDeployment: Bool = false
     ) {
         askInForce(Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
-            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken,
+            readDeployment: readDeployment
         ))
     }
 

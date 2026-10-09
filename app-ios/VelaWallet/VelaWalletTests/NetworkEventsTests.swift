@@ -59,7 +59,7 @@ struct NetworkEventsTests {
         let asked = Asked()
         let settings = SettingsStore(
             store: shelf, accounts: accounts,
-            pool: RpcPool(store: shelf, accounts: accounts),
+            pool: RpcPool(store: shelf, accounts: accounts, offline: true),
             networkPerform: NetworkAdminStub.perform(
                 executor: executor, reported: reported, chains: chains,
                 asked: { type, url in

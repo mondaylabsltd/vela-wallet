@@ -47,7 +47,7 @@ struct Spec100Tests {
             let probes = Box<[String]>([])
             settings = SettingsStore(
                 store: shelf, accounts: accounts,
-                pool: RpcPool(store: shelf, accounts: accounts),
+                pool: RpcPool(store: shelf, accounts: accounts, offline: true),
                 networkPerform: { operation in
                     let url = operation["url"] as? String ?? ""
                     switch operation["type"] as? String ?? "" {

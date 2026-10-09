@@ -779,9 +779,16 @@ final class RelayClient {
 
     /// The three raw gas signals, each `nil` when unreadable; the core prices
     /// with what it has, and only a failed `eth_gasPrice` triggers its default.
-    func gasSignals(chainId: Int, wantTip: Bool) async -> GasSignals {
+    ///
+    /// `fresh`: a retry after a failure (the fee machine's `fresh`, issue
+    /// #483) — measured again past the held reading, and no read already in
+    /// flight answers it.
+    func gasSignals(chainId: Int, wantTip: Bool, fresh: Bool = false) async -> GasSignals {
         let key = "\(chainId):gas:\(wantTip)"
-        if let held = gasSignalsCache[key], now() - held.at < Self.feeSignalsTTLMs {
+        if fresh {
+            gasSignalsCache[key] = nil
+            feeSignalsEpoch[chainId, default: 0] += 1
+        } else if let held = gasSignalsCache[key], now() - held.at < Self.feeSignalsTTLMs {
             return held.signals
         }
         let epoch = feeSignalsEpoch[chainId, default: 0]
@@ -847,12 +854,26 @@ final class RelayClient {
         return Self.hexQuantity(decimal: decimal)
     }
 
-    /// What the deployment read came to: an answer, or none — and whether
-    /// none was a rate limit (spec 082 RJ13: the fee row then names the
-    /// chain's node, never Vela's relay).
+    /// What the deployment read came to: an answer; none from the chain —
+    /// and whether none was a rate limit (spec 082 RJ13: the fee row then
+    /// names the chain's node, never Vela's relay); or none because the read
+    /// never left the app (issue #483: never told as "can't reach the chain").
+    /// The fee machine's `DeploymentRead`, case for case (`wire`).
     enum DeploymentRead: Equatable {
         case deployed(Bool)
         case unread(rateLimited: Bool)
+        /// Something inside the app failed before the chain could be asked.
+        /// `kind` is diagnostics for the report, never shown.
+        case `internal`(kind: String)
+
+        /// The fee machine's `FeeShellResult::Deployment.read`.
+        var wire: [String: Any] {
+            switch self {
+            case .deployed(let deployed): ["type": "read", "deployed": deployed]
+            case .unread(let rateLimited): ["type": "unreachable", "rate_limited": rateLimited]
+            case .internal(let kind): ["type": "internal", "kind": kind]
+            }
+        }
     }
 
     /// `eth_getCode` != `0x`; `nil` when the chain could not be asked.
@@ -869,10 +890,16 @@ final class RelayClient {
     }
 
     /// `isDeployed`, saying why there is no answer when there is none.
-    func deploymentRead(chainId: Int, address: String) async -> DeploymentRead {
+    ///
+    /// `fresh`: a retry after a failure (the fee machine's `fresh`) — read the
+    /// chain again rather than answer from what is held.
+    func deploymentRead(chainId: Int, address: String, fresh: Bool = false) async -> DeploymentRead {
+        // Not an address: there is nothing to ask a chain, and nothing a chain
+        // did wrong (issue #483).
+        guard Self.isAddress(address) else { return .internal(kind: "deployment: not_an_address") }
         let key = "\(chainId):\(address.lowercased())"
-        if deployedAccounts.contains(key) { return .deployed(true) }
-        return await deploymentFlights.run(key) {
+        if !fresh, deployedAccounts.contains(key) { return .deployed(true) }
+        return await deploymentFlights.run(fresh ? key + ":fresh" : key) {
             let outcome = await self.port.call(
                 chainId: chainId, method: "eth_getCode", params: [address, "latest"], kind: "rpc"
             )
@@ -910,6 +937,11 @@ final class RelayClient {
     func bundlerBaseForTest(chainId: Int) async -> String? {
         await port.bundlerBase(chainId: chainId)
     }
+
+    /// The request pool this client reads through, when it is the app's
+    /// (`PoolRelayPort`) — for the check that the signing path and the app
+    /// share one (issue #483).
+    var boundPool: RpcPool? { (port as? PoolRelayPort)?.pool }
 
     /// What `network_admin`'s `clear_bundler_cache` means on this client.
     func clearCaches() {

@@ -16,7 +16,7 @@ struct ReadPathContractTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
     /// The executor these contracts read through. Its per-chain deadline is
-    /// one no run reaches: the unbooted pool refuses every call at once, so a
+    /// one no run reaches: the offline pool refuses every call at once, so a
     /// chain's verdict here is the read's own — never a cut made because a
     /// loaded machine was slow to get to it (CI #386: on the 3-core runner
     /// the core's 18 s cut every chain, Tempo included, and "failed" became
@@ -28,9 +28,11 @@ struct ReadPathContractTests {
     private func fresh() -> (VelaStore, RpcPool) {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
-        // Unbooted: every routed call is refused without a packet leaving the
-        // machine, which is the same shape as a device with no network.
-        return (store, RpcPool(store: store, accounts: AccountStore(defaults: defaults)))
+        // Offline: every routed call is refused without a packet leaving the
+        // machine, which is the same shape as a device with no network. (A
+        // pool nobody booted no longer refuses — issue #483 — so the test
+        // says what it wants.)
+        return (store, RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true))
     }
 
     /// **SC-003.** A chain that could not be read is reported FAILED — never as
@@ -75,8 +77,8 @@ struct ReadPathContractTests {
         let reply = (try? CoreJSON.object(await executor.perform([
             "type": "fetch_tokens", "address": golden, "pull": false,
         ]))) ?? [:]
-        // A refused-before-boot call is a failure, not a throttle — nothing
-        // asked us to slow down.
+        // A call with no network is a failure, not a throttle — nothing asked
+        // us to slow down.
         #expect((reply["rate_limited_chain_ids"] as? [Int] ?? []).isEmpty)
         #expect(!(reply["failed_chain_ids"] as? [Int] ?? []).isEmpty)
     }

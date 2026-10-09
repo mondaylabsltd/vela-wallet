@@ -373,7 +373,7 @@ struct SplitWriteAheadTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accountStore = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accountStore)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
         let seen = Seen()
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,

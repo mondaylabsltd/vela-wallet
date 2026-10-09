@@ -65,10 +65,6 @@ enum SigningLive {
         var handoffLine: SignerIntegrityLine?
         /// The person's own label for that page, when they gave it one.
         var handoffPageName: String?
-        /// Spec 082 RF5: the quote could not even start (the account's
-        /// deployment could not be read) — the core's failure name for it,
-        /// drawn as a failed quote is.
-        var feeStartFailure: String?
         /// The clock the landing's pace is read at (spec 099 R6); the screen
         /// counts the seconds itself once a countdown runs.
         var nowMs: Double = Date().timeIntervalSince1970 * 1000
@@ -1352,7 +1348,7 @@ enum SigningLive {
             // explicit that these two surfaces must not drift.
             value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
                                            networks: context.networks)
-        } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
+        } else if fee?.failed != nil {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
@@ -1406,21 +1402,20 @@ enum SigningLive {
             // spends (the PancakeSwap USDC swap, fee in USDC). The core
             // flags it; said under the fee while that coin is the one paying.
             warning = context.loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": selected.symbol])
-        } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
-                  let key = feeFailureReasonKey(failure: failed) {
+        } else if let failed = fee?.failed, let key = feeFailureReasonKey(failure: failed) {
             // Spec 079: why there is no fee, and that it will be asked again
             // (the row said "点击重试" with the relay down and stayed so).
             // Which words is the core's (spec 082 RJ13): the relay for a
             // relay's failure, the chain's node — rate-limited, or named
             // unreachable — for a chain read, and none for a failure that is
             // not the network's (G48: a public node's rate limit read "Can't
-            // reach Vela").
+            // reach Vela"). A read that never left the app is Vela's own
+            // fault, said as that (issue #483) — never "Can't reach <chain>".
             warning = context.loc.t(key, vars: ["chain": context.chainName])
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failed != nil || (fee == nil && context.feeStartFailure != nil)
-            || options.count > 1
+        let tappable = fee?.failed != nil || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
     }

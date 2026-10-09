@@ -473,19 +473,23 @@ final class SendExecutor {
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let account = operation["account"] as? String ?? ""
         let publicKey = operation["public_key_hex"] as? String
-        let deployed = await relay.isDeployed(chainId: chainId, address: account) ?? false
 
+        // The account's deployment is read by the fee machine itself (issue
+        // #483): an unanswered read was `?? false` here — "not deployed", an
+        // initCode priced into a deployed account's fee — and a failed one is
+        // now the fee's own failure, with the fee's words and retry.
         let settled = await fees.quote(
             chainId: chainId,
             account: account,
-            deployed: deployed,
+            deployed: false,
             publicKeyAvailable: publicKey != nil,
             calls: calls,
             feeToken: operation["gas_fee_token"] as? String,
             // Nobody chose the coin on this form: the fee machine picks one
             // that can pay, and the estimate's `fee_asset` says which. A chip
             // tap makes the core send `false` from then on.
-            autoFeeToken: operation["auto_fee_token"] as? Bool ?? false
+            autoFeeToken: operation["auto_fee_token"] as? Bool ?? false,
+            readDeployment: true
         )
         guard let settled else {
             // Superseded by a newer request. The core still needs an answer for
@@ -503,8 +507,23 @@ final class SendExecutor {
         }
         return CoreJSON.string([
             "type": "fee_estimated",
-            "outcome": ["type": "failed", "kind": settled.failed ?? "other"],
+            "outcome": ["type": "failed", "kind": Self.estimateFailure(settled.failed)],
         ])
+    }
+
+    /// The send machine's `SendEstimateFailure` for a fee failure: the fee
+    /// vocabulary it shares, else `other`. A fee failure the send vocabulary
+    /// has no word for (`chain_read`, `internal`, `would_fail`) used to go
+    /// through as it came and was refused by the machine's decode — an answer
+    /// the send never heard. The fee row says the precise cause from the fee
+    /// view itself.
+    static func estimateFailure(_ failed: String?) -> String {
+        let shared: Set<String> = [
+            "missing_public_key", "fee_token_unavailable", "quote_unavailable",
+            "calculation_failed", "estimate_failed", "gas_quote_too_high",
+        ]
+        guard let failed, shared.contains(failed) else { return "other" }
+        return failed
     }
 
     // MARK: - Submit

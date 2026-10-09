@@ -99,7 +99,7 @@ struct ManageTokensTests {
         // packet leaving the machine. Before that guard existed this suite
         // hung — the continuation waited on an event `CoreStore` had dropped.
         let executor = ManageTokensExecutor(
-            store: store, pool: RpcPool(store: store, accounts: accounts)
+            store: store, pool: RpcPool(store: store, accounts: accounts, offline: true)
         )
         #expect(ManageTokensExecutor.operations.count == 5)
         for name in ManageTokensExecutor.operations {
@@ -126,7 +126,7 @@ struct ManageTokensTests {
         // packet leaving the machine. Before that guard existed this suite
         // hung — the continuation waited on an event `CoreStore` had dropped.
         let executor = ManageTokensExecutor(
-            store: store, pool: RpcPool(store: store, accounts: accounts)
+            store: store, pool: RpcPool(store: store, accounts: accounts, offline: true)
         )
         let reply = (try? CoreJSON.object(await executor.perform([
             "type": "write_custom_token",
