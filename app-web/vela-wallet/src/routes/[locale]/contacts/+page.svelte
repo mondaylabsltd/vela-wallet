@@ -24,7 +24,6 @@
 	import ContactsDesktop from '$lib/contacts/ContactsDesktop.svelte';
 	import ContactsHome from '$lib/contacts/ContactsHome.svelte';
 	import ContactEditSheet from '$lib/contacts/ui/ContactEditSheet.svelte';
-	import ContactQr from '$lib/contacts/ui/ContactQr.svelte';
 	import GroupEditSheet from '$lib/contacts/ui/GroupEditSheet.svelte';
 	import GroupForm from '$lib/contacts/ui/GroupForm.svelte';
 	import PickList from '$lib/contacts/ui/PickList.svelte';
@@ -59,7 +58,6 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { fill } from '$lib/wallet/messages';
-	import { encodeQr } from '$lib/wallet/qr';
 	import { track } from '$lib/analytics';
 	import type { PageProps } from './$types';
 
@@ -139,7 +137,6 @@
 		| { kind: 'confirm-group-delete'; id: string; name: string }
 		| { kind: 'member-pick'; id: string }
 		| { kind: 'group-pick'; address: string }
-		| { kind: 'qr'; address: string }
 		| { kind: 'export'; scope: ContactExportScope };
 	let sheet = $state<SheetState>({ kind: 'none' });
 
@@ -246,22 +243,6 @@
 	/** The import's outcome, in the corpus's words, until acknowledged. */
 	const report = $derived(view === null ? undefined : importReport(view, m));
 
-	/** The QR sheet's subject, resolved from the book so a rename shows through. */
-	const qrSubject = $derived.by(() => {
-		if (sheet.kind !== 'qr' || view === null) return undefined;
-		const address = sheet.address;
-		const contact = view.contacts.find((c) => c.address === address);
-		if (contact === undefined) return undefined;
-		const name = displayName(contact);
-		return {
-			name,
-			address: contact.address,
-			identiconSvg: identiconSvgForClient(contact.address),
-			// The address, encoded — what the receive card does for our own.
-			code: encodeQr(contact.address)
-		};
-	});
-
 	// --- Files in and out --------------------------------------------------
 
 	/** The export the core wrote is handed over the moment it appears, then taken. */
@@ -317,10 +298,6 @@
 
 	function sendTo(address: string): void {
 		handOff({ kind: 'send', recipient: address });
-	}
-
-	function receiveFrom(): void {
-		handOff({ kind: 'receive' });
 	}
 
 	/**
@@ -445,9 +422,6 @@
 			case m.send:
 				if (address !== undefined) sendTo(address);
 				break;
-			case m.receive:
-				receiveFrom();
-				break;
 			case m.copyAddress:
 				if (address !== undefined) void copyAddress(address);
 				break;
@@ -531,12 +505,6 @@
 				switch (event.id) {
 					case 'send':
 						sendTo(event.address);
-						return;
-					case 'receive':
-						receiveFrom();
-						return;
-					case 'qr':
-						sheet = { kind: 'qr', address: event.address };
 						return;
 					case 'copy':
 						void copyAddress(event.address);
@@ -767,26 +735,6 @@
 				<PickList model={groupPickModel(view, sheet.address, m)} onsave={saveGroups} />
 			{/key}
 		</SheetOrDialog>
-	{:else if qrSubject !== undefined}
-		{@const subject = qrSubject}
-		<SheetOrDialog
-			wide={wide.current}
-			title={m.actionQr}
-			closeLabel={m.cancel}
-			height="tall"
-			onclose={closeSheet}
-		>
-			<ContactQr
-				name={subject.name}
-				address={subject.address}
-				identiconSvg={subject.identiconSvg}
-				code={subject.code}
-				copyLabel={m.copyAddress}
-				copiedLabel={m.copied}
-				copied={copied === subject.address}
-				oncopy={() => copyAddress(subject.address)}
-			/>
-		</SheetOrDialog>
 	{:else if sheet.kind === 'export'}
 		<SheetOrDialog
 			wide={wide.current}
@@ -816,7 +764,7 @@
 		</SheetOrDialog>
 	{/if}
 
-	{#if copied !== null && sheet.kind !== 'qr'}
+	{#if copied !== null}
 		<div class="toast" role="status">{m.copied}</div>
 	{/if}
 {:else}

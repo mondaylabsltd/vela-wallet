@@ -303,8 +303,6 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addressLabel: k('contacts.addressLabel'),
 		copyAddress: k('componentsUi.identiconViewer.copyAddress'),
 		send: k('componentsUi.dock.send'),
-		receive: k('componentsUi.dock.receive'),
-		actionQr: k('contacts.actionQr'),
 		deleteContact: k('contacts.deleteContact'),
 		delete: k('contacts.delete'),
 		deleteTitle: k('contacts.deleteTitle'),

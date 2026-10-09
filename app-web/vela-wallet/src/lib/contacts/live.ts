@@ -204,7 +204,7 @@ export function liveContactDetail(
 		contact: model,
 		chips: model.groups,
 		addChipLabel: m.moveGroup,
-		actions: { send: m.send, receive: m.receive, qr: m.actionQr },
+		actions: { send: m.send },
 		address: {
 			label: m.addressLabel,
 			lines: [contact.address.slice(0, half), contact.address.slice(half)],
