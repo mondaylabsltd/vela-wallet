@@ -121,12 +121,6 @@ pub struct SettingsStrings {
     pub account_create: SharedString,
     pub account_sign_in: SharedString,
     pub sign_out_button: SharedString,
-    /// The Ethereum backup row (spec 062).
-    pub backup_title: SharedString,
-    pub backup_backed_up: SharedString,
-    pub backup_not_backed_up: SharedString,
-    pub backup_could_not_check: SharedString,
-    pub backup_checking: SharedString,
     /// The keys block (spec 062): which passkeys control the wallet.
     pub keys_title: SharedString,
     pub keys_subtitle: SharedString,
@@ -147,7 +141,9 @@ pub struct SettingsStrings {
     pub keys_attestation: SharedString,
     pub keys_copy: SharedString,
     pub keys_copied: SharedString,
-    /// PUBLIC keys only; private keys never leave the device.
+    /// What copying the record to Ethereum makes public and what it costs
+    /// (`registry_backup::EXPLAIN_KEY`). The backup ROW's own words are the
+    /// core's (`BackupState::row`), resolved where it is drawn.
     pub backup_explain: SharedString,
     pub sign_out_desc: SharedString,
     pub erase_title: SharedString,
@@ -431,11 +427,6 @@ impl SettingsStrings {
             account_create: s("settingsModals.account.createNew"),
             account_sign_in: s("settingsModals.account.signInExisting"),
             sign_out_button: s("settings.signOut.button"),
-            backup_title: s("settingsModals.backup.title"),
-            backup_backed_up: s("settingsModals.backup.backedUp"),
-            backup_not_backed_up: s("settingsModals.backup.notBackedUp"),
-            backup_could_not_check: s("settingsModals.backup.couldNotCheck"),
-            backup_checking: s("componentsUi.funding.checking"),
             keys_title: s("settingsModals.keys.title"),
             keys_subtitle: s("settingsModals.keys.subtitle"),
             keys_key_n: raw("settingsModals.keys.keyN"),

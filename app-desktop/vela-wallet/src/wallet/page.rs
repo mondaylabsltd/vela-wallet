@@ -836,10 +836,7 @@ pub struct WalletPage {
     /// (`None` = still asking). Asked of the chain, never of our server, each
     /// time the Account page meets a different account.
     backup_for: Option<String>,
-    backup_check: Option<(
-        vela_core::registry_backup::BackupState,
-        Option<vela_core::registry_backup::BackupCall>,
-    )>,
+    backup_check: Option<crate::executor::registry::BackupAnswer>,
     /// Which passkeys control that same wallet (spec 062), read from the
     /// registry contract; `None` = still asking.
     keys_check: Option<(
@@ -1355,6 +1352,19 @@ impl WalletPage {
                 .map(|page| page.name)
                 .unwrap_or_default();
             self.signer_page_rename = Some((url, name));
+        }
+        // `VELA_SETTINGS_SCROLL=<px>|bottom`: the open panel scrolled that
+        // far down — a screenshot pass cannot turn a wheel, and the Keys
+        // block (with its copy-to-Ethereum row) sits below the first screen.
+        match crate::dev_env::var!("VELA_SETTINGS_SCROLL").as_deref() {
+            Some("bottom") => self.settings_scroll.scroll_to_bottom(),
+            Some(raw) => {
+                if let Ok(down) = raw.parse::<f32>() {
+                    self.settings_scroll
+                        .set_offset(gpui::point(px(0.), px(-down.max(0.))));
+                }
+            }
+            None => {}
         }
     }
 
@@ -9708,6 +9718,30 @@ impl WalletPage {
             return;
         };
         self.backup_check = None;
+        // `VELA_BACKUP_STATE=backed_up|not_backed_up|could_not_check|
+        // not_copyable` (developer builds): the row in that state, with no
+        // walk — a wallet from before registry V13, or one never copied,
+        // cannot be had on demand, and each state's row has to be looked at.
+        // The same env-pin family as `VELA_SETTINGS_STATE`.
+        if let Some(state) = crate::dev_env::var!("VELA_BACKUP_STATE").and_then(|want| {
+            serde_json::from_value::<vela_core::registry_backup::BackupState>(
+                serde_json::Value::String(want),
+            )
+            .ok()
+        }) {
+            use vela_core::registry_backup::{BackupCall, BackupState, REGISTRY, TARGET_CHAIN};
+            self.backup_check = Some(crate::executor::registry::BackupAnswer {
+                state,
+                call: (state == BackupState::NotBackedUp).then(|| BackupCall {
+                    chain_id: TARGET_CHAIN,
+                    to: REGISTRY.to_owned(),
+                    value: "0".to_owned(),
+                    data: "0x".to_owned(),
+                }),
+                row: state.row(),
+            });
+            return;
+        }
         let address = account.address.clone();
         let key = account.keys.first().map_or_else(
             || account.public_key_hex.clone(),
@@ -9736,38 +9770,35 @@ impl WalletPage {
         .detach();
     }
 
-    /// The Ethereum backup row (spec 062): one line, three states, a button
-    /// only while there is something to do. Nothing at all when the registry is
-    /// not on Ethereum or the wallet has no record there to copy.
+    /// "Copy this wallet's record to Ethereum" (spec 062): one line, a button
+    /// only while there is something to do. Nothing at all when the registry
+    /// is not on Ethereum or the wallet has no record there to copy.
+    ///
+    /// The row is the CORE's (`BackupState::row`): its words, its tone and
+    /// what a tap does — copy, ask again, or nothing. "Not copied yet" is a
+    /// state, not a warning (a copy is optional and costs a fee), and a
+    /// wallet from before registry V13 gets a calm end with nothing to tap
+    /// rather than a "could not check" that retries forever.
     fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        use crate::executor::registry::{BackupPress, backup_line};
         use vela_core::registry_backup::BackupState;
-        let s = &self.settings;
-        // The web's four states (`ethereumBackupRow`): what the row says, in
-        // which colour, and what — if anything — pressing it does.
-        let (subtitle, colour, call, retry) = match &self.backup_check {
-            None => (s.backup_checking.clone(), theme.fg_subtle, None, false),
-            Some((BackupState::BackedUp, _)) => {
-                (s.backup_backed_up.clone(), theme.success, None, false)
-            }
-            Some((BackupState::NotBackedUp, call)) => (
-                s.backup_not_backed_up.clone(),
-                theme.warning_base,
-                call.clone(),
-                false,
-            ),
-            // Pressable, and what it does is ask again — the state a person is
-            // most likely to press, and the only one where "nothing happened"
-            // was the whole experience.
-            Some((BackupState::CouldNotCheck, _)) => (
-                s.backup_could_not_check.clone(),
-                theme.fg_subtle,
-                None,
-                true,
-            ),
-            Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
+        let line = backup_line(self.backup_check.as_ref())?;
+        let title = self.loc.t(&line.title_key);
+        let subtitle = self.loc.t(&line.subtitle_key);
+        let colour = if line.positive {
+            theme.success
+        } else {
+            theme.fg_subtle
         };
-        let backed_up = matches!(&self.backup_check, Some((BackupState::BackedUp, _)));
-        let title = s.backup_title.clone();
+        let (call, retry) = match line.press {
+            BackupPress::Copy(call) => (Some(call), false),
+            BackupPress::Retry => (None, true),
+            BackupPress::Nothing => (None, false),
+        };
+        let backed_up = self
+            .backup_check
+            .as_ref()
+            .is_some_and(|answer| answer.state == BackupState::BackedUp);
         let actionable = call.is_some() || retry;
         let accent = theme.accent;
         let mut row = div()
@@ -10610,7 +10641,10 @@ impl WalletPage {
             }
         }
         match self.backup_row(theme, cx) {
-            // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+            // Under the row, what the copy makes public and what it costs
+            // (`registry_backup::EXPLAIN_KEY`): the wallet's name, each key's
+            // name, public key, credential ID and authenticator model, for
+            // one Ethereum transaction and its fee — never "only public keys".
             Some(backup) => block.child(backup).child(
                 div()
                     .pl(px(theme::KEY_ROW_MARK + 12.))
