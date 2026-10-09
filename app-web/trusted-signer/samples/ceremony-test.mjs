@@ -175,7 +175,7 @@ try {
     const shown = await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'create'");
     const card = await page.text();
     check('create: its own card — title, what it does, the wallet\'s name', shown &&
-      card.includes('Create a key') && card.includes(WALLET) && /nothing is signed/i.test(card), card.split('\n')[2]);
+      card.includes('Add a passkey') && card.includes(WALLET) && /nothing is signed/i.test(card), card.split('\n')[2]);
     check('create: the card says who asks (the app on this device)', card.includes('the Vela app on this device'));
     await page.ev('window.__slider.__confirm()', true);
     const answer = await created;
@@ -389,7 +389,7 @@ try {
       await popup.waitFor("window.__velaState && window.__velaState.phase === 'card' && window.__velaState.kind === 'create'");
       const card = await popup.text();
       check('post: a create from https://getvela.app is let through, and the card names the site',
-        card.includes('Create a key') && card.includes('getvela.app') && !(await popup.ev('window.__refused')));
+        card.includes('Add a passkey') && card.includes('getvela.app') && !(await popup.ev('window.__refused')));
       await popup.ev('window.__slider.__confirm()', true);
       await opener.waitFor('window.__answers.length === 1', 15000);
       const made = await opener.ev('window.__answers[0]');

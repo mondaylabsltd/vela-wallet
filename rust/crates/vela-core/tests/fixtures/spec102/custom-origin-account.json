@@ -1,0 +1,27 @@
+{
+  "id": "c0ffee01",
+  "name": "Vault",
+  "address": "0x2222222222222222222222222222222222222222",
+  "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "created_at_iso": "2026-10-01T08:00:00.000Z",
+  "keys": [
+    {
+      "credential_id": "c0ffee01",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "Vault",
+      "transports": "usb,nfc",
+      "signer_origin": "http://localhost:8140"
+    },
+    {
+      "credential_id": "c0ffee02",
+      "public_key_hex": "04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "name": "Key 2",
+      "transports": ""
+    }
+  ],
+  "signed_in_with": {
+    "credential_id": "c0ffee01",
+    "method": "trusted_signer",
+    "signer_origin": "http://localhost:8140"
+  }
+}

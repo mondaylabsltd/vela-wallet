@@ -268,7 +268,19 @@ fn open_window_with<V: gpui::Render + 'static>(
     // 5 s goes through.
     let build = move |window: &mut gpui::Window, cx: &mut App| {
         window.on_window_should_close(cx, close_requested);
-        build(window, cx)
+        let root = build(window, cx);
+        // Spec 102 D-14: a return to the front asks whether any signing page
+        // in use is due a re-check (the desktop's "foreground"), whichever
+        // screen the window shows.
+        root.update(cx, |_, cx| {
+            cx.observe_window_activation(window, |_, window, _| {
+                if window.is_window_active() {
+                    executor::trusted_signer::prime_in_background();
+                }
+            })
+            .detach();
+        });
+        root
     };
 
     cx.open_window(
@@ -390,8 +402,11 @@ fn main() {
 
     // Spec 076: find out which published version of the signer page this build
     // accepts, before anybody presses Sign. Off the launch path on purpose —
-    // see `prime_in_background`.
+    // see `prime_in_background`. Spec 102 D-14: and again hourly while the
+    // app runs (and whenever a window comes back to the front, below), each
+    // page only when its check is half a day old.
     executor::trusted_signer::prime_in_background();
+    executor::trusted_signer::keep_fresh();
 
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has

@@ -320,11 +320,6 @@ struct UsbConnectingSheet: View {
         case .hybrid: loc.t(I18nKeys.Flow.touchRemoteTitle)
         case .securityKey: loc.t(I18nKeys.Create.methodSecurityKeyTitle)
         case .platform: loc.t(I18nKeys.Create.methodPlatformTitle)
-        // Spec 075. In practice the Trusted Signer never reaches this hold —
-        // it puts up its OWN sheet the moment it is chosen, and that sheet
-        // asks where the signer is. Named anyway rather than defaulted, so
-        // the compiler keeps telling us about a fifth route.
-        case .trustedSigner: loc.t(I18nKeys.TrustedSigner.title)
         }
     }
 
@@ -335,7 +330,6 @@ struct UsbConnectingSheet: View {
         case .securityKey: loc.t(I18nKeys.Create.methodSecurityKeyBody)
         // What unlocks a passkey HERE (087 F01) — the core names it.
         case .platform: methodCopy(.platform, chooser: .create, loc: loc).body
-        case .trustedSigner: loc.t(I18nKeys.TrustedSigner.body)
         }
     }
 

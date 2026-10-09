@@ -60,16 +60,31 @@
       "subtitle": "Vela에서 시작하는 모든 보내기가 여기서 시작합니다. 보낼 때 한 건만 따로 바꿀 수도 있습니다."
     },
     "signing": {
-      "title": "서명 방법",
-      "subtitle": "Vela에서 시작하는 모든 서명은 여기서 시작합니다. 한 번의 서명에 대해서는 다른 방법을 고를 수 있습니다.",
-      "pageTitle": "Trusted Signer 페이지",
-      "pageSubtitle": "Trusted Signer가 여는 페이지: 공식 페이지 또는 직접 배포한 의존성 없는 서명 페이지.",
-      "pageOfficial": "공식",
+      "title": "서명 페이지",
+      "subtitle": "요청을 표시하고 서명하는 데 신뢰하는 페이지입니다.",
+      "pageOfficial": "Vela 공식 서명 페이지",
       "pageInvalid": "웹 주소가 아닙니다.",
       "pageInsecure": "https 페이지나 이 기기의 루프백 주소에 있는 페이지를 사용하세요. 브라우저는 그 밖의 곳에서는 서명하지 않습니다.",
-      "pageForeign": "패스키는 getvela.app에 속합니다. 다른 도메인의 페이지는 요청을 보여줄 수는 있어도 서명할 수는 없습니다.",
-      "pageReset": "공식 페이지 사용",
-      "pageSave": "저장"
+      "pageSave": "저장",
+      "pageAdd": "직접 배포한 서명 페이지 추가",
+      "pageDuplicate": "이미 저장된 페이지입니다.",
+      "keysOn": "키 위치: {{domain}}",
+      "pageSelfHosted": "직접 배포한 서명 페이지 · {{domain}}",
+      "pageTrust": "이 버전 신뢰",
+      "pageRename": "이름 변경",
+      "pageRemove": "제거",
+      "pageName": "이름"
+    },
+    "venue": {
+      "title": "검토하고 서명하는 곳",
+      "subtitle": "이 계정의 거래와 메시지에 적용됩니다. 키는 바뀌지 않습니다.",
+      "inVela": "Vela에서 검토하고 서명",
+      "inVelaBody": "Vela 자체 서명 화면",
+      "page": "신뢰할 수 있는 서명 페이지에서 검토하고 서명",
+      "pageBody": "의존성 없는 페이지가 서명할 내용을 그대로 보여 줍니다",
+      "blockedApp": "Vela는 {{domain}}의 키를 사용할 수 없습니다.",
+      "blockedPage": "이 페이지는 {{pageDomain}}에 있고, 이 계정의 키는 {{domain}}에 있습니다.",
+      "blockedWeb": "서명 페이지는 웹이 아닌 Vela 앱에서만 열 수 있습니다."
     },
     "advanced": {
       "networksTitle": "네트워크",

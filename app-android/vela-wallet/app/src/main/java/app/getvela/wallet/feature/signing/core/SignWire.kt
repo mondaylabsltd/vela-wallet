@@ -78,6 +78,13 @@ enum class SignErrorKind {
 
     /** The passkey prompt failed for another reason (`FailureKind.Other`); it may work the next time. */
     @SerialName("signer_failed") SignerFailed,
+
+    /**
+     * Spec 102: the account's venue cannot be used here — nothing was signed
+     * or sent, and trying again changes nothing. [SignErrorNotice.venue_block]
+     * says why.
+     */
+    @SerialName("venue_blocked") VenueBlocked,
 }
 
 /**
@@ -187,7 +194,12 @@ data class SignQuotedFee(
 )
 
 @Serializable
-data class SignErrorNotice(val kind: SignErrorKind, val detail: String? = null)
+data class SignErrorNotice(
+    val kind: SignErrorKind,
+    val detail: String? = null,
+    /** Spec 102: with [SignErrorKind.VenueBlocked], why — drawn as the core's sentence for it. */
+    val venue_block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock? = null,
+)
 
 /** Why a request is refused outright: the Safe function it would have called. */
 @Serializable
@@ -385,6 +397,15 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("asker_gone")
     data object AskerGone : SignSubmitOutcome()
+
+    /**
+     * Spec 102: the account's venue cannot be used here (`signing_plan`'s
+     * `blocked`) — nothing was signed or sent. The sheet says why in the
+     * person's language; the page hears -32603 "This account cannot sign here".
+     */
+    @Serializable
+    @SerialName("venue_blocked")
+    data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SignSubmitOutcome()
 }
 
 @Serializable
@@ -744,4 +765,26 @@ sealed class SignEvent {
     @Serializable
     @SerialName("transport_dropped")
     data class TransportDropped(val transport_id: String) : SignEvent()
+}
+
+/**
+ * Spec 102 D4 (core round 5): the hand-off card's compact fee + speed row —
+ * the core's `sign_confirm::HandoffFee`, from `handoffFeeRow(feeJson,
+ * speedJson)`. [fee] is the quote in force, settled for the speed; [tier_key]
+ * names the speed (`send.gasTier.<tier>`), `null` where there is nothing to
+ * restate (one speed, no control). No control is drawn on it.
+ */
+@Serializable
+data class HandoffFee(
+    val fee: app.getvela.wallet.feature.send.core.FeeEstimateView,
+    val tier: app.getvela.wallet.feature.send.core.FeeTier? = null,
+    val tier_key: String? = null,
+) {
+    companion object {
+        /** The row for the fee session and speed control as last committed, or `null`: no row. */
+        fun of(feeJson: String?, speedJson: String?): HandoffFee? {
+            val json = runCatching { uniffi.vela_core_uniffi.handoffFeeRow(feeJson, speedJson) }.getOrNull() ?: return null
+            return runCatching { app.getvela.wallet.core.crux.Wire.json.decodeFromString(serializer(), json) }.getOrNull()
+        }
+    }
 }

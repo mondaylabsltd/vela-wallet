@@ -133,6 +133,9 @@ use ts_rs::TS;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SessionOperation"))]
+// A wire type: the JSON shape is pinned by the generated TS, and an account
+// (spec 102 added its venue and domain) is what most of these carry.
+#[allow(clippy::large_enum_variant)]
 pub enum SessionOperation {
     /// Read every locally stored account.
     LoadAccounts,
@@ -295,6 +298,15 @@ pub enum Event {
     /// is the same end state as [`Self::SignOutConfirmed`] and reached the
     /// same way, so there is one definition of "not signed in".
     RemoveAccount { index: usize },
+    /// Spec 102 (D1): where the account at `address` reviews and signs, on
+    /// this device — keyed by address, the identity a row has (invariant ⑨).
+    /// Refused, and nothing written, when the venue cannot reach the
+    /// account's keys (R1): Vela's sheet for a custom-domain account, or a
+    /// page on another domain.
+    SigningVenueChosen {
+        address: String,
+        venue: crate::signing_venue::SigningVenue,
+    },
     /// The settings row: open the sign-out confirmation. Triggers the
     /// pending-upload check first (invariant ⑤).
     SignOut,
@@ -475,6 +487,7 @@ impl App for Session {
                 requests(model, vec![SessionOperation::CheckPendingUploads])
             }
             Event::RemoveAccount { index } => remove_account(model, index),
+            Event::SigningVenueChosen { address, venue } => choose_venue(model, &address, venue),
             Event::SignOutConfirmed => sign_out_confirmed(model),
             Event::SignOutDismissed => {
                 if model.sign_out_warning.take().is_none() {
@@ -559,6 +572,31 @@ fn switch_account(model: &mut Model, index: usize) -> Command<SessionEffect, Eve
     }
     model.active_index = index;
     requests(model, vec![SessionOperation::SaveActiveIndex { index }])
+}
+
+/// Spec 102: an account's venue, chosen in its settings. The write is best
+/// effort, like every write here; the choice stands in memory either way.
+fn choose_venue(
+    model: &mut Model,
+    address: &str,
+    venue: crate::signing_venue::SigningVenue,
+) -> Command<SessionEffect, Event> {
+    if model.phase != Phase::Active {
+        return Command::done();
+    }
+    let Some(account) = model
+        .accounts
+        .iter_mut()
+        .find(|account| account.address.eq_ignore_ascii_case(address))
+    else {
+        return Command::done();
+    };
+    if account.signing_venue.same_as(&venue) || account.choose_venue(venue).is_err() {
+        return Command::done();
+    }
+    account.stamp_page_origin();
+    let account = account.clone();
+    requests(model, vec![SessionOperation::SaveAccount { account }])
 }
 
 /// Drop one wallet from this device and stay on the others.

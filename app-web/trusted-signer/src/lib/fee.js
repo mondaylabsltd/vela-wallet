@@ -93,8 +93,9 @@ window.VelaCS = window.VelaCS || {};
     if (ns.abi.selectorOf(leg.data) === ns.keccak.selector(ERC20_TRANSFER)) {
       var decoded = ns.abi.decode(ERC20_TRANSFER, leg.data);
       if (!decoded) return null;
-      var known = ns.registry.token(leg.to);
-      var decimals = known ? known.decimals : 18;
+      // Known on THIS chain, or read as the integer it is (no guessed decimals).
+      var known = ns.registry.token(leg.to, context.chainId);
+      var decimals = known ? known.decimals : 0;
       var tokenSymbol = known ? known.symbol : '?';
       var tokenFiat = fiatOf(context, tokenSymbol, decoded[1], decimals);
       return {

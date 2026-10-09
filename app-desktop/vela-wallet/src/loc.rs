@@ -189,6 +189,14 @@ impl Loc {
 #[cfg(test)]
 pub(crate) const LANGUAGES: [&str; 15] = vela_core::i18n::SUPPORTED;
 
+/// The language the app shows — the shipped tag the strings resolved to
+/// (`zh-HK`, `pt-BR`, `en`) — without building an engine. What a signing page
+/// is told (`lang=`, spec 102), so the page speaks the app's language and not
+/// the browser's.
+pub(crate) fn app_language() -> String {
+    vela_core::i18n::resolve_language(&requested_tag()).language
+}
+
 /// The tag the strings resolve from: the `VELA_LANG` pin, else the language
 /// the person chose in Settings (spec 072: `vela.language`), else what the
 /// system asks for ([`system_language`]).
@@ -305,6 +313,14 @@ fn normalize_posix_tag(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 102: the language a signing page is told (`lang=`) is the one the
+    /// app's strings resolved to — never a raw environment tag.
+    #[test]
+    fn the_language_a_page_is_told_is_the_apps() {
+        assert_eq!(app_language(), Loc::from_env().language());
+        assert!(vela_core::i18n::SUPPORTED.contains(&app_language().as_str()));
+    }
 
     /// Spec 095: on macOS "follow the system" is the person's preferred
     /// languages through the core's rule — whatever the environment says.
@@ -500,8 +516,9 @@ mod tests {
         "onboarding.create.keysSubtitleFull",
         "onboarding.create.keysTitle",
         "onboarding.create.keysTitleBlocked",
-        "onboarding.create.methodBlockedHint",
-        "onboarding.create.methodBlockedSigner",
+        // Spec 102 (D6): the choosers' "Use a trusted signing page" entry.
+        "onboarding.create.signingPageTitle",
+        "onboarding.create.signingPageBody",
         "onboarding.create.methodHybridTitle",
         "onboarding.create.methodHybridUnavailable",
         "onboarding.create.methodPlatformTitle",

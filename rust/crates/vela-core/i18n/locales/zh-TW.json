@@ -60,16 +60,31 @@
       "subtitle": "在 Vela 發起的每筆轉帳都從這裡開始。傳送時仍可單獨調整某一筆。"
     },
     "signing": {
-      "title": "簽署方式",
-      "subtitle": "你在 Vela 發起的每次簽署都從這裡開始。單次簽署時仍可另選方式。",
-      "pageTitle": "可信簽署器頁面",
-      "pageSubtitle": "可信簽署器開啟的頁面：官方頁面，或你自行部署的零依賴簽署頁。",
-      "pageOfficial": "官方",
+      "title": "簽名頁",
+      "subtitle": "你信任、用來顯示並簽署請求的頁面。",
+      "pageOfficial": "Vela 官方簽名頁",
       "pageInvalid": "這不是一個網址。",
       "pageInsecure": "請使用 https 頁面，或這台裝置本機回環位址上的頁面——瀏覽器不會在其他地方簽署。",
-      "pageForeign": "你的通行密鑰屬於 getvela.app。其他網域上的頁面可以顯示請求，但無法簽署。",
-      "pageReset": "使用官方頁面",
-      "pageSave": "儲存"
+      "pageSave": "儲存",
+      "pageAdd": "新增自行部署的簽名頁",
+      "pageDuplicate": "這個頁面已經儲存過了。",
+      "keysOn": "金鑰在 {{domain}}",
+      "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
+      "pageTrust": "信任這個版本",
+      "pageRename": "重新命名",
+      "pageRemove": "移除",
+      "pageName": "名稱"
+    },
+    "venue": {
+      "title": "在哪裡預覽並簽署",
+      "subtitle": "用於這個帳戶的交易和訊息。你的金鑰不會改變。",
+      "inVela": "在 Vela 裡預覽並簽署",
+      "inVelaBody": "Vela 內建的簽署介面",
+      "page": "在可信簽名頁預覽並簽署",
+      "pageBody": "零依賴的頁面，所見即所簽",
+      "blockedApp": "Vela 無法使用 {{domain}} 上的金鑰。",
+      "blockedPage": "這個頁面在 {{pageDomain}}，這個帳戶的金鑰在 {{domain}}。",
+      "blockedWeb": "簽名頁只能從 Vela App 開啟，網頁版不支援。"
     },
     "advanced": {
       "networksTitle": "網路",

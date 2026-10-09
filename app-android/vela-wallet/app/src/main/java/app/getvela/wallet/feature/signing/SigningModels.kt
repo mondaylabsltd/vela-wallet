@@ -27,6 +27,35 @@ enum class SigningScreenState {
      * not drawn on this platform yet; the number stays the canon's.
      */
     CS36,
+
+    /**
+     * Spec 102 D4: the hand-off card — an account that reviews and signs on
+     * the official page, whose check matches the published build list (CS37);
+     * the same request when the page could not be checked, so Open stays shut
+     * (CS38); and the page open, waiting for its answer (CS39).
+     */
+    CS37, CS38, CS39,
+
+    /**
+     * Spec 102 core round, the card on its own — what a send's hand-off
+     * raises when no send confirm is on screen: its fee + speed row
+     * (`handoffFeeRow`), the key named by its
+     * place (D-17), the page matching (CS40); the same card while a check
+     * older than a day runs again, Open off (CS41); and a dApp request on a
+     * self-hosted page whose build is new to Vela — the line asks, "Trust
+     * this version" answers, Open off until it is trusted (CS42).
+     */
+    CS40, CS41, CS42,
+
+    /**
+     * Spec 102 integration: a key ceremony waiting on a self-hosted page — what
+     * it is doing there (its own title, as the card's line under "Waiting
+     * for the signing page…") and its key row, as the page draws its own: a key being made
+     * there ("New key on | Phone or tablet", CS43) and a sign-in ("Confirm
+     * with | This device", CS44). The card a create or a sign-in raises on
+     * its own (`TrustedSignerWaitingSheet`).
+     */
+    CS43, CS44,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -254,8 +283,61 @@ sealed interface FeeModel {
 }
 
 /**
- * The Trusted Signer's page is open (spec 071): the sheet says so instead of
- * offering the confirm, with a way back to the page and a way out.
+ * Spec 102 D4: the hand-off card — the account reviews and signs on a page,
+ * so the sheet does not repeat the preview. Where (the title), with which key
+ * (the "Confirm with | …" row), what is trusted about the page (its integrity
+ * line, or why it will not open), and Open — enabled only when the line says
+ * the page opens and the request may be confirmed.
+ */
+@Immutable
+data class HandoffModel(
+    val title: String,
+    /**
+     * The key row, drawn like the sheet's "Signing account | name" row:
+     * "Confirm with | Savings" / "Confirm with | This device" (the core's
+     * `KeyLabel`); `null` when nothing names the key.
+     */
+    val key: KeyRowModel?,
+    /** The page's address, without its scheme. */
+    val page: String,
+    val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
+    val open: String,
+    /**
+     * The fee this operation was priced at, and its speed — one quiet row
+     * under the key row (core round 5, `handoffFeeRow`), no control: the fee
+     * was chosen before the hand-off. Drawn only on a screen that shows no
+     * fee of its own, so a fee is on screen once — the sheet a send's
+     * hand-off raises when no send confirm is on screen. `null`: no row — a
+     * message, a fee not settled for the speed in force, or a surface whose
+     * own fee row sits right above the card (the dApp sheet's, the send
+     * confirm's: each draws the card in its confirm's place).
+     */
+    val fee: HandoffFeeModel? = null,
+    /**
+     * "Trust this version" under a self-hosted page's question
+     * (`settings.signing.pageTrust`), when its line asks; `null` otherwise.
+     */
+    val trust: String? = null,
+)
+
+/** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
+@Immutable
+data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
+
+/**
+ * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
+ * device" — the core's `KeyLabel` in the person's words: [label] from its
+ * `label_key`, [value] its name or its place's title.
+ */
+@Immutable
+data class KeyRowModel(val label: String, val value: String)
+
+/**
+ * The signing page is open (spec 071): the sheet says so instead of
+ * offering the confirm, with a way back to the page and a way out. A key
+ * ceremony (spec 102) names its key: [key] is "New key on | …" while a key is
+ * made, "Confirm with | …" when one signs in or proves; `null` for a
+ * signature, whose hand-off card already named it.
  */
 @Immutable
 data class TrustedSignerWaitModel(
@@ -263,6 +345,7 @@ data class TrustedSignerWaitModel(
     val hint: String,
     val reopen: String,
     val cancel: String,
+    val key: KeyRowModel? = null,
 )
 
 @Immutable
@@ -291,8 +374,10 @@ data class SigningScreenModel(
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
     val networkLogoUrl: String? = null,
-    /** Spec 071: the Trusted Signer is open; the confirm gives way to this. */
+    /** Spec 071: the signing page is open; the confirm gives way to this. */
     val trustedSignerWait: TrustedSignerWaitModel? = null,
+    /** Spec 102 D4: the account signs on a page — the confirm is this card's Open. */
+    val handoff: HandoffModel? = null,
     /** Spec 071: why the last Trusted Signer attempt did not sign. */
     val trustedSignerNotice: String? = null,
     val blocks: List<SigningBlock>,
@@ -325,13 +410,6 @@ data class SigningScreenModel(
     val confirmBlockLine: String? = null,
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
-    /**
-     * Spec 079 (owner: one slide): the account signs on the Trusted Signer's
-     * page, whose slide is the consent — the sheet's action is a button that
-     * goes there ([confirmButtonLabel], "去签名页确认"), not a second slide.
-     */
-    val confirmAsButton: Boolean = false,
-    val confirmButtonLabel: String = "",
     /**
      * Spec 079: once the person has approved, the sheet stops being a form and
      * shows this — the send receipt's own model and words, so a dApp

@@ -302,10 +302,11 @@ bridge_object!(
 );
 
 bridge_object!(
-    /// How this device signs by default (spec 071): the "Sign with" every
-    /// signing sheet starts at, and which Trusted Signer page it opens.
-    SignPrefCore,
-    vela_core::app::sign_pref::SignPref
+    /// Settings → Signing pages (spec 102): the pages this device trusts to
+    /// show and sign requests, the official one always first, and the 071
+    /// "Trusted Signer page" imported once.
+    SigningPagesCore,
+    vela_core::app::signing_pages::SigningPages
 );
 
 bridge_object!(

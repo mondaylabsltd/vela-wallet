@@ -215,6 +215,10 @@ export const CHAIN_MISMATCH_MESSAGE = 'chainId does not match the connected chai
  *
  * Pure and dependency-free so both the executor (which puts it on the wire)
  * and the provider (which renders it) can read it, on either platform.
+ *
+ * A kind with no provider wording to keep is not restated here: spec 102's
+ * `venue_blocked` reads the core's own words (`signErrorWords`, the core's
+ * `dapp_rpc::sign_error_words`), which the executor asks for itself.
  */
 export function signErrorMessage(notice: SignErrorNotice): string {
 	const detail = notice.detail ?? undefined;

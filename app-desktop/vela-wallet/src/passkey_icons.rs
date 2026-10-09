@@ -32,9 +32,10 @@ pub enum PasskeyIcon {
     Laptop,
     /// lucide `scan-line` — the camera that scans the code (stroke, 24-unit).
     Scan,
-    /// lucide `eye` — spec 075's Trusted Signer row: a page you READ before you
-    /// sign. Not a lock, not a key: the whole claim of that route is that you
-    /// can see what is being signed. The same glyph the web client draws.
+    /// lucide `eye` — the choosers' "Use a trusted signing page" (spec 102): a
+    /// page you READ before you sign. Not a lock, not a key, and not a place a
+    /// key lives: the whole claim of a trusted page is that you can see what
+    /// is being signed. The same glyph the web client draws.
     Eye,
 }
 
@@ -49,7 +50,6 @@ impl PasskeyIcon {
             KeyMethod::Platform => Self::Laptop,
             KeyMethod::Hybrid => Self::Scan,
             KeyMethod::SecurityKey => Self::Usb,
-            KeyMethod::TrustedSigner => Self::Eye,
         }
     }
 }

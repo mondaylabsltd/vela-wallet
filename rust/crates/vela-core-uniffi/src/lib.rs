@@ -544,8 +544,9 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: String, answers_json: St
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), &source, &answers_json)
 }
 
-/// "Sign with": which credential a ceremony is pinned to and how it is reached,
-/// for the method the person chose — `None` for `auto`. See
+/// "Sign with": which credential a ceremony is pinned to and where it lives
+/// (a key route: `{credential_id, method, transports, hints}`), for the place
+/// the person chose — `None` for `auto` and anything else. See
 /// `vela_core::wallet_keys::sign_route`.
 #[uniffi::export]
 #[must_use]
@@ -671,6 +672,20 @@ pub fn sign_confirm_state(
     )
 }
 
+/// The hand-off card's compact fee + speed row (spec 102, D4): the fee view of
+/// the session in force and the speed control's view (`None` without one), as
+/// last rendered (JSON) — a `HandoffFee` JSON (`{fee, tier?, tier_key?}`;
+/// draw `fee` exactly as the sheet's folded fee row draws `FeeView.fee`, and
+/// `tier_key` beside it), or `None`: no row (a message, or a fee not settled
+/// for the speed in force). The card's Open is the sheet's confirm: enabled
+/// only when `sign_confirm_state` is AND the integrity line opens. See
+/// `vela_core::app::sign_confirm::handoff_fee`.
+#[uniffi::export]
+#[must_use]
+pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> Option<String> {
+    vela_core::app::sign_confirm::handoff_fee_json(fee_json.as_deref(), speed_json.as_deref())
+}
+
 /// The landing's countdown (spec 099 R6), counted from when the relay put the
 /// bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
 /// JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.
@@ -693,7 +708,7 @@ pub struct KeyMethodWords {
 
 /// The words of one key-method row in the create or sign-in chooser, decided
 /// once in the core for every shell. All three are wire names: `method`
-/// (`"platform"`, `"hybrid"`, `"security_key"`, `"trusted_signer"`),
+/// (`"platform"`, `"hybrid"`, `"security_key"` — spec 102: no fourth),
 /// `chooser` (`"create"`, `"sign_in"`) and `unlock` — what unlocks a passkey
 /// on this device as far as the shell can tell (`"face_id"`, `"touch_id"`,
 /// `"windows_hello"`, `"other"`). `None` for a name the core does not know.
@@ -708,21 +723,112 @@ pub fn key_method_words(method: String, chooser: String, unlock: String) -> Opti
     })
 }
 
-/// Where an account's signatures go (founder, 2026-09-26): the key it was
-/// created or signed in with, over the route that reached it — `None` for a
-/// record written before that existed, which signs as it always did.
-/// `account_json` is the stored account record. See
-/// `vela_core::app::Account::sign_in_route`.
+/// A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"signing_page"`
+/// — the choosers' "Use a trusted signing page" (D6; `"own_page"`, its name
+/// before, still reads). `None` for a name the core does not know. See
+/// `vela_core::app::method_words::venue_words`.
 #[uniffi::export]
 #[must_use]
-pub fn sign_in_route(account_json: String) -> Option<String> {
-    vela_core::app::sign_in_route_json(&account_json)
+pub fn venue_words(row: String) -> Option<KeyMethodWords> {
+    let words = vela_core::app::method_words::venue_words(&row)?;
+    Some(KeyMethodWords {
+        title_key: words.title_key.to_owned(),
+        line_key: words.line_key().map(str::to_owned),
+        line_name: words.line_name().map(str::to_owned),
+    })
+}
+
+/// How an account signs on this device (spec 102), as JSON — a `SigningPlan`:
+/// `{domain, venue, blocked?, key?, key_label}`. `venue` is where its
+/// transactions and messages are reviewed and signed (`{"type":"in_vela"}` or
+/// `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
+/// set only when nothing on this device can; `key` is the key route
+/// (`{credential_id, method, transports, hints}`), absent for a record
+/// written before the sign-in key was kept; `key_label` is the "Confirm with
+/// | {key}" row — `{name?, place_key, label_key}`: the translation of
+/// `label_key` beside `name` when set, else the translation of `place_key`
+/// (the key's own label when it is not the wallet's name, else its place). `None` for a record this build cannot
+/// read. See `vela_core::app::Account::signing_plan`.
+#[uniffi::export]
+#[must_use]
+pub fn signing_plan(account_json: String) -> Option<String> {
+    vela_core::app::signing_plan_json(&account_json)
+}
+
+/// The words of a venue refusal (spec 102): the corpus key `VenueBlock::key()`
+/// names and the values its line takes, by the corpus's names (`domain`,
+/// `pageDomain`). Translate `key` with `vars` and the sentence is the core's
+/// whole — no shell decides which fact fills which placeholder.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct VenueBlockLine {
+    pub key: String,
+    pub vars: std::collections::HashMap<String, String>,
+}
+
+/// A `VenueBlock` (JSON — a plan's `blocked`, a choice's `blocked`, a
+/// notice's `venue_block`) in words; `None` for anything else.
+#[uniffi::export]
+#[must_use]
+pub fn venue_block_line(block_json: String) -> Option<VenueBlockLine> {
+    let block: vela_core::signing_venue::VenueBlock = serde_json::from_str(&block_json).ok()?;
+    Some(VenueBlockLine {
+        key: block.key().to_owned(),
+        vars: block
+            .vars()
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    })
+}
+
+/// Every venue an account on `domain` could pick, as a JSON `VenueChoice[]`
+/// (spec 102 R1, R2): Vela's sheet, the official page, then the saved pages,
+/// each with `blocked` set when it cannot reach the account's keys.
+/// `active_json` is the account's `signing_venue`, `saved_json` the
+/// `SigningPage[]` Settings keeps (`SigningPagesCore`'s `saved`).
+#[uniffi::export]
+#[must_use]
+pub fn signing_venue_choices(
+    domain: String,
+    active_json: String,
+    saved_json: String,
+) -> Option<String> {
+    let active = serde_json::from_str(&active_json).ok()?;
+    let saved: Vec<vela_core::signing_venue::SigningPage> =
+        serde_json::from_str(&saved_json).ok()?;
+    serde_json::to_string(&vela_core::signing_venue::venue_choices(
+        &domain, &active, &saved,
+    ))
+    .ok()
+}
+
+/// The versions the person trusted for the page at `url` on this device
+/// (spec 102) — what to pass as `trusted` to `SignerPageTarget::choose` and
+/// `signer_page_admit` when checking that page. `saved_json` is the
+/// `SigningPage[]` `SigningPagesCore` keeps (`saved`). Empty for the official
+/// page, a page that is not saved, and a list that does not read.
+#[uniffi::export]
+#[must_use]
+pub fn signing_page_trusted(saved_json: String, url: String) -> Vec<String> {
+    let saved: Vec<vela_core::signing_venue::SigningPage> =
+        serde_json::from_str(&saved_json).unwrap_or_default();
+    vela_core::signing_venue::trusted_versions(&saved, &url)
+}
+
+/// The domain whose keys a page at `url` can use (spec 102): its host, or
+/// `getvela.app` for every `*.getvela.app` page. Empty for something that is
+/// not an address.
+#[uniffi::export]
+#[must_use]
+pub fn signing_page_domain(url: String) -> String {
+    vela_core::signing_venue::domain_of_page(&url)
 }
 
 /// Which passkeys control the wallet at `address` — the Settings keys view
-/// (spec 062). `sign_in_credential` is the account's sign-in route credential
-/// (`sign_in_route`), empty for none: its row is marked `signs_here`. See
-/// `vela_core::wallet_keys`.
+/// (spec 062). `sign_in_credential` is the credential of the account's key
+/// route (`signing_plan`'s `key`), empty for none: its row is marked
+/// `signs_here`. Rows are captioned by where each key lives, never the page
+/// it was made on (spec 102). See `vela_core::wallet_keys`.
 #[uniffi::export]
 #[must_use]
 pub fn wallet_keys_step(
@@ -3445,5 +3551,74 @@ mod tests_082 {
         let tempo = balance_read_plan(4217, "[]".into(), None, "[]".into()).unwrap();
         assert!(tempo.iter().all(|slot| slot.kind != "native"));
         assert!(balance_read_plan(8453, "{".into(), None, String::new()).is_err());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests_102_core_round {
+    use super::*;
+
+    /// A page's trusted versions come out of the saved list by its address —
+    /// never for the official page, nothing for a list that does not read.
+    #[test]
+    fn a_pages_trusted_versions_by_its_address() {
+        let own = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455";
+        let saved = format!(r#"[{{"url":"https://sign.example.com/","trusted":["{own}"]}}]"#);
+        assert_eq!(
+            signing_page_trusted(saved.clone(), "sign.example.com".to_owned()),
+            vec![own.to_owned()]
+        );
+        assert!(signing_page_trusted(saved, "https://sign.getvela.app/".to_owned()).is_empty());
+        assert!(signing_page_trusted("nope".to_owned(), "https://x.test/".to_owned()).is_empty());
+    }
+
+    /// The hand-off card's row: none for views that do not read, or no fee.
+    #[test]
+    fn the_hand_off_row_needs_a_fee() {
+        assert_eq!(handoff_fee_row(None, None), None);
+        assert_eq!(handoff_fee_row(Some("{".to_owned()), None), None);
+    }
+
+    /// The plan names the key the person confirms with.
+    #[test]
+    fn the_plan_carries_the_key_label() {
+        let record = serde_json::json!({
+            "id": "aa", "name": "Savings", "address": "0x1",
+            "public_key_hex": "04", "created_at_iso": "",
+            "keys": [{"credential_id": "aa", "public_key_hex": "04", "name": "Savings",
+                      "transports": "usb"}],
+            "sign_in_key": {"credential_id": "aa", "method": "security_key", "transports": "usb"}
+        });
+        let plan: serde_json::Value =
+            serde_json::from_str(&signing_plan(record.to_string()).unwrap()).unwrap();
+        assert_eq!(
+            plan["key_label"],
+            serde_json::json!({"place_key": "onboarding.create.methodSecurityKeyTitle",
+                               "label_key": "componentsUi.signing.confirmWithLabel"})
+        );
+        assert_eq!(
+            venue_words("own_page".to_owned()).map(|w| w.title_key),
+            Some("onboarding.create.signingPageTitle".to_owned())
+        );
+        let line = venue_block_line(
+            r#"{"type":"page_on_other_domain","page_domain":"sign.example.com","domain":"getvela.app"}"#
+                .to_owned(),
+        )
+        .unwrap();
+        assert_eq!(line.key, "settings.venue.blockedPage");
+        assert_eq!(
+            line.vars.get("pageDomain").map(String::as_str),
+            Some("sign.example.com")
+        );
+        assert_eq!(
+            line.vars.get("domain").map(String::as_str),
+            Some("getvela.app")
+        );
+        assert!(venue_block_line(r#"{"type":"not_on_web"}"#.to_owned())
+            .unwrap()
+            .vars
+            .is_empty());
+        assert!(venue_block_line("{}".to_owned()).is_none());
     }
 }

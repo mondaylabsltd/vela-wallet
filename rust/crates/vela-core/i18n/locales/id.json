@@ -60,16 +60,31 @@
       "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
     },
     "signing": {
-      "title": "Tanda tangani dengan",
-      "subtitle": "Setiap tanda tangan yang Anda mulai di Vela berawal dari sini. Untuk satu tanda tangan, Anda tetap bisa memilih cara lain.",
-      "pageTitle": "Halaman Trusted Signer",
-      "pageSubtitle": "Halaman yang dibuka Trusted Signer: halaman resmi, atau salinan halaman tanpa dependensi milik Anda sendiri.",
-      "pageOfficial": "Resmi",
+      "title": "Halaman tanda tangan",
+      "subtitle": "Halaman yang Anda percayai untuk menampilkan dan menandatangani permintaan.",
+      "pageOfficial": "Halaman tanda tangan resmi Vela",
       "pageInvalid": "Itu bukan alamat web.",
       "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
-      "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
-      "pageReset": "Gunakan halaman resmi",
-      "pageSave": "Simpan"
+      "pageSave": "Simpan",
+      "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
+      "pageDuplicate": "Halaman itu sudah disimpan.",
+      "keysOn": "Kunci di {{domain}}",
+      "pageSelfHosted": "Di-host sendiri · {{domain}}",
+      "pageTrust": "Percayai versi ini",
+      "pageRename": "Ganti nama",
+      "pageRemove": "Hapus",
+      "pageName": "Nama"
+    },
+    "venue": {
+      "title": "Tempat Anda meninjau dan menandatangani",
+      "subtitle": "Untuk transaksi dan pesan akun ini. Kunci Anda tidak berubah.",
+      "inVela": "Tinjau dan tanda tangani di Vela",
+      "inVelaBody": "Lembar tanda tangan milik Vela",
+      "page": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
+      "pageBody": "Halaman tanpa dependensi menampilkan persis apa yang Anda tanda tangani",
+      "blockedApp": "Vela tidak dapat menjangkau kunci di {{domain}}.",
+      "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}.",
+      "blockedWeb": "Halaman tanda tangan hanya dibuka dari aplikasi Vela, bukan web."
     },
     "advanced": {
       "networksTitle": "Jaringan",

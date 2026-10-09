@@ -1550,17 +1550,6 @@ export function ethereumBackupRow(
 function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
 	const transport = [key.authenticator_attachment, key.transports].filter(Boolean).join(' · ');
 	return [
-		// Spec 075: WHICH page, for a key that lives behind one. First, because
-		// it answers the question the rest of this list assumes — where the key
-		// is — and labelled with the Trusted Signer's own title, the same words the
-		// caption above it uses. Absent when the key lives behind no page, and
-		// then the row is exactly what it always was.
-		{
-			label: m.signing.methods.trusted_signer,
-			value: key.signer_origin ?? '',
-			mono: false,
-			copy: false
-		},
 		{
 			label: m.keys.publicKey,
 			value: key.public_key_hex ? `0x${key.public_key_hex}` : '',
@@ -1583,7 +1572,14 @@ function keyFingerprint(publicKeyHex: string): string {
 export function walletKeysModel(
 	keys: WalletKeys | null,
 	backup: EthereumBackupState | 'checking',
-	m: SettingsMessages
+	m: SettingsMessages,
+	/**
+	 * Spec 102 (P2-10): the account's signing domain when it is NOT the apps'
+	 * own — a wallet made on the person's own signing page, whose keys answer
+	 * only there. Said once, above the keys. Absent for a `getvela.app`
+	 * account, where it would be noise on every wallet.
+	 */
+	customDomain?: string
 ): WalletKeysModel {
 	/**
 	 * Where this key lives, when the catalog cannot name its vault.
@@ -1598,27 +1594,19 @@ export function walletKeysModel(
 	 * that ARE true wherever they are read ("Phone or tablet", "Security key")
 	 * are shared with the create flow.
 	 *
-	 * Spec 075 adds a fourth answer that is not about a device at all: a key
-	 * behind a Trusted Signer page lives behind the PAGE, and it is named with the
-	 * Trusted Signer's own title.
+	 * Three answers, no fourth (spec 102): a signing page is where a person
+	 * reviews and signs, not where a key lives — the row is captioned by the
+	 * key's place, wherever it signs.
 	 */
 	const fallbackFor = (method: string) =>
-		method === 'trusted_signer'
-			? m.signing.methods.trusted_signer
-			: method === 'security_key'
-				? m.keys.providerSecurityKey
-				: method === 'hybrid'
-					? m.keys.providerGeneric
-					: m.keys.providerPlatform;
+		method === 'security_key'
+			? m.keys.providerSecurityKey
+			: method === 'hybrid'
+				? m.keys.providerGeneric
+				: m.keys.providerPlatform;
 	const rows = (keys?.keys ?? []).map((key, index) => ({
 		name: key.name !== '' ? key.name : m.keys.keyN.replace('{{n}}', String(index + 1)),
 		holderFallback: fallbackFor(key.method),
-		// …and for that fourth answer the catalog must not be asked at all: the
-		// AAGUID a page reports belongs to the authenticator on ITS side, which
-		// is the one thing this wallet cannot reach. Naming that vault points
-		// away from where the key is (the device pass of 2026-09-22 found such a
-		// key drawn as the phone's built-in passkey).
-		holder: key.method === 'trusted_signer' ? fallbackFor(key.method) : undefined,
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
 			...(key.signs_here ? [{ text: m.keys.signsHere, tone: 'signs_here' as const }] : []),
@@ -1654,6 +1642,8 @@ export function walletKeysModel(
 		count: keys === null ? '' : String(rows.length),
 		loading: keys === null,
 		note: keys !== null && keys.source === 'device' ? m.keys.fromDevice : undefined,
+		domain:
+			customDomain === undefined ? undefined : fill(m.signing.keysOn, { domain: customDomain }),
 		rows,
 		backup: ethereumBackupRow(backup, m),
 		backupExplain: m.backup.explain,

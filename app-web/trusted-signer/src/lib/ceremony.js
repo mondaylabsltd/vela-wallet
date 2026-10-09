@@ -11,24 +11,24 @@
 //   proof         UTF-8 "vela-verify-<ms>" / "vela-recover-<ms>"   (the shells' own form)
 //   member proof  keccak256(abi.encode(chainId, registry, rpId, publicKey,
 //                   keccak256(abi.encode(groupPublicKey, attestation))))
-//                 — recomputed HERE from the inputs on screen and the
-//                 registry's own deployment (GET /api/health), and used only
-//                 when the registry's answer to the page's own
-//                 POST /api/challenge is those same 32 bytes.
+//                 — computed HERE from the inputs on screen; the page asks
+//                 no registry anything (it reaches no network, 076).
 //
 // The first two are text, never 32 bytes. The third IS 32 bytes, but it is a
 // keccak over a fixed ABI layout of what the card shows: nobody can choose
 // inputs that make it equal a SafeOp or an EIP-191 hash.
 //
-// Creating a key lives here now (it used to be lib/enrol.js, which the signing
-// page did not load). The owner's ruling of 2026-09-22 made the page a passkey
-// route, and a route that cannot create is not one. What keeps a create out of
-// a signing flow is no longer the build but the decision in resolve.js: only
-// a `vela_createPasskey` request from a Vela wallet reaches `create()`, as its
-// own request, with its own card — never inside a signature.
+// Creating a key lives here (it used to be lib/enrol.js). What keeps a create
+// out of a signing flow is the decision in resolve.js: only a
+// `vela_createPasskey` request from a Vela wallet reaches `create()`, as its
+// own request, with its own card — never inside a signature. Since spec 102
+// the apps run these on the page only for a wallet whose keys live on the
+// page's own domain (R3); the request says where the key is or will be
+// (`place`, `hints`, and for a named key its `transports`), so the browser
+// goes straight there.
 //
 // No words here, and no decisions about WHETHER a request may run: that is
-// resolve.js. This file derives, fetches and performs.
+// resolve.js. This file derives and performs.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
@@ -43,8 +43,12 @@ window.VelaCS = window.VelaCS || {};
   var PURPOSES = { verify: 'vela-verify-', recover_first: 'vela-recover-', recover_second: 'vela-recover-' };
 
   var DEFAULT_REGISTRY = 'https://p256-index-v2.getvela.app';
-  var REGISTRY_TIMEOUT = 15000;
   var CEREMONY_TIMEOUT = 120000;
+
+  // Where a new key is made, by the place the person chose (spec 102 R5):
+  // this device's own authenticator, or another one — a phone over the
+  // browser's QR code, or a security key.
+  var ATTACHMENT = { platform: 'platform', hybrid: 'cross-platform', security_key: 'cross-platform' };
 
   // --- bytes -----------------------------------------------------------------
 
@@ -117,37 +121,6 @@ window.VelaCS = window.VelaCS || {};
     return ns.keccak.hash(fromHex(encoded));
   }
 
-  function refusal(key, code, detail) {
-    var error = new Error(detail || key);
-    error.refusal = key;   // an i18n key the sheet shows
-    error.code = code;     // what the requester is told
-    return error;
-  }
-
-  function fetchJson(url, init) {
-    var controller = typeof AbortController === 'function' ? new AbortController() : null;
-    var timer = controller ? setTimeout(function () { controller.abort(); }, REGISTRY_TIMEOUT) : null;
-    var options = Object.assign({ cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }, init || {});
-    if (controller) options.signal = controller.signal;
-    return fetch(url, options).then(function (response) {
-      if (timer) clearTimeout(timer);
-      if (!response.ok) throw new Error(url + ' answered ' + response.status);
-      return response.json();
-    }, function (error) {
-      if (timer) clearTimeout(timer);
-      throw error;
-    });
-  }
-
-  /**
-   * The member challenge, fetched by THIS page for the inputs its card shows,
-   * and accepted only when the registry's answer is the challenge this page
-   * computes itself for them. `inputs` = resolve's `view.ceremony.member`.
-   *
-   * Resolves with `{ challenge: Uint8Array(32), chainId, registry }`; rejects
-   * with `.refusal` = `refuse.memberMismatch` (the answer is not for these
-   * inputs) or `refuse.registryUnavailable` (no usable answer at all).
-   */
   /**
    * The member challenge, computed HERE from the facts on screen.
    *
@@ -180,53 +153,6 @@ window.VelaCS = window.VelaCS || {};
     return { challenge: challenge, chainId: inputs.chainId, registry: inputs.registryContract };
   }
 
-  function fetchMemberChallenge(inputs, rpId) {
-    var base = inputs.registry.replace(/\/+$/, '');
-    var facts = null;
-    return fetchJson(base + '/api/health', { method: 'GET' })
-      .catch(function (error) {
-        throw refusal('refuse.registryUnavailable', 'unavailable', String(error && error.message || error));
-      })
-      .then(function (health) {
-        var chainId = health && health.chainId;
-        var registry = health && health.domainRegistry;
-        if (typeof chainId !== 'number' || !Number.isSafeInteger(chainId) || chainId < 1 ||
-          typeof registry !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(registry)) {
-          throw refusal('refuse.registryUnavailable', 'unavailable', 'the registry did not name its deployment');
-        }
-        facts = { chainId: chainId, registry: registry };
-        var body = { rpId: rpId, groupPublicKey: inputs.groupPublicKey, publicKey: inputs.publicKey };
-        if (inputs.attestation) body.attestation = inputs.attestation;
-        return fetchJson(base + '/api/challenge', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        }).catch(function (error) {
-          throw refusal('refuse.registryUnavailable', 'unavailable', String(error && error.message || error));
-        });
-      })
-      .then(function (answer) {
-        var binding = memberBinding(inputs.groupPublicKey, inputs.attestation);
-        var challenge = memberChallenge({
-          chainId: facts.chainId,
-          registry: facts.registry,
-          rpId: rpId,
-          publicKey: inputs.publicKey,
-          binding: binding,
-        });
-        var ours = '0x' + hex(challenge);
-        var theirs = answer && typeof answer.challenge === 'string' ? answer.challenge.toLowerCase() : null;
-        var agrees = theirs === ours &&
-          (answer.binding === undefined || String(answer.binding).toLowerCase() === '0x' + hex(binding)) &&
-          (answer.challengeBase64url === undefined || answer.challengeBase64url === b64url(challenge));
-        if (!agrees) {
-          throw refusal('refuse.memberMismatch', 'refused',
-            'the registry answered ' + theirs + ' where these inputs give ' + ours);
-        }
-        return { challenge: challenge, chainId: facts.chainId, registry: facts.registry };
-      });
-  }
-
   // --- WebAuthn ------------------------------------------------------------------
 
   // `name\0<uuid v4>` as UTF-8, the user handle every Vela shell writes: the
@@ -250,10 +176,15 @@ window.VelaCS = window.VelaCS || {};
    * The challenge is 32 random bytes made here: a registration proves nothing
    * about a challenge, so nobody else's bytes have any business in it.
    *
+   * `options.key` = resolve's `{place, hints}` for this request: the
+   * authenticator attachment and the WebAuthn L3 hints, so the browser asks
+   * for the place the person already chose rather than offering all three.
+   *
    * Resolves with the answer's payload: `{registration, origin}`.
    */
   function create(options) {
     options = options || {};
+    var key = options.key || null;
     var name = options.name || 'Vela';
     var rpId = ns.signer.relyingPartyId();
     var publicKey = {
@@ -270,6 +201,10 @@ window.VelaCS = window.VelaCS || {};
       extensions: { credProps: true },
       timeout: CEREMONY_TIMEOUT,
     };
+    if (key && ATTACHMENT[key.place]) {
+      publicKey.authenticatorSelection.authenticatorAttachment = ATTACHMENT[key.place];
+    }
+    ns.signer.withHints(publicKey, key);
     var exclude = (options.excludeCredentialIds || []).map(unb64url);
     if (exclude.length) {
       publicKey.excludeCredentials = exclude.map(function (id) { return { type: 'public-key', id: id }; });
@@ -306,10 +241,12 @@ window.VelaCS = window.VelaCS || {};
    * An assertion over a challenge this page derived. `allow` = base64url ids
    * (empty: any discoverable key of this relying party, i.e. sign-in). When a
    * key was named, an answer from another key is discarded, not returned.
+   * `key` = resolve's route for this request (place, hints, and the named
+   * key's transports), as for a signature (`ns.signer.credentials`).
    *
    * Resolves with the answer's payload: `{assertion, origin}`.
    */
-  function assert(challenge, allow) {
+  function assert(challenge, allow, key) {
     allow = allow || [];
     var request = {
       challenge: challenge,
@@ -317,11 +254,8 @@ window.VelaCS = window.VelaCS || {};
       userVerification: 'required',
       timeout: CEREMONY_TIMEOUT,
     };
-    if (allow.length) {
-      request.allowCredentials = allow.map(function (id) {
-        return { type: 'public-key', id: unb64url(id) };
-      });
-    }
+    if (allow.length) request.allowCredentials = ns.signer.credentials(allow, key);
+    ns.signer.withHints(request, key);
     return navigator.credentials.get({ publicKey: request }).then(function (credential) {
       var response = credential.response;
       var credentialId = b64url(new Uint8Array(credential.rawId));
@@ -355,7 +289,6 @@ window.VelaCS = window.VelaCS || {};
     memberBinding: memberBinding,
     memberChallenge: memberChallenge,
     memberChallengeFor: memberChallengeFor,
-    fetchMemberChallenge: fetchMemberChallenge,
     create: create,
     assert: assert,
     _utf8: utf8,

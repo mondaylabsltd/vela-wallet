@@ -136,29 +136,36 @@ class RegistryBackupTest {
     }
 
     /**
-     * Spec 075: a key minted on the Trusted Signer page lives behind that page.
-     * The page signs in a browser and so reports `platform`; before the core's
-     * rule moved, the row called it the built-in passkey of this phone — the
-     * one side of the page the wallet cannot reach (device pass, 2026-09-22).
+     * Spec 102: a key is captioned by where it LIVES — never by the page it
+     * was made on. A key made on a signing page is an ordinary passkey (the
+     * page ran the ceremony in a browser), and the row says so; there is no
+     * "Trusted Signer" holder or detail row any more.
      */
     @Test
-    fun `the keys block - a key behind a page names the page, not this device`() {
-        val behind = key(name = "On the page", method = KeyMethod.TrustedSigner)
-            .copy(signerOrigin = "http://localhost:8140")
+    fun `the keys block - a key is captioned by its place, never by a page`() {
         val block = SettingsLive.withWalletKeys(
             model,
-            WalletKeys.Result(WalletKeys.Source.Device, listOf(behind, key("Built in"))),
+            WalletKeys.Result(WalletKeys.Source.Device, listOf(key("Made on a page"), key("Built in"))),
             RegistryBackup.State.NotBackedUp,
             strings,
         ).keys!!
-        assertEquals(listOf("Trusted Signer", "Built-in passkey"), block.rows.map { it.holder })
-        // …and WHICH page, for somebody running their own deployment.
-        assertEquals(
-            "http://localhost:8140",
-            block.rows.first().details.firstOrNull { it.label == "Trusted Signer" }?.value,
-        )
-        // A key that lives on an authenticator this device can reach says nothing about pages.
-        assertTrue(block.rows[1].details.none { it.label == "Trusted Signer" })
+        assertEquals(listOf("Built-in passkey", "Built-in passkey"), block.rows.map { it.holder })
+        assertTrue(block.rows.all { row -> row.details.none { it.label.contains("Trusted") } })
+        // A wallet on the apps' own domain says nothing about domains.
+        assertNull(block.domain)
+    }
+
+    /** Spec 102: a wallet whose keys belong to its own domain says which (`settings.signing.keysOn`). */
+    @Test
+    fun `the keys block - a custom-domain wallet names its domain`() {
+        val block = SettingsLive.withWalletKeys(
+            model,
+            WalletKeys.Result(WalletKeys.Source.Device, listOf(key("Mine"))),
+            RegistryBackup.State.NotBackedUp,
+            strings,
+            signingDomain = "example.com",
+        ).keys!!
+        assertEquals("Keys on example.com", block.domain)
     }
 
     @Test

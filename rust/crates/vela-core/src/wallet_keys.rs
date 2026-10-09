@@ -33,6 +33,7 @@ use crate::registry_backup::{
 use crate::registry_chain::{self, READ_CHAINS};
 use crate::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 use crate::registry_metadata::RegistryMetadata;
+use crate::signing_venue::KeyRoute;
 use crate::{passkey, primitives};
 
 /// One key as the device's account record holds it. Both spellings are read:
@@ -49,10 +50,6 @@ pub struct DeviceKey {
     pub name: String,
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Trusted Signer page this key lives behind (the account
-    /// record's `signer_origin`), or empty.
-    #[serde(default)]
-    pub signer_origin: Option<String>,
 }
 
 /// Where the rows came from.
@@ -88,14 +85,12 @@ pub struct WalletKeyRow {
     pub aaguid: String,
     /// "Apple Passwords", "1Password" … empty when the catalog cannot name it.
     pub provider_name: String,
-    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
+    /// Where the key lives: `platform` | `hybrid` | `security_key` — never the
+    /// page a key was made on (spec 102). A page runs the ceremony in a
+    /// browser, and the authenticator on the far side of it reports where the
+    /// key is like any other: an iCloud passkey made on the page is "this
+    /// device", a key made by scanning a code is a phone.
     pub method: String,
-    /// Spec 075: the Trusted Signer page this key lives behind, when it does —
-    /// so a row can name the page rather than the device on the far side of
-    /// it. Known from the account record; the registry does not store it, so a
-    /// row the device could not match stays `None`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_origin: Option<String>,
     /// Uncompressed `04‖x‖y`, lowercase bare hex.
     pub public_key_hex: String,
     /// The WebAuthn credential id, base64url as authenticators and the registry
@@ -140,29 +135,6 @@ fn method_of(attachment: &str, transports: &str) -> &'static str {
     passkey::reported_method_name(attachment, transports).unwrap_or("platform")
 }
 
-/// The same question for a ROW, where one thing outranks the report: a key that
-/// lives behind a Trusted Signer page (spec 075).
-///
-/// A page runs the ceremony in a browser, so it reports `platform` — the
-/// attachment describes the authenticator on the page's side, which this wallet
-/// cannot address any other way. Drawing that key as "a passkey on this device"
-/// tells the person the opposite of where it is, and the device pass of
-/// 2026-09-22 found exactly that: a key minted on the page, captioned as the
-/// built-in one. Where a key lives is the page.
-fn row_method(attachment: &str, transports: &str, signer_origin: Option<&str>) -> &'static str {
-    if signer_origin.is_some_and(|origin| !origin.is_empty()) {
-        return "trusted_signer";
-    }
-    method_of(attachment, transports)
-}
-
-/// The page a key lives behind, empty strings read as absent.
-fn page_of(signer_origin: Option<&String>) -> Option<String> {
-    signer_origin
-        .filter(|origin| !origin.is_empty())
-        .map(ToOwned::to_owned)
-}
-
 fn normal_key(public_key_hex: &str) -> Option<String> {
     Some(primitives::to_hex(
         &public_key_bytes(public_key_hex)?,
@@ -181,8 +153,7 @@ fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
             synced: None,
             aaguid: String::new(),
             provider_name: String::new(),
-            method: row_method("", &key.transports, key.signer_origin.as_deref()).to_owned(),
-            signer_origin: page_of(key.signer_origin.as_ref()),
+            method: method_of("", &key.transports).to_owned(),
             public_key_hex: normal_key(&key.public_key_hex).unwrap_or_default(),
             credential_id: String::new(),
             attestation_hex: String::new(),
@@ -266,15 +237,7 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
                 .unwrap_or_default()
                 .to_owned(),
             aaguid,
-            // The registry knows nothing of pages; the device record does, and
-            // `remembered` is this key's own record when the device has one.
-            method: row_method(
-                attachment,
-                transports,
-                remembered.and_then(|key| key.signer_origin.as_deref()),
-            )
-            .to_owned(),
-            signer_origin: remembered.and_then(|key| page_of(key.signer_origin.as_ref())),
+            method: method_of(attachment, transports).to_owned(),
             public_key_hex,
             credential_id,
             attestation_hex: if attestation.is_empty() {
@@ -294,7 +257,7 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
 /// `device` is the account record's key list in founding order (a legacy
 /// single-key record is a list of one). `answers` is the whole transcript.
 /// `sign_in_credential` is the credential of the account's sign-in route
-/// (`app::Account::sign_in_route`), empty when it has none; its row is the one
+/// (`app::Account::key_route`), empty when it has none; its row is the one
 /// marked [`WalletKeyRow::signs_here`].
 #[must_use]
 pub fn step(
@@ -437,40 +400,20 @@ fn walk(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> KeysSt
 // "Sign with" — which key a ceremony is pinned to, and how it is reached
 // ---------------------------------------------------------------------------
 
-/// Every "Sign with" value: `auto` (do what the wallet always did), the three
-/// places a passkey can be, and the Trusted Signer (spec 071) — a separate page
-/// that checks the request and runs the ceremony itself. Chosen when a wallet
-/// is created or signed into, never per signature (founder, 2026-09-26).
-pub const SIGN_METHODS: [&str; 5] = [
-    "auto",
-    "platform",
-    "hybrid",
-    "security_key",
-    "trusted_signer",
-];
+/// Every "Sign with" value: `auto` (do what the wallet always did) and the
+/// three places a passkey can be. Chosen when a wallet is created or signed
+/// into, never per signature (founder, 2026-09-26). Spec 102: there is no
+/// fourth — where a person reviews and signs is the account's venue
+/// ([`crate::signing_venue`]), not a way to reach a key.
+pub const SIGN_METHODS: [&str; 4] = ["auto", "platform", "hybrid", "security_key"];
 
-/// Where one signing ceremony goes: the credential it is pinned to, the
-/// transports the request carries, and the method the shell routes by.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SignRoute {
-    pub credential_id: String,
-    pub transports: String,
-    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
-    pub method: String,
-    /// Spec 075: for `trusted_signer`, the page the key lives behind — empty
-    /// means the person's Trusted Signer page from Settings.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub signer_origin: String,
-}
-
-/// Where a signature goes for a given "Sign with" value. `None` for `auto` —
-/// and for anything this build does not know — which means "do what you always
-/// did".
+/// Where a signature goes for a given "Sign with" value, as a key route
+/// (R5). `None` for `auto` — and for anything this build does not know —
+/// which means "do what you always did".
 ///
 /// Founder, 2026-09-26: signing no longer asks. An account signs with the key
-/// it was created or signed in with (`app::Account::sign_in_route`);
-/// this answers only for records written before that existed, which ask it
-/// for `auto`.
+/// it was created or signed in with (`app::Account::key_route`); this answers
+/// only for records written before that existed.
 ///
 /// A native ceremony is PINNED to one credential, so the choice also picks the
 /// key: the first founding key whose own stored transports describe that
@@ -481,63 +424,20 @@ pub struct SignRoute {
 /// registered as `internal`), the first key is pinned and the method's own
 /// transports make it reachable.
 #[must_use]
-pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
-    let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
-    // Spec 075: a key minted or found through the Trusted Signer lives behind
-    // its page. `auto` follows the wallet's pinned key there; the Clear
-    // Signer by name prefers such a key.
-    let behind_page =
-        |key: &&DeviceKey| key.signer_origin.as_deref().is_some_and(|o| !o.is_empty());
-    let clear_route = |key: &DeviceKey| SignRoute {
-        credential_id: key.credential_id.clone(),
-        transports: String::new(),
-        method: "trusted_signer".to_owned(),
-        signer_origin: key.signer_origin.clone().unwrap_or_default(),
-    };
-    match method {
-        "auto" => {
-            let pinned = device.iter().find(usable)?;
-            return behind_page(&pinned).then(|| clear_route(pinned));
-        }
-        "trusted_signer" => {
-            let pinned = device
-                .iter()
-                .filter(usable)
-                .find(behind_page)
-                .or_else(|| device.iter().find(usable))?;
-            return Some(clear_route(pinned));
-        }
-        _ => {}
-    }
+pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<KeyRoute> {
     let transports = transports_of_method(method)?;
-    // A platform sheet reaches a Trusted Signer key only when the page was the
-    // wallet's own (`*.getvela.app` passkeys are the app's passkeys). A key
-    // behind anybody else's page is reachable nowhere else — route it there.
-    let reachable = |key: &&DeviceKey| {
-        key.signer_origin.as_deref().is_none_or(|origin| {
-            origin.is_empty() || crate::trusted_signer::uses_wallet_passkeys(origin)
-        })
-    };
-    let Some(pinned) = device
+    let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
+    let pinned = device
         .iter()
         .filter(usable)
-        .filter(reachable)
         .find(|key| method_of("", &key.transports) == method)
-        .or_else(|| device.iter().filter(usable).find(reachable))
-    else {
-        return device.iter().find(usable).map(clear_route);
-    };
-    Some(SignRoute {
-        credential_id: pinned.credential_id.clone(),
-        transports: transports.to_owned(),
-        method: method.to_owned(),
-        signer_origin: String::new(),
-    })
+        .or_else(|| device.iter().find(usable))?;
+    Some(KeyRoute::new(&pinned.credential_id, method, transports))
 }
 
 /// The transports a pinned request carries to reach a key over `method` — what
-/// makes the platform look in the right place. `None` for a route that is not
-/// a place a passkey is (`auto`, the Trusted Signer, anything unknown).
+/// makes the platform look in the right place. `None` for anything that is not
+/// a place a passkey is (`auto`, anything unknown).
 #[must_use]
 pub fn transports_of_method(method: &str) -> Option<&'static str> {
     match method {
@@ -611,7 +511,6 @@ mod tests {
                 .to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: "internal".to_owned(),
-            signer_origin: None,
         }]
     }
 
@@ -806,76 +705,25 @@ mod tests {
         );
     }
 
-    fn behind(credential_id: &str, origin: &str) -> DeviceKey {
-        DeviceKey {
-            credential_id: credential_id.to_owned(),
-            signer_origin: Some(origin.to_owned()),
-            ..DeviceKey::default()
-        }
-    }
-
-    /// Spec 075: a key that lives behind a Trusted Signer page is signed
-    /// there — by `auto`, and by the Trusted Signer chosen by name.
+    /// Spec 102: a key made on a signing page is still a key in one of the
+    /// three places. "Sign with" never answers with the page — the venue
+    /// decides that — and a page-made key is pinned like any other.
     #[test]
-    fn a_trusted_signer_key_routes_to_its_page() {
-        let keys = [
-            behind("cs", "https://sign.getvela.app"),
-            held("apple", "internal"),
-        ];
-        let auto = sign_route(&keys, "auto").unwrap_or_else(|| unreachable!());
-        assert_eq!(
-            (
-                auto.method.as_str(),
-                auto.credential_id.as_str(),
-                auto.signer_origin.as_str()
-            ),
-            ("trusted_signer", "cs", "https://sign.getvela.app")
-        );
-        // The Trusted Signer by name prefers the key behind a page, wherever it stands.
-        let flipped = [
-            held("apple", "internal"),
-            behind("cs", "https://me.example"),
-        ];
-        let named = sign_route(&flipped, "trusted_signer").unwrap_or_else(|| unreachable!());
-        assert_eq!(
-            (named.credential_id.as_str(), named.signer_origin.as_str()),
-            ("cs", "https://me.example")
-        );
-        // …and with none, pins the first key for the Settings page to reach.
-        let plain = [held("apple", "internal")];
-        let named = sign_route(&plain, "trusted_signer").unwrap_or_else(|| unreachable!());
-        assert_eq!(
-            (named.method.as_str(), named.signer_origin.as_str()),
-            ("trusted_signer", "")
-        );
-    }
-
-    /// A key behind somebody else's page cannot be reached by a platform
-    /// sheet: the choice is answered by the page it lives behind. A key made
-    /// on the official page is a `getvela.app` passkey and stays reachable.
-    #[test]
-    fn a_self_hosted_key_is_reachable_only_through_its_page() {
-        let only = [behind("mine", "https://me.example")];
-        let route = sign_route(&only, "platform").unwrap_or_else(|| unreachable!());
-        assert_eq!(
-            (route.method.as_str(), route.signer_origin.as_str()),
-            ("trusted_signer", "https://me.example")
-        );
-        let mixed = [
-            behind("mine", "https://me.example"),
-            held("yubikey", "usb,nfc"),
-        ];
-        let route = sign_route(&mixed, "platform").unwrap_or_else(|| unreachable!());
+    fn there_is_no_page_route_any_more() {
+        let keys = [held("cs", "internal"), held("apple", "internal")];
+        assert_eq!(sign_route(&keys, "trusted_signer"), None);
+        assert!(!SIGN_METHODS.contains(&"trusted_signer"));
+        // A key record that still names its page reads, and routes by place.
+        let device: Vec<DeviceKey> = serde_json::from_str(
+            r#"[{"credential_id":"cs","transports":"usb,nfc","signer_origin":"https://me.example"}]"#,
+        )
+        .unwrap_or_default();
+        let route = sign_route(&device, "security_key").unwrap_or_else(|| unreachable!());
         assert_eq!(
             (route.method.as_str(), route.credential_id.as_str()),
-            ("platform", "yubikey")
+            ("security_key", "cs")
         );
-        let official = [behind("cs", "https://sign.getvela.app")];
-        let route = sign_route(&official, "platform").unwrap_or_else(|| unreachable!());
-        assert_eq!(
-            (route.method.as_str(), route.credential_id.as_str()),
-            ("platform", "cs")
-        );
+        assert_eq!(route.hints, ["security-key"]);
     }
 
     #[test]
@@ -941,35 +789,25 @@ mod tests {
         assert_eq!(method_of("", ""), "platform");
     }
 
-    /// Spec 075: a row says where its key LIVES, and for a key behind a Clear
-    /// Signer page that is the page — whatever the authenticator on the far
-    /// side reports about itself (a page always answers `platform`).
+    /// Spec 102: a row says where its key LIVES — this device, a phone, a USB
+    /// key — and never "Trusted Signer", whatever page the key was made on.
     #[test]
-    fn a_row_for_a_key_behind_a_page_says_so() {
-        assert_eq!(row_method("platform", "internal", None), "platform");
-        assert_eq!(row_method("platform", "internal", Some("")), "platform");
-        assert_eq!(
-            row_method("platform", "internal", Some("http://localhost:8140")),
-            "trusted_signer"
-        );
-        // Even a report that would otherwise read as a fob: the page is how
-        // this wallet reaches it.
-        assert_eq!(
-            row_method("cross-platform", "usb", Some("https://sign.getvela.app")),
-            "trusted_signer"
-        );
-
-        let rows = device_rows(&[
-            behind("cs", "https://sign.getvela.app"),
-            held("apple", "internal"),
-        ]);
-        assert_eq!(
-            (rows[0].method.as_str(), rows[0].signer_origin.as_deref()),
-            ("trusted_signer", Some("https://sign.getvela.app"))
-        );
-        assert_eq!(
-            (rows[1].method.as_str(), rows[1].signer_origin.as_deref()),
-            ("platform", None)
+    fn a_row_is_captioned_by_where_its_key_lives() {
+        let device: Vec<DeviceKey> = serde_json::from_str(
+            r#"[
+                {"credential_id":"cs","transports":"internal","signer_origin":"https://sign.getvela.app"},
+                {"credential_id":"fob","transports":"usb,nfc","signer_origin":"http://localhost:8140"},
+                {"credential_id":"apple","transports":"hybrid,internal"}
+            ]"#,
+        )
+        .unwrap_or_default();
+        let rows = device_rows(&device);
+        let methods: Vec<&str> = rows.iter().map(|row| row.method.as_str()).collect();
+        assert_eq!(methods, ["platform", "security_key", "platform"]);
+        let json = serde_json::to_string(&rows).unwrap_or_default();
+        assert!(
+            !json.contains("trusted_signer") && !json.contains("signer_origin"),
+            "{json}"
         );
     }
 

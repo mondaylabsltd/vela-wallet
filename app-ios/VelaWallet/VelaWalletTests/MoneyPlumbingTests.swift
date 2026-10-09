@@ -71,12 +71,9 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
         WalletKeyRecord(credentialId: "cred-0", publicKeyHex: "04" + String(repeating: "11", count: 64)),
     ]
 
-    /// Spec 075: what `sign_route` is asked about — `nil` keeps the default
-    /// ("nothing known", so the ceremony routes as it always did).
-    var routesJson: String?
     var accountName: String?
-    /// The stored record `signInRoute` reads — `nil` is no record, which signs
-    /// as a record written before the sign-in key did.
+    /// The stored record `signingPlan` reads — `nil` is no record, which signs
+    /// as a record written before the sign-in key did, in Vela.
     var recordJson: String?
 
     func accountJson(of address: String) async -> String? { recordJson }
@@ -84,7 +81,6 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
     func routing(of address: String) async -> (transports: String, method: KeyMethod) {
         ("internal", .platform)
     }
-    func keyRoutesJson(of address: String) async -> String { routesJson ?? "[]" }
     func name(of address: String) async -> String? { accountName }
 }
 
@@ -743,6 +739,54 @@ struct SendMachineTests {
         // themselves stopped.
         let failure = reply["failure"] as? [String: Any] ?? [:]
         #expect(failure["type"] as? String == "passkey_cancelled")
+    }
+
+    /// Spec 102 (core round 7): an account nothing on this device can reach
+    /// is refused before any ceremony, and the send machine is told
+    /// `venue_blocked` with the block itself — so the confirm screen says why
+    /// in the person's language, never "try again".
+    @Test func anUnreachableAccountIsRefusedAsAVenueBlock() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        port.rpc["eth_getCode"] = .ok("0x6080604052")
+        port.rpc["eth_call"] = .ok("0x" + String(repeating: "0", count: 63) + "1")
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        var record = try CoreJSON.object(TrustedSignerFixture().recordJson(venue: ["type": "in_vela"]))
+        record["signing_domain"] = "sign.example.com"
+        accountPort.recordJson = String(decoding: try JSONSerialization.data(withJSONObject: record), as: UTF8.self)
+        let signer = CountingSigner()
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
+        let pool = RpcPool(store: store, accounts: accounts)
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool,
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { signer }),
+            accounts: accountPort, fees: fees,
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
+            metadata: TokenMetadata(store: store, pool: pool),
+            accountStore: accounts,
+            balances: { try? balance() }, networks: { try? networks() },
+            ports: SendExecutor.Ports()
+        )
+        let answer = await executor.perform([
+            "type": "submit_user_op",
+            "chain_id": 100,
+            "account": golden,
+            "public_key_hex": "04" + String(repeating: "11", count: 64),
+            "calls": [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+            "gas_fee_token": NSNull(),
+            "quoted_fee": ["amount": "1000", "recipient": golden] as [String: Any],
+        ])
+        let reply = try CoreJSON.object(answer)
+        #expect(reply["type"] as? String == "submit_failed")
+        let failure = reply["failure"] as? [String: Any] ?? [:]
+        #expect(failure["type"] as? String == "venue_blocked")
+        let block = failure["block"] as? [String: Any] ?? [:]
+        #expect(block["type"] as? String == "app_cannot_reach")
+        #expect(block["domain"] as? String == "sign.example.com")
+        #expect(signer.calls == 0, "a ceremony was raised for an account nothing can reach")
     }
 
     /// The pending row is written before anything tracks it.

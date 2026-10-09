@@ -30,7 +30,6 @@
     "rescanFailed": "Impossibile raggiungere {{names}}. Correggi il suo RPC dal banner in home o controlla un block explorer.",
     "rescanAgain": "Scansiona di nuovo",
     "rescanClose": "Fatto",
-    "rescanNativeNote": "Le monete native (ETH, BNB, MATIC…) ricevute su alcune reti non possono essere rilevate qui. Il tuo saldo resta comunque corretto — apri un block explorer per lo storico completo.",
     "rescanExplorerTitle": "Controlla direttamente su un block explorer",
     "tabActivity": "Attività",
     "tabAssets": "Asset",

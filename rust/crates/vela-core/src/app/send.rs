@@ -865,6 +865,14 @@ pub enum SendSubmitFailure {
     Other {
         message: Option<String>,
     },
+    /// Spec 102: the shell refused to sign because the account's venue cannot
+    /// be used here — `signing_plan`'s `blocked`, or the web's
+    /// (`signingPlan(…, "web")`). Nothing was signed or sent; the confirm
+    /// screen says why in the person's language
+    /// ([`SendTxErrorKey::VenueBlocked`], [`SendView::tx_venue_block`]).
+    VenueBlocked {
+        block: crate::signing_venue::VenueBlock,
+    },
 }
 
 /// Post-submit receipt convergence, fed by the shell from `tx_tracker`
@@ -1534,6 +1542,10 @@ pub enum SendTxErrorKey {
     Generic,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
+    /// Spec 102: the account cannot sign here — the line is
+    /// [`SendView::tx_venue_block`]'s reason (`VenueBlock::key()`, with its
+    /// domains), not a generic failure.
+    VenueBlocked,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1830,6 +1842,9 @@ pub struct Model {
     cancelled: bool,
     tx: SendTxStatus,
     tx_error: Option<SendTxErrorKey>,
+    /// The reason behind a [`SendTxErrorKey::VenueBlocked`]; read only while
+    /// `tx_error` says so.
+    venue_block: Option<crate::signing_venue::VenueBlock>,
     tx_hash: Option<String>,
     user_op_hash: Option<String>,
     receipt_lines: Option<Vec<SendLine>>,
@@ -2227,6 +2242,12 @@ pub struct SendView {
     pub sending: bool,
     pub tx_status: SendTxStatus,
     pub tx_error: Option<SendTxErrorKey>,
+    /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
+    /// account cannot sign here — drawn as `VenueBlock::key()` with its
+    /// domains. `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub tx_venue_block: Option<crate::signing_venue::VenueBlock>,
     pub tx_hash: Option<String>,
     pub user_op_hash: Option<String>,
     pub receipt: Option<SendReceiptView>,
@@ -2696,6 +2717,10 @@ impl Send {
             sending: model.lock.busy(),
             tx_status: model.tx,
             tx_error: model.tx_error,
+            tx_venue_block: model
+                .venue_block
+                .clone()
+                .filter(|_| model.tx_error == Some(SendTxErrorKey::VenueBlocked)),
             tx_hash: model.tx_hash.clone(),
             user_op_hash: model.user_op_hash.clone(),
             receipt: receipt_view(model, stage),
@@ -6806,6 +6831,20 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             // (invariant ⑮).
             model.tx = SendTxStatus::Error;
             model.tx_error = Some(SendTxErrorKey::Generic);
+            model.lock.end(gen);
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
+        }
+        SendSubmitFailure::VenueBlocked { block } => {
+            // Spec 102: not a failure of the network or the relay — this
+            // account cannot sign here, and the screen says why.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::VenueBlocked);
+            model.venue_block = Some(block);
             model.lock.end(gen);
             fire(
                 model,

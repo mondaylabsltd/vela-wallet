@@ -55,9 +55,6 @@ window.VelaCS.i18n.register('en', {
   'field.nonce': 'Nonce',
   'field.assetTo': 'Assets to',
 
-  'tag.own': 'your account',
-  'tag.tokenContract': 'token contract',
-  'tag.verified': 'verified',
   'tag.sourceVerified': 'source verified',
   'tag.expired': 'expired',
   'tag.capped': 'capped',
@@ -127,10 +124,9 @@ window.VelaCS.i18n.register('en', {
   'warn.offchainNoTrace': 'Off-chain signatures cost no fee and never reach the chain, so they leave no trace you can look up.',
   'warn.deploy': 'Once deployed this code is permanent, and it may hold assets you send it later.',
   'warn.typedUnknown': 'Unknown EIP-712 structure — read every field below before deciding.',
-  'warn.unverifiedDecimals': 'Decimals unverified — the number may not mean what it appears to.',
+  'warn.unverifiedDecimals': 'This page doesn’t know this token on this network, so the amount is shown in its smallest units — its decimals can’t be checked here.',
   'warn.claimedOrigin': "The site's name comes from the site itself and can't be checked — go by the details below.",
 
-  'ui.aboutToSign': 'You are signing',
   'ui.techDetails': 'Technical details',
   'ui.function': 'Function',
   'ui.params': 'Parameters',
@@ -140,11 +136,7 @@ window.VelaCS.i18n.register('en', {
   'ui.balanceChange': 'Balance change',
   'ui.fee': 'Network fee',
   'ui.feeOffchain': 'No network fee · off-chain',
-  'ui.feeFixed': 'Quoted by the requester; not editable here',
   'ui.signer': 'Signing account',
-  'ui.slide': 'Slide to confirm · {intent}',
-  'ui.confirm': 'Confirm',
-  'ui.locked': 'fixed',
   'ui.legTitle': '{index} · {intent}',
   'ui.contract': 'Contract',
   'ui.outerContract': 'Outer contract',
@@ -153,17 +145,15 @@ window.VelaCS.i18n.register('en', {
   'ui.simNoOther': '{delta} · nothing else changes',
 
   'refuse.ethSign': 'This page does not sign eth_sign. It signs an unreadable hash — the very thing clear signing exists to abolish.',
-  'refuse.noSafeOp': 'The transaction digest cannot be derived here yet: it is the Safe 4337 SafeOp hash, which needs the account, the EntryPoint and the module address. **This page will not sign a guessed digest.**',
+  'refuse.noSafeOp': 'The transaction digest cannot be derived here yet: it is the Safe 4337 SafeOp hash, which needs the account, the EntryPoint and the module address. This page will not sign a guessed digest.',
   'refuse.typedShape': 'This request does not carry exactly one signed message for one account — what is shown could differ from what would be signed. Not signing.',
   'refuse.unknownMethod': 'No digest can be derived for this method, so it will not be signed.',
-  'ui.cannotSign': 'This request cannot be signed here — the reasons are listed above. Closing refuses it.',
-  'ui.dragToSign': 'Drag the orange dot all the way right to sign. Closing the page refuses.',
+  'ui.cannotSign': 'This request can’t be signed here — the reasons are above. Closing this page refuses it.',
   'ui.waitingRequest': 'Waiting for a signing request…',
   'ui.waitingWallet': 'Connecting to the wallet app on this device… If the browser asks whether this page may reach other apps on this device, allow it.',
   'ui.walletGone': 'The wallet app is no longer waiting for this request. Go back to it and try again.',
-  'ui.waitingAuthenticator': 'Waiting for the authenticator…',
+  'ui.waitingAuthenticator': 'Waiting for your passkey…',
   'ui.signed': 'Signed. The result went back to the requester.',
-  'ui.ceremonyCancelled': 'The ceremony was cancelled or timed out.',
 
   'refuse.opMismatch': 'The operation does not contain the call the site asked for — it was altered during assembly. Not signing.',
   'refuse.opUnreadable': "This operation's calldata cannot be read, so what is on screen cannot be tied to what would be signed. Not signing.",
@@ -174,15 +164,14 @@ window.VelaCS.i18n.register('en', {
   'ui.digest': 'Signed digest · {kind}',
   'ui.digestUnwrapped': 'not wrapped in SafeMessage — an EOA-style signature a Safe will not accept',
   'ui.wrongCredential': 'The key that answered does not belong to this account — the signature was discarded, not returned.',
-  'ui.ceremonyFailed': 'Not signed. You may have cancelled, waited too long, or this device has no key for this account. You can slide again.',
-  'ui.notSigned': 'Not signed. You can slide again.',
+  'ui.ceremonyFailed': 'Not signed. You may have cancelled, waited too long, or this device has no key for this account. You can try again.',
+  'ui.notSigned': 'Not signed. You can try again.',
   'ui.requestEnded': 'This signing request has ended. Go back to Vela and start it again.',
   'ui.framed': 'This page does not work inside another page. Open it on its own — Vela opens it for you when you sign.',
   'tag.self': 'this account',
   'tag.calledContract': 'contract being called',
   'tag.localDescriptor': 'known to this page',
   'ui.accountUnknown': 'the requester did not say which account signs',
-  'tag.thisDevice': 'this device',
   'ui.feeCeiling': 'at most {amount} {symbol}',
   'ui.feeLegAmount': '{amount} {symbol}',
   'ui.feeLegClaim': 'this fee is call {index} of the operation — the amount and recipient are decoded from the calldata; "it is the network fee" is the requester’s word',
@@ -195,9 +184,15 @@ window.VelaCS.i18n.register('en', {
   'ui.copyAddress': 'Copy full address',
   'ui.copied': 'Copied',
   'ui.simClaimed': 'simulation supplied by the requester — not run by this page',
-  'tag.claimed': 'claimed',
+  // Two tags, because the app vouches for two different things. Beside the
+  // fee: the amount and recipient are decoded from the signed calldata, and
+  // only "this payment is the network fee" is the app's word. Beside the
+  // network: the chain id is inside the digest, and only its NAME is the
+  // app's, for a chain this page's own table does not know.
+  'tag.feeByApp': 'per the app',
+  'tag.nameByApp': 'named by the app',
   // --- key ceremonies (spec 075): the page as a passkey route --------------
-  'intent.create': 'Create a key',
+  'intent.create': 'Add a passkey',
   'intent.signIn': 'Sign in',
   'intent.proofVerify': 'Confirm your key',
   'intent.proofRecover': 'Recover with your key',
@@ -210,13 +205,13 @@ window.VelaCS.i18n.register('en', {
   'tag.stepTwo': '2 of 2',
   'value.viaApp': 'the Vela app on this device',
   'value.viaUnknown': 'a requester this page cannot identify',
-  // Where the answer goes. Not who asked — this page cannot know that —
-  // but what it will DO, which is the one thing about the other end it can
-  // state and a person can hold it to.
-  'value.answerToThisWallet': 'the answer goes to the Vela wallet on this device',
+  // Where the answer goes, after the name of who asked ("Vela wallet · …"),
+  // so it says "it" rather than naming the wallet twice (owner, 2026-10-09).
+  // What the page will DO is the one thing about the other end it can state
+  // and a person can hold it to: it answers `velawallet://sign-result` and
+  // nothing else.
+  'value.answerOnlyToIt': 'the answer goes back only to it',
   'value.answerToNobody': 'nowhere — this request named no address for the answer',
-  'value.yourWallet': 'Your Vela wallet',
-  'value.unnamedWallet': '(no name given)',
   'value.randomChallenge': '32 random bytes made on this page',
   'value.anyKey': 'any passkey of this site — you pick',
   'field.wallet': 'Wallet',
@@ -232,8 +227,8 @@ window.VelaCS.i18n.register('en', {
   'sentence.signIn': 'Pick your passkey to sign in to Vela. It signs a sign-in code this page made itself — no transaction can hide in it — and the wallet finds your account from the key.',
   'sentence.proofVerify': 'Your passkey confirms it is really there. It signs a check code this page made itself; no transaction can hide in it.',
   'sentence.proofRecover': 'Your passkey signs a recovery code this page made itself, so the wallet can find this key again. No transaction can hide in it.',
-  'sentence.memberProof': 'Your passkey confirms that this key joins {wallet} in the public-key registry. The page asked the registry itself, for exactly the keys shown below.',
-  'sentence.memberProofUnnamed': 'Your passkey confirms that this key joins your wallet in the public-key registry. The page asked the registry itself, for exactly the keys shown below.',
+  'sentence.memberProof': 'Your passkey confirms that this key joins {wallet} in the public-key registry. The challenge is computed on this page from the chain, the registry contract and the keys shown below.',
+  'sentence.memberProofUnnamed': 'Your passkey confirms that this key joins your wallet in the public-key registry. The challenge is computed on this page from the chain, the registry contract and the keys shown below.',
   'refuse.suppliedChallenge': 'The requester tried to supply the challenge. This page signs only challenges it makes itself — bytes chosen by someone else could be a transaction in disguise. Not signing.',
   // The reason, as the rule now states it: not "nobody proved who asked"
   // (nothing can) but "the answer would not reach a Vela wallet".
@@ -249,20 +244,14 @@ window.VelaCS.i18n.register('en', {
   'refuse.answerElsewhere': 'This page sends a signature only to the Vela wallet on this device. This request wants it sent to {to} instead — and whoever receives a signature can use it. Not signing.',
   'refuse.answerNotToWallet': 'This page sends a signature only to the Vela wallet on this device, and this request’s answer would not go there. Not signing.',
   'refuse.badCeremony': 'This request is malformed, so there is nothing sound to sign. Not signing.',
-  'refuse.memberMismatch': 'The registry’s challenge is not the one these keys give. What would be signed is not what is shown. Not signing.',
   'refuse.noDeployment': 'This request does not say which chain and registry the key would be confirmed against, so the challenge cannot be computed. Not signing.',
-  'refuse.registryUnavailable': 'The registry did not answer, so this key’s challenge cannot be checked. Try again from the wallet.',
   'warn.notWalletAsks': 'This request did not come from a Vela wallet. Whoever asked will learn which passkey you picked.',
   'warn.foreignPageKey': 'This key will belong to {rpId}: the Vela apps can use it only through this page.',
   'ui.challenge': 'Signed challenge · made on this page',
-  'ui.challengePending': 'asking the registry…',
   'ui.challengeFromClock': 'the time now, and random bytes from this page',
-  'ui.challengeFromRegistry': 'computed here from the keys above; the registry answered the same 32 bytes',
   // Computed, not fetched: the published page reaches no network (076), and
   // a challenge this page derived is the only kind it ever signed.
   'ui.challengeComputedHere': 'computed here from the chain, the registry and the keys above',
-  'ui.fetchingChallenge': 'Asking the registry for this key’s challenge…',
-  'ui.slideCreate': 'Drag the orange dot all the way right to create the key. Closing the page refuses.',
   'ui.created': 'Key created. It went back to the wallet.',
   'ui.ceremonyDone': 'Done. The answer went back to the wallet.',
   'ui.createFailed': 'No key was made: the ceremony was cancelled or timed out.',
@@ -270,11 +259,37 @@ window.VelaCS.i18n.register('en', {
   'ui.proofFailed': 'Not signed: the ceremony was cancelled, timed out, or this device holds no such key.',
   'ui.waitingForWallet': 'Waiting for the wallet',
   'ui.waitingNote': 'This page stays open for the wallet’s next request. You can go back to the wallet.',
-  'ui.connectedNote': 'Connected. The wallet’s request will appear here.',
   'ui.sessionDone': 'Done — the wallet has what it asked for. You can close this page.',
   'ui.sessionIdle': 'Nothing arrived for 5 minutes, so this page stopped waiting. Start again from the wallet.',
   'ui.openerSilent': 'The page that opened this one never sent a request.',
   'ui.sessionEnded': 'Session ended',
   'ui.refusedSent': 'Refused — the reasons are listed above, and the wallet has been told.',
   'ui.sessionOver': 'The wallet ended the session. You can close this page.',
+  // --- spec 102: the button, the key, the page itself ------------------------
+  // The confirm button says the action, as the apps say it.
+  'button.send': 'Confirm send',
+  'button.swap': 'Confirm swap',
+  'button.deposit': 'Confirm deposit',
+  'button.withdraw': 'Confirm withdrawal',
+  'button.approve': 'Approve',
+  'button.approveAll': 'Approve All',
+  'button.revoke': 'Revoke',
+  'button.sign': 'Sign',
+  'button.signIn': 'Sign in',
+  'button.confirm': 'Confirm',
+  'button.create': 'Add a passkey',
+  'button.cannotSign': 'Can’t sign this',
+  'button.done': 'Done',
+  'ui.closeRefuses': 'Not what you expected? Close this page — nothing gets signed.',
+  // Where the key is: the places the person chose from in the wallet.
+  'field.confirmWith': 'Confirm with',
+  'field.network': 'Network',
+  'field.keyOn': 'New key on',
+  'place.platform': 'This device',
+  'place.hybrid': 'Phone or tablet',
+  'place.security_key': 'USB security key',
+  // The trust line under everything.
+  'ui.pageName': 'Vela signing page',
+  'ui.version': 'version {version}',
+  'ui.pageFacts': 'zero dependencies · open source · self-hostable',
 });

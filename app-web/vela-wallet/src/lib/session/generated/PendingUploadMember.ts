@@ -5,6 +5,7 @@
  */
 export type PendingUploadMember = { credential_id: string, name: string, public_key_hex: string, attestation_object_hex: string, authenticator_attachment: string, transports: string, 
 /**
- * Spec 075: see [`AccountKey::signer_origin`].
+ * See [`AccountKey::signer_origin`] — kept for the same older builds,
+ * which retry an interrupted publish from this record.
  */
 signer_origin?: string | null, };

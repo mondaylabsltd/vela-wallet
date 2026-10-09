@@ -56,6 +56,9 @@ pub mod registry_proof;
 pub mod registry_resolve;
 pub mod safe;
 pub mod sign_message;
+/// Where a person reviews and signs — in Vela, or on a page they trust — and
+/// the rules that keep that choice able to reach the account's keys (spec 102).
+pub mod signing_venue;
 pub mod storage_catalog;
 pub mod trusted_signer;
 /// One reading of a transaction request's calls — the `value` rule every

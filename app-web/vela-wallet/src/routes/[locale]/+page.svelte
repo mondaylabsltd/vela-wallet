@@ -207,7 +207,9 @@
 			signInMethod = method;
 			signInOpen = true;
 			track('sign_in_started', { method: analyticsMethod(method) });
-			login.dispatch({ type: 'sign_in', method });
+			// `page: null` — in the app. The web offers no "Sign in on my own
+			// signing page" (spec 102): it opens no page (owner, 2026-09-23).
+			login.dispatch({ type: 'sign_in', method, page: null });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never
 			// came up, so the button can be pressed again.

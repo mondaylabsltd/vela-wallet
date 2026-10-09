@@ -52,6 +52,9 @@ pub enum ProofPurpose {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
+// A wire type: the JSON shape is pinned by the generated TS. One account is
+// larger than a list of them (spec 102 added its venue and domain).
+#[allow(clippy::large_enum_variant)]
 pub enum CompletionMode {
     SetWallet {
         accounts: Vec<Account>,
@@ -85,6 +88,12 @@ pub enum ShellOperation {
         /// by this.
         #[serde(default)]
         method: KeyMethod,
+        /// Spec 102 R3: the signing page this ceremony runs on — `Some` only
+        /// for a wallet on a custom domain, whose keys only its page can mint.
+        /// `None`: in the app. The place (`method`) rides along either way, so
+        /// a page can hint the browser to it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<String>,
     },
     /// `navigator.credentials.get()` against a known credential.
     SignProof {
@@ -104,10 +113,10 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         purpose: ProofPurpose,
-        /// Spec 075: with `method = trusted_signer`, the page the key lives
-        /// behind (the sign-in's own). `None` on every other route.
+        /// Spec 102 R3: the page this proof is signed on — the custom-domain
+        /// wallet's, as the sign-in's. `None`: in the app.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        signer_origin: Option<String>,
+        page: Option<String>,
     },
     /// Mint the one-time software group key for a wallet's registry group.
     /// All randomness lives in the shell; the seed never touches the core's
@@ -152,11 +161,12 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         group_public_key_hex: String,
-        /// Spec 075: with `method = trusted_signer`, the page the key was just
-        /// minted behind — the membership is confirmed there. `None` on every
-        /// other route.
+        /// Spec 102 R3: the page the key was just minted on — the membership
+        /// is confirmed there, under that page's domain (the registry is asked
+        /// for the challenge under `registry_rp_id(page)`). `None`: in the
+        /// app, under the wallet's own relying party.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        signer_origin: Option<String>,
+        page: Option<String>,
     },
     /// The v1 index's display name for a credential — the only place a
     /// v1-era wallet's name survives (v1 stored it server-side; a handle
@@ -173,6 +183,11 @@ pub enum ShellOperation {
     AuthenticatePasskey {
         #[serde(default)]
         method: KeyMethod,
+        /// Spec 102 R3: sign in on this page — the person's own signing page
+        /// on a custom domain, the only place its keys answer. `None`: in the
+        /// app.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<String>,
     },
     /// Read every locally stored account.
     LoadAccounts,
@@ -220,6 +235,12 @@ pub enum ShellOperation {
         /// byte — and are answered only once the group has landed.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         answer_when_accepted: bool,
+        /// Spec 102 R3: the page a member with no replayable proof signs its
+        /// live proof on, and whose domain the whole unit is filed under
+        /// (`registry_rp_id(page)`) — a custom-domain wallet's. `None`: the
+        /// app, and the wallet's own relying party.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<String>,
     },
     /// Is this public key already an entry in the registry? Lets a sign-in
     /// skip a redundant re-publish (and its extra signature).

@@ -191,6 +191,18 @@ const DATE_WORDS: [(DatePreset, &str); 5] = [
 ];
 const TIME_WORDS: [(TimePreset, &str); 2] = [(TimePreset::H24, "h24"), (TimePreset::H12, "h12")];
 
+/// A date preset as the store (and the core's wire) names it: `ymd_slash`…
+#[must_use]
+pub fn date_word(preset: DatePreset) -> &'static str {
+    word(&DATE_WORDS, Some(preset))
+}
+
+/// A clock preset as the store (and the core's wire) names it: `h24`, `h12`.
+#[must_use]
+pub fn time_word(preset: TimePreset) -> &'static str {
+    word(&TIME_WORDS, Some(preset))
+}
+
 fn word<T: Copy + PartialEq>(table: &[(T, &'static str)], preset: Option<T>) -> &'static str {
     preset
         .and_then(|preset| table.iter().find(|(p, _)| *p == preset))

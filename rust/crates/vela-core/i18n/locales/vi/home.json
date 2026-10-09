@@ -53,7 +53,6 @@
     "rescanFailed": "Không thể kết nối {{names}}. Hãy sửa RPC từ thanh thông báo ở màn hình chính, hoặc kiểm tra block explorer.",
     "rescanAgain": "Quét lại lần nữa",
     "rescanClose": "Xong",
-    "rescanNativeNote": "Coin gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở block explorer để xem đầy đủ.",
     "rescanExplorerTitle": "Kiểm tra trực tiếp trên block explorer",
     "connClear": "Xóa",
     "connClearTitle": "Xóa hoạt động kết nối?",

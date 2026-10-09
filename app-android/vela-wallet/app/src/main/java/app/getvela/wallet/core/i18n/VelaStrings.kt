@@ -35,6 +35,13 @@ interface VelaStrings {
      * resolved. `RelativeTime.ago` fills all four from the device.
      */
     fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String
+
+    /**
+     * The language the app shows (`zh-HK`, `pt-BR`, `en`) — what a core rule
+     * that writes words of its own is told (a 12-hour clock's day period, spec
+     * 102's `{{time}}`), and what a signing page is launched in (`lang=`).
+     */
+    val language: String get() = "en"
 }
 
 val LocalVelaStrings = staticCompositionLocalOf<VelaStrings> {

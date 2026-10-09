@@ -831,6 +831,10 @@ pub struct SendConfirm {
     pub cta: SharedString,
     /// The core's `can_confirm`, plus signing / submitting.
     pub cta_state: CtaState,
+    /// Spec 102 D4: the account reviews and signs on a trusted page — the
+    /// page, the key and the integrity line, drawn above the CTA, which then
+    /// says where it goes and opens only when the page may. `None` in Vela.
+    pub handoff: Option<Box<crate::signing::trusted_signer::HandoffModel>>,
 }
 
 #[derive(Clone)]
@@ -1671,6 +1675,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
+        handoff: None,
     }
 }
 

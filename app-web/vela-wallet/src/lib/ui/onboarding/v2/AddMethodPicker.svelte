@@ -1,41 +1,40 @@
 <script lang="ts">
 	/**
-	 * The four ways to mint a founding key — or to find one, when this picker
+	 * The three places a founding key can live — or be found, when this picker
 	 * is the sign-in sheet — expanded in place.
 	 *
-	 * The first three are the browser's to present: `navigator.credentials`
-	 * shows its own picker covering this device, a nearby device and a security
-	 * key. So those three dispatch the SAME ceremony and differ only in what the
-	 * core records as the person's choice — which is what labels the key row
-	 * afterwards.
+	 * The three are the browser's to present: `navigator.credentials` shows its
+	 * own picker covering this device, a nearby device and a security key. So
+	 * they dispatch the SAME ceremony and differ only in what the core records
+	 * as the person's choice — which is what labels the key row afterwards, and
+	 * which hints a later signature carries.
 	 *
 	 * That is a web-only truth. The native shells run the ceremony themselves
 	 * and must honour the choice, which is why it travels through the core
 	 * rather than being decided here.
 	 *
-	 * The fourth is not a place a passkey is: the Trusted Signer (spec 075) is a
-	 * passkey route of our own — a page that shows what it is about to do and
-	 * runs the ceremony there, on this device or on another one. The executor
-	 * sends it to the page instead of the browser's sheet.
+	 * Three, and no fourth (spec 102). The Trusted Signer used to sit here as a
+	 * fourth "place", and a person who tapped it was asked "this device / scan a
+	 * code / USB key" again — because a signing page is not where a key lives,
+	 * it is where a person REVIEWS AND SIGNS. That is the account's venue now,
+	 * chosen in Settings, and the same three places exist on the page too.
 	 *
-	 * `allowed` narrows the list once the set has a key: every key in a wallet
-	 * belongs to the same relying party — the registry files a unit under one
-	 * `rpId` — so a route that would mint for a different one cannot add to
-	 * THIS set. Such a row stays, disabled, with `blocked`'s sentence under the
-	 * list: a row that vanished could not say that the Trusted Signer's page is a
-	 * setting the person can change.
+	 * The apps add one entry below the three that is not a place: "Use a
+	 * trusted signing page" (D6), for a wallet whose keys live on a page's own
+	 * domain and sign only on that page (R2, R3). The web has no such entry
+	 * (P2b-W3): it opens no signing page, so a self-hosted page's ceremonies
+	 * could never run here, and the official page's run in the app and sign in
+	 * Vela on the web anyway (P2-11).
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import type { AddBlocked } from '$lib/onboarding/generated/AddBlocked';
 	import { methodCopy, type KeyChooser } from '$lib/onboarding/core/copy';
 	import { methodGlyph } from '$lib/onboarding/passkey-icons';
 	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
 		open: boolean;
-		/** The routes that may mint for this set; every route when absent. */
+		/** The places the core offers — always the three (spec 102); every place when absent. */
 		allowed?: KeyMethod[];
-		blocked?: AddBlocked | null;
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onPick: (method: KeyMethod) => void;
 		/**
@@ -45,46 +44,11 @@
 		chooser?: KeyChooser;
 	}
 
-	let { open, allowed, blocked = null, strings, onPick, chooser = 'create' }: Props = $props();
+	let { open, allowed, strings, onPick, chooser = 'create' }: Props = $props();
 
 	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
-	/**
-	 * The core offers `trusted_signer` to every shell; this one cannot open a
-	 * Trusted Signer page at all (owner, 2026-09-23), so it is never drawn here.
-	 *
-	 * Filtered rather than trusted-not-to-appear: `allowed` comes from the
-	 * core, and a wallet whose only key was minted on a page could otherwise be
-	 * created from a browser that can never sign with it again.
-	 */
-	const offered: KeyMethod[] = $derived((allowed ?? METHODS).filter((m) => m !== 'trusted_signer'));
-
-	/**
-	 * What this wallet's keys belong to, and — when the configured Trusted Signer
-	 * page is the thing that does not fit — which page it is and what a key
-	 * from it would belong to instead.
-	 *
-	 * Two paragraphs, never one joined string: the first fact is always the
-	 * reason, the second is only sometimes true and is the half a person can
-	 * act on. Joining them would also put a space after a full stop that
-	 * already ends a line in Chinese (device-found, 2026-09-23).
-	 */
-	const reason = $derived.by((): string[] => {
-		if (!blocked) return [];
-		const lines = [
-			strings('onboarding.create.methodBlockedHint', { party: blocked.relying_party })
-		];
-		if (blocked.page) {
-			lines.push(
-				strings('onboarding.create.methodBlockedSigner', {
-					page: blocked.page,
-					pageParty: blocked.page_relying_party ?? '',
-					party: blocked.relying_party
-				})
-			);
-		}
-		return lines;
-	});
+	const offered: KeyMethod[] = $derived(allowed ?? METHODS);
 </script>
 
 {#if open}
@@ -109,9 +73,6 @@
 			</li>
 		{/each}
 	</ul>
-	{#each reason as line (line)}
-		<p class="reason">{line}</p>
-	{/each}
 {/if}
 
 <style>
@@ -144,12 +105,6 @@
 	.off {
 		opacity: var(--opacity-disabled);
 		cursor: not-allowed;
-	}
-
-	.reason {
-		margin: var(--space-sm) 0 0;
-		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
 	}
 
 	.text {

@@ -170,8 +170,6 @@
 			"keysSubtitleFull": "Das Limit von 7 ist erreicht.",
 			"keysTitle": "Passkeys hinzufügen",
 			"keysTitleBlocked": "Noch ein Schlüssel, dann kannst du erstellen",
-			"methodBlockedHint": "Die Schlüssel dieser Wallet gehören alle zu {{party}}.",
-			"methodBlockedSigner": "Deine Clear-Signer-Seite ist {{page}}, ihre Schlüssel gehören zu {{pageParty}}. Stelle in den Einstellungen {{party}} ein, um hier einen hinzuzufügen.",
 			"methodHybridBody": "Code scannen und auf einem Gerät in der Nähe erstellen",
 			"methodHybridTitle": "Handy oder Tablet",
 			"methodHybridUnavailable": "Demnächst",
@@ -184,6 +182,8 @@
 			"needSecondKeyHint": "Dieser Schlüssel hat nirgends ein Backup. Geht er verloren, bleibt die Wallet zu. Füge einen zweiten hinzu.",
 			"nextBtn": "Weiter",
 			"openSettings": "Einstellungen öffnen",
+			"signingPageTitle": "Vertrauenswürdige Signaturseite verwenden",
+			"signingPageBody": "Fortgeschritten: Velas offizielle Seite oder eine selbst gehostete",
 			"pinAttemptsLeft": "Verbleibende Versuche: {{attempts}}",
 			"pinBody": "{{product}} hat keinen Fingerabdrucksensor und bestätigt Sie deshalb per PIN. Die PIN geht nur an den Schlüssel in Ihrer Hand — nie auf die Festplatte dieses Computers und nie an einen Server.",
 			"pinLabel": "PIN",
@@ -230,8 +230,7 @@
 			"touchFingerprintBody": "{{product}} blinkt. Legen Sie Ihren Finger auf den Sensor, um zu bestätigen, dass Sie es sind.",
 			"touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
 			"touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
-			"verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
-			"verifyStuckHint": "Die Bestätigung schlägt immer wieder fehl? Ihr Gerät hat diesen Passkey möglicherweise nicht richtig gespeichert. Sie können bedenkenlos neu beginnen — es wurde noch nichts erstellt."
+			"verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit."
 		},
 		"login": {
 			"alertNotSupportedTitle": "Nicht unterstützt",

@@ -95,6 +95,19 @@ export function loadAccounts(): Account[] {
  * One record in the current spelling, whatever spelling it was written in.
  * Returns the SAME object when nothing had to change (so the caller can tell a
  * rewrite is due), `null` for a record that is not an account at all.
+ *
+ * Only the retired client's camelCase is respelled here. Everything else is
+ * carried through as it was stored — including what spec 102 moved into the
+ * core's reader (`sign_in_key`, `signing_domain`, `signing_venue`, and the
+ * `signed_in_with` / per-key `signer_origin` a record from before 102 still
+ * has). This file once rebuilt `signed_in_with` and `signer_origin` by hand;
+ * a hand copy is how a field the core reads gets dropped, so it no longer
+ * names them at all. What a record MEANS is asked of the core
+ * (`signingPlan`), which migrates on the way in.
+ *
+ * So the `Account` type is a promise about what the core WRITES, not about
+ * what an old record holds: a record from before 102 has no `signing_domain`
+ * here. Read those through the core, never off this object.
  */
 export function normaliseAccount(record: unknown): Account | null {
 	if (!record || typeof record !== 'object') return null;
@@ -112,7 +125,12 @@ export function normaliseAccount(record: unknown): Account | null {
 		!Array.isArray(r.keys);
 	if (!old) return record as Account;
 	const keys = Array.isArray(r.keys) ? r.keys : [];
-	const account: Account = {
+	// Everything else rides along untouched; only the old spellings go.
+	const { publicKeyHex: _publicKeyHex, createdAt: _createdAt, ...rest } = r;
+	void _publicKeyHex;
+	void _createdAt;
+	return {
+		...rest,
 		id,
 		name: str(r.name) ?? '',
 		address,
@@ -121,31 +139,32 @@ export function normaliseAccount(record: unknown): Account | null {
 		keys: keys
 			.filter((k): k is Record<string, unknown> => !!k && typeof k === 'object')
 			.map((k) => {
-				const key: Account['keys'][number] = {
+				const {
+					credentialId: _credentialId,
+					publicKeyHex: _keyHex,
+					signerOrigin: _signerOrigin,
+					...keyRest
+				} = k;
+				void _credentialId;
+				void _keyHex;
+				void _signerOrigin;
+				const key: Record<string, unknown> = {
+					...keyRest,
 					credential_id: str(k.credential_id, k.credentialId) ?? '',
 					public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
 					name: str(k.name) ?? '',
 					// Where the credential lives; the old client never recorded it.
 					transports: str(k.transports) ?? ''
 				};
-				// Spec 075: the Trusted Signer page a key lives behind. It is the
-				// ONLY way that key can ever be reached, so normalising a record
-				// must carry it through — dropping it here would make the key
-				// unsignable and the wallet unopenable, silently. Absent stays
-				// absent (the field is optional on the wire).
+				// The page a key was minted on (spec 075), respelled like the rest:
+				// the core still reads it to migrate the record, and an older build
+				// still routes by it. Absent stays absent.
 				const origin = str(k.signer_origin, k.signerOrigin);
 				if (origin !== undefined && origin !== '') key.signer_origin = origin;
+				else delete key.signer_origin;
 				return key;
 			})
-	};
-	// The key this device signs with (founder, 2026-09-26). Only the core
-	// writes it, always in snake_case, and the core judges it on the way in —
-	// so it is carried whole rather than read here. Dropping it would hand the
-	// choice of key back to the browser.
-	if (r.signed_in_with && typeof r.signed_in_with === 'object') {
-		account.signed_in_with = r.signed_in_with as Account['signed_in_with'];
-	}
-	return account;
+	} as Account;
 }
 
 /** Upsert by id. The whole record is written — see the invariant above. */

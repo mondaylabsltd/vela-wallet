@@ -60,16 +60,31 @@
       "subtitle": "Vela'da başlattığınız her gönderim burada başlar. Tek bir gönderim için yine de değiştirebilirsiniz."
     },
     "signing": {
-      "title": "Şununla imzala",
-      "subtitle": "Vela'da başlattığınız her imza buradan başlar. Tek bir imza için yine de başka bir yol seçebilirsiniz.",
-      "pageTitle": "Trusted Signer sayfası",
-      "pageSubtitle": "Trusted Signer'ın açtığı sayfa: resmi sayfa ya da bağımlılıksız sayfanın kendi kopyanız.",
-      "pageOfficial": "Resmi",
+      "title": "İmza sayfaları",
+      "subtitle": "İstekleri gösterip imzalamak için güvendiğiniz sayfalar.",
+      "pageOfficial": "Vela'nın resmi imza sayfası",
       "pageInvalid": "Bu bir web adresi değil.",
       "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
-      "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
-      "pageReset": "Resmi sayfayı kullan",
-      "pageSave": "Kaydet"
+      "pageSave": "Kaydet",
+      "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
+      "pageDuplicate": "Bu sayfa zaten kayıtlı.",
+      "keysOn": "Anahtarlar: {{domain}}",
+      "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
+      "pageTrust": "Bu sürüme güven",
+      "pageRename": "Yeniden adlandır",
+      "pageRemove": "Kaldır",
+      "pageName": "İsim"
+    },
+    "venue": {
+      "title": "İnceleyip imzaladığınız yer",
+      "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
+      "inVela": "Vela'da inceleyin ve imzalayın",
+      "inVelaBody": "Vela'nın kendi imza ekranı",
+      "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
+      "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
+      "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
+      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
+      "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
     },
     "advanced": {
       "networksTitle": "Ağlar",

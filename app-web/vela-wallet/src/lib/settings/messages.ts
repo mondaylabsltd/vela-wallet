@@ -92,24 +92,62 @@ export interface SettingsMessages {
 		slowHint: string;
 	};
 	/**
-	 * Spec 071: the Trusted Signer — its title, which names a key that lives
-	 * behind its page, and its page.
+	 * Spec 102: Settings → Signing pages — the pages this device trusts to show
+	 * and sign requests. (Spec 071's single "Trusted Signer page" field, and
+	 * the Trusted Signer as a fourth place a key lives, are gone.)
 	 */
 	signing: {
-		methods: {
-			trusted_signer: string;
-		};
-		/** The Trusted Signer's one line, under its name. */
-		trustedSignerBody: string;
-		pageTitle: string;
-		pageSubtitle: string;
+		title: string;
+		subtitle: string;
 		pageOfficial: string;
+		/** Why an address was not added: not an address / not https / already saved. */
 		pageInvalid: string;
 		pageInsecure: string;
-		pageForeign: string;
-		pageReset: string;
+		pageDuplicate: string;
+		pageAdd: string;
 		pageSave: string;
+		/** `Keys on {{domain}}` — the domain whose keys a page (or an account) uses. */
+		keysOn: string;
+		/** `Self-hosted · {{domain}}` — a saved page the person has not named. */
+		pageSelfHosted: string;
+		/** A saved page's own actions, in the signing pages' own words. */
+		pageRename: string;
+		pageRemove: string;
+		/** The answer to a self-hosted page's "trust this version?" (D-15). */
+		pageTrust: string;
 	};
+	/** Spec 102: the account's "Where you review and sign". */
+	venue: {
+		title: string;
+		subtitle: string;
+		inVela: string;
+		inVelaBody: string;
+		page: string;
+		pageBody: string;
+		/**
+		 * Why a venue cannot be used, by the corpus key the core's
+		 * `VenueBlock::key()` names (`VENUE_BLOCK_KEYS`); the core supplies
+		 * the values that fill it (`venueBlockLine`).
+		 */
+		blocked: Record<VenueBlockKey, string>;
+	};
+	/**
+	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.
+	 * Keyed by the core's `IntegrityState`, so no shell maps a state itself.
+	 */
+	integrity: Record<
+		| 'checking'
+		| 'matches'
+		| 'trusted'
+		| 'unchecked'
+		| 'mismatch'
+		| 'blocked'
+		| 'askTrust'
+		| 'couldNotCheck'
+		| 'noVersion'
+		| 'allBlocked',
+		string
+	>;
 	networks: {
 		/** Template with `{{count}}`. */
 		count: string;
@@ -488,6 +526,22 @@ export const UNREACHABLE_LINE_KEYS = [
 ] as const;
 
 /**
+ * The lines a venue refusal can say (`VenueBlock::key()`): R1's two —
+ * `blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}` — and the
+ * web's `blockedWeb` (no vars: it opens no signing page, D-16). Only what a
+ * build-time manifest must resolve; which line a refusal says, and with
+ * which values, is the core's (`venueBlockLine`). `venue.test.ts` holds this
+ * list to the core.
+ */
+export const VENUE_BLOCK_KEYS = [
+	'settings.venue.blockedApp',
+	'settings.venue.blockedPage',
+	'settings.venue.blockedWeb'
+] as const;
+
+export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
+
+/**
  * Every corpus key the settings screens consume, in the order the manifest
  * declares them. The parity test iterates this, so a key that stops resolving
  * fails the build rather than shipping a dotted path onto a screen.
@@ -552,16 +606,36 @@ export const SETTINGS_KEYS = [
 	'send.gasTierHintFast',
 	'send.gasTierHintStandard',
 	'send.gasTierHintSlow',
-	'componentsUi.signing.trustedSignerTitle',
-	'componentsUi.signing.trustedSignerBody',
-	'settings.signing.pageTitle',
-	'settings.signing.pageSubtitle',
+	'settings.signing.title',
+	'settings.signing.subtitle',
 	'settings.signing.pageOfficial',
 	'settings.signing.pageInvalid',
 	'settings.signing.pageInsecure',
-	'settings.signing.pageForeign',
-	'settings.signing.pageReset',
+	'settings.signing.pageDuplicate',
+	'settings.signing.pageAdd',
 	'settings.signing.pageSave',
+	'settings.signing.keysOn',
+	'settings.signing.pageSelfHosted',
+	'settings.signing.pageRename',
+	'settings.signing.pageRemove',
+	'settings.signing.pageTrust',
+	'settings.venue.title',
+	'settings.venue.subtitle',
+	'settings.venue.inVela',
+	'settings.venue.inVelaBody',
+	'settings.venue.page',
+	'settings.venue.pageBody',
+	...VENUE_BLOCK_KEYS,
+	'componentsUi.signing.integrity.checking',
+	'componentsUi.signing.integrity.matches',
+	'componentsUi.signing.integrity.trusted',
+	'componentsUi.signing.integrity.unchecked',
+	'componentsUi.signing.integrity.mismatch',
+	'componentsUi.signing.integrity.blocked',
+	'componentsUi.signing.integrity.askTrust',
+	'componentsUi.signing.integrity.couldNotCheck',
+	'componentsUi.signing.integrity.noVersion',
+	'componentsUi.signing.integrity.allBlocked',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

@@ -654,9 +654,70 @@ for (let i = 1; i < PATHS.length; i++) {
 //   the full path nor the leaf name appears outside the corpus and the
 //   generated tables) — the room it needs, instead of a budget move. Same
 //   branches: 1792 + 1 - 2 = 1791 leaves.
-if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
+// 1905 (spec 102, 2026-10-09): where you review and sign — in Vela, or on a
+//   page you trust. The Trusted Signer stops being a fourth key method and
+//   becomes each account's signing VENUE. + the `settings.venue` branch (title,
+//   subtitle, the two rows and their lines, the two reasons a venue cannot
+//   reach an account's keys), + `componentsUi.signing.{handoffTitle,handoffKey}`
+//   (the hand-off card), + the `componentsUi.signing.integrity` branch (ten
+//   lines: checking, matches the published build list · checked, trusted here,
+//   unchecked, mismatch, blocked, ask to trust, could not check, no version,
+//   all blocked), + `settings.signing.{pageAdd,pageDuplicate,keysOn}` (the
+//   saved-pages list that replaces the free-text page field), +
+//   `onboarding.create.{ownPageTitle,ownPageBody}` ("Use my own signing
+//   page"). `settings.signing.{title,subtitle}` and the waiting / closed /
+//   refused / mismatch / timeout lines are reworded (they promised a choice per
+//   signature, and named a "Trusted Signer"). Minus what only served the fourth
+//   method or the free-text field — `componentsUi.signing.{trustedSignerTitle,
+//   trustedSignerBody,signWith,trustedSignerDoneTab}`, `settings.signing.
+//   {pageTitle,pageSubtitle,pageForeign,pageReset}`, `onboarding.create.
+//   {methodBlockedHint,methodBlockedSigner}` — and three dead duplicates of
+//   `onboarding.common` lines no client reads (git grep: neither the full path
+//   nor the leaf name appears outside the corpus and the generated tables):
+//   `onboarding.create.{alertNotDiscoverableTitle,alertNotDiscoverableBody,
+//   verifyStuckHint}` — the ja + en room the new lines need under SC-005,
+//   instead of a budget move. 1792 − 13 + 25 = 1804 leaves, 99 + 2 = 101
+//   branches.
+// 1913 (spec 102 core round, 2026-10-09): the owner's naming (D6) and the
+//   gaps the shells hit in Phase 2. + `settings.venue.blockedWeb` (the web
+//   opens no signing page: its page rows are drawn disabled with this
+//   reason, and a custom-domain account's refusal there says it), +
+//   `settings.signing.{pageSelfHosted,pageTrust,pageRename,pageRemove,
+//   pageName}` ("Self-hosted · <domain>", "Trust this version" — the answer
+//   to the integrity line's ask-to-trust question — and the signing-pages
+//   list's own rename / remove / name words, which the phones borrowed from
+//   other screens), + `componentsUi.signing.{ceremonyCreate,ceremonySignIn,
+//   ceremonyConfirm}` (a key ceremony on a self-hosted page has its own
+//   title, not the hand-off card's "Review and sign"). Renamed:
+//   `onboarding.create.{ownPageTitle,ownPageBody}` → `{signingPageTitle,
+//   signingPageBody}` — the entry is "Use a trusted signing page" now and
+//   lists Vela's official page too, so "own page" named it wrongly. Reworded
+//   (D6): `settings.venue.{inVela,page}` ("Review and sign in Vela" / "… on a
+//   trusted signing page"), `settings.signing.{pageOfficial,pageAdd}` ("Vela's
+//   official signing page", "Add a self-hosted signing page") and
+//   `componentsUi.signing.handoffTitle`. Minus `home.rescanNativeNote`, the
+//   longest of the `home.rescan*` lines spec 004's research found with zero
+//   call sites (still none in any shell: git grep, every 102 worktree) — the
+//   ja + en room the new lines need under SC-005 instead of a budget move.
+//   1804 − 2 + 2 + 1 + 5 + 3 − 1 = 1812 leaves, 101 branches.
+// 1914 (main's device pass merged into spec 102, 2026-10-09): the 1890
+//   entry above landed on main beside 1905 and 1913. Its minus
+//   (`onboarding.create.alertNotDiscoverable{Title,Body}`) is 1905's too, so
+//   only its plus is new here: `onboarding.login.alertSignInFailedBodyAndroid`.
+//   1812 + 1 = 1813 leaves, 101 branches.
+// 1915 (spec 102 integration polish, 2026-10-09): the hand-off card's key is
+//   a row, as the signing page draws it — 「确认方式 | 这台设备」 — not a
+//   sentence a locale must inflect a place title into ("用 这台设备 确认",
+//   "Confirm with This device"). − `componentsUi.signing.handoffKey`
+//   ("Confirm with {{key}}"), + `componentsUi.signing.{confirmWithLabel,
+//   newKeyOnLabel}` (the row's label: "Confirm with", and a create
+//   ceremony's "New key on" — the page's `field.confirmWith` /
+//   `field.keyOn`, word for word in all fifteen). `handoffTitle` loses its
+//   possessive (D6: only a self-hosted page is "your own").
+//   1813 − 1 + 2 = 1814 leaves, 101 branches.
+if (PATHS.length !== 1915) fail(`expected 1915 paths (1814 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1814) fail(`expected 1814 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

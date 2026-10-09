@@ -51,7 +51,12 @@ vi.mock('$lib/services/networks', () => ({
 vi.mock('$lib/onboarding/core/passkey', () => ({ PasskeyError: class extends Error {} }));
 vi.mock('$lib/signing/sign-challenge', () => ({
 	cancelChallenge: vi.fn(),
-	signChallenge: vi.fn()
+	signChallenge: vi.fn(),
+	VenueBlockedError: class VenueBlockedError extends Error {
+		constructor(readonly block: unknown) {
+			super('venue blocked');
+		}
+	}
 }));
 vi.mock('$lib/services/add-network.svelte', () => ({
 	addCustomNetworkByChainId: seams.addNetwork
@@ -95,6 +100,7 @@ import { createSendExecutor, setSendTrackerSink } from './send-executor';
 import type { SendShellPorts } from './send-types';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import { sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
+import { VenueBlockedError } from '$lib/signing/sign-challenge';
 
 const ACCOUNT = '0x' + 'aa'.repeat(20);
 const HELD: SendToken = {
@@ -362,6 +368,32 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		await expect(submitting).resolves.toEqual({
 			type: 'submit_failed',
 			failure: { type: 'other', message: 'relay unreachable; nothing was sent' }
+		});
+		expect(posted).not.toHaveBeenCalled();
+	});
+
+	/**
+	 * Spec 102 (P2b-W1): an account that cannot sign on the web is refused
+	 * before any ceremony, and the core hears WHY — it puts the reason on the
+	 * confirm screen in the person's words (`SendView.tx_venue_block`), never
+	 * an English sentence of ours and never "try again".
+	 */
+	it('an account that cannot sign on the web fails as venue_blocked, with the core’s block', async () => {
+		const posted = vi.fn();
+		vi.mocked(sendBatchCalls).mockImplementationOnce(async (...args: unknown[]) => {
+			const signFn = args[4] as SignFn;
+			await signFn(new Uint8Array(32), {} as never);
+			posted();
+			throw new Error('unreachable');
+		});
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockRejectedValueOnce(new VenueBlockedError({ type: 'not_on_web' }));
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'venue_blocked', block: { type: 'not_on_web' } }
 		});
 		expect(posted).not.toHaveBeenCalled();
 	});

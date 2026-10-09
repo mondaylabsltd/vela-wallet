@@ -76,8 +76,10 @@ class SendExecutor(
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
     /** Spec 043 T048: the identity waterfall the contacts machine also asks. */
     private val identity: suspend (String) -> SendRecipientIdentity? = { null },
-    /** Spec 071: the Trusted Signer, for an account that signed in through it. */
+    /** Spec 071/102: the signing page, for an account whose venue is one. */
     private val trustedSigner: () -> TrustedSigner? = { null },
+    /** The corpus, for the sentences a signature that cannot be made is told in (spec 102). */
+    private val words: (key: String, vars: Map<String, String>) -> String = { key, _ -> key },
     /**
      * Spec 078: the asset list's holdings — `fetch_tokens` is answered from
      * the round the balance machine settled, never a second walk of every
@@ -104,16 +106,10 @@ class SendExecutor(
         suspend fun publicKeyOf(accountId: String): String?
 
         /**
-         * Every founding key's credential id and stored transports, as JSON for
-         * the core's `sign_route` — `[{credential_id, transports}]`. The default
-         * is "nothing known", which routes as it always did.
-         */
-        suspend fun keyRoutesJson(address: String): String = "[]"
-
-        /**
          * The stored account record for `address`, whole — what the core's
-         * `signInRoute` reads the account's sign-in key from. `null` when
-         * unknown, which signs as a record without one does.
+         * `signing_plan` reads the account's venue, signing domain and key
+         * route from (spec 102). `null` when unknown, which signs in Vela as a
+         * record without a sign-in key does.
          */
         suspend fun accountJson(address: String): String? = null
     }
@@ -495,7 +491,7 @@ class SendExecutor(
     private val spine = UserOpSpine(relay, accounts, signer, measureCall = { chainId, from, to, valueHex, data ->
         (pool.call(chainId, "eth_estimateGas", listOf(JSONObject().put("from", from).put("to", to).put("value", valueHex).put("data", data))) as? RpcResult.Body)
             ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
-    }, trustedSigner = trustedSigner)
+    }, trustedSigner = trustedSigner, words = words)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
     private suspend fun submitInner(op: SendOperation.SubmitUserOp, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
@@ -529,6 +525,8 @@ class SendExecutor(
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
                 // The send's words for a passkey that failed are unchanged (the desktop's rule).
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
+                // Spec 102: this account cannot sign here — the confirm screen says why, translated.
+                is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
             },
         )
     }

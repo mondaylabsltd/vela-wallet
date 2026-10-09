@@ -239,6 +239,13 @@ struct SigningModel {
     /// says so (`confirmButtonLabel`, "去签名页确认") instead of the action.
     var confirmAsButton = false
     var confirmButtonLabel = ""
+    /// Spec 102 D4: this account reviews and signs on a trusted page, so the
+    /// sheet is the hand-off card — which page, which key, its integrity
+    /// line — and not a second preview: the page is the authority.
+    var handoff: HandoffCardModel?
+    /// What still stands under the card: the request's status, how the page
+    /// last ended, and every warning the wallet has about this request.
+    var handoffBlocks: [SigningBlock] = []
     /// Spec 079: once the person has approved, the sheet stops being a form
     /// and shows this — the send receipt's own model and words, so a dApp
     /// transaction and a send look the same while they land. Also the ending

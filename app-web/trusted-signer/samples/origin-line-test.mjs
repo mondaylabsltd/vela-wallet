@@ -29,6 +29,7 @@ const ns = loadPageLibs([
   'src/lib/encode.js',
   'src/lib/fee.js',
   'src/lib/logos.js',
+  'src/lib/catalog.js',
   'src/lib/registry.js',
   'src/lib/resolve.js',
   'src/lib/render.js',
@@ -119,11 +120,14 @@ const warned = (view, sheet) =>
   check('verified: no self-reported-site warning', !view.warnings.some((w) => w.key === 'warn.claimedOrigin'));
 }
 
-// 7. The wallet asking itself (no origin): no host line, as before.
+// 7. The wallet asking itself (no origin): no host line — and since spec 102
+//    no requester line at all (the apps' first_party), rather than a generic
+//    "Wallet" that says nothing a person can check.
 {
   const view = ns.resolve({ method: 'personal_sign', params: ['0x68656c6c6f', ACCOUNT] }, { account: ACCOUNT, chainId: 1 });
   const sheet = ns.render(view, {});
-  check('no origin: no host line', head(sheet).find('.dapp-origin').length === 0 && view.dapp.originShown === false);
+  check('no origin: no host line', sheet.find('.dapp-origin').length === 0 && view.dapp.originShown === false);
+  check('no origin: no requester line at all', view.dapp.own === true && sheet.find('.requester').length === 0);
 }
 
 // 8. The ceremony head keeps its line: the verified requester's host, the
@@ -145,6 +149,38 @@ const warned = (view, sheet) =>
   check('ceremony answering elsewhere: the destination line is drawn',
     head(elsewhere.sheet).find('.dapp-origin').map((n) => n.textContent).join() === 'evil:',
     JSON.stringify(lines(elsewhere.sheet)));
+}
+
+// 9. The ceremony's subtitle says who asked and that the answer goes back
+//    only to it — naming the wallet once (owner, 2026-10-09: 「Vela 钱包 ·
+//    答复交回本机的 Vela 钱包」 said it twice).
+for (const [locale, name] of [['zh', 'Vela 钱包'], ['en', 'Vela wallet']]) {
+  ns.i18n.setLocale(locale);
+  const view = ns.resolve({ method: 'vela_createPasskey', params: [{ name: 'Savings' }] },
+    { rpId: 'getvela.app', walletName: 'Savings', channel: 'url', callback: 'velawallet://sign-result' });
+  const line = lines(ns.render(view, {})).join(' · ');
+  check(`${locale}: the ceremony subtitle names the wallet once`,
+    line.split(name).length === 2 && line === name + ' · ' + ns.i18n.t('value.answerOnlyToIt'), line);
+}
+ns.i18n.setLocale('zh');
+
+// 10. Whose word each tag is. The network row marks a NAME the app gave for a
+//     chain this page does not know (the id is in the digest); a chain nobody
+//     named is called by its id, in the page's own words, unmarked.
+{
+  const named = signing('', undefined, { chainId: 167000, chainName: 'Taiko' });
+  const tag = named.sheet.find('.network-claimed').map((n) => n.textContent).join();
+  check('an unknown chain the app names: 「App 提供」 beside the name',
+    named.view.chain === 'Taiko' && named.view.chainClaimed === true && tag === 'App 提供', tag);
+  const bare = signing('', undefined, { chainId: 167000 });
+  check('an unknown chain nobody names: its id, unmarked',
+    bare.view.chain === 'chain 167000' && bare.view.chainClaimed === false &&
+    bare.sheet.find('.network-claimed').length === 0, bare.view.chain);
+  const known = signing('', undefined, { chainId: 8453, chainName: 'Not Base' });
+  check('a known chain: the page\'s own name, unmarked',
+    known.view.chain === 'Base' && known.view.chainClaimed === false, known.view.chain);
+  check('the fee and the network say different things, so they are two words',
+    ns.i18n.t('tag.feeByApp') === 'App 标注' && ns.i18n.t('tag.nameByApp') === 'App 提供');
 }
 
 process.exit(check.summary() ? 0 : 1);

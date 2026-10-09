@@ -483,23 +483,16 @@ enum SettingsLive {
         let rows = (keys?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
             var body = row.publicKeyHex.hasPrefix("0x") ? String(row.publicKeyHex.dropFirst(2)) : row.publicKeyHex
             if body.count == 130, body.hasPrefix("04") { body = String(body.dropFirst(2)) }
+            // Where the key LIVES, by its place — never "Trusted Signer"
+            // (spec 102): a page is where a person reviews and signs, not a
+            // place a key is, and a key made on one is an ordinary passkey.
             let line = switch row.key.method {
             case .securityKey: k.keysProviderSecurityKey
             case .hybrid: k.keysProviderGeneric
             case .platform: k.keysProviderPlatform
-            // Spec 075: the core now says `trusted_signer` for a key that lives
-            // behind a Trusted Signer page, and where a key lives is the page.
-            // The same sentence the "Sign with" chooser offers the route under,
-            // so a person meets one thing whether creating, spending or looking.
-            case .trustedSigner: I18nKeys.TrustedSigner.title
             }
-            // The vault's name outranks the generic line — EXCEPT behind a page.
-            // A Trusted Signer key's AAGUID is the authenticator on the page's far
-            // side, which this wallet can reach no other way: naming that vault
-            // points past the page exactly as "this device" did (found by the
-            // Android device pass, 2026-09-22).
-            let holder = row.key.method == .trustedSigner || row.key.providerName.isEmpty
-                ? loc.t(line) : row.key.providerName
+            // The vault's name outranks the generic line.
+            let holder = row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName
             return WalletKeyRowModel(
                 id: index,
                 name: row.key.name.isEmpty
@@ -522,13 +515,6 @@ enum SettingsLive {
                     KeyDetailModel(
                         label: loc.t(k.keysTransport),
                         value: [row.key.authenticatorAttachment, row.key.transports].filter { !$0.isEmpty }.joined(separator: " · "),
-                        mono: false, copy: false
-                    ),
-                    // WHICH page (spec 075). The caption says the route; only
-                    // this says the place. Dropped by the filter below for every
-                    // key that lives behind no page.
-                    KeyDetailModel(
-                        label: loc.t(I18nKeys.TrustedSigner.title), value: row.signerOrigin,
                         mono: false, copy: false
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
@@ -668,51 +654,6 @@ enum SettingsLive {
         }
         copy.feeSpeedSheet = sheet
         return copy
-    }
-
-    /// Which Trusted Signer page this device opens (spec 071): the row's value
-    /// and the page's sheet — every verdict in them the `sign_pref` core's, so
-    /// the row cannot name one page while a signature opens another.
-    static func withSignPref(
-        _ view: SignPrefViewWire,
-        on model: SettingsScreenModel,
-        loc: Loc
-    ) -> SettingsScreenModel {
-        var copy = model
-        copy.sections = model.sections.map { section in
-            var updated = section
-            updated.rows = section.rows.map { row in
-                guard row.id == SettingsFixtures.signerPageRow else { return row }
-                var changed = row
-                changed.value = signerPageValue(view, loc: loc)
-                return changed
-            }
-            return updated
-        }
-        let error: String? = switch view.signerUrlError {
-        case "invalid": loc.t("settings.signing.pageInvalid")
-        case "insecure": loc.t("settings.signing.pageInsecure")
-        default: nil
-        }
-        copy.signerPage = SignerPageModel(
-            title: loc.t("settings.signing.pageTitle"),
-            subtitle: loc.t("settings.signing.pageSubtitle"),
-            field: UrlFieldModel(
-                id: "signer-url", label: "", value: view.signerUrl,
-                placeholder: trustedSignerDefaultUrl(), tone: error == nil ? nil : .error
-            ),
-            error: error,
-            foreign: view.signerUsesWalletPasskeys ? nil : loc.t("settings.signing.pageForeign"),
-            save: loc.t("settings.signing.pageSave"),
-            reset: view.signerUrlIsDefault ? nil : loc.t("settings.signing.pageReset")
-        )
-        return copy
-    }
-
-    /// "Official", or the host of the page a person chose.
-    static func signerPageValue(_ view: SignPrefViewWire, loc: Loc) -> String {
-        guard !view.signerUrlIsDefault else { return loc.t("settings.signing.pageOfficial") }
-        return URL(string: view.signerUrl)?.host ?? view.signerUrl
     }
 
     static func withCurrency(

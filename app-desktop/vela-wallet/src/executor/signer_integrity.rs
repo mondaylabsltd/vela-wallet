@@ -1,11 +1,14 @@
-//! Is the Trusted Signer's page the page it is supposed to be? (spec 076 phase C)
+//! Is the signing page the page it is supposed to be? (spec 076 phase C, and
+//! spec 102 R6)
 //!
-//! The core decides; this fetches. `vela_core::trusted_signer::integrity` holds
-//! the whole of the judgement — which hashes this build accepts, that the
-//! person's deny-list outranks everything, that a check which cannot complete
-//! is a check that failed — and every shell asks it the same question. What is
-//! platform work, and therefore here, is three things: ask the endpoint what it
-//! publishes, fetch a version by its hash, and hash the bytes that came back.
+//! The core decides; this fetches. `vela_core::trusted_signer::launch` holds
+//! the whole of the rule — which version of a page to open, that the URL
+//! fetched to be checked is the URL that is opened, that the bytes there must
+//! BE that version, that the person's deny-list outranks everything, that a
+//! check which cannot complete is a check that failed — and every shell asks it
+//! the same question. What is platform work, and therefore here, is three
+//! things: ask the endpoint what it publishes, fetch the target's URL, and hash
+//! the bytes that came back.
 //!
 //! **A plain HTTPS request, on purpose** (owner, 2026-09-23: 「我们先用 http
 //! 请求 html 来判断吧」). Not a hidden WebView navigation: verifying by
@@ -19,28 +22,34 @@
 //! that serves bad bytes only to the browser and good ones to this check; the
 //! spec says so plainly, and so must anything this produces.
 //!
-//! # Observe only, for now
+//! # Refusing, since spec 102
 //!
-//! The page is published under `/b/<sha256>/` and [`BUILD_ALLOWED`] lists the
-//! builds this app accepts, but `integrity::ENFORCE` is still `false`. So
-//! [`check`] is CALLED and LOGGED, not a gate on the open: a page that does not
-//! match is opened anyway. The gate is one `if` away, and belongs in the commit
-//! that flips `ENFORCE`.
+//! `integrity::ENFORCE` is on. A check that admits the page leaves a
+//! [`CheckedPage`] here, and that is the only thing a launch can be built
+//! from ([`checked_page`]); a page whose check failed, or never ran, is not
+//! opened. The check still runs at launch, off to one side (FR-007), and again
+//! whenever the one it left is too old to vouch for the page.
 
+use std::collections::{HashMap, HashSet};
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use serde_json::Value;
-use vela_core::trusted_signer::integrity::{self, CheckFailure, NoVersion, Page, Verdict};
+use vela_core::trusted_signer::integrity::{self, CheckFailure, NoVersion, Verdict};
+use vela_core::trusted_signer::launch::{self, Admission, CheckedPage, IntegrityLine, Target};
 
 use crate::executor::storage;
 
-/// Hashes this person trusted on this device (FR-009), and hashes they blocked
-/// (FR-010). Per device: these never sync, and Settings says so.
-pub const KEY_SIGNER_TRUSTED: &str = "vela.signerPage.trusted";
+/// Hashes this person blocked on this device (FR-010). Per device: these never
+/// sync, and Settings says so.
+///
+/// Trust is no longer a device-wide list (spec 102, D-15): a version the
+/// person trusted is stored on THAT saved page (`SigningPage.trusted`), and
+/// only that page's list is passed when it is checked
+/// ([`trusted_for_page`]). The old `vela.signerPage.trusted` is neither read
+/// nor written.
 pub const KEY_SIGNER_BLOCKED: &str = "vela.signerPage.blocked";
-/// Which version the last check chose, per address. Read by the launch path so
-/// opening the page costs no network round trip.
-pub const KEY_SIGNER_VERSION: &str = "vela.signerPage.version";
 
 /// Where the endpoint lists what it still publishes (FR-002).
 ///
@@ -94,7 +103,8 @@ enum Index {
 fn published(base: &str) -> Index {
     let url = format!("{}{INDEX_PATH}", with_trailing_slash(base));
     let mut response =
-        match crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| agent.get(&url).call()) {
+        match crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| as_a_browser(agent, &url))
+        {
             Ok(response) => response,
             Err(failure) => return unanswered(&url, &failure),
         };
@@ -139,6 +149,23 @@ fn listed(text: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A GET as a browser NAVIGATING to `url` asks for it — the core's
+/// [`launch::CHECK_HEADERS`] — so the host answers the check with the bytes it
+/// answers the launch with. A host may rewrite HTML for a navigation only
+/// (Cloudflare's beacon was injected into `text/html` answers alone), and a
+/// check that asked for `*/*` hashed a page the browser never opened.
+fn as_a_browser(
+    agent: &ureq::Agent,
+    url: &str,
+) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    launch::CHECK_HEADERS
+        .iter()
+        .fold(agent.get(url), |request, (name, value)| {
+            request.header(*name, *value)
+        })
+        .call()
+}
+
 fn with_trailing_slash(base: &str) -> String {
     if base.ends_with('/') {
         base.to_owned()
@@ -155,7 +182,7 @@ fn with_trailing_slash(base: &str) -> String {
 /// they are all "this wallet could not see the page".
 fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
     let mut response =
-        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| agent.get(url).call())
+        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| as_a_browser(agent, url))
             .map_err(|_| CheckFailure::Unreachable)?;
     if response.status() != 200 {
         return Err(CheckFailure::Unreachable);
@@ -171,61 +198,87 @@ fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
     Ok(integrity::hash_page(&bytes))
 }
 
-/// The verdict for the page at `base`, having actually gone and looked.
+/// The verdict for the page at `base`, having actually gone and looked — and
+/// the admission left on the board for [`checked_page`] and [`line`].
 ///
-/// `base` is the address Settings holds — the official page, or one the person
-/// deployed themselves.
+/// `base` is the page an account signs on, or one in Settings → Signing pages.
+/// The versions passed as trusted are THAT page's own ([`trusted_for_page`],
+/// D-15); the block list is the device's. **Blocks** on the network (two
+/// requests, each within [`TIMEOUT`]): run it off the frame.
 #[must_use]
 pub fn check(base: &str) -> Verdict {
     check_with(
         base,
-        &hashes_at(KEY_SIGNER_TRUSTED),
+        &trusted_for_page(base),
         &hashes_at(KEY_SIGNER_BLOCKED),
     )
 }
 
-/// The same, with the two per-device lists handed in.
+/// The versions the person trusted for the page at `base`, on this device —
+/// stored on that saved page (`SigningPage.trusted`, spec 102 core round).
+/// Empty for the official page (the core ignores trust there anyway) and for
+/// a page that is not saved.
+#[must_use]
+pub fn trusted_for_page(base: &str) -> Vec<String> {
+    vela_core::signing_venue::trusted_versions(&crate::executor::signing_pages::saved(), base)
+}
+
+/// The same, with the page's trusted versions and the device's block list
+/// handed in.
 ///
 /// Separated so the network path can be exercised against a real server
 /// without a configured store — which is how it was first driven end to end,
 /// over a LAN address, before anything was published.
 #[must_use]
 pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict {
-    // Which version to ask for. The endpoint's index narrows the candidates;
-    // the order is this client's, so the endpoint cannot steer the choice.
-    let hash = match choose(&published(base), trusted, blocked) {
-        Ok(hash) => hash,
-        Err(verdict) => return verdict,
+    let base = key_of(base);
+    started(&base, crate::executor::now_ms() as u64);
+    let outcome = admission_with(&base, trusted, blocked);
+    let verdict = match &outcome {
+        Ok(Admission::Admitted(page)) => page.verdict().clone(),
+        Ok(Admission::Refused { verdict, .. }) | Err(verdict) => verdict.clone(),
     };
-    remember_version(base, &hash);
-    let Some(url) = integrity::content_addressed_url(base, &hash) else {
-        return Verdict::CouldNotCheck(CheckFailure::NotChecked);
-    };
-    // A deployment that publishes by hash is asked by hash — including one on a
-    // person's own host, because `dist/` is the same layout wherever it is
-    // copied. A host serving a single page has no index, so `choose_version`
-    // already returned `None` above and this is never reached.
-    verdict_for(base, fetch_and_hash(&url), trusted, blocked)
+    record(&base, outcome, crate::executor::now_ms() as u64);
+    verdict
+}
+
+/// R6 through this shell's own I/O: which version to open (the endpoint's index
+/// narrows, the core chooses), fetch EXACTLY that version's URL, hash the
+/// bytes, and let the core rule. `Err` when there was no version to ask for.
+fn admission_with(
+    base: &str,
+    trusted: &[String],
+    blocked: &[String],
+) -> Result<Admission, Verdict> {
+    let target = choose(base, &published(base), trusted, blocked)?;
+    let observed = fetch_and_hash(target.url());
+    // The shell's clock when the bytes arrived: what "checked {{time}}" says.
+    let checked_at = crate::executor::now_ms() as u64;
+    Ok(admit_for(&target, observed, trusted, blocked, checked_at))
 }
 
 /// The version to ask for, or the verdict without one.
 ///
-/// Nothing to ask for, and WHY matters: "this endpoint publishes nothing this
-/// wallet knows" sends a person to update, and "you have blocked every usable
-/// version" sends them to their own list. Saying "could not check" for either
-/// would send them to their network settings — and saying "update the wallet"
-/// for an index that never answered sent them the wrong way (G67): that is
-/// "could not check", with the host and the failure in the log.
-fn choose(index: &Index, trusted: &[String], blocked: &[String]) -> Result<String, Verdict> {
-    match index {
+/// The index has no authority and is an optimisation, not a dependency: one
+/// that never answered is logged ("could not fetch …", spec 082 G67) and the
+/// version is asked for directly — the official page's launch version, which
+/// is deployed by definition. Nothing to ask for, and WHY, still matters:
+/// "this endpoint publishes nothing this wallet knows" sends a person to
+/// update, and "you have blocked every usable version" to their own list.
+fn choose(
+    base: &str,
+    index: &Index,
+    trusted: &[String],
+    blocked: &[String],
+) -> Result<Target, Verdict> {
+    let listed = match index {
         Index::Unfetched { host, kind } => {
             crate::diag::vlog!("signer page", "{}", fetch_line(host, kind));
-            Err(Verdict::CouldNotCheck(CheckFailure::Unreachable))
+            None
         }
-        Index::Listed(available) => {
-            integrity::choose_version(available, trusted, blocked).map_err(Verdict::NoVersionToAsk)
-        }
-    }
+        Index::Listed(available) => Some(available.as_slice()),
+    };
+    launch::target(base, listed, trusted, blocked).map_err(Verdict::NoVersionToAsk)
 }
 
 /// The log line for an index that never answered (the area is the caller's
@@ -234,76 +287,284 @@ fn fetch_line(host: &str, kind: &str) -> String {
     format!("could not fetch {host} ({kind})")
 }
 
-/// The pure half: bytes-or-failure in, the core's verdict out.
-fn verdict_for(
-    base: &str,
+/// The pure half: the target's bytes-or-failure in, the core's ruling out.
+fn admit_for(
+    target: &Target,
     observed: Result<String, CheckFailure>,
     trusted: &[String],
     blocked: &[String],
-) -> Verdict {
+    now_ms: u64,
+) -> Admission {
     let (hash, failure) = match observed {
         Ok(hash) => (Some(hash), CheckFailure::NotChecked),
         Err(why) => (None, why),
     };
-    integrity::decide(&Page {
-        url: base,
-        observed: hash.as_deref(),
+    launch::admit(
+        target,
+        hash.as_deref(),
         failure,
         trusted,
         blocked,
         // FR-009: only ever honoured for a custom address, and the core is
-        // what enforces that. Settings will own this in phase E; until then
-        // the check is at its strictest.
-        verification_off: false,
+        // what enforces that. Settings will own this; until then the check
+        // is at its strictest.
+        false,
+        now_ms,
+    )
+}
+
+/// What the last check of a page came to.
+#[derive(Clone, Debug)]
+enum Outcome {
+    /// The core's ruling on the bytes: the page admitted (what the launch
+    /// path opens without a network round trip — a person pressing Open must
+    /// not wait on one, and a unit test of the launch path must not reach the
+    /// internet), or refused with its verdict.
+    Ruled(Admission),
+    /// There was no version to ask for at all, and the line says why.
+    NoVersion(IntegrityLine),
+}
+
+impl Outcome {
+    fn admission(&self) -> Option<&Admission> {
+        match self {
+            Self::Ruled(admission) => Some(admission),
+            Self::NoVersion(_) => None,
+        }
+    }
+}
+
+/// What the checks so far came to, by the page's normal address.
+///
+/// - `kept` — the check each page is held to: the newest one that COMPLETED,
+///   or the fresh admission before a refresh that could not
+///   (`launch::keep_or_replace`) — so an offline afternoon does not turn a
+///   good line into "couldn't check";
+/// - `attempted` — when a check of each page last STARTED, completed or not,
+///   which spaces retries ([`launch::refresh_due`]);
+/// - `running` — checks under way, which are not started twice and read as
+///   the core's `line_while_checking`.
+#[derive(Default)]
+struct Board {
+    kept: HashMap<String, Outcome>,
+    attempted: HashMap<String, u64>,
+    running: HashSet<String>,
+    /// Who hears that a check finished — the screens that draw a line.
+    listeners: Vec<UnboundedSender<()>>,
+}
+
+static BOARD: LazyLock<Mutex<Board>> = LazyLock::new(|| Mutex::new(Board::default()));
+
+fn with_board<T>(change: impl FnOnce(&mut Board) -> T) -> T {
+    change(
+        &mut BOARD
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
+}
+
+/// The one spelling of a page's address the board keys on: the core's
+/// normalisation (`https://sign.getvela.app/`), so an account's venue, a saved
+/// page and a ceremony's `page` all find the same check.
+#[must_use]
+pub fn key_of(base: &str) -> String {
+    vela_core::trusted_signer::signer_url(base).unwrap_or_else(|_| base.trim().to_owned())
+}
+
+/// A check of `base` starts at `now_ms`.
+fn started(base: &str, now_ms: u64) {
+    with_board(|board| {
+        board.running.insert(base.to_owned());
+        board.attempted.insert(base.to_owned(), now_ms);
+    });
+}
+
+/// Put a finished check on the board — keeping the check before it when this
+/// one could not complete and that one still vouches for the page (the
+/// core's `keep_or_replace`) — and tell whoever is drawing a line.
+fn record(base: &str, outcome: Result<Admission, Verdict>, now_ms: u64) {
+    let listeners = with_board(|board| {
+        board.running.remove(base);
+        let next = match outcome {
+            Ok(next) => {
+                let previous = board.kept.get(base).and_then(Outcome::admission).cloned();
+                Outcome::Ruled(launch::keep_or_replace(previous, next, now_ms))
+            }
+            Err(verdict) => Outcome::NoVersion(IntegrityLine::of(&verdict, "", None)),
+        };
+        board.kept.insert(base.to_owned(), next);
+        board.listeners.retain(|tx| !tx.is_closed());
+        board.listeners.clone()
+    });
+    for listener in listeners {
+        let _ = listener.unbounded_send(());
+    }
+}
+
+/// A stream that says "a check finished" — the screens' cue to draw their
+/// lines again. Nothing is lost by a listener that goes away.
+#[must_use]
+pub fn subscribe() -> UnboundedReceiver<()> {
+    let (tx, rx) = unbounded();
+    with_board(|board| board.listeners.push(tx));
+    rx
+}
+
+/// The page to OPEN for `base`: the version that was checked, at the address
+/// that was checked — or `None`, and nothing opens, when no check admitted it
+/// or the one that did is too old to vouch for it (check again first).
+///
+/// This replaces opening "the remembered version, else the address as typed":
+/// the fallback to the bare address opened bytes nobody had checked (spec 102
+/// R6, `ENFORCE` on).
+#[must_use]
+pub fn checked_page(base: &str, now_ms: u64) -> Option<CheckedPage> {
+    let base = key_of(base);
+    with_board(|board| {
+        board
+            .kept
+            .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::page)
+            .filter(|page| page.is_fresh(now_ms))
+            .cloned()
     })
 }
 
-/// The URL to actually OPEN, for the address Settings holds.
+/// The integrity line for `base` at `now_ms` — what the hand-off card,
+/// Settings → Signing pages and the choosers draw.
 ///
-/// **The page that is opened must be the page that was checked.** `check()`
-/// fetches `<base>/b/<hash>/sign.html`; if the browser were sent to
-/// `<base>/sign.html` the two would be different bytes, and "verified" would
-/// refer to something the browser never loaded. That was the shape of it
-/// before this existed (owner, 2026-09-23: 「路径缺少了 /b/sha256/」).
-///
-/// Falls back to the address as typed when no version is known for it — a
-/// deployment that serves a single page, or one whose index has not been read
-/// yet. With `ENFORCE` off, refusing to open at all would brick a Trusted Signer
-/// that works.
-///
-/// **No network here.** This is called on the path that opens the page, and a
-/// person pressing Sign must not wait on an HTTP round trip — nor should a unit
-/// test of the launch path reach the internet, which is how the first version
-/// of this announced itself: three tests that used to take milliseconds took
-/// five minutes. The version comes from what the background check last chose
-/// (FR-007: the check runs at an unpredictable moment and the result is
-/// cached).
+/// While a check runs it is the core's `line_while_checking`: the previous
+/// admission's line while that still vouches for the page (a background
+/// refresh does not make a good line flicker), else "checking". Otherwise the
+/// kept check's line — "checking" again once an admission is too old to vouch
+/// for anything — and "checking" before any check has finished.
 #[must_use]
-pub fn open_url(base: &str) -> String {
-    match remembered_version(base).and_then(|hash| integrity::content_addressed_url(base, &hash)) {
-        Some(url) => url,
-        None => base.to_owned(),
+pub fn line(base: &str, now_ms: u64) -> IntegrityLine {
+    let base = key_of(base);
+    with_board(|board| {
+        let kept = board.kept.get(&base);
+        if board.running.contains(&base) {
+            return launch::line_while_checking(kept.and_then(Outcome::admission), now_ms);
+        }
+        match kept {
+            Some(Outcome::Ruled(Admission::Admitted(page))) => page.line(now_ms),
+            Some(Outcome::Ruled(refused)) => refused.line(),
+            Some(Outcome::NoVersion(line)) => line.clone(),
+            None => IntegrityLine::checking(),
+        }
+    })
+}
+
+/// The full version to store when the person answers "Trust this version"
+/// for `base` — `Some` only while the kept check of that page ended in
+/// `AskToTrust` (the core's `Admission::version_to_trust`).
+#[must_use]
+pub fn version_to_trust(base: &str) -> Option<String> {
+    let base = key_of(base);
+    with_board(|board| {
+        board
+            .kept
+            .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::version_to_trust)
+            .map(str::to_owned)
+    })
+}
+
+/// Should a check of `base` start now? The core's [`launch::refresh_due`]:
+/// when no check vouches for the page or the one that does is older than
+/// half a day — and no attempt started within the last ten minutes, so a
+/// page that cannot be reached is not fetched on every frame that draws its
+/// line. Never while one is running.
+#[must_use]
+pub fn wants_check(base: &str, now_ms: u64) -> bool {
+    let base = key_of(base);
+    with_board(|board| {
+        let checked_at = board
+            .kept
+            .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::page)
+            .map(CheckedPage::checked_at_ms);
+        !board.running.contains(&base)
+            && launch::refresh_due(checked_at, board.attempted.get(&base).copied(), now_ms)
+    })
+}
+
+/// Forget the last refusal of `base` and its resting time, so the next look
+/// checks it again — the "check again" a refused line offers, and what
+/// follows "Trust this version". An admission is kept: it is not a refusal.
+pub fn forget_refusal(base: &str) {
+    let base = key_of(base);
+    with_board(|board| {
+        if board
+            .kept
+            .get(&base)
+            .is_some_and(|kept| kept.admission().and_then(Admission::page).is_none())
+        {
+            board.kept.remove(&base);
+        }
+        board.attempted.remove(&base);
+    });
+}
+
+/// Check `base` on a thread of its own when [`wants_check`] says so. The
+/// result reaches the screens through [`subscribe`].
+pub fn check_in_background(base: &str) {
+    let now = crate::executor::now_ms() as u64;
+    if !wants_check(base, now) {
+        return;
+    }
+    let base = key_of(base);
+    // Marked before the thread starts, so a second frame in the same breath
+    // does not start a second check.
+    started(&base, now);
+    let checking = base.clone();
+    let spawned = std::thread::Builder::new()
+        .name("signer-page-check".to_owned())
+        .spawn(move || {
+            let verdict = check(&checking);
+            crate::diag::vlog!("signer page", "{}", unprefixed(&describe(&verdict)));
+        });
+    if spawned.is_err() {
+        with_board(|board| board.running.remove(&base));
     }
 }
 
-/// The version the last check chose for this address, if any.
-fn remembered_version(base: &str) -> Option<String> {
-    let all = storage::read_value(KEY_SIGNER_VERSION).ok().flatten()?;
-    let hash = all.get(base)?.as_str()?;
-    integrity::normalize_hash(hash)
+/// Tests elsewhere in this crate that launch a page: leave an admitted check
+/// of `base` on the board, as a check that found the bytes in order would —
+/// the launch path then opens without reaching the network. The official page
+/// is admitted at its launch version; any other at a version "trusted on this
+/// device".
+#[cfg(test)]
+pub(crate) fn admit_for_tests(base: &str) {
+    const TRUSTED: &str = "7e57000000000000000000000000000000000000000000000000000000007e57";
+    let base = key_of(base);
+    let now = crate::executor::now_ms() as u64;
+    let trusted = vec![TRUSTED.to_owned()];
+    let (target, observed) = if integrity::is_official(&base) {
+        (
+            launch::target(&base, None, &[], &[]),
+            integrity::LAUNCH.to_owned(),
+        )
+    } else {
+        (
+            launch::target(&base, Some(&trusted), &trusted, &[]),
+            TRUSTED.to_owned(),
+        )
+    };
+    let target = target.unwrap_or_else(|_| unreachable!("a version to ask for"));
+    let admission = admit_for(&target, Ok(observed), &trusted, &[], now);
+    assert!(admission.page().is_some(), "{admission:?}");
+    record(&base, Ok(admission), now);
 }
 
-/// Remember which version was chosen for this address, so the launch path can
-/// open it without asking the network.
-fn remember_version(base: &str, hash: &str) {
-    let mut all = storage::read_value(KEY_SIGNER_VERSION)
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
-    if let Some(object) = all.as_object_mut() {
-        object.insert(base.to_owned(), Value::String(hash.to_owned()));
-    }
-    let _ = storage::write_value(KEY_SIGNER_VERSION, all);
+/// [`describe`]'s line without its own `signer page: `, for a log line whose
+/// area already says it.
+#[must_use]
+pub fn unprefixed(line: &str) -> &str {
+    line.strip_prefix("signer page: ").unwrap_or(line)
 }
 
 /// One line for the log, saying what was found without claiming more than the
@@ -347,22 +608,27 @@ pub fn describe(verdict: &Verdict) -> String {
     }
 }
 
-/// Whether this build may REFUSE on the verdict, as opposed to recording it.
-///
-/// The core owns the answer (`integrity::ENFORCE`), and it is deliberately not
-/// "is the allow-set non-empty": listing the first hash must not, by itself,
-/// start refusing every page that is not published yet.
-#[must_use]
-pub fn can_enforce() -> bool {
-    integrity::ENFORCE
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use vela_core::trusted_signer::integrity::BUILD_ALLOWED;
 
     const A: &str = "aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee";
+
+    fn official() -> Target {
+        launch::target("https://sign.getvela.app/", None, &[], &[])
+            .unwrap_or_else(|_| unreachable!())
+    }
+
+    fn custom(version: &str) -> Target {
+        launch::target(
+            "https://signer.example.test/",
+            Some(&[version.to_owned()]),
+            &[],
+            &[],
+        )
+        .unwrap_or_else(|_| unreachable!())
+    }
 
     #[test]
     fn a_fetch_that_failed_opens_nothing() {
@@ -373,34 +639,214 @@ mod tests {
             CheckFailure::NoCachedBytes,
             CheckFailure::NotChecked,
         ] {
-            let verdict = verdict_for("https://sign.getvela.app/", Err(why), &[], &[]);
-            assert_eq!(verdict, Verdict::CouldNotCheck(why));
+            let admission = admit_for(&official(), Err(why), &[], &[], 1);
+            assert_eq!(admission.page(), None);
+            assert!(matches!(
+                admission,
+                Admission::Refused { verdict: Verdict::CouldNotCheck(w), .. } if w == why
+            ));
         }
     }
 
     #[test]
     fn bytes_this_person_trusted_open_on_their_own_address() {
         let trusted = vec![A.to_owned()];
-        let verdict = verdict_for(
-            "https://signer.example.test/",
-            Ok(A.to_owned()),
-            &trusted,
-            &[],
+        let admission = admit_for(&custom(A), Ok(A.to_owned()), &trusted, &[], 1);
+        assert_eq!(
+            admission.page().map(|page| page.verdict().clone()),
+            Some(Verdict::Open)
         );
-        assert_eq!(verdict, Verdict::Open);
     }
 
     #[test]
     fn the_block_list_still_wins_here() {
         let trusted = vec![A.to_owned()];
         let blocked = vec![A.to_owned()];
-        let verdict = verdict_for(
-            "https://signer.example.test/",
-            Ok(A.to_owned()),
-            &trusted,
-            &blocked,
+        let admission = admit_for(&custom(A), Ok(A.to_owned()), &trusted, &blocked, 1);
+        assert!(matches!(
+            admission,
+            Admission::Refused {
+                verdict: Verdict::Denied { .. },
+                ..
+            }
+        ));
+    }
+
+    /// R6: what is opened is what was checked — the admitted page's address is
+    /// the one this shell fetched.
+    ///
+    /// Its own address: the board is the process's, and the official page is
+    /// what other modules' tests seed as admitted.
+    #[test]
+    fn the_page_left_for_the_launch_is_the_one_that_was_checked() {
+        const BASE: &str = "https://board-left.example.test/";
+        let trusted = vec![A.to_owned()];
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
+            .unwrap_or_else(|_| unreachable!());
+        started(BASE, 1_000);
+        let admission = admit_for(&target, Ok(A.to_owned()), &trusted, &[], 1_000);
+        record(BASE, Ok(admission), 1_000);
+        let page = checked_page(BASE, 2_000).unwrap_or_else(|| unreachable!());
+        assert_eq!(page.target().url(), target.url());
+        // The line says what was checked, and that it opens.
+        let said = line(BASE, 2_000);
+        assert!(said.opens, "{said:?}");
+        assert_eq!(said.version, &A[..8]);
+        assert_eq!(said.checked_at_ms, Some(1_000));
+        // Too old to vouch for anything: nothing opens until it is checked
+        // again, the line reads "checking", and a screen asks for that check.
+        let stale = 1_000 + launch::MAX_CHECK_AGE_MS + 1;
+        assert!(checked_page(BASE, stale).is_none());
+        assert_eq!(line(BASE, stale).key, IntegrityLine::checking().key);
+        assert!(wants_check(BASE, stale));
+        assert!(!wants_check(BASE, 2_000), "a fresh check is not run again");
+        // D-14: half a day on, a background refresh is due — while the page
+        // still opens, so Open almost never waits.
+        let due = 1_000 + launch::REFRESH_AFTER_MS + 1;
+        assert!(wants_check(BASE, due));
+        assert!(checked_page(BASE, due).is_some());
+    }
+
+    /// D-14: a refresh that could not complete keeps the fresh admission
+    /// before it — and draws its line, not "checking", while it runs — and an
+    /// attempt rests ten minutes before the next; one that completed replaces
+    /// it, a refusal included.
+    #[test]
+    fn a_refresh_keeps_a_fresh_check_until_one_completes() {
+        const BASE: &str = "https://board-refresh.example.test/";
+        let trusted = vec![A.to_owned()];
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
+            .unwrap_or_else(|_| unreachable!());
+        let at = 10_000;
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &trusted, &[], at)),
+            at,
         );
-        assert!(matches!(verdict, Verdict::Denied { .. }));
+        // The refresh starts: the line stays the admission's, Open stays on.
+        let refresh = at + launch::REFRESH_AFTER_MS + 1;
+        started(BASE, refresh);
+        let said = line(BASE, refresh);
+        assert!(said.opens, "{said:?}");
+        assert!(!wants_check(BASE, refresh), "one check at a time");
+        // Offline: the admission before it stays, and the next attempt rests.
+        let offline = admit_for(
+            &target,
+            Err(CheckFailure::Unreachable),
+            &trusted,
+            &[],
+            refresh,
+        );
+        record(BASE, Ok(offline), refresh);
+        assert!(checked_page(BASE, refresh).is_some());
+        assert!(line(BASE, refresh).opens);
+        assert!(
+            !wants_check(BASE, refresh + 1),
+            "resting after a failed attempt"
+        );
+        assert!(wants_check(BASE, refresh + launch::RETRY_AFTER_MS + 1));
+        // A completed refresh replaces it — bytes that no longer match are the
+        // news it exists to catch.
+        let later = refresh + launch::RETRY_AFTER_MS + 1;
+        started(BASE, later);
+        let mismatch = admit_for(&target, Ok("bb".repeat(32)), &trusted, &[], later);
+        record(BASE, Ok(mismatch), later);
+        assert!(checked_page(BASE, later).is_none());
+        let said = line(BASE, later);
+        assert!(!said.opens);
+        assert_eq!(said.key, "componentsUi.signing.integrity.mismatch");
+        assert!(
+            !wants_check(BASE, later + 1),
+            "a refusal is not re-run on every frame"
+        );
+        // "Check again" forgets the refusal and its rest; the next look checks.
+        forget_refusal(BASE);
+        assert!(wants_check(BASE, later + 1));
+        assert_eq!(line(BASE, later + 1).key, IntegrityLine::checking().key);
+    }
+
+    /// With nothing that vouches for the page, a check under way reads
+    /// "checking" — the hand-off card's Open stays off until it lands.
+    #[test]
+    fn a_check_with_nothing_before_it_reads_checking() {
+        const BASE: &str = "https://board-checking.example.test/";
+        started(BASE, 5);
+        let said = line(BASE, 6);
+        assert_eq!(said.key, IntegrityLine::checking().key);
+        assert!(!said.opens);
+    }
+
+    /// "Trust this version" is offered for exactly the version a self-hosted
+    /// page's check asked about — and never for an admitted page.
+    #[test]
+    fn the_version_to_trust_is_the_one_the_check_asked_about() {
+        const BASE: &str = "https://board-ask.example.test/";
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &[], &[])
+            .unwrap_or_else(|_| unreachable!());
+        assert!(target.proposed_by_index());
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &[], &[], 1)),
+            1,
+        );
+        assert_eq!(version_to_trust(BASE).as_deref(), Some(A));
+        assert_eq!(line(BASE, 2).key, "componentsUi.signing.integrity.askTrust");
+        // Trusted on this page: the next check opens it, and nothing is asked.
+        let trusted = vec![A.to_owned()];
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
+            .unwrap_or_else(|_| unreachable!());
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &trusted, &[], 3)),
+            3,
+        );
+        assert_eq!(version_to_trust(BASE), None);
+        assert_eq!(line(BASE, 4).key, "componentsUi.signing.integrity.trusted");
+    }
+
+    /// The check asks as a browser navigating to the page asks — the core's
+    /// headers — so the host answers it with the bytes the launch gets.
+    #[test]
+    fn the_check_asks_as_a_browser_does() {
+        assert!(
+            launch::CHECK_HEADERS
+                .iter()
+                .any(|(name, value)| name.eq_ignore_ascii_case("accept")
+                    && value.starts_with("text/html"))
+        );
+    }
+
+    /// Every spelling of one page is one entry on the board.
+    #[test]
+    fn a_page_is_one_entry_however_its_address_was_written() {
+        assert_eq!(
+            key_of("https://sign.getvela.app"),
+            "https://sign.getvela.app/"
+        );
+        assert_eq!(key_of(" SIGN.getvela.app "), "https://sign.getvela.app/");
+        assert_eq!(
+            key_of("http://LOCALHOST:8140/clearsigning/"),
+            "http://localhost:8140/clearsigning/"
+        );
+    }
+
+    /// A finished check is announced to whoever draws a line.
+    #[test]
+    fn a_finished_check_is_announced() {
+        const BASE: &str = "https://board-announce.example.test/";
+        let mut heard = subscribe();
+        record(
+            BASE,
+            Err(Verdict::NoVersionToAsk(
+                NoVersion::NothingPublishedThisWalletKnows,
+            )),
+            1,
+        );
+        assert!(heard.try_recv().is_ok());
+        assert_eq!(
+            line(BASE, 1).key,
+            "componentsUi.signing.integrity.noVersion"
+        );
     }
 
     #[test]
@@ -422,13 +868,11 @@ mod tests {
     }
 
     #[test]
-    fn this_build_records_but_does_not_refuse_yet() {
-        // The guard that keeps phase C from bricking a working Trusted Signer:
-        // the page is not published at the official address yet.
-        assert!(
-            !can_enforce(),
-            "076: enforcement is on — publish first, then flip integrity::ENFORCE"
-        );
+    fn this_build_refuses_a_page_that_failed_its_check() {
+        // Spec 102 R6: the page has been published at the official address
+        // since 079, and a failed or missing check opens nothing.
+        // The core owns the switch (`integrity::ENFORCE`); this build obeys it.
+        const { assert!(integrity::ENFORCE, "102: enforcement is off") };
     }
 
     /// The whole chain, over a real socket: index → choose → fetch by hash →
@@ -477,18 +921,65 @@ mod tests {
         let Ok(base) = std::env::var("SIGNER_DIST") else {
             return;
         };
-        let opened = open_url(&base);
-        println!("open_url({base}) → {opened}");
+        let verdict = check_with(&base, &[], &[]);
+        assert_eq!(verdict, Verdict::Open);
+        let now = crate::executor::now_ms() as u64;
+        let opened = checked_page(&base, now).unwrap_or_else(|| unreachable!("admitted"));
+        println!("checked_page({base}) → {}", opened.target().url());
         // It must be the content-addressed path of a version this build knows,
         // not the bare address — otherwise the check and the browser look at
         // different bytes.
         assert!(
-            opened.contains("/b/") && opened.ends_with("/sign.html"),
-            "opened the wrong page: {opened}"
+            opened.target().url().contains("/b/") && opened.target().url().ends_with("/sign.html"),
+            "opened the wrong page: {}",
+            opened.target().url()
         );
         assert!(
-            opened.contains(BUILD_ALLOWED[0]),
-            "opened an unknown version: {opened}"
+            opened.target().url().contains(BUILD_ALLOWED[0]),
+            "opened an unknown version: {}",
+            opened.target().url()
+        );
+    }
+
+    /// A self-hosted deployment of a build Vela did not publish, over a real
+    /// socket: the check asks (`AskToTrust`, with the version to trust), and
+    /// once that version is the page's trusted one the same check opens it,
+    /// "trusted on this device" — at the checked address.
+    ///
+    /// ```sh
+    /// SIGNER_SELF_HOSTED=http://localhost:8931/ cargo test self_hosted_build -- --ignored
+    /// ```
+    /// (any static host serving `index.json` and `b/<sha256>/sign.html`.)
+    #[test]
+    #[ignore = "needs a self-hosted deployment at $SIGNER_SELF_HOSTED"]
+    fn a_self_hosted_build_is_asked_about_then_trusted() {
+        let Ok(base) = std::env::var("SIGNER_SELF_HOSTED") else {
+            return;
+        };
+        let asked = check_with(&base, &[], &[]);
+        let Verdict::AskToTrust { actual } = asked.clone() else {
+            unreachable!("not asked: {asked:?}")
+        };
+        assert_eq!(version_to_trust(&base).as_deref(), Some(actual.as_str()));
+        let now = crate::executor::now_ms() as u64;
+        assert_eq!(
+            line(&base, now).key,
+            "componentsUi.signing.integrity.askTrust"
+        );
+        assert!(
+            checked_page(&base, now).is_none(),
+            "opened before it was trusted"
+        );
+        let trusted = vec![actual.clone()];
+        assert_eq!(check_with(&base, &trusted, &[]), Verdict::Open);
+        let now = crate::executor::now_ms() as u64;
+        let said = line(&base, now);
+        assert_eq!(said.key, "componentsUi.signing.integrity.trusted");
+        let page = checked_page(&base, now).unwrap_or_else(|| unreachable!("admitted"));
+        assert!(
+            page.target()
+                .url()
+                .ends_with(&format!("/b/{actual}/sign.html"))
         );
     }
 
@@ -519,11 +1010,12 @@ mod tests {
             fetch_line("sign.getvela.app", "proxy"),
             "could not fetch sign.getvela.app (proxy)"
         );
-        let Err(verdict) = choose(&index, &[], &[]) else {
-            unreachable!("nothing answered, so there is nothing to ask for")
-        };
-        assert_eq!(verdict, Verdict::CouldNotCheck(CheckFailure::Unreachable));
-        assert!(!describe(&verdict).contains("update the wallet"));
+        // The index is an optimisation, not a dependency: with none, the
+        // official page's launch version is asked for directly — never "update
+        // the wallet".
+        let target = choose("https://sign.getvela.app/", &index, &[], &[])
+            .unwrap_or_else(|_| unreachable!("the launch version is always there to ask for"));
+        assert_eq!(target.version(), integrity::LAUNCH);
         // An HTTP status is an answer: no index, which is allowed.
         let missing = Transport {
             error: ureq::Error::StatusCode(404),
@@ -537,7 +1029,12 @@ mod tests {
     /// version line — the one that sends a person to update.
     #[test]
     fn an_empty_version_list_is_the_version_line() {
-        let Err(verdict) = choose(&Index::Listed(Vec::new()), &[], &[]) else {
+        let Err(verdict) = choose(
+            "https://sign.getvela.app/",
+            &Index::Listed(Vec::new()),
+            &[],
+            &[],
+        ) else {
             unreachable!("an empty index offers nothing")
         };
         assert_eq!(

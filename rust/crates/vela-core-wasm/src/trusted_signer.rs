@@ -1,28 +1,16 @@
-//! What the web wallet still needs of the Trusted Signer (spec 075): nothing of
+//! What the web wallet still needs of the signing page (spec 075): nothing of
 //! the channel, only the REGISTRY's relying party.
 //!
-//! The web wallet does not offer the Trusted Signer at all (owner, 2026-09-23 —
+//! The web wallet does not open a signing page at all (owner, 2026-09-23 —
 //! "web 就不支持可信签名器好了"): no page, no ceremonies, no loopback socket.
-//! But a wallet whose keys were minted on a phone's Trusted Signer page can be
-//! published or read from here, and a member minted behind a page proves under
-//! THAT page's domain. Getting the relying party wrong is how both phones hit
-//! 「可信签名器的回复与这笔请求不符」, so the rule stays where every shell can
-//! reach it.
+//! But a wallet whose keys were minted on a page can be published or read from
+//! here, and a member minted on a page proves under THAT page's domain. Getting
+//! the relying party wrong is how both phones hit 「可信签名器的回复与这笔请求
+//! 不符」, so the rule stays where every shell can reach it. Spec 102: whether
+//! a page can reach an account's keys at all is `signingVenueBlock`.
 
 use vela_core::trusted_signer;
 use wasm_bindgen::prelude::*;
-
-/// Whether a page at `url` can use this wallet's passkeys (they are
-/// `getvela.app` keys).
-///
-/// The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
-/// whether a key that lives behind one is reachable by a platform sheet: a key
-/// minted on `*.getvela.app` is this app's passkey, and a key minted on
-/// anybody else's page is reachable nowhere but there.
-#[wasm_bindgen(js_name = trustedSignerUsesWalletPasskeys)]
-pub fn trusted_signer_uses_wallet_passkeys(url: &str) -> bool {
-    trusted_signer::uses_wallet_passkeys(url)
-}
 
 /// The relying party a key minted behind `signerOrigin` belongs to, or `null`
 /// for a key this wallet's own authenticators made (spec 075).
@@ -53,4 +41,26 @@ pub fn trusted_signer_unit_rp_id(
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     trusted_signer::registry_unit_rp_id(&origins, wallet_rp_id)
         .map_err(|found| JsValue::from_str(&found.join(", ")))
+}
+
+/// The corpus key of the title a key ceremony on a self-hosted page is drawn
+/// under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
+/// `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
+/// not a ceremony. The web runs none; its gallery draws the apps' card.
+#[wasm_bindgen(js_name = trustedSignerCeremonyTitleKey)]
+#[must_use]
+pub fn trusted_signer_ceremony_title_key(operation_json: &str) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(operation_json)
+        .map(|ceremony| ceremony.title_key().to_owned())
+}
+
+/// The key row of a ceremony's card, as JSON `KeyLabel`
+/// (`{place_key, label_key}`): "New key on | This device" while a key is made,
+/// "Confirm with | USB security key" when one signs in or proves — the page's
+/// own row. `null` for an operation that is not a ceremony.
+#[wasm_bindgen(js_name = trustedSignerCeremonyKeyLabel)]
+#[must_use]
+pub fn trusted_signer_ceremony_key_label(operation_json: &str) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(operation_json)
+        .and_then(|ceremony| serde_json::to_string(&ceremony.key_label()).ok())
 }

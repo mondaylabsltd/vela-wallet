@@ -257,7 +257,9 @@ final class FeeStore {
                 return "{}"
             },
             onView: { [weak self] view in self?.speedChanged(view) },
-            onFault: { print("[vela-wallet] fee_speed fault: \($0)") }
+            onFault: { print("[vela-wallet] fee_speed fault: \($0)") },
+            // The hand-off card's fee row reads this view whole (spec 102).
+            keepsJson: true
         )
         _ = speedCore.boot(CoreJSON.string(["type": "reset"]))
     }

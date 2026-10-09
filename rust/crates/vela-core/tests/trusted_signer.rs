@@ -7,10 +7,30 @@ use p256::ecdsa::signature::hazmat::PrehashSigner as _;
 use p256::ecdsa::{Signature, SigningKey};
 use serde_json::{json, Value};
 use vela_core::primitives::{sha256, to_hex};
+use vela_core::trusted_signer::integrity::{CheckFailure, LAUNCH};
+use vela_core::trusted_signer::launch::{admit, target, CheckedPage};
 use vela_core::trusted_signer::ws::{intent_message, parse_message, Connection, Message};
 use vela_core::trusted_signer::{
-    self, parse_callback, request, url_launch, verify, ws_launch, RequestInput, TrustedSignerError,
+    self, parse_callback, request, verify, RequestInput, TrustedSignerError,
 };
+
+/// The official page at its launch version, checked and admitted — the only
+/// way a launch URL is built (spec 102 R6).
+fn checked_official() -> CheckedPage {
+    let page = target("https://sign.getvela.app", None, &[], &[]).expect("a version");
+    admit(
+        &page,
+        Some(LAUNCH),
+        CheckFailure::NotChecked,
+        &[],
+        &[],
+        false,
+        1_000,
+    )
+    .page()
+    .cloned()
+    .expect("the shipped page is admitted")
+}
 use vela_core::user_op::{UserOperation, WalletKey};
 use vela_core::webauthn::webauthn_signing_hash;
 
@@ -173,6 +193,7 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
         account: SAFE,
         account_name: Some("savings"),
         credential_ids_hex: &ids,
+        key_route: None,
         user_op: Some(&op),
         calls: &[vela_core::user_op::MultiSendCall {
             to: SAFE.into(),
@@ -209,6 +230,51 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
     );
 }
 
+/// Spec 102 R5: with the account's key route the page is offered that one key
+/// — its transports and the hints for where it lives — so the browser goes
+/// straight to it instead of asking where the passkey is.
+#[test]
+fn the_request_names_the_key_to_use_and_where_it_lives() {
+    let ids = vec!["112233".to_owned(), "aabb".to_owned()];
+    let route = vela_core::signing_venue::KeyRoute::new("aabb", "hybrid", "hybrid,internal");
+    let built = request(&RequestInput {
+        method: "personal_sign",
+        params: json!(["0x68656c6c6f", SAFE]),
+        origin: "https://app.example",
+        chain_id: 1,
+        account: SAFE,
+        credential_ids_hex: &ids,
+        key_route: Some(&route),
+        ..Default::default()
+    });
+    let context = &built["context"];
+    assert_eq!(
+        context["allowCredentials"],
+        json!(["qrs"]),
+        "only the key this device signs with"
+    );
+    assert_eq!(
+        context["keyRoute"],
+        json!({
+            "credentialId": "qrs",
+            "place": "hybrid",
+            "transports": ["hybrid", "internal"],
+            "hints": ["hybrid"],
+        })
+    );
+    // No route: every key, as before, and no `keyRoute`.
+    let built = request(&RequestInput {
+        method: "personal_sign",
+        params: json!(["0x68656c6c6f", SAFE]),
+        chain_id: 1,
+        account: SAFE,
+        credential_ids_hex: &ids,
+        ..Default::default()
+    });
+    assert_eq!(built["context"]["allowCredentials"], json!(["ESIz", "qrs"]));
+    assert!(built["context"].get("keyRoute").is_none());
+}
+
 #[test]
 fn a_message_request_names_no_operation() {
     let built = request(&RequestInput {
@@ -226,17 +292,11 @@ fn a_message_request_names_no_operation() {
 #[test]
 fn the_url_channel_round_trips() {
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
-    let url = url_launch(
-        "https://sign.getvela.app",
-        &built,
-        "http://127.0.0.1:51234/vela",
-        "tok en",
-    );
-    // Spec 079: the official host opens the pinned, content-addressed version.
-    let pinned = format!(
-        "https://sign.getvela.app/b/{}/sign?ch=url#i=",
-        vela_core::trusted_signer::integrity::LAUNCH
-    );
+    let url = checked_official()
+        .url_launch(&built, "http://127.0.0.1:51234/vela", "tok en", "", 2_000)
+        .unwrap();
+    // The official host opens the version that was checked, content-addressed.
+    let pinned = format!("https://sign.getvela.app/b/{LAUNCH}/sign?ch=url#i=");
     assert!(url.starts_with(&pinned), "{url}");
     let fragment = url.split_once('#').unwrap().1;
     let mut parts = fragment.split('&').map(|p| p.split_once('=').unwrap());
@@ -269,12 +329,10 @@ fn the_url_channel_round_trips() {
 #[test]
 fn the_websocket_channel_speaks_the_protocol() {
     assert_eq!(
-        ws_launch("https://sign.getvela.app/", 51_234, "abc"),
-        "https://sign.getvela.app/sign.html?ch=ws#p=51234&t=abc"
-    );
-    assert_eq!(
-        ws_launch("http://localhost:8099/sign.html", 1, "abc"),
-        "http://localhost:8099/sign.html?ch=ws#p=1&t=abc"
+        checked_official()
+            .ws_launch(51_234, "abc", "", 2_000)
+            .unwrap(),
+        format!("https://sign.getvela.app/b/{LAUNCH}/sign?ch=ws#p=51234&t=abc")
     );
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
     let intent: Value = serde_json::from_str(&intent_message("r1", &built)).unwrap();
@@ -544,7 +602,7 @@ fn an_unmasked_frame_is_a_protocol_fault() {
 
 #[test]
 fn a_signer_address_is_https_or_this_devices_own_loopback() {
-    use vela_core::trusted_signer::{signer_url, uses_wallet_passkeys, SignerUrlError};
+    use vela_core::trusted_signer::{signer_url, SignerUrlError};
     assert_eq!(
         signer_url(" sign.getvela.app ").as_deref(),
         Ok("https://sign.getvela.app/")
@@ -576,12 +634,6 @@ fn a_signer_address_is_https_or_this_devices_own_loopback() {
     );
     assert_eq!(signer_url(""), Err(SignerUrlError::Invalid));
     assert_eq!(signer_url("https:// spaced"), Err(SignerUrlError::Invalid));
-
-    assert!(uses_wallet_passkeys("https://sign.getvela.app/"));
-    assert!(uses_wallet_passkeys("https://getvela.app/sign/"));
-    assert!(!uses_wallet_passkeys("https://getvela.app.evil.example/"));
-    assert!(!uses_wallet_passkeys("http://localhost:8140/"));
-    assert!(!uses_wallet_passkeys("https://me.example/"));
 }
 
 #[test]
@@ -646,6 +698,7 @@ fn a_browser_seen_origin_is_named_to_the_page() {
         account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
         account_name: None,
         credential_ids_hex: &[],
+        key_route: None,
         user_op: None,
         calls: &[],
         origin_seen_by_browser: seen,
@@ -659,32 +712,20 @@ fn a_browser_seen_origin_is_named_to_the_page() {
     assert!(relayed["context"].get("dapp").is_none());
 }
 
-/// Spec 079: the version the phones open is one this build accepts, and a base
-/// that already names a version (the desktop's verified pick) or another host
-/// is used as given.
+/// Spec 079: the version the phones open is one this build accepts — and,
+/// spec 102 R6, it is opened only as a checked page, at the address that was
+/// checked.
 #[test]
-fn the_launch_pin_is_allowed_and_a_named_version_is_left_alone() {
-    use vela_core::trusted_signer::integrity::{BUILD_ALLOWED, LAUNCH};
+fn the_launch_pin_is_allowed_and_opened_where_it_was_checked() {
+    use vela_core::trusted_signer::integrity::BUILD_ALLOWED;
     assert!(BUILD_ALLOWED.contains(&LAUNCH));
+    let page = checked_official();
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
-    let named = url_launch(
-        "https://sign.getvela.app/b/abc/",
-        &built,
-        "velawallet://sign-result",
-        "t",
-    );
+    let url = page
+        .url_launch(&built, "velawallet://sign-result", "t", "", 2_000)
+        .unwrap();
     assert!(
-        named.starts_with("https://sign.getvela.app/b/abc/sign.html?ch=url#"),
-        "{named}"
-    );
-    let local = url_launch(
-        "https://127.0.0.1:8443",
-        &built,
-        "velawallet://sign-result",
-        "t",
-    );
-    assert!(
-        local.starts_with("https://127.0.0.1:8443/sign.html?ch=url#"),
-        "{local}"
+        url.starts_with(&format!("{}?ch=url#", page.target().url())),
+        "{url}"
     );
 }

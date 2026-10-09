@@ -128,26 +128,37 @@ struct SigningSheet: View {
 
     @ViewBuilder
     private var form: some View {
-        // The wallet's own request: its intent is already the header's title.
-        ForEach(model.formBlocks) { block in
-            blockView(block)
-        }
+        if let handoff = model.handoff {
+            // The fee, its speed and its coin are chosen here, before the
+            // hand-off (D-18): the sheet's own fee row stays, with every
+            // control it has, and the card says no fee of its own — the fee
+            // is said once. Then whose account signs, as on every sheet —
+            // the order every shell draws: fee, account, hand-off, Open.
+            feeView
+                .padding(.top, Tokens.Space.s8)
+            SigningSignerRow(label: model.signer.label, name: model.signer.name,
+                             seed: model.signer.seed)
+            // Spec 102 D4: the page is the authority — the hand-off card in
+            // place of a second preview, and only what still stands under it.
+            HandoffCardView(model: handoff)
+            ForEach(model.handoffBlocks) { block in
+                blockView(block)
+            }
+        } else {
+            // The wallet's own request: its intent is already the header's title.
+            ForEach(model.formBlocks) { block in
+                blockView(block)
+            }
 
-        Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
+            Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
 
-        if !model.tech.isEmpty {
-            TechDetailsView(tech: model.tech, open: techOpen)
+            if !model.tech.isEmpty {
+                TechDetailsView(tech: model.tech, open: techOpen)
+            }
+            feeView
+            SigningSignerRow(label: model.signer.label, name: model.signer.name,
+                             seed: model.signer.seed)
         }
-        if let fee = model.fee {
-            SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
-                           speed: model.feeSpeed, onSpeed: onSpeed,
-                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
-                           onRefresh: onRefreshFee, chevron: model.feeChevron,
-                           measuring: model.feeRefresh?.refreshing ?? false,
-                           reserve: model.feeReserve)
-        }
-        SigningSignerRow(label: model.signer.label, name: model.signer.name,
-                         seed: model.signer.seed)
         // Spec 081: a refused request offers no confirm control at
         // all. It is not disabled — it is absent, because the wallet
         // never offered it.
@@ -179,6 +190,20 @@ struct SigningSheet: View {
                     .hidden()
                     .accessibilityHidden(true)
             }
+        }
+    }
+
+    /// The fee row, its speed control and its coin list — the same in Vela
+    /// and in the hand-off.
+    @ViewBuilder
+    private var feeView: some View {
+        if let fee = model.fee {
+            SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
+                           speed: model.feeSpeed, onSpeed: onSpeed,
+                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
+                           onRefresh: onRefreshFee, chevron: model.feeChevron,
+                           measuring: model.feeRefresh?.refreshing ?? false,
+                           reserve: model.feeReserve)
         }
     }
 

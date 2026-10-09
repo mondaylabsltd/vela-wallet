@@ -186,28 +186,24 @@ struct RegistryBackupTests {
         }
     }
 
-    /// Spec 075: a key minted on a Trusted Signer page lives BEHIND that page,
-    /// and the keys list has to say so.
-    ///
-    /// The page runs its ceremony in a browser, so the authenticator reports
-    /// `authenticatorAttachment: "platform"` — and the list captioned such a key
-    /// "Built-in passkey", which names the one side of the page this wallet
-    /// cannot reach (found by the Android device pass, 2026-09-22). The core
-    /// rules on it from `signer_origin`, and can only rule if this shell hands
-    /// it over. So the whole chain is pinned here at once: the account record,
-    /// the device-key list, the step door, the row, and the drawn lines.
-    @Test func aKeyBehindAPageNamesThePageAndAnOrdinaryKeyIsUnchanged() async throws {
+    /// Spec 102: a key is captioned by where it LIVES — never "Trusted
+    /// Signer". A key made on a page is an ordinary passkey on that page's
+    /// domain; the page is where a person reviews and signs, not where the key
+    /// is. The record still carries `signer_origin` (older builds route by
+    /// it), and nothing in the list reads it: no page detail row, no page
+    /// caption.
+    @Test func aKeyMadeOnAPageIsCaptionedByItsPlace() async throws {
         let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         let page = "https://sign.example"
-        let behindAPage = "04" + String(repeating: "11", count: 64)
+        let madeOnAPage = "04" + String(repeating: "11", count: 64)
         let onThisDevice = "04" + String(repeating: "22", count: 64)
         let store = AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         await store.saveAccount([
             "id": "cred-page", "address": address, "name": "Mine",
-            "public_key_hex": behindAPage,
+            "public_key_hex": madeOnAPage,
             "keys": [
                 [
-                    "credential_id": "cred-page", "public_key_hex": behindAPage,
+                    "credential_id": "cred-page", "public_key_hex": madeOnAPage,
                     "name": "Mine", "transports": "internal", "signer_origin": page,
                 ],
                 [
@@ -220,26 +216,18 @@ struct RegistryBackupTests {
         let device = await WalletKeys.deviceKeys(
             of: address, walletName: "Mine", in: SendAccountPort(accounts: store)
         )
-        #expect(device.map(\.signerOrigin) == [page, ""],
-                "the device-key list dropped where the key lives")
+        #expect(device.map(\.credentialId) == ["cred-page", "cred-here"])
 
-        // The real core, asked with no address so that it answers from the
-        // record alone — the only place a page is ever known.
         let rows = await WalletKeys(ethCall: { _, _, _ in nil })
             .read(address: "", device: device, signInCredential: "").rows
-        #expect(rows.map(\.key.method) == [.trustedSigner, .platform])
-        #expect(rows.map(\.signerOrigin) == [page, ""])
+        #expect(rows.map(\.key.method) == [.platform, .platform], "a fourth method came back")
 
         let drawn = SettingsLive.withWalletKeys(
             WalletKeys.Result(source: .device, rows: rows), backup: nil, on: base, loc: loc
         ).keys?.rows ?? []
-        #expect(drawn.map(\.holder) == ["Trusted Signer", "Built-in passkey"])
-        // The caption says the route; only the detail says WHICH page.
-        #expect(drawn.first?.details.contains(
-            KeyDetailModel(label: "Trusted Signer", value: page, mono: false, copy: false)
-        ) == true)
-        #expect(drawn.last?.details.contains { $0.label == "Trusted Signer" } == false,
-                "a key behind no page must not grow an empty page line")
+        #expect(drawn.map(\.holder) == ["Built-in passkey", "Built-in passkey"])
+        #expect(!drawn.contains { $0.details.contains { $0.value == page } }, "the page came back as a detail")
+        #expect(!drawn.contains { $0.holder.contains("Trusted Signer") })
     }
 
     @Test func aLongHexValueWrapsWithoutGainingCharacters() {

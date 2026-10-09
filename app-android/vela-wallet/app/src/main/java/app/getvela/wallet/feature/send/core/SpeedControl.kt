@@ -255,6 +255,13 @@ class SpeedControl(
         .flatMapLatest { session -> combine(session.host.viewJson, session.chainRead, ::withChainReadJson) }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
+    /**
+     * The speed control exactly as the core wrote it — for a core function
+     * that reads the whole view back (spec 102: `handoffFeeRow`). `null`
+     * before its first commit.
+     */
+    val speedJson: StateFlow<String?> = speedHost.viewJson
+
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = synchronized(sessionLock) {
         inForce.value.takeIf { it.ask?.tier == tier }?.shown

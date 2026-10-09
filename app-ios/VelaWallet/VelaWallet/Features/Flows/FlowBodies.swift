@@ -1458,6 +1458,11 @@ struct SendConfirmBody: View {
             .padding(.horizontal, Tokens.Space.s12)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
 
+            // Spec 102: these are the person's own figures; the page is where
+            // they are checked and signed. Which page, and whether it may
+            // open, is said in the pinned footer, right over the button that
+            // goes there (`FlowHost`'s `.sendConfirm`).
+
             if let tag = model.recipientTag {
                 Text(verbatim: tag)
                     .typeRole(Typography.rowSub.scaled(textScale))

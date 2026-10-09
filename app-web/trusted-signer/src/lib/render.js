@@ -5,7 +5,17 @@
 //
 // There is also nothing here that can EDIT the request. No amount editor, no
 // fee-token picker. The intent arrives fixed; the only two outcomes are sign
-// (slide) and refuse (close).
+// (tap) and refuse (close).
+//
+// The order is the page's argument (spec 102): WHAT will be signed first — the
+// intent, the amount, the plain sentence, the facts behind it — then WHICH KEY
+// signs it and where that key lives, then the one button.
+//
+// And it is drawn as the apps draw their own signing sheet (owner,
+// 2026-10-09: 「要维持和 app 内签名的视觉感受」): the title row, the blocks,
+// then a hairline and the app's footer — the folded technical details, the
+// fee, the account, the button (SigningBody). Same parts, same order, same
+// tokens (sheet.css), so the page reads as the sheet a person already knows.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
@@ -18,6 +28,22 @@ window.VelaCS = window.VelaCS || {};
     var node = document.createElement(tag);
     if (className) node.className = className;
     if (textContent !== undefined && textContent !== null) node.textContent = textContent;
+    return node;
+  }
+
+  // Line icons, drawn as the app's are (lucide paths, stroke 2): nothing here
+  // can be fetched, and a glyph character would be drawn by whatever font has it.
+  var ICONS = {
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+    'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+  };
+
+  function icon(name, className) {
+    var node = el('span', 'icon' + (className ? ' ' + className : ''));
+    node.setAttribute('aria-hidden', 'true');
+    node.innerHTML = '<svg viewBox="0 0 24 24">' + (ICONS[name] || '') + '</svg>';
     return node;
   }
 
@@ -126,12 +152,14 @@ window.VelaCS = window.VelaCS || {};
     var wrap = el('div', 'identity-wrap');
     var button = el('button', 'identity');
     button.type = 'button';
-    if (identity.identicon) button.appendChild(identicon(identity.identicon, size || 22));
+    if (identity.identicon) button.appendChild(identicon(identity.identicon, size || 18));
     var text = el('span', 'identity-text');
     if (identity.contractName) text.appendChild(el('span', 'identity-name', identity.contractName));
     text.appendChild(el('span', 'identity-address', identity.short));
     button.appendChild(text);
-    button.appendChild(el('span', 'identity-more', '⌄'));
+    var more = el('span', 'identity-more');
+    more.appendChild(icon('chevron-down', 'chevron'));
+    button.appendChild(more);
     wrap.appendChild(button);
 
     var panel = addressPanel(identity.address);
@@ -185,12 +213,6 @@ window.VelaCS = window.VelaCS || {};
       if (h.statement) siwe.appendChild(el('div', 'siwe-statement', h.statement));
       return siwe;
     }
-    if (h.kind === 'ceremony') {
-      var box = el('div', 'hero-ceremony hero-ceremony-' + h.ceremony);
-      box.appendChild(el('span', 'ceremony-glyph', { create: '＋', signIn: '→', proof: '✓', memberProof: '⛓' }[h.ceremony] || '•'));
-      box.appendChild(el('span', 'ceremony-title', h.titleKey ? t(h.titleKey) : h.title));
-      return box;
-    }
     if (h.kind === 'code') {
       var code = el('div', 'hero-call');
       code.appendChild(el('code', 'call-name', h.titleKey ? t(h.titleKey) : h.title));
@@ -202,12 +224,12 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function fieldRow(field) {
-    var row = el('div', 'row' + (field.warning || field.expired ? ' row-warn' : ''));
+    var row = el('div', 'row' + (field.warning || field.expired ? ' row-warn' : '') + (field.identity ? ' row-identity' : ''));
     row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label)));
     var value = el('span', 'row-value');
     if (field.identity) {
       if (field.identity.tag) value.appendChild(el('div', 'row-tag', t(field.identity.tag)));
-      value.appendChild(expandableIdentity(field.identity, 22));
+      value.appendChild(expandableIdentity(field.identity, 18));
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
@@ -258,7 +280,7 @@ window.VelaCS = window.VelaCS || {};
 
   function warningBanner(warning) {
     var banner = el('div', 'warning warning-' + warning.tone);
-    banner.appendChild(el('span', 'warning-mark', '▲'));
+    banner.appendChild(icon('triangle-alert', 'warning-mark'));
     banner.appendChild(el('span', 'warning-text', t(warning.key, warning.params)));
     return banner;
   }
@@ -270,7 +292,10 @@ window.VelaCS = window.VelaCS || {};
     if (!tech) return null;
     var box = el('details', 'tech');
     if (open) box.open = true;
-    box.appendChild(el('summary', 'tech-summary', t('ui.techDetails')));
+    var summary = el('summary', 'tech-summary');
+    summary.appendChild(icon('chevron-right', 'chevron'));
+    summary.appendChild(el('span', null, t('ui.techDetails')));
+    box.appendChild(summary);
 
     var body = el('div', 'tech-body');
     body.appendChild(el('div', 'tech-label', t('ui.function')));
@@ -313,8 +338,7 @@ window.VelaCS = window.VelaCS || {};
     // exactly as it will be signed.
     if (view.challenge) {
       body.appendChild(el('div', 'tech-label', t('ui.challenge')));
-      body.appendChild(el('pre', 'tech-raw challenge-text',
-        view.challenge.pending ? t('ui.challengePending') : view.challenge.text));
+      body.appendChild(el('pre', 'tech-raw challenge-text', view.challenge.text));
       if (view.challenge.noteKey) body.appendChild(el('div', 'tech-note', t(view.challenge.noteKey)));
     }
 
@@ -330,17 +354,20 @@ window.VelaCS = window.VelaCS || {};
   // Read-only by construction, and READ rather than quoted — see lib/fee.js.
   // Vela pays in band, so the usual case is a payment leg inside the calldata:
   // its amount and recipient are decoded facts, while "this leg is the fee" is
-  // the requester's label and is shown as one.
+  // the app's label (`feeLegIndex`) and is shown as one.
   function feeRow(view) {
     var wrap = el('div', 'fee-wrap');
-    var row = el('div', 'fee' + (view.fee ? '' : ' fee-off'));
-    row.appendChild(el('span', 'fee-label', t('ui.fee')));
-
+    // Nothing goes on chain: the app's quiet reassurance (PositiveNote) in
+    // place of a fee line.
     if (!view.fee) {
-      row.appendChild(el('span', 'fee-value', t('ui.feeOffchain')));
-      wrap.appendChild(row);
+      var ok = el('p', 'fee-ok fee-off');
+      ok.appendChild(icon('check'));
+      ok.appendChild(el('span', 'fee-value', t('ui.feeOffchain')));
+      wrap.appendChild(ok);
       return wrap;
     }
+    var row = el('div', 'fee');
+    row.appendChild(el('span', 'fee-label', t('ui.fee')));
     if (view.fee.unknown) {
       row.appendChild(el('span', 'fee-value', t('ui.feeUnstated')));
       wrap.appendChild(row);
@@ -350,17 +377,21 @@ window.VelaCS = window.VelaCS || {};
     // Spec 079: the explanation folds under the row — the row itself is the
     // summary a person taps. What must stay in sight stays on the row: the
     // amount read from the calldata and, for a leg, that "this is the fee" is
-    // the requester's word (the same 自述 tag the chain pill uses).
+    // the app's word — said in muted text beside the label (「App 标注」 /
+    // "per the app"). Not the network row's tag: there the app gives a NAME.
     wrap = el('details', 'fee-wrap');
     row = el('summary', 'fee');
     row.appendChild(el('span', 'fee-label', t('ui.fee')));
-    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.claimed')));
+    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.feeByApp')));
     var headline = view.fee.leg
       ? t('ui.feeLegAmount', { amount: view.fee.leg.amount, symbol: view.fee.leg.symbol })
       : t('ui.feeCeiling', { amount: view.fee.gas.max, symbol: view.fee.gas.symbol });
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
-    row.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
-    row.appendChild(el('span', 'fee-chevron', '›'));
+    // The amount and its chevron stay together when a long label wraps.
+    var end = el('span', 'fee-end');
+    end.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    end.appendChild(icon('chevron-right', 'chevron fee-chevron'));
+    row.appendChild(end);
     wrap.appendChild(row);
 
     var note = el('div', 'fee-note');
@@ -388,29 +419,130 @@ window.VelaCS = window.VelaCS || {};
     return wrap;
   }
 
-  function slider(view) {
-    var track = el('div', 'slide' + (view.refuse ? ' slide-off' : ''));
-    track.appendChild(el('span', 'slide-knob', '→'));
-    track.appendChild(el('span', 'slide-label', t('ui.slide', { intent: sliderIntent(view) })));
-    return track;
+  /**
+   * The one control: a button (spec 102 — every confirmation in Vela is a
+   * tap, the apps' included). Its words are the action (`view.confirmKey`).
+   * A request this page refuses still shows the button, disabled and saying
+   * so, where the person expects it. sign.js arms it.
+   */
+  function confirmBar(view) {
+    var bar = el('div', 'confirm-bar');
+    var button = el('button', 'confirm', t(view.confirmKey || 'button.sign'));
+    button.type = 'button';
+    if (view.refuse) {
+      button.disabled = true;
+      button.classList.add('confirm-off');
+    }
+    bar.appendChild(button);
+    if (!view.refuse) bar.appendChild(el('p', 'confirm-hint', t('ui.closeRefuses')));
+    return bar;
   }
 
-  // The spec's rule: name the intent on the slider, and fall back to a bare
-  // "confirm" only when the name is too long to read at a glance.
-  function sliderIntent(view) {
-    var name = t(view.intentKey);
-    return name.length > 12 ? t('ui.confirm') : name;
+  // Line icons for a key's place, drawn here (no image can be fetched).
+  var PLACE_ICONS = {
+    platform: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>',
+    hybrid: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="9" height="15" rx="2"/><path d="M6 16.5h2"/><rect x="14.5" y="8.5" width="7" height="7" rx="1"/><path d="M17 11h2v2h-2z"/></svg>',
+    security_key: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="14" rx="2"/><path d="M9.5 7.5v-5h5v5"/><circle cx="12" cy="14.5" r="1.6"/></svg>',
+  };
+
+  /** Where the person confirms: the key's place, from the wallet's route. */
+  function keyRow(view) {
+    if (!view.key || !view.key.place) return null;
+    var row = el('div', 'row key-row');
+    row.appendChild(el('span', 'row-label', t(view.keyLabel || 'field.confirmWith')));
+    var value = el('span', 'row-value key-place');
+    var icon = el('span', 'key-icon');
+    icon.innerHTML = PLACE_ICONS[view.key.place] || '';
+    value.appendChild(icon);
+    value.appendChild(el('span', 'key-place-name', t('place.' + view.key.place)));
+    row.appendChild(value);
+    return row;
   }
 
+  /**
+   * Who is asking, as one quiet line under the title — or nothing, for the
+   * wallet's own request (`view.dapp.own`). The words and the mark are
+   * resolve.js's: a verified requester, the destination of the answer, or a
+   * name the requester gave for itself, said as such.
+   */
+  function requester(view, ceremony) {
+    if (!ceremony && view.dapp.own) return null;
+    // A key ceremony is the wallet asking for itself, as the apps' own sheets
+    // are: no site to put a face to, so the line is a quiet subtitle under
+    // the title. A mark is drawn only where a requester sent one — the line
+    // beside it says it is its own.
+    var line = el('div', 'requester' + (ceremony ? ' requester-quiet' : ''));
+    if (!ceremony || view.dapp.icon) line.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
+    var identity = el('div', 'sheet-identity');
+    identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
+    if (ceremony && view.dapp.nameClaimed) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
+    }
+    // `originShown`, not `origin`: a host the name above already says is not
+    // drawn twice (resolve.js decides; 082 L-HOST).
+    if (ceremony && (view.dapp.originShown || view.dapp.originKey)) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
+    } else if (!ceremony && view.dapp.originShown) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    }
+    var note = noteFor(view, 'requester');
+    if (note) identity.appendChild(note);
+    line.appendChild(identity);
+    return line;
+  }
+
+  /**
+   * The title row: the intent, as the first thing read — in the sheet's title
+   * type, as the apps title the wallet's own request. The network is not a
+   * chip beside it but a row with the others (`networkRow`), as in the apps.
+   */
+  function titleRow(view) {
+    var head = el('header', 'sheet-top');
+    var label = el('h1', 'intent-label tone-' + view.risk, t(view.intentKey));
+    if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
+    head.appendChild(label);
+    return head;
+  }
+
+  /**
+   * 网络 · Base. A chain this page does not know is named by the app — the
+   * chain id is in the digest, the name is not — and the row says so
+   * (「App 提供」 / "named by the app"), quietly, in the row's own muted type.
+   */
+  function networkRow(view) {
+    if (!view.chain) return null;
+    var row = el('div', 'row network-row');
+    row.appendChild(el('span', 'row-label', t('field.network')));
+    var value = el('span', 'row-value');
+    value.appendChild(el('span', 'network-name', view.chain));
+    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    row.appendChild(value);
+    return row;
+  }
+
+  // Refusals and dangers first, right under the title — a card that will not
+  // sign says why before anything else; cautions sit with the facts they are
+  // about.
+  function warningsOf(view, danger) {
+    return view.warnings.filter(function (w) { return !w.near && (w.tone === 'danger') === danger; });
+  }
+
+  // A caution about one line of the card, drawn as a quiet note under it.
+  function noteFor(view, near) {
+    var notes = view.warnings.filter(function (w) { return w.near === near; });
+    if (!notes.length) return null;
+    var box = el('div', 'warning warning-note');
+    notes.forEach(function (w) { box.appendChild(el('span', 'warning-text', t(w.key, w.params))); });
+    return box;
+  }
 
   /**
    * The calm screen between requests: who this page is talking to.
    * `state` = { titleKey, noteKey, originKey | origin }. Nothing here can be
-   * confirmed; there is no slider.
+   * confirmed; there is no button.
    */
   function renderWaiting(state) {
     var sheet = el('article', 'sheet sheet-waiting');
-    sheet.appendChild(el('div', 'grabber'));
     var head = el('header', 'sheet-head');
     // Only a channel that vouches for the peer gets Vela's mark; over a
     // loopback socket this is whatever connected, and it is drawn as that.
@@ -440,47 +572,43 @@ window.VelaCS = window.VelaCS || {};
     return sheet;
   }
 
-  function renderCeremony(view, options) {
-    var sheet = el('article', 'sheet sheet-ceremony risk-' + view.risk);
-    sheet.appendChild(el('div', 'grabber'));
+  // The app's footer (SigningBody): a hairline, then the folded technical
+  // details, the fee, the account, the button — in that order, as there.
+  function footer() {
+    return el('div', 'sheet-foot');
+  }
 
-    var head = el('header', 'sheet-head');
-    head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
-    var identity = el('div', 'sheet-identity');
-    identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
-    if (view.dapp.nameClaimed) {
-      identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
-    }
-    // `originShown`, not `origin`: a host the name above already says is not
-    // drawn twice (resolve.js decides; 082 L-HOST).
-    if (view.dapp.originShown || view.dapp.originKey) {
-      identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
-    }
-    head.appendChild(identity);
+  function renderCeremony(view, options) {
+    // No hero: the wallet it is for is a row, and a second mark beside the
+    // title only said it again (owner, 2026-10-09: 「+ savings 看着很奇怪」).
+    // The title, who asks, one sentence, the rows, the button.
+    var sheet = el('article', 'sheet sheet-ceremony risk-' + view.risk);
+    var head = titleRow(view);
+    head.appendChild(requester(view, true));
     sheet.appendChild(head);
 
-
-    var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
-    if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
-    sheet.appendChild(label);
+    var blocks = el('div', 'blocks');
+    warningsOf(view, true).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
 
     var h = hero(view);
-    if (h) sheet.appendChild(h);
-    if (view.sentence) sheet.appendChild(el('p', 'sentence', t(view.sentence)));
+    if (h) blocks.appendChild(h);
+    if (view.sentence) blocks.appendChild(el('p', 'sentence', t(view.sentence)));
 
-    var visible = view.fields.filter(function (f) { return !f.detail; });
-    if (visible.length) {
-      var rows = el('div', 'rows');
-      visible.forEach(function (field) { rows.appendChild(fieldRow(field)); });
-      sheet.appendChild(rows);
-    }
+    var rows = el('div', 'rows');
+    view.fields.filter(function (f) { return !f.detail; })
+      .forEach(function (field) { rows.appendChild(fieldRow(field)); });
+    var place = keyRow(view);
+    if (place) rows.appendChild(place);
+    if (rows.children.length) blocks.appendChild(rows);
 
-    view.warnings.forEach(function (warning) { sheet.appendChild(warningBanner(warning)); });
+    warningsOf(view, false).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
+    sheet.appendChild(blocks);
 
+    var foot = footer();
     var tech = techPanel(view, options.techOpen);
-    if (tech) sheet.appendChild(tech);
-
-    sheet.appendChild(slider(view));
+    if (tech) foot.appendChild(tech);
+    foot.appendChild(confirmBar(view));
+    sheet.appendChild(foot);
     return sheet;
   }
 
@@ -489,73 +617,69 @@ window.VelaCS = window.VelaCS || {};
     options = options || {};
     if (view.kind === 'ceremony') return renderCeremony(view, options);
     var sheet = el('article', 'sheet risk-' + view.risk);
-    sheet.appendChild(el('div', 'grabber'));
 
-    var head = el('header', 'sheet-head');
-    head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
-    var identity = el('div', 'sheet-identity');
-    identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
-    if (view.dapp.originShown) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
-    head.appendChild(identity);
-    var chain = el('span', 'chain-pill');
-    var dot = el('i', 'chain-dot');
-    if (view.chainLogos && view.chainLogos.length) attachLogo(dot, view.chainLogos.slice());
-    chain.appendChild(dot);
-    chain.appendChild(document.createTextNode(view.chain));
-    if (view.chainClaimed) chain.appendChild(el('span', 'tag', t('tag.claimed')));
-    head.appendChild(chain);
-    sheet.appendChild(head);
-
-    var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
-    if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
-    sheet.appendChild(label);
+    // 1. What: the intent, who asks (if anyone), and why not, when not.
+    sheet.appendChild(titleRow(view));
+    var blocks = el('div', 'blocks');
+    var who = requester(view, false);
+    if (who) blocks.appendChild(who);
+    warningsOf(view, true).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
 
     var h = hero(view);
-    if (h) sheet.appendChild(h);
+    if (h) blocks.appendChild(h);
+    if (view.sentence) blocks.appendChild(el('p', 'sentence', t(view.sentence)));
 
-    if (view.sentence) sheet.appendChild(el('p', 'sentence', t(view.sentence)));
+    view.legs.forEach(function (leg) { blocks.appendChild(legCard(leg)); });
 
-    view.legs.forEach(function (leg) { sheet.appendChild(legCard(leg)); });
+    // The facts, as the app's label / value rows — the network first, as the
+    // apps list it.
+    var rows = el('div', 'rows');
+    var network = networkRow(view);
+    if (network) rows.appendChild(network);
+    view.fields.filter(function (f) { return !f.detail && !f.consumedByHero; })
+      .forEach(function (field) { rows.appendChild(fieldRow(field)); });
+    if (rows.children.length) blocks.appendChild(rows);
 
-    var visible = view.fields.filter(function (f) { return !f.detail && !f.consumedByHero; });
-    if (visible.length) {
-      var rows = el('div', 'rows');
-      visible.forEach(function (field) { rows.appendChild(fieldRow(field)); });
-      sheet.appendChild(rows);
-    }
+    if (view.balance) blocks.appendChild(balanceCard(view.balance));
+    warningsOf(view, false).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
+    sheet.appendChild(blocks);
 
-    if (view.balance) sheet.appendChild(balanceCard(view.balance));
-
-    view.warnings.forEach(function (warning) { sheet.appendChild(warningBanner(warning)); });
-
+    var foot = footer();
+    // The details a person needs only when something looks wrong, folded —
+    // where the apps fold theirs, above the fee.
     var tech = techPanel(view, options.techOpen);
-    if (tech) sheet.appendChild(tech);
+    if (tech) foot.appendChild(tech);
 
     var fee = feeRow(view);
-    if (fee) sheet.appendChild(fee);
+    if (fee) foot.appendChild(fee);
 
-    // The signing account is an ADDRESS with its locally derived avatar. A
-    // nickname here would be the one thing on the sheet a requester could
-    // choose, and it would sit next to the button that spends the money.
+    // 2. With which key. The signing account is an ADDRESS with its locally
+    // derived avatar; a name beside it is only ever one the wallet keeps for
+    // its own account — it helps pick the right passkey, and the address and
+    // identicon next to it remain the anchor.
     var signer = el('div', 'signer');
-    signer.appendChild(el('span', 'signer-label', t('ui.signer')));
+    var account = el('div', 'row signer-row');
+    account.appendChild(el('span', 'row-label signer-label', t('ui.signer')));
+    var who2 = el('span', 'row-value');
     if (view.account) {
-      // A name here is only ever one THIS DEVICE recorded when the key was
-      // enrolled — it helps pick the right passkey. The requester's idea of
-      // what to call your account is precisely the label an attacker would
-      // choose, and it would sit next to the button that spends the money.
-      signer.appendChild(expandableIdentity({
+      who2.appendChild(expandableIdentity({
         address: view.account,
         short: ns.format.short(view.account),
         identicon: ns.identicon.forAddress(view.account),
         contractName: view.accountName || null,
-      }, 26));
+      }, 18));
     } else {
-      signer.appendChild(el('span', 'signer-address', t('ui.accountUnknown')));
+      who2.appendChild(el('span', 'signer-address', t('ui.accountUnknown')));
     }
-    sheet.appendChild(signer);
+    account.appendChild(who2);
+    signer.appendChild(account);
+    var place = keyRow(view);
+    if (place) signer.appendChild(place);
+    foot.appendChild(signer);
 
-    sheet.appendChild(slider(view));
+    // 3. The button, and the line under it.
+    foot.appendChild(confirmBar(view));
+    sheet.appendChild(foot);
     return sheet;
   }
 

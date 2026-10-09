@@ -2354,100 +2354,6 @@ export class SessionCore {
 if (Symbol.dispose) SessionCore.prototype[Symbol.dispose] = SessionCore.prototype.free;
 
 /**
- * r#" How this device signs by default (spec 071): the "Sign with" every"#
- * r" signing sheet starts at, and which Trusted Signer page it opens.
- */
-export class SignPrefCore {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        SignPrefCoreFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_signprefcore_free(ptr, 0);
-    }
-    /**
-     * @param {string} event_json
-     * @returns {string}
-     */
-    dispatch(event_json) {
-        let deferred3_0;
-        let deferred3_1;
-        try {
-            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ret = wasm.signprefcore_dispatch(this.__wbg_ptr, ptr0, len0);
-            var ptr2 = ret[0];
-            var len2 = ret[1];
-            if (ret[3]) {
-                ptr2 = 0; len2 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred3_0 = ptr2;
-            deferred3_1 = len2;
-            return getStringFromWasm0(ptr2, len2);
-        } finally {
-            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-        }
-    }
-    constructor() {
-        const ret = wasm.signprefcore_new();
-        this.__wbg_ptr = ret;
-        SignPrefCoreFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * @param {bigint} effect_id
-     * @param {string} result_json
-     * @returns {string}
-     */
-    resolve_effect(effect_id, result_json) {
-        let deferred3_0;
-        let deferred3_1;
-        try {
-            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ret = wasm.signprefcore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
-            var ptr2 = ret[0];
-            var len2 = ret[1];
-            if (ret[3]) {
-                ptr2 = 0; len2 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred3_0 = ptr2;
-            deferred3_1 = len2;
-            return getStringFromWasm0(ptr2, len2);
-        } finally {
-            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-        }
-    }
-    /**
-     * @returns {string}
-     */
-    view() {
-        let deferred2_0;
-        let deferred2_1;
-        try {
-            const ret = wasm.signprefcore_view(this.__wbg_ptr);
-            var ptr1 = ret[0];
-            var len1 = ret[1];
-            if (ret[3]) {
-                ptr1 = 0; len1 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred2_0 = ptr1;
-            deferred2_1 = len1;
-            return getStringFromWasm0(ptr1, len1);
-        } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-        }
-    }
-}
-if (Symbol.dispose) SignPrefCore.prototype[Symbol.dispose] = SignPrefCore.prototype.free;
-
-/**
  * r" The dApp signing approval lifecycle.
  */
 export class SignRequestCore {
@@ -2539,6 +2445,101 @@ export class SignRequestCore {
     }
 }
 if (Symbol.dispose) SignRequestCore.prototype[Symbol.dispose] = SignRequestCore.prototype.free;
+
+/**
+ * r" Settings → Signing pages (spec 102): the pages this device trusts to
+ * r" show and sign requests, the official one always first, and the 071
+ * r#" "Trusted Signer page" imported once."#
+ */
+export class SigningPagesCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        SigningPagesCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_signingpagescore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.signingpagescore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.signingpagescore_new();
+        this.__wbg_ptr = ret;
+        SigningPagesCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.signingpagescore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.signingpagescore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) SigningPagesCore.prototype[Symbol.dispose] = SigningPagesCore.prototype.free;
 
 /**
  * r" The token trust model: transfer allowlists, auto-add admission,
@@ -3889,6 +3890,29 @@ export function groupPublicKeyFromSeed(seed_hex) {
 }
 
 /**
+ * The hand-off card's compact fee + speed row (spec 102, D4) as a
+ * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
+ * draws no hand-off card; exported for the gallery's boards, which draw the
+ * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ * @param {string | null} [fee_json]
+ * @param {string | null} [speed_json]
+ * @returns {string | undefined}
+ */
+export function handoffFeeRow(fee_json, speed_json) {
+    var ptr0 = isLikeNone(fee_json) ? 0 : passStringToWasm0(fee_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(speed_json) ? 0 : passStringToWasm0(speed_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.handoffFeeRow(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * @param {string} typed_data_json
  * @returns {Uint8Array}
  */
@@ -4889,24 +4913,26 @@ export function signEndingState(ending_json, entry_json) {
 }
 
 /**
- * The route an account's signatures take, as JSON
- * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
- * record written before the account named its sign-in key — that one signs as
- * it always did. `account_json` is the stored account record. See
- * `vela_core::app::Account::sign_in_route`.
- * @param {string} account_json
+ * The message a dApp reads when signing ended in the error the core named
+ * `kind` (a `SignErrorKind`'s wire name), with the notice's `detail` — the
+ * core's `dapp_rpc::sign_error_words`. `null` for a kind it does not know.
+ * For the developer, not the person: EIP-1193 messages are not UI.
+ * @param {string} kind
+ * @param {string | null} [detail]
  * @returns {string | undefined}
  */
-export function signInRoute(account_json) {
-    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function signErrorWords(kind, detail) {
+    const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.signInRoute(ptr0, len0);
-    let v2;
+    var ptr1 = isLikeNone(detail) ? 0 : passStringToWasm0(detail, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signErrorWords(ptr0, len0, ptr1, len1);
+    let v3;
     if (ret[0] !== 0) {
-        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v2;
+    return v3;
 }
 
 /**
@@ -4961,6 +4987,192 @@ export function signNotConfirmedDetail(user_op_hash) {
 export function signRequestTtlMs() {
     const ret = wasm.signRequestTtlMs();
     return ret;
+}
+
+/**
+ * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
+ * (spec 102: a day)?
+ * @param {number} checked_at_ms
+ * @param {number} now_ms
+ * @returns {boolean}
+ */
+export function signerCheckFresh(checked_at_ms, now_ms) {
+    const ret = wasm.signerCheckFresh(checked_at_ms, now_ms);
+    return ret !== 0;
+}
+
+/**
+ * Is a background check of a page due (spec 102)? `checked_at_ms`: its last
+ * admitting check (`undefined`: none); `last_attempt_ms`: when a check last
+ * started. See `vela_core::trusted_signer::launch::refresh_due`.
+ * @param {number | null | undefined} checked_at_ms
+ * @param {number | null | undefined} last_attempt_ms
+ * @param {number} now_ms
+ * @returns {boolean}
+ */
+export function signerCheckRefreshDue(checked_at_ms, last_attempt_ms, now_ms) {
+    const ret = wasm.signerCheckRefreshDue(!isLikeNone(checked_at_ms), isLikeNone(checked_at_ms) ? 0 : checked_at_ms, !isLikeNone(last_attempt_ms), isLikeNone(last_attempt_ms) ? 0 : last_attempt_ms, now_ms);
+    return ret !== 0;
+}
+
+/**
+ * `{{time}}` in the integrity line's "… · checked {{time}}" (spec 102) — the
+ * one rule every shell draws: the clock time in the person's format when the
+ * check ran today, else the date and the time. `utc_offset_minutes` is
+ * `-new Date().getTimezoneOffset()`; `date_format` / `time_format` the
+ * person's presets as stored, `auto` resolved; `language` the page's.
+ * @param {number} checked_at_ms
+ * @param {number} now_ms
+ * @param {number} utc_offset_minutes
+ * @param {string} date_format
+ * @param {string} time_format
+ * @param {string} language
+ * @returns {string}
+ */
+export function signerIntegrityTime(checked_at_ms, now_ms, utc_offset_minutes, date_format, time_format, language) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(date_format, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(time_format, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(language, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.signerIntegrityTime(checked_at_ms, now_ms, utc_offset_minutes, ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * The headers a signing page's check sends (spec 102), as a JSON
+ * `[[name, value], …]` — a browser's navigation `Accept`.
+ * @returns {string}
+ */
+export function signerPageCheckHeaders() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.signerPageCheckHeaders();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * The domain whose keys a page at `url` can use (spec 102): its host, or
+ * `getvela.app` for every `*.getvela.app` page. Empty for something that is
+ * not an address.
+ * @param {string} url
+ * @returns {string}
+ */
+export function signingPageDomain(url) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.signingPageDomain(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * How an account signs on this device (spec 102), as JSON — a
+ * `SigningPlan`: `{domain, venue, blocked?, key?, key_label}`. `key` is the
+ * key route (`{credential_id, method, transports, hints}`), absent for a
+ * record written before the account named its sign-in key, which signs as it
+ * always did; `key_label` the name of that key as the person reads it
+ * (`{name?, place_key}`). `null` for a record this build cannot read.
+ * `account_json` is the stored account record.
+ *
+ * With `surface = "web"` the plan is the web's
+ * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
+ * signs in Vela, and a custom-domain account is `blocked` with
+ * `{"type":"not_on_web"}` — refuse to sign, and report
+ * `venue_blocked { block }` to the send/sign core so the sheet says why. See
+ * `vela_core::app::Account::signing_plan`.
+ * @param {string} account_json
+ * @param {string | null} [surface]
+ * @returns {string | undefined}
+ */
+export function signingPlan(account_json, surface) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signingPlan(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
+ * JSON `VenueBlock` — or `null` when it can (or does not read as a venue,
+ * which reaches nothing: the string `"invalid"`).
+ * @param {string} domain
+ * @param {string} venue_json
+ * @returns {string | undefined}
+ */
+export function signingVenueBlock(domain, venue_json) {
+    const ptr0 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(venue_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signingVenueBlock(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * Every venue an account on `domain` could pick, as a JSON `VenueChoice[]` —
+ * Vela's sheet, the official page, then the saved pages, each reachable or
+ * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
+ * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
+ * when either does not read. With `surface = "web"`, every page row R1 does
+ * not already block is blocked `{"type":"not_on_web"}`
+ * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+ * @param {string} domain
+ * @param {string} active_json
+ * @param {string} saved_json
+ * @param {string | null} [surface]
+ * @returns {string | undefined}
+ */
+export function signingVenueChoices(domain, active_json, saved_json, surface) {
+    const ptr0 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(active_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(saved_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.signingVenueChoices(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    let v5;
+    if (ret[0] !== 0) {
+        v5 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v5;
 }
 
 /**
@@ -5152,6 +5364,46 @@ export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, na
 }
 
 /**
+ * The key row of a ceremony's card, as JSON `KeyLabel`
+ * (`{place_key, label_key}`): "New key on | This device" while a key is made,
+ * "Confirm with | USB security key" when one signs in or proves — the page's
+ * own row. `null` for an operation that is not a ceremony.
+ * @param {string} operation_json
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyKeyLabel(operation_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyKeyLabel(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * The corpus key of the title a key ceremony on a self-hosted page is drawn
+ * under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
+ * `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
+ * not a ceremony. The web runs none; its gallery draws the apps' card.
+ * @param {string} operation_json
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyTitleKey(operation_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyTitleKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -5208,24 +5460,6 @@ export function trustedSignerUnitRpId(member_origins_json, wallet_rp_id) {
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-}
-
-/**
- * Whether a page at `url` can use this wallet's passkeys (they are
- * `getvela.app` keys).
- *
- * The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
- * whether a key that lives behind one is reachable by a platform sheet: a key
- * minted on `*.getvela.app` is this app's passkey, and a key minted on
- * anybody else's page is reachable nowhere but there.
- * @param {string} url
- * @returns {boolean}
- */
-export function trustedSignerUsesWalletPasskeys(url) {
-    const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.trustedSignerUsesWalletPasskeys(ptr0, len0);
-    return ret !== 0;
 }
 
 /**
@@ -5532,6 +5766,46 @@ export function validateClientData(kind, client_data_json, authenticator_data) {
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
+}
+
+/**
+ * The words of a venue refusal (spec 102), as JSON `{key, vars}`: the corpus
+ * key `VenueBlock::key()` names and the values its line takes by name
+ * (`domain`, `pageDomain`) — translate `key` with `vars` and the sentence is
+ * the core's whole. `null` for something that is not a `VenueBlock`.
+ * @param {string} block_json
+ * @returns {string | undefined}
+ */
+export function venueBlockLine(block_json) {
+    const ptr0 = passStringToWasm0(block_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.venueBlockLine(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * A venue row's words as JSON (`{title_key, line_key, line_name}`) —
+ * `"in_vela"`, `"page"`, or `"signing_page"` (the choosers' "Use a trusted
+ * signing page", D6; `"own_page"` still reads) — or `null` for a name the
+ * core does not know. See `vela_core::app::method_words::venue_words`.
+ * @param {string} row
+ * @returns {string | undefined}
+ */
+export function venueWords(row) {
+    const ptr0 = passStringToWasm0(row, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.venueWords(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
 }
 
 /**
@@ -5930,12 +6204,12 @@ const SendCoreFinalization = (typeof FinalizationRegistry === 'undefined')
 const SessionCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_sessioncore_free(ptr, 1));
-const SignPrefCoreFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_signprefcore_free(ptr, 1));
 const SignRequestCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_signrequestcore_free(ptr, 1));
+const SigningPagesCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_signingpagescore_free(ptr, 1));
 const TokenTrustCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_tokentrustcore_free(ptr, 1));

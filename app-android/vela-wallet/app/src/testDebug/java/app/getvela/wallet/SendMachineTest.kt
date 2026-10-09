@@ -65,15 +65,18 @@ class SendMachineTest {
     @After
     fun stop() = scope.cancel()
 
-    /** [signedInWith]: the key the account signed in with (2026-09-26); `null` = a record from before. */
-    private fun seedAccount(signedInWith: JSONObject? = null) {
+    /**
+     * [signInKey]: the key the account signed in with (2026-09-26), written as
+     * the spec 102 machines write it (`sign_in_key`); `null` = a record from before.
+     */
+    private fun seedAccount(signInKey: JSONObject? = null) {
         val keyset = fixtureAccounts()
         val keys = JSONArray()
         keyset.forEach { keys.put(JSONObject().put("credential_id", it.credentialIdHex).put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", "internal")) }
         val account = JSONObject()
             .put("id", keyset.first().credentialIdHex).put("name", "Parallel space").put("address", safe)
             .put("public_key_hex", keyset.first().publicKeyHex).put("created_at_iso", "2026-09-12T00:00:00Z").put("keys", keys)
-        if (signedInWith != null) account.put("signed_in_with", signedInWith)
+        if (signInKey != null) account.put("sign_in_key", signInKey)
         store.values["vela.accounts"] = JSONArray().put(account).toString()
         store.values["vela.activeAccountIndex"] = "0"
     }
@@ -294,7 +297,7 @@ class SendMachineTest {
     @Test
     fun `a send signs with the key the account signed in with, over its route`() = runBlocking {
         val second = fixtureAccounts()[1].credentialIdHex
-        seedAccount(signedInWith = JSONObject().put("credential_id", second).put("method", "hybrid")); scriptRelay()
+        seedAccount(signInKey = JSONObject().put("credential_id", second).put("method", "hybrid")); scriptRelay()
         val c = controller()
         c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
         val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }

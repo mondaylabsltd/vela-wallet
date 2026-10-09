@@ -80,101 +80,17 @@ pub const ACK_COUNT: usize = 3;
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
-/// The reason some methods are missing, when some are.
-fn blocked_reason(drafts: &[Draft], signer_page: &str) -> Option<AddBlocked> {
-    let committed = committed_relying_party(drafts)?;
-    if methods_for(drafts, signer_page).len() == 4 {
-        return None;
-    }
-    let page_rp = crate::trusted_signer::registry_rp_id(Some(signer_page))
-        .unwrap_or_else(|| "getvela.app".to_owned());
-    let page_differs = page_rp != committed;
-    Some(AddBlocked {
-        relying_party: committed,
-        page: page_differs.then(|| {
-            if signer_page.trim().is_empty() {
-                crate::trusted_signer::DEFAULT_SIGNER_URL.to_owned()
-            } else {
-                signer_page.to_owned()
-            }
-        }),
-        page_relying_party: page_differs.then_some(page_rp),
-    })
-}
-
-/// Why a key method is not on offer (spec 075). Carries the two facts the
-/// sentence needs, so the words live in the shells' catalogues and the
-/// judgement lives here.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct AddBlocked {
-    /// The relying party every key in this wallet belongs to.
-    pub relying_party: String,
-    /// The Trusted Signer page Settings names, when it is the thing that does
-    /// not fit — a key minted there would belong to `page_relying_party`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<String>,
-    /// That page's relying party, when it differs from the wallet's.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page_relying_party: Option<String>,
-}
-
-/// The relying party this key set has committed to, or `None` while it is
-/// empty (ruling, 2026-09-23).
+/// Which methods may mint a key for this set: the three places a key can
+/// live, always (spec 102).
 ///
-/// A key minted on a Trusted Signer page belongs to that page's domain; every
-/// other route mints a key of the wallet's own relying party, and so does the
-/// official page. The first key decides, because the registry stores ONE
-/// `rpId` per unit and a member can only ever prove membership under its own.
-fn committed_relying_party(drafts: &[Draft]) -> Option<String> {
-    let first = drafts.first()?;
-    Some(
-        crate::trusted_signer::registry_rp_id(first.signer_origin.as_deref())
-            .unwrap_or_else(|| "getvela.app".to_owned()),
-    )
-}
-
-/// Which methods may still mint a key for this set.
-///
-/// Everything, until the set belongs to somebody's own deployment — then only
-/// the Trusted Signer, because that page is the only thing that can mint another
-/// key of that domain. Offering the rest would let a person mint a key that
-/// can never join this wallet's unit, which is only discovered at the publish.
-fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
-    const OWN: [KeyMethod; 3] = [
-        KeyMethod::Platform,
-        KeyMethod::Hybrid,
-        KeyMethod::SecurityKey,
-    ];
-    // Where the Trusted Signer would mint: the page Settings names. The official
-    // one is a `getvela.app` page, so a key from it joins a set of the app's
-    // own keys; somebody's own deployment mints for its own domain, and that
-    // key can only ever join a set of ITS keys.
-    let page_rp = crate::trusted_signer::registry_rp_id(Some(signer_page))
-        .unwrap_or_else(|| "getvela.app".to_owned());
-    let mut allowed: Vec<KeyMethod> = Vec::new();
-    match committed_relying_party(drafts) {
-        // Nothing minted yet: any route may start the set, and whatever it
-        // picks is what the rest must match.
-        None => {
-            allowed.extend(OWN);
-            allowed.push(KeyMethod::TrustedSigner);
-        }
-        Some(committed) => {
-            if committed == "getvela.app" {
-                allowed.extend(OWN);
-            }
-            // …and the page only when it would mint for the same party. This
-            // is the case the owner hit on 2026-09-23: a set of `getvela.app`
-            // keys, a signer page on `localhost`, and the Trusted Signer still
-            // offered — so a key was minted that nothing would accept, and the
-            // wallet only said so at the publish.
-            if page_rp == committed {
-                allowed.push(KeyMethod::TrustedSigner);
-            }
-        }
-    }
-    allowed
+/// Spec 075 offered a fourth — the Trusted Signer — and then had to take
+/// methods away again once a set's first key had committed it to one relying
+/// party, because the page Settings named might mint for another. Now the
+/// domain is chosen BEFORE the first key ([`Event::SigningPageChosen`]) and
+/// every key of the set is minted for it — in the app for `getvela.app`, on the
+/// page for a custom domain (R3) — so no place is ever the wrong one.
+fn methods_for() -> Vec<KeyMethod> {
+    KeyMethod::ALL.to_vec()
 }
 
 // ---------------------------------------------------------------------------
@@ -203,11 +119,18 @@ pub enum Event {
         #[serde(default)]
         method: KeyMethod,
     },
-    /// The Trusted Signer page Settings names, so this machine can tell whether
-    /// that route would mint a key this set can accept. Sent on entry and
-    /// whenever the preference changes; empty means the official page.
-    SignerPageChanged {
-        url: String,
+    /// Spec 102: "Use my own signing page" — create this wallet on a saved
+    /// page, and so on that page's domain. `None` goes back to the app.
+    ///
+    /// Only before the first key exists: the first key commits the set to one
+    /// domain (the registry stores one `rpId` per unit), so a page on another
+    /// domain is refused once it does. A page on a custom domain mints every
+    /// key and runs every ceremony (R3), and the wallet is locked to it (R2);
+    /// a `getvela.app` page runs them in the app and becomes the wallet's
+    /// venue. An address no browser would sign on is ignored.
+    SigningPageChosen {
+        #[serde(default)]
+        url: Option<String>,
     },
     /// Drop a not-yet-published draft key. Index 0 (the wallet's pinned first
     /// key) is only removable via `StartOver`.
@@ -273,8 +196,8 @@ pub struct Draft {
     /// registration, one `get()` per key, interleaved. `None` until signed
     /// (or after a cancelled confirmation).
     pub proof: Option<RegistryProof>,
-    /// Spec 075: the Trusted Signer page the key was minted behind, if any —
-    /// where its membership confirmation must be signed too.
+    /// The origin of the page the key was minted on, when it was (a
+    /// custom-domain wallet, R3) — written onto the key for older builds.
     pub signer_origin: Option<String>,
 }
 
@@ -296,9 +219,9 @@ pub struct PreparedKey {
     pub transports: String,
     /// The creation-time membership proof.
     pub proof: Option<RegistryProof>,
-    /// Spec 075: the Trusted Signer page the key was minted behind, if any.
+    /// The origin of the page the key was minted on, if any.
     pub signer_origin: Option<String>,
-    /// The route the person chose for it — for the first key, how this device
+    /// Where the person chose it to live — for the first key, how this device
     /// signs from now on ([`super::SignInKey`]).
     pub method: KeyMethod,
 }
@@ -310,6 +233,10 @@ pub struct Prepared {
     pub keys: Vec<PreparedKey>,
     pub address: String,
     pub created_at_iso: String,
+    /// Spec 102: the domain the keys were minted for, and where the wallet
+    /// reviews and signs — settled by the page chosen before the first key.
+    pub signing_domain: String,
+    pub signing_venue: crate::signing_venue::SigningVenue,
 }
 
 impl Prepared {
@@ -320,7 +247,7 @@ impl Prepared {
 
     fn account(&self) -> Account {
         let first = self.first();
-        Account {
+        let mut account = Account {
             id: first.credential_id.clone(),
             name: first.name.clone(),
             address: self.address.clone(),
@@ -338,14 +265,17 @@ impl Prepared {
                 })
                 .collect(),
             // Creating is this device's first sign-in: the first key signs,
-            // over the route it was made on.
-            signed_in_with: Some(SignInKey {
+            // from the place it was made in.
+            sign_in_key: Some(SignInKey {
                 credential_id: first.credential_id.clone(),
                 method: first.method,
                 transports: first.transports.clone(),
-                signer_origin: first.signer_origin.clone(),
             }),
-        }
+            signing_domain: self.signing_domain.clone(),
+            signing_venue: self.signing_venue.clone(),
+        };
+        account.stamp_page_origin();
+        account
     }
 }
 
@@ -411,10 +341,9 @@ impl Stage {
 pub struct Model {
     name: String,
     acks: [bool; ACK_COUNT],
-    /// The Trusted Signer page Settings names — empty means the official one.
-    /// It decides whether that route can mint a key THIS set accepts, which
-    /// depends on the page's domain rather than on the route (spec 075).
-    signer_page: String,
+    /// Spec 102: the signing page the person chose to create this wallet on
+    /// ("Use my own signing page"), normalised. `None`: the app.
+    signing_page: Option<String>,
     /// Founding-order draft keys; `drafts[0]` is the pinned first key.
     drafts: Vec<Draft>,
     /// The label of the registration currently in flight, claimed by the
@@ -538,29 +467,20 @@ pub struct CreateView {
     pub keys: Vec<CreateKeyRow>,
     /// May one more key be added (below the cap, nothing in flight)?
     pub can_add_key: bool,
-    /// Spec 075 (ruling, 2026-09-23): the relying party this key set has
-    /// committed to, once its first key exists.
-    ///
-    /// The registry stores ONE `rpId` per unit and every member's proof
-    /// carries `sha256(rpId)` from its own authenticator, so a set spread over
-    /// two sites can never be proved. The first key therefore decides where
-    /// the rest must come from. `None` before there is a key.
+    /// Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
+    /// or the domain of the page chosen with "Use my own signing page".
+    /// Shown, so a person sees which site their keys will belong to.
+    pub signing_domain: String,
+    /// Spec 102: that page, normalised, when one was chosen. The shell draws
+    /// its integrity line beside it; on a custom domain every ceremony runs
+    /// there (R3).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key_relying_party: Option<String>,
-    /// The page that relying party lives on, when it is a Trusted Signer page —
-    /// so a shell can say WHICH page the remaining keys must be minted on.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key_signer_origin: Option<String>,
-    /// Which methods may still mint a key for this set. Every method while the
-    /// set is empty; afterwards only those that would mint for the relying
-    /// party it committed to — which for the Trusted Signer depends on the page
-    /// Settings names, not on the route.
+    pub signing_page: Option<String>,
+    /// May a signing page still be chosen? Only before the first key: the
+    /// first key commits the set to one domain.
+    pub can_choose_page: bool,
+    /// The places a key may be minted in — always the three.
     pub add_methods: Vec<KeyMethod>,
-    /// Why the others are not offered, when some are missing. A sentence a
-    /// person can act on: what this wallet's keys belong to, and what the
-    /// route they just reached for would have made instead.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub add_blocked: Option<AddBlocked>,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
     /// The sole drafted key is NOT a synced passkey: one lost device would
@@ -601,10 +521,7 @@ impl App for CreateWallet {
             }
             Event::Submit => submit(model),
             Event::AddKey { name, method } => add_key(model, name, method),
-            Event::SignerPageChanged { url } => {
-                model.signer_page = url;
-                render()
-            }
+            Event::SigningPageChosen { url } => choose_page(model, url),
             Event::RemoveKey { index } => remove_key(model, index),
             Event::KeyNameChanged { index, name } => key_name_changed(model, index, name),
             Event::ConfirmKey { index } => confirm_key(model, index),
@@ -707,38 +624,23 @@ impl App for CreateWallet {
                             .is_some(),
                         aaguid,
                         provider_name,
-                        // The page first, when the key lives behind one (spec
-                        // 075): a page runs the ceremony in a browser and so
-                        // reports `platform`, and drawing "a passkey on this
-                        // device" would name the wrong side of the page. Then
-                        // the report; the person's tap only when the
-                        // authenticator said nothing about itself.
-                        kind: if draft
-                            .signer_origin
-                            .as_deref()
-                            .is_some_and(|origin| !origin.is_empty())
-                        {
-                            KeyMethod::TrustedSigner
-                        } else {
-                            crate::passkey::reported_method(
-                                &draft.authenticator_attachment,
-                                &draft.transports,
-                            )
-                            .unwrap_or(draft.method)
-                        },
+                        // The report; the person's tap only when the
+                        // authenticator said nothing about itself. A key made
+                        // on a page is reported like any other (spec 102).
+                        kind: crate::passkey::reported_method(
+                            &draft.authenticator_attachment,
+                            &draft.transports,
+                        )
+                        .unwrap_or(draft.method),
                         method: draft.method,
                     }
                 })
                 .collect(),
             can_add_key: at_key_list && model.drafts.len() < crate::safe::MAX_MULTI_KEYS,
-            key_relying_party: committed_relying_party(&model.drafts),
-            key_signer_origin: model
-                .drafts
-                .first()
-                .and_then(|draft| draft.signer_origin.clone())
-                .filter(|origin| !origin.is_empty()),
-            add_methods: methods_for(&model.drafts, &model.signer_page),
-            add_blocked: blocked_reason(&model.drafts, &model.signer_page),
+            signing_domain: super::new_signing(model.signing_page.as_deref()).0,
+            signing_page: model.signing_page.clone(),
+            can_choose_page: !busy && !has_draft,
+            add_methods: methods_for(),
             can_finish: at_key_list
                 && has_draft
                 && model.drafts.iter().all(|draft| draft.proof.is_some())
@@ -803,7 +705,7 @@ fn add_key(model: &mut Model, label: String, method: KeyMethod) -> Command<Effec
     // shell that asks anyway would otherwise mint a passkey that can never
     // join this wallet's unit — the person would keep a key they cannot use
     // and learn about it minutes later, after the registry refused the set.
-    if !methods_for(&model.drafts, &model.signer_page).contains(&method) {
+    if !methods_for().contains(&method) {
         return Command::done();
     }
     // Key 1's label and provider display name ARE the wallet name (N=1 stays
@@ -838,14 +740,36 @@ fn add_key(model: &mut Model, label: String, method: KeyMethod) -> Command<Effec
         .iter()
         .map(|draft| draft.credential_id.clone())
         .collect();
+    let page = crate::signing_venue::ceremony_page(model.signing_page.as_deref());
     request(
         model,
         ShellOperation::RegisterPasskey {
             name,
             exclude_credential_ids,
             method,
+            page,
         },
     )
+}
+
+/// "Use my own signing page" (spec 102): only before the first key, and only
+/// an address a browser would sign on.
+fn choose_page(model: &mut Model, url: Option<String>) -> Command<Effect, Event> {
+    if model.stage.is_busy() || !model.drafts.is_empty() {
+        return Command::done();
+    }
+    let page = match url {
+        None => None,
+        Some(url) => match crate::trusted_signer::signer_url(&url) {
+            Ok(url) => Some(url),
+            Err(_) => return Command::done(),
+        },
+    };
+    if page == model.signing_page {
+        return Command::done();
+    }
+    model.signing_page = page;
+    render()
 }
 
 fn remove_key(model: &mut Model, index: usize) -> Command<Effect, Event> {
@@ -922,7 +846,7 @@ fn begin_sign_member(model: &mut Model, index: usize) -> Command<Effect, Event> 
             // return to the same authenticator.
             method: draft.method,
             group_public_key_hex,
-            signer_origin: draft.signer_origin,
+            page: crate::signing_venue::ceremony_page(model.signing_page.as_deref()),
         },
     )
 }
@@ -987,10 +911,13 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
     // The wallet's creation moment is the first key's mint time — no clock
     // lives in the core.
     let created_at_iso = model.drafts[0].registered_at_iso.clone();
+    let (signing_domain, signing_venue) = super::new_signing(model.signing_page.as_deref());
     let prepared = Prepared {
         keys,
         address,
         created_at_iso,
+        signing_domain,
+        signing_venue,
     };
     let record = pending_record(&prepared, None);
     model.prepared = Some(prepared);
@@ -1430,7 +1357,6 @@ fn registry_publish_op(
                 authenticator_attachment: key.authenticator_attachment.clone(),
                 transports: key.transports.clone(),
                 proof: key.proof.clone(),
-                signer_origin: key.signer_origin.clone(),
             })
             .collect(),
         group_seed_hex,
@@ -1440,6 +1366,11 @@ fn registry_publish_op(
         // the field.
         method: KeyMethod::default(),
         answer_when_accepted: enters_on_acceptance(prepared),
+        // The unit is filed under the domain its keys were minted for.
+        page: prepared
+            .signing_venue
+            .page_url()
+            .and_then(|url| crate::signing_venue::ceremony_page(Some(url))),
     })
 }
 

@@ -23,9 +23,14 @@ import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
-import type { SigningMessages } from '$lib/signing/messages';
+import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
-import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
+import {
+	UNREACHABLE_LINE_KEYS,
+	VENUE_BLOCK_KEYS,
+	type SettingsMessages,
+	type VenueBlockKey
+} from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
 import type { PluralCopy } from './plural';
 
@@ -337,6 +342,44 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 	};
 }
 
+/**
+ * Spec 102: a venue refusal's lines, by the corpus key the core names
+ * (`VenueBlock::key()`) — Settings and both sheets carry the same three.
+ */
+function venueBlockWords(k: (key: string) => string): Record<VenueBlockKey, string> {
+	return Object.fromEntries(VENUE_BLOCK_KEYS.map((key) => [key, k(key)])) as Record<
+		VenueBlockKey,
+		string
+	>;
+}
+
+/** Spec 102 (D4): the hand-off card's words — for the gallery's boards only. */
+export function resolveHandoffMessages(locale: Locale): HandoffMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, key);
+	const table = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, k(key)]));
+	return {
+		title: k('componentsUi.signing.handoffTitle'),
+		// The labels a `KeyLabel.label_key` can name (the core's
+		// `CONFIRM_WITH_LABEL` / `NEW_KEY_ON_LABEL`).
+		keyLabels: table([
+			'componentsUi.signing.confirmWithLabel',
+			'componentsUi.signing.newKeyOnLabel'
+		]),
+		open: k('componentsUi.signing.openSigner'),
+		waiting: k('componentsUi.signing.trustedSignerWaiting'),
+		waitingHint: k('componentsUi.signing.trustedSignerWaitingHint'),
+		reopen: k('componentsUi.signing.trustedSignerReopen'),
+		official: k('settings.signing.pageOfficial'),
+		integrity: resolveSettingsMessages(locale).integrity,
+		places: table([
+			'onboarding.create.methodPlatformTitle',
+			'onboarding.create.methodHybridTitle',
+			'onboarding.create.methodSecurityKeyTitle'
+		])
+	};
+}
+
 /** The serializable strings the settings screens render (spec 023). */
 export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 	activate(locale);
@@ -425,18 +468,40 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			slowHint: k('send.gasTierHintSlow')
 		},
 		signing: {
-			methods: {
-				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
-			},
-			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
-			pageTitle: k('settings.signing.pageTitle'),
-			pageSubtitle: k('settings.signing.pageSubtitle'),
+			title: k('settings.signing.title'),
+			subtitle: k('settings.signing.subtitle'),
 			pageOfficial: k('settings.signing.pageOfficial'),
 			pageInvalid: k('settings.signing.pageInvalid'),
 			pageInsecure: k('settings.signing.pageInsecure'),
-			pageForeign: k('settings.signing.pageForeign'),
-			pageReset: k('settings.signing.pageReset'),
-			pageSave: k('settings.signing.pageSave')
+			pageDuplicate: k('settings.signing.pageDuplicate'),
+			pageAdd: k('settings.signing.pageAdd'),
+			pageSave: k('settings.signing.pageSave'),
+			keysOn: k('settings.signing.keysOn'),
+			pageSelfHosted: k('settings.signing.pageSelfHosted'),
+			pageRename: k('settings.signing.pageRename'),
+			pageRemove: k('settings.signing.pageRemove'),
+			pageTrust: k('settings.signing.pageTrust')
+		},
+		venue: {
+			title: k('settings.venue.title'),
+			subtitle: k('settings.venue.subtitle'),
+			inVela: k('settings.venue.inVela'),
+			inVelaBody: k('settings.venue.inVelaBody'),
+			page: k('settings.venue.page'),
+			pageBody: k('settings.venue.pageBody'),
+			blocked: venueBlockWords(k)
+		},
+		integrity: {
+			checking: k('componentsUi.signing.integrity.checking'),
+			matches: k('componentsUi.signing.integrity.matches'),
+			trusted: k('componentsUi.signing.integrity.trusted'),
+			unchecked: k('componentsUi.signing.integrity.unchecked'),
+			mismatch: k('componentsUi.signing.integrity.mismatch'),
+			blocked: k('componentsUi.signing.integrity.blocked'),
+			askTrust: k('componentsUi.signing.integrity.askTrust'),
+			couldNotCheck: k('componentsUi.signing.integrity.couldNotCheck'),
+			noVersion: k('componentsUi.signing.integrity.noVersion'),
+			allBlocked: k('componentsUi.signing.integrity.allBlocked')
 		},
 		networks: {
 			count: k('settings.networks.count'),
@@ -1070,6 +1135,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),
+		venueBlock: venueBlockWords(k),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),

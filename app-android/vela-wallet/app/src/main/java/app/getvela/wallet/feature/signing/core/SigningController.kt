@@ -90,8 +90,10 @@ class SigningController(
     /** `null`: the core's answer window (`dappReceiptWaitMs`, spec 082 RA12); tests pin a number. */
     receiptWaitMs: Long? = null,
     receiptPollMs: Long = 3_000L,
-    /** Spec 071: the Trusted Signer, for an account that signed in through it. */
+    /** Spec 071/102: the signing page, for an account whose venue is one. */
     trustedSigner: () -> TrustedSigner? = { null },
+    /** The corpus, for the sentences a signature that cannot be made is told in (spec 102). */
+    words: (key: String, vars: Map<String, String>) -> String = { key, _ -> key },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -304,16 +306,18 @@ class SigningController(
     private val _sim = MutableStateFlow<SimOutcome?>(null)
     val sim: StateFlow<SimOutcome?> = _sim
 
-    private val spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner)
+    // Spec 102 D4: this sheet IS the hand-off card when the venue is a page,
+    // so the page opens on its Open — the channel raises no second card.
+    private val spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner, handoffShown = true, words = words)
 
     /**
-     * Spec 079 (owner: one slide, not two): this account signs through the
-     * Trusted Signer's page, whose own slide is the consent — so the sheet
-     * offers a button that goes there instead of a second slide. Read once per
-     * request from the same route the spine will sign over.
+     * Spec 102 D4: this account reviews and signs on a page — the sheet draws
+     * the hand-off card (where, with which key, the page's integrity line)
+     * instead of repeating the preview, and its Open goes there. `null`: in
+     * Vela. Read once per request from the same plan the spine signs over.
      */
-    private val _trustedSignerRoute = MutableStateFlow(false)
-    val trustedSignerRoute: StateFlow<Boolean> = _trustedSignerRoute
+    private val _handoff = MutableStateFlow<UserOpSpine.Handoff?>(null)
+    val handoff: StateFlow<UserOpSpine.Handoff?> = _handoff
 
     private val signExecutor = SignExecutor(
         spine = spine,
@@ -537,8 +541,7 @@ class SigningController(
     fun open(request: IncomingRequest) {
         _request.value = request
         scope.launch {
-            val first = runCatching { accounts.keysOf(wallet.address) }.getOrNull()?.firstOrNull() ?: return@launch
-            _trustedSignerRoute.value = runCatching { spine.routeFor(wallet.address, first).method == app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner }.getOrDefault(false)
+            _handoff.value = runCatching { spine.handoffFor(wallet.address) }.getOrNull()
         }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()

@@ -169,11 +169,16 @@ final class SigningController {
     private let relay: RelayClient
     private let spine: UserOpSpine
 
-    /// Spec 079 (owner: one slide, not two): this account signs on the
-    /// Trusted Signer's page, whose own slide is the consent — so the sheet
-    /// offers a confirm that goes there instead of a second consent. Read once
-    /// per request, from the route the spine will sign over.
-    private(set) var trustedSignerRoute = false
+    /// Spec 079 (owner: one slide, not two) and 102: this account reviews and
+    /// signs on a trusted page, whose own slide is the consent — so the sheet
+    /// is the hand-off card and its confirm goes there. Read once per request,
+    /// from the plan the spine signs by.
+    private(set) var venuePlan: SigningPlanWire?
+    var trustedSignerRoute: Bool { venuePage != nil }
+    /// The page, when the venue is one.
+    var venuePage: String? { venuePlan?.venue.pageUrl }
+    /// "Confirm with …" — the plan's own name for the key (D-17).
+    var venueKeyLabel: KeyLabelWire? { venuePlan?.keyLabel }
     private var ports: Ports
 
     /// Record ids already on disk, and the handoff waiting for them. The
@@ -381,11 +386,13 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
-        trustedSignerRoute = false
+        venuePlan = nil
         Task { [weak self, spine, wallet] in
-            let route = await spine.signsOnTrustedSigner(account: wallet.address)
+            let plan = await spine.plan(account: wallet.address)
             guard let self, self.request == incoming else { return }
-            self.trustedSignerRoute = route
+            self.venuePlan = plan
+            // The card's line: checked now, unless a fresh ruling stands.
+            if let page = plan?.venue.pageUrl { SignerPageChecks.shared.prime(page) }
         }
         // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()

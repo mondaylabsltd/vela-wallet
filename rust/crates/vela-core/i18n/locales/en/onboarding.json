@@ -170,8 +170,6 @@
       "keysSubtitleFull": "You've reached the limit of 7.",
       "keysTitle": "Add passkeys",
       "keysTitleBlocked": "One more key before you can create",
-      "methodBlockedHint": "This wallet's keys all belong to {{party}}.",
-      "methodBlockedSigner": "Your Trusted Signer page is {{page}}, whose keys belong to {{pageParty}}. Change it in Settings to add one here.",
       "methodHybridBody": "Scan a code and create it on a nearby device",
       "methodHybridTitle": "Phone or tablet",
       "methodHybridUnavailable": "Coming soon",
@@ -184,6 +182,8 @@
       "needSecondKeyHint": "This key isn't backed up anywhere. Lose it and the wallet can't be opened. Add a second one.",
       "nextBtn": "Continue",
       "openSettings": "Open Settings",
+      "signingPageTitle": "Use a trusted signing page",
+      "signingPageBody": "Advanced: Vela's official page, or one you deployed yourself",
       "pinAttemptsLeft": "Attempts left: {{attempts}}",
       "pinBody": "{{product}} has no fingerprint sensor, so its PIN is how it confirms it is you. The PIN goes only to the key in your hand — never to this computer's disk, and never to a server.",
       "pinLabel": "PIN",
@@ -230,8 +230,7 @@
       "touchFingerprintBody": "{{product}} is blinking. Rest your finger on its sensor to confirm it is you.",
       "touchSelectBody": "Several security keys are plugged in and all of them are blinking. Touch the one you want to use.",
       "touchTitle": "Touch your security key",
-      "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
-      "verifyStuckHint": "Verification keeps failing? Your device may not have saved this passkey properly. It's safe to start over — nothing has been created yet."
+      "verifyHint": "Your passkey is verified and your key is synced — you're all set."
     },
     "login": {
       "alertNotSupportedTitle": "Not Supported",

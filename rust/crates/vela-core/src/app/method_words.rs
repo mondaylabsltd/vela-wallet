@@ -1,6 +1,12 @@
 //! The words of a key-method row — "This device", "Phone or tablet", "USB
-//! security key", "Trusted Signer" and the line under each — decided once here
-//! for every shell's create chooser and sign-in chooser (087 F01, F02).
+//! security key" and the line under each — decided once here for every
+//! shell's create chooser and sign-in chooser (087 F01, F02).
+//!
+//! Three rows and no fourth (spec 102): the Trusted Signer is where a person
+//! reviews and signs, not a place a key lives, so its words moved to the venue
+//! rows ([`venue_words`]) — "Review and sign in Vela", "Review and sign on a
+//! trusted signing page", and the choosers' "Use a trusted signing page" (D6:
+//! Vela's official page, or one the person deployed).
 //!
 //! Two lines depend on where the row is drawn (083 W16, which fixed them on the
 //! desktop alone):
@@ -134,12 +140,6 @@ impl KeyMethod {
                 "onboarding.create.methodSecurityKeyTitle",
                 MethodLine::Key("onboarding.create.methodSecurityKeyBody"),
             ),
-            // Spec 075: the signing sheet's own two sentences — the route is
-            // one thing wherever a person meets it.
-            Self::TrustedSigner => (
-                "componentsUi.signing.trustedSignerTitle",
-                MethodLine::Key("componentsUi.signing.trustedSignerBody"),
-            ),
         };
         MethodWords { title_key, line }
     }
@@ -170,16 +170,75 @@ pub fn method_words_json(method: &str, chooser: &str, unlock: &str) -> Option<St
     .ok()
 }
 
+/// A venue row: the two venues of "Where you review and sign", and the
+/// choosers' advanced entry that creates or signs into a wallet on a trusted
+/// signing page — Vela's official one, or one the person deployed (spec 102,
+/// D6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum VenueRow {
+    /// Vela's own signing sheet.
+    InVela,
+    /// A trusted signing page.
+    Page,
+    /// The create / sign-in choosers' "Use a trusted signing page" — its list
+    /// is Vela's official signing page and the self-hosted ones; a wallet made
+    /// on a self-hosted page keeps its keys on that page's domain.
+    /// [`venue_words`] also reads it as `own_page`, its name before D6.
+    SigningPage,
+}
+
+/// A venue row's two lines, as corpus keys.
+#[must_use]
+pub const fn venue_row_words(row: VenueRow) -> MethodWords {
+    let (title_key, line) = match row {
+        VenueRow::InVela => ("settings.venue.inVela", "settings.venue.inVelaBody"),
+        VenueRow::Page => ("settings.venue.page", "settings.venue.pageBody"),
+        VenueRow::SigningPage => (
+            "onboarding.create.signingPageTitle",
+            "onboarding.create.signingPageBody",
+        ),
+    };
+    MethodWords {
+        title_key,
+        line: MethodLine::Key(line),
+    }
+}
+
+/// [`venue_row_words`] over a wire name (`"in_vela"`, `"page"`,
+/// `"signing_page"`, or `"own_page"` as before D6); `None` for one this core
+/// does not know.
+#[must_use]
+pub fn venue_words(row: &str) -> Option<MethodWords> {
+    // D6 renamed the chooser's entry; a shell built before still asks for it
+    // by its old name.
+    let row = if row == "own_page" {
+        "signing_page"
+    } else {
+        row
+    };
+    let row: VenueRow = serde_json::from_value(serde_json::Value::String(row.to_owned())).ok()?;
+    Some(venue_row_words(row))
+}
+
+/// [`venue_words`] as the same flat JSON [`method_words_json`] answers.
+#[must_use]
+pub fn venue_words_json(row: &str) -> Option<String> {
+    let words = venue_words(row)?;
+    serde_json::to_string(&serde_json::json!({
+        "title_key": words.title_key,
+        "line_key": words.line_key(),
+        "line_name": words.line_name(),
+    }))
+    .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const ALL: [KeyMethod; 4] = [
-        KeyMethod::Platform,
-        KeyMethod::Hybrid,
-        KeyMethod::SecurityKey,
-        KeyMethod::TrustedSigner,
-    ];
+    const ALL: [KeyMethod; 3] = KeyMethod::ALL;
     const UNLOCKS: [DeviceUnlock; 4] = [
         DeviceUnlock::FaceId,
         DeviceUnlock::TouchId,
@@ -232,7 +291,7 @@ mod tests {
                 let create = method.words(KeyChooser::Create, unlock);
                 let sign_in = method.words(KeyChooser::SignIn, unlock);
                 assert_eq!(create.title_key, sign_in.title_key, "{method:?}");
-                if matches!(method, KeyMethod::SecurityKey | KeyMethod::TrustedSigner) {
+                if method == KeyMethod::SecurityKey {
                     assert_eq!(create, sign_in, "{method:?}");
                 }
             }
@@ -255,6 +314,13 @@ mod tests {
                 }
             }
         }
+        for row in [VenueRow::InVela, VenueRow::Page, VenueRow::SigningPage] {
+            let words = venue_row_words(row);
+            keys.push(words.title_key);
+            if let MethodLine::Key(key) = words.line {
+                keys.push(key);
+            }
+        }
         keys.sort_unstable();
         keys.dedup();
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/i18n/locales");
@@ -267,8 +333,16 @@ mod tests {
             for key in &keys {
                 let mut parts = key.split('.');
                 let namespace = parts.next().unwrap_or_default();
-                let text = std::fs::read_to_string(dir.join(format!("{namespace}.json")))
-                    .unwrap_or_else(|e| unreachable!("{namespace}.json: {e}"));
+                // A namespace has its own file, or lives in the locale's
+                // top-level one (`settings` does: `<lang>.json`).
+                let own = dir.join(format!("{namespace}.json"));
+                let path = if own.exists() {
+                    own
+                } else {
+                    dir.with_extension("json")
+                };
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| unreachable!("{}: {e}", path.display()));
                 let mut node: serde_json::Value =
                     serde_json::from_str(&text).unwrap_or_else(|e| unreachable!("json: {e}"));
                 node = node[namespace].clone();
@@ -284,6 +358,53 @@ mod tests {
             checked += 1;
         }
         assert_eq!(checked, 15, "every language checked");
+    }
+
+    /// Spec 102: three places and no fourth. The Trusted Signer's wire name
+    /// is not a key method any more — a shell that still asks for its row
+    /// gets nothing to draw, rather than a place a key cannot live.
+    #[test]
+    fn there_is_no_fourth_row() {
+        for chooser in ["create", "sign_in"] {
+            assert_eq!(method_words("trusted_signer", chooser, "other"), None);
+        }
+        assert_eq!(KeyMethod::ALL.len(), 3);
+    }
+
+    /// The key label's place (`signing_venue::place_title_key`, which needs no
+    /// `crux`) names each place exactly as the choosers' rows do.
+    #[test]
+    fn a_key_label_names_its_place_as_the_chooser_does() {
+        for method in ALL {
+            assert_eq!(
+                crate::signing_venue::place_title_key(method.name()),
+                method
+                    .words(KeyChooser::Create, DeviceUnlock::Other)
+                    .title_key
+            );
+        }
+    }
+
+    #[test]
+    fn the_venue_rows_have_their_own_words() {
+        assert_eq!(
+            venue_words("in_vela").map(|w| w.title_key),
+            Some("settings.venue.inVela")
+        );
+        assert_eq!(
+            venue_words("page").map(|w| w.line),
+            Some(MethodLine::Key("settings.venue.pageBody"))
+        );
+        assert_eq!(
+            venue_words_json("signing_page").as_deref(),
+            Some(
+                r#"{"line_key":"onboarding.create.signingPageBody","line_name":null,"title_key":"onboarding.create.signingPageTitle"}"#
+            )
+        );
+        // D6 renamed the row; a shell still asking by its old name gets the
+        // same words.
+        assert_eq!(venue_words("own_page"), venue_words("signing_page"));
+        assert_eq!(venue_words("trusted_signer"), None);
     }
 
     #[test]

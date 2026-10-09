@@ -6,10 +6,11 @@
  * sheet only calls `onsend`; the route's send is tested in bug-report.test.ts.
  */
 import { tick } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import { words } from '../__fixtures__/words';
 import { buildMobileState } from '../fixtures';
 import type { FeedbackModel, FeedbackResult } from '../model';
@@ -17,6 +18,9 @@ import { ReportDraft } from '../report-draft.svelte';
 import FeedbackBody from './FeedbackBody.svelte';
 
 const m = words();
+// The settings fixtures carry the venue rows, whose refusals are the core's
+// sentences (`venueBlockLine`): built over the loaded core.
+beforeAll(() => loadCore());
 const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 
 function panel(): FeedbackModel {

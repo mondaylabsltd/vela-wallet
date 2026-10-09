@@ -421,15 +421,30 @@ struct FlowHost: View {
                     onNoticeReport: { onRelayReport?() }
                 )
             } footer: {
+                // A hairline over the pinned hand-off: figures that run past
+                // the fold end at an edge, not under a floating card.
+                if m.handoff != nil { FlowDivider() }
                 FlowFooter {
-                    // A BUTTON — the same primary button the signing sheet
-                    // confirms with since issue #461, so the two confirm
-                    // screens are one control.
-                    VelaButton(title: m.cta, kind: .primary) {
-                        if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
+                    VStack(spacing: Tokens.Space.s12) {
+                        // Spec 102: an account that signs on a page — which
+                        // page, with which key, and its check, pinned with the
+                        // button that goes there. In the footer, not the
+                        // scroll: the integrity line is on screen whatever the
+                        // figures above it hold, and the button can never
+                        // cover it (a 6.1" phone cut it in half when the card
+                        // rode under the facts).
+                        if let handoff = m.handoff {
+                            HandoffCardView(model: handoff, compact: true)
+                        }
+                        // A BUTTON — the same primary button the signing sheet
+                        // confirms with since issue #461, so the two confirm
+                        // screens are one control.
+                        VelaButton(title: m.cta, kind: .primary) {
+                            if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
+                        }
+                        .disabled(sendCtaDisabled)
+                        .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
                     }
-                    .disabled(sendCtaDisabled)
-                    .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
                 }
             }
         case .sendReceipt(let m):

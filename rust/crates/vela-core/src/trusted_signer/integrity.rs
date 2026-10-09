@@ -32,14 +32,15 @@
 //! on [`Verdict::Refused`] are "this page does not match the published list",
 //! never "a distribution attack was prevented" (spec 076, threat model).
 //!
-//! # Checking, not yet refusing
+//! # Checking, and refusing
 //!
-//! [`BUILD_ALLOWED`] lists the published pages and the shells run this check
-//! on every launch, but [`ENFORCE`] is still `false`: a verdict is recorded
-//! and shown, and the page opens either way. The two are deliberately
-//! separate, because the commit that lists a hash must not be the commit that
-//! starts turning people away — see [`ENFORCE`] for why, and the tripwire test
-//! that makes flipping it a deliberate act.
+//! [`BUILD_ALLOWED`] lists the published pages, and since spec 102 [`ENFORCE`]
+//! is on: a page whose check failed, or never ran, is not opened — and the
+//! only way to open one at all is through [`super::launch`], which opens the
+//! version it checked. The two stay deliberately separate, because the commit
+//! that lists a hash must not be the commit that starts turning people away —
+//! see [`ENFORCE`] for why, and the tripwire test that makes flipping it back
+//! a deliberate act.
 //!
 //! The ordering of [`BUILD_ALLOWED`] is load-bearing: [`choose_version`] takes
 //! the first entry the endpoint still serves, so the front of the list is what
@@ -60,6 +61,44 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 245c9ea1's page and behaviour, with two wordings from the owner's
+    // review (2026-10-09). The tag beside the fee and beside a chain the page
+    // does not know says WHOSE word it is — 「App 标注」 / "per the app" for
+    // "this payment is the network fee", 「App 提供」 / "named by the app" for
+    // a chain's name — where it said 「自述」 / "claimed"; a chain nobody
+    // names is called by its id, unmarked. The key ceremony's subtitle names
+    // the wallet once: 「Vela 钱包 · 答复只交回给它」. LAUNCH (spec 102 Phase
+    // 3) — valid only once `dist/` is deployed and `/b/f14e755a…/sign`
+    // answers 200 + immutable with these bytes.
+    "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8",
+    // The same page, drawn as the apps draw their own signing sheet (owner,
+    // 2026-10-09: the page's colours were too loud — keep the in-app signing
+    // feel): the app's tokens in light and dark, its face (Plus Jakarta Sans,
+    // carried in the hashed bytes; the CSP gains `font-src data:` and nothing
+    // else), the title / rows / hairline / footer of its sheet, the network
+    // as a row, neutral marks, one accent on a pill confirm, no decorative
+    // hero, and a key ceremony titled in the app's own words ("Add a
+    // passkey"). Behaviour is 2d19fa49's: answers only to
+    // `velawallet://sign-result`, refuses frames, the key route, the tap.
+    // LAUNCH in one commit only, never deployed, replaced by f14e755a before
+    // any release (its words, not its behaviour). Kept: `dist/` carries it,
+    // so a test build that launches it opens a live page once `dist/` is
+    // deployed, and it is as safe to open.
+    "245c9ea1a365f85bc9dfa16ff4d67b9242a7936168e7b3dbb3450f5e2301b0f6",
+    // The page as the authority (spec 102 Phase 3): what is signed first, the
+    // key it will use, then one tap — the WebAuthn call inside the tap, for
+    // Safari. It reads the wallet's key route (`context.keyRoute`, a
+    // ceremony's `place`/`hints`/`transports`) and asks the browser for that
+    // one key with its transports and hints, so no generic chooser; names
+    // networks and tokens from this crate's own tables (a Base USDC send was
+    // "0 ?"); speaks the apps' fifteen languages; and says what it is in one
+    // line (its version from its own address · zero dependencies · open
+    // source · self-hostable). Answers only to `velawallet://sign-result`
+    // and refuses frames, as 364b8737 does. LAUNCH in one commit only, never
+    // deployed, replaced by 245c9ea1 before any release (its look, not its
+    // behaviour). Kept: `dist/` carries it, so a test build that launches it
+    // opens a live page once `dist/` is deployed, and it is as safe to open.
+    "2d19fa497c4131a9341f69248fb68a79c3bbf750aed0559747b0d34ac9fa009d",
     // The answer goes to the Vela wallet and nowhere else (spec 102 R7, Phase
     // 0). Every earlier page signs for whoever opens it: a signature's answer
     // went to any `cb=` the link named and to any postMessage opener, so a
@@ -68,8 +107,8 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // `velawallet://sign-result` (signatures and every ceremony on the URL
     // channel), sends nothing anywhere else, and does nothing inside a frame
     // (the host adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`).
-    // LAUNCH (spec 102 Phase 0) — valid only once `dist/` is deployed and
-    // `/b/364b8737…/sign` answers 200 + immutable with these bytes.
+    // LAUNCH from spec 102 Phase 0 until 245c9ea1 (Phase 3). Kept: a build
+    // that knows only this hash keeps working, and it is as safe to open.
     "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23",
     // Both of the next two, in one page: 085's typed-data reader and 082's
     // site and plain-send fixes (the merge of the two branches, 2026-10-01).
@@ -148,9 +187,15 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// published. That is a self-inflicted outage in the shape of a security
 /// feature.
 ///
-/// Flip this in the commit that publishes the page at the official address,
-/// and not before. Until then the shells check, log and open.
-pub const ENFORCE: bool = false;
+/// On since spec 102 (R6, owner 2026-10-09: "a failed check refuses to
+/// open"): the page has been published at the official address since spec
+/// 079, every listed hash is committed at its own path in `dist/` (tested),
+/// and a version is only ever chosen from what the endpoint lists — or, with
+/// no index, [`LAUNCH`], which is deployed by definition — so a hash listed
+/// before its page is deployed is never asked for. Turning it off again is
+/// the kill switch: [`super::launch::admit`] then opens a refused page with
+/// its refusal drawn, as before 102.
+pub const ENFORCE: bool = true;
 
 /// The version the phone apps open (spec 079). Content-addressed, so the host's
 /// `/b/*` immutable rule lets the browser keep it and open it with no network —
@@ -158,7 +203,7 @@ pub const ENFORCE: bool = false;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23";
+pub const LAUNCH: &str = "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
@@ -722,17 +767,16 @@ mod tests {
 
     #[test]
     // The assertion IS on a constant, and that is the point: this is a tripwire
-    // on `ENFORCE`, so that turning refusals on is a deliberate act with a
+    // on `ENFORCE`, so that turning refusals off is a deliberate act with a
     // failing test attached rather than a one-character edit nobody reviews.
     #[allow(clippy::assertions_on_constants)]
-    fn refusing_is_still_switched_off() {
-        // The guard against a self-inflicted outage: listing a hash must not,
-        // by itself, start refusing pages that are not published yet. Flip
-        // `ENFORCE` in the commit that publishes, and change this test with it.
+    fn refusing_is_switched_on() {
+        // Spec 102 R6: a failed or missing check opens nothing. Turning this
+        // off opens refused pages again — change this test with it, and say
+        // why in the commit.
         assert!(
-            !ENFORCE,
-            "076: enforcement is on — the page must be published at the official \
-             address first, and every listed hash reachable at its own path"
+            ENFORCE,
+            "102: enforcement is off — a page that failed its check would open"
         );
     }
 }

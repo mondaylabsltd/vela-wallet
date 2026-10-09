@@ -1,0 +1,21 @@
+{
+  "id": "a1b2c3d4",
+  "name": "Savings",
+  "address": "0x1111111111111111111111111111111111111111",
+  "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "created_at_iso": "2026-09-30T10:00:00.000Z",
+  "keys": [
+    {
+      "credential_id": "a1b2c3d4",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "Savings",
+      "transports": "hybrid,internal",
+      "signer_origin": "https://sign.getvela.app"
+    }
+  ],
+  "signed_in_with": {
+    "credential_id": "a1b2c3d4",
+    "method": "trusted_signer",
+    "signer_origin": "https://sign.getvela.app"
+  }
+}

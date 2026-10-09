@@ -29,6 +29,17 @@
 > `frame-ancestors 'none'` + `X-Frame-Options: DENY`。桌面演示要的回环例外只在测试页
 > `samples/loopback-sign.html` 里（`src/` 之外，发布页里没有）。见 PROTOCOL.md 第 0 节。
 
+> **102 第 3 阶段（2026-10-09）：页面本身。** 先说要签什么，再说用哪把钥匙，最后一个
+> 按钮 —— 滑块换成**点按**（和各 App 一样），WebAuthn 在点按的处理函数里同步发起
+> （Safari 只认手势里的调用；`samples/confirm-test.mjs` 在调用那一刻核对）。钱包给的
+> **钥匙路线**（`context.keyRoute` / 仪式的 `place`、`hints`、`transports`）让浏览器直接
+> 去那一把钥匙，不再弹「这台设备 / 扫码 / USB」选择框（`samples/key-route-test.mjs`）。
+> 代币与网络改由 vela-core 的表生成（`samples/gen-catalog.mjs` → `src/lib/catalog.js`，
+> 按链查；Base 的 USDC 以前显示成「0 ?」）。卡片下面一行写明这一页是什么：版本（地址里
+> 哈希的前 8 位，和钱包交接卡一致）· 零依赖 · 开源 · 可自建。十五种语言全部编进被哈希的
+> 字节，选语言的规则和 App 相同（`samples/locales-test.mjs`）。见 PROTOCOL.md 第 0 节后
+> 「钥匙路线、确认按钮、页面自己那一行」。
+
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 
 ---
@@ -60,12 +71,16 @@ bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
 bun samples/hostile-test.mjs       # 32/32 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
 bun samples/channels-test.mjs      # 19/19 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
-bun samples/slider-test.mjs        # 19/19 真触摸拖动滑块：签名与创建，以及答复要交去别处就拖不动
-bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实测、自定义 scheme 不被 CSP 拦
+bun samples/confirm-test.mjs       # 33/33 真触摸点按（规格 102）：passkey 弹窗在点按里发起、只问路线上那一把钥匙、等待时不接第二次点按；创建按所选位置；答复要交去别处就按不动；成员挑战码本地算；回车也能确认
+node samples/key-route-test.mjs     # 50/50 钥匙路线（102 R5）：签名与四种仪式发给浏览器的选项（allowCredentials / transports / hints / authenticatorAttachment）、路线的校验、按钮上的动作、Base USDC 读成 250 而不是「0 ?」
+node samples/locales-test.mjs       # 十五种语言：键与英文一致、占位符一致、自称正确、选语言与 vela-core match_system_tag 的向量一致
+bun samples/gen-catalog.mjs --check # src/lib/catalog.js 与 vela-core 的网络表、代币表一致
+node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plus Jakarta Sans 按这份子集生成的（要 fontTools）
+bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
-node samples/origin-line-test.mjs   # 17/17 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）
+node samples/origin-line-test.mjs   # 24/24 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名
 node samples/plain-send-test.mjs    # 153/153 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）
 bun samples/plain-send-test.mjs     # 153/153 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
 ```
@@ -138,7 +153,7 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 - 无限额授权与 permit：标红、可原样签（2026-09-26 裁决，取代 never-unlimited 拒签）；对整个 NFT 合集的授权仍拒签
 - 接管拦截（2026-09-27）：账户对自己调用改所有者 / 模块 / guard / fallback 的函数、任何 delegatecall、
   EIP-712 `SafeTx` 一律拒签，查的是**操作里的每一条腿**（`samples/takeover-test.mjs`，与 vela-core `self_call_guard.rs` 同一规则）
-- i18n（zh/en）、深浅色跟随系统
+- i18n（2026-10-09 起十五种，和各 App 一样）、深浅色跟随系统
 - 摘要：EIP-191 / EIP-712 / **SafeOp / SafeMessage**，全部对拍通过
 - 交易绑定检查：站点请求的调用必须真在被签的操作里，否则拒签
 - 通道：postMessage、扩展端口、URL 片段 + 回环回调 —— 三条端到端跑通真 WebAuthn

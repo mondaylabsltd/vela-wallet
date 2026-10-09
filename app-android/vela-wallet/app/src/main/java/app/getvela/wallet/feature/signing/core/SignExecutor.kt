@@ -302,7 +302,8 @@ class SignExecutor(
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
-                UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer -> outcomeOf(failure)
+                UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
+                is UserOpSpine.Failure.VenueBlocked -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
@@ -389,6 +390,8 @@ class SignExecutor(
             // "refused" sentence, the sheet never says "try again".
             is UserOpSpine.Failure.Rejected -> SignSubmitOutcome.Failed(failure.message ?: userOpRefusedDappDetail(), refused = true)
             is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
+            // Spec 102: this account cannot sign here — the core says why, translated.
+            is UserOpSpine.Failure.VenueBlocked -> SignSubmitOutcome.VenueBlocked(failure.block)
         }
 
         /**

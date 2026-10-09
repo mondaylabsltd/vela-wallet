@@ -6,15 +6,38 @@ window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
 
-  var TOKENS = {
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': { symbol: 'USDC', decimals: 6, name: 'USD Coin', tone: '#2775ca' },
-    '0xdac17f958d2ee523a2206206994597c13d831ec7': { symbol: 'USDT', decimals: 6, name: 'Tether USD', tone: '#26a17b' },
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': { symbol: 'WETH', decimals: 18, name: 'Wrapped Ether', tone: '#8a93a5' },
-    '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', decimals: 18, name: 'Dai Stablecoin', tone: '#f5ac37' },
-    '0x83f20f44975d03b1b09e64809b757c47f942beea': { symbol: 'sDAI', decimals: 18, name: 'Savings DAI', tone: '#3fae74' },
-    '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d': { symbol: 'BAYC', decimals: 0, name: 'Bored Ape Yacht Club', tone: '#c8963e', nft: true },
-    '0x4d224452801aced8b2f0aebe155379bb5d594381': { symbol: 'APE', decimals: 18, name: 'ApeCoin', tone: '#0054f9' },
+  // Tokens, PER CHAIN (spec 102): the same address can be a different
+  // contract on another network, so a token is known only on the chain the
+  // signature is for. Every row of vela-core's token registry
+  // (lib/catalog.js, generated), plus three mainnet entries only this page
+  // carries — a vault, a collection and a coin its examples use.
+  var OWN_TOKENS = {
+    1: {
+      '0x83f20f44975d03b1b09e64809b757c47f942beea': { symbol: 'sDAI', decimals: 18, name: 'Savings DAI', tone: '#3fae74' },
+      '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d': { symbol: 'BAYC', decimals: 0, name: 'Bored Ape Yacht Club', tone: '#c8963e', nft: true },
+      '0x4d224452801aced8b2f0aebe155379bb5d594381': { symbol: 'APE', decimals: 18, name: 'ApeCoin', tone: '#0054f9' },
+    },
   };
+
+  // A token chip's colour, by symbol — decoration, like the logo it stands in
+  // for. Anything not listed is drawn in the neutral grey.
+  var TONES = {
+    USDC: '#2775ca', 'USDC.e': '#2775ca', USDbC: '#2775ca', axlUSDC: '#2775ca',
+    USDT: '#26a17b', USDT0: '#26a17b', 'USDT.e': '#26a17b', 'USD₮0': '#26a17b',
+    DAI: '#f5ac37', 'DAI.e': '#f5ac37', EURC: '#2775ca', PYUSD: '#0074de', PYUSD0: '#0074de',
+  };
+
+  var TOKENS = {};
+  ((ns.catalog && ns.catalog.tokens) || []).forEach(function (row) {
+    var chain = TOKENS[row[0]] || (TOKENS[row[0]] = {});
+    chain[row[1]] = { symbol: row[2], decimals: row[3], tone: TONES[row[2]] || '#8a93a5' };
+  });
+  Object.keys(OWN_TOKENS).forEach(function (chainId) {
+    var chain = TOKENS[chainId] || (TOKENS[chainId] = {});
+    Object.keys(OWN_TOKENS[chainId]).forEach(function (address) {
+      chain[address] = OWN_TOKENS[chainId][address];
+    });
+  });
 
   var CONTRACTS = {
     '0x1111111254eeb25477b68fb85ed929f73a960582': { name: '1inch Router', owner: '1inch Network', verified: true, descriptor: true },
@@ -28,18 +51,18 @@ window.VelaCS = window.VelaCS || {};
     '0x4e59b44847b379578588920ca78fbf26c0b4956c': { name: 'CREATE2 Deployer', verified: true, descriptor: false },
   };
 
-  var CHAINS = {
-    1: 'Ethereum', 10: 'OP Mainnet', 56: 'BNB Smart Chain', 100: 'Gnosis',
-    137: 'Polygon', 8453: 'Base', 42161: 'Arbitrum One', 43114: 'Avalanche',
-    59144: 'Linea', 534352: 'Scroll', 4217: 'Tempo',
-  };
-
-  // Each chain's own coin. Tempo has none (fees are paid in a stablecoin), so
-  // it is absent rather than guessed.
-  var NATIVE = {
-    1: 'ETH', 10: 'ETH', 56: 'BNB', 100: 'xDAI', 137: 'POL', 8453: 'ETH',
-    42161: 'ETH', 43114: 'AVAX', 59144: 'ETH', 534352: 'ETH',
-  };
+  // Networks: the ones Vela ships, named as the apps name them
+  // (lib/catalog.js), and two more this page has always known.
+  var CHAINS = { 59144: 'Linea', 534352: 'Scroll' };
+  var NATIVE = { 59144: 'ETH', 534352: 'ETH' };
+  ((ns.catalog && ns.catalog.chains) || []).forEach(function (row) {
+    CHAINS[row[0]] = row[1];
+    NATIVE[row[0]] = row[2];
+  });
+  // Each chain's own coin — except Tempo, which has none (fees are paid in a
+  // stablecoin; the apps' "USD" is a display unit, not a coin a call can
+  // carry), so it is absent rather than guessed.
+  delete NATIVE[4217];
 
   var CONTACTS = {
     '0x88cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894': { name: 'Account 1', kind: 'own' },
@@ -193,8 +216,10 @@ window.VelaCS = window.VelaCS || {};
     bySelector: bySelector,
     fourbyte: FOURBYTE,
     selectorProof: selectorProof,
-    token: function (address) {
-      return TOKENS[lower(address)] || null;
+    /** A token this page knows ON THAT CHAIN, or null. */
+    token: function (address, chainId) {
+      var chain = TOKENS[Number(chainId)];
+      return (chain && chain[lower(address)]) || null;
     },
     contract: function (address) {
       return CONTRACTS[lower(address)] || null;

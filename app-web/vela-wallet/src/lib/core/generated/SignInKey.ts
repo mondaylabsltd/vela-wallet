@@ -2,8 +2,9 @@
 import type { KeyMethod } from "./KeyMethod";
 
 /**
- * Which of the wallet's keys this device signs with, and how it reaches it:
- * the one the person created the wallet with, or last signed in with, HERE.
+ * Which of the wallet's keys this device signs with, and where that key
+ * lives: the one the person created the wallet with, or last signed in with,
+ * HERE.
  *
  * Founder, 2026-09-26: a person says where their passkey is when they create
  * or sign in, and never again — every later signature reuses that answer. The
@@ -11,10 +12,13 @@ import type { KeyMethod } from "./KeyMethod";
  * "Sign with" choice per signature was asking a question already answered.
  * There is no switching: a key that stops answering is replaced by signing
  * out and signing in with another, which records that one instead.
+ *
+ * Spec 102: `method` is where the key LIVES — one of the three places. Where
+ * the person reviews and signs is the account's venue, not the key's.
  */
 export type SignInKey = { credential_id: string, 
 /**
- * The route that reached it — the person's choice at sign-in, not what
+ * The place that reached it — the person's choice at sign-in, not what
  * the key reported at registration: a synced passkey minted on a phone
  * (`internal`) is reached from a desktop by scanning a code.
  */
@@ -27,8 +31,4 @@ method: KeyMethod,
  * picked, a phone scanned — so the route names both, and a later
  * signature can reach the key wherever the sign-in found it.
  */
-transports?: string, 
-/**
- * With `method = trusted_signer`, the page the ceremony ran on (spec 075).
- */
-signer_origin?: string | null, };
+transports?: string, };

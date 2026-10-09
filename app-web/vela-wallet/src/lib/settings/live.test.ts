@@ -358,7 +358,9 @@ describe('liveAccountsSheet', () => {
 				address: '0xAAAA000000000000000000000000000000000001',
 				public_key_hex: '04',
 				created_at_iso: '2026-01-01T00:00:00.000Z',
-				keys: []
+				keys: [],
+				signing_domain: 'getvela.app',
+				signing_venue: { type: 'in_vela' as const }
 			}
 		},
 		{
@@ -369,7 +371,9 @@ describe('liveAccountsSheet', () => {
 				address: '0xBBBB000000000000000000000000000000000002',
 				public_key_hex: '04',
 				created_at_iso: '2026-01-02T00:00:00.000Z',
-				keys: []
+				keys: [],
+				signing_domain: 'getvela.app',
+				signing_venue: { type: 'in_vela' as const }
 			}
 		}
 	];

@@ -877,7 +877,10 @@ struct SendConfirmModel {
     /// signs. The core resolves it only while this page is up
     /// (`confirm_probes`), so the form never has it to show. `nil` on a split.
     var recipientTag: String?
-    let cta: String
+    var cta: String
+    /// Spec 102: this account reviews and signs on a trusted page — the
+    /// page, the key, its integrity line — and the CTA goes there.
+    var handoff: HandoffCardModel? = nil
 }
 
 enum ReceiptStage {

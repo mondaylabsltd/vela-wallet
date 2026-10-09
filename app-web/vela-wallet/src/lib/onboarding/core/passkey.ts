@@ -113,8 +113,8 @@ export function encodeUserHandle(name: string): string {
  * sign-in screens ask, so the ceremony must go there, not wherever the
  * browser's own sheet would look first). ONE mapping for every ceremony:
  * WebAuthn L3 `hints`, and for minting a key the authenticator attachment.
- * The Trusted Signer is not a place a passkey is (and the web offers none), so
- * it — like no method at all — adds nothing.
+ * Three places and no fourth (spec 102: a signing page is where a person
+ * reviews and signs, not where a key lives); no method at all adds nothing.
  */
 export function methodRouting(method: KeyMethod | null | undefined): {
 	hints?: string[];

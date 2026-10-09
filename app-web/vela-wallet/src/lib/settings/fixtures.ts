@@ -14,6 +14,13 @@
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import type { SettingsMessages } from './messages';
+import type { SigningPage } from '$lib/core/generated/SigningPage';
+import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
+import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+import type { VenueChoice } from '$lib/core/generated/VenueChoice';
+import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import { BOARD_CHECK_TIME } from './board-check';
+import { integrityLineModel, signingPagesModel, venueModel } from './venue';
 import type {
 	AboutModel,
 	AccountsSheetModel,
@@ -42,7 +49,10 @@ import type {
 	SettingsPageId,
 	SettingsRowModel,
 	SettingsSectionModel,
-	StorageModel
+	StorageModel,
+	IntegrityLineModel,
+	SigningPagesModel,
+	VenueModel
 } from './model';
 
 /** Re-exported so routes can enumerate states without importing `model`. */
@@ -317,6 +327,16 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					title: m.advanced.feeSpeedTitle,
 					subtitle: m.advanced.feeSpeedSubtitle,
 					value: m.feeSpeed.fast,
+					trailing: 'chevron'
+				},
+				// Spec 102: the pages this device trusts to show and sign requests.
+				// A device preference beside the others — which page an ACCOUNT
+				// signs on is that account's own row, under it.
+				{
+					id: 'signing-pages',
+					icon: 'shield-check',
+					title: m.signing.title,
+					subtitle: m.signing.subtitle,
 					trailing: 'chevron'
 				},
 				{
@@ -1101,6 +1121,268 @@ function indexDown(m: SettingsMessages): IndexDownModel {
 }
 
 // ---------------------------------------------------------------------------
+// Spec 102 — where you review and sign, and the pages this device trusts
+// ---------------------------------------------------------------------------
+
+/** The official page, as the core normalises it. */
+export const OFFICIAL_PAGE = 'https://sign.getvela.app/';
+/** A page the person deployed on their own domain, saved in Settings and named. */
+export const OWN_PAGE = 'https://sign.example.com/';
+/**
+ * A second self-hosted page, saved without a name — so it is called
+ * "Self-hosted · sign.example.org" — whose check asks to trust a version it
+ * does not know (ST18).
+ */
+export const NEW_PAGE = 'https://sign.example.org/';
+/** The build of {@link OWN_PAGE} the person trusted on this device (D-15: per page). */
+export const OWN_PAGE_TRUSTED = '3f9a1c22' + '5e07b6d1'.repeat(7);
+/** The unknown build {@link NEW_PAGE} serves: the version "Trust this version" would store. */
+export const NEW_PAGE_VERSION = '9be01d44' + 'a3c58f20'.repeat(7);
+
+/** What Settings → Signing pages keeps on the drawn device (the official page is never stored). */
+export const SAVED_PAGES: SigningPage[] = [
+	{ url: OWN_PAGE, name: 'Home server', trusted: [OWN_PAGE_TRUSTED] },
+	{ url: NEW_PAGE, name: '' }
+];
+
+/** A drawn account's venue, as an app and as the web read it. */
+interface VenueAccount {
+	domain: string;
+	venue: SigningVenue;
+	/** `signingVenueChoices(domain, venue, SAVED_PAGES)` — an app's rows. */
+	choices: VenueChoice[];
+	/**
+	 * The web's reading (P2-09, D-16): `signingVenueChoices(domain, venue, [],
+	 * 'web')` — the web saves no pages, and every page row is disabled with
+	 * its reason — and the web plan's venue and block
+	 * (`signingPlan(record, 'web')`).
+	 */
+	web: { choices: VenueChoice[]; plan: Pick<SigningPlan, 'venue' | 'blocked'> };
+}
+
+/**
+ * The account the boards draw, on `getvela.app`, reviewing on the official
+ * page — and one on the person's own domain, locked to its page (R2).
+ * `choices` (and `web.choices`) are EXACTLY what the core's
+ * `signingVenueChoices` answers (`venue.test.ts` asks it), so the board is a
+ * screen the core can produce.
+ */
+export const VENUE_ACCOUNTS: Record<'app' | 'own', VenueAccount> = {
+	app: {
+		domain: 'getvela.app',
+		venue: { type: 'page', url: OFFICIAL_PAGE },
+		choices: [
+			{
+				venue: { type: 'in_vela' },
+				name: '',
+				domain: 'getvela.app',
+				official: false,
+				active: false
+			},
+			{
+				venue: { type: 'page', url: OFFICIAL_PAGE },
+				name: '',
+				domain: 'getvela.app',
+				official: true,
+				active: true
+			},
+			{
+				venue: { type: 'page', url: OWN_PAGE },
+				name: 'Home server',
+				domain: 'sign.example.com',
+				official: false,
+				active: false,
+				blocked: {
+					type: 'page_on_other_domain',
+					page_domain: 'sign.example.com',
+					domain: 'getvela.app'
+				}
+			},
+			{
+				venue: { type: 'page', url: NEW_PAGE },
+				name: '',
+				domain: 'sign.example.org',
+				official: false,
+				active: false,
+				blocked: {
+					type: 'page_on_other_domain',
+					page_domain: 'sign.example.org',
+					domain: 'getvela.app'
+				}
+			}
+		],
+		web: {
+			choices: [
+				{
+					venue: { type: 'in_vela' },
+					name: '',
+					domain: 'getvela.app',
+					official: false,
+					active: false
+				},
+				{
+					venue: { type: 'page', url: OFFICIAL_PAGE },
+					name: '',
+					domain: 'getvela.app',
+					official: true,
+					active: true,
+					blocked: { type: 'not_on_web' }
+				}
+			],
+			// P2-11: a page venue on `getvela.app` signs in Vela on the web.
+			plan: { venue: { type: 'in_vela' }, blocked: null }
+		}
+	},
+	own: {
+		domain: 'sign.example.com',
+		venue: { type: 'page', url: OWN_PAGE },
+		choices: [
+			{
+				venue: { type: 'in_vela' },
+				name: '',
+				domain: 'getvela.app',
+				official: false,
+				active: false,
+				blocked: { type: 'app_cannot_reach', domain: 'sign.example.com' }
+			},
+			{
+				venue: { type: 'page', url: OFFICIAL_PAGE },
+				name: '',
+				domain: 'getvela.app',
+				official: true,
+				active: false,
+				blocked: {
+					type: 'page_on_other_domain',
+					page_domain: 'getvela.app',
+					domain: 'sign.example.com'
+				}
+			},
+			{
+				venue: { type: 'page', url: OWN_PAGE },
+				name: 'Home server',
+				domain: 'sign.example.com',
+				official: false,
+				active: true
+			},
+			{
+				venue: { type: 'page', url: NEW_PAGE },
+				name: '',
+				domain: 'sign.example.org',
+				official: false,
+				active: false,
+				blocked: {
+					type: 'page_on_other_domain',
+					page_domain: 'sign.example.org',
+					domain: 'sign.example.com'
+				}
+			}
+		],
+		web: {
+			choices: [
+				{
+					venue: { type: 'in_vela' },
+					name: '',
+					domain: 'getvela.app',
+					official: false,
+					active: false,
+					blocked: { type: 'app_cannot_reach', domain: 'sign.example.com' }
+				},
+				{
+					venue: { type: 'page', url: OFFICIAL_PAGE },
+					name: '',
+					domain: 'getvela.app',
+					official: true,
+					active: false,
+					blocked: {
+						type: 'page_on_other_domain',
+						page_domain: 'getvela.app',
+						domain: 'sign.example.com'
+					}
+				},
+				{
+					venue: { type: 'page', url: OWN_PAGE },
+					name: '',
+					domain: 'sign.example.com',
+					official: false,
+					active: true,
+					blocked: { type: 'not_on_web' }
+				}
+			],
+			// A custom-domain account signs nowhere on the web, and the plan says why.
+			plan: { venue: { type: 'page', url: OWN_PAGE }, blocked: { type: 'not_on_web' } }
+		}
+	}
+};
+
+/** Settings → Signing pages as the core's `SigningPagesView.pages` lists them. */
+export const SIGNING_PAGE_ROWS: SigningPageRow[] = [
+	{ url: OFFICIAL_PAGE, name: '', domain: 'getvela.app', official: true, trusted: [] },
+	{
+		url: OWN_PAGE,
+		name: 'Home server',
+		domain: 'sign.example.com',
+		official: false,
+		trusted: [OWN_PAGE_TRUSTED]
+	},
+	{ url: NEW_PAGE, name: '', domain: 'sign.example.org', official: false, trusted: [] }
+];
+
+/**
+ * The integrity lines the boards draw — the core's `IntegrityLine` states,
+ * checked at `BOARD_CHECK`, its time as the core's `checked_time` draws it
+ * (`board-check.ts`). The official page matches the published build list;
+ * the named self-hosted page is a build the person trusted on this device;
+ * the unnamed one serves a build nobody vouched for, and asks. ST18b shows
+ * what a page that will NOT open looks like.
+ */
+function integrityLines(
+	m: SettingsMessages,
+	refused: boolean
+): Partial<Record<string, IntegrityLineModel>> {
+	const time = BOARD_CHECK_TIME;
+	const line = (state: string, version: string) =>
+		integrityLineModel({ key: `componentsUi.signing.integrity.${state}`, version }, time, m);
+	return {
+		[OFFICIAL_PAGE]: line('matches', '0ba8ee8c'),
+		[OWN_PAGE]: refused
+			? line('mismatch', '7d41e0b9')
+			: line('trusted', OWN_PAGE_TRUSTED.slice(0, 8)),
+		[NEW_PAGE]: line('askTrust', NEW_PAGE_VERSION.slice(0, 8))
+	};
+}
+
+function venue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
+	const account = VENUE_ACCOUNTS[which];
+	return venueModel(
+		{ domain: account.domain, choices: account.choices, integrity: integrityLines(m, false) },
+		m
+	);
+}
+
+/** The web's reading of the same account: read-only, page rows disabled (P2-09, D-16). */
+export function webVenue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
+	const account = VENUE_ACCOUNTS[which];
+	return venueModel(
+		{ domain: account.domain, choices: account.web.choices, web: account.web.plan },
+		m
+	);
+}
+
+function signingPages(m: SettingsMessages, refused: boolean): SigningPagesModel {
+	return signingPagesModel(
+		{
+			pages: SIGNING_PAGE_ROWS,
+			integrity: integrityLines(m, refused),
+			askTrust: { [NEW_PAGE]: NEW_PAGE_VERSION },
+			// ST18b: the address typed is one already saved, so nothing was added.
+			addError: refused ? 'duplicate' : null,
+			draft: refused ? OWN_PAGE : ''
+		},
+		m
+	);
+}
+
+// ---------------------------------------------------------------------------
 // State table
 // ---------------------------------------------------------------------------
 
@@ -1136,6 +1418,10 @@ const MOBILE_SHAPE: Record<
 	st14: { page: 'about', overlay: 'none' },
 	st15: { page: 'home', overlay: 'feedback' },
 	st16: { page: 'home', overlay: 'erase-device' },
+	st17: { page: 'signing-venue', overlay: 'none' },
+	st17b: { page: 'signing-venue', overlay: 'none' },
+	st18: { page: 'signing-pages', overlay: 'none' },
+	st18b: { page: 'signing-pages', overlay: 'none' },
 	sr1: { page: 'home', overlay: 'none', tab: 'wallet' },
 	sr2: { page: 'home', overlay: 'rpc-fix', tab: 'wallet', backdrop: 'wallet' },
 	sr2b: { page: 'home', overlay: 'rpc-fix', tab: 'wallet', backdrop: 'wallet' },
@@ -1175,6 +1461,8 @@ export function buildMobileState(
 			action: m.account.switch
 		},
 		sections: sections(m, state === 'st1b'),
+		venue: venue(m, state === 'st17b' ? 'own' : 'app'),
+		signingPages: signingPages(m, state === 'st18b'),
 		appearance: {
 			theme: {
 				label: m.appearance.themeTitle,
@@ -1252,6 +1540,7 @@ const DESKTOP_PAGE: Record<DesktopSettingsStateId, SettingsPageId> = {
 	dst6: 'endpoints',
 	dst7: 'storage',
 	dst8: 'about',
+	dst9: 'signing-pages',
 	dsr1: 'account'
 };
 
@@ -1270,6 +1559,8 @@ export function buildDesktopState(
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
 		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
+		// Spec 102, in the phone's order: Signing pages sits just before Storage.
+		{ id: 'signing-pages', icon: 'shield-check', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		// Spec 081 FR-016. The wide layout had no way in at all — the report was
 		// reachable only from `/gallery`, which no person who owns this wallet
@@ -1299,8 +1590,10 @@ export function buildDesktopState(
 			secondary: accounts.secondary,
 			signOutLabel: m.signOut.button,
 			signOutNote: m.signOut.desc,
-			erase: { title: m.erase.title, subtitle: m.erase.subtitle, action: m.erase.confirm }
+			erase: { title: m.erase.title, subtitle: m.erase.subtitle, action: m.erase.confirm },
+			venue: venue(m, 'app')
 		},
+		signingPages: signingPages(m, false),
 		appearance: {
 			title: m.sections.appearance,
 			language: {

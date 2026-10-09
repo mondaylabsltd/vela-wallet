@@ -62,11 +62,129 @@ enum Fixture {
     Touch(TouchRequest),
     Pin(PinRequest),
     Pick(Vec<CredentialChoice>),
-    /// Spec 075's Trusted Signer dialogs, here for the same reason as the
-    /// cable's: each needs a browser and a socket in a particular state, so
-    /// they are among the screens a reviewer is least able to reach on
-    /// purpose. A `Refusal` is how an attempt ended.
-    TrustedSignerEnded(crate::executor::trusted_signer::Refusal),
+    /// The trusted page's dialogs, here for the same reason as the cable's:
+    /// each needs a browser and a page in a particular state, so they are
+    /// among the screens a reviewer is least able to reach on purpose. A
+    /// `Refusal` is how an attempt ended; `NotOpened` why a page never was.
+    TrustedSignerEnded(
+        crate::executor::trusted_signer::Refusal,
+        Option<crate::executor::trusted_signer::NotOpened>,
+    ),
+    /// Spec 102 D4: the hand-off card, with its page's integrity line. No
+    /// fee row: every screen that hands off keeps its own fee and speed rows
+    /// above the card (`VELA_HANDOFF` draws the card on those screens).
+    Handoff(
+        crate::executor::send::Handoff,
+        vela_core::trusted_signer::launch::IntegrityLine,
+    ),
+    /// The wait while a page has the request — for a key ceremony, with the
+    /// key row the core names for it (`Ceremony::key_label`); `true` when
+    /// the page could not be reached.
+    TrustedSignerWaiting(Option<vela_core::trusted_signer::ceremony::Ceremony>, bool),
+    /// Spec 102: the sign-in chooser — three places and "Use a trusted
+    /// signing page", or (with a page) that page heading the places.
+    SignIn(Option<String>),
+    /// Spec 102: "Use a trusted signing page" — the picker, its pages and their
+    /// lines (url, label, domain, official, line).
+    OwnPages(
+        Vec<(
+            String,
+            String,
+            String,
+            bool,
+            vela_core::trusted_signer::launch::IntegrityLine,
+        )>,
+    ),
+}
+
+/// `VELA_HANDOFF=checking|matches|asks|refused|named` — with `VELA_PAGE=gallery`
+/// and a mock signing column (`VELA_SIGNING_STATE`) or the send's mock confirm
+/// (`VELA_FLOW=DSD3`), the screen hands off to Vela's official page (a
+/// self-hosted one for `asks` and `named`) with that integrity line, so the
+/// hand-off can be looked at where it is drawn — the screen's own fee rows
+/// above the card — without a request, a page or a check. Same env-pin
+/// family as `VELA_SIGNING_STATE` and `VELA_FLOW`.
+pub fn handoff_pin() -> Option<(
+    crate::executor::send::Handoff,
+    vela_core::trusted_signer::launch::IntegrityLine,
+)> {
+    let want = crate::dev_env::var!("VELA_HANDOFF")?;
+    let place = |method: &str| vela_core::signing_venue::KeyLabel::of(None, "", method);
+    let official = |line| {
+        Some((
+            crate::executor::send::Handoff {
+                page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
+                block: None,
+                key_label: place("hybrid"),
+            },
+            line,
+        ))
+    };
+    let own = |key_label, line| {
+        Some((
+            crate::executor::send::Handoff {
+                page: Some(OWN_PAGE.to_owned()),
+                block: None,
+                key_label,
+            },
+            line,
+        ))
+    };
+    match want.trim() {
+        "checking" => official(vela_core::trusted_signer::launch::IntegrityLine::checking()),
+        "matches" => official(official_checked()),
+        "refused" => official(could_not_check()),
+        "asks" => own(place("security_key"), asks_to_trust()),
+        "named" => own(
+            vela_core::signing_venue::KeyLabel::of(Some("YubiKey 5C"), "Savings", "security_key"),
+            own_checked(),
+        ),
+        _ => None,
+    }
+}
+
+/// A check that admitted `version` — "matches Vela's published build list"
+/// for one this build ships, "trusted on this device" for another — a
+/// minute before the shot.
+fn checked(version: &str) -> vela_core::trusted_signer::launch::IntegrityLine {
+    vela_core::trusted_signer::launch::IntegrityLine::of(
+        &vela_core::trusted_signer::integrity::Verdict::Open,
+        version,
+        Some((crate::executor::now_ms() as u64).saturating_sub(60_000)),
+    )
+}
+
+/// The official page's line, as a check of its launch version reads.
+fn official_checked() -> vela_core::trusted_signer::launch::IntegrityLine {
+    checked(vela_core::trusted_signer::integrity::LAUNCH)
+}
+
+/// A self-hosted page's line: its own build, trusted on this device.
+fn own_checked() -> vela_core::trusted_signer::launch::IntegrityLine {
+    checked("7e57c0de5e1f0000000000000000000000000000000000000000000000000000")
+}
+
+/// A self-hosted page serving a build nobody decided about yet: "Version
+/// 3f9a1c22 is new to Vela. Trust it on this device?"
+fn asks_to_trust() -> vela_core::trusted_signer::launch::IntegrityLine {
+    vela_core::trusted_signer::launch::IntegrityLine::of(
+        &vela_core::trusted_signer::integrity::Verdict::AskToTrust {
+            actual: "3f9a1c22b7e04d5a9c8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c".to_owned(),
+        },
+        "",
+        None,
+    )
+}
+
+/// A check that did not complete.
+fn could_not_check() -> vela_core::trusted_signer::launch::IntegrityLine {
+    vela_core::trusted_signer::launch::IntegrityLine::of(
+        &vela_core::trusted_signer::integrity::Verdict::CouldNotCheck(
+            vela_core::trusted_signer::integrity::CheckFailure::Unreachable,
+        ),
+        "",
+        None,
+    )
 }
 
 struct Entry {
@@ -94,19 +212,17 @@ fn base_view() -> CreateView {
         can_add_key: true,
         can_finish: false,
         needs_second_key: false,
-        // An empty set has committed to no relying party, so every route is
-        // still open and there is nothing to explain (spec 075).
-        key_relying_party: None,
-        key_signer_origin: None,
-        add_methods: vec![
-            KeyMethod::Platform,
-            KeyMethod::Hybrid,
-            KeyMethod::SecurityKey,
-            KeyMethod::TrustedSigner,
-        ],
-        add_blocked: None,
+        // Spec 102: three places, always; the domain is Vela's until the
+        // person picks their own page, which they may before the first key.
+        signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+        signing_page: None,
+        can_choose_page: true,
+        add_methods: KeyMethod::ALL.to_vec(),
     }
 }
+
+/// The self-hosted page the fixtures that need one are made on.
+const OWN_PAGE: &str = "https://sign.example.com/";
 
 /// A platform key carries a resolvable AAGUID; a security key deliberately
 /// carries none, so the gallery shows the named case and the degradation on one
@@ -192,6 +308,14 @@ fn entries() -> Vec<Entry> {
         view.status = Some(StatusKey::VerifyCancelled);
         view
     });
+    // The first key: the three places, and — the one moment a wallet's
+    // signing domain can be chosen — "Use a trusted signing page" under them.
+    flow("keys · first key", {
+        let mut view = base_view();
+        view.stage = CreateStage::AddKeys;
+        view.can_go_back = true;
+        view
+    });
     flow("keys · one, needs a second", {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
@@ -211,47 +335,27 @@ fn entries() -> Vec<Entry> {
         view.can_finish = true;
         view
     });
-    // Spec 075: a wallet's keys all belong to one relying party, so both ways
-    // the picker narrows — the row dims and the sentence under the list says
-    // what to do about it.
-    flow("keys · signer page elsewhere", {
+    // Spec 102: "Use a trusted signing page" chosen before the first key — the
+    // page heads the list, with its domain and integrity line, and the three
+    // places are minted ON it.
+    flow("keys · on a self-hosted page", {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
         view.can_go_back = true;
-        view.keys = vec![key("Everyday wallet", KeyMethod::SecurityKey, true, false)];
-        view.needs_second_key = true;
-        view.key_relying_party = Some("getvela.app".to_owned());
-        view.add_methods = vec![
-            KeyMethod::Platform,
-            KeyMethod::Hybrid,
-            KeyMethod::SecurityKey,
-        ];
-        view.add_blocked = Some(vela_core::app::create_wallet::AddBlocked {
-            relying_party: "getvela.app".to_owned(),
-            page: Some("http://localhost:8140/sign.html".to_owned()),
-            page_relying_party: Some("localhost".to_owned()),
-        });
+        view.signing_domain = "sign.example.com".to_owned();
+        view.signing_page = Some(OWN_PAGE.to_owned());
         view
     });
+    // …and once a key exists, the page is a fact of the wallet: no way back.
     flow("keys · a page's own set", {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
         view.can_go_back = true;
-        view.keys = vec![key(
-            "Everyday wallet",
-            KeyMethod::TrustedSigner,
-            true,
-            false,
-        )];
+        view.keys = vec![key("Everyday wallet", KeyMethod::Platform, true, false)];
         view.needs_second_key = true;
-        view.key_relying_party = Some("sign.example.com".to_owned());
-        view.key_signer_origin = Some("https://sign.example.com".to_owned());
-        view.add_methods = vec![KeyMethod::TrustedSigner];
-        view.add_blocked = Some(vela_core::app::create_wallet::AddBlocked {
-            relying_party: "sign.example.com".to_owned(),
-            page: None,
-            page_relying_party: None,
-        });
+        view.signing_domain = "sign.example.com".to_owned();
+        view.signing_page = Some(OWN_PAGE.to_owned());
+        view.can_choose_page = false;
         view
     });
     flow("keys · unconfirmed row", {
@@ -420,19 +524,183 @@ fn entries() -> Vec<Entry> {
     // The failure sheet, one row per outcome the catalog names. The two that
     // carry a detail string are driven through the refinement rather than
     // around it, so this list is also a check on it.
-    // Spec 075: the Trusted Signer's own dialogs, in their own group — they are
-    // not the cable's, and a reviewer looking for "the page route" should find
-    // them together.
+    // The trusted page's own dialogs, in their own group — they are not the
+    // cable's, and a reviewer looking for "the page" should find them
+    // together.
     let mut signer = |code: &'static str, fixture: Fixture| {
         out.push(Entry {
-            group: "Trusted Signer",
+            group: "Trusted page",
             code,
             fixture,
         });
     };
+    // The key labels the plan carries (D-17): a key named after the wallet
+    // is named by its place; one the person named, by its name.
+    let by_place = |method: &str| vela_core::signing_venue::KeyLabel::of(None, "", method);
+    let official_handoff = crate::executor::send::Handoff {
+        page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
+        block: None,
+        key_label: by_place("hybrid"),
+    };
+    signer(
+        "hand-off · matches",
+        Fixture::Handoff(official_handoff.clone(), official_checked()),
+    );
+    signer(
+        "hand-off · checking",
+        Fixture::Handoff(
+            official_handoff.clone(),
+            vela_core::trusted_signer::launch::IntegrityLine::checking(),
+        ),
+    );
+    signer(
+        "hand-off · could not check",
+        Fixture::Handoff(official_handoff.clone(), could_not_check()),
+    );
+    signer(
+        "hand-off · self-hosted, named key",
+        Fixture::Handoff(
+            crate::executor::send::Handoff {
+                page: Some(OWN_PAGE.to_owned()),
+                block: None,
+                key_label: vela_core::signing_venue::KeyLabel::of(
+                    Some("YubiKey 5C"),
+                    "Savings",
+                    "security_key",
+                ),
+            },
+            own_checked(),
+        ),
+    );
+    signer(
+        "hand-off · self-hosted, new version",
+        Fixture::Handoff(
+            crate::executor::send::Handoff {
+                page: Some(OWN_PAGE.to_owned()),
+                block: None,
+                key_label: by_place("security_key"),
+            },
+            asks_to_trust(),
+        ),
+    );
+    signer(
+        "hand-off · keys out of reach",
+        Fixture::Handoff(
+            crate::executor::send::Handoff {
+                page: None,
+                block: Some(vela_core::signing_venue::VenueBlock::AppCannotReach {
+                    domain: "sign.example.com".to_owned(),
+                }),
+                key_label: by_place("platform"),
+            },
+            vela_core::trusted_signer::launch::IntegrityLine::checking(),
+        ),
+    );
+    // A key ceremony on a self-hosted page: its own title, and the key row
+    // the core names for it — "New key on" while a key is made, "Confirm
+    // with" while one signs in.
+    signer(
+        "ceremony · create a key",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::RegisterPasskey {
+                    name: "Savings".to_owned(),
+                    exclude_credential_ids: Vec::new(),
+                    method: KeyMethod::Hybrid,
+                },
+            ),
+            false,
+        ),
+    );
+    signer(
+        "ceremony · sign in",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::AuthenticatePasskey {
+                    method: KeyMethod::SecurityKey,
+                },
+            ),
+            false,
+        ),
+    );
+    signer(
+        "ceremony · sign in, page down",
+        Fixture::TrustedSignerWaiting(
+            Some(
+                vela_core::trusted_signer::ceremony::Ceremony::AuthenticatePasskey {
+                    method: KeyMethod::SecurityKey,
+                },
+            ),
+            true,
+        ),
+    );
+    signer(
+        "waiting · a signature",
+        Fixture::TrustedSignerWaiting(None, false),
+    );
+    signer("sign in · methods", Fixture::SignIn(None));
+    signer(
+        "sign in · on a self-hosted page",
+        Fixture::SignIn(Some(OWN_PAGE.to_owned())),
+    );
+    signer(
+        "trusted page · picker",
+        Fixture::OwnPages(vec![
+            (
+                vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),
+                String::new(),
+                vela_core::signing_venue::APP_DOMAIN.to_owned(),
+                true,
+                official_checked(),
+            ),
+            (
+                OWN_PAGE.to_owned(),
+                "Home".to_owned(),
+                "sign.example.com".to_owned(),
+                false,
+                own_checked(),
+            ),
+            (
+                "https://signer.example.org/".to_owned(),
+                String::new(),
+                "signer.example.org".to_owned(),
+                false,
+                asks_to_trust(),
+            ),
+            (
+                "http://localhost:8140/clearsigning/".to_owned(),
+                String::new(),
+                "localhost".to_owned(),
+                false,
+                could_not_check(),
+            ),
+        ]),
+    );
     signer(
         "ended · nothing came back in time",
-        Fixture::TrustedSignerEnded(crate::executor::trusted_signer::Refusal::TimedOut),
+        Fixture::TrustedSignerEnded(crate::executor::trusted_signer::Refusal::TimedOut, None),
+    );
+    signer(
+        "ended · page not opened",
+        Fixture::TrustedSignerEnded(
+            crate::executor::trusted_signer::Refusal::NotOpened,
+            Some(crate::executor::trusted_signer::NotOpened::Integrity {
+                line: could_not_check(),
+                page: vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),
+            }),
+        ),
+    );
+    // A self-hosted page's new build, met at sign-in: the question, and its
+    // answer beside it.
+    signer(
+        "ended · a new version asks",
+        Fixture::TrustedSignerEnded(
+            crate::executor::trusted_signer::Refusal::NotOpened,
+            Some(crate::executor::trusted_signer::NotOpened::Integrity {
+                line: asks_to_trust(),
+                page: OWN_PAGE.to_owned(),
+            }),
+        ),
     );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {
         out.push(Entry {
@@ -507,6 +775,8 @@ pub struct GalleryView {
     focus_handle: FocusHandle,
     identicons: RefCell<IdenticonCache>,
     passkey_icons: RefCell<crate::passkey_icons::PasskeyIconCache>,
+    /// The app's glyphs, for the signing-page rows and the hand-off card.
+    icons: RefCell<crate::icons::IconCache>,
     /// Always empty here: the gallery's keys are fixtures, and a review screen
     /// that reached the network would be a review of the network.
     directory: RefCell<crate::passkey_directory::PasskeyDirectory>,
@@ -527,8 +797,14 @@ impl GalleryView {
         // the arrow keys OR take a picture, and "launch it once per fixture and
         // see whether it survives a frame" is the only end-to-end check left —
         // `scripts/sweep-gallery.sh` is that loop.
+        // An index, or a fixture's own code (`hand-off · checking`) — so a
+        // screenshot pass names the state it means, not where it sits today.
         let selected = crate::dev_env::var!("VELA_GALLERY_STATE")
-            .and_then(|raw| raw.parse::<usize>().ok())
+            .and_then(|raw| {
+                raw.parse::<usize>()
+                    .ok()
+                    .or_else(|| entries.iter().position(|entry| entry.code == raw.trim()))
+            })
             .filter(|index| *index < entries.len())
             .unwrap_or(0);
         eprintln!(
@@ -549,6 +825,7 @@ impl GalleryView {
             focus_handle,
             identicons: RefCell::default(),
             passkey_icons: RefCell::default(),
+            icons: RefCell::default(),
             directory: RefCell::default(),
         }
     }
@@ -696,6 +973,18 @@ impl GalleryView {
                         other => eprintln!("[vela-wallet] gallery: {other:?}"),
                     });
                 });
+                // The page's row from a fixture line: a review screen that
+                // reached the network would be a review of the network.
+                let own_page = view.signing_page.as_deref().map(|url| {
+                    crate::signing::pages::page_row(
+                        &self.loc,
+                        url,
+                        "",
+                        &view.signing_domain,
+                        false,
+                        &own_checked(),
+                    )
+                });
                 let host = FlowHost {
                     theme,
                     loc: &self.loc,
@@ -708,6 +997,8 @@ impl GalleryView {
                     // of the network.
                     directory: &self.directory,
                     picker_open: self.picker_open,
+                    own_page: own_page.as_ref(),
+                    icons: &self.icons,
                     copied: self.copied,
                     sink,
                 };
@@ -741,8 +1032,138 @@ impl GalleryView {
                 crate::hardware::pick_card(theme, &self.loc, choices, |_, _, _| {}, |_, _, _| {})
             }
             // Spec 075: bare, like the cable's — the gallery IS the backdrop.
-            Fixture::TrustedSignerEnded(refusal) => {
-                crate::signing::trusted_signer::ended_card(theme, &self.loc, *refusal, |_, _, _| {})
+            Fixture::TrustedSignerEnded(refusal, not_opened) => {
+                // The question is met at a ceremony's launch (a sign-in, here);
+                // the other endings are a signature's.
+                let asked = crate::signing::trusted_signer::asked_page(not_opened.as_ref());
+                let heading = self.loc.t(if asked.is_some() {
+                    "componentsUi.signing.ceremonySignIn"
+                } else {
+                    "componentsUi.signing.handoffTitle"
+                });
+                let on_trust = asked.map(|_| {
+                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {})
+                        as crate::signing::trusted_signer::Click
+                });
+                crate::signing::trusted_signer::ended_card(
+                    theme,
+                    &mut self.icons.borrow_mut(),
+                    &self.loc,
+                    heading,
+                    crate::signing::trusted_signer::ended_words(
+                        &self.loc,
+                        *refusal,
+                        not_opened.as_ref(),
+                    ),
+                    on_trust,
+                    |_, _, _| {},
+                )
+            }
+            // On the signing column's own surface and width, as the wallet
+            // draws it beside a request.
+            Fixture::Handoff(handoff, line) => {
+                let model =
+                    crate::signing::trusted_signer::handoff_model(&self.loc, handoff, Some(line));
+                let on_open: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
+                let on_recheck: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
+                let on_trust: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
+                div()
+                    .w(px(theme::THIRD_PANEL_W))
+                    .p(px(24.))
+                    .rounded(px(RADIUS_CARD))
+                    .bg(theme.bg_raised)
+                    .border_1()
+                    .border_color(theme.border_card)
+                    .child(crate::signing::trusted_signer::handoff_card(
+                        theme,
+                        &mut self.icons.borrow_mut(),
+                        &model,
+                        Some(on_open),
+                        Some(on_recheck),
+                        Some(on_trust),
+                    ))
+            }
+            // Bare, like the ended card: a ceremony's own title on the card
+            // that has one (page down), its key row on both.
+            Fixture::TrustedSignerWaiting(ceremony, unreachable) => {
+                let key = ceremony.as_ref().map(|ceremony| {
+                    crate::signing::trusted_signer::KeyRow::of(&self.loc, &ceremony.key_label())
+                });
+                let heading = self.loc.t(ceremony.as_ref().map_or(
+                    "componentsUi.signing.handoffTitle",
+                    vela_core::trusted_signer::ceremony::Ceremony::title_key,
+                ));
+                crate::signing::trusted_signer::waiting_card(
+                    theme,
+                    &mut self.icons.borrow_mut(),
+                    &self.loc,
+                    heading,
+                    key.as_ref(),
+                    *unreachable,
+                    |_, _, _| {},
+                    |_, _, _| {},
+                )
+            }
+            Fixture::SignIn(page) => {
+                let row = page.as_deref().map(|url| {
+                    crate::signing::pages::page_row(
+                        &self.loc,
+                        url,
+                        "",
+                        &vela_core::signing_venue::domain_of_page(url),
+                        false,
+                        &own_checked(),
+                    )
+                });
+                let own_page = crate::hardware::OwnPage {
+                    chosen: row.as_ref(),
+                    icons: &self.icons,
+                    on_open: Rc::new(|_, _| {}),
+                    on_clear: Rc::new(|_, _| {}),
+                    on_page: row.is_some(),
+                };
+                crate::hardware::signin_method_card(
+                    theme,
+                    &self.loc,
+                    &self.passkey_icons,
+                    Some(own_page),
+                    std::sync::Arc::new(|_, _, _| {}),
+                    |_, _, _| {},
+                )
+            }
+            Fixture::OwnPages(pages) => {
+                let rows: Vec<crate::signing::pages::PageRow> = pages
+                    .iter()
+                    .map(|(url, name, domain, official, line)| {
+                        crate::signing::pages::page_row(
+                            &self.loc, url, name, domain, *official, line,
+                        )
+                    })
+                    .collect();
+                let add = crate::settings::components::editable_url_field(
+                    "gallery-own-page-add",
+                    theme,
+                    Some(self.loc.t("settings.signing.pageAdd")),
+                    "",
+                    SharedString::from("https://sign.example.com"),
+                    None,
+                    None,
+                    None,
+                    &self.name_focus,
+                    window,
+                    |_, _, _| {},
+                    |_, _| {},
+                );
+                crate::signing::pages::own_page_sheet(
+                    theme,
+                    &mut self.icons.borrow_mut(),
+                    &self.loc,
+                    &rows,
+                    Rc::new(|_, _, _| {}),
+                    Rc::new(|_, _, _| {}),
+                    add,
+                    |_, _, _| {},
+                )
             }
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);

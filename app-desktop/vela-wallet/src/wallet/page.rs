@@ -1015,10 +1015,13 @@ pub struct WalletPage {
     crash: Option<crate::outcome::Prompt>,
     /// One per editable settings field, made on first use.
     endpoint_focuses: Vec<gpui::FocusHandle>,
-    /// The Trusted Signer page as typed (spec 071), until it is saved — `None`
-    /// shows the page `sign_pref` holds. The core validates it on Save, not
-    /// per keystroke: half an address is not an error yet.
-    signer_page_draft: Option<String>,
+    /// Settings → Signing pages' "Add a page" field as typed (spec 102). The
+    /// core validates it on Add, not per keystroke: half an address is not an
+    /// error yet.
+    signer_page_draft: String,
+    /// A saved page being renamed: its address and the label as typed.
+    signer_page_rename: Option<(String, String)>,
+    signer_rename_focus: Option<gpui::FocusHandle>,
     /// The Feedback page's report (078 S-03): what the person typed, whether
     /// the steps box is open, whether the preview is, the send in flight and
     /// how the last one ended.
@@ -1182,6 +1185,9 @@ pub struct Identity {
 /// and the per-row facts each listener carries.
 struct SendBindings {
     host: gpui::Entity<SendHost>,
+    /// Spec 102: the trusted page this send hands off to, for the hand-off's
+    /// "Try again" and "Trust this version".
+    handoff_page: Option<String>,
     token_ids: Vec<String>,
     fee_contracts: Vec<Option<String>>,
     amount: String,
@@ -1311,6 +1317,9 @@ impl WalletPage {
         {
             page.select_tab(tab, window);
         }
+        if section == Section::Settings {
+            page.pin_settings_page();
+        }
         // `VELA_FEEDBACK_STATE` on the live route too: the signed-in page, in
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
@@ -1320,6 +1329,28 @@ impl WalletPage {
             page.pin_feedback_state(&state);
         }
         page
+    }
+
+    /// `VELA_SETTINGS_PAGE=signing` (developer builds): open Settings on a
+    /// panel no `dst*` state names — Signing pages (spec 102), which has no
+    /// mock and so no chip. Same env-pin family as `VELA_SETTINGS_STATE`.
+    fn pin_settings_page(&mut self) {
+        if let Some(page) = crate::dev_env::var!("VELA_SETTINGS_PAGE")
+            .and_then(|want| SettingsPage::ALL.into_iter().find(|page| page.id() == want))
+        {
+            self.settings_page = page;
+        }
+        // `VELA_SIGNING_RENAME=<url>`: Signing pages with that saved page's
+        // name field open — a rename is a click a screenshot pass cannot make.
+        if let Some(url) = crate::dev_env::var!("VELA_SIGNING_RENAME") {
+            let url = crate::executor::signer_integrity::key_of(&url);
+            let name = crate::executor::signing_pages::saved()
+                .into_iter()
+                .find(|page| crate::executor::signer_integrity::key_of(&page.url) == url)
+                .map(|page| page.name)
+                .unwrap_or_default();
+            self.signer_page_rename = Some((url, name));
+        }
     }
 
     /// What the header, the receive panel and the identicon are drawn from.
@@ -1341,6 +1372,7 @@ impl WalletPage {
         if let Some(tab) = GalleryTab::from_settings_env() {
             page.select_tab(tab, window);
         }
+        page.pin_settings_page();
         // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
         // screenshot pass that cannot click, drop or paste (078 round 3).
         if let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE") {
@@ -1573,7 +1605,9 @@ impl WalletPage {
             scan_preview: ScanPreview::default(),
             window_handle: crate::onboarding::native_window_handle(window),
             endpoint_focuses: Vec::new(),
-            signer_page_draft: None,
+            signer_page_draft: String::new(),
+            signer_page_rename: None,
+            signer_rename_focus: None,
             feedback: FeedbackDraft::new(cx),
             money_watch: MoneyWatch::default(),
             signer_page_focus: None,
@@ -6346,8 +6380,10 @@ impl WalletPage {
         } else {
             Vec::new()
         };
+        let handoff_page = host.read(cx).handoff().and_then(|handoff| handoff.page);
         Some(SendBindings {
             host,
+            handoff_page,
             token_ids: flows_live::send_token_ids(&view),
             fee_contracts: flows_live::fee_token_contracts(&fee),
             // Shown in the person's decimal mark (078 M-04); edits are read
@@ -6412,9 +6448,9 @@ impl WalletPage {
         }
     }
 
-    /// The Trusted Signer's four dialogs (specs 071 and 075), over whichever flow
-    /// started the attempt — the signing column or the send: where the signer
-    /// is, the cross-device pairing, the wait, and its last word. The buttons
+    /// The trusted page's dialogs (specs 071, 075, 102), over whichever flow
+    /// started the attempt — the signing column or the send: the wait, and its
+    /// last word (or why the page never opened). The buttons
     /// speak to the attempt through its channel; the host redraws when the
     /// channel answers.
     fn trusted_signer_prompt(
@@ -6435,20 +6471,49 @@ impl WalletPage {
             .find(|channel| channel.waiting() || channel.ended().is_some())?;
         let card = if channel.waiting() {
             let unreachable = channel.unreachable();
+            let heading = self.loc.t(channel.title_key());
+            // A key ceremony on the page names its key, as the page does.
+            let key = channel
+                .ceremony_key()
+                .map(|key| signing_trusted_signer::KeyRow::of(&self.loc, &key));
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_trusted_signer::waiting_card(
                 theme,
+                &mut self.icons,
                 &self.loc,
+                heading,
+                key.as_ref(),
                 unreachable,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
             )
         } else {
             let refusal = channel.ended()?;
-            signing_trusted_signer::ended_card(
-                theme,
+            let said = signing_trusted_signer::ended_words(
                 &self.loc,
                 refusal,
+                channel.not_opened().as_ref(),
+            );
+            // A self-hosted page asking about its build is answered here:
+            // stored on that page and checked again, and the card goes —
+            // the next attempt opens it.
+            let on_trust =
+                signing_trusted_signer::asked_page(channel.not_opened().as_ref()).map(|page| {
+                    let read = Arc::clone(&channel);
+                    Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            crate::signing::integrity::trust(&page, cx);
+                            read.forget();
+                        },
+                    ) as signing_trusted_signer::Click
+                });
+            signing_trusted_signer::ended_card(
+                theme,
+                &mut self.icons,
+                &self.loc,
+                self.loc.t(channel.title_key()),
+                said,
+                on_trust,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| channel.forget(),
             )
         };
@@ -6679,6 +6744,24 @@ impl WalletPage {
         );
     }
 
+    /// A panel's mock — and the send's mock confirm handed off when the
+    /// gallery pins a hand-off (`VELA_HANDOFF`): the confirm's own fee rows
+    /// above the card, the card with none.
+    fn mock_flow_body(&self, panel: FlowPanel) -> flow_fixtures::FlowBody {
+        match (
+            flow_fixtures::body(panel, &self.flow_strings),
+            crate::gallery::handoff_pin(),
+        ) {
+            (flow_fixtures::FlowBody::SendConfirm(confirm), Some((handoff, line))) => {
+                flow_fixtures::FlowBody::SendConfirm(flows_live::with_handoff(
+                    confirm,
+                    signing_trusted_signer::handoff_model(&self.loc, &handoff, Some(&line)),
+                ))
+            }
+            (body, _) => body,
+        }
+    }
+
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
     ///
     /// Not every panel has a live source yet — Send is 032's, and the scanner
@@ -6690,7 +6773,7 @@ impl WalletPage {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
         let Some(identity) = self.identity.clone() else {
-            return flow_fixtures::body(panel, &self.flow_strings);
+            return self.mock_flow_body(panel);
         };
         match panel {
             FlowPanel::Dt1 | FlowPanel::Dt4 => {
@@ -6863,14 +6946,38 @@ impl WalletPage {
                             flow_fixtures::FlowBody::FeeToken(flows_live::fee_token(&inputs))
                         }
                         FlowPanel::Dsd3 => {
-                            flow_fixtures::FlowBody::SendConfirm(flows_live::send_confirm(&inputs))
+                            let confirm = flows_live::send_confirm(&inputs);
+                            // Spec 102 D4: the account reviews and signs on
+                            // its trusted page — the confirm hands off.
+                            let handoff = self
+                                .send_host
+                                .as_ref()
+                                .and_then(|host| host.read(cx).handoff());
+                            let confirm = match handoff {
+                                Some(handoff) => {
+                                    let line = handoff
+                                        .page
+                                        .as_deref()
+                                        .map(|page| crate::signing::integrity::line(page, cx));
+                                    flows_live::with_handoff(
+                                        confirm,
+                                        signing_trusted_signer::handoff_model(
+                                            &self.loc,
+                                            &handoff,
+                                            line.as_ref(),
+                                        ),
+                                    )
+                                }
+                                None => confirm,
+                            };
+                            flow_fixtures::FlowBody::SendConfirm(confirm)
                         }
                         _ => {
                             flow_fixtures::FlowBody::SendReceipt(flows_live::send_receipt(&inputs))
                         }
                     }
                 }
-                None => flow_fixtures::body(panel, &self.flow_strings),
+                None => self.mock_flow_body(panel),
             },
             // Spec 032 phase 5: the importer reads its own machine, which the
             // host opens when the send machine shows the sheet.
@@ -7029,6 +7136,8 @@ impl WalletPage {
             notice_action: None,
             notice_dismiss: None,
             notice_report: None,
+            handoff_recheck: None,
+            handoff_trust: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -7650,7 +7759,23 @@ impl WalletPage {
                     });
                     actions.advance = Some(to_batch(BatchEvent::Apply));
                 }
-                FlowPanel::Dsd3 => actions.advance = Some(to_host(SendEvent::SlideConfirm)),
+                FlowPanel::Dsd3 => {
+                    actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // Spec 102: the hand-off's own two actions, on its page.
+                    if let Some(page) = send.handoff_page.clone() {
+                        let again = page.clone();
+                        actions.handoff_recheck = Some(Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::signing::integrity::recheck(&again, cx);
+                            },
+                        ));
+                        actions.handoff_trust = Some(Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::signing::integrity::trust(&page, cx);
+                            },
+                        ));
+                    }
+                }
                 FlowPanel::Dsd4 => actions.advance = Some(to_host(SendEvent::Done)),
                 _ => {}
             }
@@ -9515,7 +9640,6 @@ impl WalletPage {
                 public_key_hex: account.public_key_hex.clone(),
                 name: account.name.clone(),
                 transports: String::new(),
-                signer_origin: None,
             }]
         } else {
             account
@@ -9526,13 +9650,13 @@ impl WalletPage {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
-                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect()
         };
         let keys_address = account.address.clone();
+        // R5: the key this device signs with — the sign-in key's route.
         let sign_in_credential = account
-            .sign_in_route()
+            .key_route()
             .map(|route| route.credential_id)
             .unwrap_or_default();
         cx.spawn(async move |page, cx| {
@@ -9711,6 +9835,342 @@ impl WalletPage {
         Some(div().child(row.py(px(14.))))
     }
 
+    /// "Where you review and sign" (spec 102 D1): for the active account, on
+    /// this device — in Vela, or on a trusted page — with the domain its keys
+    /// live under, every page this device keeps, and why a choice that cannot
+    /// reach this account's keys is off (R1). A custom-domain account is
+    /// locked to pages on its domain (R2); its keys do not change either way.
+    fn venue_block(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        use vela_core::app::signing_pages::SigningPages;
+        use vela_core::signing_venue::{SigningVenue, VenueChoice, venue_choices};
+        let session = session::view(cx);
+        let account = session
+            .accounts
+            .iter()
+            .find(|row| row.index == session.active_index)
+            .map(|row| row.account.clone())?;
+        let pages = resident::resident::<SigningPages>(cx).read(cx).view();
+        let choices = venue_choices(
+            &account.signing_domain,
+            &account.signing_venue,
+            &pages.saved,
+        );
+        let s = &self.settings;
+        let (title, subtitle) = (s.venue_title.clone(), s.venue_subtitle.clone());
+        let (in_vela, in_vela_body) = (s.venue_in_vela.clone(), s.venue_in_vela_body.clone());
+        let (on_page, on_page_body) = (s.venue_page.clone(), s.venue_page_body.clone());
+        let keys_on = self.loc.t_texts(
+            "settings.signing.keysOn",
+            &[("domain", account.signing_domain.as_str())],
+        );
+        let header = div()
+            .flex()
+            .items_center()
+            .flex_wrap()
+            .gap(px(8.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(title),
+            )
+            .child(
+                div()
+                    .id("settings-venue-keys-on")
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded_full()
+                    .bg(theme.bg_sunken)
+                    .border_1()
+                    .border_color(theme.divider)
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Lock,
+                        false,
+                        theme.fg_subtle,
+                        11.,
+                    ))
+                    .child(keys_on),
+            );
+
+        let radio = |theme: &Theme, on: bool, size: f32| {
+            div()
+                .size(px(size))
+                .flex_none()
+                .rounded_full()
+                .border_2()
+                .border_color(if on {
+                    theme.accent
+                } else {
+                    theme.border_strong
+                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(on, |el| {
+                    el.child(div().size(px(size * 0.45)).rounded_full().bg(theme.accent))
+                })
+        };
+        // A choice the person can make now: reachable (R1), and not the one
+        // already made. Choosing it is the session's — refused there too if
+        // the venue cannot reach the keys.
+        let pick = |choice: &VenueChoice, el: gpui::Stateful<Div>, cx: &mut Context<Self>| {
+            if choice.blocked.is_none() && !choice.active {
+                let address = account.address.clone();
+                let venue = choice.venue.clone();
+                el.cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        session::choose_venue(&address, venue.clone(), cx);
+                        cx.notify();
+                    }))
+            } else {
+                el
+            }
+        };
+        let reason = |this: &mut Self, block: &vela_core::signing_venue::VenueBlock| {
+            div()
+                .flex()
+                .items_start()
+                .gap(px(6.))
+                .child(div().pt(px(2.)).child(icon_img(
+                    &mut this.icons,
+                    Icon::Lock,
+                    false,
+                    theme.fg_subtle,
+                    12.,
+                )))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(signing_trusted_signer::block_words(&this.loc, block)),
+                )
+        };
+
+        // In Vela.
+        let mut rows = div()
+            .flex()
+            .flex_col()
+            .rounded(px(16.))
+            .border_1()
+            .border_color(theme.divider)
+            .bg(theme.bg_raised);
+        if let Some(choice) = choices
+            .iter()
+            .find(|choice| choice.venue == SigningVenue::InVela)
+        {
+            let mut body = div()
+                .flex_1()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(in_vela),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(in_vela_body),
+                );
+            if let Some(block) = &choice.blocked {
+                body = body.child(div().pt(px(6.)).child(reason(self, block)));
+            }
+            let entry = div()
+                .id("settings-venue-in-vela")
+                .flex()
+                .items_start()
+                .gap(px(12.))
+                .px(px(16.))
+                .py(px(14.))
+                .when(choice.blocked.is_some(), |el| el.opacity(0.55))
+                .child(div().pt(px(2.)).child(radio(theme, choice.active, 18.)))
+                .child(body);
+            rows = rows.child(pick(choice, entry, cx));
+        }
+
+        // On a trusted page — said once, the pages nested under it, each its
+        // own choice: what is trusted, named, with whose keys it reaches and
+        // how its check went; one that cannot reach this account's keys says
+        // why instead.
+        let page_choices: Vec<&VenueChoice> = choices
+            .iter()
+            .filter(|choice| choice.venue != SigningVenue::InVela)
+            .collect();
+        let on_a_page = page_choices.iter().any(|choice| choice.active);
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .px(px(16.))
+            .py(px(14.))
+            .border_t_1()
+            .border_color(theme.divider)
+            .child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(12.))
+                    .child(div().pt(px(2.)).child(radio(theme, on_a_page, 18.)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.fg_base)
+                                    .child(on_page),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_muted)
+                                    .child(on_page_body),
+                            ),
+                    ),
+            );
+        let mut nested = div().flex().flex_col().gap(px(6.)).pl(px(30.));
+        for (index, choice) in page_choices.into_iter().enumerate() {
+            let SigningVenue::Page { url } = &choice.venue else {
+                continue;
+            };
+            let reachable = choice.blocked.is_none();
+            // A page that cannot reach this account's keys is not checked
+            // for it: its reason is what matters.
+            let line = if reachable {
+                crate::signing::integrity::line(url, cx)
+            } else {
+                vela_core::trusted_signer::launch::IntegrityLine::checking()
+            };
+            let row = crate::signing::pages::page_row(
+                &self.loc,
+                url,
+                &choice.name,
+                &choice.domain,
+                choice.official,
+                &line,
+            );
+            let body = if reachable {
+                // A page that asks about its build, or whose check refused
+                // it, can be answered here too — this is where a person finds
+                // that their account's page will not open.
+                let (trust_url, again) = (url.clone(), url.clone());
+                let actions = crate::signing::pages::line_actions(
+                    theme,
+                    &mut self.icons,
+                    SharedString::from(format!("settings-venue-line-{index}")),
+                    &row,
+                    self.loc.t("common.tryAgain"),
+                    Some(Box::new(move |_, _, cx| {
+                        crate::signing::integrity::trust(&trust_url, cx);
+                    })),
+                    Some(Box::new(move |_, _, cx| {
+                        crate::signing::integrity::recheck(&again, cx);
+                    })),
+                );
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(crate::signing::pages::page_row_body(
+                        theme,
+                        &mut self.icons,
+                        &row,
+                    ))
+                    .children(actions)
+            } else {
+                let block = choice.blocked.clone();
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .min_w(px(0.))
+                                    .truncate()
+                                    .text_size(theme::text_row_sub())
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.fg_base)
+                                    .child(row.name.clone()),
+                            )
+                            .children(row.host.clone().map(|host| {
+                                div()
+                                    .flex_none()
+                                    .font_family(theme::font_mono())
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_subtle)
+                                    .child(host)
+                            })),
+                    )
+                    .children(block.map(|block| reason(self, &block)))
+            };
+            let entry = div()
+                .id(ElementId::from(("settings-venue-page", index)))
+                .flex()
+                .items_start()
+                .gap(px(10.))
+                .p(px(12.))
+                .rounded(px(12.))
+                .border_1()
+                .border_color(if choice.active {
+                    theme.accent
+                } else {
+                    theme.divider
+                })
+                .bg(if choice.active {
+                    theme.bg_raised
+                } else {
+                    theme.bg_base
+                })
+                .when(!reachable, |el| el.opacity(0.55))
+                .child(div().pt(px(8.)).child(radio(theme, choice.active, 14.)))
+                .child(div().flex_1().min_w(px(0.)).child(body));
+            nested = nested.child(pick(choice, entry, cx));
+        }
+        section = section.child(nested);
+        rows = rows.child(section);
+
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
+                .child(header)
+                .child(
+                    div()
+                        .pt(px(4.))
+                        .pb(px(12.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(subtitle),
+                )
+                .child(rows),
+        )
+    }
+
     /// The keys that control this wallet, with their Ethereum backup beneath
     /// them (spec 062) — one block. A person offered "back up your keys" is
     /// owed the sight of them first: what each is called, who is holding it,
@@ -9730,10 +10190,17 @@ impl WalletPage {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
-        // Spec 075: the fourth place a key can live, in the "Sign with"
-        // sheet's own words — the caption for a key behind a page, and the
-        // label on the line naming which page.
-        let trusted_signer = trusted_signer_words(s);
+        // Spec 102: a key is captioned by where it LIVES — never by the page
+        // it was made on. A wallet on the person's own signing domain says
+        // that domain once, by the title: only its page can reach these keys.
+        let keys_on = money::active_account()
+            .filter(|account| vela_core::signing_venue::locked_to_page(&account.signing_domain))
+            .map(|account| {
+                self.loc.t_texts(
+                    "settings.signing.keysOn",
+                    &[("domain", &account.signing_domain)],
+                )
+            });
         let user_verified = s.keys_user_verified.clone();
         let signs_here = s.keys_signs_here.clone();
         let labels = (
@@ -9760,6 +10227,32 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
                     .child(keys.len().to_string()),
+            );
+        }
+        if let Some(keys_on) = keys_on {
+            header = header.child(
+                div()
+                    .id("settings-keys-on")
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded_full()
+                    // D7: the venue header's own quiet tag, not a tinted chip.
+                    .bg(theme.bg_sunken)
+                    .border_1()
+                    .border_color(theme.divider)
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Lock,
+                        false,
+                        theme.fg_subtle,
+                        11.,
+                    ))
+                    .child(keys_on),
             );
         }
         let mut block = div()
@@ -9809,7 +10302,7 @@ impl WalletPage {
                     } else {
                         key.name.clone()
                     };
-                    let holder = key_holder(key, &lines, &trusted_signer);
+                    let holder = key_holder(key, &lines);
                     let body = key.public_key_hex.trim_start_matches("04");
                     let fingerprint = (body.len() >= 8)
                         .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
@@ -9956,13 +10449,7 @@ impl WalletPage {
                     .filter(|part| !part.is_empty())
                     .collect::<Vec<_>>()
                     .join(" · ");
-                    // Spec 075: WHICH page, first, because where a key lives is
-                    // the one fact about it a person cannot look up elsewhere.
-                    // Empty for every other key, and an empty value is dropped
-                    // below — so no ordinary row grows a line.
-                    let signer_page = key_page(key);
                     let details: Vec<(gpui::SharedString, String, bool, bool)> = [
-                        (trusted_signer.clone(), signer_page.clone(), false, true),
                         (
                             labels.0.clone(),
                             if key.public_key_hex.is_empty() {
@@ -9987,10 +10474,8 @@ impl WalletPage {
                     .filter(|(_, value, _, _)| !value.is_empty())
                     .collect();
                     // A row with no credential id came from the device alone and
-                    // has nothing worth opening — unless it lives behind a
-                    // page, which is exactly the row whose whereabouts a person
-                    // wants to check when the registry is unreachable.
-                    let expandable = !key.credential_id.is_empty() || !signer_page.is_empty();
+                    // has nothing worth opening.
+                    let expandable = !key.credential_id.is_empty();
                     let is_open = self.keys_open.contains(&index);
                     let mut stateful = row.id(("settings-key-row", index));
                     if expandable {
@@ -10209,10 +10694,12 @@ impl WalletPage {
         erase_confirm: gpui::SharedString,
         cx: &mut Context<Self>,
     ) -> Div {
+        let venue = self.venue_block(theme, cx);
         let keys = self.keys_block(theme, cx);
         div()
             .flex()
             .flex_col()
+            .children(venue)
             .child(keys)
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
@@ -11239,7 +11726,7 @@ impl WalletPage {
         });
         let label = self.settings.nav_fee_speed.clone();
         let control = self.settings_dropdown_control("fee-speed", theme, value, menu, cx);
-        // The web's panel measure, as the "Sign with" page keeps.
+        // The web's panel measure, as the signing pages panel keeps.
         div()
             .flex()
             .flex_col()
@@ -11298,162 +11785,335 @@ impl WalletPage {
         .with_priority(1)
     }
 
-    /// The Trusted Signer's page (spec 071) — where a wallet created or
-    /// signed into through the Trusted Signer signs. How a signature is
-    /// routed is not a setting: the account signs with the key it signed in
-    /// with (founder, 2026-09-26).
+    /// Settings → Signing pages (spec 102): the pages this person trusts to
+    /// show and sign requests — the official one first and always there, the
+    /// ones they added under it — each with whose keys it reaches and how its
+    /// check went; rename and remove; add one by its address. Which page an
+    /// ACCOUNT signs on is that account's own choice (Account → "Where you
+    /// review and sign"), never a field here: a free-text page every
+    /// signature opened was a door a social-engineering message walked
+    /// straight through.
     fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
-        use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
-        let view = resident::resident::<SignPref>(cx).read(cx).view();
-
-        // The page. Its badge is where it is — "Official", or the host a
-        // person chose — and the field holds what they are typing until Save
-        // hands it to the core, which normalises it or says why not.
-        let s = &self.settings;
-        let badge = pill(
-            Tone::Neutral,
-            if view.signer_url_is_default {
-                s.signer_page_official.clone()
+        use vela_core::app::signing_pages::{Event as PagesEvent, SigningPages};
+        let view = resident::resident::<SigningPages>(cx).read(cx).view();
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .rounded(px(16.))
+            .border_1()
+            .border_color(theme.divider)
+            .bg(theme.bg_raised);
+        for (index, page) in view.pages.iter().enumerate() {
+            let line = crate::signing::integrity::line(&page.url, cx);
+            let row = crate::signing::pages::page_row(
+                &self.loc,
+                &page.url,
+                &page.name,
+                &page.domain,
+                page.official,
+                &line,
+            );
+            let url = page.url.clone();
+            let renaming = self
+                .signer_page_rename
+                .as_ref()
+                .filter(|(editing, _)| *editing == page.url)
+                .map(|(_, typed)| typed.clone());
+            let mut body =
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .child(crate::signing::pages::page_row_body(
+                        theme,
+                        &mut self.icons,
+                        &row,
+                    ));
+            // The line's own actions: "Trust this version" under a
+            // self-hosted page's question (stored on THAT page, D-15), "Try
+            // again" under a refusal.
+            let (trust_url, again) = (url.clone(), url.clone());
+            body = body.children(crate::signing::pages::line_actions(
+                theme,
+                &mut self.icons,
+                SharedString::from(format!("settings-signing-line-{index}")),
+                &row,
+                self.loc.t("common.tryAgain"),
+                Some(Box::new(move |_, _, cx| {
+                    crate::signing::integrity::trust(&trust_url, cx);
+                })),
+                Some(Box::new(move |_, _, cx| {
+                    crate::signing::integrity::recheck(&again, cx);
+                })),
+            ));
+            if let Some(typed) = renaming {
+                let focus = self
+                    .signer_rename_focus
+                    .get_or_insert_with(|| cx.focus_handle())
+                    .clone();
+                let page_entity = cx.entity();
+                let save_url = url.clone();
+                body = body.child(div().pl(px(44.)).pt(px(10.)).child(editable_url_field(
+                    ElementId::from(("settings-signing-rename", index)),
+                    theme,
+                    Some(self.settings.signer_page_name.clone()),
+                    &typed,
+                    row.host.clone().unwrap_or_else(|| row.name.clone()),
+                    None,
+                    None,
+                    None,
+                    &focus,
+                    window,
+                    move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                        page_entity.update(cx, |page, cx| {
+                            if let Some((_, typed)) = page.signer_page_rename.as_mut() {
+                                *typed = text;
+                            }
+                            cx.notify();
+                        });
+                    },
+                    {
+                        let page_entity = cx.entity();
+                        move |_window: &mut Window, cx: &mut gpui::App| {
+                            let save_url = save_url.clone();
+                            page_entity.update(cx, |page, cx| {
+                                page.save_page_name(&save_url, cx);
+                            });
+                        }
+                    },
+                )));
+            }
+            // Rename and Remove, in words (core round 10) — quiet text
+            // buttons; the official page is neither renamed nor removed.
+            let mut tools = div().flex().flex_none().items_center().gap(px(4.));
+            if !page.official && view.loaded {
+                let rename_url = url.clone();
+                let current = page.name.clone();
+                let editing = self
+                    .signer_page_rename
+                    .as_ref()
+                    .is_some_and(|(u, _)| *u == url);
+                let tool = |id: ElementId, label: SharedString| {
+                    div()
+                        .id(id)
+                        .px(px(10.))
+                        .py(px(6.))
+                        .rounded(px(8.))
+                        .cursor_pointer()
+                        .text_size(theme::text_row_sub())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .child(label)
+                };
+                tools = tools
+                    .child(
+                        tool(
+                            ElementId::from(("settings-signing-rename-button", index)),
+                            if editing {
+                                self.settings.signer_page_save.clone()
+                            } else {
+                                self.settings.signer_page_rename.clone()
+                            },
+                        )
+                        .text_color(if editing {
+                            theme.accent
+                        } else {
+                            theme.fg_muted
+                        })
+                        .hover(|el| el.bg(theme.bg_sunken))
+                        .on_click(cx.listener(
+                            move |page, _, window, cx| {
+                                if page
+                                    .signer_page_rename
+                                    .as_ref()
+                                    .is_some_and(|(u, _)| *u == rename_url)
+                                {
+                                    page.save_page_name(&rename_url.clone(), cx);
+                                } else {
+                                    page.signer_page_rename =
+                                        Some((rename_url.clone(), current.clone()));
+                                    let focus = page
+                                        .signer_rename_focus
+                                        .get_or_insert_with(|| cx.focus_handle())
+                                        .clone();
+                                    focus.focus(window, cx);
+                                }
+                                cx.notify();
+                            },
+                        )),
+                    )
+                    .child({
+                        let remove_url = url.clone();
+                        tool(
+                            ElementId::from(("settings-signing-remove", index)),
+                            self.settings.signer_page_remove.clone(),
+                        )
+                        .text_color(theme.fg_muted)
+                        .hover(|el| el.bg(theme.error_soft).text_color(theme.error_base))
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
+                                pages.dispatch(
+                                    PagesEvent::PageRemoved {
+                                        url: remove_url.clone(),
+                                    },
+                                    cx,
+                                );
+                            });
+                            page.signer_page_rename = None;
+                            cx.notify();
+                        }))
+                    });
+            }
+            let entry = div()
+                .flex()
+                .items_start()
+                .gap(px(12.))
+                .px(px(16.))
+                .py(px(16.))
+                .child(body)
+                .child(tools);
+            list = list.child(if index > 0 {
+                entry.border_t_1().border_color(theme.divider)
             } else {
-                SharedString::from(page_host(&view.signer_url))
-            },
-        );
-        let refused = match view.signer_url_error.as_deref() {
+                entry
+            });
+        }
+
+        // Add a page: the address, and the core says whether a browser would
+        // sign there (https, or this machine's own loopback) and whether it
+        // is already here.
+        let s = &self.settings;
+        let refused = match view.add_error.as_deref() {
             Some("insecure") => Some(s.signer_page_insecure.clone()),
+            Some("duplicate") => Some(s.signer_page_duplicate.clone()),
             Some(_) => Some(s.signer_page_invalid.clone()),
             None => None,
         };
-        let (title, subtitle, foreign, save, reset) = (
-            s.signer_page_title.clone(),
-            s.signer_page_subtitle.clone(),
-            s.signer_page_foreign.clone(),
-            s.signer_page_save.clone(),
-            s.signer_page_reset.clone(),
-        );
+        let add_label = s.signer_page_add.clone();
         let focus = self
             .signer_page_focus
             .get_or_insert_with(|| cx.focus_handle())
             .clone();
-        let typed = self
-            .signer_page_draft
-            .clone()
-            .unwrap_or_else(|| view.signer_url.clone());
-        let page = cx.entity();
-        let mut section = div()
+        let typed = self.signer_page_draft.clone();
+        let page_entity = cx.entity();
+        let field = editable_url_field(
+            "settings-signer-page",
+            theme,
+            Some(add_label.clone()),
+            &typed,
+            SharedString::from("https://sign.example.com"),
+            None,
+            None,
+            refused.is_some().then_some(Tone::Error),
+            &focus,
+            window,
+            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                page_entity.update(cx, |page, cx| {
+                    page.signer_page_draft = text;
+                    cx.notify();
+                });
+            },
+            {
+                let page_entity = cx.entity();
+                move |_window: &mut Window, cx: &mut gpui::App| {
+                    page_entity.update(cx, |page, cx| page.add_signing_page(cx));
+                }
+            },
+        );
+        let can_add = view.loaded && !typed.trim().is_empty();
+        let add_button = div()
+            .id("settings-signer-page-add")
+            .h(px(theme::INPUT_H))
+            .px(px(16.))
+            .rounded(px(10.))
             .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(editable_url_field(
-                "settings-signer-page",
-                theme,
-                Some(title),
-                &typed,
-                SharedString::from(vela_core::trusted_signer::DEFAULT_SIGNER_URL),
-                Some(&badge),
-                Some(subtitle),
-                refused.is_some().then_some(Tone::Error),
-                &focus,
-                window,
-                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                    page.update(cx, |page, cx| {
-                        page.signer_page_draft = Some(text);
-                        cx.notify();
-                    });
-                },
-                // Saved by its own button, which asks the core; Enter does
-                // not stand in for it.
-                |_, _| {},
-            ));
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.divider)
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_base)
+            .child(icon_img(
+                &mut self.icons,
+                Icon::Plus,
+                false,
+                theme.fg_base,
+                14.,
+            ))
+            .child(add_label)
+            .when(can_add, |el| {
+                el.cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .on_click(cx.listener(|page, _, _, cx| page.add_signing_page(cx)))
+            })
+            .when(!can_add, |el| el.opacity(0.5));
+        let mut add = div().flex().flex_col().gap(px(8.)).child(
+            div()
+                .flex()
+                .items_end()
+                .gap(px(8.))
+                .child(div().flex_1().min_w(px(0.)).child(field))
+                .child(add_button),
+        );
         if let Some(refused) = refused {
-            section = section.child(
+            add = add.child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.error_base)
                     .child(refused),
             );
         }
-        // A page elsewhere can show a request but not sign it: said beside
-        // the address rather than discovered at the worst moment (R5).
-        if !view.signer_uses_wallet_passkeys {
-            section = section.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.warning_base)
-                    .child(foreign),
-            );
-        }
-        // Drawn like the networks panel's header action: a settings panel has
-        // no primary CTA, and the accent means "this moves the money".
-        let mut actions = div().flex().items_center().gap(px(16.)).child(
-            div()
-                .id("settings-signer-page-save")
-                .h(px(36.))
-                .px(px(16.))
-                .rounded(px(10.))
-                .flex()
-                .flex_none()
-                .items_center()
-                .cursor_pointer()
-                .bg(theme.bg_raised)
-                .border_1()
-                .border_color(theme.divider)
-                .hover(|el| el.bg(theme.bg_sunken))
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(save)
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    let text = page
-                        .signer_page_draft
-                        .clone()
-                        .unwrap_or_else(|| typed.clone());
-                    let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                        pref.dispatch(SignPrefEvent::SignerUrlSubmitted { text }, cx);
-                        pref.view().signer_url_error.is_none()
-                    });
-                    // Taken: the field shows the page as the core stored it.
-                    // Refused: what was typed stays, under its reason.
-                    if stored {
-                        page.signer_page_draft = None;
-                    }
-                    cx.notify();
-                })),
-        );
-        if !view.signer_url_is_default {
-            actions = actions.child(
-                div()
-                    .id("settings-signer-page-reset")
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|page, _, _, cx| {
-                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(SignPrefEvent::SignerUrlReset, cx);
-                        });
-                        page.signer_page_draft = None;
-                        cx.notify();
-                    }))
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::RefreshCw,
-                        false,
-                        theme.accent,
-                        14.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.accent)
-                            .child(reset),
-                    ),
-            );
-        }
         div()
             .flex()
             .flex_col()
-            .gap(px(32.))
+            .gap(px(28.))
             .max_w(px(560.))
-            .child(section.child(actions))
+            .child(list)
+            .child(add)
+    }
+
+    /// "Add a page": the core normalises it, or says why not and keeps what
+    /// was typed under its reason.
+    fn add_signing_page(&mut self, cx: &mut Context<Self>) {
+        use vela_core::app::signing_pages::{Event as PagesEvent, SigningPages};
+        let url = self.signer_page_draft.trim().to_owned();
+        if url.is_empty() {
+            return;
+        }
+        let added = resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
+            pages.dispatch(
+                PagesEvent::PageAdded {
+                    url,
+                    name: String::new(),
+                },
+                cx,
+            );
+            pages.view().add_error.is_none()
+        });
+        if added {
+            self.signer_page_draft.clear();
+        }
+        cx.notify();
+    }
+
+    /// A saved page's new label, as typed (empty clears it).
+    fn save_page_name(&mut self, url: &str, cx: &mut Context<Self>) {
+        use vela_core::app::signing_pages::{Event as PagesEvent, SigningPages};
+        let Some((editing, typed)) = self.signer_page_rename.take() else {
+            return;
+        };
+        if editing == url {
+            resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
+                pages.dispatch(
+                    PagesEvent::PageRenamed {
+                        url: editing,
+                        name: typed,
+                    },
+                    cx,
+                );
+            });
+        }
+        cx.notify();
     }
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -16874,10 +17534,10 @@ impl WalletPage {
         let mut kind = signing_live::ColumnKind::Request;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
-        // Spec 079 US7: this account signs on the Trusted Signer's page, whose
-        // own control is the consent — the column offers a button that goes
-        // there, not a second confirm.
-        let mut signs_on_page = false;
+        // Spec 102 D4: this account reviews and signs on a trusted page (or
+        // nothing here can reach its keys). The page is the authority, so the
+        // column does not draw the request a second time: it hands off.
+        let mut handoff: Option<crate::executor::send::Handoff> = None;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
         // The confirm's note line, held for a live request (`HeldLines::note`):
@@ -16887,9 +17547,9 @@ impl WalletPage {
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             let fee = host.fee_view();
-            // The route the executor will sign over, read from the same
-            // channel it reads (`SignContext::follow_sign_in`).
-            signs_on_page = host.trusted_signer().chosen().is_some();
+            // Where the executor will sign, from the same context it reads
+            // (`SignContext::follow_venue`).
+            handoff = host.handoff();
             // WHO signs, as the core has it — the account the site was shown
             // (078 W-07). The mock's own wallet stood here, so every sheet
             // named "大表哥" whichever wallet was about to sign.
@@ -17121,6 +17781,21 @@ impl WalletPage {
         let funding = kind == signing_live::ColumnKind::Funding;
         let refused = kind == signing_live::ColumnKind::Refused;
 
+        // The mock column, handed off when the gallery pins one
+        // (`VELA_HANDOFF`), with the pinned check's line — never a live one.
+        #[cfg(not(target_os = "linux"))]
+        let mock = self.signing_host.is_none();
+        #[cfg(target_os = "linux")]
+        let mock = true;
+        let pinned_line = if mock && handoff.is_none() {
+            crate::gallery::handoff_pin().map(|(pinned, line)| {
+                handoff = Some(pinned);
+                line
+            })
+        } else {
+            None
+        };
+
         // Spec 079: once approved, the column is the send receipt — the form,
         // its fee and its confirm are gone from the first frame after the
         // approval, not when the core closes the sheet ninety seconds later.
@@ -17186,6 +17861,85 @@ impl WalletPage {
             });
         #[cfg(target_os = "linux")]
         let confirm_action: Option<panels::Click> = None;
+        // Spec 102 D4: the hand-off card in place of the request — who asked
+        // (the header), the page, the key, the integrity line and Open. Open
+        // is the approval itself (the page's own slide is the consent), armed
+        // only when the request may be approved AND the page's check says it
+        // may open. Funding and a refusal are the column's own, as ever.
+        if kind == signing_live::ColumnKind::Request
+            && let Some(handoff) = handoff.as_ref()
+        {
+            let line = pinned_line.clone().or_else(|| {
+                handoff
+                    .page
+                    .as_deref()
+                    .map(|page| crate::signing::integrity::line(page, cx))
+            });
+            let card = signing_trusted_signer::handoff_model(&self.loc, handoff, line.as_ref());
+            let on_recheck: Option<signing_trusted_signer::Click> =
+                handoff.page.clone().map(|page| {
+                    Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            crate::signing::integrity::recheck(&page, cx);
+                        },
+                    ) as signing_trusted_signer::Click
+                });
+            let on_trust: Option<signing_trusted_signer::Click> =
+                handoff.page.clone().map(|page| {
+                    Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            crate::signing::integrity::trust(&page, cx);
+                        },
+                    ) as signing_trusted_signer::Click
+                });
+            // Why the request cannot be approved yet (a fee still being
+            // measured) — the confirm's own note, under the card.
+            let note = held_note.clone().unwrap_or_else(|| {
+                model
+                    .confirm_note
+                    .clone()
+                    .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
+                    .map(|note| (note, true))
+            });
+            // The fee is said once on this screen, and it is the sheet's own
+            // row: the fee and its speed — with their controls — stay above the
+            // card (D-18: chosen here, before the page opens; the page signs
+            // the operation they priced), and the card carries no fee row. Then
+            // who signs, the row the card's key row reads beside.
+            let fee_block =
+                self.signing_fee_block(theme, &model.fee, signing_speed.as_ref(), &speed_tiers, cx);
+            return div()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .children(signing_components::header(theme, &model))
+                .children(fee_block)
+                .child(signing_components::signer_row(
+                    theme,
+                    &mut self.identicons,
+                    model.signer_label.clone(),
+                    model.signer_name.clone(),
+                    &model.signer_seed,
+                ))
+                .child(signing_trusted_signer::handoff_card(
+                    theme,
+                    &mut self.icons,
+                    &card,
+                    confirm_action,
+                    on_recheck,
+                    on_trust,
+                ))
+                .children(note.map(|(note, said)| {
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(if said {
+                            theme.fg_subtle
+                        } else {
+                            gpui::transparent_black()
+                        })
+                        .child(note)
+                }));
+        }
         // The wallet's own request draws no header — and no gap where it was:
         // its intent, the headline below, is the first thing in the column.
         let mut column = div()
@@ -17491,51 +18245,13 @@ impl WalletPage {
             }
             column = column.child(row_divider(theme)).child(section);
         }
-        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
-        if let Some(fee) = signing_components::fee(
+        column = column.children(self.signing_fee_block(
             theme,
-            &mut self.icons,
             &model.fee,
-            on_fee,
-            on_fee_pick,
-            on_fee_refresh,
-        ) {
-            let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
-            if let Some(speed) = &signing_speed {
-                // The same control, the same clicks, as the send form's.
-                #[cfg(not(target_os = "linux"))]
-                let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
-                    |page, _: &gpui::ClickEvent, _, cx| {
-                        if let Some(host) = page.signing_host.as_ref() {
-                            host.update(cx, |host, cx| host.toggle_speed(cx));
-                        }
-                    },
-                )));
-                #[cfg(not(target_os = "linux"))]
-                let picks: Vec<panels::Click> = speed_tiers
-                    .iter()
-                    .map(|tier| {
-                        let tier = *tier;
-                        Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
-                            if let Some(host) = page.signing_host.as_ref() {
-                                host.update(cx, |host, cx| host.pick_speed(tier, cx));
-                            }
-                        })) as panels::Click
-                    })
-                    .collect();
-                #[cfg(target_os = "linux")]
-                let (toggle, picks): (Option<panels::Click>, Vec<panels::Click>) =
-                    (None, Vec::new());
-                fee_block = fee_block.child(panels::speed_control(
-                    theme,
-                    &mut self.icons,
-                    speed,
-                    toggle,
-                    picks,
-                ));
-            }
-            column = column.child(fee_block);
-        }
+            signing_speed.as_ref(),
+            &speed_tiers,
+            cx,
+        ));
         column = column
             .child(signing_components::signer_row(
                 theme,
@@ -17551,16 +18267,6 @@ impl WalletPage {
                     signing_components::funding_check_button(
                         theme,
                         model.confirm_label.clone(),
-                        confirm_action,
-                    )
-                } else if signs_on_page {
-                    // One consent per signature (owner, spec 079 ruling 9):
-                    // the page's. This button sends the same approval the
-                    // confirm does, and the page asks for the consent.
-                    signing_components::open_signer_button(
-                        theme,
-                        self.signing.open_signer.clone(),
-                        model.confirm_enabled,
                         confirm_action,
                     )
                 } else {
@@ -17626,6 +18332,66 @@ impl WalletPage {
             );
         }
         column
+    }
+
+    /// The sheet's fee row and, under it, the speed control (spec 069) —
+    /// the same control, the same clicks, as the send form's. `None` where
+    /// the request has no fee row (`FeeModel::Hidden`). Drawn in Vela and in
+    /// the hand-off alike: the fee and its speed are chosen here before the
+    /// page opens (D-18), and the page signs the operation they priced.
+    fn signing_fee_block(
+        &mut self,
+        theme: &Theme,
+        fee: &signing_fixtures::FeeModel,
+        speed: Option<&flow_fixtures::FeeSpeedModel>,
+        speed_tiers: &[vela_core::app::fee_policy::FeeTier],
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
+        let fee = signing_components::fee(
+            theme,
+            &mut self.icons,
+            fee,
+            on_fee,
+            on_fee_pick,
+            on_fee_refresh,
+        )?;
+        let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
+        if let Some(speed) = speed {
+            #[cfg(not(target_os = "linux"))]
+            let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
+                |page, _: &gpui::ClickEvent, _, cx| {
+                    if let Some(host) = page.signing_host.as_ref() {
+                        host.update(cx, |host, cx| host.toggle_speed(cx));
+                    }
+                },
+            )));
+            #[cfg(not(target_os = "linux"))]
+            let picks: Vec<panels::Click> = speed_tiers
+                .iter()
+                .map(|tier| {
+                    let tier = *tier;
+                    Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
+                        if let Some(host) = page.signing_host.as_ref() {
+                            host.update(cx, |host, cx| host.pick_speed(tier, cx));
+                        }
+                    })) as panels::Click
+                })
+                .collect();
+            #[cfg(target_os = "linux")]
+            let (toggle, picks): (Option<panels::Click>, Vec<panels::Click>) = {
+                let _ = speed_tiers;
+                (None, Vec::new())
+            };
+            fee_block = fee_block.child(panels::speed_control(
+                theme,
+                &mut self.icons,
+                speed,
+                toggle,
+                picks,
+            ));
+        }
+        Some(fee_block)
     }
 
     /// The fee row's tap, and one listener per fee coin in the relay's order
@@ -20108,9 +20874,9 @@ const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis
 ///
 /// A pure function so the sheet it goes to can be pinned by a test: the backup
 /// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
-/// means it gets the same "Sign with" row every other signature gets — the
-/// core's five routes, the Trusted Signer among them (spec 075). A backup with a
-/// sheet of its own would be the one signature a person could not route.
+/// means it goes where every other signature of the account goes — its venue
+/// (spec 102), Vela's sheet or its trusted page. A backup with a sheet of its
+/// own would be the one signature a person could not review on their page.
 #[cfg(not(target_os = "linux"))]
 
 /// Spec 083 FR-006: an open bar nobody has typed in follows the page — the
@@ -20159,42 +20925,21 @@ fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signin
     }
 }
 
-fn page_host(url: &str) -> String {
-    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
-    rest.split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default()
-        .to_owned()
-}
-
-/// The Trusted Signer's caption: the title its Settings page wears, so one
-/// route is never named two ways — the drift spec 075 was raised over.
-fn trusted_signer_words(s: &SettingsStrings) -> SharedString {
-    s.nav_signing.clone()
-}
-
 /// Who is holding a key, for the line under its name in the keys list.
 ///
 /// `lines` is the fallback trio in the core's method order — built-in passkey,
 /// phone or tablet, security key — used when no catalog can name the vault.
 ///
-/// Spec 075: a key minted on a Trusted Signer page ran its ceremony in a browser,
-/// so the authenticator reports `platform` and the AAGUID catalog names
-/// whatever vault answered on the page's own side. Both of those describe the
-/// side of the page this wallet cannot reach, and the Android device pass of
-/// 2026-09-22 found the result: a key made on the page, captioned as this
-/// machine's built-in passkey — the opposite of where the key is. So the page
-/// outranks both the report and the vault's name. The core decides it
-/// (`WalletKeyRow::method` is `trusted_signer` exactly when the row carries a
-/// `signer_origin`); this only says it.
+/// Spec 102: by where the key LIVES, always — never "Trusted Signer". A key
+/// made on a signing page ran its ceremony in a browser, and the authenticator
+/// on the far side of it reports where the key is like any other: an iCloud
+/// passkey made on the page is this device's kind, a key made by scanning a
+/// code is a phone. The core says which (`WalletKeyRow::method` is the place);
+/// this only says it.
 fn key_holder(
     key: &vela_core::wallet_keys::WalletKeyRow,
     lines: &(SharedString, SharedString, SharedString),
-    trusted_signer: &SharedString,
 ) -> SharedString {
-    if key.method == vela_core::trusted_signer::METHOD {
-        return trusted_signer.clone();
-    }
     if !key.provider_name.is_empty() {
         return SharedString::from(key.provider_name.clone());
     }
@@ -20203,18 +20948,6 @@ fn key_holder(
         "hybrid" => lines.1.clone(),
         _ => lines.0.clone(),
     }
-}
-
-/// Which page a key lives behind, for its details; empty when it lives behind
-/// none.
-///
-/// "A Trusted Signer" is no answer to "where is my key" for a person who has used
-/// two of them, so the row that says the route names the deployment as well.
-fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
-    key.signer_origin
-        .clone()
-        .filter(|origin| !origin.is_empty())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -20766,7 +21499,9 @@ mod tests {
                     public_key_hex: "04aa".to_owned(),
                     created_at_iso: String::new(),
                     keys: Vec::new(),
-                    signed_in_with: None,
+                    sign_in_key: None,
+                    signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+                    signing_venue: vela_core::signing_venue::SigningVenue::InVela,
                 },
             };
         let accounts = [
@@ -20811,19 +21546,15 @@ mod tests {
         }
     }
 
-    /// **A key minted on a Trusted Signer page is captioned as the page, and says
-    /// which page** (spec 075, the Android device pass of 2026-09-22).
-    ///
-    /// The pass found such a key drawn as the phone's built-in passkey, because
-    /// a page runs its ceremony in a browser and the authenticator therefore
-    /// reports `platform` — the far side of the page, the one side this wallet
-    /// cannot reach. The row is built here from the account record's own keys,
-    /// so the whole chain is walked: a `DeviceKey` carrying the origin the
-    /// record stored, through the core's row builder, to the two lines a person
-    /// reads. And the caption is the Trusted Signer page's own title, so the
-    /// keys list and Settings never name one route two ways.
+    /// **A key is captioned by where it lives, never "Trusted Signer"**
+    /// (spec 102 P2-10). A key made on a signing page ran its ceremony in a
+    /// browser, and its authenticator reports where it is like any other's —
+    /// so a USB key reads as a USB key and a vault's key by its vault's name,
+    /// whichever page it was made on. The row is built from the account
+    /// record's own keys, through the core's row builder, to the line a
+    /// person reads.
     #[test]
-    fn a_key_behind_a_page_is_captioned_as_the_trusted_signer() {
+    fn a_key_is_captioned_by_where_it_lives() {
         let loc = Loc::from_env();
         let s = SettingsStrings::resolve(&loc);
         let lines = (
@@ -20831,89 +21562,62 @@ mod tests {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
-        let trusted_signer = super::trusted_signer_words(&s);
-        assert!(
-            !trusted_signer.is_empty(),
-            "the Trusted Signer's caption went missing"
-        );
-
-        // As `ensure_backup_check` builds them: one key behind a page, one on
-        // the end of a cable.
-        let page = "https://sign.example.test";
         let device = [
             vela_core::wallet_keys::DeviceKey {
                 credential_id: "cred0".to_owned(),
                 public_key_hex: "04".to_owned() + &"ab".repeat(64),
-                name: "Behind the page".to_owned(),
-                transports: String::new(),
-                signer_origin: Some(page.to_owned()),
+                name: "Made on the page".to_owned(),
+                transports: "internal,hybrid".to_owned(),
             },
             vela_core::wallet_keys::DeviceKey {
                 credential_id: "cred1".to_owned(),
                 public_key_hex: "04".to_owned() + &"cd".repeat(64),
                 name: "On the desk".to_owned(),
                 transports: "usb".to_owned(),
-                signer_origin: None,
             },
         ];
-        let rows = match vela_core::wallet_keys::step("", &device, &[], "") {
+        let rows = match vela_core::wallet_keys::step("", &device, &[], "cred1") {
             vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
             vela_core::wallet_keys::KeysStep::Ask { .. } => {
                 unreachable!("asked with no address, so nobody can be asked")
             }
         };
         assert_eq!(rows.len(), 2);
-
-        // The key behind the page: captioned as the route, naming the page.
-        assert_eq!(rows[0].method, vela_core::trusted_signer::METHOD);
-        assert_eq!(
-            super::key_holder(&rows[0], &lines, &trusted_signer),
-            trusted_signer
-        );
-        assert_ne!(
-            super::key_holder(&rows[0], &lines, &trusted_signer),
-            lines.0,
-            "the page's key is drawn as this device's built-in passkey"
-        );
-        assert_eq!(super::key_page(&rows[0]), page);
-
-        // Even when a catalog names the vault that answered: that vault is on
-        // the far side of the page, and where the key lives is the page.
-        let named = vela_core::wallet_keys::WalletKeyRow {
-            provider_name: "Apple Passwords".to_owned(),
-            ..rows[0].clone()
-        };
-        assert_eq!(
-            super::key_holder(&named, &lines, &trusted_signer),
-            trusted_signer
-        );
-
-        // And an ordinary key is untouched: the USB key still reads as one, and
-        // its details grow no page line.
-        assert_eq!(
-            super::key_holder(&rows[1], &lines, &trusted_signer),
-            lines.2
-        );
-        assert!(super::key_page(&rows[1]).is_empty());
+        for row in &rows {
+            assert!(
+                vela_core::app::KeyMethod::ALL
+                    .iter()
+                    .any(|place| place.name() == row.method),
+                "a row captioned by something that is not a place: {}",
+                row.method
+            );
+            let holder = super::key_holder(row, &lines);
+            assert_ne!(holder.as_ref(), s.nav_signing.as_ref(), "named as a page");
+            assert!(
+                !holder.to_lowercase().contains("trusted signer"),
+                "{holder}"
+            );
+        }
+        assert_eq!(super::key_holder(&rows[1], &lines), lines.2);
+        // The key this device signs with is marked.
+        assert!(rows[1].signs_here && !rows[0].signs_here);
         let vaulted = vela_core::wallet_keys::WalletKeyRow {
             provider_name: "1Password".to_owned(),
             ..rows[1].clone()
         };
-        assert_eq!(
-            super::key_holder(&vaulted, &lines, &trusted_signer).as_ref(),
-            "1Password"
-        );
+        assert_eq!(super::key_holder(&vaulted, &lines).as_ref(), "1Password");
     }
 
-    /// **The Ethereum key backup gets the Trusted Signer too** (spec 075: "创建/
-    /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
+    /// **The Ethereum key backup goes where the account reviews and signs**
+    /// (spec 075: "创建/登录/转账/dapp签名/公钥备份 等" — the owner listed the
+    /// backup with the rest; spec 102: by the account's venue).
     ///
     /// It gets it by being an ordinary request on the shared signing sheet
     /// rather than a sheet of its own: the same `eth_sendTransaction` on the
-    /// wallet's own transport that a send is, so the same "Sign with" row with
-    /// the same five routes. If this ever grew its own sheet, the backup would
-    /// be the one signature a person could not route — and the backup is the
-    /// signature that matters most to a wallet living behind a signer page.
+    /// wallet's own transport that a send is, so the same venue and the same
+    /// hand-off. If this ever grew its own sheet, the backup would be the one
+    /// signature a person could not review on their page — and the backup is
+    /// the signature that matters most to a wallet on its own signing domain.
     #[test]
     #[cfg(not(target_os = "linux"))]
     fn the_key_backup_goes_to_the_shared_signing_sheet() {
@@ -20938,11 +21642,6 @@ mod tests {
         assert!(!calls, "a backup is submitted, not signed as a message");
         assert!(request.params_json.contains(&call.data));
         assert!(request.params_json.contains(address));
-        // And the row it lands under offers every route the core knows.
-        assert!(
-            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::trusted_signer::METHOD),
-            "the shared sheet does not offer the Trusted Signer"
-        );
     }
 
     /// The save button is available exactly when the address is one.
@@ -21031,18 +21730,6 @@ mod tests {
         assert_eq!(codes, crate::settings::fixtures::DESKTOP_STATES);
     }
 
-    /// The Trusted Signer page's badge names where the page is; the address
-    /// itself is in the field under it.
-    #[test]
-    fn a_signer_page_badge_is_its_host() {
-        assert_eq!(
-            page_host("https://sign.example.com/vela/"),
-            "sign.example.com"
-        );
-        assert_eq!(page_host("http://localhost:8140/"), "localhost:8140");
-        assert_eq!(page_host("https://[::1]:9/?x#y"), "[::1]:9");
-    }
-
     /// The second-level nav is the phone's settings list with the rows
     /// collapsed to their titles — same ids, same order, so somebody who
     /// learned one knows the other.
@@ -21051,7 +21738,7 @@ mod tests {
         assert_eq!(SettingsPage::ALL.len(), 11);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
-        // "Sign with" beside the speed (spec 071).
+        // Signing pages beside the speed (spec 071, 102).
         assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
         // Community, About, then Send feedback — the phones' order
         // (2026-09-27); Community is drawn above About.

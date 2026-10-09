@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.signing.SigningTone
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +37,10 @@ class SigningFixturesTest {
     private fun zhStrings(): I18nRuntime = I18nRuntime { tag ->
         File(repoRoot, "assets/i18n/$tag.json").readBytes()
     }.apply { initialize("zh") }
+
+    private fun enStrings(): I18nRuntime = I18nRuntime { tag ->
+        File(repoRoot, "assets/i18n/$tag.json").readBytes()
+    }.apply { initialize("en") }
 
     private fun stringsOf(model: SigningScreenModel): List<String> {
         val out = mutableListOf(
@@ -96,11 +101,18 @@ class SigningFixturesTest {
 
     @Test
     fun everyScenarioBuilds() {
-        // The 33 of the canon, and CS36 — the wallet's own backup.
-        assertEquals(34, SigningScreenState.entries.size)
+        // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
+        // spec 102's hand-off card (CS40/CS41: the card a send raises on its
+        // own), and CS43/CS44, a key ceremony waiting on its page.
+        assertEquals(42, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
+            // D4: a page venue's sheet repeats no preview — the card is its body.
+            if (model.handoff != null) {
+                assertTrue("$state repeats the preview", model.blocks.isEmpty() && model.tech.isEmpty)
+                continue
+            }
             assertTrue("$state has no blocks", model.blocks.isNotEmpty())
             // A site's sheet opens on its intent; the wallet's own says it as
             // the header's title, and not again below.
@@ -111,6 +123,81 @@ class SigningFixturesTest {
                 assertTrue("$state opens without an intent", model.blocks.first() is SigningBlock.Intent)
             }
         }
+    }
+
+    /**
+     * Spec 102 D4: the hand-off boards — CS37 matches the published build list
+     * and Open is on; CS38 could not be checked and Open is off; CS39 is the
+     * page open, the waiting card in the card's place.
+     */
+    @Test
+    fun theHandOffBoardsSayWhereWithWhichKeyAndWhatIsTrusted() {
+        val en = enStrings()
+        val open = SigningFixtures.build(SigningScreenState.CS37, en)
+        val card = open.handoff!!
+        assertEquals("Review and sign on a trusted signing page", card.title)
+        // D-17: the founding key carries the wallet's name, so it is named by
+        // its place — a label | value row, like "Signing account | name".
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Phone or tablet"), card.key)
+        assertEquals("sign.getvela.app", card.page)
+        // D-13: a moment, in the person's format — the boards' check ran at 14:32 today.
+        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertFalse(card.integrity.text, card.integrity.text.endsWith("checked "))
+        // The dApp sheet's own fee row sits right above the card: the card does not repeat it.
+        assertNull(card.fee)
+        assertNull(card.trust)
+        assertTrue(open.confirmEnabled)
+        val shut = SigningFixtures.build(SigningScreenState.CS38, en)
+        assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
+        assertFalse(shut.confirmEnabled)
+        assertEquals("Waiting for the signing page…", SigningFixtures.build(SigningScreenState.CS39, en).trustedSignerWait!!.title)
+
+        // CS40: the card a send's hand-off raises on its own, when no send
+        // confirm is on screen — no fee is, so the card restates it (the
+        // core's row). On the confirm the card stands under the page's own
+        // fee row and carries none.
+        val alone = SigningFixtures.standaloneHandoff(SigningScreenState.CS40, en)!!
+        val fee = alone.fee!!
+        assertEquals("Network fee", fee.label)
+        assertTrue(fee.value, fee.value.startsWith("0.00012 ETH"))
+        assertEquals("Standard", fee.tier)
+        assertEquals(card.key, alone.key)
+        assertTrue(alone.integrity.opens)
+        // CS41: a check a day old runs again — "checking", and Open waits.
+        val checking = SigningFixtures.standaloneHandoff(SigningScreenState.CS41, en)!!
+        assertEquals("Checking the page…", checking.integrity.text)
+        assertFalse(checking.integrity.opens)
+        assertNull(SigningFixtures.standaloneHandoff(SigningScreenState.CS37, en))
+        // CS42: a self-hosted build new to Vela — the line asks, the card answers, Open is off.
+        val asks = SigningFixtures.build(SigningScreenState.CS42, en)
+        assertEquals("Version 3f9a1c22 is new to Vela. Trust it on this device?", asks.handoff!!.integrity.text)
+        assertEquals("Trust this version", asks.handoff!!.trust)
+        assertEquals("signer.example.org", asks.handoff!!.page)
+        assertFalse(asks.confirmEnabled)
+    }
+
+    /**
+     * CS43/CS44: a key ceremony waiting on a self-hosted page names its key
+     * in a row, as the page does — the core's `Ceremony::key_label`: "New key
+     * on | Phone or tablet" while a key is made, "Confirm with | This device"
+     * when one signs in. Never a name: the key has none yet.
+     */
+    @Test
+    fun theCeremonyBoardsNameTheirKeyInARow() {
+        val en = enStrings()
+        val create = SigningFixtures.standaloneCeremony(SigningScreenState.CS43, en)!!
+        assertEquals("Waiting for the signing page…", create.title)
+        assertEquals("Create a key on the signing page", create.hint)
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create.key)
+        val signIn = SigningFixtures.standaloneCeremony(SigningScreenState.CS44, en)!!
+        assertEquals("Sign in on the signing page", signIn.hint)
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "This device"), signIn.key)
+        val zh = zhStrings()
+        assertEquals(
+            app.getvela.wallet.feature.signing.KeyRowModel("新钥匙存在", "手机或平板"),
+            SigningFixtures.standaloneCeremony(SigningScreenState.CS43, zh)!!.key,
+        )
+        assertNull(SigningFixtures.standaloneCeremony(SigningScreenState.CS40, en))
     }
 
     /**

@@ -50,7 +50,7 @@ struct SettingsCommunityTests {
         #expect(SettingsScreen.externalLink(forRow: "community-telegram") == "https://t.me/velawallet")
         #expect(SettingsScreen.externalLink(forRow: "community-discord") == "https://discord.gg/23gWrtaYSa")
         #expect(SettingsScreen.externalLink(forRow: "about") == nil)
-        #expect(SettingsScreen.overlay(forRow: "community-x", hasSignerPage: true) == nil)
+        #expect(SettingsScreen.overlay(forRow: "community-x") == nil)
     }
 
     /// The brand marks are real SVG documents the core can rasterize.

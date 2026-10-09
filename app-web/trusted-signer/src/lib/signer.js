@@ -84,6 +84,34 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
+   * `allowCredentials` entries for `ids`, and the WebAuthn L3 `hints` — with
+   * the key route, where the person's key lives (spec 102 R5).
+   *
+   * `key` is resolve's checked route (`view.key`, or a ceremony's): one
+   * credential, the transports it reported when it was made, and the hints
+   * for its place. With it the browser goes straight to that key — the
+   * platform's own sheet, the phone's QR code, or "insert your security key"
+   * — instead of drawing its generic "where is your passkey?" chooser, which
+   * asks again what the person already answered in the wallet. Without one the
+   * request is what it always was: the ids, and the browser's choice.
+   *
+   * The transports ride only on the routed credential: they are facts about
+   * that key, not about the account's others.
+   */
+  function credentials(ids, key) {
+    return (ids || []).map(function (id) {
+      var entry = { type: 'public-key', id: unb64url(id) };
+      if (key && key.credentialId === id && key.transports.length) entry.transports = key.transports.slice();
+      return entry;
+    });
+  }
+
+  function withHints(request, key) {
+    if (key && key.hints && key.hints.length) request.hints = key.hints.slice();
+    return request;
+  }
+
+  /**
    * Sign a digest we derived.
    *
    * This function NEVER creates a key. Creating one mints a NEW ACCOUNT —
@@ -92,11 +120,16 @@ window.VelaCS = window.VelaCS || {};
    * it would teach people to accept an enrolment prompt in the middle of a
    * signing flow, which is exactly the confusion an attacker wants.
    *
-   * `allowCredentials` comes from the REQUEST: the account's own key set. With
-   * it the authenticator picks the right key; without it we ask for any
-   * discoverable credential of this relying party and let the caller check
-   * which one answered. Local storage is never consulted for this — a leftover
-   * id in this browser says nothing about which account is being signed for.
+   * `allowCredentials` comes from the REQUEST: the account's own key set —
+   * narrowed by resolve.js to the routed key when the request names one
+   * (`options.key`). With it the authenticator picks the right key; without
+   * it we ask for any discoverable credential of this relying party and let
+   * the caller check which one answered. Local storage is never consulted for
+   * this — a leftover id in this browser says nothing about which account is
+   * being signed for.
+   *
+   * Synchronous up to `navigator.credentials.get`: it runs inside the tap's
+   * own event handler, and Safari grants the passkey prompt only there.
    */
   function sign(digest, options) {
     options = options || {};
@@ -107,10 +140,9 @@ window.VelaCS = window.VelaCS || {};
       timeout: 60000,
     };
     if (options.allowCredentials && options.allowCredentials.length) {
-      request.allowCredentials = options.allowCredentials.map(function (id) {
-        return { type: 'public-key', id: unb64url(id) };
-      });
+      request.allowCredentials = credentials(options.allowCredentials, options.key);
     }
+    withHints(request, options.key);
 
     return navigator.credentials.get({ publicKey: request }).then(function (assertion) {
       var authenticatorData = new Uint8Array(assertion.response.authenticatorData);
@@ -150,6 +182,8 @@ window.VelaCS = window.VelaCS || {};
     // Deliberately absent: any way to CREATE a key. `sign()` is what a signing
     // intent reaches, and it can only assert. Creation is lib/ceremony.js,
     // reached only by a vela_createPasskey request resolve.js let through.
+    credentials: credentials,
+    withHints: withHints,
     _derToRaw: derToRaw,
     _b64url: b64url,
     _unb64url: unb64url,

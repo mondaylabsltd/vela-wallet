@@ -31,11 +31,14 @@
 //! "where is your Trusted Signer?", `cx.open_url` (a CDP `Target` opened on
 //! the same URL), and the OS's delivery of the custom scheme.
 //!
-//! The page is served from this repository's `src/` on
-//! `http://localhost:<port>/src/`, a secure context whose passkeys live under
-//! rpId `localhost`. The wallet never checks the rpId hash (research R5), so
-//! the key signs for the wallet exactly as it would through the official
-//! page — the same stand-in the phones' device pass uses.
+//! The page is this repository's `dist/` — the deployment, index and
+//! content-addressed builds — served on `http://localhost:<port>/`, a secure
+//! context whose passkeys live under rpId `localhost`; it is checked first,
+//! as the app checks it (spec 102 R6), and the launch opens the version that
+//! check admitted (`/b/<sha256>/sign.html`), in the app's language (`lang=`).
+//! The wallet never checks the rpId hash (research R5), so the key signs for
+//! the wallet exactly as it would through the official page — the same
+//! stand-in the phones' device pass uses.
 
 use std::io::{Read as _, Write as _};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
@@ -68,9 +71,12 @@ const CHAIN: u32 = 100;
 // The page, the browser, and the page's tab
 // ---------------------------------------------------------------------------
 
-/// `app-web/trusted-signer`, served as files on this machine's loopback.
+/// `app-web/trusted-signer/dist` — the deployment itself, its index and its
+/// content-addressed versions — served as files on this machine's loopback,
+/// so the launch path checks it exactly as it checks the official host
+/// (spec 102 R6: only a checked page is opened).
 fn serve_page() -> u16 {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app-web/trusted-signer");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app-web/trusted-signer/dist");
     let listener =
         TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap_or_else(|e| unreachable!("{e}"));
     let port = listener.local_addr().map(|a| a.port()).unwrap_or_default();
@@ -402,9 +408,19 @@ impl Rig {
         ];
         let channel = Channel::new().0;
         let origin = format!("http://localhost:{}", serve_page());
+        // The checked deployment (this checkout's `dist/`), at its root.
+        let page = format!("{origin}/");
+        // R6: the launch opens only what a check admitted — so check it, as
+        // the app does at launch, against the bytes this checkout serves.
+        let verdict = crate::executor::signer_integrity::check(&page);
+        assert_eq!(
+            verdict,
+            vela_core::trusted_signer::integrity::Verdict::Open,
+            "the served dist/ is not a version this build accepts"
+        );
         Some(Self {
             browser,
-            page: format!("{origin}/src/"),
+            page,
             origin,
             key,
             credential,
@@ -427,7 +443,7 @@ impl Rig {
     /// which the page wipes from history the moment it reads it.
     fn launch(&self) -> String {
         let url = page_of_channel(&self.channel);
-        assert!(url.contains("/src/sign.html?ch=url#i="), "{url}");
+        assert_checked_launch(&url);
         url
     }
 
@@ -439,7 +455,7 @@ impl Rig {
         loop {
             tab.pump();
             if let Some(url) = self.channel.take_page() {
-                assert!(url.contains("/src/sign.html?ch=url#i="), "{url}");
+                assert_checked_launch(&url);
                 return url;
             }
             assert!(
@@ -482,6 +498,18 @@ impl Rig {
         }
         assert!(!self.channel.waiting(), "Cancel did not end the wait");
     }
+}
+
+/// A launch the desktop may hand the browser (spec 102): the version its check
+/// admitted (`/b/<sha256>/sign.html`), the request in the fragment, and the
+/// app's language in the query.
+fn assert_checked_launch(url: &str) {
+    assert!(
+        url.contains("/b/") && url.contains("/sign.html?ch=url"),
+        "not the checked version: {url}"
+    );
+    let lang = format!("&lang={}#i=", crate::loc::app_language());
+    assert!(url.contains(&lang), "no `{lang}` in {url}");
 }
 
 struct Stop<'a>(&'a Channel);
@@ -550,7 +578,7 @@ fn the_page_signs_the_operation_the_wallet_assembled() {
     let digest =
         calculate_safe_op_hash(&op, u64::from(CHAIN)).unwrap_or_else(|e| unreachable!("{e}"));
     let request =
-        Ask::own(Some("E2E".to_owned())).request(CHAIN, SAFE, &rig.keys, Some((&op, &calls)));
+        Ask::own(Some("E2E".to_owned())).request(CHAIN, SAFE, &rig.keys, None, Some((&op, &calls)));
     let signed = std::thread::scope(|scope| {
         let ceremony = scope
             .spawn(|| trusted_signer::sign(&request, &rig.page, &digest, &rig.keys, &rig.channel));
@@ -597,9 +625,9 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
                 &rig.keys,
                 Signer::TrustedSigner {
                     ask: &ask,
-                    page: &rig.page,
+                    page: rig.page.clone(),
                     channel: &rig.channel,
-                    only: None,
+                    key_route: None,
                 },
                 &user_op::quiet,
                 &user_op::always_asked,
@@ -639,7 +667,7 @@ fn a_tab_closed_unsigned_signs_nothing() {
     let op = assembled(&calls);
     let digest =
         calculate_safe_op_hash(&op, u64::from(CHAIN)).unwrap_or_else(|e| unreachable!("{e}"));
-    let request = Ask::own(None).request(CHAIN, SAFE, &rig.keys, Some((&op, &calls)));
+    let request = Ask::own(None).request(CHAIN, SAFE, &rig.keys, None, Some((&op, &calls)));
     let outcome = std::thread::scope(|scope| {
         let ceremony = scope
             .spawn(|| trusted_signer::sign(&request, &rig.page, &digest, &rig.keys, &rig.channel));
@@ -674,7 +702,7 @@ fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
     let op = assembled(&[dust("0x9A8b7C6d5E4F3a2B1c0D9e8F7a6B5c4D3e2F1a09")]);
     let digest =
         calculate_safe_op_hash(&op, u64::from(CHAIN)).unwrap_or_else(|e| unreachable!("{e}"));
-    let request = Ask::own(None).request(CHAIN, SAFE, &rig.keys, Some((&op, &asked)));
+    let request = Ask::own(None).request(CHAIN, SAFE, &rig.keys, None, Some((&op, &asked)));
     let outcome = std::thread::scope(|scope| {
         let ceremony = scope
             .spawn(|| trusted_signer::sign(&request, &rig.page, &digest, &rig.keys, &rig.channel));
@@ -729,36 +757,41 @@ fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
 #[ignore = "needs a real browser: scripts/trusted-signer-e2e.sh"]
 fn the_page_creates_a_key_and_then_signs_in_with_it() {
     let Some(rig) = Rig::new() else { return };
-    // A create has no key yet, so it goes to the page SETTINGS names — the
-    // real read (`vela.trustedSignerUrl`), pointed at this checkout's own copy
-    // of the page rather than at the official one.
+    // Spec 102 R3: a create on a self-hosted page — "Use a trusted signing
+    // page", pointed at this checkout's copy — carries that page on its op.
     let state = crate::executor::storage::tests::state_dir("trusted-signer-e2e-create");
-    let _ = crate::executor::storage::write_value(
-        crate::executor::storage::KEY_TRUSTED_SIGNER_URL,
-        Value::String(rig.page.clone()),
-    );
-    assert_eq!(
-        trusted_signer::signer_url(),
-        rig.page,
-        "the create would have opened the official page"
-    );
     let register = ShellOperation::RegisterPasskey {
         name: "E2E wallet".to_owned(),
         exclude_credential_ids: vec![],
-        method: KeyMethod::TrustedSigner,
+        method: KeyMethod::Platform,
+        page: Some(rig.page.clone()),
     };
     let sign_in = ShellOperation::AuthenticatePasskey {
-        method: KeyMethod::TrustedSigner,
+        method: KeyMethod::Platform,
+        page: Some(rig.page.clone()),
     };
     let registry = "https://p256-index-v2.getvela.app";
 
     let (created, found) = std::thread::scope(|scope| {
         let flow = scope.spawn(|| {
-            let created =
-                trusted_signer::run_ceremony(&register, None, registry, &rig.channel, false)
-                    .unwrap_or_else(|| unreachable!("a create is a ceremony"));
-            let found = trusted_signer::run_ceremony(&sign_in, None, registry, &rig.channel, true)
-                .unwrap_or_else(|| unreachable!("a sign-in is a ceremony"));
+            let created = trusted_signer::run_ceremony(
+                &register,
+                &rig.page,
+                None,
+                registry,
+                &rig.channel,
+                false,
+            )
+            .unwrap_or_else(|| unreachable!("a create is a ceremony"));
+            let found = trusted_signer::run_ceremony(
+                &sign_in,
+                &rig.page,
+                None,
+                registry,
+                &rig.channel,
+                true,
+            )
+            .unwrap_or_else(|| unreachable!("a sign-in is a ceremony"));
             (created, found)
         });
         let _stop = rig.guard();

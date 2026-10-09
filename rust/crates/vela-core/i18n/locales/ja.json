@@ -60,16 +60,31 @@
       "subtitle": "Vela から始める送金はすべてここから始まります。送金時に一回だけ変えることもできます。"
     },
     "signing": {
-      "title": "署名方法",
-      "subtitle": "Vela で始めるすべての署名はここから始まります。1 回ごとに別の方法を選ぶこともできます。",
-      "pageTitle": "Trusted Signer のページ",
-      "pageSubtitle": "Trusted Signer が開くページ:公式ページ、またはご自身でデプロイした依存関係ゼロの署名ページ。",
-      "pageOfficial": "公式",
+      "title": "署名ページ",
+      "subtitle": "リクエストを表示して署名する、信頼するページ。",
+      "pageOfficial": "Vela 公式の署名ページ",
       "pageInvalid": "Web アドレスではありません。",
       "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
-      "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
-      "pageReset": "公式ページを使う",
-      "pageSave": "保存"
+      "pageSave": "保存",
+      "pageAdd": "セルフホストの署名ページを追加",
+      "pageDuplicate": "このページは保存済みです。",
+      "keysOn": "キーは {{domain}}",
+      "pageSelfHosted": "セルフホスト · {{domain}}",
+      "pageTrust": "このバージョンを信頼",
+      "pageRename": "名前を変更",
+      "pageRemove": "削除",
+      "pageName": "名前"
+    },
+    "venue": {
+      "title": "確認と署名の場所",
+      "subtitle": "このアカウントの取引とメッセージに適用。キーは変わりません。",
+      "inVela": "Vela で確認して署名",
+      "inVelaBody": "Vela の署名画面",
+      "page": "信頼できる署名ページで確認して署名",
+      "pageBody": "依存ゼロのページで、見たものに署名",
+      "blockedApp": "Vela は {{domain}} のキーを使えません。",
+      "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。",
+      "blockedWeb": "署名ページは Vela アプリでのみ開けます。"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

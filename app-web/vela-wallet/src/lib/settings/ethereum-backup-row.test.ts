@@ -173,30 +173,15 @@ describe('walletKeysModel', () => {
 	});
 
 	/**
-	 * Spec 075 (the Android device pass, 2026-09-22): a key minted on the Clear
-	 * Signer page lives BEHIND that page. The ceremony runs in a browser, so the
-	 * authenticator reports `platform` — and every shell captioned such a key
-	 * "this device", naming the one side of the page the wallet cannot reach.
-	 *
-	 * The core fixed the rule; the web's part is to pass the origin in (the
-	 * registry stores none) and then to draw the page rather than the vault
-	 * beyond it.
+	 * Spec 102 (P2-10): a key is captioned by where it LIVES — this device, a
+	 * phone, a security key — never by a page. Spec 075 drew a key minted on a
+	 * signing page as "Trusted Signer"; but the same key signs in Vela and on
+	 * the page alike, and a page is where a person reviews, not where a key is.
+	 * An account on its OWN signing domain says that domain once, above its
+	 * keys, because those keys answer only on its page.
 	 */
-	describe('a key behind a Trusted Signer page', () => {
-		const PAGE = 'https://sign.getvela.app';
-		/** What the row builder sees once the shell has passed the origin in. */
-		const behind = key({
-			name: 'On the page',
-			method: 'trusted_signer',
-			signer_origin: PAGE,
-			// The page's own authenticator answered, and the catalog can name it:
-			// this is exactly the row that used to read "Apple Passwords".
-			provider_name: 'Apple Passwords',
-			aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
-			credential_id: 'aa_bgDzJkhFmY'
-		});
-
-		it('hands the walk each key’s origin — the registry cannot tell it', () => {
+	describe('captions by place (spec 102)', () => {
+		it('hands the walk each key and nothing about pages', () => {
 			expect(
 				deviceKeys({
 					id: 'one',
@@ -206,9 +191,9 @@ describe('walletKeysModel', () => {
 						{
 							credential_id: 'one',
 							public_key_hex: '04ab',
-							name: 'On the page',
+							name: 'Minted on the page',
 							transports: 'internal',
-							signer_origin: PAGE
+							signer_origin: 'https://sign.getvela.app'
 						},
 						{
 							credential_id: 'two',
@@ -222,77 +207,55 @@ describe('walletKeysModel', () => {
 				{
 					credential_id: 'one',
 					public_key_hex: '04ab',
-					name: 'On the page',
-					transports: 'internal',
-					signer_origin: PAGE
+					name: 'Minted on the page',
+					transports: 'internal'
 				},
-				{
-					credential_id: 'two',
-					public_key_hex: '04cd',
-					name: 'Built in',
-					transports: 'internal',
-					signer_origin: null
-				}
+				{ credential_id: 'two', public_key_hex: '04cd', name: 'Built in', transports: 'internal' }
 			]);
-			// A legacy record is one key, its credential the record's id, and
-			// predates the origin.
+			// A legacy record is one key, its credential the record's id.
 			expect(deviceKeys({ id: 'old', name: 'Old', public_key_hex: '04ef', keys: [] })).toEqual([
-				{
-					credential_id: 'old',
-					public_key_hex: '04ef',
-					name: 'Old',
-					transports: '',
-					signer_origin: null
-				}
+				{ credential_id: 'old', public_key_hex: '04ef', name: 'Old', transports: '' }
 			]);
 		});
 
-		it('is captioned the Trusted Signer, and says WHICH page', () => {
+		it('a key the page minted is captioned by its place, and no row names a page', () => {
+			// The authenticator answered `platform`; the catalog can name its vault.
+			const minted = key({
+				name: 'Minted on the page',
+				method: 'platform',
+				provider_name: 'Apple Passwords',
+				aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+				credential_id: 'aa_bgDzJkhFmY'
+			});
 			const model = walletKeysModel(
-				{ source: 'registry', chainId: 100, keys: [behind] },
+				{ source: 'registry', chainId: 100, keys: [minted] },
 				'backed_up',
 				m
 			);
 			const row = model.rows[0];
-			// The Trusted Signer's own title, so Settings cannot name it twice.
-			expect(row.holder).toBe('Trusted Signer');
-			expect(row.holder).toBe(m.signing.methods.trusted_signer);
-			// …and it is the LAST word: the catalog knows this AAGUID, and its
-			// answer names the authenticator on the page's far side.
-			expect(row.holder).not.toBe(behind.provider_name);
-			// The mark reads the same field the caption does (issue 207).
-			expect(row.key.kind).toBe('trusted_signer');
-			// Which page, labelled with the route's own title, above the key itself.
-			expect(row.details.map((detail) => [detail.label, detail.value])).toEqual([
-				['Trusted Signer', PAGE],
-				['Public key', '0x04' + 'ab'.repeat(64)],
-				['Credential', 'aa_bgDzJkhFmY'],
-				['AAGUID', behind.aaguid],
-				['Transport', 'platform · internal']
-			]);
-		});
-
-		it('leaves a key that lives behind no page exactly as it was', () => {
-			const plain = walletKeysModel(registry, 'backed_up', m);
-			expect(plain.rows.map((row) => row.holder)).toEqual([undefined, undefined, undefined]);
-			// No page line anywhere, absent or empty-string alike.
-			for (const row of plain.rows)
-				expect(row.details.map((detail) => detail.label)).not.toContain('Trusted Signer');
-			const empty = walletKeysModel(
-				{ source: 'device', chainId: null, keys: [key({ synced: null, signer_origin: '' })] },
-				'unavailable',
-				m
-			);
-			expect(empty.rows[0].holder).toBeUndefined();
-			expect(empty.rows[0].details.map((detail) => detail.label)).toEqual([
+			expect(row.holderFallback).toBe(m.keys.providerPlatform);
+			expect(row.key.kind).toBe('platform');
+			expect(row.details.map((detail) => detail.label)).toEqual([
 				'Public key',
+				'Credential',
+				'AAGUID',
 				'Transport'
 			]);
+			for (const r of walletKeysModel(registry, 'backed_up', m).rows) {
+				expect(['platform', 'hybrid', 'security_key']).toContain(r.key.kind);
+				expect(r.holderFallback).not.toMatch(/trusted signer/i);
+			}
 		});
 
-		it('every locale names the route', () => {
+		it('says the domain once for an account on its own — and only then', () => {
+			const own = walletKeysModel(registry, 'backed_up', m, 'sign.example.com');
+			expect(own.domain).toBe('Keys on sign.example.com');
+			expect(walletKeysModel(registry, 'backed_up', m).domain).toBeUndefined();
+		});
+
+		it('every locale has the domain line', () => {
 			for (const locale of SUPPORTED_LOCALES)
-				expect(resolveSettingsMessages(locale).signing.methods.trusted_signer, locale).not.toBe('');
+				expect(resolveSettingsMessages(locale).signing.keysOn, locale).toContain('{{domain}}');
 		});
 	});
 });

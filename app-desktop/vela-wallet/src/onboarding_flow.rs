@@ -161,9 +161,6 @@ fn provider_line(key: &CreateKeyRow) -> &'static str {
         KeyMethod::Platform => "onboarding.create.methodPlatformTitle",
         KeyMethod::Hybrid => "onboarding.create.methodHybridTitle",
         KeyMethod::SecurityKey => "onboarding.create.providerSecurityKey",
-        // Spec 075: a key the Trusted Signer minted lives behind its page, and
-        // the row says so in the picker's own words.
-        KeyMethod::TrustedSigner => "componentsUi.signing.trustedSignerTitle",
     }
 }
 
@@ -195,6 +192,10 @@ pub enum FlowEvent {
     CopyAddress,
     /// Presentation only: a method the desktop cannot run was pressed.
     MethodUnavailable(KeyMethod),
+    /// Spec 102: "Use a trusted signing page" — open the page picker.
+    ChooseOwnPage,
+    /// Spec 102: back to Vela's own keys (`SigningPageChosen { url: None }`).
+    ClearOwnPage,
 }
 
 pub type FlowSink = Rc<dyn Fn(FlowEvent, &mut Window, &mut App)>;
@@ -216,6 +217,11 @@ pub struct FlowHost<'a> {
     pub directory: &'a RefCell<PasskeyDirectory>,
     /// The add-method list is expanded.
     pub picker_open: bool,
+    /// Spec 102: the page this wallet is being made on, worded with its
+    /// domain and integrity line — `Some` exactly when `view.signing_page` is.
+    pub own_page: Option<&'a crate::signing::pages::PageRow>,
+    /// The glyphs the own-page banner draws with.
+    pub icons: &'a RefCell<crate::icons::IconCache>,
     /// The Done screen's transient 已复制 feedback.
     pub copied: bool,
     pub sink: FlowSink,
@@ -924,12 +930,19 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     row
 }
 
-/// The four ways to mint a founding key (spec 075 added the Trusted Signer).
+/// The three places a founding key can live (spec 102: no fourth), and —
+/// before the first key, the only moment a wallet's signing domain can be
+/// chosen — the advanced entry: "Use a trusted signing page".
 ///
 /// **One of them may not run here, and it says so.** `Platform` needs a system
 /// passkey service, which only Windows provides in this app's reach. Hiding it
 /// would leave a person wondering whether their laptop's fingerprint reader was
 /// supposed to work; showing it greyed with a reason answers that in one line.
+///
+/// **A chosen page heads the list.** Once the person picked their own page,
+/// the three places are minted ON that page (R3), and the banner says which
+/// page, whose keys the wallet's will be, and how its check went — with the
+/// way back to Vela's own keys while no key exists yet.
 fn method_picker(host: &FlowHost<'_>) -> Div {
     let theme = host.theme;
     let loc = host.loc;
@@ -939,21 +952,17 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         muted: theme.fg_subtle,
         paper: theme.bg_base,
     };
-    // The routes, their words and which of them can run here are
+    // The places, their words and which of them can run here are
     // `hardware`'s — the same list the sign-in chooser reads, so the two
-    // cannot come to disagree about what a passkey route is.
-    // Two different "cannot": this MACHINE has no such authenticator, and this
-    // SET cannot take a key from that route — every key in a wallet belongs to
-    // one relying party (spec 075), so a route that would mint for another is
-    // off until the set is empty again, which it never is.
-    let fits_the_set = |method: KeyMethod| host.view.add_methods.contains(&method);
+    // cannot come to disagree about what a place is.
+    // On the person's own page the browser runs the ceremony (R3), and it
+    // reaches this device's own authenticator on every desktop.
+    let on_page = host.view.signing_page.is_some()
+        && vela_core::signing_venue::locked_to_page(&host.view.signing_domain);
     let entry = |method: KeyMethod| {
-        let here = crate::hardware::method_available(method);
-        let available = here && fits_the_set(method);
+        let here = crate::hardware::place_available(method, on_page);
+        let available = here && host.view.add_methods.contains(&method);
         let (title_key, _) = crate::hardware::method_words(method);
-        // A route this MACHINE cannot run says what is missing; a route this
-        // SET cannot take keeps its own caption, because the sentence under the
-        // list already says what the set belongs to.
         let body = if here {
             crate::hardware::method_line(loc, method, crate::hardware::Chooser::Create)
         } else {
@@ -1014,34 +1023,40 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         .flex()
         .flex_col()
         .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
+    if let Some(chosen) = host.own_page {
+        // Only before the first key may the page change; after it, the
+        // banner stays as the fact it is, without its ×.
+        let clear: Option<crate::signing::trusted_signer::Click> =
+            host.view.can_choose_page.then(|| {
+                let clear = emit(&host.sink, FlowEvent::ClearOwnPage);
+                Box::new(
+                    move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut App| {
+                        clear(window, cx);
+                    },
+                ) as crate::signing::trusted_signer::Click
+            });
+        let banner = crate::signing::pages::chosen_page_banner(
+            theme,
+            &mut host.icons.borrow_mut(),
+            chosen,
+            loc.t("common.tryAgain"),
+            clear,
+        );
+        list = list.child(div().pt(px(FLOW_GAP_SM)).pb(px(FLOW_GAP_SM)).child(banner));
+    }
     for method in crate::hardware::CREATE_ROUTES {
         list = list.child(entry(method));
     }
-    // Two paragraphs, never one joined string: what this wallet's keys belong
-    // to is always the reason; naming the configured page is only sometimes
-    // true, and it is the half a person can act on. Joining them would also put
-    // a space after a full stop that already ends a line in Chinese
-    // (device-found, 2026-09-23).
-    if let Some(blocked) = host.view.add_blocked.as_ref() {
-        let hint = loc.t_texts(
-            "onboarding.create.methodBlockedHint",
-            &[("party", blocked.relying_party.as_str())],
-        );
-        list = list.child(div().pt(px(FLOW_GAP_SM)).child(caption(theme, hint)));
-        if let Some(page) = blocked.page.as_deref() {
-            let signer = loc.t_texts(
-                "onboarding.create.methodBlockedSigner",
-                &[
-                    ("page", page),
-                    (
-                        "pageParty",
-                        blocked.page_relying_party.as_deref().unwrap_or_default(),
-                    ),
-                    ("party", blocked.relying_party.as_str()),
-                ],
-            );
-            list = list.child(div().pt(px(FLOW_GAP_SM)).child(caption(theme, signer)));
-        }
+    if host.view.can_choose_page && host.own_page.is_none() {
+        let open = emit(&host.sink, FlowEvent::ChooseOwnPage);
+        list = list.child(crate::hardware::own_page_row(
+            "flow-own-page",
+            theme,
+            loc,
+            host.passkey_icons,
+            palette,
+            std::rc::Rc::new(open),
+        ));
     }
     list
 }
@@ -1434,10 +1449,10 @@ mod tests {
             can_add_key: true,
             can_finish: false,
             needs_second_key: false,
-            key_relying_party: None,
-            key_signer_origin: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_page: None,
+            can_choose_page: !busy,
             add_methods: crate::hardware::CREATE_ROUTES.to_vec(),
-            add_blocked: None,
         }
     }
 

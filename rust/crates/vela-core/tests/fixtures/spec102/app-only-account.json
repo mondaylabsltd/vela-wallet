@@ -1,0 +1,26 @@
+{
+  "id": "5ec0de01",
+  "name": "Spending",
+  "address": "0x3333333333333333333333333333333333333333",
+  "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "created_at_iso": "2026-09-27T12:00:00.000Z",
+  "keys": [
+    {
+      "credential_id": "5ec0de01",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "Spending",
+      "transports": "hybrid,internal"
+    },
+    {
+      "credential_id": "5ec0de02",
+      "public_key_hex": "04b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "name": "YubiKey",
+      "transports": "nfc,usb"
+    }
+  ],
+  "signed_in_with": {
+    "credential_id": "5ec0de02",
+    "method": "security_key",
+    "transports": "usb,nfc,ble,hybrid"
+  }
+}

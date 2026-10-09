@@ -183,7 +183,9 @@ describe('followActiveAccount writes what the core authored', () => {
 			address,
 			public_key_hex: '04',
 			created_at_iso: '2025-01-01T00:00:00.000Z',
-			keys: []
+			keys: [],
+			signing_domain: 'getvela.app',
+			signing_venue: { type: 'in_vela' as const }
 		}
 	});
 	const view = (address: string, held: string[] = [ALICE, BOB], loading = false) => ({

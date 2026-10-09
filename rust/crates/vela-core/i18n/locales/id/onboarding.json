@@ -170,8 +170,6 @@
       "keysSubtitleFull": "Sudah mencapai batas 7 kunci.",
       "keysTitle": "Tambah passkey",
       "keysTitleBlocked": "Perlu satu kunci lagi untuk membuat",
-      "methodBlockedHint": "Semua kunci dompet ini milik {{party}}.",
-      "methodBlockedSigner": "Halaman Trusted Signer kamu {{page}}, kuncinya milik {{pageParty}}. Ganti ke halaman {{party}} di Pengaturan untuk menambah di sini.",
       "methodHybridBody": "Pindai kode dan buat di perangkat terdekat",
       "methodHybridTitle": "Ponsel atau tablet",
       "methodHybridUnavailable": "Segera hadir",
@@ -184,6 +182,8 @@
       "needSecondKeyHint": "Kunci ini tidak dicadangkan di mana pun. Kalau hilang, dompet tak bisa dibuka. Tambahkan satu lagi.",
       "nextBtn": "Lanjut",
       "openSettings": "Buka Pengaturan",
+      "signingPageTitle": "Gunakan halaman tanda tangan tepercaya",
+      "signingPageBody": "Lanjutan: halaman resmi Vela, atau yang Anda host sendiri",
       "pinAttemptsLeft": "Sisa percobaan: {{attempts}}",
       "pinBody": "{{product}} tidak punya sensor sidik jari, jadi PIN-nya yang memastikan ini benar Anda. PIN hanya dikirim ke kunci di tangan Anda — tidak pernah ke disk komputer ini, dan tidak pernah ke server.",
       "pinLabel": "PIN",
@@ -230,8 +230,7 @@
       "touchFingerprintBody": "{{product}} berkedip. Letakkan jari Anda di sensornya untuk memastikan ini benar Anda.",
       "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
       "touchTitle": "Sentuh kunci keamanan Anda",
-      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
-      "verifyStuckHint": "Verifikasi terus gagal? Perangkat Anda mungkin tidak menyimpan passkey ini dengan benar. Aman untuk memulai ulang — belum ada yang dibuat."
+      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap."
     },
     "login": {
       "alertNotSupportedTitle": "Tidak Didukung",

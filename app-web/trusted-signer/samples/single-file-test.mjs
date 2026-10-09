@@ -33,7 +33,11 @@ const ROOT = resolve(HERE, '..');
 // every version ever published, so the test must name the one under test
 // rather than assume there is only one.
 const { build } = await import('./build-single.mjs');
-const PAGE = join(ROOT, 'dist', 'b', build().hash, 'sign.html');
+const HASH = build().hash;
+const PAGE = join(ROOT, 'dist', 'b', HASH, 'sign.html');
+// Where the official host serves a version (spec 079), which is the address
+// the page reads its own version from (spec 102).
+const VERSIONED = `/b/${HASH}/sign`;
 const PORT = 8911;
 const CDP = 9225;
 
@@ -58,7 +62,7 @@ const html = readFileSync(PAGE);
 const asked = [];
 const server = createServer((request, response) => {
 	asked.push(request.url);
-	if (request.url === '/sign.html') {
+	if (request.url === '/sign.html' || request.url.split('?')[0] === VERSIONED) {
 		response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
 		response.end(html);
 		return;
@@ -148,8 +152,19 @@ try {
 
 	check('no CSP violation on load', violations.length === 0, violations[0] || '');
 
-	const ownDocumentOnly = requested.every((url) => url.endsWith('/sign.html'));
-	check('the page asks the network for nothing but itself', ownDocumentOnly, requested.join(' '));
+	// The app's face is carried in the page (src/fonts.css, `font-src data:`):
+	// it must load under the page's own CSP, from nowhere but the file.
+	const face = await ev(
+		`document.fonts.load('600 13px "Plus Jakarta Sans"', 'Vela').then((f) => f.map((x) => x.status).join() || 'none', (e) => 'error: ' + e)`
+	);
+	check("the app's face loads from inside the page", face === 'loaded', face);
+
+	// Chrome reports a `data:` URI as a request, but it is bytes already in
+	// the hashed file — nothing leaves the browser. Everything else must be
+	// the document itself.
+	const overNetwork = requested.filter((url) => !url.startsWith('data:'));
+	const ownDocumentOnly = overNetwork.every((url) => url.endsWith('/sign.html'));
+	check('the page asks the network for nothing but itself', ownDocumentOnly, overNetwork.join(' '));
 
 	// The property the constraint exists for: a script in this page cannot send
 	// what the page sees anywhere. Every way out is tried, and then the SERVER
@@ -206,6 +221,25 @@ try {
 		'NOTHING but the document ever reached the server',
 		escaped.length === 0,
 		escaped.length ? escaped.join(' ') : 'only /sign.html'
+	);
+
+	// Spec 102: what the page is, in one line — and its version only where its
+	// address carries one. The root copy has no hash in its path, so it names
+	// none; the versioned address names the first 8 characters of its own,
+	// as the wallet's hand-off card does.
+	const rootLine = await ev(`(document.getElementById('trust') || {}).textContent || ''`);
+	check(
+		'at the root address the line says what the page is, and claims no version',
+		/zero dependencies/.test(rootLine) && !/version/.test(rootLine),
+		rootLine
+	);
+	await send('Page.navigate', { url: `http://127.0.0.1:${PORT}${VERSIONED}?ch=url&lang=en` });
+	await sleep(2500);
+	const line = await ev(`(document.getElementById('trust') || {}).textContent || ''`);
+	check(
+		'at /b/<hash>/sign the line names this version, as the wallet will',
+		line === `Vela signing page · version ${HASH.slice(0, 8)} · zero dependencies · open source · self-hostable`,
+		line
 	);
 } catch (error) {
 	console.log('FAILED: ' + error.message);

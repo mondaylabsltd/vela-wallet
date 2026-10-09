@@ -80,55 +80,113 @@ struct WelcomeScreen: View {
 }
 
 /// The three ways to sign in — this device, a nearby device by scan, a hardware
-/// security key — the same set creating a wallet offers per key. `hybrid` (the
-/// scan) is present-but-unavailable until the caBLE client lands (feature 020's
-/// remnant in T174), exactly as it is on the create key screen.
+/// security key — the same set creating a wallet offers per key. Three places,
+/// no fourth (spec 102).
+///
+/// Below them, apart: "Use a trusted signing page". It is not a place a key
+/// lives; it says where this sign-in runs and where the account will review
+/// and sign — a page on the person's own domain runs the ceremony itself (its
+/// keys answer nowhere else), a `getvela.app` page signs in here and becomes
+/// the account's venue. The chosen page heads the list, with the domain its
+/// keys live on and this phone's check of it.
 struct SignInMethodSheet: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let onPick: (KeyMethod) -> Void
+    /// Spec 102: Vela's own and every page this device trusts, the chosen one
+    /// marked. Empty hides the entry.
+    var pageChoices: [SigningPageChoiceModel] = []
+    /// The page this sign-in will run on; `nil` signs in in the app.
+    var chosenPage: String?
+    var onChoosePage: ((String?) -> Void)?
+    var onAddPage: ((String) -> Void)?
+    var pageAddError: String?
+    /// The page list is on screen: check the pages it lists.
+    var onPagesShown: () -> Void = {}
+
+    @State private var picking = false
+    @State private var detent: PresentationDetent = .medium
+
+    private var chosen: SigningPageChoiceModel? {
+        guard let page = chosenPage else { return nil }
+        return pageChoices.first { $0.url.map(SignerPageChecks.key) == SignerPageChecks.key(page) }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(loc.t(I18nKeys.Login.header))
-                .typeRole(Typography.title)
-                .foregroundStyle(theme.fgBase)
-                .padding(.bottom, Tokens.Space.s16)
-
-            ForEach(KeyMethod.allCases, id: \.self) { method in
-                // All three routes are live now: platform, scan (our caBLE
-                // initiator, BLE-only capable), and a security key.
-                let available = true
-                let copy = methodCopy(method, chooser: .signIn, loc: loc)
-                Button { if available { onPick(method) } } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(copy.title)
-                                .typeRole(Typography.rowTitle)
-                                .foregroundStyle(theme.fgBase)
-                            Text(available ? copy.body : loc.t(I18nKeys.Create.methodHybridUnavailable))
-                                .typeRole(Typography.flowCaption)
-                                .foregroundStyle(theme.fgMuted)
-                                .multilineTextAlignment(.leading)
-                        }
-                        Spacer()
-                        if available {
-                            Image(systemName: "chevron.right").foregroundStyle(theme.fgSubtle)
-                        }
-                    }
-                    .frame(minHeight: Tokens.Layout.hitTarget)
-                    .padding(.vertical, Tokens.Space.s8)
-                }
-                .disabled(!available)
-                .opacity(available ? 1 : Tokens.Opacity.disabled)
+        Group {
+            if picking {
+                SigningPagePicker(
+                    loc: loc,
+                    choices: pageChoices,
+                    onPick: { url in
+                        onChoosePage?(url)
+                        picking = false
+                        detent = url == nil ? .medium : .large
+                    },
+                    onAdd: onAddPage,
+                    addError: pageAddError,
+                    onClose: { picking = false }
+                )
+                .task { onPagesShown() }
+            } else {
+                methods
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Tokens.Layout.screenPaddingX)
-        .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
+    }
+
+    private var methods: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(loc.t(I18nKeys.Login.header))
+                    .typeRole(Typography.title)
+                    .foregroundStyle(theme.fgBase)
+                    .padding(.bottom, Tokens.Space.s16)
+
+                if let chosen {
+                    ChosenSigningPageCard(loc: loc, choice: chosen) {
+                        picking = true
+                        detent = .large
+                    }
+                    .padding(.bottom, Tokens.Space.s12)
+                }
+
+                ForEach(KeyMethod.allCases, id: \.self) { method in
+                    let copy = methodCopy(method, chooser: .signIn, loc: loc)
+                    Button { onPick(method) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                                Text(copy.title)
+                                    .typeRole(Typography.rowTitle)
+                                    .foregroundStyle(theme.fgBase)
+                                Text(copy.body)
+                                    .typeRole(Typography.flowCaption)
+                                    .foregroundStyle(theme.fgMuted)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(theme.fgSubtle)
+                        }
+                        .frame(minHeight: Tokens.Layout.hitTarget)
+                        .padding(.vertical, Tokens.Space.s8)
+                    }
+                }
+
+                if chosen == nil, onChoosePage != nil, !pageChoices.isEmpty {
+                    Divider().overlay(theme.borderBase).padding(.vertical, Tokens.Space.s8)
+                    SigningPageEntry(loc: loc) {
+                        picking = true
+                        detent = .large
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Tokens.Layout.screenPaddingX)
+            .padding(.vertical, Tokens.Space.s32)
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 }
 

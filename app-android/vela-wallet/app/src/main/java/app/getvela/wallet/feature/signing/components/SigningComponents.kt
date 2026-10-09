@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -940,10 +941,141 @@ fun TrustedSignerWaiting(
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
         Text(model.title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.base)
+        // Spec 102: a key ceremony names its key, as the page does.
+        model.key?.let { key -> KeyRow(key) }
         if (model.hint.isNotBlank()) {
             Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
         }
         app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(model.reopen, onReopen, Modifier.fillMaxWidth())
         app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(model.cancel, onCancel, Modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * Spec 102 D4: the hand-off card. The account reviews and signs on a page, so
+ * this card says only what Vela knows and the page cannot: where it goes (the
+ * page's address), which key the person will confirm with (the "Confirm with
+ * | …" row), what this operation was priced at only when the screen shows no
+ * fee of its own (one quiet row, no control: the fee was chosen before the
+ * hand-off; a fee is on screen once), and what is trusted about the page —
+ * its integrity line, or why it will not open, with "Trust this version"
+ * under a self-hosted page's question. Open is the consent that goes there,
+ * enabled only when [enabled] (the line opens and the request may be
+ * confirmed). D7: the sheet's own palette and rows, one accent — the button.
+ */
+@Composable
+fun HandoffCard(
+    model: app.getvela.wallet.feature.signing.HandoffModel,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+    onTrust: () -> Unit = {},
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+            .padding(VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            Icon(
+                imageVector = app.getvela.wallet.core.designsystem.components.VelaIcons.Eye,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier.padding(top = VelaSpacing.xs).size(VelaIconSize.base),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    model.title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.lg,
+                )
+                Text(model.page, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+        }
+        model.key?.let { key -> KeyRow(key) }
+        model.fee?.let { fee -> HandoffFeeRow(fee) }
+        Column {
+            app.getvela.wallet.feature.settings.components.IntegrityLine(model.integrity)
+            model.trust?.let { label ->
+                app.getvela.wallet.feature.settings.components.TrustAnswer(
+                    label,
+                    modifier = Modifier.padding(top = VelaSpacing.sm),
+                    indent = false,
+                    onClick = onTrust,
+                )
+            }
+        }
+        app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+            text = model.open,
+            onClick = onOpen,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
+ * device" — drawn as the sheet's [SignerRow] ("Signing account | name") is:
+ * the label muted, the value in the body colour at its end, the same size.
+ * A long value wraps at the end rather than pushing the label away.
+ */
+@Composable
+fun KeyRow(model: app.getvela.wallet.feature.signing.KeyRowModel, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(
+            text = model.label,
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+        )
+        Text(
+            text = model.value,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
+ * The card's fee + speed row: the label, and what this operation was priced
+ * at with its speed's name — the sheet's fee row, folded to one line with no
+ * control on it, set like the key row above it (label | value).
+ */
+@Composable
+private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeModel) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(model.label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+        Text(
+            text = androidx.compose.ui.text.buildAnnotatedString {
+                append(model.value)
+                model.tier?.let { tier ->
+                    withStyle(androidx.compose.ui.text.SpanStyle(color = colors.fgMuted)) { append(" · $tier") }
+                }
+            },
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
     }
 }

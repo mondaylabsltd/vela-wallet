@@ -25,7 +25,6 @@
 		type CreateWalletSession
 	} from '$lib/onboarding/core/sessions';
 	import { progressFor, statusKeyToI18n, submitLabelToI18n } from '$lib/onboarding/core/copy';
-	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 	import type { CreateView } from '$lib/onboarding/generated/CreateView';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
@@ -123,18 +122,11 @@
 						failed('error');
 					}
 				});
+				// Spec 102: no `signing_page_chosen`. Settings no longer names a page
+				// a create would follow, and the web offers no "Use my own signing
+				// page" (it opens no page, owner 2026-09-23) — so every wallet made
+				// here is a `getvela.app` wallet whose ceremonies run in the app.
 				session.start({ type: 'start' });
-				// Spec 075: a key minted on the Trusted Signer page belongs to THAT
-				// page's domain, and a wallet's keys all belong to one relying
-				// party — so which page Settings names decides whether the route
-				// can add to this set. The core cannot read the setting.
-				// `ready()`, not `settled()`: the view before the stored read is the
-				// factory default, and answering with that would offer a route
-				// this person's own setting rules out.
-				void signPreference.ready().then(() => {
-					if (disposed) return;
-					send({ type: 'signer_page_changed', url: signPreference.view.signer_url });
-				});
 			})
 			.catch((error) => {
 				if (!disposed) fatal = error instanceof Error ? error.message : String(error);
@@ -245,7 +237,8 @@
 			busy={view.busy}
 			maxKeys={MAX_KEYS}
 			addMethods={view.add_methods}
-			addBlocked={view.add_blocked}
+			signingDomain={view.signing_domain}
+			signingPage={view.signing_page ?? null}
 			{strings}
 			onAddKey={addKey}
 			onConfirmKey={(index) => send({ type: 'confirm_key', index })}

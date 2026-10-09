@@ -130,6 +130,20 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
         )
     }
 
+    /**
+     * Spec 102: where [address]'s transactions and messages are reviewed and
+     * signed on this device — [venueJson] exactly as the core offered it
+     * (`signingVenueChoices`). By address (invariant ⑨). The core refuses a
+     * venue that cannot reach the account's keys and writes nothing; otherwise
+     * it saves the record, and the session view carries the new venue.
+     */
+    fun chooseSigningVenue(address: String, venueJson: String) {
+        val venue = runCatching { JSONObject(venueJson) }.getOrNull() ?: return
+        driver.dispatch(
+            JSONObject().put("type", "signing_venue_chosen").put("address", address).put("venue", venue).toString(),
+        )
+    }
+
     fun signOut() = driver.dispatch(event("sign_out"))
 
     fun signOutConfirmed() = driver.dispatch(event("sign_out_confirmed"))

@@ -52,6 +52,7 @@ import {
 	type DAppSubmitHooks
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
+import { VenueBlockedError } from '$lib/signing/sign-challenge';
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,
@@ -112,6 +113,23 @@ describe('the receipt wait, as the core hears it', () => {
 		expect(result).toMatchObject({
 			type: 'submit',
 			outcome: { type: 'succeeded', result: '0xtxhash' }
+		});
+	});
+});
+
+/**
+ * Spec 102 (P2b-W1): an account that cannot sign on the web is refused before
+ * any ceremony. The core hears it as `venue_blocked` with the block itself —
+ * it answers the page -32603 and puts the reason on the sheet in the person's
+ * language — never as a failure whose words are ours.
+ */
+describe('a venue the web cannot use', () => {
+	it('is venue_blocked with the core’s block, never `failed`', async () => {
+		submit.impl = () => Promise.reject(new VenueBlockedError({ type: 'not_on_web' }));
+		const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+		expect(result).toMatchObject({
+			type: 'submit',
+			outcome: { type: 'venue_blocked', block: { type: 'not_on_web' } }
 		});
 	});
 });

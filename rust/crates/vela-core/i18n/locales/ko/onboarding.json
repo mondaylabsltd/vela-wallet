@@ -170,8 +170,6 @@
       "keysSubtitleFull": "최대 7개에 도달했습니다.",
       "keysTitle": "패스키 추가",
       "keysTitleBlocked": "생성하려면 하나 더 필요합니다",
-      "methodBlockedHint": "이 지갑의 키는 모두 {{party}}에 속합니다.",
-      "methodBlockedSigner": "Trusted Signer 페이지가 {{page}}이고 그 키는 {{pageParty}}에 속합니다. 설정에서 {{party}} 페이지로 바꾸면 추가할 수 있습니다.",
       "methodHybridBody": "코드를 스캔해 근처 기기에서 생성",
       "methodHybridTitle": "휴대폰 또는 태블릿",
       "methodHybridUnavailable": "곧 지원",
@@ -184,6 +182,8 @@
       "needSecondKeyHint": "이 키는 어디에도 백업되어 있지 않습니다. 잃어버리면 지갑을 열 수 없습니다. 하나 더 추가하세요.",
       "nextBtn": "계속",
       "openSettings": "설정 열기",
+      "signingPageTitle": "신뢰할 수 있는 서명 페이지 사용",
+      "signingPageBody": "고급: Vela 공식 페이지 또는 직접 배포한 페이지",
       "pinAttemptsLeft": "남은 시도 횟수: {{attempts}}",
       "pinBody": "{{product}}에는 지문 센서가 없어 PIN으로 본인을 확인합니다. PIN은 손에 든 키에만 전달되며, 이 컴퓨터에 저장되거나 서버로 전송되지 않습니다.",
       "pinLabel": "PIN",
@@ -230,8 +230,7 @@
       "touchFingerprintBody": "{{product}}이(가) 깜박이고 있습니다. 센서에 손가락을 올려 본인임을 확인하세요.",
       "touchSelectBody": "보안 키가 여러 개 연결되어 모두 깜박이고 있습니다. 사용할 키를 터치하세요.",
       "touchTitle": "보안 키를 터치하세요",
-      "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다.",
-      "verifyStuckHint": "확인이 계속 실패하나요? 기기가 이 패스키를 제대로 저장하지 못했을 수 있습니다. 아직 아무것도 생성되지 않았으니 안심하고 처음부터 다시 시작하세요."
+      "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다."
     },
     "login": {
       "alertNotSupportedTitle": "지원되지 않음",

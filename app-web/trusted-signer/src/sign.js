@@ -1,6 +1,6 @@
 // The real entry. Requests in, answers out, one session at a time.
 //
-//   intake (a session) → next request → resolve → render → (the person slides)
+//   intake (a session) → next request → resolve → render → (the person taps)
 //     · a signing intent: digest → passkey assertion → respond
 //     · a key ceremony:   the page's own challenge → create / assertion → respond
 //   → back to "waiting for the wallet" → next request … until bye / close / idle
@@ -25,6 +25,43 @@
   var lastGone = false;    // the request on screen lost its wallet
 
   ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
+  document.title = t('ui.pageName');
+
+  /**
+   * What this page is, in one calm line under everything (spec 102): its
+   * version, and how it is built — zero dependencies, open source, and
+   * yours to host.
+   *
+   * The version is the content hash in this page's own address
+   * (`/b/<sha256>/`), shortened to the 8 characters the wallet's hand-off card
+   * shows, so a person can see the two agree. It is read from the address the
+   * browser opened — which is what the wallet checked before opening it — and
+   * it is a label, not a proof: a page cannot vouch for its own bytes (076).
+   * The wallet's check is the proof; this line says which page that was.
+   */
+  function versionOf(path) {
+    var match = /\/b\/([0-9a-f]{64})\//.exec(path || '');
+    return match ? match[1].slice(0, 8) : null;
+  }
+
+  (function trustLine() {
+    var line = document.getElementById('trust');
+    if (!line) return;
+    var version = versionOf(location.pathname);
+    var parts = [
+      t('ui.pageName'),
+      version ? t('ui.version', { version: version }) : null,
+      t('ui.pageFacts'),
+    ].filter(Boolean).join(' · ').split(' · ');
+    // Each phrase whole: a narrow screen wraps between them, never inside.
+    parts.forEach(function (part, i) {
+      if (i) line.appendChild(document.createTextNode(' · '));
+      var span = document.createElement('span');
+      span.className = 'trust-part';
+      span.textContent = part;
+      line.appendChild(span);
+    });
+  })();
 
   function say(key, params) {
     status.textContent = typeof key === 'string' && key.indexOf('.') > 0 ? t(key, params) : key;
@@ -37,69 +74,56 @@
     if (extra) Object.assign(state, extra);
   }
 
-  // --- slide to confirm ------------------------------------------------------
+  // --- tap to confirm ---------------------------------------------------------
   //
-  // The only way to accept. There is deliberately no reject button: closing the
-  // sheet is the refusal, which is also what happens if the user walks away.
+  // The only way to accept: one button (spec 102 — every confirmation in Vela
+  // is a tap). There is deliberately no reject button: closing the page is the
+  // refusal, which is also what happens if the person walks away.
+  //
+  // `onConfirm` runs INSIDE the click handler and stays synchronous all the
+  // way to navigator.credentials.get / create: Safari grants the passkey
+  // prompt only to code running in the person's own gesture, and an await or
+  // a timer in between would lose it. A second tap while the prompt is up does
+  // nothing (`busy`, and each request's own `busy` flag).
+  //
+  // `window.__slider` / `__confirm` / `__reset` keep their names: the desktop
+  // e2e and every suite here drive the page through them.
 
-  function attachSlider(element, onConfirm) {
-    var knob = element.querySelector('.slide-knob');
-    var label = element.querySelector('.slide-label');
-    var dragging = false;
-    var startX = 0;
-    var travel = 0;
-
-    function span() {
-      return element.clientWidth - knob.offsetWidth - 12;
-    }
-
-    function moveTo(x) {
-      travel = Math.max(0, Math.min(span(), x));
-      knob.style.transform = 'translateX(' + travel + 'px)';
-      label.style.opacity = String(1 - (travel / span()) * 0.9);
-    }
-
-    function release() {
-      if (!dragging) return;
-      dragging = false;
-      if (travel / span() >= 0.88) {
-        knob.style.transition = 'transform 120ms ease';
-        moveTo(span());
-        onConfirm();
-      } else {
-        knob.style.transition = 'transform 220ms cubic-bezier(.2,1.2,.3,1)';
-        moveTo(0);
-      }
-      setTimeout(function () { knob.style.transition = ''; }, 260);
-    }
-
-    knob.addEventListener('pointerdown', function (event) {
-      if (element.classList.contains('slide-off')) return;
-      dragging = true;
-      startX = event.clientX - travel;
-      knob.setPointerCapture(event.pointerId);
+  function arm(button, onConfirm) {
+    button.addEventListener('click', function () {
+      if (button.disabled || button.classList.contains('busy')) return;
+      onConfirm();
     });
-    knob.addEventListener('pointermove', function (event) {
-      if (dragging) moveTo(event.clientX - startX);
-    });
-    knob.addEventListener('pointerup', release);
-    knob.addEventListener('pointercancel', release);
+    button.__confirm = onConfirm;
+    button.__reset = function () { idle(button); };
+  }
 
-    // After a failed attempt the knob goes back to the start (spec 079): parked
-    // at the end with its label faded, a second try looked like a dead control.
-    element.__reset = function () {
-      dragging = false;
-      knob.style.transition = 'transform 220ms cubic-bezier(.2,1.2,.3,1)';
-      moveTo(0);
-      setTimeout(function () { knob.style.transition = ''; }, 260);
-    };
+  // Waiting for the passkey: the button stays the colour it was — busy must
+  // never read as "disabled" — and stops taking taps.
+  function busy(button) {
+    button.classList.add('busy');
+    button.setAttribute('aria-busy', 'true');
+  }
 
-    // Keyboard and automation: End, or a programmatic confirm.
-    element.tabIndex = 0;
-    element.addEventListener('keydown', function (event) {
-      if (event.key === 'End' || event.key === 'Enter') onConfirm();
-    });
-    element.__confirm = onConfirm;
+  function idle(button) {
+    button.classList.remove('busy');
+    button.removeAttribute('aria-busy');
+  }
+
+  function off(button, labelKey) {
+    if (!button) return;
+    idle(button);
+    button.disabled = true;
+    button.classList.add('confirm-off');
+    if (labelKey) button.textContent = t(labelKey);
+    var hint = button.parentNode && button.parentNode.querySelector('.confirm-hint');
+    if (hint) hint.remove();
+  }
+
+  function done(button) {
+    off(button, 'button.done');
+    button.classList.remove('confirm-off');
+    button.classList.add('confirm-done');
   }
 
   function draw(sheet) {
@@ -107,10 +131,12 @@
     slot.appendChild(sheet);
   }
 
-  function ready(slider, onConfirm, sayKey) {
-    attachSlider(slider, onConfirm);
-    say(sayKey || 'ui.dragToSign');
-    window.__slider = slider;
+  function ready(button, onConfirm) {
+    arm(button, onConfirm);
+    // The hint is on the card, under the button; the status line is for what
+    // happens next.
+    say('');
+    window.__slider = button;
     phase('card');
   }
 
@@ -157,8 +183,7 @@
   // the reasons stay on screen until the next request; on a one-shot channel
   // closing the page sends it, as it always has.
   function refused(request, code) {
-    var slider = slot.querySelector('.slide');
-    if (slider) slider.classList.add('slide-off');
+    off(slot.querySelector('.confirm'), 'button.cannotSign');
     request.refusalCode = 'refused';
     window.__refused = true;
     window.__slider = null;
@@ -186,6 +211,7 @@
     var digest = ns.digest.of(request.intent, context);
     if (digest.refuse) {
       view.refuse = true;
+      view.confirmKey = 'button.cannotSign';
       view.warnings.push({ tone: 'danger', key: digest.refuse });
     }
     if (digest.warn) view.warnings.push({ tone: 'danger', key: digest.warn });
@@ -199,15 +225,15 @@
 
     var sheet = ns.render(view, {});
     draw(sheet);
-    var slider = sheet.querySelector('.slide');
+    var button = sheet.querySelector('.confirm');
     if (view.refuse) {
       refused(request);
       return;
     }
-    ready(slider, function () { confirmSigning(request, digest, slider, context); });
+    ready(button, function () { confirmSigning(request, digest, button, context, view.key); });
   }
 
-  function confirmSigning(request, digest, slider, context) {
+  function confirmSigning(request, digest, button, context, key) {
     if (request.answered || request.busy) return;
     // Spec 102 R7 once more, at the last moment before a passkey prompt: the
     // card refused already if the answer would not reach the wallet, so this
@@ -217,16 +243,18 @@
       return;
     }
     request.busy = true;
-    slider.classList.add('slide-off');
+    busy(button);
     say('ui.waitingAuthenticator');
     phase('busy');
 
-    // The account's own key set, as the requester declared it. Signing never
-    // creates a key: if none of these is on this device, the answer is "sign
-    // it somewhere else", not "here, make a new account".
-    var allowed = context.allowCredentials || [];
+    // The account's own key set, as the requester declared it — or the one
+    // key of it the wallet signs with, when it said which (spec 102 R5;
+    // resolve.js checked that key is one of them). Signing never creates a
+    // key: if none of these is on this device, the answer is "sign it
+    // somewhere else", not "here, make a new account".
+    var allowed = key && key.credentialId ? [key.credentialId] : (context.allowCredentials || []);
 
-    ns.signer.sign(digest.hash, { allowCredentials: allowed })
+    ns.signer.sign(digest.hash, { allowCredentials: allowed, key: key })
       .then(function (assertion) {
         // Whichever key answered must be one the account actually owns —
         // otherwise this is a valid signature for somebody else's wallet.
@@ -237,13 +265,15 @@
         assertion.digest = ns.digest.toHex(digest.hash);
         assertion.digestKind = digest.describes;
         window.__result = assertion;
-        return request.respond({ result: assertion }).then(function () { answered('ui.signed'); });
+        return request.respond({ result: assertion }).then(function () {
+          done(button);
+          answered('ui.signed');
+        });
       })
       .catch(function (error) {
         request.busy = false;
         if (request.gone) return;
-        slider.classList.remove('slide-off');
-        if (slider.__reset) slider.__reset();
+        idle(button);
         phase('card');
         if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
           // Cancelled, timed out, or this device simply holds no key for the
@@ -273,81 +303,68 @@
       view.challenge = { text: proof, noteKey: 'ui.challengeFromClock' };
       challenge = ns.ceremony._utf8(proof);
     } else if (!view.refuse && c.kind === 'memberProof') {
-      view.challenge = { pending: true };
+      // The member challenge, computed HERE from the facts on screen — the
+      // chain, the registry contract, the relying party, the key and its
+      // binding. No fetch: the published page reaches no network at all
+      // (076), and the page never signed a challenge it was handed anyway.
+      var computed = null;
+      try {
+        computed = ns.ceremony.memberChallengeFor(c.member, context.rpId);
+      } catch (error) {
+        computed = null;
+      }
+      if (computed) {
+        view.challenge = {
+          text: '0x' + ns.ceremony._hex(computed.challenge),
+          noteKey: 'ui.challengeComputedHere',
+        };
+        challenge = computed.challenge;
+      } else {
+        view.refuse = true;
+        view.risk = 'danger';
+        view.warnings.push({ tone: 'danger', key: 'refuse.noDeployment' });
+        view.confirmKey = 'button.cannotSign';
+      }
     }
 
     var sheet = ns.render(view, {});
     draw(sheet);
     if (view.refuse) {
-      refused(request);
-      return;
-    }
-
-    if (c.kind !== 'memberProof') {
-      arm(request, view, sheet.querySelector('.slide'), challenge);
-      return;
-    }
-
-    // The member challenge, computed HERE from the facts on screen — the chain,
-    // the registry contract, the relying party, the key and its binding. No
-    // fetch: the published page reaches no network at all (076), and the page
-    // never signed a challenge it was handed anyway.
-    var computed = null;
-    try {
-      computed = ns.ceremony.memberChallengeFor(c.member, context.rpId);
-    } catch (error) {
-      computed = null;
-    }
-    if (!computed) {
-      sheet.querySelector('.slide').classList.add('slide-off');
-      view.refuse = true;
-      view.risk = 'danger';
-      view.challenge = null;
-      view.warnings.push({ tone: 'danger', key: 'refuse.noDeployment' });
-      draw(ns.render(view, {}));
       refused(request, 'refused');
       return;
     }
-    view.challenge = {
-      text: '0x' + ns.ceremony._hex(computed.challenge),
-      noteKey: 'ui.challengeComputedHere',
-    };
-    var redrawn = ns.render(view, {});
-    draw(redrawn);
-    arm(request, view, redrawn.querySelector('.slide'), computed.challenge);
+    var button = sheet.querySelector('.confirm');
+    ready(button, function () { confirmCeremony(request, c, button, challenge, view.key); });
   }
 
-  function arm(request, view, slider, challenge) {
-    var c = view.ceremony;
-    ready(slider, function () { confirmCeremony(request, c, slider, challenge); },
-      c.kind === 'create' ? 'ui.slideCreate' : 'ui.dragToSign');
-  }
-
-  function confirmCeremony(request, c, slider, challenge) {
+  function confirmCeremony(request, c, button, challenge, key) {
     if (request.answered || request.busy) return;
     request.busy = true;
-    slider.classList.add('slide-off');
+    busy(button);
     say('ui.waitingAuthenticator');
     phase('busy');
 
+    // Where the key is, or where the new one goes (spec 102 R5), so the
+    // browser asks for that place only. Synchronous to the WebAuthn call.
     var work;
     if (c.kind === 'create') {
-      work = ns.ceremony.create({ name: c.name, excludeCredentialIds: c.excludeCredentialIds });
+      work = ns.ceremony.create({ name: c.name, excludeCredentialIds: c.excludeCredentialIds, key: key });
     } else {
       var allow = c.kind === 'signIn' ? [] : c.credentialId ? [c.credentialId] : [];
-      work = ns.ceremony.assert(challenge, allow);
+      work = ns.ceremony.assert(challenge, allow, key);
     }
 
     work.then(function (payload) {
       if (request.gone) return null;
       window.__result = payload;
       return request.respond(payload).then(function () {
+        done(button);
         answered(c.kind === 'create' ? 'ui.created' : 'ui.ceremonyDone');
       });
     }).catch(function (error) {
       request.busy = false;
       if (request.gone) return;
-      slider.classList.remove('slide-off');
+      idle(button);
       phase('card');
       if (error && error.wrongCredential) say('ui.wrongCredential');
       else if (error && error.name === 'InvalidStateError') say('ui.keyExists');
@@ -465,13 +482,12 @@
       // the person first (Local Network Access).
       onWaiting: function () { say('ui.waitingWallet'); },
       // The wallet stopped waiting for the request on screen: signing now
-      // would sign into nothing, so the slider goes.
+      // would sign into nothing, so the button goes.
       onGone: function (request) {
         if (request !== current) return;
         current = null;
         lastGone = true;
-        var slider = slot.querySelector('.slide');
-        if (slider) slider.classList.add('slide-off');
+        off(slot.querySelector('.confirm'));
         window.__slider = null;
         say('ui.walletGone');
         phase('gone');
@@ -497,7 +513,7 @@
    * Inside another page this page does nothing at all (spec 102 R7).
    *
    * A frame lets the page around it draw over this one — hide the card, cover
-   * it with its own words, lay a "continue" exactly where the slide is — while
+   * it with its own words, lay a "continue" exactly where the button is — while
    * the passkey prompt still says Vela's domain. The host forbids framing
    * (`frame-ancestors 'none'` and `X-Frame-Options: DENY` in `dist/_headers`);
    * this covers a host that does not send those headers, and a browser that

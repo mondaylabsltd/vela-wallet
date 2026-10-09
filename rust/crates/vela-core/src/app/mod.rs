@@ -76,8 +76,8 @@ pub mod send;
 pub mod session;
 pub mod shell;
 pub mod sign_confirm;
-pub mod sign_pref;
 pub mod sign_request;
+pub mod signing_pages;
 pub mod sim_outcome;
 pub mod token_registry;
 pub mod token_trust;
@@ -122,10 +122,9 @@ pub struct Registration {
     pub authenticator_attachment: String,
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Trusted Signer page's origin when the key was minted
-    /// through it — where the key lives from now on. `None` for every other
-    /// route. The shell reports it only after `verify_registration` checked
-    /// the answer came from that origin.
+    /// The signing page's origin when the ceremony ran on one (a custom-domain
+    /// wallet, R3) — the shell reports it only after the answer was checked to
+    /// come from that origin. `None` for a ceremony in the app.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_origin: Option<String>,
 }
@@ -146,9 +145,8 @@ pub struct Assertion {
     /// key can still record it. Store-only display; never signed.
     #[serde(default)]
     pub authenticator_attachment: String,
-    /// Spec 075: the Trusted Signer page's origin when the ceremony ran there
-    /// (a sign-in found the key behind that page). `None` for every other
-    /// route.
+    /// The signing page's origin when the ceremony ran on one (a sign-in on a
+    /// custom-domain wallet's page, R3). `None` for a ceremony in the app.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_origin: Option<String>,
 }
@@ -171,9 +169,13 @@ pub struct AccountKey {
     /// guess, which is what this field exists to stop.
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Trusted Signer page this key lives behind (its origin, and
-    /// so its rpId). A key with one is signed through that page — `auto`
-    /// routes there — and never through a platform sheet that cannot see it.
+    /// The origin of the signing page this key was minted or found on (spec
+    /// 075). Spec 102: no longer how this build routes anything — the
+    /// account's [`Account::signing_domain`] and [`Account::signing_venue`]
+    /// are — but still WRITTEN, because it is what an older build reads to
+    /// open the page (its "auto" route follows the first key's page), and a
+    /// custom-domain account must stay signable there. Every key of a
+    /// custom-domain account carries its page's origin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_origin: Option<String>,
 }
@@ -185,13 +187,21 @@ pub struct AccountKey {
 /// of its first key, and a legacy record simply has no `keys` at all. Only
 /// [`Account::key_hexes`] / [`Account::matches_credential`] may interpret this
 /// duality — everything else asks them.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
+///
 /// Spec 048: the retired client wrote these records in camelCase at the same
 /// web origin the current shell now serves (`publicKeyHex`, `createdAt`,
 /// `keys[].credentialId`). The hand-written reader below accepts that
 /// spelling; only snake_case is ever written, and the web rewrites an old list
 /// once it has read it.
+///
+/// Spec 102 adds where the account reviews and signs ([`Self::signing_venue`])
+/// and the domain its keys live under ([`Self::signing_domain`]). A record
+/// from before has neither, and the reader derives both from what it does
+/// have — see [`Account`]'s `Deserialize` and `specs/102-signing-venue/
+/// data-model.md` for the table. Records are written with both, plus what an
+/// older build needs to keep signing (see the `Serialize` impl).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "bindings", derive(TS))]
 pub struct Account {
     pub id: String,
     pub name: String,
@@ -199,28 +209,49 @@ pub struct Account {
     pub public_key_hex: String,
     pub created_at_iso: String,
     /// Full founding key set. Empty ⇒ legacy single-key account (the scalar
-    /// fields are the whole story). `#[serde(default)]` lets records written
-    /// before this field existed deserialize unchanged.
-    #[serde(default)]
+    /// fields are the whole story). Records written before this field existed
+    /// deserialize unchanged.
     pub keys: Vec<AccountKey>,
     /// The key this device signs with — see [`SignInKey`]. `None` on records
     /// written before it existed, which sign as they always did.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signed_in_with: Option<SignInKey>,
+    ///
+    /// Spec 102: written under this name; the `signed_in_with` of earlier
+    /// builds is read (and migrated) but never written by this one — except as
+    /// the compatibility copy older builds read, see `Serialize`.
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub sign_in_key: Option<SignInKey>,
+    /// Spec 102: the RP ID this account's keys live under — `getvela.app` for
+    /// every account made in the apps or on the official page, the person's
+    /// own domain for one made on a self-hosted page.
+    pub signing_domain: String,
+    /// Spec 102 (D1): where this account's transactions and messages are
+    /// previewed and signed on THIS device. Always one that can reach the
+    /// account's keys (R1) — the reader replaces one that cannot.
+    pub signing_venue: crate::signing_venue::SigningVenue,
 }
 
-/// The JSON door to [`Account::sign_in_route`] for the shells that hold the
+/// The JSON door to [`Account::signing_plan`] for the shells that hold the
 /// record as JSON (web over wasm, the phones over UniFFI): the stored account
-/// in, its route out — `None` for a record this build cannot read, or one with
-/// no usable sign-in key, which signs as it always did.
+/// in, how it signs out — `None` for a record this build cannot read.
 #[must_use]
-pub fn sign_in_route_json(account_json: &str) -> Option<String> {
+pub fn signing_plan_json(account_json: &str) -> Option<String> {
     let account: Account = serde_json::from_str(account_json).ok()?;
-    serde_json::to_string(&account.sign_in_route()?).ok()
+    serde_json::to_string(&account.signing_plan()).ok()
 }
 
-/// Which of the wallet's keys this device signs with, and how it reaches it:
-/// the one the person created the wallet with, or last signed in with, HERE.
+/// [`signing_plan_json`] as the web wallet carries it out
+/// ([`crate::signing_venue::SigningPlan::on_web`]): the web opens no page, so
+/// a `getvela.app` account signs in Vela there and a custom-domain account is
+/// `blocked` with the web's reason.
+#[must_use]
+pub fn signing_plan_on_web_json(account_json: &str) -> Option<String> {
+    let account: Account = serde_json::from_str(account_json).ok()?;
+    serde_json::to_string(&account.signing_plan().on_web()).ok()
+}
+
+/// Which of the wallet's keys this device signs with, and where that key
+/// lives: the one the person created the wallet with, or last signed in with,
+/// HERE.
 ///
 /// Founder, 2026-09-26: a person says where their passkey is when they create
 /// or sign in, and never again — every later signature reuses that answer. The
@@ -228,11 +259,14 @@ pub fn sign_in_route_json(account_json: &str) -> Option<String> {
 /// "Sign with" choice per signature was asking a question already answered.
 /// There is no switching: a key that stops answering is replaced by signing
 /// out and signing in with another, which records that one instead.
+///
+/// Spec 102: `method` is where the key LIVES — one of the three places. Where
+/// the person reviews and signs is the account's venue, not the key's.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignInKey {
     pub credential_id: String,
-    /// The route that reached it — the person's choice at sign-in, not what
+    /// The place that reached it — the person's choice at sign-in, not what
     /// the key reported at registration: a synced passkey minted on a phone
     /// (`internal`) is reached from a desktop by scanning a code.
     pub method: KeyMethod,
@@ -244,48 +278,99 @@ pub struct SignInKey {
     /// signature can reach the key wherever the sign-in found it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub transports: String,
-    /// With `method = trusted_signer`, the page the ceremony ran on (spec 075).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_origin: Option<String>,
 }
 
 impl Account {
-    /// Where this account's signatures go: the key it was created or signed in
-    /// with, over the route that reached it ([`SignInKey`]). `None` when the
-    /// record predates that, or names a key this wallet does not hold — the
-    /// shell then signs as it always did.
+    /// R5: the key this device signs with and where it lives — the key the
+    /// account was created or signed in with, over the place that reached it
+    /// ([`SignInKey`]). `None` when the record predates that, or names a key
+    /// this wallet does not hold: the shell then signs as it always did.
     #[must_use]
-    pub fn sign_in_route(&self) -> Option<crate::wallet_keys::SignRoute> {
-        let key = self.signed_in_with.as_ref()?;
+    pub fn key_route(&self) -> Option<crate::signing_venue::KeyRoute> {
+        let key = self.sign_in_key.as_ref()?;
         if key.credential_id.is_empty() || !self.matches_credential(&key.credential_id) {
             return None;
         }
         let method = key.method.name();
-        let signer_origin = if key.method == KeyMethod::TrustedSigner {
-            // The sign-in's own page, else the page the key was minted behind;
-            // empty means the person's page from Settings.
-            key.signer_origin
-                .clone()
-                .or_else(|| {
-                    self.keys
-                        .iter()
-                        .find(|held| held.credential_id == key.credential_id)
-                        .and_then(|held| held.signer_origin.clone())
-                })
-                .unwrap_or_default()
-        } else {
-            String::new()
+        let routed = crate::wallet_keys::transports_of_method(method)?;
+        Some(crate::signing_venue::KeyRoute::new(
+            &key.credential_id,
+            method,
+            &crate::wallet_keys::joined_transports(routed, &key.transports),
+        ))
+    }
+
+    /// How this account signs on this device: its signing domain, the venue
+    /// its transactions and messages go to (R4), and its key route (R5).
+    ///
+    /// The venue the reader produced always reaches the keys when anything
+    /// can; [`crate::signing_venue::SigningPlan::blocked`] is set only when
+    /// nothing on this device can — and then the shell signs nothing.
+    #[must_use]
+    pub fn signing_plan(&self) -> crate::signing_venue::SigningPlan {
+        crate::signing_venue::SigningPlan {
+            domain: self.signing_domain.clone(),
+            blocked: crate::signing_venue::reachability(&self.signing_domain, &self.signing_venue)
+                .err(),
+            venue: self.signing_venue.clone(),
+            key: self.key_route(),
+            key_label: self.key_label(),
+        }
+    }
+
+    /// "Confirm with | {key}" — the key this device signs with, as the person
+    /// reads it ([`crate::signing_venue::KeyLabel`]): its own label when that
+    /// is not the wallet's name, else the place it lives (the place the
+    /// sign-in reached it on). A record with no sign-in key names its first
+    /// key the same way, its place read from what that key reported.
+    #[must_use]
+    pub fn key_label(&self) -> crate::signing_venue::KeyLabel {
+        let (key, method) = match self
+            .sign_in_key
+            .as_ref()
+            .filter(|key| self.matches_credential(&key.credential_id))
+        {
+            Some(sign_in) => (
+                self.keys
+                    .iter()
+                    .find(|key| key.credential_id == sign_in.credential_id),
+                sign_in.method,
+            ),
+            None => {
+                let first = self.keys.first();
+                let method = first
+                    .and_then(|key| crate::passkey::reported_method("", &key.transports))
+                    .unwrap_or_default();
+                (first, method)
+            }
         };
-        let transports = match crate::wallet_keys::transports_of_method(method) {
-            Some(routed) => crate::wallet_keys::joined_transports(routed, &key.transports),
-            None => String::new(),
+        crate::signing_venue::KeyLabel::of(
+            key.map(|key| key.name.as_str()),
+            &self.name,
+            method.name(),
+        )
+    }
+
+    /// Choose where this account reviews and signs (D1) — refused, and nothing
+    /// changed, when the venue cannot reach the account's keys (R1).
+    ///
+    /// # Errors
+    ///
+    /// Why that venue cannot be used for this account.
+    pub fn choose_venue(
+        &mut self,
+        venue: crate::signing_venue::SigningVenue,
+    ) -> Result<(), crate::signing_venue::VenueBlock> {
+        let venue = match venue {
+            crate::signing_venue::SigningVenue::Page { url } => {
+                crate::signing_venue::SigningVenue::page(&url)
+                    .unwrap_or(crate::signing_venue::SigningVenue::Page { url })
+            }
+            in_vela => in_vela,
         };
-        Some(crate::wallet_keys::SignRoute {
-            credential_id: key.credential_id.clone(),
-            transports,
-            method: method.to_owned(),
-            signer_origin,
-        })
+        crate::signing_venue::reachability(&self.signing_domain, &venue)?;
+        self.signing_venue = venue;
+        Ok(())
     }
 
     /// The full key set in founding order; a legacy account projects its
@@ -303,6 +388,47 @@ impl Account {
     pub(crate) fn matches_credential(&self, credential_id: &str) -> bool {
         self.id == credential_id || self.keys.iter().any(|k| k.credential_id == credential_id)
     }
+
+    /// The origin every key of a custom-domain account carries ([`AccountKey::
+    /// signer_origin`]) — its page's — so an older build, which opens the page
+    /// the first key names, keeps signing for it. Keys of a `getvela.app`
+    /// account are left as they are.
+    pub(crate) fn stamp_page_origin(&mut self) {
+        if !crate::signing_venue::locked_to_page(&self.signing_domain) {
+            return;
+        }
+        let Some(url) = self.signing_venue.page_url() else {
+            return;
+        };
+        let origin = crate::trusted_signer::ws::origin_of(url);
+        if origin.is_empty() {
+            return;
+        }
+        for key in &mut self.keys {
+            if key.signer_origin.as_deref().is_none_or(str::is_empty) {
+                key.signer_origin = Some(origin.clone());
+            }
+        }
+    }
+}
+
+/// How an account signs, settled for a new record by the machine that makes
+/// it: the domain its keys live under and the venue it starts with. A page
+/// the person chose (`page`) is the venue — locked to it when it is on a
+/// custom domain (R2) — and otherwise Vela's own sheet.
+pub(crate) fn new_signing(page: Option<&str>) -> (String, crate::signing_venue::SigningVenue) {
+    use crate::signing_venue::{domain_of_page, SigningVenue, APP_DOMAIN};
+    match page.and_then(SigningVenue::page) {
+        Some(venue) => {
+            let domain = venue
+                .page_url()
+                .map(domain_of_page)
+                .filter(|domain| !domain.is_empty())
+                .unwrap_or_else(|| APP_DOMAIN.to_owned());
+            (domain, venue)
+        }
+        None => (APP_DOMAIN.to_owned(), SigningVenue::InVela),
+    }
 }
 
 /// One draft key inside a multi-member [`PendingUpload`], founding order.
@@ -317,7 +443,8 @@ pub struct PendingUploadMember {
     pub authenticator_attachment: String,
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: see [`AccountKey::signer_origin`].
+    /// See [`AccountKey::signer_origin`] — kept for the same older builds,
+    /// which retry an interrupted publish from this record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_origin: Option<String>,
 }
@@ -455,24 +582,293 @@ impl<'de> Deserialize<'de> for Account {
             created_at_camel: Option<String>,
             #[serde(default)]
             keys: Vec<AccountKey>,
-            /// Read loosely: a record naming a route a newer build added must
-            /// cost only this field (the account signs as it always did), never
-            /// the whole account list.
+            /// Spec 102's sign-in key. Read loosely, like every field below: a
+            /// value a newer build added must cost only itself (the account
+            /// signs as it always did), never the whole account list.
+            #[serde(default)]
+            sign_in_key: Option<serde_json::Value>,
+            /// The sign-in key as builds before spec 102 wrote it — a route,
+            /// whose `method` could be `trusted_signer`.
             #[serde(default)]
             signed_in_with: Option<serde_json::Value>,
+            #[serde(default)]
+            signing_domain: Option<String>,
+            #[serde(default)]
+            signing_venue: Option<serde_json::Value>,
         }
         let w = Wire::deserialize(d)?;
-        Ok(Account {
+        let legacy = w
+            .signed_in_with
+            .and_then(|raw| serde_json::from_value::<LegacySignIn>(raw).ok());
+        let current = w
+            .sign_in_key
+            .and_then(|raw| serde_json::from_value::<SignInKey>(raw).ok());
+        let mut account = Account {
             id: w.id,
             name: w.name,
             address: w.address,
             public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
             created_at_iso: either(w.created_at_iso, w.created_at_camel, "created_at_iso")?,
             keys: w.keys,
-            signed_in_with: w
-                .signed_in_with
-                .and_then(|raw| serde_json::from_value(raw).ok()),
+            sign_in_key: None,
+            signing_domain: String::new(),
+            signing_venue: crate::signing_venue::SigningVenue::InVela,
+        };
+        let stored = w
+            .signing_venue
+            .and_then(|raw| serde_json::from_value::<crate::signing_venue::SigningVenue>(raw).ok());
+        let migrated = migrate(&account, legacy.as_ref());
+        account.sign_in_key = match (current, migrated.sign_in_key) {
+            // Both: this build wrote the record and its compatibility copy
+            // together. An older build that signed in again since rewrote the
+            // copy alone — then the copy is the newer fact.
+            (Some(current), Some(copy)) if copy.credential_id != current.credential_id => {
+                Some(copy)
+            }
+            (Some(current), _) => Some(current),
+            (None, copy) => copy,
+        };
+        account.signing_domain = w
+            .signing_domain
+            .map(|domain| domain.trim().to_ascii_lowercase())
+            .filter(|domain| !domain.is_empty())
+            .unwrap_or(migrated.domain);
+        account.signing_venue = settle_venue(&account, stored, migrated.venue);
+        account.stamp_page_origin();
+        Ok(account)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spec 102: what builds before it wrote, and what they still read
+//
+// The data-model table (`specs/102-signing-venue/data-model.md`, "Migration")
+// is the specification of `migrate`; each row has a test below.
+// ---------------------------------------------------------------------------
+
+/// The sign-in key as builds before spec 102 wrote it (`signed_in_with`): a
+/// ROUTE, whose method could be the Trusted Signer — "sign on the page this key
+/// lives behind". Only ever read.
+#[derive(Deserialize)]
+struct LegacySignIn {
+    credential_id: String,
+    method: LegacyMethod,
+    #[serde(default)]
+    transports: String,
+    #[serde(default)]
+    signer_origin: Option<String>,
+}
+
+/// The four "Sign with" routes of builds before spec 102. The fourth is read
+/// here and nowhere else: it names a venue, not a place a key lives, and no
+/// record this build writes carries it.
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum LegacyMethod {
+    Platform,
+    Hybrid,
+    SecurityKey,
+    TrustedSigner,
+}
+
+/// What a record from before spec 102 says about how it signs.
+struct Migrated {
+    sign_in_key: Option<SignInKey>,
+    domain: String,
+    venue: crate::signing_venue::SigningVenue,
+}
+
+/// A page origin from an old record, empty read as absent.
+fn origin_of_record(origin: Option<&String>) -> Option<&str> {
+    origin
+        .map(|origin| origin.trim())
+        .filter(|origin| !origin.is_empty())
+}
+
+/// The migration rule (spec 102, "Migration"):
+///
+/// - a Trusted Signer sign-in whose page is empty or official → domain
+///   `getvela.app`, venue the official page, the key place read from the key's
+///   stored transports;
+/// - one on a custom origin → domain that host, venue locked to that page;
+/// - any other sign-in → the key place it names, venue Vela's sheet (or, on a
+///   custom domain, its page);
+/// - no sign-in key at all → the route builds before it always took: the first
+///   key's page if it lives behind one, else Vela's sheet.
+fn migrate(account: &Account, legacy: Option<&LegacySignIn>) -> Migrated {
+    use crate::signing_venue::{SigningVenue, APP_DOMAIN};
+    let held = |credential_id: &str| {
+        account
+            .keys
+            .iter()
+            .find(|key| key.credential_id == credential_id)
+    };
+    // The page this record's signatures went to, if they went to one.
+    let page_origin: Option<String> = match legacy {
+        Some(sign_in) if sign_in.method == LegacyMethod::TrustedSigner => Some(
+            origin_of_record(sign_in.signer_origin.as_ref())
+                .or_else(|| {
+                    held(&sign_in.credential_id)
+                        .and_then(|key| origin_of_record(key.signer_origin.as_ref()))
+                })
+                // Empty: "the person's page from Settings" — the official one
+                // (spec 102, Migration).
+                .unwrap_or(crate::trusted_signer::DEFAULT_SIGNER_URL)
+                .to_owned(),
+        ),
+        Some(_) => None,
+        None => account
+            .keys
+            .iter()
+            .find(|key| !key.credential_id.is_empty())
+            .and_then(|key| origin_of_record(key.signer_origin.as_ref()))
+            .map(str::to_owned),
+    };
+    // The domain: the page's, else any key's page (a custom-domain wallet's
+    // keys all share one), else the apps'.
+    let domain = page_origin
+        .as_deref()
+        .and_then(|origin| crate::trusted_signer::registry_rp_id(Some(origin)))
+        .or_else(|| {
+            account
+                .keys
+                .iter()
+                .filter_map(|key| origin_of_record(key.signer_origin.as_ref()))
+                .find_map(|origin| crate::trusted_signer::registry_rp_id(Some(origin)))
         })
+        .unwrap_or_else(|| APP_DOMAIN.to_owned());
+    let venue = page_origin
+        .as_deref()
+        .and_then(SigningVenue::page)
+        .filter(|venue| crate::signing_venue::reachability(&domain, venue).is_ok())
+        .or_else(|| {
+            crate::signing_venue::default_venue(
+                &domain,
+                account
+                    .keys
+                    .iter()
+                    .filter_map(|key| origin_of_record(key.signer_origin.as_ref())),
+            )
+        })
+        .unwrap_or(SigningVenue::InVela);
+    let sign_in_key = legacy.map(|sign_in| {
+        let stored = held(&sign_in.credential_id)
+            .map(|key| key.transports.as_str())
+            .unwrap_or_default();
+        let method = match sign_in.method {
+            LegacyMethod::Platform => KeyMethod::Platform,
+            LegacyMethod::Hybrid => KeyMethod::Hybrid,
+            LegacyMethod::SecurityKey => KeyMethod::SecurityKey,
+            // The page was where the person checked what they signed; the key
+            // itself lived where its authenticator said it did.
+            LegacyMethod::TrustedSigner => {
+                crate::passkey::reported_method("", stored).unwrap_or_default()
+            }
+        };
+        SignInKey {
+            credential_id: sign_in.credential_id.clone(),
+            method,
+            // A page sign-in recorded no transports; the key route then comes
+            // from the key's own (spec 102, Migration).
+            transports: if sign_in.transports.is_empty()
+                && sign_in.method == LegacyMethod::TrustedSigner
+            {
+                crate::passkey::allowlist_transports(stored)
+            } else {
+                sign_in.transports.clone()
+            },
+        }
+    });
+    Migrated {
+        sign_in_key,
+        domain,
+        venue,
+    }
+}
+
+/// The venue a record is read with: the stored one when it can reach the
+/// account's keys (R1); otherwise the migrated one, then the domain's default.
+/// A record never comes out of the reader pointing at a venue that cannot
+/// sign for it, unless nothing can — a custom domain with no page known —
+/// and then [`Account::signing_plan`] says so.
+fn settle_venue(
+    account: &Account,
+    stored: Option<crate::signing_venue::SigningVenue>,
+    migrated: crate::signing_venue::SigningVenue,
+) -> crate::signing_venue::SigningVenue {
+    use crate::signing_venue::reachability;
+    let domain = &account.signing_domain;
+    stored
+        .into_iter()
+        .chain(std::iter::once(migrated.clone()))
+        .find(|venue| reachability(domain, venue).is_ok())
+        .or_else(|| {
+            crate::signing_venue::default_venue(
+                domain,
+                account
+                    .keys
+                    .iter()
+                    .filter_map(|key| origin_of_record(key.signer_origin.as_ref())),
+            )
+        })
+        .unwrap_or(migrated)
+}
+
+impl Serialize for Account {
+    /// Every field, and one more for builds before spec 102: `signed_in_with`,
+    /// the sign-in key in the shape they read — written only for a
+    /// `getvela.app` account, whose keys an older build can reach natively.
+    ///
+    /// A custom-domain account gets none on purpose. An older build reading
+    /// one would sign natively with a key the app cannot reach; reading none,
+    /// it follows the first key's page — which every key of such an account
+    /// names ([`AccountKey::signer_origin`]) — and keeps working. The fourth
+    /// route (`trusted_signer`) is never written.
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct OlderBuildsCopy<'a> {
+            credential_id: &'a str,
+            method: KeyMethod,
+            #[serde(skip_serializing_if = "str::is_empty")]
+            transports: &'a str,
+        }
+        #[derive(Serialize)]
+        struct Wire<'a> {
+            id: &'a str,
+            name: &'a str,
+            address: &'a str,
+            public_key_hex: &'a str,
+            created_at_iso: &'a str,
+            keys: &'a [AccountKey],
+            #[serde(skip_serializing_if = "Option::is_none")]
+            sign_in_key: Option<&'a SignInKey>,
+            signing_domain: &'a str,
+            signing_venue: &'a crate::signing_venue::SigningVenue,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            signed_in_with: Option<OlderBuildsCopy<'a>>,
+        }
+        let copy = self
+            .sign_in_key
+            .as_ref()
+            .filter(|_| !crate::signing_venue::locked_to_page(&self.signing_domain))
+            .map(|key| OlderBuildsCopy {
+                credential_id: &key.credential_id,
+                method: key.method,
+                transports: &key.transports,
+            });
+        Wire {
+            id: &self.id,
+            name: &self.name,
+            address: &self.address,
+            public_key_hex: &self.public_key_hex,
+            created_at_iso: &self.created_at_iso,
+            keys: &self.keys,
+            sign_in_key: self.sign_in_key.as_ref(),
+            signing_domain: &self.signing_domain,
+            signing_venue: &self.signing_venue,
+            signed_in_with: copy,
+        }
+        .serialize(s)
     }
 }
 
@@ -591,12 +987,6 @@ pub struct RegistryPublishMember {
     /// on the login re-publish, whose executor signs the member live.
     #[serde(default)]
     pub proof: Option<crate::registry_proof::RegistryProof>,
-    /// Spec 075: the Trusted Signer page this member lives behind, when it does.
-    /// The re-publish signs a member with no replayable proof LIVE, and that
-    /// signature has to reach the page holding the key — not whichever page
-    /// Settings names (Android, 075 phase C, found this missing).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_origin: Option<String>,
 }
 
 /// One founding member of a registry group (Unit), as fetched back from the
@@ -615,7 +1005,8 @@ pub struct RegistryUnitMember {
     pub transports: String,
 }
 
-/// How the person chose to mint a founding key.
+/// Where a key lives — how the person chose to mint a founding key, or which
+/// key they signed in with.
 ///
 /// This is the **choice**, not the report. `CreateKeyRow` also carries
 /// `authenticator_attachment` / `transports` / `aaguid`, which are what the
@@ -624,10 +1015,12 @@ pub struct RegistryUnitMember {
 /// The ceremony follows the choice; the row's provider line shows the report.
 /// Neither is inferred from the other.
 ///
-/// [`KeyMethod::Hybrid`] exists before anything can execute it. A later feature
-/// adds the transport, not a core type, and until then a shell can render the
-/// method as present-and-explained rather than absent — which is what the
-/// design draws.
+/// **Three places, and no fourth** (spec 102). The Trusted Signer was a fourth
+/// value here from spec 075 until 102: a page is not a place a key lives — the
+/// same three places exist on the page too — but where a person reviews and
+/// signs, which is the account's [`crate::signing_venue::SigningVenue`]. A
+/// record that still says `trusted_signer` is read by the account reader
+/// (`LegacyMethod`) and mapped; nothing writes it, and nothing else accepts it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -639,23 +1032,19 @@ pub enum KeyMethod {
     Hybrid,
     /// A removable authenticator — a USB/NFC security key.
     SecurityKey,
-    /// Spec 075: the Trusted Signer — our own route to a passkey. A page that
-    /// shows what is being signed runs the ceremony in this device's browser
-    /// (the request in the link, the answer back through
-    /// `velawallet://sign-result`) and the answer is verified here. A peer of
-    /// the three above, on the desktop and phone apps.
-    TrustedSigner,
 }
 
 impl KeyMethod {
-    /// The wire name — the "Sign with" vocabulary (`wallet_keys::SIGN_METHODS`).
+    /// Every place, in the order the choosers draw them.
+    pub const ALL: [Self; 3] = [Self::Platform, Self::Hybrid, Self::SecurityKey];
+
+    /// The wire name — `platform` | `hybrid` | `security_key`.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::Platform => "platform",
             Self::Hybrid => "hybrid",
             Self::SecurityKey => "security_key",
-            Self::TrustedSigner => crate::trusted_signer::METHOD,
         }
     }
 }
@@ -943,13 +1332,13 @@ mod tests {
         assert_eq!(handle(&format!("\0{UUID}")).user_name(), None);
     }
 
-    fn two_keys(signed_in_with: Option<SignInKey>) -> Account {
-        let key = |id: &str, origin: Option<&str>| AccountKey {
+    fn two_keys(sign_in_key: Option<SignInKey>) -> Account {
+        let key = |id: &str, transports: &str| AccountKey {
             credential_id: id.to_owned(),
             public_key_hex: "04ab".to_owned(),
             name: id.to_owned(),
-            transports: "internal".to_owned(),
-            signer_origin: origin.map(str::to_owned),
+            transports: transports.to_owned(),
+            signer_origin: None,
         };
         Account {
             id: "first".to_owned(),
@@ -957,8 +1346,10 @@ mod tests {
             address: "0x2222222222222222222222222222222222222222".to_owned(),
             public_key_hex: "04ab".to_owned(),
             created_at_iso: "2026-09-26T00:00:00.000Z".to_owned(),
-            keys: vec![key("first", None), key("second", Some("https://my.signer"))],
-            signed_in_with,
+            keys: vec![key("first", "internal"), key("second", "usb,nfc")],
+            sign_in_key,
+            signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: crate::signing_venue::SigningVenue::InVela,
         }
     }
 
@@ -967,27 +1358,33 @@ mod tests {
             credential_id: credential_id.to_owned(),
             method,
             transports: String::new(),
-            signer_origin: None,
         })
     }
 
-    /// Founder, 2026-09-26: signing reuses the sign-in's key AND route — not
-    /// the first key, and not where that key was registered.
+    fn read(json: &serde_json::Value) -> Account {
+        serde_json::from_value(json.clone()).unwrap_or_else(|e| unreachable!("reads: {e}"))
+    }
+
+    /// Founder, 2026-09-26: signing reuses the sign-in's key AND place — not
+    /// the first key, and not where that key was registered. R5: the route
+    /// carries the place's hints for a page to pass on.
     #[test]
     fn signatures_go_to_the_sign_in_key_over_its_route() {
         let account = two_keys(signed_in("second", KeyMethod::SecurityKey));
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        let route = account.key_route().unwrap_or_else(|| unreachable!());
         assert_eq!(route.credential_id, "second", "not keys[0]");
         assert_eq!(route.method, "security_key");
         assert_eq!(route.transports, "usb,nfc,ble");
+        assert_eq!(route.hints, ["security-key"]);
 
         // A synced passkey registered as `internal`, reached here by a scan.
         let account = two_keys(signed_in("first", KeyMethod::Hybrid));
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        let route = account.key_route().unwrap_or_else(|| unreachable!());
         assert_eq!(
             (route.method.as_str(), route.transports.as_str()),
             ("hybrid", "hybrid,internal")
         );
+        assert_eq!(route.hints, ["hybrid"]);
     }
 
     /// "This device" was picked, and the system sheet was answered by a phone
@@ -997,89 +1394,198 @@ mod tests {
     #[test]
     fn the_route_also_names_where_the_sign_in_found_the_key() {
         let mut account = two_keys(signed_in("first", KeyMethod::Platform));
-        if let Some(key) = account.signed_in_with.as_mut() {
+        if let Some(key) = account.sign_in_key.as_mut() {
             key.transports = "usb,nfc,ble,hybrid".to_owned();
         }
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        let route = account.key_route().unwrap_or_else(|| unreachable!());
         assert_eq!(route.method, "platform");
         assert_eq!(route.transports, "internal,usb,nfc,ble,hybrid");
 
         // Found where it was chosen: nothing added, nothing repeated.
-        if let Some(key) = account.signed_in_with.as_mut() {
+        if let Some(key) = account.sign_in_key.as_mut() {
             key.transports = "internal".to_owned();
         }
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        let route = account.key_route().unwrap_or_else(|| unreachable!());
         assert_eq!(route.transports, "internal");
-    }
-
-    #[test]
-    fn a_trusted_signer_sign_in_signs_on_its_page() {
-        let mut account = two_keys(None);
-        account.signed_in_with = Some(SignInKey {
-            credential_id: "first".to_owned(),
-            method: KeyMethod::TrustedSigner,
-            transports: String::new(),
-            signer_origin: Some("https://sign.getvela.app".to_owned()),
-        });
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
-        assert_eq!(route.method, crate::trusted_signer::METHOD);
-        assert_eq!(route.signer_origin, "https://sign.getvela.app");
-
-        // No page on the sign-in: the page the key lives behind.
-        account.signed_in_with = signed_in("second", KeyMethod::TrustedSigner);
-        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
-        assert_eq!(route.signer_origin, "https://my.signer");
     }
 
     /// No record, or one naming a key this wallet does not hold: the shell
     /// signs as it always did.
     #[test]
     fn no_usable_sign_in_key_means_no_route() {
-        assert_eq!(two_keys(None).sign_in_route(), None);
+        assert_eq!(two_keys(None).key_route(), None);
         assert_eq!(
-            two_keys(signed_in("stranger", KeyMethod::Platform)).sign_in_route(),
+            two_keys(signed_in("stranger", KeyMethod::Platform)).key_route(),
             None
         );
         assert_eq!(
-            two_keys(signed_in("", KeyMethod::Platform)).sign_in_route(),
+            two_keys(signed_in("", KeyMethod::Platform)).key_route(),
             None
         );
     }
 
+    /// The plan answers venue and key together, and a `getvela.app` account
+    /// is never blocked.
     #[test]
-    fn the_sign_in_key_round_trips_and_an_unknown_route_costs_only_itself() {
-        let account = two_keys(signed_in("second", KeyMethod::Hybrid));
-        let json = serde_json::to_string(&account).unwrap_or_default();
-        let back: Account = serde_json::from_str(&json).unwrap_or_else(|_| unreachable!());
-        assert_eq!(back, account);
+    fn the_plan_is_venue_domain_and_key() {
+        let mut account = two_keys(signed_in("second", KeyMethod::SecurityKey));
+        let plan = account.signing_plan();
+        assert_eq!(plan.domain, "getvela.app");
+        assert_eq!(plan.venue, crate::signing_venue::SigningVenue::InVela);
+        assert_eq!(plan.blocked, None);
+        assert_eq!(plan.key, account.key_route());
 
-        // A route a newer build added: the account still reads.
-        let mut value = serde_json::to_value(&account).unwrap_or_default();
-        value["signed_in_with"]["method"] = "telepathy".into();
-        let back: Account = serde_json::from_value(value).unwrap_or_else(|_| unreachable!());
-        assert_eq!(back.signed_in_with, None);
+        // Choosing the official page: allowed, nothing else changes.
+        assert_eq!(
+            account.choose_venue(crate::signing_venue::SigningVenue::official()),
+            Ok(())
+        );
+        assert_eq!(
+            account.signing_plan().venue,
+            crate::signing_venue::SigningVenue::official()
+        );
+        assert_eq!(account.signing_plan().key, plan.key);
+
+        // A page on another domain: refused, and the venue stands (R1).
+        let other = crate::signing_venue::SigningVenue::Page {
+            url: "https://sign.example.com".to_owned(),
+        };
+        assert!(matches!(
+            account.choose_venue(other),
+            Err(crate::signing_venue::VenueBlock::PageOnOtherDomain { .. })
+        ));
+        assert_eq!(
+            account.signing_venue,
+            crate::signing_venue::SigningVenue::official()
+        );
+    }
+
+    /// A record this build wrote reads back as it was — and carries, beside
+    /// it, the copy an older build reads.
+    #[test]
+    fn a_record_round_trips_with_its_copy_for_older_builds() {
+        let mut account = two_keys(signed_in("second", KeyMethod::Hybrid));
+        account.signing_venue = crate::signing_venue::SigningVenue::official();
+        let value = serde_json::to_value(&account).unwrap_or_default();
+        assert_eq!(read(&value), account);
+        assert_eq!(value["signing_domain"], "getvela.app");
+        assert_eq!(value["signing_venue"]["type"], "page");
+        // The copy: the sign-in key in the shape a build before 102 reads.
+        assert_eq!(value["signed_in_with"]["credential_id"], "second");
+        assert_eq!(value["signed_in_with"]["method"], "hybrid");
+        let text = value.to_string();
+        assert!(!text.contains("trusted_signer"), "{text}");
+
+        // A sign-in key a newer build added: the account still reads.
+        let mut newer = value.clone();
+        newer["sign_in_key"]["method"] = "telepathy".into();
+        newer["signed_in_with"]["method"] = "telepathy".into();
+        let back = read(&newer);
+        assert_eq!(back.sign_in_key, None);
         assert_eq!(back.keys, account.keys);
 
-        // Records written before it existed carry nothing, and write nothing.
-        let old = two_keys(None);
-        let json = serde_json::to_string(&old).unwrap_or_default();
-        assert!(!json.contains("signed_in_with"), "{json}");
+        // Records with no sign-in key write none, and no copy.
+        let json = serde_json::to_string(&two_keys(None)).unwrap_or_default();
+        assert!(
+            !json.contains("sign_in_key") && !json.contains("signed_in_with"),
+            "{json}"
+        );
     }
 
-    /// The door the web and the phones call: the stored record in, the route
-    /// out, and `null` rather than a guess for anything it cannot use.
+    /// An older build that signed in again rewrote the copy alone: the copy is
+    /// then the newer fact.
+    #[test]
+    fn a_copy_an_older_build_rewrote_wins() {
+        let account = two_keys(signed_in("first", KeyMethod::Platform));
+        let mut value = serde_json::to_value(&account).unwrap_or_default();
+        value["signed_in_with"] =
+            serde_json::json!({ "credential_id": "second", "method": "security_key" });
+        let back = read(&value);
+        assert_eq!(
+            back.sign_in_key,
+            signed_in("second", KeyMethod::SecurityKey)
+        );
+    }
+
+    /// A stored venue that cannot reach the keys is never read back (R1): the
+    /// reader falls to one that can.
+    #[test]
+    fn a_stored_venue_that_cannot_reach_the_keys_is_replaced() {
+        let account = two_keys(None);
+        let mut value = serde_json::to_value(&account).unwrap_or_default();
+        value["signing_venue"] =
+            serde_json::json!({ "type": "page", "url": "https://sign.example.com/" });
+        assert_eq!(
+            read(&value).signing_venue,
+            crate::signing_venue::SigningVenue::InVela
+        );
+        // Garbage costs only the venue.
+        value["signing_venue"] = serde_json::json!(42);
+        assert_eq!(
+            read(&value).signing_venue,
+            crate::signing_venue::SigningVenue::InVela
+        );
+    }
+
+    /// A custom-domain account: no copy for older builds (they would sign
+    /// natively with keys they cannot reach), and every key names the page —
+    /// which is what an older build follows.
+    #[test]
+    fn a_custom_domain_account_keeps_older_builds_on_its_page() {
+        let mut account = two_keys(signed_in("first", KeyMethod::Platform));
+        account.signing_domain = "sign.example.com".to_owned();
+        account.signing_venue = crate::signing_venue::SigningVenue::Page {
+            url: "https://sign.example.com/".to_owned(),
+        };
+        account.stamp_page_origin();
+        let value = serde_json::to_value(&account).unwrap_or_default();
+        assert!(value.get("signed_in_with").is_none(), "{value}");
+        for key in value["keys"].as_array().into_iter().flatten() {
+            assert_eq!(key["signer_origin"], "https://sign.example.com");
+        }
+        let back = read(&value);
+        assert_eq!(back, account);
+        assert!(back.signing_plan().blocked.is_none());
+    }
+
+    /// The door the web and the phones call: the stored record in, the plan
+    /// out, and `null` rather than a guess for anything it cannot read.
     #[test]
     fn the_json_door_answers_like_the_account() {
         let account = two_keys(signed_in("second", KeyMethod::Hybrid));
         let json = serde_json::to_string(&account).unwrap_or_default();
-        let route: crate::wallet_keys::SignRoute =
-            serde_json::from_str(&sign_in_route_json(&json).unwrap_or_default())
+        let plan: crate::signing_venue::SigningPlan =
+            serde_json::from_str(&signing_plan_json(&json).unwrap_or_default())
                 .unwrap_or_else(|_| unreachable!());
-        assert_eq!(Some(route), account.sign_in_route());
+        assert_eq!(plan, account.signing_plan());
+        assert_eq!(signing_plan_json("not json"), None);
+    }
 
-        let old = serde_json::to_string(&two_keys(None)).unwrap_or_default();
-        assert_eq!(sign_in_route_json(&old), None);
-        assert_eq!(sign_in_route_json("not json"), None);
+    #[test]
+    fn a_new_record_starts_in_vela_or_on_the_page_the_person_chose() {
+        use crate::signing_venue::SigningVenue;
+        assert_eq!(
+            new_signing(None),
+            ("getvela.app".to_owned(), SigningVenue::InVela)
+        );
+        assert_eq!(
+            new_signing(Some("https://sign.getvela.app")),
+            ("getvela.app".to_owned(), SigningVenue::official())
+        );
+        assert_eq!(
+            new_signing(Some("http://localhost:8140")),
+            (
+                "localhost".to_owned(),
+                SigningVenue::Page {
+                    url: "http://localhost:8140/".to_owned()
+                }
+            )
+        );
+        // Not a page: nothing to lock to.
+        assert_eq!(
+            new_signing(Some("ftp://nope")),
+            ("getvela.app".to_owned(), SigningVenue::InVela)
+        );
     }
 
     #[test]

@@ -60,16 +60,31 @@
       "subtitle": "Cada envío que empiezas en Vela comienza aquí. Aun así puedes cambiar uno en particular."
     },
     "signing": {
-      "title": "Firmar con",
-      "subtitle": "Cada firma que inicias en Vela empieza aquí. Aun así, puedes elegir otra forma para una sola.",
-      "pageTitle": "Página del Trusted Signer",
-      "pageSubtitle": "La página que abre el Trusted Signer: la oficial o tu propia copia de la página sin dependencias.",
-      "pageOfficial": "Oficial",
+      "title": "Páginas de firma",
+      "subtitle": "Páginas en las que confías para mostrar y firmar solicitudes.",
+      "pageOfficial": "Página de firma oficial de Vela",
       "pageInvalid": "Esa no es una dirección web.",
       "pageInsecure": "Usa una página https o una en el loopback de este dispositivo: el navegador no firmará en ningún otro lugar.",
-      "pageForeign": "Tus passkeys pertenecen a getvela.app. Una página en otro dominio puede mostrar una solicitud, pero no puede firmarla.",
-      "pageReset": "Usar la página oficial",
-      "pageSave": "Guardar"
+      "pageSave": "Guardar",
+      "pageAdd": "Agregar una página de firma alojada por ti",
+      "pageDuplicate": "Esa página ya está guardada.",
+      "keysOn": "Llaves en {{domain}}",
+      "pageSelfHosted": "Alojada por ti · {{domain}}",
+      "pageTrust": "Confiar en esta versión",
+      "pageRename": "Cambiar nombre",
+      "pageRemove": "Quitar",
+      "pageName": "Nombre"
+    },
+    "venue": {
+      "title": "Dónde revisas y firmas",
+      "subtitle": "Para las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
+      "inVela": "Revisa y firma en Vela",
+      "inVelaBody": "La pantalla de firma de Vela",
+      "page": "Revisa y firma en una página de firma de confianza",
+      "pageBody": "Una página sin dependencias muestra exactamente lo que firmas",
+      "blockedApp": "Vela no puede usar las llaves de {{domain}}.",
+      "blockedPage": "Esta página está en {{pageDomain}}; las llaves de esta cuenta están en {{domain}}.",
+      "blockedWeb": "Las páginas de firma se abren desde las apps de Vela, no en la web."
     },
     "advanced": {
       "networksTitle": "Redes",

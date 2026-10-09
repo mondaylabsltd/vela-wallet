@@ -52,9 +52,19 @@ enum SigningLive {
         /// Spec 079: the chain's usual inclusion time (the core's table,
         /// `networkTypicalInclusionS`), for the receipt's ring.
         var typicalS: Int?
-        /// Spec 079: this account signs on the Trusted Signer's page — the
-        /// page's own slide is the one consent.
+        /// Spec 079: this account signs on a trusted page — the page's own
+        /// slide is the one consent.
         var trustedSignerRoute = false
+        /// Spec 102 D4: that page (the account's venue), the plan's key row
+        /// and this phone's integrity line for the page — the hand-off card.
+        /// `nil` page: the account signs in Vela. No fee here: the sheet keeps
+        /// its own fee row, speed and coin in the hand-off (D-18), and the fee
+        /// is said once.
+        var handoffPage: String?
+        var handoffKeyLabel: KeyLabelWire?
+        var handoffLine: SignerIntegrityLine?
+        /// The person's own label for that page, when they gave it one.
+        var handoffPageName: String?
         /// Spec 082 RF5: the quote could not even start (the account's
         /// deployment could not be read) — the core's failure name for it,
         /// drawn as a failed quote is.
@@ -109,7 +119,7 @@ enum SigningLive {
     /// a person's own decision, told calmly; a refusal or a mismatch is not.
     static func trustedSignerBlocks(_ notice: TrustedSignerNotice?, loc: Loc) -> [SigningBlock] {
         guard let notice else { return [] }
-        return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
+        return [.warning(tone: notice.calm ? .caution : .danger, text: notice.text(loc))]
     }
 
     /// The core's words in the reader's language. A clear-signing result is
@@ -269,6 +279,19 @@ enum SigningLive {
                 + (quietSim == nil ? balances : [])
                 + guardBlocks(guardView, loc: loc)
 
+        // Spec 102 D4: an account whose venue is a page gets the hand-off card,
+        // and its Open is shut until this phone's check admitted the page —
+        // the core's answer, as the gate's is. The card draws no fee: the
+        // sheet's own fee row stays above Open (the fee is said once).
+        let handoff: HandoffCardModel? = refused ? nil : context.handoffPage.map { page in
+            HandoffCardModel.build(
+                page: page,
+                keyLabel: context.handoffKeyLabel,
+                line: context.handoffLine ?? SignerPageChecks.checking,
+                loc: loc,
+                name: context.handoffPageName
+            )
+        }
         var model = SigningModel(
             id: fallback.id,
             // The HOST, twice. A name a page supplies is a claim, and a
@@ -311,7 +334,7 @@ enum SigningLive {
             confirm: refused
                 ? nil
                 : (action: confirmLabel(clear: clear, loc: loc),
-                   enabled: (gate ?? .shut).enabled),
+                   enabled: (gate ?? .shut).enabled && (handoff?.opens ?? true)),
             panelTitle: s(loc, "signatureRequest")
         )
         // Spec 079: the ✕, and — once approved — the send receipt in place of
@@ -319,6 +342,15 @@ enum SigningLive {
         model.closeLabel = loc.t("onboarding.common.close")
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
+        if let handoff {
+            model.handoff = handoff
+            // Minimal context only: where the request stands, how the page
+            // last ended, and every warning — never the preview again.
+            model.handoffBlocks = blocks.filter {
+                if case .warning = $0 { return true }
+                return false
+            }
+        }
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
         // Spec 099 R7: a shut confirm says which part of the gate is shut —
         // the core's line for it — never a dead control with no reason.
@@ -421,6 +453,8 @@ enum SigningLive {
             // Spec 099 R8: the passkey failed — the signer layer's own line.
             case .signerUnavailable, .signerNotDiscoverable, .signerFailed:
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
+            // Spec 102: this account cannot sign here — the venue's reason.
+            case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
             // The relay refused it (spec 082 RJ3): nothing was sent, and
             // "try again" would send the same refusal.
             default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
@@ -493,10 +527,14 @@ enum SigningLive {
         // ending — said in the signer's words, and tried again when the core
         // says a retry can help (`failure_retryable`).
         if let error = sign.error, error.kind != .userRejected,
-           sign.pendingOpHash != nil || error.kind == .submitFailed || error.kind.signerReasonKey != nil {
+           sign.pendingOpHash != nil || error.kind == .submitFailed || error.kind.signerReasonKey != nil
+            || error.kind == .venueBlocked {
             // Spec 096 F8: the core holds the page's answer until this closes;
             // a failure that sent nothing may be tried again.
-            let reason = error.kind.signerReasonKey.map { loc.t($0) }
+            // Spec 102: a venue that cannot be used here says why (and the
+            // core never offers a retry for it).
+            let reason = error.venueReason(loc)
+                ?? error.kind.signerReasonKey.map { loc.t($0) }
                 ?? (sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"))
             return SendReceiptModel(
                 header: header, stage: .failed,

@@ -126,8 +126,12 @@ window.VelaCS = window.VelaCS || {};
 
   /** `bits`: the amount field's width — 160 for Permit2's, otherwise 256. */
   function tokenAmount(value, tokenAddress, ctx, bits) {
-    var known = reg.token(tokenAddress);
-    var token = known || { symbol: '?', nameKey: 'value.unknownToken', decimals: 18, tone: '#8a93a5' };
+    var known = reg.token(tokenAddress, ctx && ctx.chainId);
+    // A token this page does not know on this chain has no decimals it can
+    // vouch for. Guessing 18 drew 250 USDC as "0" (spec 102); the figure is
+    // the integer in the calldata instead — every digit, in the token's own
+    // smallest units — and `warn.unverifiedDecimals` says so.
+    var token = known || { symbol: '?', nameKey: 'value.unknownToken', decimals: 0, tone: '#8a93a5' };
     var unlimited = value >= (bits === 160 ? UNLIMITED_160 : UNLIMITED_256);
     return {
       unlimited: unlimited,
@@ -207,11 +211,17 @@ window.VelaCS = window.VelaCS || {};
         // messaging) proves who is asking. Everything else is the requester's
         // own word, and has to be shown as such.
         originVerified: ctx.originVerified === true,
+        // No site at all: the wallet's own send. The card then names no
+        // requester (the apps' `first_party`), rather than a generic
+        // "Wallet" line that says nothing a person can check.
+        own: !host && !(known && known.name),
       },
-      // Named from the chain id we are actually signing for. A requester's own
-      // label is only used for a chain this page does not know, and is marked.
+      // Named from the chain id we are actually signing for (it is in the
+      // digest's domain). The app's own label is only used for a chain this
+      // page does not know, and is marked as the app's. A chain neither knows
+      // is named by its id — the page's own words, so not marked.
       chain: reg.chainName(ctx.chainId) || ctx.chainName || ('chain ' + (ctx.chainId || '?')),
-      chainClaimed: !reg.chainName(ctx.chainId),
+      chainClaimed: !reg.chainName(ctx.chainId) && !!ctx.chainName,
       chainLogos: ns.logos.chain(ctx, ctx.chainId),
       // The account whose key signs. For a transaction this is also inside
       // the digest (SafeOp.safe), so it is not merely a claim.
@@ -477,7 +487,7 @@ window.VelaCS = window.VelaCS || {};
           role: field.role,
         });
       } else if (field.format === 'nftId') {
-        hero = { kind: 'nft', collection: reg.token(call.to), id: raw.toString() };
+        hero = { kind: 'nft', collection: reg.token(call.to, ctx.chainId), id: raw.toString() };
         rows.push({ label: field.label, value: '#' + raw.toString(), format: 'raw' });
       } else if (field.format === 'date') {
         var expired = Number(raw) * 1000 < (ctx.now || Date.now());
@@ -933,6 +943,83 @@ window.VelaCS = window.VelaCS || {};
   var ADDRESS = /^0x[0-9a-fA-F]{40}$/;
   var LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
+  // --- where the key is (spec 102 R5) ------------------------------------------
+  //
+  // The wallet says which key signs and where it lives — the place the person
+  // chose when they made the key or signed in — so the browser can go straight
+  // to it instead of asking "where is your passkey?" all over again. Every
+  // part is checked here and anything unrecognised is dropped: a route only
+  // ever narrows what the browser offers, and the answer is still checked
+  // against the account's keys (sign.js) and by the wallet.
+
+  /** A place → its WebAuthn L3 hints (vela-core `signing_venue::hints_of`). */
+  var PLACE_HINTS = { platform: ['client-device'], hybrid: ['hybrid'], security_key: ['security-key'] };
+  /** A place → the transports to name when the wallet knows none for the key. */
+  var PLACE_TRANSPORTS = { platform: ['internal'], hybrid: ['hybrid'], security_key: ['usb', 'nfc'] };
+  var TRANSPORTS = ['usb', 'nfc', 'ble', 'smart-card', 'hybrid', 'internal'];
+  var HINTS = ['client-device', 'hybrid', 'security-key'];
+
+  function knownList(value, allowed) {
+    var out = [];
+    (Array.isArray(value) ? value : []).forEach(function (item) {
+      if (typeof item === 'string' && allowed.indexOf(item) >= 0 && out.indexOf(item) < 0) out.push(item);
+    });
+    return out;
+  }
+
+  /**
+   * `{credentialId, place, transports, hints}` as checked, or null.
+   *
+   * `raw` is the request's `context.keyRoute` (a signature) or a ceremony's
+   * own params; `allow` the request's `allowCredentials`. A route that names
+   * a key outside them, or a credential id that is not one, is no route at
+   * all — the request then asks as it always did. Hints the wallet did not
+   * send are the place's; transports it did not send are the place's too
+   * (a key named with none makes some browsers guess — vela-core
+   * `app::shell`).
+   */
+  function keyRoute(raw, allow) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    var place = Object.prototype.hasOwnProperty.call(PLACE_HINTS, raw.place) ? raw.place : null;
+    var id = null;
+    if (raw.credentialId !== undefined && raw.credentialId !== null) {
+      if (typeof raw.credentialId !== 'string' || !CREDENTIAL_ID.test(raw.credentialId)) return null;
+      id = raw.credentialId;
+      if (Array.isArray(allow) && allow.length && allow.indexOf(id) < 0) return null;
+    }
+    if (!place && !id) return null;
+    var hints = knownList(raw.hints, HINTS);
+    if (!hints.length && place) hints = PLACE_HINTS[place].slice();
+    var transports = id ? knownList(raw.transports, TRANSPORTS) : [];
+    if (id && !transports.length && place) transports = PLACE_TRANSPORTS[place].slice();
+    return { credentialId: id, place: place, transports: transports, hints: hints };
+  }
+
+  /**
+   * The confirm button's words: the action, as the apps word it
+   * (`ClearConfirm` — "Confirm send", "Approve", "Sign"…), never a bare
+   * "OK". The intent above it says what; this says what tapping does.
+   */
+  var CONFIRM = {
+    'intent.transfer': 'button.send', 'intent.send': 'button.send',
+    'intent.transferFrom': 'button.send', 'intent.nftTransfer': 'button.send',
+    'intent.swap': 'button.swap',
+    'intent.vaultDeposit': 'button.deposit', 'intent.vaultWithdraw': 'button.withdraw',
+    'intent.approve': 'button.approve', 'intent.increase': 'button.approve',
+    'intent.permit': 'button.approve', 'intent.permit2': 'button.approve',
+    'intent.approveAll': 'button.approveAll',
+    'intent.revoke': 'button.revoke',
+    'intent.login': 'button.signIn', 'intent.signIn': 'button.signIn',
+    'intent.create': 'button.create',
+    'intent.proofVerify': 'button.confirm', 'intent.proofRecover': 'button.confirm',
+    'intent.memberProof': 'button.confirm',
+  };
+
+  function confirmKey(view) {
+    if (view.refuse) return 'button.cannotSign';
+    return CONFIRM[view.intentKey] || 'button.sign';
+  }
+
   function hostOf(url) {
     try { return new URL(url).hostname.toLowerCase(); } catch (e) { return ''; }
   }
@@ -1080,7 +1167,7 @@ window.VelaCS = window.VelaCS || {};
       // checked (owner, 2026-09-24: the page answers a `velawallet://` and
       // nothing else, so 「某个钱包」 and its logo were both inappropriate).
       return ns.resolve.answersToWallet(ctx)
-        ? { originKey: 'value.answerToThisWallet', verified: true }
+        ? { originKey: 'value.answerOnlyToIt', verified: true }
         : { origin: schemeOf(ctx.callback) || null, originKey: schemeOf(ctx.callback) ? null : 'value.answerToNobody', verified: false, elsewhere: true };
     }
     var byChannel = { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[ctx.channel];
@@ -1171,7 +1258,7 @@ window.VelaCS = window.VelaCS || {};
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;
 
-    view.hero = { kind: 'ceremony', ceremony: kind, title: wallet, titleKey: wallet ? null : 'value.yourWallet' };
+    // No hero: the wallet is this row, as the apps' own sheets list it.
     if (wallet) view.fields.push({ label: 'field.wallet', value: wallet });
 
     var params = [];
@@ -1253,7 +1340,12 @@ window.VelaCS = window.VelaCS || {};
         view.fields.push({ label: 'field.key', value: shortKey(view.ceremony.member.publicKey) });
         view.fields.push({ label: 'field.groupKey', value: shortKey(view.ceremony.member.groupPublicKey) });
         view.fields.push({ label: 'field.registry', value: hostOf(member.registry) });
-        view.fields.push({ label: 'field.chain', value: String(member.chainId) });
+        view.fields.push({
+          label: 'field.chain',
+          value: reg.chainName(member.chainId)
+            ? reg.chainName(member.chainId) + ' · ' + member.chainId
+            : String(member.chainId),
+        });
         params.push({ name: 'chainId', value: String(member.chainId) });
         params.push({ name: 'registryContract', value: member.registryContract });
         params.push({ name: 'publicKey', value: view.ceremony.member.publicKey });
@@ -1262,6 +1354,18 @@ window.VelaCS = window.VelaCS || {};
         params.push({ name: 'registry', value: member.registry });
       }
     }
+
+    // Where the key is, or where the new one goes (spec 102 R5): the place
+    // the person chose in the wallet, so the browser asks for that one only.
+    view.key = keyRoute({
+      credentialId: kind === 'proof' || kind === 'memberProof' ? p.credentialId : undefined,
+      place: p.place,
+      transports: p.transports,
+      hints: p.hints,
+    }, null);
+    view.keyLabel = kind === 'create' ? 'field.keyOn' : 'field.confirmWith';
+    if (view.key && view.key.hints.length) params.push({ name: 'hints', value: view.key.hints.join(', ') });
+    if (view.key && view.key.transports.length) params.push({ name: 'transports', value: view.key.transports.join(', ') });
 
     view.fields.push({ label: 'field.relyingParty', value: rpId || '—' });
     view.tech = techFor(kind === 'create' ? 'WebAuthn · navigator.credentials.create' : 'WebAuthn · navigator.credentials.get',
@@ -1302,6 +1406,7 @@ window.VelaCS = window.VelaCS || {};
     if (!view.refuse && kind === 'create' && rpId && rpId !== 'getvela.app') {
       view.warnings.push({ tone: 'caution', key: 'warn.foreignPageKey', params: { rpId: rpId } });
     }
+    view.confirmKey = confirmKey(view);
     return view;
   }
 
@@ -1465,7 +1570,7 @@ window.VelaCS = window.VelaCS || {};
       // OR, never overwrite: `operationSubject` may already have refused (the
       // operation does not contain the site's call). Every Vela operation has
       // at least two legs — the call and the fee — so an overwrite here would
-      // offer the slide for exactly the tampered operation it exists to stop.
+      // offer the button for exactly the tampered operation it exists to stop.
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
       view.legs.forEach(function (leg) {
         leg.view.warnings.forEach(function (w) {
@@ -1507,15 +1612,16 @@ window.VelaCS = window.VelaCS || {};
     }
 
     if (!view.dapp.originVerified && view.dapp.origin) {
-      view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin' });
+      // About the requester line, so drawn under it (`near`), not as a banner.
+      view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin', near: 'requester' });
     }
 
     // Spec 102 R7: a signature goes to the Vela wallet on this device and
     // nowhere else. Any site can open this page with an operation of its
     // choosing and its own answer address; the card would describe that
-    // operation truthfully, and a person who slid would hand a usable
-    // signature to whoever named the address. So nothing is offered — no
-    // slide, no passkey prompt — and the card says where the answer would
+    // operation truthfully, and a person who tapped would hand a usable
+    // signature to whoever named the address. So nothing is offered — the
+    // button is off, no passkey prompt — and the card says where the answer would
     // have gone. Fails closed: a context that does not say the answer
     // reaches the wallet is refused, previews included (they pass the
     // address the apps send).
@@ -1527,12 +1633,19 @@ window.VelaCS = window.VelaCS || {};
         ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
         : { tone: 'danger', key: 'refuse.answerNotToWallet' });
     }
+
+    // The key that signs, and where it lives (spec 102 R5). sign.js asks for
+    // this one credential; the card says where the person will confirm.
+    view.key = keyRoute(ctx.keyRoute, ctx.allowCredentials);
+    view.keyLabel = 'field.confirmWith';
+    view.confirmKey = confirmKey(view);
     return view;
   }
 
   ns.resolve = resolve;
   ns.resolve.typedDocument = typedDocument;
   ns.resolve.walletRequester = walletRequester;
+  ns.resolve.keyRoute = keyRoute;
   ns.resolve.answersToWallet = answersToWallet;
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;

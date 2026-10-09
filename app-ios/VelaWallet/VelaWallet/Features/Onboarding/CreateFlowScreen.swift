@@ -66,13 +66,28 @@ struct CreateFlowScreen: View {
                 )
 
             case .keys:
+                let pages = model.signingPages()
                 KeysScreen(
                     loc: loc,
                     view: view,
                     onAddKey: model.addKey,
                     onConfirmKey: model.confirmKey,
                     onRemoveKey: model.removeKey,
-                    onFinish: model.finishKeys
+                    onFinish: model.finishKeys,
+                    // Spec 102: "Use a trusted signing page" — the pages this
+                    // device trusts, each with its domain and this phone's
+                    // check of it.
+                    pageChoices: SigningPagePickerModel.choices(
+                        pages: pages?.pages ?? [], selected: view.signingPage, loc: loc,
+                        line: { SignerPageChecks.shared.line(for: $0) },
+                        asksTrust: { SignerPageChecks.shared.versionAskingTrust($0) }
+                    ),
+                    onChoosePage: model.chooseSigningPage,
+                    onAddPage: model.addSigningPage,
+                    pageAddError: SigningPagesViewWire.addErrorKey(pages?.addError),
+                    onPagesShown: {
+                        for page in pages?.pages ?? [] { SignerPageChecks.shared.prime(page.url) }
+                    }
                 )
 
             case .progress:

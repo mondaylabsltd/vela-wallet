@@ -1,0 +1,16 @@
+{
+  "id": "b4b4b4b4",
+  "name": "Old page wallet",
+  "address": "0x5555555555555555555555555555555555555555",
+  "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "created_at_iso": "2026-09-23T09:30:00.000Z",
+  "keys": [
+    {
+      "credential_id": "b4b4b4b4",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "Old page wallet",
+      "transports": "internal",
+      "signer_origin": "https://sign.getvela.app"
+    }
+  ]
+}

@@ -60,16 +60,31 @@
       "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
     },
     "signing": {
-      "title": "Ký bằng",
-      "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
-      "pageTitle": "Trang Trusted Signer",
-      "pageSubtitle": "Trang mà Trusted Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
-      "pageOfficial": "Chính thức",
+      "title": "Trang ký",
+      "subtitle": "Những trang bạn tin cậy để hiển thị và ký yêu cầu.",
+      "pageOfficial": "Trang ký chính thức của Vela",
       "pageInvalid": "Đây không phải là địa chỉ web.",
       "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
-      "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
-      "pageReset": "Dùng trang chính thức",
-      "pageSave": "Lưu"
+      "pageSave": "Lưu",
+      "pageAdd": "Thêm trang ký tự triển khai",
+      "pageDuplicate": "Trang này đã được lưu.",
+      "keysOn": "Khóa trên {{domain}}",
+      "pageSelfHosted": "Tự triển khai · {{domain}}",
+      "pageTrust": "Tin cậy phiên bản này",
+      "pageRename": "Đổi tên",
+      "pageRemove": "Xóa",
+      "pageName": "Tên"
+    },
+    "venue": {
+      "title": "Nơi bạn xem lại và ký",
+      "subtitle": "Áp dụng cho giao dịch và tin nhắn của tài khoản này. Khóa của bạn không đổi.",
+      "inVela": "Xem lại và ký trong Vela",
+      "inVelaBody": "Màn hình ký của chính Vela",
+      "page": "Xem lại và ký trên trang ký tin cậy",
+      "pageBody": "Trang không phụ thuộc hiển thị đúng những gì bạn ký",
+      "blockedApp": "Vela không dùng được khóa trên {{domain}}.",
+      "blockedPage": "Trang này ở {{pageDomain}}; khóa của tài khoản này ở {{domain}}.",
+      "blockedWeb": "Trang ký chỉ mở được từ ứng dụng Vela, không phải trên web."
     },
     "advanced": {
       "networksTitle": "Mạng lưới",

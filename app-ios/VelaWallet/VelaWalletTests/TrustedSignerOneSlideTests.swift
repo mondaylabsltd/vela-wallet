@@ -51,15 +51,21 @@ struct TrustedSignerOneSlideTests {
         #expect(button.confirm != nil, "the same approve, drawn as a button")
     }
 
-    /// The spine's own route decides: a key behind a page is the page's.
-    @Test func theRouteIsTheSpinesOwn() async {
+    /// The spine's own plan decides (spec 102): the account's venue, which
+    /// the sheet and the ceremony both read.
+    @Test func theVenueIsTheSpinesOwnPlan() async {
+        let fixture = TrustedSignerFixture()
         let accounts = ScriptedAccounts()
         let relay = RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
-        #expect(!(await spine.signsOnTrustedSigner(account: "0xabc")), "no route named: the platform sheet")
+        #expect(await spine.plan(account: "0xabc") == nil, "no record: nothing to read, the app's own sheet")
 
-        accounts.routesJson = #"[{"credential_id":"cred-0","transports":"internal","signer_origin":"https://sign.example"}]"#
-        #expect(await spine.signsOnTrustedSigner(account: "0xabc"), "a key behind a page signs there")
+        accounts.recordJson = fixture.recordJson(venue: ["type": "in_vela"])
+        #expect(await spine.plan(account: fixture.account)?.venue == .inVela)
+
+        accounts.recordJson = fixture.pageRecordJson
+        #expect(await spine.plan(account: fixture.account)?.venue.pageUrl == "https://sign.getvela.app/",
+                "an account whose venue is a page signs there")
     }
 
     /// A page's request tells the page the browser saw the site; the page

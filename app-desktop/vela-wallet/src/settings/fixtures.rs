@@ -32,8 +32,8 @@ pub enum SettingsPage {
     /// The default transaction speed (spec 069) — between the endpoints and
     /// the storage, as the web's desktop layout places it.
     FeeSpeed,
-    /// How this device signs by default, and the Trusted Signer's page (spec
-    /// 071) — beside the speed, where every shell puts the two.
+    /// Signing pages (spec 102): the pages this device trusts to show and
+    /// sign requests — beside the speed, where every shell puts the two.
     Signing,
     Storage,
     /// Send feedback (078 S-03) — beside About, as the web's desktop and
@@ -62,6 +62,23 @@ impl SettingsPage {
         SettingsPage::Feedback,
     ];
 
+    /// A panel's id, as `VELA_SETTINGS_PAGE` names it.
+    pub fn id(self) -> &'static str {
+        match self {
+            SettingsPage::Account => "account",
+            SettingsPage::Appearance => "appearance",
+            SettingsPage::Localization => "localization",
+            SettingsPage::Networks => "networks",
+            SettingsPage::RpcProviders => "rpc",
+            SettingsPage::Endpoints => "endpoints",
+            SettingsPage::FeeSpeed => "fee-speed",
+            SettingsPage::Signing => "signing",
+            SettingsPage::Storage => "storage",
+            SettingsPage::Feedback => "feedback",
+            SettingsPage::About => "about",
+        }
+    }
+
     pub fn icon(self) -> Icon {
         match self {
             SettingsPage::Account => Icon::UsersRound,
@@ -71,7 +88,7 @@ impl SettingsPage {
             SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::FeeSpeed => Icon::Clock,
-            SettingsPage::Signing => Icon::Lock,
+            SettingsPage::Signing => Icon::Eye,
             SettingsPage::Storage => Icon::HardDrive,
             SettingsPage::Feedback => Icon::MessageSquareText,
             SettingsPage::About => Icon::Info,

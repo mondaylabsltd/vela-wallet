@@ -170,8 +170,6 @@
       "keysSubtitleFull": "Vous avez atteint la limite de 7.",
       "keysTitle": "Ajouter des passkeys",
       "keysTitleBlocked": "Une clé de plus avant de pouvoir créer",
-      "methodBlockedHint": "Les clés de ce portefeuille appartiennent toutes à {{party}}.",
-      "methodBlockedSigner": "Votre page Trusted Signer est {{page}}, dont les clés appartiennent à {{pageParty}}. Choisissez une page {{party}} dans les réglages pour en ajouter une ici.",
       "methodHybridBody": "Scannez un code et créez-la sur un appareil à proximité",
       "methodHybridTitle": "Téléphone ou tablette",
       "methodHybridUnavailable": "Bientôt disponible",
@@ -184,6 +182,8 @@
       "needSecondKeyHint": "Cette clé n'est sauvegardée nulle part. Si vous la perdez, le portefeuille reste fermé. Ajoutez-en une deuxième.",
       "nextBtn": "Continuer",
       "openSettings": "Ouvrir les Réglages",
+      "signingPageTitle": "Utiliser une page de signature de confiance",
+      "signingPageBody": "Avancé : la page officielle de Vela, ou une que vous hébergez",
       "pinAttemptsLeft": "Tentatives restantes : {{attempts}}",
       "pinBody": "{{product}} n'a pas de lecteur d'empreinte : c'est son code PIN qui confirme que c'est bien vous. Le code n'est transmis qu'à la clé que vous tenez — jamais au disque de cet ordinateur, jamais à un serveur.",
       "pinLabel": "Code PIN",
@@ -231,8 +231,7 @@
       "touchFingerprintBody": "{{product}} clignote. Posez votre doigt sur son capteur pour confirmer que c'est bien vous.",
       "touchSelectBody": "Plusieurs clés de sécurité sont branchées et clignotent toutes. Touchez celle que vous voulez utiliser.",
       "touchTitle": "Touchez votre clé de sécurité",
-      "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt.",
-      "verifyStuckHint": "La vérification échoue encore ? Votre appareil n'a peut-être pas bien enregistré cette clé d'accès. Vous pouvez recommencer sans risque — rien n'a encore été créé."
+      "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt."
     },
     "login": {
       "alertNotSupportedTitle": "Non pris en charge",

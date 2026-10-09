@@ -25,6 +25,7 @@ const ns = loadPageLibs([
   'src/lib/encode.js',
   'src/lib/fee.js',
   'src/lib/logos.js',
+  'src/lib/catalog.js',
   'src/lib/registry.js',
   'src/lib/resolve.js',
   'src/lib/render.js',
@@ -52,7 +53,7 @@ const tx = (call, ctx = {}) => ns.resolve(
 );
 const draw = (view) => ns.render(view, {});
 const heroText = (sheet) => sheet.find('.amount').map((n) => n.textContent).join();
-const slideText = (sheet) => sheet.find('.slide-label').map((n) => n.textContent).join();
+const confirmText = (sheet) => sheet.find('confirm').map((n) => n.textContent).join();
 const isSend = (view) => view.intentKey === 'intent.send' && view.hero && view.hero.kind === 'amount';
 const noDanger = (view) => view.risk !== 'danger' && view.risk !== 'hard-danger' &&
   !view.warnings.some((w) => w.tone === 'danger');
@@ -85,8 +86,8 @@ for (const [name, call] of [
   check(`${name}: the hero reads 0, with no minus`, heroText(sheet) === '0' && !/[-−]/.test(heroText(sheet)),
     heroText(sheet));
   check(`${name}: no "nothing else changes" line`, sheet.find('.tech-sim').length === 0 && !view.tech.sim);
-  check(`${name}: the slide says ${t('intent.send')}, not ${t('intent.blind')}`,
-    slideText(sheet) === t('ui.slide', { intent: t('intent.send') }), slideText(sheet));
+  check(`${name}: the button says ${t('button.send')}, not ${t('button.sign')}`,
+    confirmText(sheet) === t('button.send'), confirmText(sheet));
 }
 
 // 3. Every spelling of "no calldata" the wallet accepts, at value 0.

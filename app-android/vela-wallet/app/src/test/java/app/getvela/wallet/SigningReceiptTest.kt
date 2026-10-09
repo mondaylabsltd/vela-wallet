@@ -48,19 +48,113 @@ class SigningReceiptTest {
     private fun entry(status: TrackStatus, outcome: TrackOutcome, txHash: String? = null, relaySentAtMs: Double? = 1.0) =
         TrackEntryView(user_op_hash = op, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0, outcome = outcome, relay_sent_at_ms = relaySentAtMs)
 
+    /**
+     * Spec 102 D4: an account whose venue is a page gets the hand-off card —
+     * where, with which key, what is trusted about the page, and Open — and
+     * the sheet does not repeat the preview: the page is the authority.
+     */
     @Test
-    fun `an account that signs on the Trusted Signer's page gets a button, not a second slide`() {
+    fun `an account that signs on a page gets the hand-off card, not a second preview`() {
         val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
         val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val clear = app.getvela.wallet.feature.signing.core.ClearSigningView()
         val guard = app.getvela.wallet.feature.signing.core.GuardView()
         val fee = app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true)
-        val slide = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx)
-        assertTrue(!slide.confirmAsButton)
-        val button = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(trustedSignerRoute = true))
-        assertTrue(button.confirmAsButton)
-        assertEquals(strings.t("componentsUi.signing.openSigner"), button.confirmButtonLabel)
+        val inVela = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx)
+        assertNull(inVela.handoff)
+
+        val opens = uniffi.vela_core_uniffi.SignerIntegrityLine(
+            uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "0ba8ee8c", 1_760_000_000_000uL,
+            "componentsUi.signing.integrity.matches", true,
+        )
+        val key = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel(
+            name = "Savings", placeKey = "onboarding.create.methodPlatformTitle", labelKey = "componentsUi.signing.confirmWithLabel",
+        )
+        val handoff = SigningLive.Handoff("https://sign.getvela.app/", key, opens)
+        val card = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff))
+        val model = card.handoff!!
+        assertEquals("Review and sign on a trusted signing page", model.title)
+        // A label | value row, like "Signing account | Savings".
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Savings"), model.key)
+        assertEquals("sign.getvela.app", model.page)
+        assertTrue(model.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertEquals(strings.t("componentsUi.signing.openSigner"), model.open)
+        assertTrue(card.confirmEnabled)
+        // No preview: the decoded request is the page's to show.
+        assertTrue(card.blocks.none { it is SigningBlock.Intent || it is SigningBlock.Code || it is SigningBlock.Sentence })
+        assertTrue(card.tech.isEmpty)
+
+        // A page whose check did not admit it: the card says why, and Open stays shut.
+        val refused = opens.copy(state = uniffi.vela_core_uniffi.SignerIntegrityState.COULD_NOT_CHECK, key = "componentsUi.signing.integrity.couldNotCheck", opens = false, checkedAtMs = null)
+        val shut = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff.copy(line = refused)))
+        assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
+        assertTrue(!shut.confirmEnabled)
+    }
+
+    /**
+     * P2b-A10: a venue this device cannot use is told to the core as
+     * `venue_blocked`; the sheet's failure says why in the person's language
+     * (`SignErrorNotice.venue_block`), never the shell's English, and offers
+     * no retry.
+     */
+    @Test
+    fun `a venue that cannot be used here is said in the person's words`() {
+        val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
+        val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
+        val block = app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("sign.example.com")
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            error = app.getvela.wallet.feature.signing.core.SignErrorNotice(
+                app.getvela.wallet.feature.signing.core.SignErrorKind.VenueBlocked, venue_block = block,
+            ),
+        )
+        val sheet = SigningLive.model(
+            drawn, request, sign,
+            app.getvela.wallet.feature.signing.core.ClearSigningView(), app.getvela.wallet.feature.signing.core.GuardView(),
+            app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true), ctx,
+        )
+        val said = "Vela can't reach keys on sign.example.com."
+        val receipt = sheet.receipt
+        assertTrue("the reason is said: ${sheet.blocks} / $receipt", receipt?.captions?.contains(said) == true || sheet.blocks.any { it is SigningBlock.Warning && it.text == said })
+        assertNull("no retry: nothing would change", receipt?.retry)
+        // The wire reads the core's shape.
+        val decoded = app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+            app.getvela.wallet.feature.signing.core.SignErrorNotice.serializer(),
+            """{"kind":"venue_blocked","detail":null,"venue_block":{"type":"page_on_other_domain","page_domain":"sign.example.com","domain":"getvela.app"}}""",
+        )
+        assertEquals(app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app"), decoded.venue_block)
+        val outcome = app.getvela.wallet.core.crux.Wire.json.encodeToString(
+            app.getvela.wallet.feature.signing.core.SignSubmitOutcome.serializer(),
+            app.getvela.wallet.feature.signing.core.SignSubmitOutcome.VenueBlocked(block),
+        )
+        assertEquals("""{"type":"venue_blocked","block":{"type":"app_cannot_reach","domain":"sign.example.com"}}""", outcome)
+    }
+
+    /**
+     * P2b-A8: a key ceremony on a page waits saying what it does there — its
+     * own title as the card's line, not a signature's "check the request" —
+     * and names its key in a row, as the page does ("New key on | Phone or
+     * tablet"). A signature's card already named its key.
+     */
+    @Test
+    fun `a ceremony waits saying what it does, with its key row`() {
+        val op = """{"type":"register_passkey","name":"Savings","method":"hybrid"}"""
+        val create = SigningLive.trustedSignerWait(
+            ctx.copy(
+                trustedSignerWaiting = true,
+                trustedSignerTitle = uniffi.vela_core_uniffi.trustedSignerCeremonyTitleKey(op),
+                trustedSignerKey = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel.ofCeremony(op),
+            ),
+        )
+        // Desktop's line, every shell's: the card waits, and says what for.
+        assertEquals("Waiting for the signing page…", create?.title)
+        assertEquals("Create a key on the signing page", create?.hint)
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create?.key)
+        val signature = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true))
+        assertEquals("Waiting for the signing page…", signature?.title)
+        assertNull(signature?.key)
+        assertEquals(strings.t("componentsUi.signing.trustedSignerWaitingHint"), signature?.hint)
     }
 
     @Test

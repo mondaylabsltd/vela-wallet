@@ -71,10 +71,9 @@ struct SettingsScreen: View {
     /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
     /// whether there is anything to send.
     var onEthereumBackup: (() -> Void)?
-    /// The Trusted Signer page's Save and reset (spec 071). Save answers whether
-    /// the core took the address.
-    var onSaveSignerUrl: ((String) -> Bool)?
-    var onResetSignerUrl: (() -> Void)?
+    /// Spec 102: the account's venue and Settings → Signing pages. Absent in
+    /// the gallery, where both are pictures of choices already made.
+    var signingActions: SigningSettingsActions?
     /// The relay's Save and reset (spec 075) — the same pair against the
     /// other key.
     /// A link on the page — About's three, the language sheet's "suggest a
@@ -141,8 +140,7 @@ struct SettingsScreen: View {
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
         onEthereumBackup: (() -> Void)? = nil,
-        onSaveSignerUrl: ((String) -> Bool)? = nil,
-        onResetSignerUrl: (() -> Void)? = nil,
+        signingActions: SigningSettingsActions? = nil,
         onOpenLink: ((String) -> Void)? = nil,
         onRevealDebugMode: (() -> Void)? = nil,
         onDebugMode: ((Bool) -> Void)? = nil
@@ -165,8 +163,7 @@ struct SettingsScreen: View {
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
-        self.onSaveSignerUrl = onSaveSignerUrl
-        self.onResetSignerUrl = onResetSignerUrl
+        self.signingActions = signingActions
         self.onOpenLink = onOpenLink
         self.onRevealDebugMode = onRevealDebugMode
         self.onDebugMode = onDebugMode
@@ -256,6 +253,7 @@ struct SettingsScreen: View {
                 switch page {
                 case .endpoints: endpointActions?.onOpenEndpoints()
                 case .rpcProviders: endpointActions?.onOpenProviders()
+                case .signingPages: signingActions?.onPagesShown()
                 default: break
                 }
             }
@@ -269,6 +267,7 @@ struct SettingsScreen: View {
             .sheet(item: sheetBinding) { overlay in
                 SettingsSheet(
                     model: model, overlay: overlay,
+                    loc: loc,
                     onDismiss: { self.overlay = .none },
                     onSignOut: onSignOut,
                     onPick: onPick.map { pick in
@@ -310,13 +309,19 @@ struct SettingsScreen: View {
                             remove(index)
                         }
                     },
+                    onChooseVenue: signingActions.map { actions in
+                        { venue in
+                            actions.onChooseVenue(venue)
+                            self.overlay = .none
+                        }
+                    },
+                    // The sheet stays: the row's line follows the new check.
+                    onTrustVenue: signingActions.map { $0.onTrustPage },
                     pendingConfirm: pendingConfirm?.sheet,
                     onConfirmPending: {
                         pendingConfirm?.action()
                         pendingConfirm = nil
                     },
-                    onSaveSignerUrl: onSaveSignerUrl,
-                    onResetSignerUrl: onResetSignerUrl,
                     onOpenLink: onOpenLink,
                     feedbackSender: feedbackSender
                 )
@@ -382,6 +387,7 @@ struct SettingsScreen: View {
         case .endpoints: (model.endpoints.title, nil)
         case .storage: (model.storage.title, model.storage.subtitle)
         case .about: (model.about.title, nil)
+        case .signingPages: (model.signingPages?.title ?? "", model.signingPages?.subtitle)
         case .home: (model.title, nil)
         }
     }
@@ -440,6 +446,10 @@ struct SettingsScreen: View {
                 ) { clear?(id) }
             }
         )
+        case .signingPages:
+            if let panel = model.signingPages {
+                SigningPagesBody(loc: loc, panel: panel, actions: signingActions)
+            }
         case .about: AboutBody(
             panel: model.about,
             onOpenLink: onOpenLink,
@@ -470,6 +480,13 @@ struct SettingsScreen: View {
         // Under the account it belongs to (spec 062): which keys, then their backup.
         if let keys = model.keys {
             WalletKeysBlock(model: keys, onTap: select)
+        }
+
+        // Spec 102: where this account reviews and signs — the account's own
+        // setting, beside its keys, which it never changes.
+        if let venue = model.venue {
+            SettingsRow(row: venue.row, divider: false, onTap: select)
+                .accessibilityIdentifier("settings.venue")
         }
 
         ForEach(model.sections) { section in
@@ -599,7 +616,8 @@ struct SettingsScreen: View {
 
     /// Rows a tap navigates from; everything else opens an overlay.
     private func select(_ id: String) {
-        if let sheet = Self.overlay(forRow: id, hasSignerPage: model.signerPage != nil) {
+        if let sheet = Self.overlay(forRow: id) {
+            if sheet == .signingVenue { signingActions?.onPagesShown() }
             if sheet == .feedback {
                 // A fresh form — unless a report is still on its way, whose
                 // sheet this then reopens on.
@@ -624,6 +642,7 @@ struct SettingsScreen: View {
         case "endpoints": page = .endpoints
         case "storage": page = .storage
         case "about": page = .about
+        case SigningPagesPageModel.rowId: page = .signingPages
         case SettingsLive.ethereumBackupRow: onEthereumBackup?()
         default: break
         }
@@ -632,12 +651,12 @@ struct SettingsScreen: View {
     /// The sheet a row raises, if it raises one. Pure, so a test can hold
     /// every row to its sheet — the feedback row had a route and no row for
     /// two specs (2026-09-27).
-    static func overlay(forRow id: String, hasSignerPage: Bool) -> SettingsOverlay? {
+    static func overlay(forRow id: String) -> SettingsOverlay? {
         switch id {
         case "language": .language
         case "currency": .currency
         case SettingsFixtures.feeSpeedRow: .feeSpeed
-        case SettingsFixtures.signerPageRow: hasSignerPage ? .signerPage : nil
+        case VenueSettingModel.rowId: .signingVenue
         case "number-format": .numberFormat
         case "date-format": .dateFormat
         case "time-format": .timeFormat

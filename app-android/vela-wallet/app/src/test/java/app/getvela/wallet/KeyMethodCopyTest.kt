@@ -10,6 +10,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,7 +62,7 @@ class KeyMethodCopyTest {
 
     /**
      * Every row resolves to words in both choosers — never a bare key — and
-     * the Trusted Signer keeps the signing sheet's own two sentences (spec 075).
+     * there are three places, each its own words (spec 102: no fourth row).
      */
     @Test
     fun `every row has words in both choosers`() {
@@ -75,10 +76,33 @@ class KeyMethodCopyTest {
                 }
             }
         }
-        assertEquals(
-            strings.t("componentsUi.signing.trustedSignerBody"),
-            methodCopy(KeyMethod.TrustedSigner, KeyChooser.SignIn, strings).second,
-        )
-        assertEquals(4, KeyMethod.entries.map { methodCopy(it, KeyChooser.SignIn, strings).first }.toSet().size)
+        assertEquals(3, KeyMethod.entries.map { methodCopy(it, KeyChooser.SignIn, strings).first }.toSet().size)
+        // The fourth method's words are gone from the core: nothing can draw it.
+        assertNull(uniffi.vela_core_uniffi.keyMethodWords("trusted_signer", "sign_in", "other"))
+    }
+
+    /**
+     * Spec 102 D6: "Use a trusted signing page" has words of its own — the
+     * venue's, not a key place's; it lists Vela's official page too, so it is
+     * never "my own" — and so do the two venues of "Where you review and
+     * sign", which read alike (D-19), in every chooser that draws them.
+     */
+    @Test
+    fun `the signing page entry and the venues have their own words`() {
+        val strings = strings("en")
+        val (title, line) = app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(strings)
+        assertEquals("Use a trusted signing page", title)
+        assertEquals("Advanced: Vela's official page, or one you deployed yourself", line)
+        assertEquals("Review and sign in Vela", strings.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("Review and sign on a trusted signing page", strings.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        val zh = strings("zh")
+        assertEquals("使用可信签名页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).first)
+        assertEquals("在 Vela 里预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("在可信签名页预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        // "My own signing page" is nowhere (D6).
+        for (s in listOf(strings, zh)) {
+            assertFalse(app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(s).first.contains("own", ignoreCase = true))
+            assertFalse(app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(s).first.contains("自己"))
+        }
     }
 }

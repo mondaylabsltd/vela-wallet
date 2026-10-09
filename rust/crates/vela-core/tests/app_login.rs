@@ -33,6 +33,7 @@ fn authenticated() -> Sut {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -241,6 +242,7 @@ fn an_incompatible_provider_stops_before_any_resolution() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
 
@@ -285,6 +287,7 @@ fn awaiting_second_signature(first: Assertion) -> Sut {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -307,7 +310,7 @@ fn awaiting_second_signature(first: Assertion) -> Sut {
             // platform vault this walk signed in with.
             method: KeyMethod::Platform,
             purpose: ProofPurpose::RecoverSecond,
-            signer_origin: None,
+            page: None,
         }],
         "accepting asks for the disambiguating second signature"
     );
@@ -401,6 +404,7 @@ fn a_cancelled_ceremony_is_silent() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
 
@@ -423,12 +427,14 @@ fn a_cancelled_phone_ceremony_is_silent_too() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Hybrid,
+        page: None,
     });
     let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
     assert_eq!(
         next,
         vec![ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::Hybrid
+            method: KeyMethod::Hybrid,
+            page: None,
         }],
         "the phone route shows a code"
     );
@@ -449,12 +455,14 @@ fn a_cancelled_phone_ceremony_is_silent_too() {
     // afresh and can still succeed.
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Hybrid,
+        page: None,
     });
     let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
     assert_eq!(
         next,
         vec![ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::Hybrid
+            method: KeyMethod::Hybrid,
+            page: None,
         }]
     );
     let next = sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -475,6 +483,7 @@ fn a_cancelled_phone_recovery_signature_is_silent() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Hybrid,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -512,7 +521,7 @@ fn a_cancelled_phone_recovery_signature_is_silent() {
 fn a_failed_link_to_the_phone_is_not_blamed_on_biometrics() {
     let prompt_after = |method: KeyMethod, message: &str| {
         let mut sut = mounted();
-        sut.dispatch(Event::SignIn { method });
+        sut.dispatch(Event::SignIn { method, page: None });
         sut.resolve(ShellResult::PasskeySupport { supported: true });
         let next = sut.resolve(ShellResult::PasskeyFailed {
             kind: FailureKind::Other,
@@ -602,6 +611,7 @@ fn late_result_after_supersede_cannot_overwrite() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     let stale_prompt = sut.resolve(ShellResult::PasskeySupport { supported: false });
     assert!(matches!(
@@ -612,6 +622,7 @@ fn late_result_after_supersede_cannot_overwrite() {
     // A new attempt starts while the alert is still up.
     let fresh = sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     assert_eq!(fresh, vec![ShellOperation::CheckPasskeySupport]);
 
@@ -632,7 +643,8 @@ fn late_result_after_supersede_cannot_overwrite() {
     assert_eq!(
         next,
         vec![ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::Platform
+            method: KeyMethod::Platform,
+            page: None,
         }]
     );
 }
@@ -646,12 +658,14 @@ fn the_sign_in_method_choice_reaches_the_ceremony() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::SecurityKey,
+        page: None,
     });
     let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
     assert_eq!(
         next,
         vec![ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::SecurityKey
+            method: KeyMethod::SecurityKey,
+            page: None,
         }],
         "the who-are-you ceremony must run on the chosen route"
     );
@@ -663,9 +677,11 @@ fn sign_in_while_busy_is_a_no_op() {
     let mut sut = mounted();
     let first = sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     let second = sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
 
     assert_eq!(first.len(), 1);
@@ -842,6 +858,7 @@ fn a_sibling_credential_matches_the_local_multikey_account() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     // Authenticated with the SECOND founding key's credential.
@@ -893,6 +910,7 @@ fn authenticated_nameless() -> Sut {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -1039,6 +1057,7 @@ fn an_uppercase_uuid_handle_still_yields_its_name() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
@@ -1289,7 +1308,7 @@ fn signed_in_holding(
     stored: Vec<vela_core::app::Account>,
 ) -> (Sut, Vec<ShellOperation>) {
     let mut sut = mounted();
-    sut.dispatch(Event::SignIn { method });
+    sut.dispatch(Event::SignIn { method, page: None });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     sut.resolve(ShellResult::PasskeyAuthenticated {
         assertion: support::assertion(credential),
@@ -1306,7 +1325,6 @@ fn named(credential: &str, method: KeyMethod) -> Option<SignInKey> {
         credential_id: credential.to_owned(),
         method,
         transports: "internal".to_owned(),
-        signer_origin: None,
     })
 }
 
@@ -1319,14 +1337,14 @@ fn the_sign_in_names_the_key_this_device_signs_with() {
     match next.as_slice() {
         [ShellOperation::SaveAccount { account }] => {
             assert_eq!(account.id, stored.id, "the held record, updated in place");
-            assert_eq!(account.signed_in_with, named(CRED, KeyMethod::Hybrid));
+            assert_eq!(account.sign_in_key, named(CRED, KeyMethod::Hybrid));
         }
         other => panic!("expected the record re-saved first, got {other:?}"),
     }
     match sut.resolve(ShellResult::AccountSaved).as_slice() {
         [ShellOperation::CompleteOnboarding {
             mode: CompletionMode::SetWallet { accounts, .. },
-        }] => assert_eq!(accounts[0].signed_in_with, named(CRED, KeyMethod::Hybrid)),
+        }] => assert_eq!(accounts[0].sign_in_key, named(CRED, KeyMethod::Hybrid)),
         other => panic!("expected the wallet to open, got {other:?}"),
     }
 }
@@ -1335,7 +1353,7 @@ fn the_sign_in_names_the_key_this_device_signs_with() {
 #[test]
 fn signing_in_the_same_way_again_writes_nothing() {
     let stored = vela_core::app::Account {
-        signed_in_with: named(CRED, KeyMethod::Platform),
+        sign_in_key: named(CRED, KeyMethod::Platform),
         ..support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222")
     };
     let (_, next) = signed_in_holding(CRED, KeyMethod::Platform, vec![stored]);
@@ -1371,14 +1389,14 @@ fn signing_in_with_another_key_changes_the_one_it_signs_with() {
                 signer_origin: None,
             },
         ],
-        signed_in_with: named(CRED, KeyMethod::Platform),
+        sign_in_key: named(CRED, KeyMethod::Platform),
         ..support::account(CRED, "Ann", &multi_address())
     };
     let (_, next) = signed_in_holding(CRED2, KeyMethod::SecurityKey, vec![stored]);
     match next.as_slice() {
         [ShellOperation::SaveAccount { account }] => {
-            assert_eq!(account.signed_in_with, named(CRED2, KeyMethod::SecurityKey));
-            let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+            assert_eq!(account.sign_in_key, named(CRED2, KeyMethod::SecurityKey));
+            let route = account.key_route().unwrap_or_else(|| unreachable!());
             assert_eq!(route.credential_id, CRED2, "the second key signs now");
         }
         other => panic!("expected the record re-saved, got {other:?}"),
@@ -1404,17 +1422,78 @@ fn a_failed_resave_still_opens_the_wallet() {
     );
 }
 
-/// A wallet new to this device is saved naming its sign-in key, page included
-/// when the ceremony ran behind one.
+/// A wallet new to this device is saved naming its sign-in key — the place
+/// the person chose, never the page (spec 102).
 #[test]
 fn a_recovered_wallet_is_saved_naming_its_sign_in_key() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
-        method: KeyMethod::TrustedSigner,
+        method: KeyMethod::SecurityKey,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion: support::assertion(CRED),
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::AccountsLoaded { accounts: vec![] });
+    let next = sut.resolve(ShellResult::RegistryKeyStatus {
+        registered: true,
+        unit_ids: vec![],
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(
+                account.sign_in_key,
+                Some(SignInKey {
+                    credential_id: CRED.to_owned(),
+                    method: KeyMethod::SecurityKey,
+                    transports: "internal".to_owned(),
+                })
+            );
+            assert_eq!(account.signing_domain, "getvela.app");
+            assert_eq!(
+                account.signing_venue,
+                vela_core::signing_venue::SigningVenue::InVela
+            );
+        }
+        other => panic!("expected the recovered save, got {other:?}"),
+    }
+}
+
+/// An address no browser would run a passkey ceremony on is not a page to
+/// sign in on: nothing starts.
+#[test]
+fn an_address_no_browser_signs_on_starts_nothing() {
+    let mut sut = mounted();
+    let next = sut.dispatch(Event::SignIn {
+        method: KeyMethod::Platform,
+        page: Some("http://192.168.1.4:8140/".to_owned()),
+    });
+    assert!(next.is_empty(), "{next:?}");
+}
+
+/// Spec 102 R3: "Sign in on my own signing page" on a custom domain runs the
+/// ceremony on that page — its keys answer nowhere else — and the account is
+/// saved on that domain, locked to that page (R2), every key naming the page
+/// for older builds.
+#[test]
+fn a_custom_page_sign_in_is_saved_on_its_domain() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Hybrid,
+        page: Some("http://localhost:8140".to_owned()),
+    });
+    let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
+    assert_eq!(
+        next,
+        vec![ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::Hybrid,
+            page: Some("http://localhost:8140/".to_owned()),
+        }]
+    );
     let mut assertion = support::assertion(CRED);
-    assertion.signer_origin = Some("https://sign.getvela.app".to_owned());
+    assertion.signer_origin = Some("http://localhost:8140".to_owned());
     sut.resolve(ShellResult::PasskeyAuthenticated {
         assertion,
         now_iso: NOW.to_owned(),
@@ -1425,16 +1504,65 @@ fn a_recovered_wallet_is_saved_naming_its_sign_in_key() {
         unit_ids: vec![],
     });
     match next.as_slice() {
-        [ShellOperation::SaveAccount { account }] => assert_eq!(
-            account.signed_in_with,
-            Some(SignInKey {
-                credential_id: CRED.to_owned(),
-                method: KeyMethod::TrustedSigner,
-                transports: "internal".to_owned(),
-                signer_origin: Some("https://sign.getvela.app".to_owned()),
-            })
-        ),
-        other => panic!("expected the recovered save, got {other:?}"),
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.signing_domain, "localhost");
+            assert_eq!(
+                account.signing_venue,
+                vela_core::signing_venue::SigningVenue::Page {
+                    url: "http://localhost:8140/".to_owned()
+                }
+            );
+            assert_eq!(
+                account.sign_in_key.as_ref().map(|key| key.method),
+                Some(KeyMethod::Hybrid),
+                "where the key lives, never the page"
+            );
+            assert!(account
+                .keys
+                .iter()
+                .all(|key| key.signer_origin.as_deref() == Some("http://localhost:8140")));
+            assert!(account.signing_plan().blocked.is_none());
+        }
+        other => panic!("expected the save, got {other:?}"),
+    }
+}
+
+/// Spec 102 R3: a `getvela.app` page signs in in the app — there is nothing to
+/// preview — and becomes the account's venue.
+#[test]
+fn signing_in_on_the_official_page_runs_in_the_app_and_keeps_the_page() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Platform,
+        page: Some("https://sign.getvela.app".to_owned()),
+    });
+    let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
+    assert_eq!(
+        next,
+        vec![ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::Platform,
+            page: None,
+        }]
+    );
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion: support::assertion(CRED),
+        now_iso: NOW.to_owned(),
+    });
+    match sut
+        .resolve(ShellResult::AccountsLoaded {
+            accounts: vec![stored],
+        })
+        .as_slice()
+    {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(
+                account.signing_venue,
+                vela_core::signing_venue::SigningVenue::official()
+            );
+            assert_eq!(account.signing_domain, "getvela.app");
+        }
+        other => panic!("expected the record re-saved, got {other:?}"),
     }
 }
 
@@ -1445,6 +1573,7 @@ fn the_sign_in_records_where_the_key_answered_from() {
     let mut sut = mounted();
     sut.dispatch(Event::SignIn {
         method: KeyMethod::Platform,
+        page: None,
     });
     sut.resolve(ShellResult::PasskeySupport { supported: true });
     let mut assertion = support::assertion(CRED);
@@ -1462,12 +1591,12 @@ fn the_sign_in_records_where_the_key_answered_from() {
     {
         [ShellOperation::SaveAccount { account }] => {
             let key = account
-                .signed_in_with
+                .sign_in_key
                 .clone()
                 .unwrap_or_else(|| unreachable!());
             assert_eq!(key.method, KeyMethod::Platform);
             assert_eq!(key.transports, "usb,nfc,ble,hybrid");
-            let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+            let route = account.key_route().unwrap_or_else(|| unreachable!());
             assert_eq!(route.transports, "internal,usb,nfc,ble,hybrid");
         }
         other => panic!("expected the record re-saved, got {other:?}"),
@@ -1481,7 +1610,7 @@ fn the_sign_in_records_where_the_key_answered_from() {
 fn a_security_key_that_cannot_run_is_not_blamed_on_biometrics() {
     let prompt_after = |method: KeyMethod| {
         let mut sut = mounted();
-        sut.dispatch(Event::SignIn { method });
+        sut.dispatch(Event::SignIn { method, page: None });
         sut.resolve(ShellResult::PasskeySupport { supported: true });
         let next = sut.resolve(ShellResult::PasskeyFailed {
             kind: FailureKind::NotSupported,

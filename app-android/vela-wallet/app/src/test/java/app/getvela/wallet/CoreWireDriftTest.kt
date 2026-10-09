@@ -873,13 +873,15 @@ class CoreWireDriftTest {
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
-    /** Spec 071: the default "Sign with" and the Trusted Signer page. */
+    /** Spec 102: Settings → Signing pages (it replaced spec 071's one-page preference). */
     @Test
-    fun signPreferenceMatchesTheGeneratedMirrors() {
-        assertFieldsExist<app.getvela.wallet.feature.settings.core.SignPrefView>("SignPrefView")
-        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefOperation>("SignPrefOperation")
-        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefShellResult>("SignPrefShellResult")
-        assertVariantsExist<app.getvela.wallet.feature.settings.core.SignPrefEvent>("SignPrefEvent")
+    fun signingPagesMatchTheGeneratedMirrors() {
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.SigningPagesView>("SigningPagesView")
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.SigningPageRow>("SigningPageRow")
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.SigningPage>("SigningPage")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SigningPagesOperation>("SigningPagesOperation")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SigningPagesShellResult>("SigningPagesShellResult")
+        assertVariantsExist<app.getvela.wallet.feature.settings.core.SigningPagesEvent>("SigningPagesEvent")
     }
 
     /** Spec 069: the default speed's machine and the speed control's. */

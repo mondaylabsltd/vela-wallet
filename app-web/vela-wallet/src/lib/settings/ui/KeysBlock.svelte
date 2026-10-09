@@ -63,15 +63,9 @@
 	{:else}
 		<ul>
 			{#each model.rows as row, index (index)}
-				<!--
-					`row.holder` is the model's last word — a key behind a Clear
-					Signer page (spec 075), whose holder the AAGUID catalog must not
-					be allowed to rename: that vault sits on the page's far side.
-				-->
+				<!-- Captioned by where the key lives (spec 102: three places, no fourth). -->
 				{@const holder =
-					row.holder ??
-					providerLabel(row.key.provider_name, row.key.aaguid, isDarkTheme()) ??
-					row.holderFallback}
+					providerLabel(row.key.provider_name, row.key.aaguid, isDarkTheme()) ?? row.holderFallback}
 				{@const expandable = row.details.length > 0}
 				<li class="key" class:open={open[index] === true}>
 					<!--
@@ -138,6 +132,9 @@
 			{/each}
 		</ul>
 		{#if model.note}<p class="note">{model.note}</p>{/if}
+		<!-- Spec 102: a wallet on its own signing domain says so once — its keys
+		     answer only on that domain's page. -->
+		{#if model.domain}<p class="note domain">{model.domain}</p>{/if}
 	{/if}
 
 	{#if model.backup}

@@ -70,7 +70,7 @@ console.log(`page under test: ${PAGE}${pageArg ? '' : ' (what these sources buil
 const lib = loadPageLibs([
   'src/lib/i18n.js', 'src/lib/locales/en.js', 'src/lib/keccak.js', 'src/lib/identicon-features.js',
   'src/lib/identicon.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/fee.js', 'src/lib/logos.js',
-  'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/signer.js', 'src/lib/ceremony.js',
+  'src/lib/catalog.js', 'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/signer.js', 'src/lib/ceremony.js',
 ]);
 const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
 const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';

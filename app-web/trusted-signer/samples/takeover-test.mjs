@@ -19,6 +19,7 @@ const ns = loadPageLibs([
   'src/lib/encode.js',
   'src/lib/fee.js',
   'src/lib/logos.js',
+  'src/lib/catalog.js',
   'src/lib/registry.js',
   'src/lib/resolve.js',
   'src/lib/safeop.js',

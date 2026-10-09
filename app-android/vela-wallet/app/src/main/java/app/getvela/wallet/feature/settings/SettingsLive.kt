@@ -4,7 +4,15 @@ import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
-import app.getvela.wallet.feature.settings.core.SignPrefView
+import app.getvela.wallet.feature.settings.core.SigningPage
+import app.getvela.wallet.feature.settings.core.SigningPagesView
+import app.getvela.wallet.feature.settings.components.SigningPageItemModel
+import app.getvela.wallet.feature.settings.components.integrityModel
+import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
+import app.getvela.wallet.feature.signing.trustedsigner.VenueWords
+import app.getvela.wallet.core.crux.Wire
+import kotlinx.serialization.builtins.ListSerializer
+import uniffi.vela_core_uniffi.SignerIntegrityLine
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.components.tokenGlyph
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
@@ -86,41 +94,198 @@ object SettingsLive {
     }
 
     /**
-     * Which Trusted Signer page this device opens (spec 071): the row and its
-     * sheet, from the `sign_pref` core. How a signature is routed is not a
-     * setting — the account signs with the key it signed in with.
+     * One signing page as every list draws it (spec 102): its name — Vela's
+     * official signing page, the person's label, or "Self-hosted · <domain>"
+     * (D6: only a page the person deployed is "their own"); the address;
+     * whose keys it reaches; and the integrity line the phone's check gives
+     * it now. [trustVersion]: the version its check asks the person to trust
+     * (`SignerPageAdmission.versionToTrust`), when it does.
      */
-    fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
-        val official = s.t("settings.signing.pageOfficial")
-        val host = view.signer_url.substringAfter("://").substringBefore('/')
-        val page = SignerPageModel(
-            title = s.t("settings.signing.pageTitle"),
-            subtitle = s.t("settings.signing.pageSubtitle"),
-            value = view.signer_url,
-            error = when (view.signer_url_error) {
+    fun pageItem(
+        url: String,
+        name: String,
+        domain: String,
+        official: Boolean,
+        line: SignerIntegrityLine,
+        s: VelaStrings,
+        trustVersion: String? = null,
+    ): SigningPageItemModel {
+        val address = url.substringAfter("://").trimEnd('/')
+        val integrity = integrityModel(line, s)
+        val label = if (official) "" else name.trim()
+        val host = address.substringBefore('/')
+        val title = when {
+            official -> s.t("settings.signing.pageOfficial")
+            label.isNotEmpty() -> label
+            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { host }))
+        }
+        return SigningPageItemModel(
+            url = url,
+            title = title,
+            address = address,
+            // A page is named once: "Self-hosted · sign.example.com" already
+            // says the address, so the row does not say it again (a page at a
+            // path, or one named otherwise, still shows where it is).
+            showAddress = !title.contains(address),
+            // "Keys on …" only where it tells the person something: Vela's
+            // official page at sign.getvela.app keeps its keys on getvela.app;
+            // a self-hosted page whose keys are its own host's says nothing more.
+            domain = if (domain.isBlank() || domain.equals(host.substringBefore(':'), ignoreCase = true)) {
+                ""
+            } else {
+                s.t("settings.signing.keysOn", mapOf("domain" to domain))
+            },
+            integrity = integrity,
+            official = official,
+            trustVersion = trustVersion?.takeIf { integrity.asksToTrust && it.isNotBlank() },
+            label = label,
+        )
+    }
+
+    /**
+     * Settings → Signing pages (spec 102): the row in the advanced section and
+     * the page behind it, from the `signing_pages` core and the integrity
+     * checks. Nothing here decides what may be saved — a refused address comes
+     * back as the core's `add_error`. [toTrust] is the version a page's check
+     * asks the person to trust, when it does.
+     */
+    fun withSigningPages(
+        model: SettingsScreenModel,
+        view: SigningPagesView,
+        line: (String) -> SignerIntegrityLine,
+        s: VelaStrings,
+        toTrust: (String) -> String? = { null },
+    ): SettingsScreenModel {
+        val rows = view.pages.map { row ->
+            pageItem(
+                url = row.url, name = row.name, domain = row.domain, official = row.official,
+                line = line(row.url), s = s, trustVersion = toTrust(row.url),
+            )
+        }
+        val pages = SigningPagesModel(
+            title = s.t("settings.signing.title"),
+            subtitle = s.t("settings.signing.subtitle"),
+            rows = rows,
+            add = s.t("settings.signing.pageAdd"),
+            nameLabel = s.t("settings.signing.pageName"),
+            rename = s.t("settings.signing.pageRename"),
+            addError = when (view.add_error) {
                 "invalid" -> s.t("settings.signing.pageInvalid")
                 "insecure" -> s.t("settings.signing.pageInsecure")
+                "duplicate" -> s.t("settings.signing.pageDuplicate")
                 else -> null
             },
-            foreign = if (view.signer_uses_wallet_passkeys) null else s.t("settings.signing.pageForeign"),
             save = s.t("settings.signing.pageSave"),
-            reset = if (view.signer_url_is_default) null else s.t("settings.signing.pageReset"),
+            remove = s.t("settings.signing.pageRemove"),
+            trust = s.t("settings.signing.pageTrust"),
+            loaded = view.loaded,
         )
         return model.copy(
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        if (row.id == SettingsFixtures.SIGNER_PAGE_ROW) {
-                            row.copy(value = if (view.signer_url_is_default) official else host)
+                        if (row.id == SettingsFixtures.SIGNING_PAGES_ROW) {
+                            row.copy(value = view.pages.size.toString())
                         } else {
                             row
                         }
                     },
                 )
             },
-            signerPage = page,
+            signingPages = pages,
         )
     }
+
+    /**
+     * "Where you review and sign" (spec 102, P2-09) for the active account:
+     * the core's choices (`signingVenueChoices`, R1/R2) in its order — Vela's
+     * sheet, the official page, the saved pages, then the account's page when
+     * it is not saved — each blocked one with its reason. A custom-domain
+     * account's Vela row comes back blocked: it is locked to its page. A page
+     * whose check asks to be trusted carries the version to trust
+     * ([toTrust], `versionToTrust`), answered by "Trust this version" there.
+     */
+    fun withVenue(
+        model: SettingsScreenModel,
+        account: app.getvela.wallet.feature.onboarding.core.SessionAccountRow?,
+        saved: List<SigningPage>,
+        line: (String) -> SignerIntegrityLine,
+        s: VelaStrings,
+        toTrust: (String) -> String? = { null },
+    ): SettingsScreenModel {
+        account ?: return model.copy(venue = null)
+        val savedJson = Wire.json.encodeToString(ListSerializer(SigningPage.serializer()), saved)
+        val choicesJson = runCatching {
+            uniffi.vela_core_uniffi.signingVenueChoices(account.signingDomain, account.signingVenueJson, savedJson)
+        }.getOrNull() ?: return model.copy(venue = null)
+        val array = runCatching { org.json.JSONArray(choicesJson) }.getOrNull() ?: return model.copy(venue = null)
+        val inVela = uniffi.vela_core_uniffi.venueWords("in_vela")
+        val onPage = uniffi.vela_core_uniffi.venueWords("page")
+        fun lineOf(words: uniffi.vela_core_uniffi.KeyMethodWords?): String =
+            words?.lineName ?: words?.lineKey?.let(s::t).orEmpty()
+        val choices = (0 until array.length()).mapNotNull { index ->
+            val choice = array.optJSONObject(index) ?: return@mapNotNull null
+            val venue = choice.optJSONObject("venue") ?: return@mapNotNull null
+            val reason = choice.optJSONObject("blocked")?.let { block -> VenueWords.block(block, s::t) }
+            val url = venue.optString("url")
+            if (venue.optString("type") == "page" && url.isNotEmpty()) {
+                VenueChoiceModel(
+                    venueJson = venue.toString(),
+                    title = "",
+                    body = "",
+                    page = pageItem(
+                        url = url, name = choice.optString("name"), domain = choice.optString("domain"),
+                        official = choice.optBoolean("official"), line = line(url), s = s,
+                        // A choice that cannot reach the keys is not asked about.
+                        trustVersion = toTrust(url).takeIf { reason == null },
+                    ),
+                    selected = choice.optBoolean("active"),
+                    reason = reason,
+                )
+            } else {
+                VenueChoiceModel(
+                    venueJson = venue.toString(),
+                    title = inVela?.titleKey?.let(s::t).orEmpty(),
+                    body = lineOf(inVela),
+                    page = null,
+                    selected = choice.optBoolean("active"),
+                    reason = reason,
+                )
+            }
+        }
+        val active = choices.firstOrNull { it.selected }
+        val title = s.t("settings.venue.title")
+        // The row says where it signs now — "Review and sign in Vela", or the
+        // page by its name (D6: 「Vela 官方签名页」, the person's label,
+        // 「自己部署的签名页 · domain」), which already says it is a page — or,
+        // when nothing here can reach the keys, why. (iOS says the same.)
+        val blocked = choices.isNotEmpty() && choices.all { it.reason != null }
+        return model.copy(
+            venue = VenueModel(
+                row = SettingsRowModel(
+                    id = VENUE_ROW,
+                    title = title,
+                    icon = SettingsIcon.Eye,
+                    subtitle = if (blocked) choices.first().reason else null,
+                    value = when {
+                        active == null -> null
+                        active.page != null -> active.page.title
+                        else -> active.title
+                    },
+                ),
+                title = title,
+                subtitle = s.t("settings.venue.subtitle"),
+                domainLine = s.t("settings.signing.keysOn", mapOf("domain" to account.signingDomain)),
+                choices = choices,
+                pageSection = onPage?.titleKey?.let(s::t).orEmpty(),
+                pageSectionBody = lineOf(onPage),
+                manage = s.t("settings.signing.title"),
+                trust = s.t("settings.signing.pageTrust"),
+            ),
+        )
+    }
+
+    const val VENUE_ROW = "signing-venue"
 
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
         val code = view.code
@@ -991,22 +1156,22 @@ object SettingsLive {
         keys: app.getvela.wallet.feature.settings.core.WalletKeys.Result?,
         backup: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
         strings: VelaStrings,
+        /** Spec 102: the account's signing domain — said only when it is not `getvela.app`. */
+        signingDomain: String = "getvela.app",
     ): SettingsScreenModel {
         val k = I18nKeys.SettingsUi
         val rows = keys?.rows.orEmpty().mapIndexed { index, row ->
             val body = row.publicKeyHex.removePrefix("0x").let { if (it.length == 130 && it.startsWith("04")) it.drop(2) else it }
             WalletKeyRowModel(
                 name = row.key.name.ifEmpty { strings.t(k.KEYS_KEY_N).replace("{{n}}", (index + 1).toString()) },
+                // Spec 102: captioned by where the key LIVES — the vault when the
+                // catalog knows it, else its place — never by a page it was made on.
                 holder = row.key.providerName.ifEmpty {
                     strings.t(
                         when (row.key.method) {
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.SecurityKey -> k.KEYS_PROVIDER_SECURITY_KEY
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.Hybrid -> k.KEYS_PROVIDER_GENERIC
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
-                            // Spec 075: the page holds it, so the page is what
-                            // the line names — no vault this device can see.
-                            app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner ->
-                                "componentsUi.signing.trustedSignerTitle"
                         },
                     )
                 },
@@ -1022,10 +1187,6 @@ object SettingsLive {
                     KeyDetailModel(strings.t(k.KEYS_PUBLIC_KEY), if (row.publicKeyHex.isEmpty()) "" else "0x${row.publicKeyHex.removePrefix("0x")}", mono = true, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
                     KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
-                    // Spec 075: WHICH page, when the key lives behind one —
-                    // the holder line above says it is the Trusted Signer, and a
-                    // person running their own deployment needs to see which.
-                    KeyDetailModel(strings.t("componentsUi.signing.trustedSignerTitle"), row.signerOrigin, mono = false, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
                     KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
                 ).filter { it.value.isNotEmpty() },
@@ -1040,6 +1201,10 @@ object SettingsLive {
                 loading = keys == null,
                 note = if (keys?.source == app.getvela.wallet.feature.settings.core.WalletKeys.Source.Device) strings.t(k.KEYS_FROM_DEVICE) else null,
                 rows = rows,
+                // Spec 102: a wallet on its own domain says so — its keys
+                // belong to that site, and only a page there can use them.
+                domain = signingDomain.takeIf { !it.equals("getvela.app", ignoreCase = true) && it.isNotBlank() }
+                    ?.let { strings.t("settings.signing.keysOn", mapOf("domain" to it)) },
                 backup = ethereumBackupRow(backup, strings),
                 backupExplain = strings.t(k.BACKUP_EXPLAIN),
                 copyLabel = strings.t(k.KEYS_COPY),

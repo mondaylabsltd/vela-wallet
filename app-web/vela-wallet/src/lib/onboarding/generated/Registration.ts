@@ -13,9 +13,8 @@ export type Registration = { credential_id: string, attestation_object_hex: stri
  */
 authenticator_attachment: string, transports: string, 
 /**
- * Spec 075: the Trusted Signer page's origin when the key was minted
- * through it — where the key lives from now on. `None` for every other
- * route. The shell reports it only after `verify_registration` checked
- * the answer came from that origin.
+ * The signing page's origin when the ceremony ran on one (a custom-domain
+ * wallet, R3) — the shell reports it only after the answer was checked to
+ * come from that origin. `None` for a ceremony in the app.
  */
 signer_origin?: string | null, };

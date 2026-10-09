@@ -964,12 +964,17 @@ pub enum Published {
 /// answered at the registry's 202, and the session's landing watch waits on
 /// the task later through [`await_task`]. Otherwise the task is polled here
 /// until the group has landed, as it always was.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the core's RegistryPublish operation, field for field, and the ceremony"
+)]
 pub fn publish(
     metadata_hex: &str,
     members: &[RegistryPublishMember],
     seed_hex: &str,
     group_public_key_hex: &str,
     method: vela_core::app::KeyMethod,
+    page: Option<&str>,
     answer_when_accepted: bool,
     ceremony: &Ceremony,
 ) -> Result<Published> {
@@ -988,23 +993,13 @@ pub fn publish(
         (seed_hex.to_owned(), group_public_key_hex.to_owned())
     };
 
-    // One relying party for the whole unit (ruling, 2026-09-23). The contract
+    // One relying party for the whole unit (ruling, 2026-09-23): the contract
     // stores a single `rpId` per unit and every member's proof carries
-    // `sha256(rpId)` from its OWN authenticator, so a set spread across sites
-    // could never be proved. Refused here rather than written and unprovable.
-    let unit_rp = vela_core::trusted_signer::registry_unit_rp_id(
-        &members
-            .iter()
-            .map(|member| member.signer_origin.clone())
-            .collect::<Vec<_>>(),
-        RELYING_PARTY,
-    )
-    .map_err(|found| {
-        RegistryError::answered(format!(
-            "these keys belong to different sites: {}",
-            found.join(", ")
-        ))
-    })?;
+    // `sha256(rpId)` from its OWN authenticator. Spec 102 R3: that is the
+    // publish's page's domain for a wallet on the person's own signing page,
+    // and the wallet's own relying party otherwise — a wallet's domain is
+    // chosen before its first key, so its set cannot mix sites.
+    let unit_rp = unit_rp_id(page);
 
     let challenge: GroupChallenge = post_json(
         "/api/challenge",
@@ -1029,8 +1024,15 @@ pub fn publish(
     // member and the end of it would otherwise leave the page's tab waiting
     // on a wallet that had given up two frames ago. Collected into a result
     // first, so the goodbye is not on the happy path alone.
-    let proven = prove_members(members, &challenge, &group_public_key, method, ceremony);
-    if method == vela_core::app::KeyMethod::TrustedSigner {
+    let proven = prove_members(
+        members,
+        &challenge,
+        &group_public_key,
+        method,
+        page,
+        ceremony,
+    );
+    if page.is_some() {
         ceremony.trusted_signer.end_flow();
     }
     let proven = proven?;
@@ -1062,6 +1064,13 @@ pub fn publish(
             Ok(Published::Landed)
         }
     }
+}
+
+/// The `rpId` a publish files its unit under (spec 102 R3): its page's domain
+/// for a wallet on the person's own signing page, the wallet's own relying
+/// party otherwise (the official page's keys fold to it).
+fn unit_rp_id(page: Option<&str>) -> String {
+    vela_core::trusted_signer::registry_rp_id(page).unwrap_or_else(|| RELYING_PARTY.to_owned())
 }
 
 /// What the register's answer leaves to do.
@@ -1099,6 +1108,7 @@ fn prove_members(
     challenge: &GroupChallenge,
     group_public_key: &str,
     method: vela_core::app::KeyMethod,
+    page: Option<&str>,
     ceremony: &Ceremony,
 ) -> Result<Vec<ApiMember>> {
     let mut proven = Vec::with_capacity(members.len());
@@ -1131,13 +1141,15 @@ fn prove_members(
                 // its possession proof over caBLE (a fresh QR), a USB one on the
                 // key in the port. Hardcoding SecurityKey here was why a caBLE
                 // recovery silently entered the wallet unpublished.
-                // Spec 075: a wallet signed in through the Trusted Signer
-                // re-publishes through it too. The page fetches this same
-                // member challenge itself and will not sign unless the two
-                // agree, so what is passed here is what the wallet was given.
-                let assertion = if method == vela_core::app::KeyMethod::TrustedSigner {
+                // Spec 102 R3: a wallet on its own signing page re-publishes
+                // there too. The page derives this same member challenge
+                // itself and will not sign unless the two agree, so what is
+                // passed here is what the wallet was given.
+                let assertion = if let Some(page) = page {
                     crate::executor::trusted_signer::member_proof(
                         member,
+                        page,
+                        method,
                         group_public_key,
                         &challenge_bytes,
                         &registry_url(),
@@ -1249,6 +1261,23 @@ fn urlencode(value: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Spec 102 R3: a publish files its unit under its page's domain, and
+    /// under the wallet's own relying party when it ran in the app — the
+    /// official page's keys fold to that same party.
+    #[test]
+    fn a_unit_is_filed_under_its_pages_domain() {
+        assert_eq!(unit_rp_id(None), RELYING_PARTY);
+        assert_eq!(unit_rp_id(Some("https://sign.getvela.app/")), "getvela.app");
+        assert_eq!(
+            unit_rp_id(Some("http://localhost:8140/clearsigning/")),
+            "localhost"
+        );
+        assert_eq!(
+            unit_rp_id(Some("https://sign.example.com/")),
+            "sign.example.com"
+        );
+    }
+
     /// The endpoint is normalised, not trusted: a trailing slash would produce
     /// `//api/health`, and a newline pasted with a URL would be smuggled into
     /// the request line.
@@ -1324,7 +1353,6 @@ mod tests {
             public_key_hex: recorded()["publicKey"].as_str().unwrap().to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
-            signer_origin: None,
         }];
         let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device, "");
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);

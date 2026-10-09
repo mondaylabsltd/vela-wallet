@@ -11,11 +11,13 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.FeeTierPrefCore
-import uniffi.vela_core_uniffi.SignPrefCore
+import uniffi.vela_core_uniffi.SigningPagesCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
 
 /**
@@ -199,35 +201,74 @@ class SettingsController(
     fun chooseFeeTier(tier: app.getvela.wallet.feature.send.core.FeeTier) =
         feeTierHost.dispatch(FeeTierPrefEvent.UserChose(tier), FeeTierPrefEvent.serializer())
 
-    // -- which Trusted Signer page this device opens (spec 071) ----------------
+    // -- the signing pages this device keeps (spec 102) ------------------------
 
-    private val signPrefExecutor = SignPrefExecutor(store)
+    private val signingPagesExecutor = SigningPagesExecutor(store)
 
-    private val signPrefHost = CoreHost(
-        bridge = SignPrefCore().asBridge(),
+    private val signingPagesHost = CoreHost(
+        bridge = SigningPagesCore().asBridge(),
         scope = scope,
-        // The official page, until the stored one is read.
-        initial = SignPrefView(),
-        serializer = SignPrefView.serializer(),
-        perform = JsonShell.perform(SignPrefOperation.serializer(), SignPrefShellResult.serializer(), signPrefExecutor::perform),
-        escapedFailure = JsonShell.escapedFailure(
-            SignPrefOperation.serializer(),
-            SignPrefShellResult.serializer(),
-            fallback = SignPrefShellResult.Stored(),
-            answer = signPrefExecutor::neutralAnswer,
+        // The official page alone, until the stored list is read.
+        initial = SigningPagesView(),
+        serializer = SigningPagesView.serializer(),
+        perform = JsonShell.perform(
+            SigningPagesOperation.serializer(),
+            SigningPagesShellResult.serializer(),
+            signingPagesExecutor::perform,
         ),
-        onFault = { error -> VelaLog.failure("settings.signPref.fault", "core fault", error) },
+        escapedFailure = JsonShell.escapedFailure(
+            SigningPagesOperation.serializer(),
+            SigningPagesShellResult.serializer(),
+            fallback = SigningPagesShellResult.Stored(),
+            answer = signingPagesExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("settings.signingPages.fault", "core fault", error) },
     )
 
-    /** The Trusted Signer page — Settings shows it, the Trusted Signer opens it. */
-    val signPref: StateFlow<SignPrefView> = signPrefHost.view
+    /**
+     * Settings → Signing pages: the official page first, then the saved ones.
+     * The `saved` list is what `signingVenueChoices` takes for an account's
+     * "Where you review and sign".
+     */
+    val signingPages: StateFlow<SigningPagesView> = signingPagesHost.view
 
-    fun refreshSignPref() = signPrefHost.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
+    /** Re-read the list (coalesced while a read is out); imports the 071 page once. */
+    fun refreshSigningPages() =
+        signingPagesHost.dispatch(SigningPagesEvent.Refresh, SigningPagesEvent.serializer())
 
-    fun submitSignerUrl(text: String) =
-        signPrefHost.dispatch(SignPrefEvent.SignerUrlSubmitted(text), SignPrefEvent.serializer())
+    /** "Add a page": the address as typed — refused by the core when unusable or already saved. */
+    fun addSigningPage(url: String, name: String = "") =
+        signingPagesHost.dispatch(SigningPagesEvent.PageAdded(url, name), SigningPagesEvent.serializer())
 
-    fun resetSignerUrl() = signPrefHost.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
+    fun renameSigningPage(url: String, name: String) =
+        signingPagesHost.dispatch(SigningPagesEvent.PageRenamed(url, name), SigningPagesEvent.serializer())
+
+    /** Forget a saved page. No account's venue changes (D-12). */
+    fun removeSigningPage(url: String) =
+        signingPagesHost.dispatch(SigningPagesEvent.PageRemoved(url), SigningPagesEvent.serializer())
+
+    /**
+     * "Trust this version" (spec 102 D-15): store [version] on the page at
+     * [url], and return once the list carries it — the check that follows
+     * reads the page's trusted versions from it. The list is read first when
+     * it never was (the core refuses an edit to a list it has not seen).
+     * Gives up quietly after a few seconds: the check then still asks.
+     */
+    suspend fun trustSigningPageVersion(url: String, version: String) {
+        kotlinx.coroutines.withTimeoutOrNull(TRUST_WAIT_MS) {
+            if (!signingPages.value.loaded) {
+                refreshSigningPages()
+                signingPages.first { it.loaded }
+            }
+            signingPagesHost.dispatch(SigningPagesEvent.VersionTrusted(url, version), SigningPagesEvent.serializer())
+            signingPages.first { view ->
+                view.saved.any { page ->
+                    SignerPageChecks.key(page.url) == SignerPageChecks.key(url) &&
+                        page.trusted.any { it.equals(version, ignoreCase = true) }
+                }
+            }
+        }
+    }
 
 
     /** The networks, endpoints and provider keys this device holds. */
@@ -350,6 +391,9 @@ class SettingsController(
         DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))
 
     private companion object {
+        /** How long "Trust this version" waits for the pages core to store it. */
+        const val TRUST_WAIT_MS = 5_000L
+
         /**
          * The device's primary locale, for the region seed.
          *

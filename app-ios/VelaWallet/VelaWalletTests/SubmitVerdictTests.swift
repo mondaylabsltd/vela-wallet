@@ -164,7 +164,7 @@ struct SubmitVerdictTests {
     private func spine(_ port: ScriptedRelayPort) -> (UserOpSpine, ScriptedTrustedSigner) {
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(relay: client(port), accounts: accounts, signer: { CountingSigner() })
         let fixture = self.fixture
         let page = ScriptedTrustedSigner { digest in

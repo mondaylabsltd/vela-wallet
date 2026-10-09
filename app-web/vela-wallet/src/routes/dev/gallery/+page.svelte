@@ -204,6 +204,9 @@
 					needsSecondKey={view.needs_second_key}
 					busy={view.busy}
 					maxKeys={7}
+					addMethods={view.add_methods}
+					signingDomain={view.signing_domain}
+					signingPage={view.signing_page ?? null}
 					{strings}
 					onAddKey={(m) => log(`add_key ${m}`)}
 					onConfirmKey={(i) => log(`confirm_key ${i}`)}

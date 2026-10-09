@@ -35,6 +35,7 @@
  */
 
 import { PasskeyError } from '$lib/onboarding/core/passkey';
+import { VenueBlockedError } from '$lib/signing/sign-challenge';
 import {
 	attemptSilentSponsorship,
 	checkBundlerFunding,
@@ -60,6 +61,7 @@ import { UserOpNotSentError } from '$lib/services/safe-transaction';
 import {
 	dappReceiptWaitMs,
 	signAnswered,
+	signErrorWords,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs
 } from '$lib/core/kernels';
@@ -261,16 +263,20 @@ export function createSignExecutor(ports: SignShellPorts) {
 						opChain !== undefined ? { chainId: opChain } : undefined
 					);
 				} else {
-					// The core owns the code and the kind; the words are this side's, and
-					// `signErrorMessage` reproduces the exact string the TS provider sent
-					// for each one (a `submit_failed` detail IS `err.message`, verbatim).
+					// The core owns the code and the kind. The words are this side's for
+					// the kinds the TS provider already named — `signErrorMessage`
+					// reproduces the exact string it sent for each (a `submit_failed`
+					// detail IS `err.message`, verbatim) — and the core's own for a
+					// refusal it introduced: spec 102's `venue_blocked` is
+					// `dapp_rpc::sign_error_words`, not a copy kept here.
+					const notice = { kind: operation.payload.kind, detail: operation.payload.message };
 					transport?.sendResponse(operation.id, undefined, {
 						code: operation.payload.code,
 						kind: operation.payload.kind,
-						message: signErrorMessage({
-							kind: operation.payload.kind,
-							detail: operation.payload.message
-						})
+						message:
+							(notice.kind === 'venue_blocked'
+								? signErrorWords(notice.kind, notice.detail)
+								: null) ?? signErrorMessage(notice)
 					});
 				}
 				return { type: 'responded' };
@@ -583,6 +589,10 @@ export function createSignExecutor(ports: SignShellPorts) {
 			// Never an error, never a response, never a durable 'rejected' (⑧).
 			return { type: 'passkey_cancelled' };
 		}
+		// Spec 102 (P2b-W1): this account cannot sign on the web. Nothing was
+		// signed or sent; the core answers the page -32603 and puts the reason
+		// on the sheet in the person's language (`SignErrorNotice.venue_block`).
+		if (error instanceof VenueBlockedError) return { type: 'venue_blocked', block: error.block };
 		if (error instanceof PasskeyError) {
 			// Spec 099 R8: the passkey is what failed, and how — the core names
 			// the signer on the sheet and in the page's record, never
