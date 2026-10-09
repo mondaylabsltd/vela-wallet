@@ -4952,7 +4952,7 @@ fn a_row_scoped_scan_takes_only_the_address_and_spares_the_other_rows() {
     sut.dispatch(Event::OpenContactPicker {
         target: Some("rcpt_2".to_owned()),
     });
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     let ops = sut.dispatch(Event::ScanResolved {
         scan: SendScan::Request {
             recipient: RECIPIENT_B.to_owned(),
@@ -5212,7 +5212,7 @@ fn a_scan_from_a_splits_targetless_picker_lands_in_the_split() {
         ],
     });
     sut.dispatch(Event::OpenContactPicker { target: None });
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     let ops = sut.dispatch(Event::ScanResolved {
         scan: SendScan::Request {
             recipient: RECIPIENT_B.to_owned(),
@@ -5237,7 +5237,7 @@ fn a_scan_from_a_splits_targetless_picker_lands_in_the_split() {
 
     // A plain address with every row taken: a new row.
     sut.dispatch(Event::OpenContactPicker { target: None });
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     sut.dispatch(Event::ScanResolved {
         scan: SendScan::Text {
             data: RECIPIENT_C.to_owned(),
@@ -5248,11 +5248,123 @@ fn a_scan_from_a_splits_targetless_picker_lands_in_the_split() {
     assert_eq!(rows[2].address, RECIPIENT_C);
 }
 
+/// Issue #471: every recipient row has its own scan icon. A split row's
+/// names its row, and the code lands there — whatever row is free.
+#[test]
+fn a_split_rows_own_scan_fills_that_row() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", "", "0.5", None),
+            split_row("rcpt_2", RECIPIENT, "0.25", Some("Bea")),
+        ],
+    });
+    sut.dispatch(Event::OpenScanner {
+        target: Some("rcpt_2".to_owned()),
+    });
+    assert_eq!(sut.view().picker_target.as_deref(), Some("rcpt_2"));
+    assert!(!sut.view().show_contact_picker, "no picker on the way");
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT_B.to_owned(),
+        },
+    });
+    let view = sut.view();
+    assert!(!view.show_scanner);
+    assert_eq!(view.recipients[0], split_row("rcpt_1", "", "0.5", None));
+    assert_eq!(
+        view.recipients[1],
+        split_row("rcpt_2", RECIPIENT_B, "0.25", None),
+        "the row it was for; Bea's name went with her address"
+    );
+    assert_eq!(view.picker_target, None, "spent by the scan");
+}
+
+/// Issue #471's latent bug: a picker closed without a pick left its target
+/// behind, and the next targetless scan overwrote that row — a row the
+/// person was no longer pointing at, holding somebody else.
+#[test]
+fn a_stale_picker_target_does_not_steer_a_later_scan() {
+    let rows = || {
+        vec![
+            split_row("rcpt_1", "", "0.5", None),
+            split_row("rcpt_2", RECIPIENT, "0.25", None),
+        ]
+    };
+    let scan_c = || Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT_C.to_owned(),
+        },
+    };
+    // Left by a picker closed without a pick …
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged { recipients: rows() });
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_2".to_owned()),
+    });
+    sut.dispatch(Event::CloseContactPicker);
+    assert_eq!(sut.view().picker_target, None);
+    sut.dispatch(Event::OpenScanner { target: None });
+    sut.dispatch(scan_c());
+    let view = sut.view();
+    assert_eq!(view.recipients[0].address, RECIPIENT_C, "the free row");
+    assert_eq!(view.recipients[1].address, RECIPIENT, "untouched");
+
+    // … by a row's scan closed without a code …
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged { recipients: rows() });
+    sut.dispatch(Event::OpenScanner {
+        target: Some("rcpt_2".to_owned()),
+    });
+    sut.dispatch(Event::CloseScanner);
+    assert_eq!(sut.view().picker_target, None);
+    sut.dispatch(Event::OpenScanner { target: None });
+    sut.dispatch(scan_c());
+    let view = sut.view();
+    assert_eq!(view.recipients[0].address, RECIPIENT_C);
+    assert_eq!(view.recipients[1].address, RECIPIENT);
+
+    // … and by a pick that already used it.
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged { recipients: rows() });
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_2".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    assert_eq!(sut.view().picker_target, None, "spent by the pick");
+    sut.dispatch(Event::OpenScanner { target: None });
+    sut.dispatch(scan_c());
+    let view = sut.view();
+    assert_eq!(view.recipients[0].address, RECIPIENT_C);
+    assert_eq!(view.recipients[1].address, RECIPIENT_B);
+}
+
+/// A shell from before #471 sends `{"type":"open_scanner"}` — still the
+/// targetless scan — and a row's icon adds its `target`.
+#[test]
+fn the_scanner_event_reads_with_and_without_a_target() {
+    let bare: Event = serde_json::from_str(r#"{"type":"open_scanner"}"#).unwrap();
+    assert!(matches!(bare, Event::OpenScanner { target: None }));
+    let aimed: Event =
+        serde_json::from_str(r#"{"type":"open_scanner","target":"rcpt_2"}"#).unwrap();
+    assert!(matches!(aimed, Event::OpenScanner { target: Some(t) } if t == "rcpt_2"));
+}
+
 #[test]
 fn an_untargeted_full_request_relocks_the_whole_flow() {
     let mut sut = boot(vec![eth("2"), usdc("5")]);
     select_eth(&mut sut);
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     let ops = sut.dispatch(Event::ScanResolved {
         scan: SendScan::Request {
             recipient: RECIPIENT.to_owned(),
@@ -5282,7 +5394,7 @@ fn an_untargeted_full_request_relocks_the_whole_flow() {
 fn a_bare_address_scan_fills_the_recipient_field() {
     let mut sut = boot(vec![eth("2")]);
     select_eth(&mut sut);
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     let ops = sut.dispatch(Event::ScanResolved {
         scan: SendScan::Text {
             data: RECIPIENT.to_owned(),
@@ -5303,7 +5415,7 @@ fn a_scan_from_the_contact_picker_closes_the_picker_too() {
     let mut sut = boot(vec![eth("2")]);
     select_eth(&mut sut);
     sut.dispatch(Event::OpenContactPicker { target: None });
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     assert!(sut.view().show_contact_picker);
     sut.dispatch(Event::ScanResolved {
         scan: SendScan::Text {
@@ -5317,7 +5429,7 @@ fn a_scan_from_the_contact_picker_closes_the_picker_too() {
 
     // The same from a request code without a chain: the address fills, both close.
     sut.dispatch(Event::OpenContactPicker { target: None });
-    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::OpenScanner { target: None });
     sut.dispatch(Event::ScanResolved {
         scan: SendScan::Request {
             recipient: RECIPIENT_B.to_owned(),
@@ -5351,7 +5463,7 @@ fn a_code_scanned_onto_the_picker_is_the_recipient_and_survives_back() {
         },
     ] {
         let mut sut = boot(vec![eth("2"), usdc("5")]);
-        sut.dispatch(Event::OpenScanner);
+        sut.dispatch(Event::OpenScanner { target: None });
         let ops = sut.dispatch(Event::ScanResolved { scan });
         assert!(
             matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]),

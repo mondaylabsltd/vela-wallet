@@ -1410,6 +1410,8 @@ pub enum Event {
     OpenContactPicker {
         target: Option<String>,
     },
+    /// The picker closed without a pick. Its target goes with it, so it
+    /// never steers a later scan or pick.
     CloseContactPicker,
     /// The contact picker chose an address. It lands where
     /// [`Event::OpenContactPicker`]'s `target` says; a shell never adds a
@@ -1417,12 +1419,23 @@ pub enum Event {
     PickedAddress {
         address: String,
     },
-    OpenScanner,
+    /// The scan icon beside a recipient (issue 471): every recipient row
+    /// has its own, the single field's and each split row's. `target` = the
+    /// split row it sits on, exactly as [`Event::OpenContactPicker`]'s;
+    /// absent = the single-mode field (or, in a split, the first row with no
+    /// address, else a new row). Absent is what a shell from before issue 471
+    /// sends, and what the home's scan sends.
+    OpenScanner {
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        target: Option<String>,
+    },
+    /// The scanner closed without a code. Its target goes with it.
     CloseScanner,
     /// A scan, parsed by the shell. Routing (`SendScreen.tsx:181-203`): in a
-    /// split, ONLY the address, into the row a pick would take (invariant
-    /// ⑬); a full request re-locks the whole flow; anything else fills the
-    /// recipient.
+    /// split, ONLY the address, into the row the scan was for, else the row
+    /// a pick would take (invariant ⑬); a full request re-locks the whole
+    /// flow; anything else fills the recipient.
     ScanResolved {
         scan: SendScan,
     },
@@ -2246,6 +2259,9 @@ pub struct SendView {
     /// the rows already started (blank rows do not count — an import drops
     /// them). The shell opens the importer with this as ITS cap.
     pub split_import_room: u32,
+    /// The split row the open contact picker or scanner fills (its
+    /// `target`), `None` for the single field or a split's first free row.
+    /// Set only while one of them is open, and spent by the pick or scan.
     pub picker_target: Option<String>,
     pub multi_select_mode: bool,
     pub multi_selected_ids: Vec<String>,
@@ -2458,15 +2474,32 @@ impl Send {
             }
             Event::CloseContactPicker => {
                 model.show_contact_picker = false;
+                // A target lives exactly as long as what it was opened for.
+                // Left behind, it aimed the NEXT scan or pick at a row the
+                // person was no longer pointing at (issue 471).
+                if !model.show_scanner {
+                    model.picker_target = None;
+                }
                 render()
             }
             Event::PickedAddress { address } => apply_picked_address(model, address),
-            Event::OpenScanner => {
+            Event::OpenScanner { target } => {
+                // A row's own scan icon names its row. A targetless scan
+                // clears whatever target is left — except when it comes from
+                // an open contact picker (a shell from before issue 471 still
+                // draws "Scan to fill the address" there), where the scan IS
+                // the picker's pick and fills the picker's row.
+                if target.is_some() || !model.show_contact_picker {
+                    model.picker_target = target;
+                }
                 model.show_scanner = true;
                 render()
             }
             Event::CloseScanner => {
                 model.show_scanner = false;
+                if !model.show_contact_picker {
+                    model.picker_target = None;
+                }
                 render()
             }
             Event::ScanResolved { scan } => scan_resolved(model, scan),
@@ -4411,11 +4444,12 @@ fn recipients_changed(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
 /// The split's cap holds: with every one of its rows taken, nothing is added.
 fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
     model.show_contact_picker = false;
+    // Spent here: a target aims one pick or one scan, never the next.
+    let target = model.picker_target.take();
     if !model.split_mode {
         return hand_in_recipient(model, address);
     }
-    let named = model
-        .picker_target
+    let named = target
         .as_ref()
         .and_then(|target| model.recipients.iter().position(|row| &row.id == target));
     let slot = named.or_else(|| {
@@ -4468,16 +4502,16 @@ fn hand_in_recipient(model: &mut Model, address: String) -> Cmd {
 
 fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
     model.show_scanner = false;
-    // The picker's "scan to fill" row opened this scanner, and the scan IS the
-    // pick: leaving the picker up put it back over the address it had just
-    // filled (issue #270), on every shell. The targeted path below closes it
-    // through `apply_picked_address`; a re-lock reopens the flow either way.
+    // A scanner opened from the contact picker (a shell from before issue 471
+    // draws "Scan to fill the address" there): the scan IS the pick, and
+    // leaving the picker up put it back over the address it had just filled
+    // (issue #270). The split path below closes it through
+    // `apply_picked_address`; a re-lock reopens the flow either way.
     model.show_contact_picker = false;
-    // A scan in split mode — just the address, into the row it was for or
-    // the row a pick would take; a full-request re-lock would blow away the
-    // other recipients (invariant ⑬). The picker's scan row is a pick, so a
-    // split's targetless picker scans into the split, never into the hidden
-    // single recipient.
+    // A scan in split mode — just the address, into the row whose scan icon
+    // opened it (`OpenScanner { target }`), else the row a pick would take;
+    // a full-request re-lock would blow away the other recipients (invariant
+    // ⑬). Nothing goes to the single recipient, which a split hides.
     if model.split_mode {
         let address = match scan {
             SendScan::Request { recipient, .. } => recipient,
@@ -4485,6 +4519,7 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
         };
         return apply_picked_address(model, address);
     }
+    model.picker_target = None;
     match scan {
         SendScan::Request {
             recipient,
