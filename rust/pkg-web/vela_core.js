@@ -5198,6 +5198,54 @@ export function userOpEventTopic() {
 }
 
 /**
+ * The gas limits a submit signs, from the relay's estimate — the core's one
+ * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
+ * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
+ * calls' measured floor (`inner_floor`, from `innerCallsGasFloor`) when there
+ * is one. Quantities are decimal strings; `settlement_gas` is the relay's
+ * `settlementGas`, `None` when it published none. Answers
+ * `{"verificationGasLimit","callGasLimit","preVerificationGas"}` as decimal
+ * strings.
+ * @param {number} chain_id
+ * @param {boolean} deployed
+ * @param {number} sub_calls
+ * @param {string} verification_gas_limit
+ * @param {string} call_gas_limit
+ * @param {string} pre_verification_gas
+ * @param {string | null} [settlement_gas]
+ * @param {string | null} [inner_floor]
+ * @returns {string}
+ */
+export function userOpGasLimits(chain_id, deployed, sub_calls, verification_gas_limit, call_gas_limit, pre_verification_gas, settlement_gas, inner_floor) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(verification_gas_limit, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(call_gas_limit, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(pre_verification_gas, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(settlement_gas) ? 0 : passStringToWasm0(settlement_gas, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(inner_floor) ? 0 : passStringToWasm0(inner_floor, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.userOpGasLimits(chain_id, deployed, sub_calls, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
  * The EntryPoint v0.7 `getUserOpHash` of `op_json` on `chain_id`,
  * 0x-lowercase — `user_op::user_op_hash`. `op_json` is the operation in the
  * `attestSafeOpHash` shape (gas fields decimal strings, byte fields hex); any

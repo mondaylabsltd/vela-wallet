@@ -1309,6 +1309,18 @@ export function userOpEstimateFailure(error_json: string): string;
 export function userOpEventTopic(): string;
 
 /**
+ * The gas limits a submit signs, from the relay's estimate — the core's one
+ * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
+ * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
+ * calls' measured floor (`inner_floor`, from `innerCallsGasFloor`) when there
+ * is one. Quantities are decimal strings; `settlement_gas` is the relay's
+ * `settlementGas`, `None` when it published none. Answers
+ * `{"verificationGasLimit","callGasLimit","preVerificationGas"}` as decimal
+ * strings.
+ */
+export function userOpGasLimits(chain_id: number, deployed: boolean, sub_calls: number, verification_gas_limit: string, call_gas_limit: string, pre_verification_gas: string, settlement_gas?: string | null, inner_floor?: string | null): string;
+
+/**
  * The EntryPoint v0.7 `getUserOpHash` of `op_json` on `chain_id`,
  * 0x-lowercase — `user_op::user_op_hash`. `op_json` is the operation in the
  * `attestSafeOpHash` shape (gas fields decimal strings, byte fields hex); any
@@ -1523,6 +1535,7 @@ export interface InitOutput {
     readonly feeQuoteDeadlineMs: () => number;
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
     readonly feeRequoteTimeoutMs: () => number;
+    readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1668,18 +1681,18 @@ export interface InitOutput {
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly userOpEstimateFailure: (a: number, b: number) => [number, number];
     readonly userOpEventTopic: () => [number, number];
+    readonly userOpGasLimits: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
     readonly userOpNotSentDetail: () => [number, number];
     readonly userOpPreviousPendingDetail: () => [number, number];
     readonly userOpRefusedDappDetail: () => [number, number];
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly userOpWriteAheadWaitMs: () => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly feeSignalsCacheTtlMs: () => number;
+    readonly userOpWriteAheadWaitMs: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

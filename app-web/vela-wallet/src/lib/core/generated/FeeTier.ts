@@ -2,7 +2,7 @@
 
 /**
  * Gas speed tier (`safe-transaction.ts:242-249`). Labels are UI words and
- * stay in the shell. Both flows run `fast` today; the vocabulary is kept
- * because the multiplier table is load-bearing math.
+ * stay in the shell. The default is `standard`, the factory default of the
+ * speed preference (`fee_tier_pref::FACTORY_DEFAULT`).
  */
 export type FeeTier = "slow" | "standard" | "rapid" | "fast";

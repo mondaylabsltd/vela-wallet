@@ -24,4 +24,16 @@ max_priority_fee_per_gas: string | null,
 /**
  * `None` when a generic bundler omits the Vela extension fields.
  */
-network_fee_per_gas: string | null, relayer_fee_per_gas: string | null, };
+network_fee_per_gas: string | null, relayer_fee_per_gas: string | null, 
+/**
+ * The relay's PUBLISHED in-band price for this tier (`inBandFeePerGas`,
+ * CONTRACT v2): the wei a client pays per unit of the operation's
+ * `settlementGas` — `relay_markup × drift_allowance × (cap × base_fee +
+ * tip)`, see [`IN_BAND_PRICE`]. The markup and one block of drift are
+ * inside it, so nothing is multiplied on top.
+ *
+ * `None` from a relay older than the field: the fee is then priced the
+ * way it always was (`Charge::Marked`). `#[serde(default)]`: a shell
+ * that does not send it keeps working unchanged.
+ */
+in_band_fee_per_gas: string | null, };
