@@ -449,6 +449,18 @@ enum SigningPageNames {
         return name.contains(host) ? nil : host
     }
 
+    /// "Keys on {{domain}}" for a page whose keys live on `domain` — `nil`
+    /// when that is the page's own host (a self-hosted page's usual case: its
+    /// name or host line already says it), so it is said only where it tells
+    /// the person something: Vela's official page at sign.getvela.app keeps
+    /// its keys on getvela.app.
+    static func keysOnLine(url: String, domain: String, loc: Loc) -> String? {
+        guard !domain.isEmpty else { return nil }
+        let pageHost = URL(string: url)?.host ?? host(url)
+        if pageHost.caseInsensitiveCompare(domain) == .orderedSame { return nil }
+        return loc.t("settings.signing.keysOn", vars: ["domain": domain])
+    }
+
     /// Is `url` Vela's official page?
     static func isOfficial(_ url: String) -> Bool {
         SignerPageChecks.key(url) == SignerPageChecks.key(trustedSignerDefaultUrl())

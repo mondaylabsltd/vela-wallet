@@ -37,6 +37,9 @@ struct VenueChoiceRowModel: Identifiable, Equatable {
     /// Why it cannot reach this account's keys — the row is disabled.
     var reason: String?
     let active: Bool
+    /// A self-hosted page's own build this device has not decided about: the
+    /// version "Trust this version" stores on the page (D-15). `nil` otherwise.
+    var trustVersion: String? = nil
 
     var enabled: Bool { reason == nil }
 }
@@ -63,7 +66,8 @@ struct SigningPageRowModel: Identifiable, Equatable {
     let url: String
     let title: String
     let host: String
-    let domainLine: String
+    /// "Keys on {{domain}}" — `nil` when the keys live on the page's own host.
+    let domainLine: String?
     let line: SignerIntegrityLine
     /// The official page cannot be renamed or removed.
     let official: Bool
@@ -127,7 +131,9 @@ extension SettingsLive {
         var copy = model
         let saved = pages?.saved ?? []
         copy.signingPages = signingPagesPage(pages, line: line, asksTrust: asksTrust, loc: loc)
-        copy.venue = plan.map { venueSetting($0, saved: saved, rows: pages?.pages ?? [], line: line, loc: loc) }
+        copy.venue = plan.map {
+            venueSetting($0, saved: saved, rows: pages?.pages ?? [], line: line, asksTrust: asksTrust, loc: loc)
+        }
         if let plan, !plan.onAppDomain {
             copy.keys?.domainLine = loc.t("settings.signing.keysOn", vars: ["domain": plan.domain])
         }
@@ -145,7 +151,7 @@ extension SettingsLive {
                     url: page.url, label: page.name, official: page.official, domain: page.domain, loc: loc
                 ),
                 host: SigningPageNames.host(page.url),
-                domainLine: loc.t("settings.signing.keysOn", vars: ["domain": page.domain]),
+                domainLine: SigningPageNames.keysOnLine(url: page.url, domain: page.domain, loc: loc),
                 line: line(page.url),
                 official: page.official,
                 label: page.name,
@@ -170,7 +176,7 @@ extension SettingsLive {
 
     static func venueSetting(
         _ plan: SigningPlanWire, saved: [SigningPageWire], rows: [SigningPageRowWire],
-        line: (String) -> SignerIntegrityLine, loc: Loc
+        line: (String) -> SignerIntegrityLine, asksTrust: (String) -> String? = { _ in nil }, loc: Loc
     ) -> VenueSettingModel {
         let choices = VenueChoiceWire.choices(domain: plan.domain, active: plan.venue, saved: saved)
         let inVelaWords = venueWords(row: "in_vela")
@@ -194,7 +200,8 @@ extension SettingsLive {
                     ),
                     subtitle: SigningPageNames.host(url),
                     line: line(url),
-                    reason: choice.blocked?.text(loc), active: choice.active
+                    reason: choice.blocked?.text(loc), active: choice.active,
+                    trustVersion: choice.official ? nil : asksTrust(url)
                 )
             }
         }
@@ -318,22 +325,19 @@ private struct SigningPageSettingsRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text(row.domainLine)
-                    .typeRole(Typography.flowCaption)
-                    .foregroundStyle(theme.fgSubtle)
+                if let domainLine = row.domainLine {
+                    Text(domainLine)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgSubtle)
+                }
                 IntegrityLineView(loc: loc, line: row.line)
                     .padding(.top, Tokens.Space.s2)
                 // "Version … is new to Vela. Trust it on this device?" — the
                 // answer, beside the question.
                 if let version = row.trustVersion, let onTrust {
-                    Button { onTrust(version) } label: {
-                        Text(panel.trust)
-                            .typeRole(Typography.actionLabel)
-                            .foregroundStyle(theme.accentBase)
-                            .frame(minHeight: Tokens.Layout.hitTarget)
+                    SigningPageTrustButton(title: panel.trust, id: "signingPage.trust.\(row.host)") {
+                        onTrust(version)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("signingPage.trust.\(row.host)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,6 +369,9 @@ struct VenueSheetBody: View {
     let loc: Loc
     let model: VenueSettingModel
     var onChoose: ((SigningVenueWire) -> Void)?
+    /// "Trust this version" on a row whose page asks it. `nil` (the gallery):
+    /// the app's one checker stores it and checks again.
+    var onTrust: ((_ url: String, _ version: String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -409,7 +416,7 @@ struct VenueSheetBody: View {
         VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 if index > 0 { Divider().overlay(theme.borderBase) }
-                VenueChoiceRow(loc: loc, row: row) { onChoose?(row.venue) }
+                VenueChoiceRow(loc: loc, row: row, onTap: { onChoose?(row.venue) }, onTrust: onTrust)
             }
         }
         .background(theme.bgBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
@@ -425,6 +432,7 @@ private struct VenueChoiceRow: View {
     let loc: Loc
     let row: VenueChoiceRowModel
     let onTap: () -> Void
+    var onTrust: ((_ url: String, _ version: String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -463,13 +471,31 @@ private struct VenueChoiceRow: View {
                 }
                 .padding(.horizontal, Tokens.Space.s16)
                 .padding(.top, Tokens.Space.s16)
-                .padding(.bottom, row.reason == nil ? Tokens.Space.s16 : Tokens.Space.s8)
+                .padding(.bottom, row.reason == nil && trust == nil ? Tokens.Space.s16 : Tokens.Space.s8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!row.enabled)
             .accessibilityAddTraits(row.active ? .isSelected : [])
             .accessibilityIdentifier("venue.\(row.venue.pageUrl.map(SigningPageNames.host) ?? "inVela")")
+
+            // "Version … is new to Vela. Trust it on this device?" — the
+            // answer beside the question, outside the row's own tap.
+            if let trust {
+                SigningPageTrustButton(
+                    title: loc.t("settings.signing.pageTrust"),
+                    id: "venue.trust.\(SigningPageNames.host(trust.url))"
+                ) {
+                    if let onTrust {
+                        onTrust(trust.url, trust.version)
+                    } else {
+                        SigningPageTrustButton.trust(trust.url, version: trust.version)
+                    }
+                }
+                .padding(.leading, Tokens.Space.s16 + Tokens.Space.s20 + Tokens.Space.s12)
+                .padding(.trailing, Tokens.Space.s16)
+                .padding(.bottom, row.reason == nil ? Tokens.Space.s8 : Tokens.Space.s0)
+            }
 
             // Why it cannot be chosen — outside the disabled control, so it is
             // read at full strength (R1: never a dimmed row with no reason).
@@ -489,6 +515,15 @@ private struct VenueChoiceRow: View {
                 .accessibilityIdentifier("venue.reason")
             }
         }
+    }
+
+    /// The question's answer, only where the line asks it of a page the
+    /// account can use.
+    private var trust: (url: String, version: String)? {
+        guard row.reason == nil, row.line?.state == .askToTrust,
+              let url = row.venue.pageUrl, let version = row.trustVersion
+        else { return nil }
+        return (url, version)
     }
 }
 
@@ -517,16 +552,19 @@ enum SigningSettingsFixtures {
     }
 
     #if DEBUG
-    /// `VELA_PAGE=settings VELA_STATE=signing-pages | signing-venue`: the two
-    /// signing surfaces through the live builders, with every control they
-    /// offer drawn (the actions are no-ops) — the official page; a self-hosted
-    /// page whose own build asks to be trusted, with "Trust this version"; a
-    /// self-hosted page the person named, trusted here; and the account's
-    /// venue with the rows that cannot reach its keys, each with its reason.
+    /// `VELA_PAGE=settings VELA_STATE=signing-pages | signing-venue |
+    /// signing-venue-own`: the two signing surfaces through the live builders,
+    /// with every control they offer drawn (the actions are no-ops) — the
+    /// official page; a self-hosted page whose own build asks to be trusted,
+    /// with "Trust this version"; a self-hosted page the person named, trusted
+    /// here; and the account's venue with the rows that cannot reach its keys,
+    /// each with its reason. `signing-venue-own` is an account made on the
+    /// self-hosted page: its own page is its venue, asking to be trusted, and
+    /// everything else is refused (R2).
     static func board(_ state: String?, loc: Loc) -> SettingsScreenModel? {
-        guard state == "signing-pages" || state == "signing-venue" else { return nil }
+        guard state == "signing-pages" || state == "signing-venue" || state == "signing-venue-own" else { return nil }
         let work = "https://sign.work.example/"
-        let version = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455"
+        let version = SigningPageFixtures.askingVersion
         let checkedAt = UInt64(Date().timeIntervalSince1970 * 1000) - 120_000
         let view = SigningPagesViewWire(
             pages: SigningPageFixtures.pages + [
@@ -539,18 +577,20 @@ enum SigningSettingsFixtures {
         )
         let line: (String) -> SignerIntegrityLine = { url in
             switch url {
-            case SigningPageFixtures.selfHosted:
-                SignerIntegrityLine(state: .askToTrust, version: "3f9a1c22", checkedAtMs: checkedAt,
-                                    key: "componentsUi.signing.integrity.askTrust", opens: false)
             case work:
-                SignerIntegrityLine(state: .trustedHere, version: "3f9a1c22", checkedAtMs: checkedAt,
+                SignerIntegrityLine(state: .trustedHere, version: String(version.prefix(8)), checkedAtMs: checkedAt,
                                     key: "componentsUi.signing.integrity.trusted", opens: true)
-            default: SigningPageFixtures.line(url)
+            default: SigningPageFixtures.askingLine(url)
             }
         }
+        let own = SigningPlanWire(
+            domain: "sign.example.com", venue: .page(url: SigningPageFixtures.selfHosted),
+            key: KeyRouteWire(credentialId: "e5f6a7b8", method: "hybrid", transports: "hybrid"),
+            keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodHybridTitle")
+        )
         var model = SettingsLive.withSigning(
-            plan: plan, pages: view, line: line,
-            asksTrust: { $0 == SigningPageFixtures.selfHosted ? version : nil },
+            plan: state == "signing-venue-own" ? own : plan, pages: view, line: line,
+            asksTrust: { SigningPageFixtures.asksTrust($0) },
             on: SettingsFixtures.build(.st1, loc: loc), loc: loc
         )
         if state == "signing-pages" { model.page = .signingPages }

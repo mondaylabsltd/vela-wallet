@@ -225,7 +225,7 @@ struct KeysScreen: View {
         return pageChoices.first { $0.url.map(SignerPageChecks.key) == SignerPageChecks.key(page) }
             ?? SigningPageChoiceModel(
                 url: page, title: SigningPageNames.host(page), subtitle: SigningPageNames.host(page),
-                domainLine: loc.t("settings.signing.keysOn", vars: ["domain": view.signingDomain]),
+                domainLine: SigningPageNames.keysOnLine(url: page, domain: view.signingDomain, loc: loc),
                 line: nil, selected: true
             )
     }

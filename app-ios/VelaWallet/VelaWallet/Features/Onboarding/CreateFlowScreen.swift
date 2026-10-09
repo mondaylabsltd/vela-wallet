@@ -79,7 +79,8 @@ struct CreateFlowScreen: View {
                     // check of it.
                     pageChoices: SigningPagePickerModel.choices(
                         pages: pages?.pages ?? [], selected: view.signingPage, loc: loc,
-                        line: { SignerPageChecks.shared.line(for: $0) }
+                        line: { SignerPageChecks.shared.line(for: $0) },
+                        asksTrust: { SignerPageChecks.shared.versionAskingTrust($0) }
                     ),
                     onChoosePage: model.chooseSigningPage,
                     onAddPage: model.addSigningPage,

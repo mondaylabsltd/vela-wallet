@@ -153,9 +153,12 @@ private struct GalleryFlowHost: View {
                     onFinish: {},
                     // The picker opens on its fixture pages; a pick goes
                     // nowhere, as every control here does.
+                    // The self-hosted page's build asks to be trusted, so the
+                    // list and the chosen page show the answer beside it.
                     pageChoices: SigningPagePickerModel.choices(
                         pages: SigningPageFixtures.pages, selected: view.signingPage, loc: loc,
-                        line: SigningPageFixtures.line
+                        line: { SigningPageFixtures.askingLine($0) },
+                        asksTrust: { SigningPageFixtures.asksTrust($0) }
                     ),
                     onChoosePage: { _ in }
                 )

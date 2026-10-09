@@ -4190,7 +4190,8 @@ struct RootView: View {
             onPick: onboarding.pickSignInMethod,
             pageChoices: SigningPagePickerModel.choices(
                 pages: pages?.pages ?? [], selected: onboarding.signInPage, loc: loc,
-                line: { SignerPageChecks.shared.line(for: $0) }
+                line: { SignerPageChecks.shared.line(for: $0) },
+                asksTrust: { SignerPageChecks.shared.versionAskingTrust($0) }
             ),
             chosenPage: onboarding.signInPage,
             onChoosePage: { onboarding.signInPage = $0 },

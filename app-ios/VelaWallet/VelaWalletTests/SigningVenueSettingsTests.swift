@@ -95,6 +95,23 @@ struct SigningVenueSettingsTests {
         #expect(model.keys?.domainLine == "Keys on sign.example.com")
     }
 
+    /// Polish 9: the account's own page asks to be trusted — the venue row
+    /// carries "Trust this version"'s version; a refused row never does.
+    @Test func aVenueRowThatAsksToBeTrustedCarriesItsAnswer() throws {
+        let plan = SigningPlanWire(domain: "sign.example.com", venue: .page(url: own))
+        let model = SettingsLive.withSigning(
+            plan: plan, pages: pages, line: SigningPageFixtures.askingLine,
+            asksTrust: SigningPageFixtures.asksTrust,
+            on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        )
+        let venue = try #require(model.venue)
+        let ownRow = try #require(venue.pages.first { $0.venue == .page(url: own) })
+        #expect(ownRow.active && ownRow.enabled)
+        #expect(ownRow.line?.state == .askToTrust)
+        #expect(ownRow.trustVersion == SigningPageFixtures.askingVersion)
+        #expect(venue.pages.filter { $0.venue != .page(url: own) }.allSatisfy { $0.trustVersion == nil })
+    }
+
     /// No plan read yet, or no account: no row — never a guessed one.
     @Test func noPlanNoRow() {
         let model = SettingsLive.withSigning(
@@ -113,7 +130,9 @@ struct SigningVenueSettingsTests {
         #expect(panel.title == "Signing pages")
         #expect(panel.subtitle == "Pages you trust to show and sign requests.")
         #expect(panel.rows.map(\.official) == [true, false])
-        #expect(panel.rows.map(\.domainLine) == ["Keys on getvela.app", "Keys on sign.example.com"])
+        // Polish 3: "Keys on …" only where it is news — the official page's
+        // keys are not on its own host; a self-hosted page's are.
+        #expect(panel.rows.map(\.domainLine) == ["Keys on getvela.app", nil])
         #expect(panel.rows.first?.line.state == .matches)
         #expect(panel.rows.map(\.title) == ["Vela's official signing page", "Self-hosted · sign.example.com"])
         let row = try #require(SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows)

@@ -31,11 +31,21 @@ struct SigningPageChoiceModel: Equatable, Identifiable {
     let title: String
     /// The page's host — or, for Vela's own sheet, what it is.
     let subtitle: String
-    /// "Keys on {{domain}}" — `nil` for Vela's own sheet.
+    /// "Keys on {{domain}}" — `nil` for Vela's own sheet, and for a page
+    /// whose keys live on its own host (its name already says where).
     let domainLine: String?
     /// The page's integrity line — `nil` for Vela's own sheet.
     let line: SignerIntegrityLine?
     let selected: Bool
+    /// A self-hosted page's own build this device has not decided about: the
+    /// version "Trust this version" stores on the page (D-15). `nil` otherwise.
+    var trustVersion: String? = nil
+
+    /// The question's answer, where the line asks it.
+    var trust: (url: String, version: String)? {
+        guard line?.state == .askToTrust, let url, let trustVersion else { return nil }
+        return (url, trustVersion)
+    }
 
     var id: String { url ?? "in_vela" }
 }
@@ -45,7 +55,8 @@ enum SigningPagePickerModel {
     /// first), each with its domain and line.
     static func choices(
         pages: [SigningPageRowWire], selected: String?, loc: Loc,
-        line: (String) -> SignerIntegrityLine
+        line: (String) -> SignerIntegrityLine,
+        asksTrust: (String) -> String? = { _ in nil }
     ) -> [SigningPageChoiceModel] {
         let inVela = venueWords(row: "in_vela")
         let selectedKey = selected.map(SignerPageChecks.key)
@@ -63,9 +74,10 @@ enum SigningPagePickerModel {
                     url: page.url, label: page.name, official: page.official, domain: page.domain, loc: loc
                 ),
                 subtitle: SigningPageNames.host(page.url),
-                domainLine: page.domain.isEmpty ? nil : loc.t("settings.signing.keysOn", vars: ["domain": page.domain]),
+                domainLine: SigningPageNames.keysOnLine(url: page.url, domain: page.domain, loc: loc),
                 line: line(page.url),
-                selected: selectedKey == SignerPageChecks.key(page.url)
+                selected: selectedKey == SignerPageChecks.key(page.url),
+                trustVersion: page.official ? nil : asksTrust(page.url)
             )
         }
     }
@@ -189,7 +201,7 @@ struct SigningPageAddField: View {
 }
 
 /// One row: a radio, the page's name and host, the domain its keys live on,
-/// and its integrity line.
+/// and its integrity line — with "Trust this version" under a line that asks.
 struct SigningPageChoiceRow: View {
     @Environment(\.theme) private var theme
     let loc: Loc
@@ -197,6 +209,22 @@ struct SigningPageChoiceRow: View {
     let onTap: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            pick
+            // The answer beside the question, outside the row's own tap.
+            if let trust = choice.trust {
+                SigningPageTrustButton(
+                    title: loc.t("settings.signing.pageTrust"),
+                    id: "signingPage.trust.\(SigningPageNames.host(trust.url))"
+                ) { SigningPageTrustButton.trust(trust.url, version: trust.version) }
+                    .padding(.leading, Tokens.Space.s16 + Tokens.Space.s20 + Tokens.Space.s12)
+                    .padding(.trailing, Tokens.Space.s16)
+                    .padding(.bottom, Tokens.Space.s8)
+            }
+        }
+    }
+
+    private var pick: some View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: Tokens.Space.s12) {
                 ZStack {
@@ -234,7 +262,9 @@ struct SigningPageChoiceRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .multilineTextAlignment(.leading)
             }
-            .padding(Tokens.Space.s16)
+            .padding(.horizontal, Tokens.Space.s16)
+            .padding(.top, Tokens.Space.s16)
+            .padding(.bottom, choice.trust == nil ? Tokens.Space.s16 : Tokens.Space.s8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -252,13 +282,42 @@ struct ChosenSigningPageCard: View {
     let choice: SigningPageChoiceModel
     var onChange: (() -> Void)?
 
+    /// The page's mark: a disc the width of a hit target, less a step.
+    private static let mark = Tokens.Layout.hitTarget - Tokens.Space.s8
+
     var body: some View {
-        let content = HStack(alignment: .center, spacing: Tokens.Space.s12) {
-            ZStack {
-                Circle().fill(theme.accentSoft)
-                LucideIcon(.globe, size: LucideIconSize.rowGlyph).foregroundStyle(theme.accentBase)
+        VStack(alignment: .leading, spacing: 0) {
+            if let onChange {
+                Button(action: onChange) { content }.buttonStyle(.plain)
+            } else {
+                content
             }
-            .frame(width: Tokens.Layout.hitTarget - Tokens.Space.s8, height: Tokens.Layout.hitTarget - Tokens.Space.s8)
+            // "Trust this version" under a line that asks — in the card, but
+            // outside its own tap (which changes the page).
+            if let trust = choice.trust {
+                SigningPageTrustButton(
+                    title: loc.t("settings.signing.pageTrust"),
+                    id: "signingPage.chosen.trust"
+                ) { SigningPageTrustButton.trust(trust.url, version: trust.version) }
+                    .padding(.leading, Tokens.Space.s16 + Self.mark + Tokens.Space.s12)
+                    .padding(.trailing, Tokens.Space.s16)
+                    .padding(.bottom, Tokens.Space.s8)
+            }
+        }
+        .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("signingPage.chosen")
+    }
+
+    private var content: some View {
+        HStack(alignment: .center, spacing: Tokens.Space.s12) {
+            // One accent on the screen (D7): the page's mark is a shape in
+            // the muted colour; the accent is the screen's primary action.
+            ZStack {
+                Circle().fill(theme.bgRaised)
+                LucideIcon(.globe, size: LucideIconSize.rowGlyph).foregroundStyle(theme.fgMuted)
+            }
+            .frame(width: Self.mark, height: Self.mark)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
                 Text(choice.title)
@@ -286,15 +345,10 @@ struct ChosenSigningPageCard: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(Tokens.Space.s16)
-        .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
-        .accessibilityIdentifier("signingPage.chosen")
-
-        if let onChange {
-            Button(action: onChange) { content }.buttonStyle(.plain)
-        } else {
-            content
-        }
+        .padding(.horizontal, Tokens.Space.s16)
+        .padding(.top, Tokens.Space.s16)
+        .padding(.bottom, choice.trust == nil ? Tokens.Space.s16 : Tokens.Space.s8)
+        .contentShape(Rectangle())
     }
 }
 
@@ -344,6 +398,24 @@ enum SigningPageFixtures {
         SigningPageRowWire(url: "https://sign.getvela.app/", name: "", domain: "getvela.app", official: true),
         SigningPageRowWire(url: selfHosted, name: "", domain: "sign.example.com", official: false),
     ]
+
+    /// The self-hosted page's own build, new to this device: the version
+    /// "Trust this version" would store.
+    static let askingVersion = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455"
+
+    /// As `line`, but the self-hosted page's build asks to be trusted.
+    static func askingLine(_ url: String) -> SignerIntegrityLine {
+        url == selfHosted
+            ? SignerIntegrityLine(
+                state: .askToTrust, version: String(askingVersion.prefix(8)),
+                checkedAtMs: UInt64(Date().timeIntervalSince1970 * 1000) - 120_000,
+                key: "componentsUi.signing.integrity.askTrust", opens: false
+            )
+            : line(url)
+    }
+
+    /// What `askingLine` asks about, by page.
+    static func asksTrust(_ url: String) -> String? { url == selfHosted ? askingVersion : nil }
 
     static func line(_ url: String) -> SignerIntegrityLine {
         url == selfHosted

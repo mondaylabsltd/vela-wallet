@@ -315,6 +315,8 @@ struct SettingsScreen: View {
                             self.overlay = .none
                         }
                     },
+                    // The sheet stays: the row's line follows the new check.
+                    onTrustVenue: signingActions.map { $0.onTrustPage },
                     pendingConfirm: pendingConfirm?.sheet,
                     onConfirmPending: {
                         pendingConfirm?.action()

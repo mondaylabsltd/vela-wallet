@@ -458,6 +458,25 @@ struct HandoffCardTests {
         #expect(KeyLabelWire.ofCeremony(operationJson: #"{"type":"nothing"}"#) == nil)
     }
 
+    /// Polish 3: "Keys on {{domain}}" only where the domain is not the page's
+    /// own host.
+    @Test func keysOnIsSaidOnlyWhereItIsNews() {
+        #expect(SigningPageNames.keysOnLine(url: "https://sign.getvela.app/", domain: "getvela.app", loc: loc)
+                == "Keys on getvela.app")
+        #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "sign.example.com", loc: loc) == nil)
+        #expect(SigningPageNames.keysOnLine(url: "https://SIGN.example.com/x/", domain: "sign.example.com", loc: loc) == nil)
+        #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "", loc: loc) == nil)
+        // The choosers say the same.
+        let choices = SigningPagePickerModel.choices(
+            pages: SigningPageFixtures.pages, selected: nil, loc: loc, line: SigningPageFixtures.askingLine,
+            asksTrust: SigningPageFixtures.asksTrust
+        )
+        #expect(choices.map(\.domainLine) == [nil, "Keys on getvela.app", nil])
+        // …and offer the answer where the line asks it — never for the
+        // official page or Vela's own sheet.
+        #expect(choices.map { $0.trust?.version } == [nil, nil, SigningPageFixtures.askingVersion])
+    }
+
     /// Core round 5: the card's fee row is the fee settled for the speed in
     /// force, with that speed — no row while it is measured, not ready, or
     /// another speed's; no speed restated where there is one.

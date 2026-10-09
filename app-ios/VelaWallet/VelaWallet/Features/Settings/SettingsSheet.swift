@@ -47,6 +47,9 @@ struct SettingsSheet: View {
     /// network's bin, "reset to defaults" — and its "yes".
     /// Spec 102: a venue was chosen for the account. Absent in the gallery.
     var onChooseVenue: ((SigningVenueWire) -> Void)?
+    /// "Trust this version" on a venue row whose page asks it: the page and
+    /// the version (D-15).
+    var onTrustVenue: ((_ url: String, _ version: String) -> Void)?
     var pendingConfirm: ConfirmSheetModel?
     var onConfirmPending: (() -> Void)?
     /// The relay's Save and reset (spec 075).
@@ -105,7 +108,7 @@ struct SettingsSheet: View {
                     )
                 case .signingVenue:
                     if let venue = model.venue, let loc {
-                        VenueSheetBody(loc: loc, model: venue, onChoose: onChooseVenue)
+                        VenueSheetBody(loc: loc, model: venue, onChoose: onChooseVenue, onTrust: onTrustVenue)
                     }
                 case .numberFormat:
                     SelectSheetBody(
