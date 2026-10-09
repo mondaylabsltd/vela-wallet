@@ -167,6 +167,9 @@
                <Test
                   Identifier = "Issue483DeviceTests">
                </Test>
+               <Test
+                  Identifier = "CorrectnessScreenshotTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

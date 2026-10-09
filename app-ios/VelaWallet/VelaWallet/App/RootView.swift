@@ -641,6 +641,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .correctness:
+            #if DEBUG
+            CorrectnessGalleryScreen(loc: loc, state: PageOverride.state ?? "held-sheet")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -3954,6 +3960,8 @@ enum PageOverride {
         case settings, settingsLive, settingsGallery, explore, signing
         /// Spec 102's hand-off boards (`HandoffGalleryScreen`).
         case handoff
+        /// PR 2's boards (`CorrectnessGalleryScreen`).
+        case correctness
     }
 
     static let page: Page? = {
@@ -3977,6 +3985,7 @@ enum PageOverride {
         case "explore": .explore
         case "signing": .signing
         case "handoff": .handoff
+        case "pr2": .correctness
         default: nil
         }
     }()
