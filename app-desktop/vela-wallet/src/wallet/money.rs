@@ -138,6 +138,24 @@ impl FeeTokenTold {
     }
 }
 
+/// Whether the fee card has failed (`FeeView.failure` set — a failure, or the
+/// core's own re-ask after one), as this journey last told the send machine
+/// (`Event::FeeFailedChanged`, the bridge beside `FeeBusyChanged`). Told when
+/// it changes; a fresh journey (a new `SendHost`) has been told nothing, so
+/// its first word always goes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FeeFailedTold(Option<bool>);
+
+impl FeeFailedTold {
+    /// The word to tell for `failed`, or `None` when it is no news.
+    fn news(&mut self, failed: bool) -> Option<bool> {
+        (self.0 != Some(failed)).then(|| {
+            self.0 = Some(failed);
+            failed
+        })
+    }
+}
+
 /// The chain the send form is on: the selected token's, else the sweep's
 /// (the core's `form_chain`).
 fn form_chain(view: &SendView) -> Option<u32> {
@@ -187,6 +205,8 @@ pub struct SendHost {
     /// The `EstimateFee` effect the fee session is answering.
     pending_fee: Option<u64>,
     last_fee_busy: bool,
+    /// The fee card's failure as this journey last told it ([`FeeFailedTold`]).
+    fee_failed_told: FeeFailedTold,
     /// The fee card's coin in force (`FeeView.fee_token`) as this send was
     /// last told it, with its chain ([`FeeTokenTold`]).
     fee_token_told: FeeTokenTold,
@@ -314,6 +334,7 @@ impl SendHost {
             window_handle,
             pending_fee: None,
             last_fee_busy: false,
+            fee_failed_told: FeeFailedTold::default(),
             fee_token_told: FeeTokenTold::default(),
             last_fee: None,
             alert: None,
@@ -1018,6 +1039,21 @@ impl SendHost {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
         }
+        // The card failed (or is re-asking after a failure) and holds no
+        // figure: the send machine holds its confirm and, on the confirm
+        // page, drops the figure it kept from Continue — never a confirm open
+        // on a discarded figure between two of the core's re-asks.
+        if let Some(failed) = self
+            .fee_failed_told
+            .news(self.speed.fee_view().failure.is_some())
+        {
+            if failed {
+                // The figure the machine just dropped is told again when it
+                // comes back, even the same one.
+                self.last_fee = None;
+            }
+            self.dispatch(SendEvent::FeeFailedChanged { failed }, cx);
+        }
         self.sync_fee_token(cx);
         if let Some(fee) = self.speed.fee_view().fee.clone()
             && self.last_fee.as_ref() != Some(&fee)
@@ -1473,6 +1509,150 @@ mod tests {
             });
             Some(news)
         }
+    }
+
+    /// The card's failure reaches the send machine once per change, and a
+    /// fresh journey's first word always goes (`FeeFailedChanged`, PR 2
+    /// integration): on the confirm page a failure holds the confirm and
+    /// drops the figure kept from Continue — the row draws the failure in
+    /// its place — and a settled quote brings both back. Through the real
+    /// send core, with the real fee core's own failure and quote.
+    #[test]
+    fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
+        let mut told = FeeFailedTold::default();
+        assert_eq!(
+            told.news(false),
+            Some(false),
+            "a fresh journey's first word"
+        );
+        assert_eq!(told.news(false), None, "no news");
+        assert_eq!(told.news(true), Some(true));
+        assert_eq!(told.news(true), None);
+        assert_eq!(told.news(false), Some(false));
+
+        let [quoted, ..] = crate::signing::fixtures::fee_coin_switch();
+        let estimate = quoted
+            .fee
+            .clone()
+            .unwrap_or_else(|| unreachable!("the real fee core priced it"));
+        let failures = crate::signing::fixtures::fee_failures();
+        let mut send = CoreHost::<Send>::new();
+        let drive = |send: &mut CoreHost<Send>, event: SendEvent| {
+            let mut pending = send.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(vec![Journey::eth()]),
+                        chains: vec![SendChainInfo {
+                            chain_id: 1,
+                            network: "ethereum".to_owned(),
+                            native_symbol: "ETH".to_owned(),
+                        }],
+                    },
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    SendOperation::ProbeTreasury { .. } => SendShellResult::TreasuryProbed {
+                        probe: vela_core::app::send::SendTreasuryProbe::Covered,
+                    },
+                    SendOperation::ResolveIdentity { .. } => {
+                        SendShellResult::IdentityResolved { identity: None }
+                    }
+                    SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                        outcome: SendFeeOutcome::Ok {
+                            estimate: estimate.clone(),
+                        },
+                    },
+                    // Timers stay out: nothing here waits on a clock.
+                    _ => continue,
+                };
+                pending.extend(send.resolve(effect.id, result));
+            }
+        };
+        drive(
+            &mut send,
+            SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SelectToken {
+                token_id: Journey::eth().id(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SetRecipient {
+                recipient: "0x2222222222222222222222222222222222222222".to_owned(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SetAmount {
+                amount: "0.001".to_owned(),
+            },
+        );
+        drive(&mut send, SendEvent::Continue);
+        let view = send.view();
+        assert_eq!(view.stage, SendStage::Confirm);
+        assert!(view.fee.is_some(), "Continue's figure");
+        let armed = view.can_confirm;
+
+        // The card failed: the bridge tells it, the confirm is held, and the
+        // figure the fee machine discarded is gone from the confirm too.
+        let mut told = FeeFailedTold::default();
+        let failed = told
+            .news(failures.down.failure.is_some())
+            .unwrap_or_else(|| unreachable!("a first word"));
+        drive(&mut send, SendEvent::FeeFailedChanged { failed });
+        let held = send.view();
+        assert!(!held.can_confirm, "held while the card has failed");
+        assert!(held.fee.is_none(), "no figure the fee machine discarded");
+        // …and so, the row draws the failure in its place.
+        let s = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let inputs = crate::flows::live::SendInputs {
+            send: &held,
+            fee: &failures.down,
+            s: &s,
+            wallet: &wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+            relay_sent_at_ms: None,
+        };
+        assert_eq!(
+            crate::flows::live::confirm_fee_fact(&inputs).value.as_ref(),
+            "—"
+        );
+        // Through the core's re-ask it stays held: no news for the bridge.
+        assert_eq!(told.news(failures.retrying.failure.is_some()), None);
+
+        // The quote settles again: the figure and the confirm are back.
+        assert_eq!(told.news(false), Some(false));
+        drive(&mut send, SendEvent::FeeFailedChanged { failed: false });
+        drive(
+            &mut send,
+            SendEvent::FeeUpdated {
+                estimate: estimate.clone(),
+            },
+        );
+        let back = send.view();
+        assert!(back.fee.is_some(), "the figure is back");
+        assert_eq!(back.can_confirm, armed, "the gate as it was before");
+        assert!(armed, "the confirm was armed on a settled figure");
     }
 
     /// The bridge beside `FeeBusyChanged` (the core's rule, iOS
