@@ -997,8 +997,9 @@ pub struct BalanceView {
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
     pub balance_partial: bool,
-    /// Nothing could be read and nothing is known: the first fetch failed
-    /// with no cache to fall back on. A skeleton and a reason, never a zero.
+    /// Nothing could be read and nothing is known: the first fetch failed —
+    /// or settled with every chain it asked failed — with no cache to fall
+    /// back on. A skeleton and a reason, never a zero.
     pub unreachable: bool,
     /// `Some` only when partial AND the silent retries are exhausted
     /// (invariant ③).
@@ -1421,6 +1422,15 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 .map(with_display_symbol)
                 .collect();
             sort_by_usd_desc(&mut live);
+            // Every chain this round asked failed — down, or a fault inside
+            // the app — and nothing is known: not a settled $0.00 under the
+            // reason, but nothing at all, as for a fetch that threw (spec 038
+            // finding 15; PR 2 integration: a faulted pool painted "$0.00" and
+            // "Deposit your first asset" under Vela's own error).
+            let nothing_answered = !read_chain_ids.is_empty()
+                && read_chain_ids
+                    .iter()
+                    .all(|id| failed_chain_ids.contains(id));
             remember_reads(model, &live, &failed_chain_ids, &read_chain_ids);
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
@@ -1429,7 +1439,8 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.internal_chain_ids = internal_chain_ids;
             model.errored_internally = false;
             model.fetch_in_flight = false;
-            model.errored_without_data = false;
+            model.errored_without_data =
+                nothing_answered && model.tokens.is_empty() && model.cached_total.is_none();
 
             let unpriced = has_unpriced(&model.tokens);
             let partial = !model.failed_chain_ids.is_empty() || unpriced;

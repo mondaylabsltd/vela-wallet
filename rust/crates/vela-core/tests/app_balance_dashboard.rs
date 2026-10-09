@@ -2357,3 +2357,40 @@ fn a_fetch_that_threw_inside_the_app_says_so() {
     );
     assert_eq!(sut.view().internal_key, None);
 }
+
+/// Every chain a round asked failed and nothing is known: no settled $0.00
+/// (and no "Deposit your first asset" under it) — nothing at all, as for a
+/// fetch that threw. A round where one chain answered, even with nothing,
+/// is a real zero.
+#[test]
+fn a_round_where_every_chain_failed_is_no_zero() {
+    let all_failed = Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![1, 56],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56],
+        internal_chain_ids: vec![1, 56],
+        now_ms: NOW,
+    };
+    let view = booted(ADDR_A, None, all_failed).view();
+    assert!(view.unreachable, "nothing known: no figure");
+    assert!(view.internal_key.is_some());
+
+    let one_answered = booted(ADDR_A, None, settled_read(vec![], vec![56], vec![1, 56])).view();
+    assert!(
+        !one_answered.unreachable,
+        "Ethereum answered: it holds nothing"
+    );
+    assert_eq!(one_answered.display_total_usd, Some(0.0));
+
+    // With a cache, the cache stands.
+    let cached = booted(
+        ADDR_A,
+        Some(12.0),
+        settled_read(vec![], vec![1, 56], vec![1, 56]),
+    )
+    .view();
+    assert!(!cached.unreachable);
+}
