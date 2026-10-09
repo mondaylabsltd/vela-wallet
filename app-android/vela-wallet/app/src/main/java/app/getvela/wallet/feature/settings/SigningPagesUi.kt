@@ -84,7 +84,16 @@ internal fun SigningPagesPageBody(
     // nothing is stored, an accepted one joins the list and the field clears.
     var draft by remember(model.draft) { mutableStateOf(model.draft) }
     var adding by remember { mutableStateOf(false) }
-    LaunchedEffect(model.rows.size) { if (adding) { draft = ""; adding = false } }
+    // Saved, the keyboard goes too: the new row and its check are what the
+    // person looks at next, and the keys covered them.
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(model.rows.size) {
+        if (adding) {
+            draft = ""
+            adding = false
+            focus.clearFocus()
+        }
+    }
     LaunchedEffect(model.addError) { if (model.addError != null) adding = false }
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
     VelaUrlField(

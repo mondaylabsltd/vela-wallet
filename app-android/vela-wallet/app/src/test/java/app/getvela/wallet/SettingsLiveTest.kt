@@ -871,9 +871,11 @@ class SettingsLiveTest {
         // A custom-domain account is locked to its page: Vela's sheet says why it cannot.
         val own = account.copy(signingDomain = "sign.example.com", signingVenueJson = """{"type":"page","url":"https://sign.example.com/"}""")
         val locked = SettingsLive.withVenue(base(), own, saved, { matches }, strings).venue!!
-        // The row says where it signs now, and on which host.
-        assertEquals("Review and sign on a trusted signing page", locked.row.value)
-        assertEquals("sign.example.com", locked.row.subtitle)
+        // The row says where it signs now: the page by its name (D6), as
+        // In Vela is said by its own — "My page", never the venue's heading
+        // over a bare host.
+        assertEquals("My page", locked.row.value)
+        assertNull(locked.row.subtitle)
         assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
         assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
         // Its page redeployed: the row asks, and answers ("Trust this version",

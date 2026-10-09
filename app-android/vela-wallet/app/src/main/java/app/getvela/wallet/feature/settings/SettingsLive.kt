@@ -255,24 +255,21 @@ object SettingsLive {
         }
         val active = choices.firstOrNull { it.selected }
         val title = s.t("settings.venue.title")
-        // The row says where it signs now — "In Vela", or "On a trusted page"
-        // and which one — or, when nothing here can reach the keys, why.
+        // The row says where it signs now — "Review and sign in Vela", or the
+        // page by its name (D6: 「Vela 官方签名页」, the person's label,
+        // 「自己部署的签名页 · domain」), which already says it is a page — or,
+        // when nothing here can reach the keys, why. (iOS says the same.)
         val blocked = choices.isNotEmpty() && choices.all { it.reason != null }
-        val pageTitle = onPage?.titleKey?.let(s::t).orEmpty()
         return model.copy(
             venue = VenueModel(
                 row = SettingsRowModel(
                     id = VENUE_ROW,
                     title = title,
                     icon = SettingsIcon.Eye,
-                    subtitle = when {
-                        blocked -> choices.first().reason
-                        active?.page != null -> active.page.address
-                        else -> null
-                    },
+                    subtitle = if (blocked) choices.first().reason else null,
                     value = when {
                         active == null -> null
-                        active.page != null -> pageTitle
+                        active.page != null -> active.page.title
                         else -> active.title
                     },
                 ),

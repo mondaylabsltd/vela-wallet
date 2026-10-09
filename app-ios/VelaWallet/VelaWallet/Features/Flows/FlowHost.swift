@@ -421,8 +421,21 @@ struct FlowHost: View {
                     onNoticeReport: { onRelayReport?() }
                 )
             } footer: {
+                // A hairline over the pinned hand-off: figures that run past
+                // the fold end at an edge, not under a floating card.
+                if m.handoff != nil { FlowDivider() }
                 FlowFooter {
-                    VStack(spacing: Tokens.Space.s8) {
+                    VStack(spacing: Tokens.Space.s12) {
+                        // Spec 102: an account that signs on a page — which
+                        // page, with which key, and its check, pinned with the
+                        // button that goes there. In the footer, not the
+                        // scroll: the integrity line is on screen whatever the
+                        // figures above it hold, and the button can never
+                        // cover it (a 6.1" phone cut it in half when the card
+                        // rode under the facts).
+                        if let handoff = m.handoff {
+                            HandoffCardView(model: handoff, compact: true)
+                        }
                         // A BUTTON — the same primary button the signing sheet
                         // confirms with since issue #461, so the two confirm
                         // screens are one control.

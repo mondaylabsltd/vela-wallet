@@ -3327,7 +3327,11 @@ struct RootView: View {
                 onChooseVenue: { chooseSigningVenue($0) },
                 onAddPage: { settings.addSigningPage(url: $0) },
                 onRenamePage: { settings.renameSigningPage(url: $0, name: $1) },
-                onRemovePage: { settings.removeSigningPage(url: $0) },
+                onRemovePage: { url in
+                    settings.removeSigningPage(url: url)
+                    // Its trust went with it: no held "trusted" for a re-add.
+                    SignerPageChecks.shared.forget(url)
+                },
                 // "Trust this version": stored on that page by the signing
                 // pages machine (D-15), then the page is checked again.
                 onTrustPage: { url, version in
@@ -3379,6 +3383,13 @@ struct RootView: View {
             signingClosed()
             // Landed, rejected or dismissed — the chain is what knows.
             Task { await checkEthereumBackup() }
+        }
+        // A page added while Signing pages is on screen is checked at once:
+        // the page's own `onPagesShown` ran before it was there, and its line
+        // said "Checking the page…" until the person left and came back
+        // (device walk, 102). Each page is checked only when nothing stands.
+        .onChange(of: settings.signingPages?.pages.map(\.url) ?? []) { _, _ in
+            primeSigningPages()
         }
         .task(id: session.view.address) { await checkEthereumBackup() }
         .task(id: "\(session.view.address)#\(signInEpoch)") {

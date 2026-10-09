@@ -1960,7 +1960,7 @@ fun SendConfirmBody(
         // The card is the whole action while it is up: the signing notice
         // ("waiting for biometric confirmation") and its Cancel are a passkey
         // ceremony's, and this one happens on the page.
-        model.notice?.takeIf { handoff == null }?.let { notice ->
+        model.notice?.takeIf { handoff?.live != true }?.let { notice ->
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             Column(
                 modifier = Modifier
@@ -2014,31 +2014,34 @@ fun SendConfirmBody(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = model.ctaEnabled,
             )
-            // The held confirm's one line (the previous transaction on this
-            // network is in flight) — quiet, centred, as the signing sheet
-            // draws its own confirm-block line.
-            model.ctaHold?.takeIf { !model.ctaEnabled }?.let { hold ->
-                Spacer(modifier = Modifier.height(VelaSpacing.sm))
-                Text(
-                    text = hold,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.sm,
-                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        }
+        // The held confirm's one line (the previous transaction on this
+        // network is in flight) — quiet, centred, as the signing sheet draws
+        // its own confirm-block line. Under the button, or under the hand-off
+        // card whose Open the same hold keeps shut (spec 102 draws the card
+        // in the button's place from the start).
+        model.ctaHold?.takeIf { !model.ctaEnabled }?.let { hold ->
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = hold,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
 
 /**
- * Spec 102 D4: the hand-off card in the send confirm's button's place, and
- * its Cancel. Brought into view once, when it first appears — the confirm
- * was tapped at the bottom of a page that may scroll, and Open and Cancel
- * must not be left below the fold or under the navigation bar (the page's
- * own bottom room is brought in with them).
+ * Spec 102 D4: the hand-off card in the send confirm's button's place, and —
+ * once the attempt's own hand-off is up — its Cancel. Brought into view then,
+ * once: Open was tapped at the bottom of a page that may scroll, and Open and
+ * Cancel must not be left below the fold or under the navigation bar (the
+ * page's own bottom room is brought in with them). Before that the card sits
+ * where the confirm's button would, and the page is not scrolled for it.
  */
 @Composable
 private fun SendHandoffCard(handoff: SendHandoff) {
@@ -2048,8 +2051,8 @@ private fun SendHandoffCard(handoff: SendHandoff) {
         with(density) { VelaSpacing.xl3.toPx() }
     var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     var revealed by remember { mutableStateOf(false) }
-    LaunchedEffect(revealed) {
-        if (revealed) {
+    LaunchedEffect(revealed, handoff.live) {
+        if (revealed && handoff.live) {
             intoView.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, size.width.toFloat(), size.height + below))
         }
     }
@@ -2065,11 +2068,11 @@ private fun SendHandoffCard(handoff: SendHandoff) {
     ) {
         app.getvela.wallet.feature.signing.components.HandoffCard(
             handoff.card,
-            enabled = handoff.card.integrity.opens,
+            enabled = handoff.enabled && handoff.card.integrity.opens,
             onOpen = handoff.onOpen,
             onTrust = handoff.onTrust,
         )
-        VelaSecondaryButton(handoff.cancel, handoff.onCancel, Modifier.fillMaxWidth())
+        handoff.cancel?.let { cancel -> VelaSecondaryButton(cancel, handoff.onCancel, Modifier.fillMaxWidth()) }
     }
 }
 

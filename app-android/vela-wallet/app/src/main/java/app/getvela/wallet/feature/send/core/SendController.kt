@@ -676,6 +676,20 @@ class SendController(
 
     fun slideConfirm() = dispatch(SendEvent.SlideConfirm)
 
+    /**
+     * Spec 102 D4: the confirm's hand-off for [address] — the page its
+     * account signs on and the key row — read from the record by the core's
+     * `signing_plan`, as the spine reads it when the attempt starts. `null`:
+     * it signs in Vela, or nothing on this device can reach its keys (the
+     * attempt says why).
+     */
+    suspend fun handoffFor(address: String): UserOpSpine.Handoff? {
+        val plan = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(accountPort.accountJson(address))
+            ?: return null
+        val page = plan.page?.takeIf { plan.blocked == null } ?: return null
+        return UserOpSpine.Handoff(page, plan.keyLabel)
+    }
+
     fun cancelSigning() = dispatch(SendEvent.CancelSigning)
 
     fun retryAfterBootstrap() = dispatch(SendEvent.RetryAfterBootstrap)
