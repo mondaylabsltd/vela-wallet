@@ -192,17 +192,20 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
 
 /**
  * A failed sign-in's body, in this phone's terms: the platform's own words,
- * then what to do about it. The corpus's sentence for it
+ * then what to do about it. The corpus's sentence for iPhones and Macs
  * (`onboarding.login.alertSignInFailedBody`) says to set up Face ID, Touch ID
- * or a fingerprint — an iPhone's and a Mac's words, shown on Android (device
- * pass 2026-10-09). Android puts the corpus's own Android-shaped advice under
- * the words instead, as that sentence's second paragraph:
- * `onboarding.common.openBiometricSettings` ("Open system settings to enable
- * biometrics"). With no words from the platform, the advice alone.
+ * or a fingerprint (device pass 2026-10-09); Android's is
+ * `onboarding.login.alertSignInFailedBodyAndroid` — "{{message}} / Make sure
+ * this device has a screen lock or fingerprint set up and try again." It once
+ * borrowed `onboarding.common.openBiometricSettings` for that second
+ * paragraph, a button's label that read as one (no full stop) in de/ja/ko.
+ * With no words from the platform, the advice alone — not under two empty
+ * lines.
  */
 internal fun signInFailedBody(detail: String?, strings: VelaStrings): String {
-    val advice = strings.t(I18nKeys.Flow.OPEN_BIOMETRIC_SETTINGS)
-    return detail?.takeIf { it.isNotBlank() }?.let { "$it\n\n$advice" } ?: advice
+    val words = detail?.takeIf { it.isNotBlank() }
+    val body = strings.t(I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY_ANDROID, mapOf("message" to words.orEmpty()))
+    return if (words == null) body.trimStart() else body
 }
 
 /**
