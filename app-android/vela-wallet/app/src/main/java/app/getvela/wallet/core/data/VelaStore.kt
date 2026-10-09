@@ -82,10 +82,14 @@ interface KeyValueStore {
         const val SIGNING_PAGES = "vela.signingPages"
 
         /**
-         * Spec 076 FR-009 / FR-010: page versions this person trusted, and
-         * blocked, ON THIS DEVICE (JSON arrays of sha256 hex). Never synced.
+         * Spec 076 FR-010: page versions this person blocked ON THIS DEVICE
+         * (a JSON array of sha256 hex). Never synced.
+         *
+         * Its sibling `vela.signerPage.trusted` is no longer read or written
+         * (spec 102 D-15): a version is trusted on the saved page it was
+         * served by (`vela.signingPages`, `SigningPage.trusted`), so a yes
+         * vouches for that deployment and nothing else.
          */
-        const val SIGNER_PAGE_TRUSTED = "vela.signerPage.trusted"
         const val SIGNER_PAGE_BLOCKED = "vela.signerPage.blocked"
 
         /**

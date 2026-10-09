@@ -4,11 +4,13 @@ import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.VelaStrings
-import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -18,8 +20,14 @@ import uniffi.vela_core_uniffi.SignerIntegrityLine
 import uniffi.vela_core_uniffi.SignerIntegrityState
 import uniffi.vela_core_uniffi.SignerPageAdmission
 import uniffi.vela_core_uniffi.SignerPageTarget
+import uniffi.vela_core_uniffi.signerIntegrityLineWhileChecking
+import uniffi.vela_core_uniffi.signerIntegrityTime
 import uniffi.vela_core_uniffi.signerPageAdmit
+import uniffi.vela_core_uniffi.signerPageCheckHeaders
 import uniffi.vela_core_uniffi.signerPageHash
+import uniffi.vela_core_uniffi.signerPageKeepOrReplace
+import uniffi.vela_core_uniffi.signerPageRefreshDue
+import uniffi.vela_core_uniffi.signingPageTrusted
 
 /**
  * Is the signing page the page it is supposed to be? — the phone's half of
@@ -46,13 +54,34 @@ import uniffi.vela_core_uniffi.signerPageHash
  *
  * A check vouches for 24 hours (the core's `MAX_CHECK_AGE_MS`): after that the
  * line reads "checking" and nothing opens until the page is checked again.
+ * So a page in use is checked again in the background well before then
+ * ([refresh], spec 102 D-14: on start, on every return to the foreground and
+ * hourly — the core says which pages are due), and a refresh that could not
+ * complete keeps a check that still vouches (`signerPageKeepOrReplace`):
+ * Open almost never waits, and a good line never flickers to "checking".
+ *
+ * **Trust is per page** (D-15): the versions a person trusted are the saved
+ * page's own (`signingPageTrusted`), recorded by `SigningPagesCore`'s
+ * `version_trusted` — never a device-wide list.
  */
 class SignerPageChecks(
-    /** GET [url], no redirects followed; see [Fetched]. */
+    /** GET [url] with the core's check headers, no redirects followed; see [Fetched]. */
     private val fetch: suspend (url: String) -> Fetched,
-    /** The per-device trusted / blocked version lists. */
+    /** The per-device blocked version list (`vela.signerPage.blocked`). */
     private val store: KeyValueStore?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * The saved pages as `SigningPagesCore` keeps them (its `saved`, JSON) —
+     * what `signingPageTrusted` reads a page's trusted versions from. By
+     * default the stored list itself.
+     */
+    private val savedPages: suspend () -> String? = { runCatching { store?.read(KeyValueStore.Keys.SIGNING_PAGES) }.getOrNull() },
+    /**
+     * Record "Trust this version" for a page (`SigningPagesEvent::VersionTrusted`)
+     * and return once [savedPages] carries it. The pages core owns the list;
+     * this only asks it.
+     */
+    private val recordTrust: suspend (url: String, version: String) -> Unit = { _, _ -> },
 ) {
     /** What one GET came back as. */
     sealed interface Fetched {
@@ -71,12 +100,18 @@ class SignerPageChecks(
         val base: String,
         /** The line as of the check (a fresh read of [admission] is [SignerPageChecks.line]). */
         val line: SignerIntegrityLine,
-        /** Present once a check ruled; opens only when [SignerPageAdmission.opens]. */
+        /**
+         * The check that rules for the page — present once one ruled, and kept
+         * through a refresh that could not complete while it still vouches.
+         * While [running], the previous one (or `null`).
+         */
         val admission: SignerPageAdmission?,
         /** The version the check asked for (sha256 hex), empty when there was none. */
         val version: String,
         /** A custom page's own build, proposed by its index: the person decides. */
         val proposed: Boolean,
+        /** A check of the page is in flight; [line] is the core's line while it runs. */
+        val running: Boolean = false,
     )
 
     private val _checks = MutableStateFlow<Map<String, Check>>(emptyMap())
@@ -86,18 +121,33 @@ class SignerPageChecks(
 
     private val locks = ConcurrentHashMap<String, Mutex>()
 
+    /** When a check of each page last STARTED, completed or not — the core spaces retries by it. */
+    private val attempts = ConcurrentHashMap<String, Long>()
+
     /**
-     * The line to draw for [base] now: the check's, read at this moment ("checking"
-     * once it is too old), or "checking" while none has ruled.
+     * The line to draw for [base] now: while a check runs, the core's line for
+     * that moment (`signerIntegrityLineWhileChecking` — the previous verdict
+     * while it still vouches, else "checking"); else the check's, read at this
+     * moment ("checking" once it is too old); "checking" while none has ruled.
      */
     fun line(base: String): SignerIntegrityLine {
         val check = _checks.value[key(base)] ?: return CHECKING
-        return check.admission?.line(clock().toULong()) ?: check.line
+        val now = clock().toULong()
+        if (check.running) return signerIntegrityLineWhileChecking(check.admission, now)
+        return check.admission?.line(now) ?: check.line
     }
 
-    /** The admission for [base] when it opens the page NOW, else `null`. */
+    /** The admission for [base] when it opens the page NOW (`isFresh`), else `null`. */
     fun admitted(base: String): SignerPageAdmission? =
-        _checks.value[key(base)]?.admission?.takeIf { it.line(clock().toULong()).opens }
+        _checks.value[key(base)]?.admission?.takeIf { it.isFresh(clock().toULong()) }
+
+    /**
+     * The full version the person is asked to trust for [base] — `Some` only
+     * while the page's check asks ([SignerIntegrityState.ASK_TO_TRUST]), which
+     * only a self-hosted page can (`SignerPageAdmission.versionToTrust`).
+     */
+    fun versionToTrust(base: String): String? =
+        _checks.value[key(base)]?.takeIf { !it.running }?.admission?.versionToTrust()
 
     /**
      * An admission for [base] that opens the page now — the one held when it is
@@ -106,7 +156,30 @@ class SignerPageChecks(
      */
     suspend fun ensure(base: String): SignerPageAdmission? {
         admitted(base)?.let { return it }
-        return check(base).admission?.takeIf { it.line(clock().toULong()).opens }
+        return check(base).admission?.takeIf { it.isFresh(clock().toULong()) }
+    }
+
+    /**
+     * Is a background check of [base] due now? The core's rule
+     * (`signerPageRefreshDue`): no check that admitted it, or one older than
+     * half a day — and no attempt in the last few minutes.
+     */
+    fun refreshDue(base: String): Boolean {
+        val key = key(base)
+        val checkedAt = _checks.value[key]?.admission?.checkedAtMs()
+        return signerPageRefreshDue(checkedAt, attempts[key]?.toULong(), clock().toULong())
+    }
+
+    /**
+     * Spec 102 D-14: re-check every page in [pages] the core says is due —
+     * each account's page venue and every saved page — side by side. Called on
+     * start, on every return to the foreground, and hourly while the app runs
+     * (`signerPageRefreshSchedule().pollMs`); a page not due costs nothing.
+     */
+    suspend fun refresh(pages: Collection<String>) = coroutineScope {
+        pages.map(::key).distinct().filter(::refreshDue).forEach { page ->
+            launch { runCatching { check(page) } }
+        }
     }
 
     /**
@@ -120,10 +193,23 @@ class SignerPageChecks(
         val before = _checks.value[key]
         return lock.withLock {
             // Someone else's check landed while this one waited: theirs is as new.
-            _checks.value[key]?.takeIf { it !== before && it.admission?.line(clock().toULong())?.opens == true }
+            _checks.value[key]?.takeIf { it !== before && !it.running && it.admission?.isFresh(clock().toULong()) == true }
                 ?.let { return@withLock it }
-            publish(key, Check(key, CHECKING, null, before?.version.orEmpty(), proposed = false))
-            val trusted = hashes(TRUSTED)
+            val held = _checks.value[key]
+            val previous = held?.admission
+            attempts[key] = clock()
+            publish(
+                key,
+                Check(
+                    key,
+                    signerIntegrityLineWhileChecking(previous, clock().toULong()),
+                    previous,
+                    held?.version.orEmpty(),
+                    held?.proposed ?: false,
+                    running = true,
+                ),
+            )
+            val trusted = trustedOf(key)
             val blocked = hashes(BLOCKED)
             val target = SignerPageTarget.choose(key, published(key), trusted, blocked)
             val url = target.url()
@@ -141,9 +227,18 @@ class SignerPageChecks(
                     Fetched.Unreachable -> null to SignerCheckFailure.UNREACHABLE
                     Fetched.Unreadable -> null to SignerCheckFailure.NO_BYTES
                 }
-                val now = clock()
-                val admission = signerPageAdmit(target, hash, failure, trusted, blocked, false, now.toULong())
-                Check(key, admission.line(now.toULong()), admission, target.version().orEmpty(), target.proposedByIndex())
+                val now = clock().toULong()
+                val next = signerPageAdmit(target, hash, failure, trusted, blocked, false, now)
+                // A refresh that could not complete keeps a check that still
+                // vouches; one that completed replaces it, a mismatch included.
+                val kept = signerPageKeepOrReplace(previous, next, now)
+                if (held != null && previous != null && next.checkedAtMs() == null && kept.checkedAtMs() != null &&
+                    kept.checkedAtMs() == previous.checkedAtMs()
+                ) {
+                    Check(key, kept.line(now), kept, held.version, held.proposed)
+                } else {
+                    Check(key, kept.line(now), kept, target.version().orEmpty(), target.proposedByIndex())
+                }
             }
             VelaLog.event(
                 "signer page",
@@ -158,19 +253,23 @@ class SignerPageChecks(
     }
 
     /**
-     * "Trust this version on this device" (FR-009): a custom page's own build,
-     * which its index proposed and nobody decided about yet. Per device, never
-     * synced. Then the page is checked again — which now admits it.
+     * "Trust this version" (spec 076 FR-009, spec 102 D-15): a self-hosted
+     * page's own build, which its index proposed and the check asked about.
+     * The version is the admission's own (`versionToTrust`), stored on THAT
+     * page by the pages core — so it vouches for that deployment and nothing
+     * else — and then the page is checked again, which now admits it. Nothing
+     * is recorded when the page's check is not asking.
      */
-    suspend fun trust(base: String, version: String): Check {
-        val store = store ?: return check(base)
-        if (version.isNotBlank()) {
-            val now = hashes(TRUSTED)
-            if (now.none { it.equals(version, ignoreCase = true) }) {
-                store.write(TRUSTED, JSONArray(now + version.lowercase()).toString())
-            }
-        }
-        return check(base)
+    suspend fun trust(base: String): Check {
+        val key = key(base)
+        versionToTrust(key)?.let { version -> recordTrust(key, version) }
+        return check(key)
+    }
+
+    /** The versions trusted for [base] on this device: the saved page's own list (`signingPageTrusted`). */
+    private suspend fun trustedOf(base: String): List<String> {
+        val saved = runCatching { savedPages() }.getOrNull() ?: return emptyList()
+        return runCatching { signingPageTrusted(saved, base) }.getOrDefault(emptyList())
     }
 
     /** What the deployment says it publishes, or `null` when it could not be read at all. */
@@ -210,7 +309,6 @@ class SignerPageChecks(
         /** The page is one file of ~300 KB; this is room to grow, and a refusal to hash something absurd. */
         const val MAX_BYTES = 4 * 1024 * 1024
 
-        private const val TRUSTED = KeyValueStore.Keys.SIGNER_PAGE_TRUSTED
         private const val BLOCKED = KeyValueStore.Keys.SIGNER_PAGE_BLOCKED
 
         /** The line while a check runs: never opens. */
@@ -236,38 +334,31 @@ class SignerPageChecks(
 
         /**
          * The integrity line in words — `{{version}}` (eight hex characters)
-         * and `{{time}}` (when the bytes arrived: the time today, else the date
-         * and time; a check is at most a day old).
+         * and `{{time}}`: the core's `signerIntegrityTime` (spec 102 D-13) —
+         * the clock time in the person's format when the check ran today,
+         * else the date and the time — over this device's offset now, the
+         * person's date and time presets (`auto` resolved) and the app's
+         * language.
          */
-        fun words(line: SignerIntegrityLine, strings: VelaStrings, now: Long = System.currentTimeMillis()): String {
-            val at = line.checkedAtMs?.toLong()
-            val time = when {
-                at == null -> ""
-                sameDay(at, now) -> Formats.current.time(at)
-                else -> Formats.current.dateTime(at)
-            }
+        fun words(
+            line: SignerIntegrityLine,
+            strings: VelaStrings,
+            now: Long = System.currentTimeMillis(),
+            formats: Formats = Formats.current,
+            zone: TimeZone = TimeZone.getDefault(),
+        ): String {
+            val time = line.checkedAtMs?.let { at ->
+                signerIntegrityTime(
+                    checkedAtMs = at,
+                    nowMs = now.toULong(),
+                    utcOffsetMinutes = zone.getOffset(now) / 60_000,
+                    dateFormat = formats.resolvedDate().wire,
+                    timeFormat = formats.resolvedTime().wire,
+                    language = strings.language,
+                )
+            }.orEmpty()
             return strings.t(line.key, mapOf("version" to line.version, "time" to time))
         }
-
-        private fun sameDay(a: Long, b: Long): Boolean {
-            val x = Calendar.getInstance().apply { timeInMillis = a }
-            val y = Calendar.getInstance().apply { timeInMillis = b }
-            return x.get(Calendar.YEAR) == y.get(Calendar.YEAR) && x.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR)
-        }
-
-        /**
-         * What a browser says it accepts when it navigates to a page — and so
-         * what the page is fetched with here. The check is only worth anything
-         * if it sees the bytes the browser will be served, and a host can
-         * serve them differently by this header: measured on 2026-10-09,
-         * `sign.getvela.app` answers `Accept: text/html` with its published
-         * build PLUS a Cloudflare Web Analytics `<script>` injected before
-         * `</body>` (sha256 `b014f9b3…`, not `0ba8ee8c…`), and a request that
-         * accepts anything with the published bytes. A check that did not ask
-         * as a browser asks would pass while the Custom Tab loaded something
-         * else.
-         */
-        const val BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
         /** The real GET, over the app's one HTTP client (no redirects followed). */
         suspend fun httpGet(url: String): Fetched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -279,9 +370,17 @@ class SignerPageChecks(
                 // the page back to back over one keep-alive connection).
                 .retryOnConnectionFailure(true)
                 .build()
-            val accept = if (url.endsWith(INDEX_PATH)) "application/json" else BROWSER_ACCEPT
+            // What a browser sends when it navigates to the page — the core's
+            // headers (`signerPageCheckHeaders`), so the host answers the check
+            // with the bytes it answers the Custom Tab with. Measured on
+            // 2026-10-09: `sign.getvela.app` injected a Cloudflare beacon into
+            // `text/html` answers only, and a check that did not ask as a
+            // browser asks passed while the tab loaded something else.
+            val request = okhttp3.Request.Builder().url(url).get().apply {
+                signerPageCheckHeaders().forEach { header(it.name, it.value) }
+            }.build()
             val response = runCatching {
-                client.newCall(okhttp3.Request.Builder().url(url).header("Accept", accept).get().build()).execute()
+                client.newCall(request).execute()
             }.getOrElse { error ->
                 VelaLog.event("signer page", "fetch failed", "host" to url.substringAfter("://").substringBefore('/'), "why" to error.javaClass.simpleName, "detail" to error.message)
                 return@withContext Fetched.Unreachable

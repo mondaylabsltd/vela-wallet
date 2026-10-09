@@ -68,6 +68,12 @@ class TrustedSignerScheme(
     /** The page the answer must have come from, for a ceremony's origin check. */
     private val signerOrigin: String = base,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * The language the app shows (`zh-HK`): the launch names it (`lang=`), so
+     * the page speaks the person's language and not the browser's. Empty —
+     * the page follows the browser.
+     */
+    private val lang: () -> String = { "" },
 ) : TrustedSignerWire {
 
     /** The request in flight: its one-time token and the URL that carries it. */
@@ -101,7 +107,7 @@ class TrustedSignerScheme(
         // R6: the checked page, or nothing. A stale check is run again here,
         // so a person pressing Open after a day away is not refused for it.
         val admission = admit() ?: return TrustedSignerAnswer.Unchecked(refusal())
-        val url = runCatching { admission.urlLaunch(ask.requestJson, token, clock().toULong()) }
+        val url = runCatching { admission.urlLaunch(ask.requestJson, token, lang(), clock().toULong()) }
             .getOrElse { error ->
                 VelaLog.failure("trustedsigner", "the checked page would not take the request", error)
                 return TrustedSignerAnswer.Unchecked(refusal())

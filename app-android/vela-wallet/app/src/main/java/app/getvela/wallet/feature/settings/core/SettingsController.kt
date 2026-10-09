@@ -11,8 +11,10 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.FeeTierPrefCore
 import uniffi.vela_core_uniffi.SigningPagesCore
@@ -245,6 +247,29 @@ class SettingsController(
     fun removeSigningPage(url: String) =
         signingPagesHost.dispatch(SigningPagesEvent.PageRemoved(url), SigningPagesEvent.serializer())
 
+    /**
+     * "Trust this version" (spec 102 D-15): store [version] on the page at
+     * [url], and return once the list carries it — the check that follows
+     * reads the page's trusted versions from it. The list is read first when
+     * it never was (the core refuses an edit to a list it has not seen).
+     * Gives up quietly after a few seconds: the check then still asks.
+     */
+    suspend fun trustSigningPageVersion(url: String, version: String) {
+        kotlinx.coroutines.withTimeoutOrNull(TRUST_WAIT_MS) {
+            if (!signingPages.value.loaded) {
+                refreshSigningPages()
+                signingPages.first { it.loaded }
+            }
+            signingPagesHost.dispatch(SigningPagesEvent.VersionTrusted(url, version), SigningPagesEvent.serializer())
+            signingPages.first { view ->
+                view.saved.any { page ->
+                    SignerPageChecks.key(page.url) == SignerPageChecks.key(url) &&
+                        page.trusted.any { it.equals(version, ignoreCase = true) }
+                }
+            }
+        }
+    }
+
 
     /** The networks, endpoints and provider keys this device holds. */
     val networks: StateFlow<NetView> = networkHost.view
@@ -366,6 +391,9 @@ class SettingsController(
         DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))
 
     private companion object {
+        /** How long "Trust this version" waits for the pages core to store it. */
+        const val TRUST_WAIT_MS = 5_000L
+
         /**
          * The device's primary locale, for the region seed.
          *

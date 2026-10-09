@@ -13,9 +13,14 @@ import kotlinx.serialization.Serializable
  * that account's own choice (`signingVenueChoices`), never this list's.
  */
 
-/** A saved page, as stored and as `signingVenueChoices` takes it. */
+/**
+ * A saved page, as stored and as `signingVenueChoices` takes it. [trusted]:
+ * the versions of THIS page the person trusted on this device (spec 102
+ * D-15) — what `signingPageTrusted` hands the check. Carried through every
+ * write, or a rename would forget them.
+ */
 @Serializable
-data class SigningPage(val url: String, val name: String = "")
+data class SigningPage(val url: String, val name: String = "", val trusted: List<String> = emptyList())
 
 /** One row of Settings → Signing pages: the official page first, then the saved ones. */
 @Serializable
@@ -26,6 +31,8 @@ data class SigningPageRow(
     /** The domain whose keys this page can use (R1) — drawn on the row. */
     val domain: String = "",
     val official: Boolean = false,
+    /** Versions of this page trusted on this device; always empty for the official page. */
+    val trusted: List<String> = emptyList(),
 )
 
 @Serializable
@@ -58,6 +65,16 @@ sealed class SigningPagesEvent {
     @Serializable
     @SerialName("page_removed")
     data class PageRemoved(val url: String) : SigningPagesEvent()
+
+    /**
+     * "Trust this version" (spec 102): [version] is the full sha256 the check
+     * asked about (`SignerPageAdmission.versionToTrust`), stored on the page at
+     * [url] — saved with it when it was not. Refused by the core for the
+     * official page and for anything that is not a sha256.
+     */
+    @Serializable
+    @SerialName("version_trusted")
+    data class VersionTrusted(val url: String, val version: String) : SigningPagesEvent()
 }
 
 @Serializable

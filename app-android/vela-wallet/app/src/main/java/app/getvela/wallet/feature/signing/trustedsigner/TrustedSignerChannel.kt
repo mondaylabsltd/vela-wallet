@@ -19,6 +19,7 @@ import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
 import uniffi.vela_core_uniffi.TrustedSignerRefusal
 import uniffi.vela_core_uniffi.WalletKeyRecord
+import uniffi.vela_core_uniffi.trustedSignerCeremonyTitleKey
 import java.security.SecureRandom
 
 /**
@@ -76,6 +77,8 @@ class TrustedSignerChannel(
      * counts) — asked only when the person is back with no answer.
      */
     private val reachable: suspend (url: String) -> Boolean = { true },
+    /** The language the app shows, for the page's launch (`lang=`, spec 102). */
+    private val lang: () -> String = { "" },
 ) : TrustedSigner {
 
     /** The sentences a refusal is told in (`componentsUi.signing.trustedSigner*`). */
@@ -104,8 +107,10 @@ class TrustedSignerChannel(
          * The page is open (or being opened) at [url] and the answer is awaited.
          * [unreachable]: the person came back without one and the page's address
          * does not answer (spec 079) — the card says so and offers a retry.
+         * [title]: a key ceremony's own title (the corpus key the core names —
+         * create, sign in, confirm; spec 102), `null` for a signature.
          */
-        data class Waiting(val url: String, val unreachable: Boolean = false) : State
+        data class Waiting(val url: String, val unreachable: Boolean = false, val title: String? = null) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -133,6 +138,16 @@ class TrustedSignerChannel(
      */
     @Volatile
     private var unopenable: String? = null
+
+    /**
+     * The request in flight's own title, when it is a key ceremony: the
+     * core's `trustedSignerCeremonyTitleKey` — "Create your key on your
+     * signing page", "Sign in on…", "Confirm with your key on…" — instead of
+     * a signature's wait. Set per request: one flow can be a create and then
+     * its member proof.
+     */
+    @Volatile
+    private var ceremonyTitle: String? = null
 
     override fun describe(chainId: Int, account: String): TrustedSignerLabels = labels(chainId, account)
 
@@ -284,6 +299,8 @@ class TrustedSignerChannel(
         one.withLock {
             notice.value = null
             unopenable = null
+            ceremonyTitle = (ask as? TrustedSignerAsk.Ceremony)
+                ?.let { runCatching { trustedSignerCeremonyTitleKey(it.operationJson) }.getOrNull() }
             if (handoff != null && !handedOff(handoff)) {
                 _state.value = State.Idle
                 return@withLock Put(TrustedSignerAnswer.Cancelled, wire == null)
@@ -350,7 +367,8 @@ class TrustedSignerChannel(
                 openPage = openPage,
                 timeoutMs = timeoutMs,
                 random = random,
-                onOpened = { url -> _state.value = State.Waiting(url) },
+                onOpened = { url -> _state.value = State.Waiting(url, title = ceremonyTitle) },
+                lang = lang,
             )
         }.getOrElse { error ->
             VelaLog.failure("trustedsigner", "the channel could not be opened", error)

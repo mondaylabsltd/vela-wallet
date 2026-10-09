@@ -221,6 +221,46 @@ class TrustedSignerChannelTest {
         assertEquals("the retry opened the same page again", 2, probed.get())
     }
 
+    /**
+     * Spec 102 core round: the launch names the app's language (`lang=`, so
+     * the page speaks it, not the browser's), and a key ceremony waits under
+     * its own title — the core's `trustedSignerCeremonyTitleKey` — where a
+     * signature waits as a signature.
+     */
+    @Test
+    fun `the page is launched in the app's language, and a ceremony waits under its own title`() {
+        val urls = java.util.concurrent.LinkedBlockingQueue<String>()
+        val ch = TrustedSignerChannel(
+            checks = OfficialDist.checks(),
+            openPage = { url -> urls += url; true },
+            bringBack = {},
+            words = { words },
+            timeoutMs = 20_000L,
+            lang = { "zh-HK" },
+        )
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            scope.launch {
+                runCatching {
+                    ch.ceremony(request, """{"type":"register_passkey","name":"Mine","page":"$official"}""", page = official)
+                }
+            }
+            val waiting = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } } as TrustedSignerChannel.State.Waiting
+            assertEquals("componentsUi.signing.ceremonyCreate", waiting.title)
+            val url = withTimeout(5_000) { kotlinx.coroutines.withContext(Dispatchers.IO) { urls.take() } }
+            assertTrue(url, url.substringBefore('#').contains("lang=zh-HK"))
+            ch.cancel()
+            withTimeout(5_000) { ch.state.first { it == TrustedSignerChannel.State.Idle } }
+
+            scope.launch { runCatching { ch.sign(request, digest, keys, official) } }
+            val signing = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } } as TrustedSignerChannel.State.Waiting
+            assertEquals("a signature has no ceremony title", null, signing.title)
+            ch.cancel()
+            withTimeout(5_000) { ch.state.first { it == TrustedSignerChannel.State.Idle } }
+            scope.cancel()
+        }
+    }
+
     // --- spec 075 over spec 076's transport: a flow of several requests -------
 
     @Test

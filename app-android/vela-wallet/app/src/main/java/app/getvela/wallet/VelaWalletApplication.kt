@@ -21,6 +21,10 @@ import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.core.crux.Wire
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.feature.settings.core.SigningPage
+import kotlinx.serialization.builtins.ListSerializer
 import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
 import app.getvela.wallet.feature.signing.trustedsigner.SigningPlan
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
@@ -356,7 +360,49 @@ class AppContainer(private val app: Application) {
      * Settings → Signing pages (which draw each page's line).
      */
     val signerPages: SignerPageChecks by lazy {
-        SignerPageChecks(fetch = SignerPageChecks::httpGet, store = VelaStore(app))
+        val store = VelaStore(app)
+        SignerPageChecks(
+            fetch = SignerPageChecks::httpGet,
+            store = store,
+            // D-15: each page's own trusted versions — the pages core's list
+            // as it stands once read, else the stored list itself.
+            savedPages = {
+                settings.signingPages.value.takeIf { it.loaded }?.saved
+                    ?.let { saved ->
+                        Wire.json.encodeToString(ListSerializer(SigningPage.serializer()), saved)
+                    }
+                    ?: store.read(KeyValueStore.Keys.SIGNING_PAGES)
+            },
+            recordTrust = { url, version -> settings.trustSigningPageVersion(url, version) },
+        )
+    }
+
+    private val signerRefreshScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    /**
+     * Spec 102 D-14: re-check the signing pages in use whose check the core
+     * says is due (`signerPageRefreshDue` — older than half a day, resting
+     * after an attempt that could not complete). In use: every saved page and
+     * each account's page venue (its `signing_plan`). The activity calls this
+     * on every resume — the first one is the start — and hourly while it
+     * runs (`signerPageRefreshSchedule().pollMs`). A page not due costs a
+     * comparison.
+     */
+    fun refreshSignerPages() {
+        signerRefreshScope.launch {
+            runCatching {
+                if (!settings.signingPages.value.loaded) {
+                    settings.refreshSigningPages()
+                    kotlinx.coroutines.withTimeoutOrNull(5_000L) { settings.signingPages.first { it.loaded } }
+                }
+                val saved = settings.signingPages.value.saved.map { it.url }
+                val port = StoreAccountPort(AccountStore(app))
+                val venues = session.view.value.accounts.mapNotNull { row ->
+                    SigningPlan.of(port.accountJson(row.address))?.page
+                }
+                signerPages.refresh(saved + venues)
+            }.onFailure { VelaLog.failure("signer page", "background refresh", it) }
+        }
     }
 
     /**
@@ -400,6 +446,8 @@ class AppContainer(private val app: Application) {
                     }.getOrDefault(false)
                 }
             },
+            // Spec 102: the page speaks the app's language, not the browser's.
+            lang = { i18nRuntime.state.value.language },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 TrustedSignerLabels(

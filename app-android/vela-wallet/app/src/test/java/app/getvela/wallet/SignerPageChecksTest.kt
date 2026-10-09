@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -55,9 +56,11 @@ class SignerPageChecksTest {
         assertEquals(OfficialDist.VERSION.take(8), line.version)
         assertTrue(line.opens)
         assertNotNull(line.checkedAtMs)
-        // The launch is built by the admission, from exactly the URL that was checked.
-        val url = admission!!.urlLaunch("""{"intent":{}}""", "tok", System.currentTimeMillis().toULong())
+        // The launch is built by the admission, from exactly the URL that was
+        // checked — and names the app's language, so the page speaks it.
+        val url = admission!!.urlLaunch("""{"intent":{}}""", "tok", "zh-HK", System.currentTimeMillis().toULong())
         assertTrue(url, url.startsWith(OfficialDist.LAUNCH_URL + "?"))
+        assertTrue(url, url.substringBefore('#').contains("lang=zh-HK"))
     }
 
     @Test
@@ -114,36 +117,225 @@ class SignerPageChecksTest {
         assertEquals(SignerIntegrityState.ALL_BLOCKED, all.line(official).state)
     }
 
+    /** A self-hosted deployment serving one build of its own, listed by its index. */
+    private class OwnDeployment(val base: String, body: String = "<!doctype html><title>my own signing page</title>") {
+        val bytes = body.toByteArray()
+        val version: String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        suspend fun fetch(url: String): SignerPageChecks.Fetched = when (url) {
+            "${base}index.json" -> SignerPageChecks.Fetched.Body(200, """{"versions":["$version"]}""".toByteArray())
+            "${base}b/$version/sign.html" -> SignerPageChecks.Fetched.Body(200, bytes)
+            else -> SignerPageChecks.Fetched.Body(404, ByteArray(0))
+        }
+    }
+
+    /** Checks whose trusted versions are the pages core's own list, as the app wires them. */
+    private fun checksOverPages(host: CoreHost<SigningPagesView>, store: FakeStore, fetch: suspend (String) -> SignerPageChecks.Fetched) =
+        SignerPageChecks(
+            fetch = fetch,
+            store = store,
+            savedPages = {
+                app.getvela.wallet.core.crux.Wire.json.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(SigningPage.serializer()),
+                    host.view.value.saved,
+                )
+            },
+            recordTrust = { url, version ->
+                host.dispatch(SigningPagesEvent.VersionTrusted(url, version), SigningPagesEvent.serializer())
+                withTimeout(10_000L) { host.view.first { view -> view.saved.any { page -> version in page.trusted } } }
+            },
+        )
+
     /**
-     * D-7: a self-hosted page's own build, proposed by its index, can only end
-     * in asking the person — and once they trust it on this device, it opens.
+     * D-7 / D-15: a self-hosted page's own build, proposed by its index, can
+     * only end in asking the person — and once they trust it, it opens. The
+     * version is the check's own (`versionToTrust`), and it is stored on THAT
+     * page by the pages core — never in a device-wide list — so the same bytes
+     * served by another page still ask.
      */
     @Test
-    fun `a custom page's own build asks to be trusted, and opens once trusted on this device`() {
-        val own = "https://sign.example.com/"
-        val bytes = "<!doctype html><title>my own signing page</title>".toByteArray()
-        val version = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    fun `a self-hosted build asks to be trusted, and opens once trusted on that page only`() {
+        val own = OwnDeployment("https://sign.example.com/")
+        val other = OwnDeployment("https://other.example.org/")
         val store = FakeStore()
+        val host = pagesHost(store)
+        host.start()
+        host.dispatch(SigningPagesEvent.Refresh, SigningPagesEvent.serializer())
+        host.settle { it.loaded }
+        val checks = checksOverPages(host, store) { url -> if (url.startsWith(own.base)) own.fetch(url) else other.fetch(url) }
+
+        val check = runBlocking { checks.check(own.base) }
+        assertEquals(SignerIntegrityState.ASK_TO_TRUST, checks.line(own.base).state)
+        assertFalse(checks.line(own.base).opens)
+        assertTrue(check.proposed)
+        assertEquals("the question carries the full version", own.version, checks.versionToTrust(own.base))
+
+        runBlocking { checks.trust(own.base) }
+        assertEquals(SignerIntegrityState.TRUSTED_HERE, checks.line(own.base).state)
+        assertTrue(checks.line(own.base).opens)
+        assertNull("nothing left to ask", checks.versionToTrust(own.base))
+        // Stored on the page (saved by the answer, though it was never added).
+        val saved = host.settle { view -> view.saved.any { it.url == own.base } }.saved.single { it.url == own.base }
+        assertEquals(listOf(own.version), saved.trusted)
+        store.settles(KeyValueStore.Keys.SIGNING_PAGES) { it?.contains(own.version) == true }
+        assertFalse("no device-wide list", store.values.containsKey("vela.signerPage.trusted"))
+        // A rename keeps it: the trust rides every write of the list.
+        host.dispatch(SigningPagesEvent.PageRenamed(own.base, "Home"), SigningPagesEvent.serializer())
+        assertEquals(listOf(own.version), host.settle { view -> view.saved.any { it.name == "Home" } }.saved.single().trusted)
+
+        // The same bytes on another page vouch for nothing there.
+        runBlocking { checks.check(other.base) }
+        assertEquals(SignerIntegrityState.ASK_TO_TRUST, checks.line(other.base).state)
+    }
+
+    @Test
+    fun `the official page is never asked about, so there is nothing to trust`() {
+        val checks = OfficialDist.checks()
+        runBlocking { checks.ensure(official) }
+        assertNull(checks.versionToTrust(official))
+        // Asking anyway records nothing and changes nothing.
+        var recorded = false
+        val guarded = SignerPageChecks(fetch = OfficialDist::fetch, store = FakeStore(), recordTrust = { _, _ -> recorded = true })
+        runBlocking { guarded.trust(official) }
+        assertFalse(recorded)
+        assertEquals(SignerIntegrityState.MATCHES, guarded.line(official).state)
+    }
+
+    // --- D-14: freshness and the background refresh ---------------------------
+
+    @Test
+    fun `a page is refreshed in the background past half a day, and not before`() {
+        var now = 1_760_000_000_000L
+        val checks = OfficialDist.checks(clock = { now })
+        assertTrue("never checked: due", checks.refreshDue(official))
+        runBlocking { checks.refresh(listOf(official)) }
+        assertEquals(SignerIntegrityState.MATCHES, checks.line(official).state)
+        val fetched = OfficialDist.fetches.get()
+        assertFalse("just checked", checks.refreshDue(official))
+
+        val schedule = uniffi.vela_core_uniffi.signerPageRefreshSchedule()
+        now += schedule.refreshAfterMs.toLong() - 1
+        runBlocking { checks.refresh(listOf(official)) }
+        assertEquals("not yet half a day: nothing fetched", fetched, OfficialDist.fetches.get())
+
+        now += 2
+        assertTrue(checks.refreshDue(official))
+        runBlocking { checks.refresh(listOf(official, official.trimEnd('/'))) }
+        assertTrue("past half a day: fetched again, once per page", OfficialDist.fetches.get() > fetched)
+        assertEquals(now.toULong(), checks.line(official).checkedAtMs)
+    }
+
+    /**
+     * D-14: an offline refresh keeps a check that still vouches — the line
+     * does not drop to "couldn't check" and Open still opens — and the next
+     * attempt rests; one that completed replaces it, whatever it says.
+     */
+    @Test
+    fun `an offline refresh keeps a check that still vouches, a completed one replaces it`() {
+        var now = 1_760_000_000_000L
+        var offline = false
+        var tampered = false
         val checks = SignerPageChecks(
             fetch = { url ->
-                when (url) {
-                    "${own}index.json" -> SignerPageChecks.Fetched.Body(200, """{"versions":["$version"]}""".toByteArray())
-                    "${own}b/$version/sign.html" -> SignerPageChecks.Fetched.Body(200, bytes)
-                    else -> SignerPageChecks.Fetched.Body(404, ByteArray(0))
+                when {
+                    offline -> SignerPageChecks.Fetched.Unreachable
+                    tampered && !url.endsWith("index.json") -> SignerPageChecks.Fetched.Body(200, "tampered".toByteArray())
+                    else -> OfficialDist.fetch(url)
                 }
             },
-            store = store,
+            store = FakeStore(),
+            clock = { now },
         )
-        val check = runBlocking { checks.check(own) }
-        assertEquals(SignerIntegrityState.ASK_TO_TRUST, checks.line(own).state)
-        assertFalse(checks.line(own).opens)
-        assertTrue(check.proposed)
-        assertEquals(version, check.version)
+        runBlocking { checks.ensure(official) }
+        val first = checks.line(official).checkedAtMs
 
-        runBlocking { checks.trust(own, check.version) }
-        assertEquals(SignerIntegrityState.TRUSTED_HERE, checks.line(own).state)
-        assertTrue(checks.line(own).opens)
-        assertEquals(JSONArray(listOf(version)).toString(), store.values[KeyValueStore.Keys.SIGNER_PAGE_TRUSTED])
+        now += 13 * 60 * 60 * 1000L
+        offline = true
+        runBlocking { checks.refresh(listOf(official)) }
+        assertEquals("kept", SignerIntegrityState.MATCHES, checks.line(official).state)
+        assertEquals(first, checks.line(official).checkedAtMs)
+        assertNotNull("still opens", checks.admitted(official))
+        assertFalse("an attempt that could not complete rests", checks.refreshDue(official))
+
+        now += uniffi.vela_core_uniffi.signerPageRefreshSchedule().retryAfterMs.toLong() + 1
+        offline = false
+        tampered = true
+        runBlocking { checks.refresh(listOf(official)) }
+        assertEquals("a completed refresh wins, a mismatch included", SignerIntegrityState.MISMATCH, checks.line(official).state)
+        assertNull(checks.admitted(official))
+    }
+
+    /**
+     * While a check runs, the line is the core's for that moment: the previous
+     * verdict while it still vouches (a background refresh never flickers a
+     * good line), "checking" once it does not — and Open waits for it.
+     */
+    @Test
+    fun `while a check runs, a good line holds and a stale one reads checking`() {
+        var now = 1_760_000_000_000L
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var held = false
+        val checks = SignerPageChecks(
+            fetch = { url ->
+                if (held && !url.endsWith("index.json")) gate.await()
+                OfficialDist.fetch(url)
+            },
+            store = FakeStore(),
+            clock = { now },
+        )
+        runBlocking { checks.ensure(official) }
+        held = true
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
+
+        now += 13 * 60 * 60 * 1000L
+        val refresh = scope.launch { checks.check(official) }
+        runBlocking { withTimeout(5_000L) { while (checks.checks.value[SignerPageChecks.key(official)]?.running != true) kotlinx.coroutines.delay(5) } }
+        assertEquals("a fresh verdict holds", SignerIntegrityState.MATCHES, checks.line(official).state)
+        assertNotNull("and still opens", checks.admitted(official))
+
+        now += 12 * 60 * 60 * 1000L
+        assertEquals("a stale one reads checking", SignerIntegrityState.CHECKING, checks.line(official).state)
+        assertFalse(checks.line(official).opens)
+        assertNull(checks.admitted(official))
+
+        gate.complete(Unit)
+        runBlocking { withTimeout(5_000L) { refresh.join() } }
+        assertEquals(SignerIntegrityState.MATCHES, checks.line(official).state)
+    }
+
+    // --- D-13: the time a check ran -----------------------------------------
+
+    @Test
+    fun `checked at is the core's moment - the clock time today, the date before today`() {
+        val zone = java.util.TimeZone.getTimeZone("UTC")
+        val formats = app.getvela.wallet.core.format.Formats(
+            date = app.getvela.wallet.core.format.DateFormatKey.MdySlash,
+            time = app.getvela.wallet.core.format.TimeFormatKey.H24,
+        )
+        val now = java.time.Instant.parse("2026-10-09T18:00:00Z").toEpochMilli()
+        fun matches(at: String) = uniffi.vela_core_uniffi.SignerIntegrityLine(
+            SignerIntegrityState.MATCHES, "0ba8ee8c", java.time.Instant.parse(at).toEpochMilli().toULong(),
+            "componentsUi.signing.integrity.matches", true,
+        )
+        assertEquals(
+            "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
+            SignerPageChecks.words(matches("2026-10-09T14:32:00Z"), strings, now, formats, zone),
+        )
+        assertEquals(
+            "Version 0ba8ee8c · matches Vela's published build list · checked 10/08/2026, 14:32",
+            SignerPageChecks.words(matches("2026-10-08T14:32:00Z"), strings, now, formats, zone),
+        )
+        val zh = app.getvela.wallet.core.i18n.I18nRuntime { lang -> java.io.File(System.getProperty("vela.repo.root"), "assets/i18n/$lang.json").readBytes() }
+            .apply { initialize("zh") }
+        assertEquals("版本 0ba8ee8c · 与 Vela 公布的构建清单一致 · 检查于 14:32", SignerPageChecks.words(matches("2026-10-09T14:32:00Z"), zh, now, formats, zone))
+        // A line with no time (still checking) fills nothing in.
+        assertEquals("Checking the page…", SignerPageChecks.words(SignerPageChecks.CHECKING, strings, now, formats, zone))
+    }
+
+    @Test
+    fun `the check asks for the page as a browser navigates to it`() {
+        val headers = uniffi.vela_core_uniffi.signerPageCheckHeaders()
+        assertEquals(listOf("Accept"), headers.map { it.name })
+        assertTrue(headers.single().value.startsWith("text/html"))
     }
 
     @Test
@@ -217,12 +409,37 @@ class SignerPageChecksTest {
 
     private fun en(key: String, vars: Map<String, String>) = strings.t(key, vars)
 
+    /**
+     * D-17: "Confirm with {{key}}" is the plan's `key_label` — the key's own
+     * name when the person gave it one that is not the wallet's, else its
+     * place's title (the card's "Signing account" row already names the wallet).
+     */
     @Test
-    fun `the hand-off card names the key, else its place`() {
-        assertEquals("Savings", VenueWords.keyLabel("Savings", app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform) { strings.t(it) })
-        assertEquals("This device", VenueWords.keyLabel("", app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform) { strings.t(it) })
-        assertEquals("", VenueWords.keyLabel(" ", null) { strings.t(it) })
-        assertEquals("Savings", VenueWords.keyName(record(null), "A1B2C3D4"))
+    fun `the hand-off card names the key by the plan's key label`() {
+        val named = JSONObject(record("""{"type":"page","url":"https://sign.getvela.app/"}""", domain = "getvela.app"))
+        named.getJSONArray("keys").getJSONObject(0).put("name", "YubiKey 5C")
+        assertEquals("YubiKey 5C", SigningPlan.of(named.toString())!!.keyLabel!!.text(strings::t))
+        // The founding key carries the wallet's name ("Savings"): named by its place.
+        val founding = SigningPlan.of(record("""{"type":"page","url":"https://sign.getvela.app/"}""", domain = "getvela.app"))!!
+        assertNull(founding.keyLabel!!.name)
+        assertEquals("This device", founding.keyLabel!!.text(strings::t))
+        val zh = app.getvela.wallet.core.i18n.I18nRuntime { lang -> java.io.File(System.getProperty("vela.repo.root"), "assets/i18n/$lang.json").readBytes() }
+            .apply { initialize("zh") }
+        assertEquals("用 YubiKey 5C 确认", zh.t("componentsUi.signing.handoffKey", mapOf("key" to SigningPlan.of(named.toString())!!.keyLabel!!.text(zh::t))))
+    }
+
+    @Test
+    fun `a venue refusal reads in the person's language, the web's included`() {
+        val t = { key: String, vars: Map<String, String> -> strings.t(key, vars) }
+        assertEquals(
+            "Vela can't reach keys on sign.example.com.",
+            app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("sign.example.com").words(t),
+        )
+        assertEquals(
+            "This page is on sign.example.com; this account's keys are on getvela.app.",
+            app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app").words(t),
+        )
+        assertEquals("Signing pages open from the Vela apps, not the web.", VenueWords.block(JSONObject().put("type", "not_on_web"), t))
     }
 
     // --- P2-08: the signing pages machine ------------------------------------
