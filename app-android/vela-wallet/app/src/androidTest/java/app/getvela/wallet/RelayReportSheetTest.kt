@@ -5,10 +5,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -101,5 +104,43 @@ class RelayReportSheetTest {
         compose.onAllNodes(hasText(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.BUG_SEND)))[0].performScrollTo().performClick()
         compose.waitUntil(5_000) { sent.isNotEmpty() }
         assertEquals(listOf(report.what to report.steps), sent)
+    }
+
+    /**
+     * Issue #478: a tap in the sheet that is not on a control leaves the box —
+     * focus goes, and the keyboard with it. The sheet is its own window: the
+     * page's tap-to-leave never reached it, and the keyboard's own hide key
+     * was the only way to see Send again.
+     */
+    @Test
+    fun aTapOutsideTheBoxLeavesIt() {
+        val model = SettingsFixtures.buildState(SettingsScreenState.ST15, strings)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    RelayReportSheet(
+                        model = model,
+                        seed = RelayReport.seed(report),
+                        onDismiss = {},
+                        onSend = { _, _, _ -> },
+                        onGithub = {},
+                        onOpenLink = {},
+                        onOpened = {},
+                        onClosed = {},
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        val box = compose.onAllNodes(hasSetTextAction())[0]
+        box.performClick()
+        box.assertIsFocused()
+        // The sheet's title: words, not a control.
+        compose.onNodeWithText(model.feedback.title).performClick()
+        compose.waitForIdle()
+        box.assertIsNotFocused()
+        // What was typed is still there.
+        val kept = box.fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text
+        assertEquals(report.what, kept)
     }
 }

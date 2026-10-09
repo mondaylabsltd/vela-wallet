@@ -1512,12 +1512,24 @@ internal fun SettingsSheet(
       // did nothing and the sheet still ended at Português.
       val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
       val sheetScroll = rememberScrollState()
+      // Issue #478: a tap anywhere in the sheet that is not a control leaves
+      // the field — the keyboard goes down and what it covered (the
+      // screenshots, the consent line, Send) is there again. The page has the
+      // same handler, but a sheet is its own window with its own focus: the
+      // page's never saw a tap in here, so in "Report a problem" the only way
+      // out of the box was the keyboard's own hide key.
+      val sheetFocus = LocalFocusManager.current
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
           LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
-        Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                .pointerInput(Unit) { detectTapGestures(onTap = { sheetFocus.clearFocus() }) },
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
