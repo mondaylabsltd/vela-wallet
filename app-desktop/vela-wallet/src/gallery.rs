@@ -77,10 +77,10 @@ enum Fixture {
         vela_core::trusted_signer::launch::IntegrityLine,
         Option<(&'static str, &'static str)>,
     ),
-    /// Spec 102: the sign-in chooser — three places and "Use my own signing
-    /// page", or (with a page) that page heading the places.
+    /// Spec 102: the sign-in chooser — three places and "Use a trusted
+    /// signing page", or (with a page) that page heading the places.
     SignIn(Option<String>),
-    /// Spec 102: "Use my own signing page" — the picker, its pages and their
+    /// Spec 102: "Use a trusted signing page" — the picker, its pages and their
     /// lines (url, label, domain, official, line).
     OwnPages(
         Vec<(
@@ -171,7 +171,7 @@ fn base_view() -> CreateView {
     }
 }
 
-/// The page the "own page" fixtures are made on.
+/// The self-hosted page the fixtures that need one are made on.
 const OWN_PAGE: &str = "https://sign.example.com/";
 
 /// A platform key carries a resolvable AAGUID; a security key deliberately
@@ -259,7 +259,7 @@ fn entries() -> Vec<Entry> {
         view
     });
     // The first key: the three places, and — the one moment a wallet's
-    // signing domain can be chosen — "Use my own signing page" under them.
+    // signing domain can be chosen — "Use a trusted signing page" under them.
     flow("keys · first key", {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
@@ -285,10 +285,10 @@ fn entries() -> Vec<Entry> {
         view.can_finish = true;
         view
     });
-    // Spec 102: "Use my own signing page" chosen before the first key — the
+    // Spec 102: "Use a trusted signing page" chosen before the first key — the
     // page heads the list, with its domain and integrity line, and the three
     // places are minted ON it.
-    flow("keys · on my own page", {
+    flow("keys · on a self-hosted page", {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
         view.can_go_back = true;
@@ -559,11 +559,11 @@ fn entries() -> Vec<Entry> {
     );
     signer("sign in · methods", Fixture::SignIn(None));
     signer(
-        "sign in · on my own page",
+        "sign in · on a self-hosted page",
         Fixture::SignIn(Some(OWN_PAGE.to_owned())),
     );
     signer(
-        "own page · picker",
+        "trusted page · picker",
         Fixture::OwnPages(vec![
             (
                 vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),

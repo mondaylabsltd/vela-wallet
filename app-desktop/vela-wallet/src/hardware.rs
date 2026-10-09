@@ -154,9 +154,9 @@ pub const METHOD_ICON_PX: u32 = 24;
 ///
 /// Spec 102: three, no fourth. The trusted page is where a person REVIEWS and
 /// signs — an account's venue, chosen in its settings — not a place a key
-/// lives; the same three places exist on the page too. A wallet on the
-/// person's OWN signing page is the choosers' advanced entry ("Use my own
-/// signing page"), under these rows.
+/// lives; the same three places exist on the page too. A wallet on a
+/// trusted signing page is the choosers' advanced entry ("Use a trusted
+/// signing page", D6), under these rows.
 pub const CREATE_ROUTES: [KeyMethod; 3] = [
     KeyMethod::SecurityKey,
     KeyMethod::Platform,
@@ -248,7 +248,7 @@ pub type PickMethod = std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>;
 /// What a chooser row does when it is pressed.
 pub type RowAction = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
 
-/// The choosers' advanced entry (spec 102): "Use my own signing page", and —
+/// The choosers' advanced entry (spec 102): "Use a trusted signing page", and —
 /// once a page is chosen — that page, drawn above the three places, with a
 /// way back to Vela's own keys.
 pub struct OwnPage<'a> {
@@ -266,7 +266,7 @@ pub struct OwnPage<'a> {
 }
 
 /// The advanced entry's row, as both choosers draw it under the three places:
-/// set apart by a rule, the page's eye, "Use my own signing page" and what it
+/// set apart by a rule, the page's eye, "Use a trusted signing page" and what it
 /// means for the keys.
 pub fn own_page_row(
     id: &'static str,

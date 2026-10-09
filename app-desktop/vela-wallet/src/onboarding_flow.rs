@@ -192,7 +192,7 @@ pub enum FlowEvent {
     CopyAddress,
     /// Presentation only: a method the desktop cannot run was pressed.
     MethodUnavailable(KeyMethod),
-    /// Spec 102: "Use my own signing page" — open the page picker.
+    /// Spec 102: "Use a trusted signing page" — open the page picker.
     ChooseOwnPage,
     /// Spec 102: back to Vela's own keys (`SigningPageChosen { url: None }`).
     ClearOwnPage,
@@ -932,7 +932,7 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
 
 /// The three places a founding key can live (spec 102: no fourth), and —
 /// before the first key, the only moment a wallet's signing domain can be
-/// chosen — the advanced entry: "Use my own signing page".
+/// chosen — the advanced entry: "Use a trusted signing page".
 ///
 /// **One of them may not run here, and it says so.** `Platform` needs a system
 /// passkey service, which only Windows provides in this app's reach. Hiding it

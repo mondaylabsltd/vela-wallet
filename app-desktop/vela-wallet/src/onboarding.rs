@@ -98,7 +98,7 @@ struct EndpointSurface {
     automatic: bool,
 }
 
-/// Which chooser opened "Use my own signing page" (spec 102) — and so where a
+/// Which chooser opened "Use a trusted signing page" (spec 102) — and so where a
 /// picked page goes: the create machine's `SigningPageChosen`, or the sign-in
 /// this page is about to start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,7 +149,7 @@ pub struct OnboardingPage {
     /// The sign-in method picker is open — the person tapped "I already have a
     /// wallet" and is choosing this device, a phone by scan, or a security key.
     signin_methods_open: bool,
-    /// Spec 102: "Use my own signing page" is open, for which chooser.
+    /// Spec 102: "Use a trusted signing page" is open, for which chooser.
     own_page_for: Option<OwnPageFor>,
     /// Spec 102: the page the next sign-in runs on (R3) — chosen from the
     /// sign-in chooser's advanced entry; `None` signs in in the app.
@@ -951,7 +951,7 @@ impl OnboardingPage {
         )))
     }
 
-    // -- spec 102: "Use my own signing page" --------------------------------
+    // -- spec 102: "Use a trusted signing page" --------------------------------
 
     /// Open the page picker for `purpose`: the pages this device keeps, read
     /// again, each checked in the background as its row is drawn.

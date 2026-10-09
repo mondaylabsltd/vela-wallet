@@ -757,7 +757,7 @@ fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
 #[ignore = "needs a real browser: scripts/trusted-signer-e2e.sh"]
 fn the_page_creates_a_key_and_then_signs_in_with_it() {
     let Some(rig) = Rig::new() else { return };
-    // Spec 102 R3: a create on the person's own page — "Use my own signing
+    // Spec 102 R3: a create on a self-hosted page — "Use a trusted signing
     // page", pointed at this checkout's copy — carries that page on its op.
     let state = crate::executor::storage::tests::state_dir("trusted-signer-e2e-create");
     let register = ShellOperation::RegisterPasskey {

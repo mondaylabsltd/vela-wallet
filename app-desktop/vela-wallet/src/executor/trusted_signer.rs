@@ -1079,7 +1079,7 @@ pub fn run_ceremony(
 /// — `Some` only for a wallet on a custom signing domain, whose keys only its
 /// page can mint or use. `None`: the ceremony runs in the app.
 ///
-/// The page is the one the person chose ("Use my own signing page"), path
+/// The page is the one the person chose ("Use a trusted signing page"), path
 /// and all — a page served under a path (`http://localhost:8140/
 /// clearsigning/`) is launched there, never at its origin's root.
 #[must_use]

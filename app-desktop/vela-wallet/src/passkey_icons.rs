@@ -32,7 +32,7 @@ pub enum PasskeyIcon {
     Laptop,
     /// lucide `scan-line` — the camera that scans the code (stroke, 24-unit).
     Scan,
-    /// lucide `eye` — the choosers' "Use my own signing page" (spec 102): a
+    /// lucide `eye` — the choosers' "Use a trusted signing page" (spec 102): a
     /// page you READ before you sign. Not a lock, not a key, and not a place a
     /// key lives: the whole claim of a trusted page is that you can see what
     /// is being signed. The same glyph the web client draws.
