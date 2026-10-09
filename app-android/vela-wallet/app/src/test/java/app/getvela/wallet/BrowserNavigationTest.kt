@@ -209,6 +209,9 @@ class BrowserNavigationTest {
     }
 
     // -- The wiring ----------------------------------------------------------------
+    // (Which tab gets an engine — none for a restored or landed-away tab until
+    // it is resumed — is a behaviour, proved on a real controller by the
+    // instrumented BrowserControllerWakeTest, not pinned here.)
 
     private val main = File(System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle"), "app-android/vela-wallet/app/src/main/java/app/getvela/wallet")
 
@@ -235,14 +238,5 @@ class BrowserNavigationTest {
         assertTrue("the visit, with where it landed, outlives the route pushed over it", "rememberSaveable(stateSaver = ExploreVisit.Saver)" in host)
         assertTrue("the landing is the visit's, settled once", "exploreVisit.settle(current) ?: return@LaunchedEffect" in host)
         assertTrue("the old engine-decides landing is gone", "initialView" !in host)
-    }
-
-    @Test
-    fun `no engine is made for a tab nobody asked to see`() {
-        val controller = source("feature/browser/core/BrowserController.kt")
-        val reconcile = controller.substringAfter("private fun reconcile(view: ExploreView)").substringBefore("private fun newEngine(")
-        assertTrue("reconcile mints only for the wanted tab", "selected.id in engines || selected.id == wanted" in reconcile)
-        val select = controller.substringAfter("private fun resume(id: String)").substringBefore("fun landedHome()")
-        assertTrue("selecting a tab is asking for it", "wanted = id" in select)
     }
 }

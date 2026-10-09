@@ -18,6 +18,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +28,9 @@ import org.junit.runner.RunWith
  * Spec 099 navigation on a REAL [BrowserController] — the real core, real
  * WebViews — where the JVM suite could only pin the source:
  *
+ * - the wake rule: a tab restored at launch, or one selected behind 探索's
+ *   home (a closed tab's neighbour), gets no engine — runs no page — until
+ *   somebody resumes it;
  * - an open from the home never shows the dApp left there while its new tab
  *   is on its way (the old page flashed up before the new one).
  *
@@ -80,6 +84,50 @@ class BrowserControllerWakeTest {
             controllers.forEach { c -> c.explore.first { v -> v.tabs.none { it.url != null } } }
         }
         scopes.forEach { it.cancel() }
+    }
+
+    @Test
+    fun aRestoredTabRunsNoPageUntilItIsResumed() {
+        val store = MemoryStore()
+        val (first, second) = onMain {
+            val before = controller(store)
+            before.start()
+            before.ready()
+            before.open(ONE)
+            val one = before.explore.first { it.tabs.size == 1 && it.selected_tab != null }.selected_tab!!
+            before.frontIs(one)
+            before.landedHome()
+            before.open(TWO)
+            val two = before.explore.first { it.tabs.size == 2 && it.selected_tab != one }.selected_tab!!
+            before.frontIs(two)
+            // The strip is written: what a relaunch reads.
+            while (store.values.values.none { ONE_HOST in it && TWO_HOST in it && two in it }) delay(20)
+            one to two
+        }
+
+        // A relaunch on what was written: two tabs with pages, the second selected.
+        onMain {
+            val relaunched = controller(MemoryStore(store.values))
+            relaunched.start()
+            val view = relaunched.explore.first { it.ready && it.tabs.size == 2 }
+            assertEquals(second, view.selected_tab)
+            delay(SETTLE_MS)
+            assertNull("a restored tab runs no page while 探索 shows its home", relaunched.current.value)
+
+            // Landed on the home, the shown tab closed: its neighbour is
+            // selected behind the home — and still nobody asked to see it.
+            relaunched.landedHome()
+            relaunched.closeTab(second)
+            relaunched.explore.first { it.tabs.size == 1 && it.selected_tab == first }
+            delay(SETTLE_MS)
+            assertNull("a tab selected behind the home wakes for nobody", relaunched.current.value)
+
+            // A resume is asking: now it gets its page.
+            relaunched.selectTab(first)
+            val engine = relaunched.frontIs(first)
+            val asked = engine.state.value.let { it.pending ?: it.url }.orEmpty()
+            assertTrue("the resumed tab loads its own page: $asked", ONE_HOST in asked)
+        }
     }
 
     @Test
@@ -140,6 +188,8 @@ class BrowserControllerWakeTest {
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
+        /** Long enough for every commit the start or a close sets off to have been reconciled. */
+        const val SETTLE_MS = 600L
         const val ONE_HOST = "example.com"
         const val TWO_HOST = "example.org"
         const val ONE = "https://$ONE_HOST/"
