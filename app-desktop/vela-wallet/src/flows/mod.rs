@@ -500,6 +500,13 @@ pub struct FlowStrings {
     /// "Try again" — the confirm after that refusal, which waits for the
     /// first like any held confirm.
     pub try_again: SharedString,
+    /// "Not sent yet" over "Your previous transaction on this network is
+    /// still being processed…" — the confirm's notice after the relay turned
+    /// a submit back because the account's previous operation holds the
+    /// nonce (`SendTxErrorKey::PreviousPending`, PR 2 polish). Nothing was
+    /// sent and nothing went wrong: said calmly, never in the failure's red.
+    pub not_sent_title: SharedString,
+    pub not_sent_body: SharedString,
     /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
     /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
     pub refusals: Vec<(&'static str, SharedString)>,
@@ -635,15 +642,16 @@ pub struct FlowStrings {
 /// the plain "the network refused it" for every other reason.
 #[must_use]
 pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
-    use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+    use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
     use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
     // The held nonce at submit (`SignView.failure_refusal_key`, PR 2 note 9)
-    // is told in the confirm's own words for it.
+    // is "not sent yet" — its sentence says what to do (PR 2 polish); read
+    // as the plain refusal it would say the network refused it.
     [
         REFUSED_KEY,
         REFUSED_FEES_KEY,
         REFUSED_NONCE_KEY,
-        PREVIOUS_PENDING_KEY,
+        NOT_SENT_BODY_KEY,
     ]
     .into_iter()
     .map(|key| (key, loc.t(key)))
@@ -1040,6 +1048,8 @@ impl FlowStrings {
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             previous_pending: s(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
             try_again: s("common.tryAgain"),
+            not_sent_title: s(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
+            not_sent_body: s(vela_core::app::sign_confirm::NOT_SENT_BODY_KEY),
             refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
@@ -1158,6 +1168,14 @@ mod tests {
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
             (s.tx_maybe_sent.as_ref(), "componentsUi.signing.maybeSent"),
+            (
+                s.not_sent_title.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY,
+            ),
+            (
+                s.not_sent_body.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_BODY_KEY,
+            ),
             (s.vela_user.as_ref(), "send.velaUser"),
             (s.tx_sent.as_ref(), "componentsTx.detail.sent"),
             (s.multi_send_title.as_ref(), "send.multiSendTitle"),

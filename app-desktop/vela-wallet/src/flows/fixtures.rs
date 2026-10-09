@@ -609,6 +609,11 @@ pub struct SendNotice {
     pub report: Option<SharedString>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
+    /// Neither red nor amber — the calm tone: nothing went wrong and
+    /// nothing was sent, as after the relay turned a submit back because the
+    /// account's previous transaction holds the nonce ("Not sent yet", PR 2
+    /// polish). Never set with `error`.
+    pub calm: bool,
 }
 
 /// A CTA's three states — the founder's rule: busy is not disabled, and a
@@ -898,13 +903,19 @@ pub struct SweepRow {
     pub amount: SharedString,
 }
 
-/// The receipt's four states (`ReceiptStage` on the web).
+/// The receipt's four states (`ReceiptStage` on the web), and the sheet's calm
+/// "Not sent yet".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReceiptStage {
     Submitting,
     Submitted,
     Confirmed,
     Failed,
+    /// The relay turned the operation back because the account's previous
+    /// one on this network still holds the nonce (`SignView.failure_not_sent`,
+    /// PR 2 polish): nothing was sent and nothing went wrong — the waiting
+    /// disc with no ring, never the failure's red.
+    NotSent,
 }
 
 /// Everything a flow panel can hold. The page matches on this, so a panel body

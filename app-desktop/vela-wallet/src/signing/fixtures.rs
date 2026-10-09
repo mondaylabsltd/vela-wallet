@@ -2220,7 +2220,8 @@ mod tests {
     /// sheet's failure says it.
     #[test]
     fn the_refusal_pins_say_why() {
-        use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
         use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
         let s = SigningStrings::resolve(&Loc::from_env());
         let clock = crate::signing::status::Clock {
@@ -2230,7 +2231,7 @@ mod tests {
             seen_submitted_ms: None,
         };
         for (want, key, retry) in [
-            ("held", PREVIOUS_PENDING_KEY, true),
+            ("held", NOT_SENT_BODY_KEY, true),
             ("refused", REFUSED_KEY, false),
             ("went-first", REFUSED_NONCE_KEY, false),
             ("fees", REFUSED_FEES_KEY, false),
@@ -2245,6 +2246,16 @@ mod tests {
                 "{want}"
             );
             assert_eq!(receipt.retry.is_some(), retry, "{want}");
+            // PR 2 polish: the held nonce is "Not sent yet" — the calm disc
+            // and its own title, never "Failed" in red.
+            if want == "held" {
+                assert!(view.failure_not_sent);
+                assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                assert_eq!(receipt.title, s.not_sent_title);
+                assert_ne!(receipt.title, s.receipt_failed);
+            } else {
+                assert_eq!(receipt.stage, ReceiptStage::Failed, "{want}");
+            }
         }
         assert!(refusal_view("nonsense").is_none());
     }

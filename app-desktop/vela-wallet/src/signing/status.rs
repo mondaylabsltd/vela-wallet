@@ -294,6 +294,26 @@ pub fn approved(
             return Some(out);
         }
         let mut captions = lead();
+        // PR 2 polish: the relay turned it back because the account's
+        // previous operation on this network still holds the nonce. Nothing
+        // was sent and nothing went wrong: "Not sent yet", calmly — the
+        // waiting disc, never the failure's red — over the core's sentence
+        // for what to do, with Try again beside the close.
+        if sign.failure_not_sent {
+            captions.push(crate::flows::refusal_of(
+                &s.refusals,
+                sign.failure_refusal_key.as_deref(),
+            ));
+            let mut out = receipt(
+                ReceiptStage::NotSent,
+                s.not_sent_title.clone(),
+                captions,
+                s.receipt_done.clone(),
+                !sign.failure_retryable,
+            );
+            out.retry = sign.failure_retryable.then(|| s.retry.clone());
+            return Some(out);
+        }
         // Spec 082 RJ3: the relay refused it — nothing was sent and sending
         // again meets the same refusal, so no "try again". A message goes
         // nowhere: "the transaction couldn't be submitted" is not what failed

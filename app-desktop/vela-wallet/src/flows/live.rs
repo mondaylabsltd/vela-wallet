@@ -3052,6 +3052,7 @@ fn build_notice(
                 .as_ref()
                 .map(|_| s.unreachable_report.clone()),
             error: true,
+            calm: false,
         };
         return Some((notice, Some(NoticeWayOut::RetryRelayUnreachable)));
     }
@@ -3118,6 +3119,7 @@ fn build_notice(
             // fix; this is how — the core's report, through the reporter.
             report: send.relay_report.as_ref().map(|_| s.funding_report.clone()),
             error: true,
+            calm: false,
         };
         return Some((notice, Some(NoticeWayOut::RetryAfterBootstrap)));
     }
@@ -3165,6 +3167,7 @@ fn build_notice(
             copy: None,
             report: None,
             error: true,
+            calm: false,
         };
         return Some((notice, way_out));
     }
@@ -3229,6 +3232,7 @@ fn build_notice(
             copy: None,
             report: None,
             error: true,
+            calm: false,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
     }
@@ -3244,6 +3248,7 @@ fn build_notice(
             copy: None,
             report: None,
             error: true,
+            calm: false,
         };
         return Some((notice, None));
     }
@@ -3268,6 +3273,7 @@ fn build_notice(
             copy: None,
             report: None,
             error: true,
+            calm: false,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
     }
@@ -3301,6 +3307,7 @@ fn build_notice(
             copy: None,
             report: None,
             error: false,
+            calm: false,
         },
         None,
     ))
@@ -3626,9 +3633,10 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     send.tx_error.map(|key| match key {
         vela_core::app::send::SendTxErrorKey::Generic => s.tx_error_generic.clone(),
         vela_core::app::send::SendTxErrorKey::BundlerFund => s.tx_error_bundler_fund.clone(),
-        // The relay refused it: another transaction of this account holds
-        // the nonce. Not a network failure — "Try again" waits for it.
-        vela_core::app::send::SendTxErrorKey::PreviousPending => s.previous_pending.clone(),
+        // The relay turned it back: another transaction of this account
+        // holds the nonce. Not a failure — "Not sent yet" ([`tx_error_notice`])
+        // over what to do, and "Try again" waits for it.
+        vela_core::app::send::SendTxErrorKey::PreviousPending => s.not_sent_body.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
@@ -3790,16 +3798,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         if refused_for_previous && send.previous_pending.is_some() {
             return None;
         }
-        tx_error_text(send, s).map(|body| SendNotice {
-            dismiss: None,
-            title: None,
-            body,
-            detail: None,
-            action: None,
-            copy: None,
-            report: None,
-            error: true,
-        })
+        tx_error_notice(send, s)
     });
     SendConfirm {
         // A sweep moves several coins; one mark would name the wrong one.
@@ -3923,6 +3922,27 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         held,
         handoff: None,
     }
+}
+
+/// The last attempt's error as the confirm's notice, under the facts. A
+/// held nonce is "Not sent yet" (PR 2 polish): its own title over the core's
+/// sentence, in the calm tone — the relay turned the submit back because the
+/// account's previous transaction still holds the nonce, so nothing was sent
+/// and nothing went wrong, and "Try again" (the confirm) waits for it. Every
+/// other error is red: the person cannot proceed as things stand.
+pub(crate) fn tx_error_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
+    let not_sent = send.tx_error == Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
+    tx_error_text(send, s).map(|body| SendNotice {
+        dismiss: None,
+        title: not_sent.then(|| s.not_sent_title.clone()),
+        body,
+        detail: None,
+        action: None,
+        copy: None,
+        report: None,
+        error: !not_sent,
+        calm: not_sent,
+    })
 }
 
 /// Spec 102 D4: the confirm when the account reviews and signs on a trusted
@@ -4793,6 +4813,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 copy: None,
                 report: None,
                 error: true,
+                calm: false,
             })
         // Over the balance is said on the total line (`batch_total`), beside
         // the figure it is about — the web's `overText` — not twice.
@@ -4806,6 +4827,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 copy: None,
                 report: None,
                 error: false,
+                calm: false,
             })
         } else {
             None
@@ -5345,13 +5367,15 @@ mod tests {
         assert_eq!(unknown.captions, vec![s.failed_refused.clone()]);
     }
 
-    /// The relay refused the submit because the account's previous
-    /// transaction holds the nonce: the confirm says so in the held line's
-    /// words and offers "Try again" — never the generic failure.
+    /// The relay turned the submit back because the account's previous
+    /// transaction holds the nonce: "Not sent yet" (PR 2 polish) — its own
+    /// title over the core's sentence for what to do, in the calm tone,
+    /// never red — and "Try again"; never the generic failure.
     #[test]
-    fn a_previous_pending_refusal_says_so_and_tries_again() {
+    fn a_previous_pending_refusal_is_not_sent_yet_and_tries_again() {
         use vela_core::app::send::{Send, SendStage, SendTxErrorKey, SendTxStatus};
         let s = strings();
+        let loc = crate::loc::Loc::from_env();
         let mut send = CoreHost::<Send>::new().view();
         send.stage = SendStage::Confirm;
         send.tx_status = SendTxStatus::Error;
@@ -5359,11 +5383,28 @@ mod tests {
         send.can_confirm = true;
         let confirm = confirm_of(&send);
         assert_eq!(confirm.cta, s.try_again);
+        let notice = confirm
+            .notice
+            .unwrap_or_else(|| unreachable!("the confirm says why it was not sent"));
         assert_eq!(
-            confirm.notice.as_ref().map(|notice| notice.body.clone()),
-            Some(s.previous_pending.clone())
+            notice.title,
+            Some(loc.t(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY))
         );
+        assert_eq!(
+            notice.body,
+            loc.t(vela_core::app::sign_confirm::NOT_SENT_BODY_KEY)
+        );
+        assert!(notice.calm && !notice.error, "calm, never red");
         assert!(confirm.held.is_none(), "nothing in flight here");
+
+        // Any other error stays red, with no title of its own.
+        send.tx_error = Some(SendTxErrorKey::Generic);
+        let generic = confirm_of(&send)
+            .notice
+            .unwrap_or_else(|| unreachable!("a failed submit says so"));
+        assert!(generic.error && !generic.calm);
+        assert_eq!(generic.title, None);
+        assert_eq!(generic.body, s.tx_error_generic);
     }
 
     /// PR 2 note 1, on Send: a failed fee says one truth on the form's row,

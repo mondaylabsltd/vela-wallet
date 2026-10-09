@@ -2219,12 +2219,14 @@ mod tests {
 
     /// PR 2 note 9: the relay did not take it because another operation of
     /// the account holds the nonce. The desktop answers it with the core's
-    /// own detail (`PREVIOUS_PENDING`), so the sheet's failure says why — the
-    /// confirm's own "waiting for your last transaction" — and offers "Try
-    /// again", as Send does; a plain refusal says the refusal, with no retry.
+    /// own detail (`PREVIOUS_PENDING`), so the sheet says why — "Not sent
+    /// yet" (PR 2 polish), calmly, over what to do — and offers "Try again",
+    /// as Send does; a plain refusal says the refusal, as a failure, with no
+    /// retry.
     #[test]
     fn a_held_nonce_at_submit_is_told_and_tried_again() {
-        use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
         use vela_core::app::tx_tracker::REFUSED_KEY;
         storage::tests::with_temp_state("sign-held-nonce", || {
             let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
@@ -2238,7 +2240,7 @@ mod tests {
             for (failure, key, retry) in [
                 (
                     user_op::SubmitFailure::PreviousPending,
-                    PREVIOUS_PENDING_KEY,
+                    NOT_SENT_BODY_KEY,
                     true,
                 ),
                 (
@@ -2272,6 +2274,14 @@ mod tests {
                     "{failure:?}"
                 );
                 assert_eq!(receipt.retry.is_some(), retry, "{failure:?}");
+                // Not sent yet is no failure: its own title and the calm disc.
+                assert_eq!(view.failure_not_sent, retry, "{failure:?}");
+                if retry {
+                    assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                    assert_eq!(receipt.title, s.not_sent_title);
+                } else {
+                    assert_eq!(receipt.stage, ReceiptStage::Failed);
+                }
             }
         });
     }

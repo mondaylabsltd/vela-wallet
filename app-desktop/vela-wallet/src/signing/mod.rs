@@ -267,6 +267,11 @@ pub struct SigningStrings {
     /// The refusal told by its reason (`TrackEntryView.refusal_key`): every
     /// sentence the core may choose, by key.
     pub refusals: Vec<(&'static str, SharedString)>,
+    /// "Not sent yet" (PR 2 polish): the column's title, in place of
+    /// "Failed", when the relay turned the operation back because the
+    /// account's previous one still holds the nonce
+    /// (`SignView.failure_not_sent`); its sentence is one of `refusals`.
+    pub not_sent_title: SharedString,
     /// The confirm's held lines the gallery draws (`ConfirmBlock::key`): the
     /// account's previous transaction still going through, and the fee being
     /// worked out. The fee that could not be is the fee view's own line
@@ -521,6 +526,7 @@ impl SigningStrings {
             fee_stale: loc.t("send.feeStale"),
             refused: s("refused"),
             refusals: crate::flows::refusal_sentences(loc),
+            not_sent_title: loc.t(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
             note_previous_pending: block_note(loc, ConfirmBlock::PreviousPending),
             note_fee_measuring: block_note(loc, ConfirmBlock::FeeMeasuring),
             fee_failure: crate::flows::FeeFailureWords::resolve(loc),
@@ -639,6 +645,10 @@ mod tests {
             (
                 s.value_unlimited.as_ref(),
                 "componentsUi.signingApprove.unlimitedValue",
+            ),
+            (
+                s.not_sent_title.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY,
             ),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");

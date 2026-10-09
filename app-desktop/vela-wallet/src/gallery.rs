@@ -115,6 +115,11 @@ enum Fixture {
 /// through the real fee core (`signing::fixtures::fee_failures`) and Send's
 /// live builders — the form's row (its figure, its reason, its measuring
 /// sign) and the confirm's fee line and the one line under its confirm.
+///
+/// `not-sent` (PR 2 polish) — with the mock confirm (`VELA_FLOW=DSD3`): the
+/// relay turned the submit back because the account's previous transaction
+/// still holds the nonce — "Not sent yet", calmly, over what to do, and
+/// "Try again" — through the real send core's error and the live notice.
 pub fn send_state_pin(
     body: crate::flows::fixtures::FlowBody,
     s: &crate::flows::FlowStrings,
@@ -167,6 +172,20 @@ pub fn send_state_pin(
                 }
                 confirm.held = crate::flows::live::confirm_held_line(&inputs);
                 confirm.cta_state = CtaState::Disabled;
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
+    if want.trim() == "not-sent" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                confirm.cta = s.try_again.clone();
                 FlowBody::SendConfirm(confirm)
             }
             other => other,

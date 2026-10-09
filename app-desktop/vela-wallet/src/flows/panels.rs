@@ -1548,10 +1548,15 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         dismiss,
         report,
     } = clicks;
-    let (tint, border) = if notice.error {
-        (theme.error_soft, theme.error_base)
+    // Three tones: red when the person cannot proceed, amber for a stop
+    // with a way on, and the calm info tone when nothing went wrong ("Not
+    // sent yet", PR 2 polish) — the settings callout's own info pair.
+    let (tint, border, ink) = if notice.calm {
+        (theme.info_soft, theme.info_base.opacity(0.3), theme.fg_base)
+    } else if notice.error {
+        (theme.error_soft, theme.error_base, theme.error_base)
     } else {
-        (theme.warning_soft, theme.warning_border)
+        (theme.warning_soft, theme.warning_border, theme.warning_base)
     };
     let mut card = div()
         .flex()
@@ -1567,11 +1572,7 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
             div()
                 .text_size(theme::text_row_title())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(if notice.error {
-                    theme.error_base
-                } else {
-                    theme.warning_base
-                })
+                .text_color(ink)
                 .child(title.clone()),
         );
     }
@@ -2566,7 +2567,9 @@ fn send_form_parts(
 /// 11 on 1.4 — red when nothing can proceed, amber while still typing (the
 /// desktop's own two tones, which the core's `error` flag carries).
 fn alert_line(theme: &Theme, icons: &mut IconCache, notice: &SendNotice) -> Div {
-    let color = if notice.error {
+    let color = if notice.calm {
+        theme.fg_muted
+    } else if notice.error {
         theme.error_base
     } else {
         theme.warning
@@ -3697,7 +3700,7 @@ fn hero_icon(stage: crate::flows::fixtures::ReceiptStage) -> Option<Icon> {
     use crate::flows::fixtures::ReceiptStage;
     match stage {
         ReceiptStage::Submitting => None,
-        ReceiptStage::Submitted => Some(Icon::Clock),
+        ReceiptStage::Submitted | ReceiptStage::NotSent => Some(Icon::Clock),
         ReceiptStage::Confirmed => Some(Icon::Check),
         ReceiptStage::Failed => Some(Icon::Exclamation),
     }
@@ -3724,7 +3727,9 @@ pub fn status_hero(
 
     let (bg, fg) = match stage {
         ReceiptStage::Submitting => (theme.bg_sunken, theme.accent),
-        ReceiptStage::Submitted => (theme.bg_sunken, theme.fg_muted),
+        // "Not sent yet" (PR 2 polish): the waiting disc with no ring —
+        // nothing is on its way, and nothing went wrong.
+        ReceiptStage::Submitted | ReceiptStage::NotSent => (theme.bg_sunken, theme.fg_muted),
         ReceiptStage::Confirmed => (theme.success_soft, theme.success_base),
         ReceiptStage::Failed => (theme.error_soft, theme.error_base),
     };
@@ -4121,9 +4126,13 @@ mod tests {
             ReceiptStage::Submitted,
             ReceiptStage::Confirmed,
             ReceiptStage::Failed,
+            ReceiptStage::NotSent,
         ] {
             assert_ne!(hero_icon(stage), Some(Icon::X), "{stage:?}");
         }
+        // "Not sent yet" is a wait, not a failure: the clock, never the
+        // exclamation.
+        assert_eq!(hero_icon(ReceiptStage::NotSent), Some(Icon::Clock));
     }
 
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
