@@ -194,8 +194,10 @@ struct SameNonceAndFeeCoinTests {
             "type": "poll_status", "user_op_hash": op, "chain_id": 100,
         ]))
         #expect(old["rejection_reason"] is NSNull)
-        #expect(RelayClient.rejectionReason(#"{"result":{"status":"failed","rejection_reason":"fee_below_market"}}"#)
-                == "fee_below_market")
+        // Through the core's ONE parser (PR 2 note 5) — no side reader.
+        port.rpc[userOpStatusMethod()] = .ok(["status": "failed", "rejection_reason": "fee_below_market"] as [String: Any])
+        let answer = try #require(await relay.userOpStatus(chainId: 100, userOpHash: op))
+        #expect(answer.rejectionReason == "fee_below_market")
     }
 
     /// The sheet's ending names the reason the tracker's entry carries.

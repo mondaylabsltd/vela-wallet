@@ -699,36 +699,19 @@ final class RelayClient {
     /// the `eth_` name this file used to ask for answered -32601 every time,
     /// G13). `nil` for an older relay, a failure or a status the core does not
     /// know — which it reads as `status_unavailable`, never as a verdict.
+    ///
+    /// The answer carries why the relay refused or failed the op — its
+    /// `rejection_reason`, verbatim (relay PR #23; an older relay sends none
+    /// and the core reads the stage) — read by the same parser (PR 2 note 5).
+    /// Nothing here reads the body beside it.
     func userOpStatus(chainId: Int, userOpHash: String) async -> TrackStatusAnswer? {
-        await userOpStatusWithReason(chainId: chainId, userOpHash: userOpHash)?.answer
-    }
-
-    /// `userOpStatus`, with why the relay refused or failed the op — its
-    /// `rejection_reason`, verbatim (relay PR #23; older relays send none, and
-    /// the core then reads the stage). Read beside the core's parse because
-    /// the UniFFI `TrackStatusAnswer` does not carry it yet (vela-core's own
-    /// `parse_user_op_status` reads the same field the same way: a non-empty
-    /// string on the result object). The core words it (`RefusalReason`).
-    func userOpStatusWithReason(
-        chainId: Int, userOpHash: String
-    ) async -> (answer: TrackStatusAnswer, rejectionReason: String?)? {
         guard !userOpHash.isEmpty,
               let result = await bundlerValue(
                   chainId: chainId, method: userOpStatusMethod(), params: [userOpHash]
               ),
-              let json = Self.jsonText(result),
-              let answer = parseUserOpStatus(json: json)
+              let json = Self.jsonText(result)
         else { return nil }
-        return (answer, Self.rejectionReason(json))
-    }
-
-    /// The status answer's `rejection_reason`, as the core's parser reads it:
-    /// a non-empty string on the result (or on a whole body's `result`).
-    static func rejectionReason(_ json: String) -> String? {
-        guard let object = object(fromJSON: json) else { return nil }
-        let result = object["status"] != nil ? object : (object["result"] as? [String: Any] ?? [:])
-        guard let reason = result["rejection_reason"] as? String, !reason.isEmpty else { return nil }
-        return reason
+        return parseUserOpStatus(json: json)
     }
 
     /// The relay-independent landing check (spec 082 ruling 8): the

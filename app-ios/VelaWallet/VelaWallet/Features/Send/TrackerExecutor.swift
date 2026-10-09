@@ -87,7 +87,7 @@ final class TrackerExecutor {
             return await pollReceipt(hash: hash, chainId: chainId)
 
         case "poll_status":
-            guard let (answer, reason) = await relay.userOpStatusWithReason(chainId: chainId, userOpHash: hash)
+            guard let answer = await relay.userOpStatus(chainId: chainId, userOpHash: hash)
             else {
                 // An older relay, or one that could not be asked. Not a verdict.
                 VelaLog.notice(.tracker, "op=\(VelaLog.short(hash)) status unavailable")
@@ -106,7 +106,8 @@ final class TrackerExecutor {
                 "tx_hash": answer.txHash.map { $0 as Any } ?? NSNull(),
                 // Why the relay refused it (PR 2 §3): the core words the
                 // refusal by its reason, never the blanket "fees stayed above".
-                "rejection_reason": reason.map { $0 as Any } ?? NSNull(),
+                // From the core's own parser (PR 2 note 5), as it came.
+                "rejection_reason": answer.rejectionReason.map { $0 as Any } ?? NSNull(),
             ])
 
         case "find_op_event":
