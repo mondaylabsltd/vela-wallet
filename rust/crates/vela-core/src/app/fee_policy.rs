@@ -2424,6 +2424,30 @@ pub struct FeeView {
     pub failure: Option<FeeFailureView>,
 }
 
+/// What a tap on a failed fee row does ([`FeeFailureView::tap`]) — and so
+/// what the row's figure may promise. A row that says "Tap to retry" and
+/// opens the coin list (or the reverse) is a control that lies (PR 2 polish).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeeFailureTap {
+    /// Asks again at once ([`Event::Requote`]) — a real new read. Every
+    /// failure but [`FeeFailure::WouldFail`]; while a re-ask is out
+    /// ([`FeeFailureView::retrying`]) a second tap asks nothing.
+    #[default]
+    Retry,
+    /// Opens the fee coins: the relay answered that the operation fails with
+    /// the coin in force ([`FeeFailure::WouldFail`]) and asking again gets
+    /// the same answer, so the way on is another coin — one the run has not
+    /// already tried, with something to pay from. The figure says so
+    /// ([`PAY_WITH_ANOTHER_COIN_KEY`]); a pick is [`Event::SelectFeeAsset`].
+    ChooseCoin,
+    /// Nothing: the relay answered that it fails, and no other coin is left
+    /// to pay with. The row keeps its dash and is no control; the line under
+    /// the confirm says what happened ([`FEE_WOULD_FAIL_KEY`]).
+    Nothing,
+}
+
 /// The fee's failure as the row and the footer draw it ([`FeeView::failure`]).
 ///
 /// The core owns the retry: a failure [`requote_delay_ms`] says can pass is
@@ -2432,7 +2456,7 @@ pub struct FeeView {
 /// and the signing sheet alike, with no scheduler of the shell's own. So the
 /// words are the machine's to choose: while it retries, nothing asks for a
 /// tap; a tap on the row still asks at once ([`Event::Requote`]), a real new
-/// read.
+/// read — except where asking again cannot help ([`Self::tap`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeeFailureView {
@@ -2452,43 +2476,114 @@ pub struct FeeFailureView {
     /// draws its measuring sign beside it — never "Estimating…" in its place
     /// — so nothing on screen flips while it retries.
     pub retrying: bool,
-    /// The row's figure: [`ESTIMATE_FAILED_KEY`] ("Tap to retry") when only
-    /// a tap asks again, else `None` — the dash.
+    /// The row's figure, saying what a tap does: [`ESTIMATE_FAILED_KEY`]
+    /// ("Tap to retry") when only a tap asks again, [`PAY_WITH_ANOTHER_COIN_KEY`]
+    /// ("Pay with another coin") when the tap opens the coins
+    /// ([`FeeFailureTap::ChooseCoin`]), else `None` — the dash.
     pub figure_key: Option<String>,
     /// The line under the held confirm, the signing sheet's and Send's:
     /// [`FEE_RETRYING_KEY`] while the machine retries (or a re-ask is out),
-    /// else [`FEE_FAILED_KEY`] — tap the row.
+    /// [`FEE_WOULD_FAIL_KEY`] when the relay answered that it fails (a fact,
+    /// asking for no tap), else [`FEE_FAILED_KEY`] — tap the row.
     pub footer_key: String,
+    /// What a tap on the row does. The row is a control only when this is
+    /// not [`FeeFailureTap::Nothing`], and does exactly this — on the send
+    /// form, its confirm page and the signing sheet alike. `#[serde(default)]`:
+    /// a reader that predates it reads `retry`.
+    #[serde(default)]
+    pub tap: FeeFailureTap,
+    /// The chain the failed run priced (PR 2 polish: a failure carries what
+    /// it was for). A surface draws the failure only for its own chain: right
+    /// after a token switch the form names another chain before the fee
+    /// machine has been asked about it, and the old chain's failure must not
+    /// flash there — a mismatched failure is dropped, as a mismatched
+    /// estimate is ([`FeeEstimateView::chain_id`]). `None` only from a view
+    /// built without a run ([`Self::of`]).
+    #[serde(default)]
+    pub chain_id: Option<u32>,
+    /// The coin the failed run priced the fee in (`None` = the chain's own),
+    /// beside [`Self::chain_id`].
+    #[serde(default)]
+    pub fee_token: Option<String>,
 }
 
 /// The row's figure when only a tap asks again: "Tap to retry".
 pub const ESTIMATE_FAILED_KEY: &str = "componentsUi.gas.estimateFailed";
+/// The row's figure when the tap opens the fee coins
+/// ([`FeeFailureTap::ChooseCoin`]): "Pay with another coin".
+pub const PAY_WITH_ANOTHER_COIN_KEY: &str = "componentsUi.gas.payWithAnotherCoin";
 /// The line under the held confirm while the machine asks again by itself:
 /// "Couldn't work out the fee yet. Retrying…".
 pub const FEE_RETRYING_KEY: &str = "componentsUi.signing.confirmBlock.feeRetrying";
 /// The line under the held confirm when only a tap asks again: "Couldn't
 /// work out the fee. Tap it to retry".
 pub const FEE_FAILED_KEY: &str = "componentsUi.signing.confirmBlock.feeFailed";
+/// The line under the held confirm when the relay answered that the
+/// operation fails ([`FeeFailure::WouldFail`]): "This would fail if sent as
+/// it is." — a fact, asking for no tap; the row says what a tap does.
+pub const FEE_WOULD_FAIL_KEY: &str = "componentsUi.signing.confirmBlock.feeWouldFail";
 
 impl FeeFailureView {
-    /// The failure as the row and the footer say it; `retrying` — a re-ask
+    /// The failure as the row and the footer say it, built without a run:
+    /// no chain, and no other coin known to pay with. `retrying` — a re-ask
     /// after it is out now.
     #[must_use]
     pub fn of(failure: FeeFailure, retrying: bool) -> Self {
+        Self::of_run(failure, retrying, false, None, None)
+    }
+
+    /// The failure of a run on `chain_id` priced in `fee_token`;
+    /// `another_coin` — a coin the run has not tried, with something to pay
+    /// from, is on offer (what [`FeeFailureTap::ChooseCoin`] needs).
+    #[must_use]
+    pub fn of_run(
+        failure: FeeFailure,
+        retrying: bool,
+        another_coin: bool,
+        chain_id: Option<u32>,
+        fee_token: Option<String>,
+    ) -> Self {
         let auto_retry = requote_delay_ms(failure, 1).is_some();
+        let would_fail = failure == FeeFailure::WouldFail;
+        let tap = match (would_fail, another_coin) {
+            (false, _) => FeeFailureTap::Retry,
+            (true, true) => FeeFailureTap::ChooseCoin,
+            (true, false) => FeeFailureTap::Nothing,
+        };
+        let figure_key = if retrying {
+            // The measuring sign stands beside the dash while it asks.
+            None
+        } else if would_fail {
+            (tap == FeeFailureTap::ChooseCoin).then_some(PAY_WITH_ANOTHER_COIN_KEY)
+        } else {
+            (!auto_retry).then_some(ESTIMATE_FAILED_KEY)
+        };
+        let footer_key = if would_fail {
+            FEE_WOULD_FAIL_KEY
+        } else if auto_retry || retrying {
+            FEE_RETRYING_KEY
+        } else {
+            FEE_FAILED_KEY
+        };
         Self {
             failure,
             reason_key: failure_reason_key(failure).map(str::to_owned),
             auto_retry,
             retrying,
-            figure_key: (!auto_retry && !retrying).then(|| ESTIMATE_FAILED_KEY.to_owned()),
-            footer_key: if auto_retry || retrying {
-                FEE_RETRYING_KEY
-            } else {
-                FEE_FAILED_KEY
-            }
-            .to_owned(),
+            figure_key: figure_key.map(str::to_owned),
+            footer_key: footer_key.to_owned(),
+            tap,
+            chain_id,
+            fee_token,
         }
+    }
+
+    /// Whether this failure is for `chain_id`'s question — the one a surface
+    /// asking about that chain may draw. A failure built without a run
+    /// (`chain_id` `None`) is taken as it is.
+    #[must_use]
+    pub fn is_for_chain(&self, chain_id: Option<u32>) -> bool {
+        self.chain_id.is_none() || self.chain_id == chain_id
     }
 }
 
@@ -2675,13 +2770,26 @@ impl App for FeePolicy {
             Phase::Failed(kind) => Some(*kind),
             _ => None,
         };
+        let options = option_views(model);
         // One state for the row and the footer (PR 2 note 1): the failure on
-        // screen, or the one the run out now is retrying.
-        let failure = match (failed, model.retrying_after) {
-            (Some(kind), _) => Some(FeeFailureView::of(kind, false)),
-            (None, Some(kind)) if is_busy(&model.phase) => Some(FeeFailureView::of(kind, true)),
-            _ => None,
+        // screen, or the one the run out now is retrying — tagged with the
+        // question it answered (chain and coin), and said only for the
+        // chain the machine is asked about now, as the estimate is.
+        let tag = |kind: FeeFailure, retrying: bool| {
+            FeeFailureView::of_run(
+                kind,
+                retrying,
+                another_coin_on_offer(model, &options),
+                model.ctx.as_ref().map(|ctx| ctx.chain_id),
+                model.fee_token.clone(),
+            )
         };
+        let failure = match (failed, model.retrying_after) {
+            (Some(kind), _) => Some(tag(kind, false)),
+            (None, Some(kind)) if is_busy(&model.phase) => Some(tag(kind, true)),
+            _ => None,
+        }
+        .filter(|failure| failure.is_for_chain(model.form_chain_id));
         // A quote is valid only for the network it was calculated on
         // (`useSendController.ts:119-121`; `TransactionFeeEstimate.chainId`).
         let fee = model
@@ -2703,7 +2811,6 @@ impl App for FeePolicy {
             && failed.is_none()
             && fee.is_some()
             && !selected_fee_is_short(model);
-        let options = option_views(model);
         // Issue #408: said only of a settled figure, and only when every coin
         // on offer is PROVABLY short of it.
         let no_coin_pays = !busy
@@ -4986,6 +5093,22 @@ fn payable_balance(model: &Model, row: &ParsedQuote) -> u128 {
         Some(changes) => after_change(row.balance, measured_change(changes, row)),
         None => row.balance,
     }
+}
+
+/// After [`FeeFailure::WouldFail`]: a coin other than the one in force that
+/// the failed run did not already try, with something to pay from — what
+/// "Pay with another coin" promises ([`FeeFailureTap::ChooseCoin`]).
+fn another_coin_on_offer(model: &Model, options: &[FeeOptionView]) -> bool {
+    let tried = |contract: &Option<String>| {
+        model.refused.iter().any(|coin| match (coin, contract) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+            _ => false,
+        })
+    };
+    options
+        .iter()
+        .any(|option| !option.selected && !option.insufficient && !tried(&option.contract))
 }
 
 fn option_views(model: &Model) -> Vec<FeeOptionView> {

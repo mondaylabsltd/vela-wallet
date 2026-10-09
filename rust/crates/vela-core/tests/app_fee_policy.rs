@@ -6685,7 +6685,9 @@ fn a_failure_that_can_pass_is_retried_by_the_machine_itself() {
 /// back every few seconds.
 #[test]
 fn the_row_and_the_footer_say_the_same_thing_through_the_retry() {
-    use vela_core::app::fee_policy::{FeeFailureView, FEE_RETRYING_KEY, REASON_CHAIN_DOWN_KEY};
+    use vela_core::app::fee_policy::{
+        FeeFailureTap, FeeFailureView, FEE_RETRYING_KEY, REASON_CHAIN_DOWN_KEY,
+    };
     let mut sut = Sut::new();
     sut.dispatch(reading_request());
     sut.resolve(Res::Deployment {
@@ -6706,6 +6708,9 @@ fn the_row_and_the_footer_say_the_same_thing_through_the_retry() {
             retrying: false,
             figure_key: None,
             footer_key: FEE_RETRYING_KEY.to_owned(),
+            tap: FeeFailureTap::Retry,
+            chain_id: Some(CHAIN),
+            fee_token: None,
         }
     );
     // The re-ask is out: `failed` is gone and `busy` is up, as before — but
@@ -6781,6 +6786,85 @@ fn a_failure_only_a_tap_retries_asks_for_the_tap() {
     assert_eq!(failure.reason_key, None);
     assert_eq!(failure.figure_key.as_deref(), Some(ESTIMATE_FAILED_KEY));
     assert_eq!(failure.footer_key, FEE_FAILED_KEY);
+}
+
+/// PR 2 polish: a fee the relay answered would fail says what a tap on its
+/// row does. Asking again gets the same answer, so the tap opens the coins —
+/// "Pay with another coin" — while one the run has not tried is on offer;
+/// with none left the row is no control. The line under the held confirm is
+/// the fact, asking for no tap ("Tap it to retry" was untrue there).
+#[test]
+fn a_fee_that_would_fail_says_what_a_tap_does() {
+    use vela_core::app::fee_policy::{
+        FeeFailureTap, FEE_WOULD_FAIL_KEY, PAY_WITH_ANOTHER_COIN_KEY,
+    };
+    // The person chose USDC and the relay refused it: ETH is untried.
+    let mut sut = Sut::new();
+    sut.dispatch(request_in(CHAIN, vec![router_call()], Some(USDC)));
+    gather(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+    );
+    sut.resolve_matching(is_estimate, refused());
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.failure, FeeFailure::WouldFail);
+    assert_eq!(failure.tap, FeeFailureTap::ChooseCoin);
+    assert_eq!(
+        failure.figure_key.as_deref(),
+        Some(PAY_WITH_ANOTHER_COIN_KEY)
+    );
+    assert_eq!(failure.footer_key, FEE_WOULD_FAIL_KEY);
+    assert_eq!(failure.chain_id, Some(CHAIN));
+    assert_eq!(failure.fee_token.as_deref(), Some(USDC), "what it was for");
+
+    // Every coin refused this run: nothing else to pay with, and the row
+    // promises nothing.
+    let mut sut = quoted_in_usdc_after_eth_was_refused();
+    sut.dispatch(Event::Requote);
+    gather(&mut sut, two_coins());
+    sut.resolve_matching(is_estimate, refused());
+    sut.resolve_matching(is_estimate, refused());
+    sut.drop_matching(is_measure);
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.failure, FeeFailure::WouldFail);
+    assert_eq!(failure.tap, FeeFailureTap::Nothing);
+    assert_eq!(failure.figure_key, None, "the dash");
+    assert_eq!(failure.footer_key, FEE_WOULD_FAIL_KEY);
+
+    // Any other failure: a tap asks again.
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    assert_eq!(
+        sut.view().failure.expect("said").tap,
+        FeeFailureTap::Retry
+    );
+}
+
+/// PR 2 polish: a failure carries the question it answered — the chain and
+/// the coin — so a surface that has moved to another chain draws none, as it
+/// draws no other chain's estimate.
+#[test]
+fn a_failure_is_only_ever_said_for_its_own_chain() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.chain_id, Some(CHAIN));
+    assert!(failure.is_for_chain(Some(CHAIN)));
+    assert!(!failure.is_for_chain(Some(CHAIN + 1)), "another chain's form");
+    sut.drop_matching(is_ttl);
+    // The form names another chain: the old chain's failure is gone.
+    sut.dispatch(Event::ChainChanged { chain_id: CHAIN + 1 });
+    assert_eq!(sut.view().failure, None);
 }
 
 /// A new question forgets the old one's failure and its schedule.
