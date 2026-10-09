@@ -83,6 +83,8 @@ describe('onboarding flow messages resolve through the vela-core engine (spec 01
 			'onboarding.create.statusSyncingKey',
 			'onboarding.login.statusAwaitingPasskey',
 			'onboarding.login.recoverOfferBody',
+			'onboarding.login.registryUnreachableTitle',
+			'onboarding.login.registryUnreachableBody',
 			'onboarding.common.notDiscoverableTitle'
 		]) {
 			expect(FLOW_KEYS, sentinel).toContain(sentinel);

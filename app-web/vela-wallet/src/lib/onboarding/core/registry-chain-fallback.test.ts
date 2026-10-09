@@ -18,9 +18,23 @@ vi.mock('$lib/core/client', async (original) => ({
 }));
 
 import { registryChainUnit, registryChainUnitPlan } from '$lib/core/client';
+import { functionSelector, toHex } from '$lib/core/kernels';
 import { _resetUnitSource, queryByPublicKey, queryUnit, RegistryError } from './registry';
 
 const answers = fixture.answers as Record<string, Record<string, string>>;
+
+/**
+ * A key neither chain has a record of: the fixture's own with one nibble
+ * flipped, answered as the contract answers an unknown key — `hasEntry` false,
+ * no groups. Only the chains listed in `emptyChains` know it is unknown; the
+ * rest stay silent about it.
+ */
+const STRANGER = fixture.publicKey.replace(/.$/, (c) => (c === '0' ? '1' : '0'));
+const HAS_ENTRY = '0x' + toHex(functionSelector('hasEntry(bytes)'));
+const WORD = (n: number) => n.toString(16).padStart(64, '0');
+const NO_ENTRY = '0x' + WORD(0);
+const NO_GROUPS = '0x' + WORD(0) + WORD(0x40) + WORD(0);
+let emptyChains: number[];
 const chainOf = (url: string) => (url.includes('gnosis') ? 100 : 1);
 
 /** Gnosis unit 10 in the index's shape, built from the CHAIN's own bytes — what an honest index returns. */
@@ -44,6 +58,7 @@ beforeEach(() => {
 	indexListing = null;
 	indexUnit = null;
 	silentChains = [];
+	emptyChains = [];
 	asked.length = 0;
 	vi.stubGlobal(
 		'fetch',
@@ -59,7 +74,12 @@ beforeEach(() => {
 			asked.push(`chain:${chain}`);
 			if (silentChains.includes(chain)) throw new TypeError('Failed to fetch');
 			const call = JSON.parse(String(init?.body)).params[0] as { data: string };
-			return Response.json({ jsonrpc: '2.0', id: 1, result: answers[String(chain)][call.data] });
+			const known = answers[String(chain)][call.data];
+			if (known === undefined && emptyChains.includes(chain)) {
+				const empty = call.data.startsWith(HAS_ENTRY) ? NO_ENTRY : NO_GROUPS;
+				return Response.json({ jsonrpc: '2.0', id: 1, result: empty });
+			}
+			return Response.json({ jsonrpc: '2.0', id: 1, result: known });
 		})
 	);
 });
@@ -115,7 +135,9 @@ describe('an index that does not answer', () => {
 	it('unreachable: the key and its unit are read from the contract on Gnosis', async () => {
 		expect(await queryByPublicKey(fixture.publicKey)).toEqual({
 			registered: true,
-			unitIds: [12, 10, 8]
+			unitIds: [12, 10, 8],
+			// Gnosis answered: the contract on the record's home vouches for it.
+			verifiedBy: 'gnosis'
 		});
 		const unit = await queryUnit(10);
 		expect(unit.members).toHaveLength(3);
@@ -153,5 +175,46 @@ describe('an index that does not answer', () => {
 		const refused = await queryByPublicKey(fixture.publicKey).catch((e: unknown) => e);
 		expect((refused as RegistryError).network).toBe(false);
 		expect((refused as RegistryError).message).toContain('400');
+	});
+});
+
+/**
+ * Correctness batch item 1: the rebuild is offered only on GNOSIS's verdict.
+ * The shell passes the resolver's `verified_by` to the sign-in machine
+ * untouched; these pin what it is for each way an answer can arrive.
+ */
+describe('who vouched for a key’s answer', () => {
+	it('an index listing nobody checked yet: none', async () => {
+		indexListing = { entry: {}, groups: { total: 1, unitIds: [10] } };
+		expect((await queryByPublicKey(fixture.publicKey)).verifiedBy).toBe('none');
+	});
+
+	it('Gnosis says the key has no record: gnosis — the one verdict the rebuild may follow', async () => {
+		indexListing = { entry: null, groups: { total: 0, unitIds: [] } };
+		emptyChains = [100, 1];
+		expect(await queryByPublicKey(STRANGER)).toEqual({
+			registered: false,
+			unitIds: [],
+			verifiedBy: 'gnosis'
+		});
+		// Gnosis is the record's home: nobody else needed asking.
+		expect(asked).not.toContain('chain:1');
+	});
+
+	it('Gnosis silent and Ethereum empty: the index’s "nothing" stands, vouched by none', async () => {
+		indexListing = { entry: null, groups: { total: 0, unitIds: [] } };
+		silentChains = [100];
+		emptyChains = [1];
+		expect(await queryByPublicKey(STRANGER)).toEqual({
+			registered: false,
+			unitIds: [],
+			verifiedBy: 'none'
+		});
+		expect(asked).toContain('chain:1');
+	});
+
+	it('Ethereum’s backup lists the key: ethereum', async () => {
+		silentChains = [100];
+		expect((await queryByPublicKey(fixture.publicKey)).verifiedBy).toBe('ethereum');
 	});
 });

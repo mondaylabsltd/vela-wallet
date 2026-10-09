@@ -190,7 +190,8 @@ export function keyBadge(
 export type PromptCopy = {
 	title: string;
 	message: string;
-	/** Present only for the one prompt whose answer changes the flow. */
+	/** Present only for the prompts whose answer changes the flow: the
+	 *  recovery offer, and the free retry of a lookup nobody answered. */
 	confirm?: { confirmLabel: string; cancelLabel: string };
 };
 
@@ -263,6 +264,23 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 			return {
 				title: t('onboarding.login.recoverFailedTitle'),
 				message: t('onboarding.login.recoverFailedBody')
+			};
+		case 'registry_unreachable':
+			// Nobody could say which wallet this passkey opens, so nothing is
+			// offered and nothing was saved. "Try again" asks the registry again
+			// from the signature already made — no new passkey. A lookup that
+			// never left the device says so in the network's words.
+			return {
+				title: kind.local
+					? t('onboarding.common.networkTitle')
+					: t('onboarding.login.registryUnreachableTitle'),
+				message: kind.local
+					? t('onboarding.common.networkBody')
+					: t('onboarding.login.registryUnreachableBody'),
+				confirm: {
+					confirmLabel: t('common.tryAgain'),
+					cancelLabel: t('common.cancel')
+				}
 			};
 		case 'sign_in_failed':
 			return {
