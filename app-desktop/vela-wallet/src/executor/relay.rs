@@ -519,6 +519,9 @@ pub fn raw_bundler_quotes(chain_id: u32) -> Option<Vec<(&'static str, FeeBundler
                     max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
                     network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
                     relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
+                    // The relay's published in-band price for the tier, per
+                    // unit of settlement gas — the core pays it (`fee_policy`).
+                    in_band_fee_per_gas: decimal_of_hex(row.get("inBandFeePerGas")),
                 },
             ))
         })
@@ -652,6 +655,13 @@ fn estimate_of(body: &Value) -> Result<GasEstimate, EstimateError> {
         verification_gas_limit: field("verificationGasLimit")?,
         call_gas_limit: field("callGasLimit")?,
         pre_verification_gas: field("preVerificationGas")?,
+        // Optional: a relay older than the field omits it, and a figure that
+        // is not a positive quantity is no figure — never a 0 stand-in.
+        settlement_gas: result
+            .get("settlementGas")
+            .and_then(Value::as_str)
+            .and_then(|text| parse_hex_quantity(Some(text)).ok())
+            .filter(|gas| *gas > 0),
     })
 }
 
@@ -1312,6 +1322,36 @@ mod tests {
     /// 078 W-05, `recommendedFundingWei`: the shortfall plus half again; an
     /// account already at the threshold is asked for the buffered threshold,
     /// not for nothing.
+    /// The estimate carries the relay's `settlementGas` when it publishes
+    /// one, and nothing in its place when it does not (or sends no positive
+    /// quantity) — the core then prices the limits, and an undeployed Safe
+    /// keeps its 2M verification floor.
+    #[test]
+    fn an_estimate_carries_the_relays_settlement_gas_or_nothing() {
+        let body = |settlement: Value| {
+            json!({ "result": {
+                "verificationGasLimit": "0x186a0",
+                "callGasLimit": "0x1c0ce",
+                "preVerificationGas": "0x18cf5",
+                "settlementGas": settlement,
+            }})
+        };
+        let estimate = estimate_of(&body(json!("0x3086c"))).expect("an estimate");
+        assert_eq!(
+            (
+                estimate.verification_gas_limit,
+                estimate.call_gas_limit,
+                estimate.pre_verification_gas,
+                estimate.settlement_gas
+            ),
+            (100_000, 114_894, 101_621, Some(198_764))
+        );
+        for absent in [Value::Null, json!("0x0"), json!(12), json!("nope")] {
+            let estimate = estimate_of(&body(absent.clone())).expect("an estimate");
+            assert_eq!(estimate.settlement_gas, None, "{absent}");
+        }
+    }
+
     #[test]
     fn a_top_up_is_the_shortfall_with_the_relays_buffer() {
         assert_eq!(recommended_funding_wei(1_000, 400), 900);

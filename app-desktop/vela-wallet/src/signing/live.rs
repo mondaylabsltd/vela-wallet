@@ -3628,7 +3628,8 @@ mod tests {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_ne!(value, s.fee_estimating);
-        // The dead `rapid` reads as the `fast` it became.
+        // The dead `rapid` reads as the factory default (`standard` since the
+        // Ethereum fee fix), as the core's `fee_speed::offered` reads it.
         if let Some(estimate) = fee.fee.as_mut() {
             estimate.tier = FeeTier::Rapid;
         }
@@ -3637,7 +3638,7 @@ mod tests {
             &guard,
             &clear,
             &fee,
-            Some(FeeTier::Fast)
+            Some(FeeTier::Standard)
         ));
     }
 
