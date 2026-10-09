@@ -47,7 +47,9 @@ class WalletFixturesTest {
         assertEquals("转账", model.actions.send)
         assertEquals("扫码", model.actions.scan)
 
-        assertEquals(listOf("今天", "昨天"), model.activityGroups.map { it.label })
+        // Issue #469: the home is the newest three — all of them today's.
+        assertEquals(listOf("今天"), model.activityGroups.map { it.label })
+        assertEquals(3, model.activityGroups.sumOf { it.rows.size })
         val sent = model.activityGroups[0].rows[0]
         assertEquals("已发送", sent.title)
         assertEquals("至 hold on", sent.subtitle)
@@ -118,12 +120,18 @@ class WalletFixturesTest {
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals("••••••", model.balance.integer)
         assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
+        // Issue #469: the home draws the core's cut — the newest three.
         val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
-        for (id in listOf("received", "sent", "swap", "permit")) assertEquals(id, "••••", rows.getValue(id).amount)
+        assertEquals(listOf("received", "sent", "swap"), model.activityGroups.flatMap { it.rows }.map { it.id })
+        for (id in listOf("received", "sent", "swap")) assertEquals(id, "••••", rows.getValue(id).amount)
         assertEquals("•••• xDAI", rows.getValue("swap").received)
-        assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), rows.getValue("permit-unlimited").amount)
-        assertFalse(rows.getValue("signature").masked)
-        val figures = (rows.values.flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
+        // The rest are History's, drawn by the same builder from the same feed.
+        val feed = WalletFixtures.liveHiddenFeed()
+        val history = app.getvela.wallet.feature.wallet.WalletLive.activity(feed, s).flatMap { it.rows }.associateBy { it.id }
+        assertEquals("••••", history.getValue("permit").amount)
+        assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), history.getValue("permit-unlimited").amount)
+        assertFalse(history.getValue("signature").masked)
+        val figures = ((rows.values + history.values).flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
             listOfNotNull(model.balance.integer, model.balance.decimals)).joinToString(" ")
         for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
     }

@@ -73,6 +73,9 @@ object WalletFixtures {
         val badgeColor: Color,
     )
 
+    /** The core's `HOME_ACTIVITY_ITEMS` (issue #469) — what the static boards draw on the home. */
+    private const val HOME_ACTIVITY_ITEMS = 3
+
     private val DEFAULT_ACTIVITY = listOf(
         ActivityFixture(
             kind = ActivityKind.Sent,
@@ -346,7 +349,9 @@ object WalletFixtures {
                 scan = strings.t(I18nKeys.Wallet.ACTION_SCAN),
             ),
             activitySection = rowsActivity,
-            activityGroups = groupByDay(strings, DEFAULT_ACTIVITY),
+            // Issue #469: the home shows the newest three (the core's
+            // `FeedView.home_rows`); the fourth is History's.
+            activityGroups = groupByDay(strings, DEFAULT_ACTIVITY.take(HOME_ACTIVITY_ITEMS)),
             assetsSection = rowsAssets,
             assetRows = DEFAULT_ASSETS.map { assetRow(strings, it) },
             tabs = TabsModel(
@@ -401,7 +406,7 @@ object WalletFixtures {
 
             WalletScreenState.H5 -> base.copy(
                 balance = balance(strings, BalanceStateKind.Hidden),
-                activityGroups = groupByDay(strings, DEFAULT_ACTIVITY, masked = true),
+                activityGroups = groupByDay(strings, DEFAULT_ACTIVITY.take(HOME_ACTIVITY_ITEMS), masked = true),
                 assetRows = DEFAULT_ASSETS.map { assetRow(strings, it, masked = true) },
             )
 
@@ -474,20 +479,12 @@ object WalletFixtures {
      * its digits and rows; dated today and yesterday so the headers read as a
      * person would see them) into [WalletLive.home]. Every money figure is
      * the mask — the total, each holding's amount AND worth, each row whose
-     * figure the core calls money, a swap's "received"; an unlimited
-     * allowance (a risk to see) and a signature with no figure keep what they
-     * draw.
+     * figure the core calls money, a swap's "received". (An unlimited
+     * allowance and a signature with no figure keep what they draw — in
+     * History, since the home stops at the core's newest three.)
      */
     private fun liveHidden(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
         val now = System.currentTimeMillis()
-        val today = java.util.Calendar.getInstance().apply {
-            timeInMillis = now
-            set(java.util.Calendar.HOUR_OF_DAY, 0)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
-        }.timeInMillis.toDouble()
-        val yesterday = today - 24 * 60 * 60 * 1000.0
         val usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
         val view = app.getvela.wallet.feature.wallet.core.BalanceView(
             address = ADDRESS_FULL,
@@ -499,6 +496,28 @@ object WalletFixtures {
             ),
             switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(hidden = true),
         )
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        return WalletLive.home(
+            base, view, liveHiddenFeed(now), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
+        ).copy(state = WalletScreenState.H10)
+    }
+
+    /**
+     * H10's feed: the core privacy fixture's rows, dated today and yesterday.
+     * The home draws the core's cut (issue #469) — `home_rows`, the newest
+     * three and the two day headers over them, as the core's fixture carries
+     * it; the allowance and signature rows are History's.
+     */
+    internal fun liveHiddenFeed(now: Long = System.currentTimeMillis()): app.getvela.wallet.feature.wallet.core.FeedView {
+        val today = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis.toDouble()
+        val yesterday = today - 24 * 60 * 60 * 1000.0
+        val usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
         fun item(
             id: String, kind: app.getvela.wallet.feature.wallet.core.FeedTxKind, direction: app.getvela.wallet.feature.wallet.core.FeedDirection,
             value: String?, symbol: String, chain: Int, day: Double, maskable: Boolean,
@@ -518,7 +537,7 @@ object WalletFixtures {
                 intent_term = term, place = "swap.example", site = "swap.example", allowance = allowance,
                 received = received, estimated = received != null, off_chain = offChain,
             )
-        val feed = app.getvela.wallet.feature.wallet.core.FeedView(
+        val all = app.getvela.wallet.feature.wallet.core.FeedView(
             hidden = true,
             rows = listOf(
                 header(today),
@@ -540,9 +559,6 @@ object WalletFixtures {
                 item("signature", FeedTxKind.SignMessage, Out, null, "", 1, yesterday, false, listOf(FeedLine.Network(1)), dapp("messageIntent", offChain = true)),
             ),
         )
-        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
-        return WalletLive.home(
-            base, view, feed, app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
-        ).copy(state = WalletScreenState.H10)
+        return all.copy(home_rows = all.rows.take(5))
     }
 }

@@ -417,6 +417,8 @@ class CoreWireDriftTest {
         assertFieldsExist<FeedView>("FeedView")
         // Balance privacy: the feed's own flag, and each row's own word on its figure.
         assertTrue("hidden" in serializer<FeedView>().descriptor.elementNames)
+        // Issue #469: the home's newest three, the core's cut.
+        assertTrue("home_rows" in serializer<FeedView>().descriptor.elementNames)
         assertTrue("figure_maskable" in serializer<FeedItem>().descriptor.elementNames)
         assertFieldsExist<FeedItem>("FeedItem")
         assertFieldsExist<FeedTxRecord>("FeedTxRecord")

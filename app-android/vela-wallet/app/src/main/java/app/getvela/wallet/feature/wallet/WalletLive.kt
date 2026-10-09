@@ -100,7 +100,10 @@ object WalletLive {
         val money = Money.of(currency)
         val rows = assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        val groups = activity(feed, strings, now, chainNames)
+        // Issue #469: the home draws the core's short list (`home_rows`, the
+        // newest three); History keeps every row. The cut is the core's — the
+        // shared helper below also builds History, so it never caps.
+        val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(

@@ -197,10 +197,11 @@ object FlowLive {
     /**
      * A1 — the whole history, not the first few.
      *
-     * The home screen's Activity section shows a handful and offers "全部".
-     * That link opened a fixture: a person tapped past their own payments into
-     * somebody else's. Same rows, same grouping, same core ordering as the home
-     * feed — this only removes the cut-off.
+     * The home screen's Activity section shows the core's newest three
+     * (`FeedView.home_rows`, issue #469) and offers "全部". That link opened a
+     * fixture: a person tapped past their own payments into somebody else's.
+     * Same grouping, same core ordering as the home feed — but every row
+     * (`FeedView.rows`).
      */
     fun history(
         fallback: HistoryModel,
