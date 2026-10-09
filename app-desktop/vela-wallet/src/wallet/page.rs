@@ -4412,37 +4412,39 @@ impl WalletPage {
                 });
             }
         }
-        let hidden = resident::resident::<BalanceDashboard>(cx)
-            .read(cx)
-            .view()
-            .hidden;
-        let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+        let feed = self.feed_view(cx);
         contacts_live::detail(
             &view,
             self.contact,
             &feed,
             &self.strings,
             self.contact_all_activity,
-            hidden,
+            feed.hidden,
         )
     }
 
     /// The activity rows: the core's feed for a real session, the mock's
     /// otherwise.
     ///
-    /// Privacy comes from the BALANCE view, not the feed's own: every money
-    /// surface masks together, and reading two different flags is how one of
-    /// them ends up out of step.
+    /// Privacy is the feed's own flag (`FeedView.hidden`, correctness batch
+    /// item 2), told from the balance machine's before it is read
+    /// ([`Self::feed_view`]) — one flag, never two out of step.
     fn activity_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::ActivityRowModel> {
         if self.identity.is_none() {
             return fixtures::activity_default(&self.strings);
         }
-        let hidden = resident::resident::<BalanceDashboard>(cx)
-            .read(cx)
-            .view()
-            .hidden;
-        let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, hidden)
+        let feed = self.feed_view(cx);
+        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, feed.hidden)
+    }
+
+    /// The activity feed's view, with the balance's privacy told to it first:
+    /// every feed surface (Activity, History, a contact's page, a transfer's
+    /// and a dApp's detail) masks on the feed's own `hidden`, which the core
+    /// keeps from `PrivacyChanged` — so it is told before anyone reads it,
+    /// and a relaunch with the balance hidden never shows a figure first.
+    fn feed_view(&mut self, cx: &mut Context<Self>) -> vela_core::app::activity_feed::FeedView {
+        self.sync_feed_privacy(cx);
+        resident::resident::<ActivityFeed>(cx).read(cx).view()
     }
 
     /// The core-list indices behind the home's asset strip, in drawn order.
@@ -6748,7 +6750,7 @@ impl WalletPage {
     /// gallery pins a hand-off (`VELA_HANDOFF`): the confirm's own fee rows
     /// above the card, the card with none.
     fn mock_flow_body(&self, panel: FlowPanel) -> flow_fixtures::FlowBody {
-        match (
+        let body = match (
             flow_fixtures::body(panel, &self.flow_strings),
             crate::gallery::handoff_pin(),
         ) {
@@ -6759,7 +6761,8 @@ impl WalletPage {
                 ))
             }
             (body, _) => body,
-        }
+        };
+        crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
@@ -6788,16 +6791,16 @@ impl WalletPage {
                 ))
             }
             FlowPanel::Da1 => {
-                // Privacy comes from the BALANCE view, not the feed's own flag:
-                // every money surface masks together.
+                // Privacy is the feed's own flag, told from the balance's
+                // first (`feed_view`).
                 let balance = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-                let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+                let feed = self.feed_view(cx);
                 flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
                     balance.balance_unknown,
                     &self.flow_strings,
                     &self.strings,
-                    balance.hidden,
+                    feed.hidden,
                 ))
             }
             FlowPanel::Dr1 => flow_fixtures::FlowBody::Receive(flows_live::receive_list(
@@ -6830,11 +6833,8 @@ impl WalletPage {
             // the mock. Each is named so the next person sees a list rather
             // than a wildcard.
             FlowPanel::Da2 | FlowPanel::Da3 => {
-                let hidden = resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .view()
-                    .hidden;
-                let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+                let feed = self.feed_view(cx);
+                let hidden = feed.hidden;
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
@@ -9185,27 +9185,18 @@ impl WalletPage {
         // The display currency the totals are stated in (spec 072) — the
         // web's switcher prints them the way the hero would.
         let currency = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        // "1 accounts · Total $0.75". The sum is over what is actually KNOWN —
-        // an account with no cached figure contributes nothing rather than
-        // making the sentence wait for it.
-        let known_total: f64 = session
+        // "1 accounts · Total $0.75" — and every figure masked while the
+        // balance is hidden: the core sends none then (`switcher.hidden`).
+        let addresses: Vec<&str> = session
             .accounts
             .iter()
-            .filter_map(|row| {
-                switcher
-                    .balances
-                    .iter()
-                    .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
-                    .map(|entry| entry.usd)
-            })
-            .sum();
+            .map(|row| row.account.address.as_str())
+            .collect();
+        let (known_total, row_totals) =
+            settings_live::switcher_figures(&switcher, &addresses, Some(&currency), &self.locale);
         let summary = gpui::SharedString::from(format!(
             "{summary_count}{}",
-            crate::wallet::fill(
-                &accounts_total,
-                "amount",
-                &settings_live::account_total(known_total, Some(&currency), &self.locale),
-            )
+            crate::wallet::fill(&accounts_total, "amount", &known_total)
         ));
         // Two copies of this list can be on screen at once — the dialog over
         // the settings panel — so each names its own rows.
@@ -9238,21 +9229,12 @@ impl WalletPage {
         let cancel_label = self.strings.sign_out_cancel.clone();
 
         let mut list = div().flex().flex_col();
-        for row in &session.accounts {
+        for (row, total) in session.accounts.iter().zip(row_totals) {
             let active = row.index == session.active_index;
-            // This account's own total, when the core has one for it. A row
-            // with no cached figure says nothing rather than $0 — the hero's
-            // invariant ② applies to every account, not just the active one.
-            let total = switcher
-                .balances
-                .iter()
-                .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
-                .map(|entry| {
-                    // In the chosen currency, like every other total this
-                    // shell prints: `Money` converts only when the endpoint
-                    // priced the code, and draws USD when it could not.
-                    settings_live::account_total(entry.usd, Some(&currency), &self.locale)
-                });
+            // This account's own total, when the core has one for it (in the
+            // chosen currency). A row with no cached figure says nothing
+            // rather than $0 — the hero's invariant ② applies to every
+            // account, not just the active one.
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
             let index = row.index;
@@ -17687,14 +17669,9 @@ impl WalletPage {
                     speed_tier,
                     &currency,
                 );
-                // Spec 079: the speed control's own deployment read, which the
-                // fee machine never sees.
-                signing_live::fee_row_state(
-                    &mut fee_model,
-                    host.fee_measuring(),
-                    host.fee_unanswered(),
-                    &self.signing,
-                );
+                // Spec 079: a measurement out on the speed control turns the
+                // row's refresh sign (the failure itself is the core's).
+                signing_live::fee_row_state(&mut fee_model, host.fee_measuring());
                 let state = signing_live::confirm_state(
                     &host.view,
                     &host.guard_view,

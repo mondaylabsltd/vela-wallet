@@ -29,7 +29,8 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::{
-    ChainGasPrice, GasSignals, derive_chain_gas_price, is_tempo_chain, min_gas_price_wei,
+    ChainGasPrice, DeploymentRead, GasSignals, derive_chain_gas_price, is_tempo_chain,
+    min_gas_price_wei,
 };
 use vela_core::app::tx_tracker::user_op_outcome_in_logs;
 use vela_core::primitives::{abi_encode_address, function_selector, to_hex};
@@ -38,8 +39,6 @@ use vela_core::user_op::parse_hex_quantity;
 
 use crate::executor::{pool, relay};
 
-/// `NONCE_CACHE_TTL` (`safe-transaction.ts:2375`).
-const NONCE_TTL: Duration = Duration::from_secs(10);
 /// `GAS_PRICE_CACHE_TTL` (`safe-transaction.ts:2482`).
 const GAS_PRICE_TTL: Duration = Duration::from_secs(15);
 
@@ -49,7 +48,6 @@ const INDETERMINATE_NONCE: &str =
 
 /// Once deployed, always deployed (irreversible), so only `true` is cached.
 static DEPLOYED: Mutex<Option<HashMap<String, ()>>> = Mutex::new(None);
-static NONCES: Mutex<Option<HashMap<String, (String, Instant)>>> = Mutex::new(None);
 static GAS_PRICES: Mutex<Option<HashMap<u32, (ChainGasPrice, Instant)>>> = Mutex::new(None);
 static CHAIN_READY: Mutex<Option<HashMap<u32, ()>>> = Mutex::new(None);
 
@@ -61,49 +59,95 @@ fn key(chain_id: u32, address: &str) -> String {
 /// read — an unreachable chain, an RPC error, or a non-string result — and
 /// the caller must retry rather than guess.
 pub fn is_deployed(address: &str, chain_id: u32) -> Result<bool, String> {
+    match read_deployment(address, chain_id, false) {
+        DeploymentRead::Read { deployed } => Ok(deployed),
+        DeploymentRead::Unreachable { .. } | DeploymentRead::Internal { .. } => {
+            Err(INDETERMINATE_DEPLOYMENT.to_owned())
+        }
+    }
+}
+
+/// The account read the fee machine asks for (`FeeOperation::ReadDeployment`,
+/// issue #483), told the way the core words it: the chain answered, the
+/// chain's nodes did not (rate-limited or not — the pool's own signal), or the
+/// read never left the app (the pool thread is gone) — `internal`, never "the
+/// chain is down".
+///
+/// `fresh` (a run after a failure) reads past the held answer. Only `true`
+/// is ever held — deployment is irreversible — and a failure never is, so a
+/// retry after a failed read is always a new read.
+pub fn read_deployment(address: &str, chain_id: u32, fresh: bool) -> DeploymentRead {
     let cache_key = key(chain_id, address);
-    if let Ok(cache) = DEPLOYED.lock()
+    if !fresh
+        && let Ok(cache) = DEPLOYED.lock()
         && cache
             .as_ref()
             .is_some_and(|map| map.contains_key(&cache_key))
     {
-        return Ok(true);
+        return DeploymentRead::Read { deployed: true };
     }
     // The speed sessions and a prewarm ask together; one `eth_getCode`.
-    static IN_FLIGHT: crate::executor::single_flight::SingleFlight<String, Result<bool, String>> =
+    static IN_FLIGHT: crate::executor::single_flight::SingleFlight<String, DeploymentRead> =
         crate::executor::single_flight::SingleFlight::new();
     IN_FLIGHT.run(cache_key.clone(), || {
-        read_deployed(address, chain_id, cache_key)
+        let read = deployment_of(pool::call(
+            chain_id,
+            "eth_getCode",
+            json!([address, "latest"]),
+        ));
+        if read == (DeploymentRead::Read { deployed: true })
+            && let Ok(mut cache) = DEPLOYED.lock()
+        {
+            cache.get_or_insert_with(HashMap::new).insert(cache_key, ());
+        }
+        read
     })
 }
 
-fn read_deployed(address: &str, chain_id: u32, cache_key: String) -> Result<bool, String> {
-    let body = pool::call(chain_id, "eth_getCode", json!([address, "latest"]))
-        .map_err(|_| INDETERMINATE_DEPLOYMENT.to_owned())?;
-    if body.get("error").is_some() {
-        return Err(INDETERMINATE_DEPLOYMENT.to_owned());
-    }
-    let Some(code) = body.get("result").and_then(Value::as_str) else {
-        return Err(INDETERMINATE_DEPLOYMENT.to_owned());
+/// An `eth_getCode` answer, as the fee machine reads it.
+fn deployment_of(answer: Result<Value, pool::PoolError>) -> DeploymentRead {
+    let body = match answer {
+        Ok(body) => body,
+        Err(pool::PoolError::Failed { rate_limited }) => {
+            return DeploymentRead::Unreachable { rate_limited };
+        }
+        // `eth_getCode` has no range to cap; a node that says so is a node
+        // that did not answer the question.
+        Err(pool::PoolError::RangeCap { .. }) => {
+            return DeploymentRead::Unreachable {
+                rate_limited: false,
+            };
+        }
+        Err(pool::PoolError::Unavailable) => {
+            return DeploymentRead::Internal {
+                kind: "rpc: pool_unavailable".to_owned(),
+            };
+        }
     };
-    let deployed = code != "0x" && code.len() > 2;
-    if deployed && let Ok(mut cache) = DEPLOYED.lock() {
-        cache.get_or_insert_with(HashMap::new).insert(cache_key, ());
+    // A node that answered with an error, or with something that is not code,
+    // did not tell us — the chain's side, not ours.
+    let code = (body.get("error").is_none())
+        .then(|| body.get("result").and_then(Value::as_str))
+        .flatten();
+    match code {
+        Some(code) => DeploymentRead::Read {
+            deployed: code != "0x" && code.len() > 2,
+        },
+        None => DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
     }
-    Ok(deployed)
 }
 
-/// `EntryPoint.getNonce(safe, 0)` (`getNonce`), as the RPC spelled it, cached
-/// 10 s. `Err` is a genuine RPC failure: a fresh account answers a valid
-/// zero word, never an error.
+/// `EntryPoint.getNonce(safe, 0)` (`getNonce`), as the RPC spelled it —
+/// read fresh every time. `Err` is a genuine RPC failure: a fresh account
+/// answers a valid zero word, never an error.
+///
+/// There is no cache and no local "+1" any more: the core holds a second
+/// operation's confirm while the first is in flight
+/// (`tx_tracker::in_flight_ops`), so a bumped nonce could only park an
+/// operation at N+1 behind an N the relay may yet refuse.
 pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
-    let cache_key = key(chain_id, safe);
-    if let Ok(cache) = NONCES.lock()
-        && let Some((nonce, at)) = cache.as_ref().and_then(|map| map.get(&cache_key))
-        && at.elapsed() < NONCE_TTL
-    {
-        return Ok(nonce.clone());
-    }
     let mut data = function_selector("getNonce(address,uint192)").map_err(|e| e.to_string())?;
     data.extend(abi_encode_address(safe).map_err(|e| e.to_string())?);
     data.extend([0u8; 32]);
@@ -119,11 +163,6 @@ pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
     let Some(nonce) = body.get("result").and_then(Value::as_str) else {
         return Err(INDETERMINATE_NONCE.to_owned());
     };
-    if let Ok(mut cache) = NONCES.lock() {
-        cache
-            .get_or_insert_with(HashMap::new)
-            .insert(cache_key, (nonce.to_owned(), Instant::now()));
-    }
     Ok(nonce.to_owned())
 }
 
@@ -191,22 +230,6 @@ pub fn user_op_outcome(receipt: &Value, user_op_hash: &str) -> Option<bool> {
         .filter_map(relay::to_trust_log)
         .collect();
     user_op_outcome_in_logs(&logs, user_op_hash)
-}
-
-/// `incrementNonceCache`: after a submit, so a concurrent send does not
-/// reuse the nonce. A missing or stale entry is left for the next read.
-pub fn bump_nonce(safe: &str, chain_id: u32) {
-    let cache_key = key(chain_id, safe);
-    if let Ok(mut cache) = NONCES.lock()
-        && let Some(map) = cache.as_mut()
-        && let Some((nonce, _)) = map.get(&cache_key)
-        && let Ok(current) = parse_hex_quantity(Some(nonce))
-    {
-        map.insert(
-            cache_key,
-            (format!("0x{:x}", current.saturating_add(1)), Instant::now()),
-        );
-    }
 }
 
 /// The three chain price signals, raw, as decimal strings (`fetchRawGasSignals`).
@@ -350,6 +373,40 @@ mod tests {
     use vela_core::app::tx_tracker::SAFE_EXECUTION_FAILURE_TOPIC;
     use vela_core::primitives::keccak256;
 
+    /// Issue #483: the account read says its cause the way the fee machine
+    /// words it — the chain's nodes out of reach (rate-limited or not), or a
+    /// pool that could not take the read at all, which is Vela's own fault
+    /// and never "can't reach the chain".
+    #[test]
+    fn the_account_read_names_its_real_cause() {
+        assert_eq!(
+            deployment_of(Ok(json!({"result": "0x6080"}))),
+            DeploymentRead::Read { deployed: true }
+        );
+        assert_eq!(
+            deployment_of(Ok(json!({"result": "0x"}))),
+            DeploymentRead::Read { deployed: false }
+        );
+        for rate_limited in [false, true] {
+            assert_eq!(
+                deployment_of(Err(pool::PoolError::Failed { rate_limited })),
+                DeploymentRead::Unreachable { rate_limited }
+            );
+        }
+        assert_eq!(
+            deployment_of(Ok(
+                json!({"error": {"code": -32000, "message": "header not found"}})
+            )),
+            DeploymentRead::Unreachable {
+                rate_limited: false
+            }
+        );
+        assert!(matches!(
+            deployment_of(Err(pool::PoolError::Unavailable)),
+            DeploymentRead::Internal { .. }
+        ));
+    }
+
     /// 083: how an operation ended, from the bundle transaction's receipt —
     /// the EntryPoint's `UserOperationEvent` for THAT op, and no Safe
     /// `ExecutionFailure` in its own execution (#D1). A bundle carries other
@@ -433,28 +490,6 @@ mod tests {
         assert_eq!(user_op_outcome(&impostor, &ours), None);
         assert_eq!(user_op_outcome(&receipt(Vec::new()), &ours), None);
         assert_eq!(user_op_outcome(&Value::Null, &ours), None);
-    }
-
-    #[test]
-    fn a_bumped_nonce_is_one_more_and_stays_hex() {
-        if let Ok(mut cache) = NONCES.lock() {
-            cache.get_or_insert_with(HashMap::new).insert(
-                key(31337, "0xAbC"),
-                (
-                    "0x0000000000000000000000000000000000000000000000000000000000000007".to_owned(),
-                    Instant::now(),
-                ),
-            );
-        }
-        bump_nonce("0xabc", 31337);
-        let now = NONCES.lock().ok().and_then(|cache| {
-            cache
-                .as_ref()
-                .and_then(|map| map.get(&key(31337, "0xabc")).cloned())
-        });
-        assert_eq!(now.map(|(nonce, _)| nonce).as_deref(), Some("0x8"));
-        // A chain nobody read is left alone.
-        bump_nonce("0xdef", 31337);
     }
 
     // -- live (`cargo test executor::chain -- --ignored --test-threads=1`) --

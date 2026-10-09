@@ -26,8 +26,8 @@ use futures::StreamExt as _;
 use gpui::Context;
 
 use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeBalanceChange, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier,
-    FeeView,
+    DeploymentRead, Event as FeeEvent, FeeBalanceChange, FeeCall, FeeOperation, FeePolicy,
+    FeeShellResult, FeeTier, FeeView,
 };
 use vela_core::app::fee_speed::{
     Event as SpeedEvent, FeeSpeed, FeeSpeedView, TierPreviewQuote, TierQuote,
@@ -35,7 +35,7 @@ use vela_core::app::fee_speed::{
 use vela_core::app::fee_tier_pref::FeeTierPref;
 
 use crate::core_host::{CoreHost, Pending};
-use crate::executor::{chain, fee_signals, format_prefs};
+use crate::executor::{fee_signals, format_prefs};
 use crate::resident::{self, Answer, Machine};
 
 /// The owner of a [`SpeedControl`]: an entity whose `Context` the sessions'
@@ -51,10 +51,6 @@ pub trait SpeedHost: Sized + 'static {
     fn answering(&self) -> bool {
         false
     }
-
-    /// The deployment read for the question in force could not answer, so no
-    /// quote was asked for.
-    fn unreadable(&mut self, _cx: &mut Context<Self>) {}
 
     /// Any session moved — for an owner that polls while fees are busy.
     fn fees_moved(&mut self, _cx: &mut Context<Self>) {}
@@ -83,11 +79,17 @@ impl QuoteAsk {
         } == *other
     }
 
-    fn event(&self, deployed: bool) -> FeeEvent {
+    /// The question, for the core. `deployed: None` — the session in force —
+    /// has the fee machine read the account first (issue #483): the read's
+    /// failure is then the fee's own, said on the row, the footer and the
+    /// retry alike, and every retry reads again. `Some` — a preview of
+    /// another tier — replays what the session in force read, so one
+    /// operation is one `eth_getCode`, not one per speed.
+    fn event(&self, deployed: Option<bool>) -> FeeEvent {
         FeeEvent::QuoteRequested {
             chain_id: self.chain_id,
             account: self.account.clone(),
-            deployed,
+            deployed: deployed.unwrap_or(false),
             public_key_available: self.public_key_available,
             tier: self.tier,
             calls: self.calls.clone(),
@@ -95,6 +97,7 @@ impl QuoteAsk {
             auto_fee_token: self.auto_fee_token,
             // Issue #408: the preset the core writes a coin's shortfall in.
             number: crate::executor::format_prefs::current().number,
+            read_deployment: deployed.is_none().then_some(true),
         }
     }
 }
@@ -106,15 +109,10 @@ struct FeeSession {
     host: CoreHost<FeePolicy>,
     view: FeeView,
     ask: Option<QuoteAsk>,
-    /// The deployment status the ask was dispatched with; `None` while it is
-    /// being read, or when it could not be.
+    /// The account's deployment for the ask: what the fee machine's own
+    /// account read answered (`ReadDeployment`), or what a preview was asked
+    /// with. `None` until it is known — the previews wait for it.
     deployed: Option<bool>,
-    /// A deployment read is out before the dispatch — as much "measuring" as
-    /// the core's own `busy`.
-    reading: bool,
-    /// The last deployment read got no answer and the chain's nodes had only
-    /// rate limits to give (the pool's own signal, spec 082 RJ13).
-    read_rate_limited: bool,
     generation: u64,
     /// The chain of the last question that reached this session's core —
     /// what its view's `fee_token` is a contract on. Set by [`ask_session`].
@@ -131,8 +129,6 @@ impl FeeSession {
             view,
             ask: None,
             deployed: None,
-            reading: false,
-            read_rate_limited: false,
             generation: 0,
             priced: None,
         }
@@ -151,9 +147,6 @@ pub struct SpeedControl {
     /// Bumped whenever the session in force is asked to price again (a new
     /// operation, a new tier, a refresh), so the previews follow it.
     generation: u64,
-    /// Guards the deployment read: a slower one must not dispatch a quote for
-    /// a question that has been superseded.
-    fee_seq: u64,
     speed: CoreHost<FeeSpeed>,
     view: FeeSpeedView,
     last_on_form: Option<bool>,
@@ -185,7 +178,6 @@ impl SpeedControl {
             previews: Vec::new(),
             next_session: 1,
             generation: 0,
-            fee_seq: 0,
             speed,
             view,
             last_on_form: None,
@@ -237,27 +229,11 @@ impl SpeedControl {
             .collect()
     }
 
-    /// A measurement is out on the session in force — the deployment read or
-    /// the quote itself (spec 079: the refresh control turns).
+    /// A measurement is out on the session in force — the account read, the
+    /// quote, or a figure switched to another coin being measured again
+    /// (spec 079: the refresh control turns). All of it is the core's word.
     pub fn measuring(&self) -> bool {
-        self.fee.reading || self.fee_view.busy
-    }
-
-    /// The question in force never reached the core: its deployment read
-    /// could not answer (spec 079). The core's view shows no failure for it,
-    /// yet nothing is priced — to a person, the same as an unreachable relay.
-    pub fn unanswered(&self) -> bool {
-        self.fee.ask.is_some() && !self.fee.reading && self.fee.deployed.is_none()
-    }
-
-    /// [`Self::unanswered`] as the failure it is (spec 082 RJ13, G48): a
-    /// chain read — the chain's node, rate-limited or out of reach — never
-    /// the relay, and never the person's network.
-    pub fn chain_read(&self) -> Option<vela_core::app::fee_policy::FeeFailure> {
-        self.unanswered()
-            .then_some(vela_core::app::fee_policy::FeeFailure::ChainRead {
-                rate_limited: self.fee.read_rate_limited,
-            })
+        self.fee_view.busy || self.fee_view.provisional
     }
 
     /// No session has an effect out.
@@ -293,7 +269,7 @@ impl SpeedControl {
             .filter_map(|session| {
                 Some(TierPreviewQuote {
                     tier: session.ask.as_ref()?.tier,
-                    busy: session.reading || session.view.busy,
+                    busy: session.view.busy,
                     fee: session.view.fee.clone(),
                 })
             })
@@ -301,7 +277,7 @@ impl SpeedControl {
         let _ = self.speed.dispatch(SpeedEvent::QuotesChanged {
             chain_id: self.fee.ask.as_ref().map(|ask| ask.chain_id),
             in_force: TierQuote {
-                busy: self.fee.reading || self.fee.view.busy,
+                busy: self.fee.view.busy,
                 fee: self.fee.view.fee.clone(),
             },
             previews,
@@ -353,7 +329,7 @@ pub fn balance_changes<H: SpeedHost>(
     control.balance_changes = Some((calls, changes));
     let asked: Vec<u64> = std::iter::once(&control.fee)
         .chain(control.previews.iter())
-        .filter(|session| !session.reading && session.deployed.is_some())
+        .filter(|session| session.ask.is_some())
         .map(|session| session.key)
         .collect();
     for key in asked {
@@ -376,6 +352,14 @@ fn resolve<H: SpeedHost>(
     let Some(session) = host.speed_control().session_mut(key) else {
         return;
     };
+    // The fee machine's own account read answered: what the previews of
+    // this operation replay instead of reading it again.
+    if let FeeShellResult::Deployment {
+        read: DeploymentRead::Read { deployed },
+    } = &result
+    {
+        session.deployed = Some(*deployed);
+    }
     let pending = session.host.resolve(id, result);
     pump(host, key, pending, cx);
 }
@@ -456,8 +440,8 @@ fn in_force_changed<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     host.in_force_changed(cx);
 }
 
-/// Price the operation at the tier in force: the deployment read first,
-/// then the question. HOW FAST is the speed core's to say (spec 068) — the
+/// Price the operation at the tier in force — the fee machine reads the
+/// account first, then prices it (issue #483). HOW FAST is the speed core's to say (spec 068) — the
 /// stored default, a one-shot pick, or a free upgrade — so `tier` is not a
 /// parameter.
 pub fn ask<H: SpeedHost>(
@@ -483,60 +467,18 @@ pub fn ask<H: SpeedHost>(
     ask_in_force(host, ask, cx);
 }
 
-/// Price `ask` on the session in force. The ask is recorded NOW, before the
-/// deployment read, so a preview of the previous operation can never be
-/// promoted over a question a machine is still waiting on.
+/// Price `ask` on the session in force: the fee machine reads the account
+/// first and then prices it (issue #483), so whatever goes wrong — the
+/// chain out of reach, or a fault inside the app — is the core's failure,
+/// with the core's words and retry.
 fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) {
     let control = host.speed_control();
-    control.fee_seq += 1;
     control.generation += 1;
-    let seq = control.fee_seq;
     control.fee.generation = control.generation;
     control.fee.ask = Some(ask.clone());
     control.fee.deployed = None;
-    control.fee.reading = true;
-    speed_pass(host, cx);
-    let account = ask.account.clone();
-    let chain_id = ask.chain_id;
-    cx.spawn(async move |host, cx| {
-        let (deployed, rate_limited) = cx
-            .background_executor()
-            .spawn(async move {
-                let deployed = chain::is_deployed(&account, chain_id);
-                // Why it got no answer, from the pool's own signal — asked
-                // here, off the window's thread, and only when it failed.
-                let rate_limited = deployed.is_err()
-                    && crate::executor::pool::rate_limited_chains().contains(&chain_id);
-                (deployed, rate_limited)
-            })
-            .await;
-        host.update(cx, |host, cx| {
-            let control = host.speed_control();
-            if seq != control.fee_seq {
-                return;
-            }
-            control.fee.reading = false;
-            control.fee.read_rate_limited = rate_limited;
-            match deployed {
-                // An indeterminate read never reaches the core: guessing
-                // "deployed" ships an op without initCode, guessing
-                // "undeployed" attaches one to a live account. Either way the
-                // fee would be for a different operation than the one sent.
-                Err(_) => {
-                    host.unreadable(cx);
-                    speed_pass(host, cx);
-                    cx.notify();
-                }
-                Ok(deployed) => {
-                    control.fee.deployed = Some(deployed);
-                    let key = control.fee.key;
-                    ask_session(host, key, ask.event(deployed), cx);
-                }
-            }
-        })
-        .ok();
-    })
-    .detach();
+    let key = control.fee.key;
+    ask_session(host, key, ask.event(None), cx);
 }
 
 /// A fee coin picked for the operation in force (`None` = the native coin).
@@ -626,22 +568,13 @@ pub fn refresh<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
         return;
     };
     fee_signals::invalidate(ask.chain_id);
-    if control.fee.reading {
-        return;
-    }
-    if control.fee.deployed.is_none() {
-        // The last attempt never reached the core, so `Requote` would be a
-        // no-op and the control a dead button: ask again for real.
-        ask_in_force(host, ask, cx);
-        return;
-    }
     control.generation += 1;
     control.fee.generation = control.generation;
     fee_dispatch(host, FeeEvent::Requote, cx);
 }
 
-/// Ask the question in force again from the start — its deployment read,
-/// then the quote — over a measurement still out (spec 082 RJ12): an
+/// Ask the question in force again from the start — the account read, then
+/// the quote — over a measurement still out (spec 082 RJ12): an
 /// automatic re-quote that ran past its bound is superseded, never waited
 /// out, because the relay it hangs on may be back already.
 pub fn reask<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
@@ -691,7 +624,7 @@ fn reconcile<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) -> bool {
     // Never over a measurement that is out: a machine may be waiting on it,
     // and would hear its own question refused.
     let control = host.speed_control();
-    if control.fee.reading || control.fee.view.busy || answering {
+    if control.fee.view.busy || answering {
         return false;
     }
     ask_in_force(host, QuoteAsk { tier, ..ask }, cx);
@@ -716,7 +649,6 @@ fn promote<H: SpeedHost>(host: &mut H, tier: FeeTier, cx: &mut Context<H>) -> bo
             .ask
             .as_ref()
             .is_some_and(|ask| ask.tier == tier && ask.same_operation(&in_force))
-            && !session.reading
             && !session.view.busy
             && session
                 .view
@@ -727,11 +659,9 @@ fn promote<H: SpeedHost>(host: &mut H, tier: FeeTier, cx: &mut Context<H>) -> bo
         return false;
     };
     let promoted = control.previews.remove(index);
-    let mut demoted = std::mem::replace(&mut control.fee, promoted);
-    // A deployment read still out for the demoted session must not dispatch
-    // onto the one now in force.
-    control.fee_seq += 1;
-    demoted.reading = false;
+    let demoted = std::mem::replace(&mut control.fee, promoted);
+    // Answers still out for the demoted session find it by its key, wherever
+    // it went — or nowhere, when it is dropped here.
     if demoted.ask.is_some() && demoted.deployed.is_some() {
         control.previews.push(demoted);
     }
@@ -741,14 +671,13 @@ fn promote<H: SpeedHost>(host: &mut H, tier: FeeTier, cx: &mut Context<H>) -> bo
 
 /// Rule 2: a preview for every tier the core wants priced, pricing the same
 /// operation as the session in force at the same generation; every other
-/// preview dropped. Nothing is created while the session in force is still
-/// reading its deployment status — its question is not settled enough to
-/// replay.
+/// preview dropped. Nothing is created until the session in force has read
+/// the account — its question is not settled enough to replay.
 fn sync_previews<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     let control = host.speed_control();
     let wanted = control.view.previews.clone();
     let base = match (&control.fee.ask, control.fee.deployed) {
-        (Some(ask), Some(deployed)) if !control.fee.reading => Some((ask.clone(), deployed)),
+        (Some(ask), Some(deployed)) => Some((ask.clone(), deployed)),
         _ => None,
     };
     let generation = control.generation;
@@ -789,7 +718,7 @@ fn sync_previews<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     // Installed first, asked second: an answer that arrives inline finds every
     // session already in place.
     for (key, ask) in started {
-        ask_session(host, key, ask.event(deployed), cx);
+        ask_session(host, key, ask.event(Some(deployed)), cx);
     }
 }
 
@@ -828,13 +757,43 @@ mod tests {
     /// The question a preview asks is the one in force, at its own tier.
     #[test]
     fn a_preview_asks_the_same_question_at_its_own_tier() {
-        let FeeEvent::QuoteRequested { tier, deployed, .. } =
-            ask(FeeTier::Standard, "1").event(true)
+        let FeeEvent::QuoteRequested {
+            tier,
+            deployed,
+            read_deployment,
+            ..
+        } = ask(FeeTier::Standard, "1").event(Some(true))
         else {
             unreachable!("a quote request");
         };
         assert_eq!(tier, FeeTier::Standard);
         assert!(deployed);
+        assert_eq!(read_deployment, None, "a preview replays the read");
+    }
+
+    /// Issue #483: the session in force never reads the account itself —
+    /// it has the fee machine read it, so a read that fails is the fee's own
+    /// failure (`FeeView.failed`), told on the row and the footer alike.
+    #[test]
+    fn the_question_in_force_has_the_core_read_the_account() {
+        let FeeEvent::QuoteRequested {
+            read_deployment, ..
+        } = ask(FeeTier::Fast, "1").event(None)
+        else {
+            unreachable!("a quote request");
+        };
+        assert_eq!(read_deployment, Some(true));
+        let mut control = SpeedControl::new();
+        let pending = control
+            .fee
+            .host
+            .dispatch(ask(FeeTier::Fast, "1").event(None));
+        assert!(
+            pending
+                .iter()
+                .any(|effect| matches!(effect.operation, FeeOperation::ReadDeployment { .. })),
+            "the account read is the core's first question"
+        );
     }
 
     /// Spec 083 fee: the simulation's balance changes are told to a session
@@ -908,6 +867,7 @@ mod tests {
             usd_balance: usd.to_owned(),
             usd_price: Some(if native { "1868.70" } else { "1" }.to_owned()),
             native_usd_floor_price: None,
+            minimum_amount: None,
         };
         let swap = QuoteAsk {
             chain_id: 8453,
@@ -945,7 +905,7 @@ mod tests {
                 ));
             }
             let key = control.fee.key;
-            let mut pending = control.fee.host.dispatch(swap.event(true));
+            let mut pending = control.fee.host.dispatch(swap.event(Some(true)));
             if let Some(told) = control.balance_event(key) {
                 pending.extend(control.fee.host.dispatch(told));
             }

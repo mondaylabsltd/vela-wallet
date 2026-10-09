@@ -226,7 +226,7 @@ pub const DESKTOP_STATES: [&str; 10] = [
     dead_code,
     reason = "cross-platform scenario inventory (data-model.md §3)"
 )]
-pub const ALL_STATES: [&str; 36] = [
+pub const ALL_STATES: [&str; 41] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
@@ -237,6 +237,12 @@ pub const ALL_STATES: [&str; 36] = [
     // no requester header, the intent as the headline, the network as the
     // first row, the confirm saying the intent.
     "cs36",
+    // The correctness batch: cs1's transfer with the fee row and the confirm
+    // drawn by the live builders from a real fee view — the chain out of
+    // reach, a fault inside Vela (#483), the account's previous transaction
+    // holding the confirm, and a fee coin switched (provisional, then
+    // measured).
+    "cs37", "cs38", "cs39", "cs40", "cs41",
 ];
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
@@ -1759,6 +1765,12 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
             &s.confirm_plain,
         ),
 
+        "cs37" => correctness_state("cs37", s),
+        "cs38" => correctness_state("cs38", s),
+        "cs39" => correctness_state("cs39", s),
+        "cs40" => correctness_state("cs40", s),
+        "cs41" => correctness_state("cs41", s),
+
         other => panic!("unknown signing state `{other}`"),
     };
 
@@ -1770,10 +1782,208 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
     model
 }
 
+/// The correctness batch's sheet states, on cs1's transfer: its fee row
+/// drawn by the live `fee_model` from a fee view the core produced or would
+/// produce, and its confirm held with the core's line for the block the gate
+/// gives (`sign_confirm`).
+fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
+    use vela_core::app::fee_policy::{FeeFailure, FeeView};
+    let mut model = build("cs1", s);
+    model.id = state;
+    let pristine =
+        || crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+    let failed = |failure| FeeView {
+        failed: Some(failure),
+        ..pristine()
+    };
+    let [_, provisional, settled] = fee_coin_switch();
+    let (fee, note) = match state {
+        "cs37" => (
+            Some(failed(FeeFailure::ChainRead {
+                rate_limited: false,
+            })),
+            Some(s.note_fee_failed.clone()),
+        ),
+        "cs38" => (
+            Some(failed(FeeFailure::Internal)),
+            Some(s.note_fee_failed.clone()),
+        ),
+        // The fee is settled; the account's previous transaction on this
+        // network holds the confirm — one line, nothing else in its place.
+        "cs39" => (None, Some(s.note_previous_pending.clone())),
+        "cs40" => (Some(provisional), Some(s.note_fee_measuring.clone())),
+        _ => (Some(settled), None),
+    };
+    if let Some(fee) = fee {
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let mut row = crate::signing::live::fee_model(
+            &clear,
+            &fee,
+            1,
+            false,
+            s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        );
+        crate::signing::live::fee_row_state(&mut row, fee.busy || fee.provisional);
+        model.fee = row;
+    }
+    model.confirm_enabled = note.is_none();
+    model.confirm_note = note;
+    model
+}
+
+/// A fee coin switched, through the real `fee_policy` core with canned
+/// answers: quoted in ETH, then USDC picked (`provisional` — the switched
+/// figure, measured again with the USDC leg before it can be confirmed),
+/// then measured. On Ethereum, for cs1's transfer.
+#[must_use]
+pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
+    use crate::core_host::{CoreHost, Pending};
+    use vela_core::app::fee_policy::{
+        DeploymentRead, Event as FeeEvent, FeeAssetKind, FeeAssetQuote, FeeBundlerQuote, FeeCall,
+        FeeGasOutcome, FeeOperation, FeePolicy, FeeShellResult as Res, FeeTier,
+    };
+    const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    let row = |native: bool| FeeAssetQuote {
+        recipient: "0x1111111111111111111111111111111111111111".to_owned(),
+        asset: if native {
+            FeeAssetKind::Native
+        } else {
+            FeeAssetKind::Erc20
+        },
+        fee_token: (!native).then(|| USDC.to_owned()),
+        balance: if native {
+            "1000000000000000000"
+        } else {
+            "50000000"
+        }
+        .to_owned(),
+        decimals: if native { 18 } else { 6 },
+        symbol: if native { "ETH" } else { "USDC" }.to_owned(),
+        usd_balance: if native { "2500" } else { "50" }.to_owned(),
+        usd_price: Some(if native { "2500" } else { "1" }.to_owned()),
+        native_usd_floor_price: None,
+        minimum_amount: None,
+    };
+    let answer = |host: &mut CoreHost<FeePolicy>, mut pending: Vec<Pending<FeeOperation>>| {
+        while let Some(effect) = pending.pop() {
+            let result = match effect.operation {
+                FeeOperation::ReadDeployment { .. } => Res::Deployment {
+                    read: DeploymentRead::Read { deployed: true },
+                },
+                FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
+                    eth_gas_price: Some("1000000000".to_owned()),
+                    base_fee: Some("1000000000".to_owned()),
+                    priority_fee: Some("1000000".to_owned()),
+                },
+                FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
+                    quote: Some(FeeBundlerQuote {
+                        max_fee_per_gas: "2000000000".to_owned(),
+                        max_priority_fee_per_gas: None,
+                        network_fee_per_gas: Some("1000000000".to_owned()),
+                        relayer_fee_per_gas: Some("1000000000".to_owned()),
+                        in_band_fee_per_gas: None,
+                    }),
+                },
+                FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
+                    quotes: Some(vec![row(true), row(false)]),
+                },
+                // The fee leg is the last call: a USDC `transfer` is one
+                // SSTORE heavier than a native leg — the reason a switched
+                // coin is measured again (its figure moves when it lands).
+                FeeOperation::EstimateUserOpGas { calls, .. } => Res::UserOpGas {
+                    outcome: FeeGasOutcome::Estimated {
+                        verification_gas_limit: "100000".to_owned(),
+                        call_gas_limit: if calls.last().is_some_and(|leg| leg.data != "0x") {
+                            "330000"
+                        } else {
+                            "300000"
+                        }
+                        .to_owned(),
+                        pre_verification_gas: "50000".to_owned(),
+                        settlement_gas: None,
+                    },
+                },
+                FeeOperation::MeasureInnerCalls { calls, .. } => Res::InnerCallsMeasured {
+                    gas: calls.iter().map(|_| None).collect(),
+                },
+                // Timers stay out: nothing here waits on a clock.
+                _ => continue,
+            };
+            pending.extend(host.resolve(effect.id, result));
+        }
+    };
+    let mut host = CoreHost::<FeePolicy>::new();
+    let pending = host.dispatch(FeeEvent::QuoteRequested {
+        chain_id: 1,
+        account: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+        deployed: false,
+        public_key_available: true,
+        tier: FeeTier::Standard,
+        calls: vec![FeeCall {
+            to: "0x2222222222222222222222222222222222222222".to_owned(),
+            value: "1000".to_owned(),
+            data: "0x".to_owned(),
+        }],
+        fee_token: None,
+        auto_fee_token: false,
+        number: Default::default(),
+        read_deployment: Some(true),
+    });
+    answer(&mut host, pending);
+    let quoted = host.view();
+    let pending = host.dispatch(FeeEvent::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    let provisional = host.view();
+    answer(&mut host, pending);
+    [quoted, provisional, host.view()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::loc::Loc;
+
+    /// The correctness batch's states draw what they are named for: the
+    /// fee row says why it failed (the chain by name, or Vela's own fault),
+    /// the confirm is held with the core's line, and a switched coin's
+    /// figure turns until it is measured.
+    #[test]
+    fn the_correctness_states_draw_their_cause() {
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let row = |state| match build(state, &s).fee {
+            FeeModel::OnChain {
+                value,
+                warning,
+                refreshing,
+                ..
+            } => (value, warning, refreshing),
+            _ => unreachable!("a transfer has a fee row"),
+        };
+        let (_, down, _) = row("cs37");
+        let (_, internal, _) = row("cs38");
+        assert!(down.as_ref().is_some_and(|line| line.contains("Ethereum")));
+        assert!(internal.is_some() && internal != down);
+        for (state, note) in [
+            ("cs37", Some(&s.note_fee_failed)),
+            ("cs38", Some(&s.note_fee_failed)),
+            ("cs39", Some(&s.note_previous_pending)),
+            ("cs40", Some(&s.note_fee_measuring)),
+            ("cs41", None),
+        ] {
+            let model = build(state, &s);
+            assert_eq!(model.confirm_note.as_ref(), note, "{state}");
+            assert_eq!(model.confirm_enabled, note.is_none(), "{state}");
+        }
+        let (value, _, refreshing) = row("cs40");
+        assert!(value.contains("USDC") && refreshing, "{value}");
+        let (value, _, refreshing) = row("cs41");
+        assert!(value.contains("USDC") && !refreshing, "{value}");
+    }
 
     /// Every scenario builds, and none of them ships an empty confirm label —
     /// the confirm is the only way to say yes, so it must always say what to.

@@ -10,6 +10,8 @@ pub mod fixtures;
 pub mod live;
 pub mod money;
 pub mod page;
+#[cfg(test)]
+mod privacy_tests;
 /// The signing panel's four machines as one journey.
 ///
 /// Unwired until the browser's ipc handler can reach the page to open one —

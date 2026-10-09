@@ -441,8 +441,9 @@ pub fn balance_detail(
 /// FR-017, owner: "需要能看到这个网络上的余额吧") — the home screen's own
 /// figures, never fetched for the picker. A network gets no figure at all
 /// rather than a made-up zero when its balance is not known (it failed, or
-/// only rate-limited), when nothing priced is held there, and when balances
-/// are hidden: the privacy mask covers every money surface.
+/// only rate-limited), and when nothing priced is held there. While balances
+/// are hidden every figure is the mask (`app::privacy`: the network picker is
+/// a masked surface, and a masked figure reads "••••" on every surface).
 #[must_use]
 pub fn network_balances(
     view: &BalanceView,
@@ -450,9 +451,6 @@ pub fn network_balances(
     money: &Money,
 ) -> std::collections::HashMap<u32, SharedString> {
     let mut sums: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
-    if view.hidden {
-        return std::collections::HashMap::new();
-    }
     for token in view.tokens.iter().filter(|token| {
         !token.spam
             && !view.failed_chain_ids.contains(&token.chain_id)
@@ -469,7 +467,14 @@ pub fn network_balances(
     sums.into_iter()
         // Half a cent is the smallest figure a person reads as money.
         .filter(|(_, usd)| *usd >= 0.005)
-        .map(|(chain_id, usd)| (chain_id, SharedString::from(money.text(usd, locale))))
+        .map(|(chain_id, usd)| {
+            let figure = if view.hidden {
+                crate::wallet::fixtures::MASK.to_owned()
+            } else {
+                money.text(usd, locale)
+            };
+            (chain_id, SharedString::from(figure))
+        })
         .collect()
 }
 
@@ -591,7 +596,13 @@ mod tests {
             );
         }
         shown.hidden = true;
-        assert!(network_balances(&shown, "en", money).is_empty());
+        let masked = network_balances(&shown, "en", money);
+        assert!(!masked.is_empty());
+        assert!(
+            masked
+                .values()
+                .all(|figure| figure.as_ref() == crate::wallet::fixtures::MASK)
+        );
     }
 
     /// A real `BalanceView` with the total substituted.
@@ -867,6 +878,7 @@ mod tests {
             dapp: None,
             subtitle: Vec::new(),
             priced: false,
+            figure_maskable: value.is_some(),
         }
     }
 
@@ -2037,6 +2049,7 @@ mod tests {
                         dapp: None,
                         subtitle: Vec::new(),
                         priced: true,
+                        figure_maskable: true,
                     },
                 }],
                 ..host.view()
@@ -2844,16 +2857,18 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
     // A grant states its allowance where a figure would be (spec 093) — the
     // core sends one only on a row that moved no money of its own.
     let allowance = item.dapp.as_ref().and_then(|dapp| dapp.allowance.as_ref());
+    // Whether this row's own figure masks is the core's one rule
+    // (`FeedItem.figure_maskable`, `app::privacy`): an amount, a batch, a
+    // capped allowance — yes; an unlimited allowance (a risk to see) or a
+    // signature with no figure (four dots would claim one) — no.
+    let masked = hidden && item.figure_maskable;
     let (amount, unit) = match allowance {
-        Some(allowance) => allowance_figure(allowance, s, hidden),
+        Some(allowance) => allowance_figure(allowance, s, masked),
         // Privacy masks the FIGURE and keeps the unit — H5's rule, and the
         // same mask the hero uses, because a leak in one surface defeats it
-        // everywhere (the core's invariant ④ on the balance side). A row with
-        // no figure has nothing to mask, and "••••" would claim one.
+        // everywhere.
         None => (
-            if moved_nothing(item) {
-                SharedString::from("")
-            } else if hidden {
+            if masked {
                 SharedString::from(crate::wallet::fixtures::MASK)
             } else {
                 amount_text(item, incoming)
@@ -3110,12 +3125,10 @@ pub(crate) fn with_decimal_mark(figure: String) -> String {
 }
 
 pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> SharedString {
-    // A dApp call that moved no coin has no figure (083 H2) — and nothing to
-    // mask either: "••••" would say there is one (083 H2 review).
-    if moved_nothing(item) {
-        return SharedString::from("");
-    }
-    if hidden {
+    // The core's one rule (`FeedItem.figure_maskable`): a dApp call that moved
+    // no coin has no figure (083 H2) — and nothing to mask either: "••••"
+    // would say there is one (083 H2 review).
+    if hidden && item.figure_maskable {
         return SharedString::from(crate::wallet::fixtures::MASK);
     }
     let amount = amount_text(item, incoming);
@@ -3124,14 +3137,6 @@ pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> S
         return amount;
     }
     SharedString::from(format!("{amount} {}", item.symbol))
-}
-
-/// A dApp's transaction that moved no coin (083 H2): the core sends no
-/// figure for it, and no surface draws one — or masks one. A multi-token
-/// batch also has no single figure, but it has a total, and privacy keeps
-/// masking that.
-pub(crate) fn moved_nothing(item: &FeedItem) -> bool {
-    item.dapp.is_some() && item.value.is_none()
 }
 
 pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {

@@ -409,6 +409,14 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
         // exactly the pre-682 answer (the blind 0.001-coin floor), so
         // desktop's behaviour is unchanged rather than half-changed.
         native_usd_floor_price: None,
+        // The relay's own floor for this row (relay `fix/held-nonce-and-floor`),
+        // verbatim — the core reads hex or decimal. An older relay sends
+        // none, and today's rule stands.
+        minimum_amount: match row.get("minimumAmount") {
+            Some(Value::String(text)) if !text.trim().is_empty() => Some(text.clone()),
+            Some(Value::Number(number)) => Some(number.to_string()),
+            _ => None,
+        },
     })
 }
 
@@ -1443,6 +1451,29 @@ mod tests {
         assert_eq!(row.usd_balance, "0");
         assert_eq!(row.usd_price, None);
         assert_eq!(row.balance, "5");
+        assert_eq!(row.minimum_amount, None, "an older relay publishes none");
+    }
+
+    /// The correctness batch, item 5: the relay's own floor for a row is
+    /// passed to the core exactly as the relay wrote it — the core, not this
+    /// shell, reads the hex.
+    #[test]
+    fn a_quote_row_carries_the_relays_minimum_verbatim() {
+        let native = json!({
+            "recipient": "0x1111111111111111111111111111111111111111",
+            "asset": "native", "balance": "0x0", "decimals": 18,
+            "symbol": "ETH", "usdPrice": "2500", "minimumAmount": "0x3e871b540c00"
+        });
+        let row = parse_quote_row(&native).unwrap_or_else(|| unreachable!("well-formed"));
+        assert_eq!(row.minimum_amount.as_deref(), Some("0x3e871b540c00"));
+        let decimal = json!({
+            "recipient": "0x1111111111111111111111111111111111111111",
+            "asset": "erc20", "feeToken": "0x2222222222222222222222222222222222222222",
+            "balance": "0x0", "decimals": 6, "symbol": "USDC", "usdPrice": "1",
+            "minimumAmount": 10000
+        });
+        let row = parse_quote_row(&decimal).unwrap_or_else(|| unreachable!("well-formed"));
+        assert_eq!(row.minimum_amount.as_deref(), Some("10000"));
     }
 
     #[test]

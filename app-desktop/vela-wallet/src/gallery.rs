@@ -44,6 +44,10 @@ pub fn gallery_enabled() -> bool {
     crate::dev_env::flag!("VELA_GALLERY")
 }
 
+/// How tall the stage is for a failure sheet: room for the tallest card (a
+/// confirmable one with the endpoint affordance) and its own scrim.
+const GALLERY_SHEET_STAGE_H: f32 = 640.;
+
 /// The address every Done fixture shows — full 42 chars; display truncates,
 /// copy does not.
 const FIXTURE_ADDRESS: &str = "0x44EEC06897ff7ab8C7f16819511A64bA168A6D33";
@@ -95,6 +99,74 @@ enum Fixture {
             vela_core::trusted_signer::launch::IntegrityLine,
         )>,
     ),
+}
+
+/// `VELA_SEND_STATE=held|went-first|fees|refused` — with `VELA_PAGE=gallery`
+/// and the send's mock confirm or receipt (`VELA_FLOW=DSD3` / `DSD4`): the
+/// confirm held for the account's previous transaction on this network (the
+/// one line under it), or the receipt of a payment the relay refused, told by
+/// its reason — another transaction went first, the fee, or the plain refusal
+/// (correctness batch item 3). The receipt is the live builder's
+/// (`flows::live::send_receipt`) over a refused send. Same env-pin family as
+/// `VELA_HANDOFF`.
+pub fn send_state_pin(
+    body: crate::flows::fixtures::FlowBody,
+    s: &crate::flows::FlowStrings,
+    wallet: &crate::wallet::WalletStrings,
+) -> crate::flows::fixtures::FlowBody {
+    use crate::flows::fixtures::{CtaState, FlowBody};
+    use vela_core::app::tx_tracker::{RefusalReason, refusal_key};
+    let Some(want) = crate::dev_env::var!("VELA_SEND_STATE") else {
+        return body;
+    };
+    let reason = match want.trim() {
+        "held" => {
+            return match body {
+                FlowBody::SendConfirm(mut confirm) => {
+                    confirm.held = Some(s.previous_pending.clone());
+                    confirm.cta_state = CtaState::Disabled;
+                    FlowBody::SendConfirm(confirm)
+                }
+                other => other,
+            };
+        }
+        "went-first" => Some(RefusalReason::NonceUsed),
+        "fees" => Some(RefusalReason::FeeBelowMarket),
+        "refused" => Some(RefusalReason::SimulationFailed),
+        _ => return body,
+    };
+    let FlowBody::SendReceipt(_) = body else {
+        return body;
+    };
+    let mut send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+    send.receipt = Some(vela_core::app::send::SendReceiptView {
+        status: vela_core::app::send::SendReceiptStatus::Failed,
+        hold_reason: (reason == Some(RefusalReason::FeeBelowMarket))
+            .then_some(vela_core::app::send::SendHoldReason::FeeRejected),
+        refusal_key: Some(refusal_key(reason).to_owned()),
+        kind: None,
+        transfers: Vec::new(),
+        coins: Vec::new(),
+        amount: "120".to_owned(),
+        usd_value: 120.0,
+        submitted_at_ms: None,
+        typical_inclusion_s: None,
+    });
+    let fee = crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+    FlowBody::SendReceipt(crate::flows::live::send_receipt(
+        &crate::flows::live::SendInputs {
+            send: &send,
+            fee: &fee,
+            s,
+            wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: crate::wallet::fixtures::WALLET_NAME,
+            identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+            speed: None,
+            relay_sent_at_ms: None,
+        },
+    ))
 }
 
 /// `VELA_HANDOFF=checking|matches|asks|refused|named` — with `VELA_PAGE=gallery`
@@ -723,6 +795,16 @@ fn entries() -> Vec<Entry> {
     sheet("incompatible", PromptKind::IncompatibleCreate, false);
     sheet("incompatible · login", PromptKind::IncompatibleLogin, false);
     sheet("recover offer", PromptKind::RecoverOffer, true);
+    sheet(
+        "registry unreachable",
+        PromptKind::RegistryUnreachable { local: false },
+        true,
+    );
+    sheet(
+        "registry unreachable · local",
+        PromptKind::RegistryUnreachable { local: true },
+        true,
+    );
     sheet("recover failed", PromptKind::RecoverFailed, false);
     sheet(
         "create failed · unknown",
@@ -1168,10 +1250,16 @@ impl GalleryView {
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);
                 prompt.details_expanded = self.details_expanded;
-                // Rendered inline rather than over a scrim: the gallery IS the
-                // backdrop, and a full-bleed dim would cover the sidebar.
+                // Rendered in the stage rather than over the window: the
+                // gallery IS the backdrop, and a full-bleed dim would cover
+                // the sidebar. The sheet centres itself in an absolute scrim,
+                // so the column it sits in needs a height of its own — with
+                // none, every card was centred on the stage's top edge and
+                // drawn with its upper half cut off.
                 div()
+                    .relative()
                     .w(px(FLOW_COLUMN_W))
+                    .h(px(GALLERY_SHEET_STAGE_H))
                     .flex()
                     .justify_center()
                     .child(outcome_sheet(
@@ -1250,6 +1338,14 @@ mod tests {
             ("create failed · no key", OutcomeKind::Unsupported),
             ("create failed · unknown", OutcomeKind::Unknown),
             ("sign-in failed", OutcomeKind::SignInFailed),
+            (
+                "registry unreachable",
+                OutcomeKind::RegistryUnreachable { local: false },
+            ),
+            (
+                "registry unreachable · local",
+                OutcomeKind::RegistryUnreachable { local: true },
+            ),
         ];
         for entry in entries() {
             let Fixture::Sheet { kind, .. } = &entry.fixture else {

@@ -116,6 +116,14 @@ pub(crate) fn pending_records(rows: &[Value]) -> Vec<TrackPendingRecord> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
                 submit_block: row.get("submitBlock").and_then(Value::as_u64),
+                // Who signed it, from the row's own `from` — so after a
+                // relaunch the tracker still knows whose nonce it holds
+                // (the in-flight hold, correctness batch item 3).
+                sender: row
+                    .get("from")
+                    .and_then(Value::as_str)
+                    .filter(|from| !from.is_empty())
+                    .map(str::to_owned),
             })
         })
         .collect()
@@ -273,6 +281,10 @@ impl Machine for TxTracker {
                             // The bundle tx the relay names while no receipt
                             // has (RA7): an explorer link, never a verdict.
                             tx_hash: answer.tx_hash,
+                            // Why the relay refused it, when it says — the
+                            // core words the refusal by it (an older relay
+                            // sends none; the core then reads the stage).
+                            rejection_reason: answer.rejection_reason,
                         },
                         None => TrackShellResult::StatusUnavailable {
                             user_op_hash: hash,
@@ -556,6 +568,24 @@ pub fn focused(cx: &mut App) {
     });
 }
 
+/// The operations holding their account's nonce, when they changed since
+/// `fed` — what a send or signing host forwards to its machine
+/// (`Event::InFlightOps`) on every tracker render. Read from the tracker's
+/// OWN view (`tx_tracker::in_flight_ops` needs each entry's `sender` and
+/// `stalled`; a view rebuilt from a shell type without them would hold
+/// nothing, or hold forever). `None`: nothing changed, nothing to tell.
+pub fn in_flight_news(
+    view: &vela_core::app::tx_tracker::TrackView,
+    fed: &mut Option<Vec<vela_core::app::tx_tracker::InFlightOp>>,
+) -> Option<Vec<vela_core::app::tx_tracker::InFlightOp>> {
+    let ops = vela_core::app::tx_tracker::in_flight_ops(view);
+    if fed.as_ref() == Some(&ops) {
+        return None;
+    }
+    *fed = Some(ops.clone());
+    Some(ops)
+}
+
 /// One operation for the tracker to follow (spec 082 RA4, ruling 8): its
 /// hash, the records it patches, and — when the submit's reply was lost —
 /// that it may have been sent and the head read before its first POST.
@@ -569,6 +599,9 @@ pub struct Handoff {
     /// RJ1): it is no longer in doubt, and a relay's `not_found` stops
     /// counting against it.
     pub admitted: bool,
+    /// The account that signed it: whose nonce it holds while in flight
+    /// (`tx_tracker::in_flight_ops`). `None` from a path that does not know.
+    pub sender: Option<String>,
 }
 
 /// A user operation is about to leave the device (the write-ahead, spec 082
@@ -593,6 +626,7 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
                 maybe_sent: handoff.maybe_sent,
                 submit_block: handoff.submit_block,
                 admitted: handoff.admitted,
+                sender: handoff.sender,
             },
             cx,
         );
@@ -654,6 +688,11 @@ mod tests {
         assert_eq!(ids, ["a", "b"]);
         assert_eq!(live[0].chain_id, 100);
         assert_eq!(live[0].submitted_at_ms, 1_700_000_000_000.0);
+        // Whose nonce it holds survives the relaunch (the in-flight hold).
+        assert_eq!(live[0].sender.as_deref(), Some("0xfrom"));
+        let mut unsigned = row("g", "pending", "0xggg", "", None);
+        unsigned["from"] = json!("");
+        assert_eq!(pending_records(&[unsigned])[0].sender, None);
     }
 
     /// Spec 082 T181: a row written for a may-have-been-sent op reads back as
@@ -909,6 +948,7 @@ mod tests {
             maybe_sent: false,
             submit_block: Some(48_487_259),
             admitted: true,
+            sender: None,
         });
         let mut receipts_by_tx = 0;
         let mut ticks = 0..5;
@@ -937,6 +977,7 @@ mod tests {
                     stage: None,
                     now_ms: now,
                     tx_hash: Some(TX.to_owned()),
+                    rejection_reason: None,
                 },
                 TrackOperation::TxReceipt {
                     chain_id,
@@ -980,6 +1021,107 @@ mod tests {
         assert_eq!(receipts_by_tx, 1, "one read of the bundle's receipt");
     }
 
+    /// Correctness batch item 3 (§3a): one in-flight hold, the core's, on
+    /// this shell's own path. A payment this device stored (its row's
+    /// `from` is who signed it) is reloaded after a relaunch and holds that
+    /// account's nonce on its chain; the send and signing hosts are told
+    /// only when the list changes (one line, nothing flickers), and ten
+    /// minutes with no word from the relay let it go — never the 24 h line,
+    /// and never a wait of this shell's own.
+    #[test]
+    fn a_stored_payment_holds_its_nonce_until_final_or_ten_minutes_still() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::tx_tracker::{IN_FLIGHT_STALL_MS, TrackLifecycle};
+        const OP: &str = "0x5ec0000000000000000000000000000000000000000000000000000000000001";
+        const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let t0 = 1_760_000_000_000.0;
+        let mut stored = row("first", "pending", OP, "", Some("send"));
+        stored["from"] = json!(ME);
+        stored["timestamp"] = json!(t0 / 1000.0);
+        let records = pending_records(&[stored]);
+        assert_eq!(records[0].sender.as_deref(), Some(ME));
+
+        let mut host = CoreHost::<TxTracker>::new();
+        // Answer whatever the tracker asks at `now`: the relay has the op
+        // queued (`word`), or says nothing at all.
+        let answer = |host: &mut CoreHost<TxTracker>,
+                      mut pending: Vec<crate::core_host::Pending<TrackOperation>>,
+                      now: f64,
+                      word: Option<TrackLifecycle>| {
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    TrackOperation::Now => TrackShellResult::Clock { now_ms: now },
+                    TrackOperation::LoadPendingTxs => TrackShellResult::RecordsLoaded {
+                        records: records.clone(),
+                        now_ms: now,
+                    },
+                    TrackOperation::PollReceipt { user_op_hash, .. } => match word {
+                        Some(_) => TrackShellResult::ReceiptPending {
+                            user_op_hash: user_op_hash.clone(),
+                            now_ms: now,
+                        },
+                        None => TrackShellResult::ReceiptUnreachable {
+                            user_op_hash: user_op_hash.clone(),
+                            now_ms: now,
+                        },
+                    },
+                    TrackOperation::PollStatus { user_op_hash, .. } => match word {
+                        Some(status) => TrackShellResult::Status {
+                            user_op_hash: user_op_hash.clone(),
+                            status,
+                            stage: None,
+                            now_ms: now,
+                            tx_hash: None,
+                            rejection_reason: None,
+                        },
+                        None => TrackShellResult::StatusUnavailable {
+                            user_op_hash: user_op_hash.clone(),
+                            now_ms: now,
+                        },
+                    },
+                    TrackOperation::UpdateTxRecords { .. } => TrackShellResult::RecordsPatched,
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+        };
+        let pending = host.dispatch(Event::AppResumed);
+        answer(&mut host, pending, t0 + 1_000.0, None);
+
+        let mut fed = None;
+        let held = in_flight_news(&host.view(), &mut fed)
+            .unwrap_or_else(|| unreachable!("the first render is news"));
+        assert_eq!(held.len(), 1, "the stored payment holds its nonce");
+        assert_eq!(held[0].sender, ME.to_lowercase());
+        assert_eq!(held[0].chain_id, 100);
+        assert_eq!(held[0].user_op_hash, OP);
+
+        // The relay has it queued, minute after minute: no news, no flicker.
+        for minute in 1..9 {
+            let now = t0 + f64::from(minute) * 60_000.0;
+            let pending = host.dispatch(Event::Tick);
+            answer(&mut host, pending, now, Some(TrackLifecycle::Queued));
+            assert_eq!(in_flight_news(&host.view(), &mut fed), None, "{minute}");
+        }
+        // Ten minutes from its submission and nothing moved: released.
+        let pending = host.dispatch(Event::Tick);
+        answer(
+            &mut host,
+            pending,
+            t0 + IN_FLIGHT_STALL_MS,
+            Some(TrackLifecycle::Queued),
+        );
+        assert_eq!(
+            in_flight_news(&host.view(), &mut fed),
+            Some(Vec::new()),
+            "the hold lets go"
+        );
+        assert!(
+            host.view().entries.iter().any(|entry| entry.polling),
+            "the tracker still follows it — only the nonce is free"
+        );
+    }
+
     /// Spec 082 RJ1: a written-ahead op proven never sent is withdrawn — the
     /// tracker forgets it and patches nothing. The write-ahead's hand-off
     /// names no record (the POST's verdict names them, 082 second review).
@@ -994,6 +1136,7 @@ mod tests {
             maybe_sent: true,
             submit_block: None,
             admitted: false,
+            sender: None,
         });
         assert_eq!(host.view().entries.len(), 1);
         let after = host.dispatch(Event::Withdrawn {

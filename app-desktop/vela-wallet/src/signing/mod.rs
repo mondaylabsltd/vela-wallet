@@ -17,6 +17,7 @@ pub mod trusted_signer;
 use gpui::SharedString;
 
 use crate::loc::Loc;
+use vela_core::app::sign_confirm::ConfirmBlock;
 
 /// Semantic weight. `Accent` is the intent sentence; the rest colour warnings.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -268,6 +269,15 @@ pub struct SigningStrings {
     /// Spec 082 RJ3: the relay refused the operation — nothing was sent, and
     /// sending it again meets the same refusal, so no "try again".
     pub refused: SharedString,
+    /// The refusal told by its reason (`TrackEntryView.refusal_key`): every
+    /// sentence the core may choose, by key.
+    pub refusals: Vec<(&'static str, SharedString)>,
+    /// The confirm's held lines the gallery draws (`ConfirmBlock::key`): the
+    /// account's previous transaction still going through, the fee being
+    /// worked out, and the fee that could not be.
+    pub note_previous_pending: SharedString,
+    pub note_fee_measuring: SharedString,
+    pub note_fee_failed: SharedString,
     /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
     pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -521,6 +531,10 @@ impl SigningStrings {
                     keys
                 }),
             refused: s("refused"),
+            refusals: crate::flows::refusal_sentences(loc),
+            note_previous_pending: block_note(loc, ConfirmBlock::PreviousPending),
+            note_fee_measuring: block_note(loc, ConfirmBlock::FeeMeasuring),
+            note_fee_failed: block_note(loc, ConfirmBlock::FeeFailed),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
@@ -562,9 +576,14 @@ impl SigningStrings {
     }
 }
 
+/// A held confirm's line, in the core's words for its block.
+fn block_note(loc: &Loc, block: ConfirmBlock) -> SharedString {
+    block.key(false).map(|key| loc.t(key)).unwrap_or_default()
+}
+
 /// Every way a fee can fail, so the sheet resolves the words for whichever
 /// the core names — the core picks the key, this only reads it once.
-const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 9] = {
+const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
     use vela_core::app::fee_policy::FeeFailure as F;
     [
         F::MissingPublicKey,
@@ -578,6 +597,8 @@ const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 9] = {
         F::ChainRead {
             rate_limited: false,
         },
+        // Issue #483: a fault inside the app — never "can't reach the chain".
+        F::Internal,
     ]
 };
 
@@ -730,6 +751,23 @@ mod tests {
     #[test]
     fn the_refusal_and_the_fee_reasons_resolve() {
         use vela_core::app::fee_policy::{FeeFailure, failure_reason_key};
+        // Every way a fee can fail is listed — a new one breaks this match
+        // first, so its words are resolved before a row needs them (issue
+        // #483's `Internal` drew a dash until it was).
+        for failure in FEE_FAILURES {
+            match failure {
+                FeeFailure::MissingPublicKey
+                | FeeFailure::FeeTokenUnavailable
+                | FeeFailure::QuoteUnavailable
+                | FeeFailure::CalculationFailed
+                | FeeFailure::EstimateFailed
+                | FeeFailure::GasQuoteTooHigh
+                | FeeFailure::ChainRead { .. }
+                | FeeFailure::WouldFail
+                | FeeFailure::Internal => {}
+            }
+        }
+        assert!(FEE_FAILURES.contains(&FeeFailure::Internal));
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         assert!(
             !s.refused.starts_with("componentsUi."),

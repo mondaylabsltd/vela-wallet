@@ -802,6 +802,14 @@ fn submit_failure(
             refused: false,
             signer: None,
         },
+        // Another operation of this account holds the nonce: the page hears
+        // the core's detail for it; the sheet may be tried again, and the
+        // core holds that while the tracker follows the first.
+        user_op::SubmitFailure::PreviousPending => SignSubmitOutcome::Failed {
+            message: user_op::PREVIOUS_PENDING.to_owned(),
+            refused: false,
+            signer: None,
+        },
         // Spec 099 R8: the passkey failed, and the core is told how.
         user_op::SubmitFailure::Signer { kind, message } => SignSubmitOutcome::Failed {
             message,

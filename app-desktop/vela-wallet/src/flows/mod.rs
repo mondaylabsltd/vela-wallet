@@ -492,6 +492,17 @@ pub struct FlowStrings {
     pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
+    /// The account's previous transaction on this network still holds its
+    /// nonce: the one line under a held confirm (`SendView.previous_pending`),
+    /// and the relay's own refusal of a second one
+    /// (`SendTxErrorKey::PreviousPending`).
+    pub previous_pending: SharedString,
+    /// "Try again" — the confirm after that refusal, which waits for the
+    /// first like any held confirm.
+    pub try_again: SharedString,
+    /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
+    /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
+    pub refusals: Vec<(&'static str, SharedString)>,
     /// Spec 102: why this account cannot sign here (`SendTxErrorKey::
     /// VenueBlocked`), the core's reason filled with its domains.
     pub venue_blocks: crate::signing::trusted_signer::VenueBlockWords,
@@ -615,7 +626,44 @@ pub struct FlowStrings {
     pub batch_import_failed_encoding: SharedString,
 }
 
+/// Every sentence the core may tell a relay's refusal in, by its key
+/// (`tx_tracker::RefusalReason::key`): the fee sentence only for a fee
+/// refusal, "another transaction went first" for a nonce already used, and
+/// the plain "the network refused it" for every other reason.
+#[must_use]
+pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
+    use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+    [REFUSED_KEY, REFUSED_FEES_KEY, REFUSED_NONCE_KEY]
+        .into_iter()
+        .map(|key| (key, loc.t(key)))
+        .collect()
+}
+
+/// The sentence for the refusal key the core chose, from `sentences`
+/// ([`refusal_sentences`]); a key this build does not know reads as the
+/// plain refusal — never the fee sentence.
+#[must_use]
+pub fn refusal_of(sentences: &[(&'static str, SharedString)], key: Option<&str>) -> SharedString {
+    let key = key.unwrap_or(vela_core::app::tx_tracker::REFUSED_KEY);
+    sentences
+        .iter()
+        .find(|(known, _)| *known == key)
+        .or_else(|| {
+            sentences
+                .iter()
+                .find(|(known, _)| *known == vela_core::app::tx_tracker::REFUSED_KEY)
+        })
+        .map(|(_, text)| text.clone())
+        .unwrap_or_default()
+}
+
 impl FlowStrings {
+    /// The sentence for a refusal, by the key the core chose.
+    #[must_use]
+    pub fn refusal(&self, key: Option<&str>) -> SharedString {
+        refusal_of(&self.refusals, key)
+    }
+
     /// The words for the History empty line the core chose
     /// (`FeedView.history_empty_key`, spec 082 RG5). The choice is the core's;
     /// this only looks the key up among the two it hands out.
@@ -861,6 +909,9 @@ impl FlowStrings {
             tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
+            previous_pending: s(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
+            try_again: s("common.tryAgain"),
+            refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             recipient_token_contract: s("send.recipientTokenContract"),

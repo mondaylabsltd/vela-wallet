@@ -103,8 +103,12 @@ fn keep<K: std::hash::Hash + Eq, T>(cache: &Mutex<Option<HashMap<K, Held<T>>>>, 
 
 /// `eth_gasPrice` ∥ the latest block's base fee ∥ the tip, raw — held 15 s,
 /// and read once for every session asking at the same moment.
-pub fn gas_signals(chain_id: u32, want_tip: bool) -> RawGasSignals {
-    if let Some(signals) = fresh(&GAS, &(chain_id, want_tip)) {
+///
+/// `read_again`: the fee machine's `fresh` — a run after a failure, which
+/// must be a real new read and never the reading held from before it
+/// (issue #483). What it reads is held as any other reading is.
+pub fn gas_signals(chain_id: u32, want_tip: bool, read_again: bool) -> RawGasSignals {
+    if !read_again && let Some(signals) = fresh(&GAS, &(chain_id, want_tip)) {
         return signals;
     }
     static IN_FLIGHT: SingleFlight<(u32, bool), RawGasSignals> = SingleFlight::new();

@@ -135,6 +135,45 @@ pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) ->
     })
 }
 
+/// The account switcher's figures: the total of every listed account the
+/// core priced, and each listed account's own (`None` where it has no figure
+/// — never $0). While the balance is hidden the core sends none
+/// (`switcher.hidden`, `balances` empty), and every figure is
+/// [`vela_core::app::privacy::MASK`] — the rows and the total alike, never
+/// the hero's pinned total overlaid (correctness batch item 2).
+#[must_use]
+pub fn switcher_figures(
+    switcher: &vela_core::app::balance_dashboard::BalanceSwitcherView,
+    accounts: &[&str],
+    currency: Option<&CurrencyView>,
+    locale: &str,
+) -> (SharedString, Vec<Option<SharedString>>) {
+    if switcher.hidden {
+        let mask = SharedString::from(vela_core::app::privacy::MASK);
+        return (
+            mask.clone(),
+            accounts.iter().map(|_| Some(mask.clone())).collect(),
+        );
+    }
+    let figure = |address: &str| {
+        switcher
+            .balances
+            .iter()
+            .find(|entry| entry.address.eq_ignore_ascii_case(address))
+            .map(|entry| entry.usd)
+    };
+    // The sum is over what is actually KNOWN — an account with no cached
+    // figure contributes nothing rather than making the sentence wait for it.
+    let known_total: f64 = accounts.iter().filter_map(|address| figure(address)).sum();
+    (
+        account_total(known_total, currency, locale),
+        accounts
+            .iter()
+            .map(|address| figure(address).map(|usd| account_total(usd, currency, locale)))
+            .collect(),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Device storage (spec 072) — the rows are the core's catalog, the numbers
 // this device's own
