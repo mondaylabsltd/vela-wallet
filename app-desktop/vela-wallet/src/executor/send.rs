@@ -39,7 +39,7 @@ use vela_core::app::send::{
     SendToken, SendTokenMeta, SendTxRecord,
 };
 use vela_core::app::{Account, KeyMethod};
-use vela_core::signing_venue::{KeyRoute, SigningVenue, VenueBlock};
+use vela_core::signing_venue::{KeyLabel, KeyRoute, SigningVenue, VenueBlock};
 use vela_core::user_op::WalletKey;
 
 use crate::diag::vlog;
@@ -102,10 +102,11 @@ pub struct SendContext {
     pub key_route: Option<KeyRoute>,
     /// The account's name: the page points the person at a passkey with it.
     pub account_name: Option<String>,
-    /// The sign-in key's own label, when it has one apart from the wallet's
-    /// name — what the hand-off card's "Confirm with …" names before it falls
-    /// back to the key's place.
-    pub key_name: Option<String>,
+    /// "Confirm with {key}" — the plan's name for the key this account signs
+    /// with (spec 102, D-17): its own label when that is not the wallet's
+    /// name, else the place it lives. The core's, never read off the record
+    /// here.
+    pub key_label: KeyLabel,
     /// The trusted page's channel (spec 071): whether this send goes to a
     /// page, and its waiting sheet. The host swaps in the channel it listens
     /// to and then points it at the venue ([`Self::follow_venue`]); the one
@@ -125,9 +126,8 @@ pub struct Handoff {
     /// The venue page; `None` exactly when [`Self::block`] is set.
     pub page: Option<String>,
     pub block: Option<VenueBlock>,
-    /// The key's own label, or `None` to name it by its place.
-    pub key_name: Option<String>,
-    pub key_place: KeyMethod,
+    /// The key it is confirmed with — the plan's `key_label`.
+    pub key_label: KeyLabel,
 }
 
 /// A key place by its wire name; `None` for anything else.
@@ -157,16 +157,6 @@ impl SendContext {
             (None, SigningVenue::Page { url }) => Some(url.clone()),
             _ => None,
         };
-        let key_name = pinned_credential
-            .as_deref()
-            .and_then(|credential| {
-                account
-                    .keys
-                    .iter()
-                    .find(|key| key.credential_id.eq_ignore_ascii_case(credential))
-            })
-            .map(|key| key.name.trim().to_owned())
-            .filter(|name| !name.is_empty() && *name != account.name.trim());
         Self {
             keys,
             key_method,
@@ -177,7 +167,7 @@ impl SendContext {
             venue_block: plan.blocked,
             key_route: plan.key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
-            key_name,
+            key_label: plan.key_label,
             trusted_signer: trusted_signer::Channel::new().0,
             clearance: Arc::new(user_op::Clearance::default()),
         }
@@ -191,8 +181,7 @@ impl SendContext {
         handoff_of(
             self.venue_page.as_deref(),
             self.venue_block.as_ref(),
-            self.key_name.as_deref(),
-            self.key_method,
+            &self.key_label,
         )
     }
 
@@ -222,8 +211,7 @@ impl SendContext {
 pub fn handoff_of(
     page: Option<&str>,
     block: Option<&VenueBlock>,
-    key_name: Option<&str>,
-    key_place: KeyMethod,
+    key_label: &KeyLabel,
 ) -> Option<Handoff> {
     if page.is_none() && block.is_none() {
         return None;
@@ -231,8 +219,7 @@ pub fn handoff_of(
     Some(Handoff {
         page: page.filter(|_| block.is_none()).map(str::to_owned),
         block: block.cloned(),
-        key_name: key_name.map(str::to_owned),
-        key_place,
+        key_label: key_label.clone(),
     })
 }
 
@@ -249,7 +236,7 @@ pub fn signer_for<'a>(
     native: SignFn<'a>,
 ) -> Signer<'a> {
     if let Some(block) = block {
-        return Signer::Unreachable { channel, block };
+        return Signer::Unreachable { block };
     }
     match page {
         Some(page) => Signer::TrustedSigner {

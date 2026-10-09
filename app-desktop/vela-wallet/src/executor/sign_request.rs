@@ -43,7 +43,7 @@ use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
 use vela_core::app::{Account, Assertion, KeyMethod};
-use vela_core::signing_venue::{KeyRoute, VenueBlock};
+use vela_core::signing_venue::{KeyLabel, KeyRoute, VenueBlock};
 use vela_core::user_op::{NOT_SENT_DAPP_DETAIL, WalletKey};
 
 use crate::diag::{short, vlog};
@@ -103,7 +103,7 @@ pub struct SignContext {
     pub venue_page: Option<String>,
     pub venue_block: Option<VenueBlock>,
     pub key_route: Option<KeyRoute>,
-    pub key_name: Option<String>,
+    pub key_label: KeyLabel,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -198,8 +198,7 @@ impl SignContext {
         crate::executor::send::handoff_of(
             self.venue_page.as_deref(),
             self.venue_block.as_ref(),
-            self.key_name.as_deref(),
-            self.key_method,
+            &self.key_label,
         )
     }
 
@@ -271,7 +270,7 @@ impl SignContext {
             venue_page: send.venue_page,
             venue_block: send.venue_block,
             key_route: send.key_route,
-            key_name: send.key_name,
+            key_label: send.key_label,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             signature_done: Arc::new(AtomicBool::new(false)),
@@ -818,6 +817,9 @@ fn submit_failure(
         },
         // Nothing signed or sent for a page that has gone (RB2).
         user_op::SubmitFailure::AskerGone => SignSubmitOutcome::AskerGone,
+        // Spec 102: this account cannot sign here. The page hears -32603;
+        // the sheet says why in the person's language.
+        user_op::SubmitFailure::VenueBlocked(block) => SignSubmitOutcome::VenueBlocked { block },
     }
 }
 

@@ -161,6 +161,11 @@ pub struct PanelActions {
     /// A relay stop's "Report this" (issue 466): the in-app reporter, seeded
     /// with the core's report as it stands at the press.
     pub notice_report: Option<Click>,
+    /// DSD3L on a trusted page (spec 102): the hand-off's "Try again" under a
+    /// refused line, and "Trust this version" under a self-hosted page's
+    /// question.
+    pub handoff_recheck: Option<Click>,
+    pub handoff_trust: Option<Click>,
     /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
     pub pick_group_rows: Vec<Click>,
     /// DSD2bL, live: each split row's own amount field and its remove — in the
@@ -485,6 +490,7 @@ pub fn render(
                 dismiss: actions.notice_dismiss,
                 report: actions.notice_report,
             },
+            (actions.handoff_recheck, actions.handoff_trust),
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -3439,6 +3445,7 @@ fn send_confirm(
     identicons: &mut IdenticonCache,
     advance: Option<Click>,
     notice_clicks: NoticeClicks,
+    (handoff_recheck, handoff_trust): (Option<Click>, Option<Click>),
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3533,7 +3540,7 @@ fn send_confirm(
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(icon_img(icons, Icon::Eye, false, theme.info_base, 16.))
+                        .child(icon_img(icons, Icon::Eye, false, theme.fg_muted, 16.))
                         .child(
                             div()
                                 .text_size(theme::text_row_title())
@@ -3543,7 +3550,11 @@ fn send_confirm(
                         ),
                 )
                 .child(crate::signing::trusted_signer::handoff_facts(
-                    theme, icons, handoff, None,
+                    theme,
+                    icons,
+                    handoff,
+                    handoff_recheck,
+                    handoff_trust,
                 )),
         );
     }

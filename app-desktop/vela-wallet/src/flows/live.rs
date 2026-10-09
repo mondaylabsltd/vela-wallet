@@ -3587,11 +3587,18 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
     }
 }
 
-/// The two error wordings the core chooses between.
+/// The error wordings the core chooses between — and, for a venue this
+/// device cannot use (spec 102), the core's reason with its domains.
 fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     send.tx_error.map(|key| match key {
         vela_core::app::send::SendTxErrorKey::Generic => s.tx_error_generic.clone(),
         vela_core::app::send::SendTxErrorKey::BundlerFund => s.tx_error_bundler_fund.clone(),
+        vela_core::app::send::SendTxErrorKey::VenueBlocked => {
+            send.tx_venue_block.as_ref().map_or_else(
+                || s.tx_error_generic.clone(),
+                |block| s.venue_blocks.say(block),
+            )
+        }
     })
 }
 
@@ -7683,8 +7690,7 @@ mod speed_tests {
         let handoff = crate::executor::send::Handoff {
             page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
             block: None,
-            key_name: None,
-            key_place: vela_core::app::KeyMethod::Hybrid,
+            key_label: vela_core::signing_venue::KeyLabel::of(None, "", "hybrid"),
         };
         let armed = |mut confirm: SendConfirm| {
             confirm.cta_state = CtaState::Enabled;

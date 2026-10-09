@@ -101,6 +101,12 @@ pub enum SubmitFailure {
         kind: FailureKind,
         message: String,
     },
+    /// Spec 102: the account's venue cannot be used here — nothing on this
+    /// device can reach its keys (`SigningPlan::blocked`). No prompt was
+    /// raised and no page opened; the core says why, in the person's
+    /// language (`SendSubmitFailure::VenueBlocked`,
+    /// `SignSubmitOutcome::VenueBlocked`).
+    VenueBlocked(VenueBlock),
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -119,6 +125,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::AskerGone => SendSubmitFailure::Other {
                 message: Some("the request was withdrawn; nothing was sent".to_owned()),
             },
+            SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
             SubmitFailure::Other(message)
             | SubmitFailure::Refused(message)
             | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
@@ -308,11 +315,9 @@ pub enum Signer<'a> {
         key_route: Option<&'a KeyRoute>,
     },
     /// Spec 102 R1: nothing on this device can reach the account's keys. No
-    /// prompt and no page; the channel says why, and the request stays open.
-    Unreachable {
-        channel: &'a Channel,
-        block: &'a VenueBlock,
-    },
+    /// prompt and no page: the submit ends `VenueBlocked`, and the core words
+    /// why.
+    Unreachable { block: &'a VenueBlock },
 }
 
 impl Signer<'_> {
@@ -358,6 +363,9 @@ impl Signer<'_> {
         keys: &[WalletKey],
         operation: Option<(&UserOperation, &[MultiSendCall])>,
     ) -> Result<Assertion, SubmitFailure> {
+        if let Self::Unreachable { block } = self {
+            return Err(SubmitFailure::VenueBlocked((*block).clone()));
+        }
         match self {
             Self::Passkey(sign) => sign(digest),
             Self::TrustedSigner {
@@ -380,9 +388,7 @@ impl Signer<'_> {
                 let request = ask.request(chain_id, safe, &allowed, *key_route, operation);
                 trusted_signer::sign(&request, page, digest, &allowed, channel)
             }
-            Self::Unreachable { channel, block } => {
-                Err(trusted_signer::unreachable(channel, (*block).clone()))
-            }
+            Self::Unreachable { .. } => unreachable!("answered above"),
         }
         .map_err(|failure| match failure.kind {
             FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
@@ -2241,12 +2247,11 @@ mod tests {
     }
 
     /// Spec 102 R1: keys nothing on this device can reach are signed by
-    /// nothing — no prompt, no page — and the request stays open with the
-    /// reason on the card.
+    /// nothing — no prompt, no page — and the submit ends `VenueBlocked`
+    /// with the reason, which the core words in the person's language
+    /// (`SendSubmitFailure::VenueBlocked`).
     #[test]
     fn keys_out_of_reach_raise_no_prompt_and_say_why() {
-        use crate::executor::trusted_signer::{NotOpened, Refusal};
-        let (channel, _changed) = Channel::new();
         let block = VenueBlock::AppCannotReach {
             domain: "sign.example.com".to_owned(),
         };
@@ -2256,10 +2261,7 @@ mod tests {
         }];
         let heard = std::cell::RefCell::new(Vec::new());
         let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
-        let mut signer = Signer::Unreachable {
-            channel: &channel,
-            block: &block,
-        };
+        let mut signer = Signer::Unreachable { block: &block };
         let refused = signer.sign(
             &[0xab; 32],
             100,
@@ -2269,10 +2271,14 @@ mod tests {
             &edges,
             &always_asked,
         );
-        assert_eq!(refused.err(), Some(SubmitFailure::PasskeyCancelled));
-        assert_eq!(channel.take_page(), None);
-        assert_eq!(channel.ended(), Some(Refusal::NotOpened));
-        assert_eq!(channel.not_opened(), Some(NotOpened::Venue(block)));
+        assert_eq!(
+            refused.err(),
+            Some(SubmitFailure::VenueBlocked(block.clone()))
+        );
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::VenueBlocked(block.clone())),
+            SendSubmitFailure::VenueBlocked { block }
+        );
     }
 
     /// A message through the Trusted Signer (spec 071): the page is told the
