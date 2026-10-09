@@ -1217,6 +1217,17 @@ sealed class SendEvent {
     data class FeeBusyChanged(val busy: Boolean) : SendEvent()
 
     /**
+     * The fee card's `FeeView.failure` is set — a failure, or the core's own
+     * re-ask after one — or no longer is: the fee machine holds no figure
+     * then. While true the confirm is held, and on the confirm page the
+     * figure kept from Continue is dropped, so the row draws the failure.
+     * Sent beside [FeeBusyChanged] when it changes ([FeeFailedWord]).
+     */
+    @Serializable
+    @SerialName("fee_failed_changed")
+    data class FeeFailedChanged(val failed: Boolean) : SendEvent()
+
+    /**
      * The fee card's coin in force (`FeeView.fee_token`, verbatim; `null` =
      * the chain's own coin), sent beside [FeeBusyChanged] whenever it differs
      * from what this send session was last told. It names the fee row's coin

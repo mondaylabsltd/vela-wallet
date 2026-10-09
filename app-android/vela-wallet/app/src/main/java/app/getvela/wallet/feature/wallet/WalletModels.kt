@@ -20,9 +20,11 @@ import androidx.compose.ui.graphics.Color
  * H11 (PR 2 note 11): a balance read that failed inside the app — the real
  * balance machine's view (`BalanceBoards`) through the live builder: the
  * fault's own sentence where the unreachable line goes, never "Can't reach
- * Ethereum".
+ * Ethereum". H12: every chain's read failed inside the app and nothing is
+ * cached — the core's `unreachable`: a skeleton and the fault's sentence,
+ * never "$0.00" or "Deposit your first asset".
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12 }
 
 @Immutable
 data class WalletHeaderModel(

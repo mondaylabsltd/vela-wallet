@@ -267,6 +267,24 @@ class BalanceMachineTest {
         assertFalse("never the chain's words: ${line?.text}", line?.text.orEmpty().contains("Ethereum"))
     }
 
+    /**
+     * Core 801b08ee1: every chain the round asked failed — here inside the
+     * app — and nothing is cached: no settled $0.00, but `unreachable`, as a
+     * fetch that threw; home's line is the fault's own sentence.
+     */
+    @Test
+    fun aRoundWhereEveryChainFailedIsUnreachableNotZero() {
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis")),
+            faultyChains = setOf(1, 100),
+        ) { _, _ -> FakeRpcTransport.body("0x14d1120d7b160000") }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.unreachable }
+        assertEquals(listOf(1, 100), view.internal_chain_ids.sorted())
+        assertEquals("componentsUi.gas.reasonInternal", view.internal_key)
+        assertTrue(view.tokens.isEmpty())
+    }
+
     /** PR 2 note 11: the whole fetch threw inside the shell — `internal`, said as the app's fault, never "can't reach". */
     @Test
     fun aFetchThatThrewInsideTheAppIsInternal() {

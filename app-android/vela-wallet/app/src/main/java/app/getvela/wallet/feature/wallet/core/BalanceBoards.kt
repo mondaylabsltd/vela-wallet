@@ -15,16 +15,27 @@ import uniffi.vela_core_uniffi.BalanceDashboardCore
  * no "Can't reach Ethereum".
  */
 object BalanceBoards {
-    fun internalFault(address: String, nowMs: Double): BalanceView {
+    /**
+     * [everyChain]: no chain answered — every read failed inside the app (a
+     * faulted pool) and nothing is cached: the core says `unreachable`, so
+     * the home draws no "$0.00" and no "Deposit your first asset", only the
+     * fault's sentence over a skeleton.
+     */
+    fun internalFault(address: String, nowMs: Double, everyChain: Boolean = false): BalanceView {
+        val failed = if (everyChain) listOf(1, 100) else listOf(1)
         val settled = BalanceShellResult.FetchSettled(
             address = address,
             pull = false,
-            tokens = listOf(
-                BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
-                BalanceToken(chain_id = 100, symbol = "USDC", name = "USDC", balance = "376.54321", decimals = 6, token_address = "0x2a22f9c3b484c3629090feed35f17ff8f88f76f0", price_usd = 1.0),
-            ),
-            failed_chain_ids = listOf(1),
-            internal_chain_ids = listOf(1),
+            tokens = if (everyChain) {
+                emptyList()
+            } else {
+                listOf(
+                    BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                    BalanceToken(chain_id = 100, symbol = "USDC", name = "USDC", balance = "376.54321", decimals = 6, token_address = "0x2a22f9c3b484c3629090feed35f17ff8f88f76f0", price_usd = 1.0),
+                )
+            },
+            failed_chain_ids = failed,
+            internal_chain_ids = failed,
             read_chain_ids = listOf(1, 100),
             now_ms = nowMs,
         )

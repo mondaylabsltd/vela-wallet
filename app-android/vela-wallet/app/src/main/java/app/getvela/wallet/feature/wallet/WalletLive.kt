@@ -120,7 +120,11 @@ object WalletLive {
                     // out, and not while the balance cannot be read at all —
                     // the web's `assetsMode`, the desktop's and the iPhone's
                     // (087 F03).
-                    view.holdings_loading || view.balance_unknown -> SectionMode.Loading
+                    // Nor while nothing could be read at all — every chain
+                    // failed, or the fetch threw, with nothing cached
+                    // (`unreachable`): "Deposit your first asset" under the
+                    // reason would be a claim nobody made (PR 2 integration).
+                    view.holdings_loading || view.balance_unknown || view.unreachable -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },
             ),

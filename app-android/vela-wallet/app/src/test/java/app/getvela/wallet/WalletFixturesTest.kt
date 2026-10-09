@@ -145,6 +145,24 @@ class WalletFixturesTest {
         assertTrue("what answered is still counted: ${model.balance.integer}", model.balance.integer?.contains("794") == true)
     }
 
+    /**
+     * H12 (PR 2 integration, core 801b08ee1): every chain's read failed inside
+     * the app and nothing is cached — the core's `unreachable`. The home draws
+     * it as a fetch that threw: a skeleton and the fault's own sentence, no
+     * "$0.00" and no "Deposit your first asset" (nobody knows that).
+     */
+    @Test
+    fun h12AnAllFailedRoundIsNoSettledZero() {
+        val s = zhStrings()
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H12, s)
+        assertEquals(WalletScreenState.H12, model.state)
+        assertEquals(BalanceStateKind.Loading, model.balance.state)
+        assertEquals("no figure at all, never $0.00", null, model.balance.integer)
+        assertEquals(s.t("componentsUi.gas.reasonInternal"), model.balance.status?.text)
+        assertEquals("never \"nothing here\" over a wallet nobody could read", SectionMode.Loading, model.assetsSection.mode)
+        assertTrue(model.assetRows.isEmpty())
+    }
+
     @Test
     fun h6IsRefreshingOnCachedTotals() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H6, zhStrings())

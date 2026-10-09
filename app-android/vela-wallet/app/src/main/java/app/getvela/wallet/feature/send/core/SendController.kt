@@ -83,6 +83,12 @@ class SendController(
     },
 ) {
 
+    /**
+     * What this send journey was last told of the fee card's failure; [open]
+     * forgets it. Declared before `init`, whose fee bridge reads it.
+     */
+    private val feeFailedWord = FeeFailedWord()
+
     private val _alert = MutableStateFlow<SendAlertKind?>(null)
 
     /** The core's refusal to print, until the screen dismisses it. */
@@ -347,6 +353,10 @@ class SendController(
                     lastBusy = view.busy
                     dispatch(SendEvent.FeeBusyChanged(view.busy))
                 }
+                // The fee card has failed (or is re-asking after a failure)
+                // and holds no figure: the confirm is held, and never opens
+                // on the figure the fee machine discarded (PR 2 integration).
+                tellFeeFailed(view.failure != null)
                 val estimate = view.fee
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
@@ -369,6 +379,11 @@ class SendController(
 
     private fun dispatch(event: SendEvent) {
         sendHost.dispatch(event, SendEvent.serializer())
+    }
+
+    /** `FeeFailedChanged` when the word changes — under its lock with the dispatch, so it never overtakes an Open. */
+    private fun tellFeeFailed(failed: Boolean) = synchronized(feeFailedWord) {
+        feeFailedWord.news(failed)?.let(::dispatch)
     }
 
     /** What this send journey was last told of the fee card's coin; [open] forgets it. */
@@ -450,6 +465,12 @@ class SendController(
                 SendEvent.Open(account = account, params = params, display = display),
                 SendEvent.serializer(),
             )
+        }
+        // A fresh journey has been told nothing of the fee card's failure:
+        // its first word goes, whatever it is — after the Open, never before.
+        synchronized(feeFailedWord) {
+            feeFailedWord.forget()
+            feeFailedWord.news(fee.value.failure != null)?.let(::dispatch)
         }
     }
 
@@ -747,6 +768,28 @@ internal class FeeTokenWord {
         if (told == said) return null
         told = said
         return SendEvent.FeeTokenChanged(feeToken)
+    }
+
+    /** A new journey: nothing told yet. */
+    fun forget() {
+        told = null
+    }
+}
+
+/**
+ * What one send journey was last told of the fee card's failure
+ * (`SendEvent.FeeFailedChanged`, from `FeeView.failure` being set): said when
+ * it changes, and a fresh journey's first word always goes. Not thread-safe:
+ * the controller holds its lock.
+ */
+internal class FeeFailedWord {
+    private var told: Boolean? = null
+
+    /** The event that tells [failed], or `null` when this journey already knows it. */
+    fun news(failed: Boolean): SendEvent.FeeFailedChanged? {
+        if (told == failed) return null
+        told = failed
+        return SendEvent.FeeFailedChanged(failed)
     }
 
     /** A new journey: nothing told yet. */
