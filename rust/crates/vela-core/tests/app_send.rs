@@ -8617,7 +8617,7 @@ fn the_tracker_s_reason_rides_the_receipt_outcome() {
 }
 
 // ---------------------------------------------------------------------------
-// PR 2 integration: note 6
+// PR 2 integration: notes 6 and 13
 // ---------------------------------------------------------------------------
 
 /// What the tracker last said is in flight is the device's, not the form's:
@@ -8639,4 +8639,56 @@ fn open_keeps_what_is_in_flight() {
     let view = sut.view();
     assert!(view.previous_pending.is_some(), "held from the first frame");
     assert!(!view.can_confirm);
+}
+
+/// The send vocabulary is the fee vocabulary (note 13): every fee failure
+/// passes through as it is, in the same wire shape, and the alert says the
+/// chain out of reach by its name and a fault inside the app as that — never
+/// "can't reach the chain" for the second.
+#[test]
+fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
+    use vela_core::app::fee_policy::{FeeFailure, REASON_INTERNAL_KEY};
+    use vela_core::app::send::{
+        ESTIMATE_CHAIN_DOWN_BODY_KEY, ESTIMATE_FAILED_BODY_KEY, ESTIMATE_FAILED_TITLE_KEY,
+    };
+    for failure in [
+        FeeFailure::MissingPublicKey,
+        FeeFailure::FeeTokenUnavailable,
+        FeeFailure::QuoteUnavailable,
+        FeeFailure::CalculationFailed,
+        FeeFailure::EstimateFailed,
+        FeeFailure::GasQuoteTooHigh,
+        FeeFailure::ChainRead { rate_limited: true },
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        },
+        FeeFailure::WouldFail,
+        FeeFailure::Internal,
+    ] {
+        let fee_json = serde_json::to_value(failure).unwrap();
+        let send: SendEstimateFailure = serde_json::from_value(fee_json.clone())
+            .unwrap_or_else(|e| panic!("{failure:?} does not pass through: {e}"));
+        assert_eq!(send, SendEstimateFailure::from(failure));
+        assert_eq!(serde_json::to_value(send).unwrap(), fee_json, "same shape");
+    }
+    assert_eq!(
+        SendEstimateFailure::ChainRead {
+            rate_limited: false
+        }
+        .body_key(),
+        ESTIMATE_CHAIN_DOWN_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Internal.body_key(),
+        REASON_INTERNAL_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::WouldFail.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Timeout.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
 }

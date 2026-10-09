@@ -67,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use super::fee_policy::{
     encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
     reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
+    FeeEstimate, FeeEstimateView, FeeFailure, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
     TEMPO_FEE_TOKEN_DECIMALS,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
@@ -829,8 +829,9 @@ pub struct SendTxRecord {
     pub submit_block: Option<u64>,
 }
 
-/// Estimate failure vocabulary — `fee_policy::FeeFailure` plus the send-side
-/// timeout; the shell maps service errors into these.
+/// Estimate failure vocabulary — every `fee_policy::FeeFailure`, in the same
+/// wire shape (a shell passes the fee machine's failure through as it is:
+/// [`From<FeeFailure>`]), plus the send-side timeout and `other`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -847,6 +848,67 @@ pub enum SendEstimateFailure {
     /// The 15s race lost (`useSendController.ts:768-770`).
     Timeout,
     Other,
+    /// A chain read the quote needs got no answer from the chain's nodes
+    /// (`FeeFailure::ChainRead`): the chain is out of reach, not Vela.
+    ChainRead {
+        rate_limited: bool,
+    },
+    /// The relay simulated it and it fails (`FeeFailure::WouldFail`).
+    WouldFail,
+    /// The read never left the app (`FeeFailure::Internal`, issue 483):
+    /// never "can't reach the chain".
+    Internal,
+}
+
+impl From<FeeFailure> for SendEstimateFailure {
+    fn from(failure: FeeFailure) -> Self {
+        match failure {
+            FeeFailure::MissingPublicKey => Self::MissingPublicKey,
+            FeeFailure::FeeTokenUnavailable => Self::FeeTokenUnavailable,
+            FeeFailure::QuoteUnavailable => Self::QuoteUnavailable,
+            FeeFailure::CalculationFailed => Self::CalculationFailed,
+            FeeFailure::EstimateFailed => Self::EstimateFailed,
+            FeeFailure::GasQuoteTooHigh => Self::GasQuoteTooHigh,
+            FeeFailure::ChainRead { rate_limited } => Self::ChainRead { rate_limited },
+            FeeFailure::WouldFail => Self::WouldFail,
+            FeeFailure::Internal => Self::Internal,
+        }
+    }
+}
+
+/// The alert's title when Continue's estimate fails ("Could not prepare
+/// transaction").
+pub const ESTIMATE_FAILED_TITLE_KEY: &str = "send.alertEstimateFailedTitle";
+/// The alert's body for a failure the words below do not name ("Could not
+/// build a valid transaction estimate. Please try again.").
+pub const ESTIMATE_FAILED_BODY_KEY: &str = "send.alertEstimateFailedBody";
+/// The body when the chain's nodes could not be reached: "Can't reach
+/// {{chain}} to price this transaction. Try again in a moment." — `{{chain}}`
+/// is the chain's name, filled by the shell.
+pub const ESTIMATE_CHAIN_DOWN_BODY_KEY: &str = "send.alertEstimateChainDownBody";
+
+impl SendEstimateFailure {
+    /// The corpus key of the alert's body for this failure (PR 2 note 13):
+    /// the chain out of reach is said as that, by the chain's name; a fault
+    /// inside the app as that (`fee_policy::REASON_INTERNAL_KEY`) — never
+    /// "can't reach the chain"; anything else keeps the general sentence.
+    /// The title is [`ESTIMATE_FAILED_TITLE_KEY`] for all of them.
+    #[must_use]
+    pub fn body_key(self) -> &'static str {
+        match self {
+            Self::ChainRead { .. } => ESTIMATE_CHAIN_DOWN_BODY_KEY,
+            Self::Internal => super::fee_policy::REASON_INTERNAL_KEY,
+            Self::MissingPublicKey
+            | Self::FeeTokenUnavailable
+            | Self::QuoteUnavailable
+            | Self::CalculationFailed
+            | Self::EstimateFailed
+            | Self::GasQuoteTooHigh
+            | Self::Timeout
+            | Self::Other
+            | Self::WouldFail => ESTIMATE_FAILED_BODY_KEY,
+        }
+    }
 }
 
 /// How a submit failed — the shell's result-mapping layer runs

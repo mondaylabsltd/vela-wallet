@@ -2810,6 +2810,22 @@ pub fn fee_failure_reason_key(failure: String) -> Option<String> {
     vela_core::app::fee_policy::failure_reason_key(fee_failure_of(&failure)?).map(str::to_owned)
 }
 
+/// The corpus key of the body of the alert a failed Continue estimate shows
+/// (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+/// its name (`{{chain}}`), a fault inside the app as that, else the general
+/// sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+/// JSON for one that carries data (`{"chain_read":{"rate_limited":false}}`);
+/// anything unreadable reads as the general sentence.
+#[uniffi::export]
+pub fn send_estimate_failure_body_key(failure: String) -> String {
+    use vela_core::app::send::SendEstimateFailure;
+    snake::<SendEstimateFailure>(&failure)
+        .or_else(|| serde_json::from_str(&failure).ok())
+        .unwrap_or(SendEstimateFailure::Other)
+        .body_key()
+        .to_owned()
+}
+
 /// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
 /// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
 /// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
@@ -3206,6 +3222,28 @@ mod tests_082 {
         .unwrap();
         assert_eq!(answer.status, "rejected");
         assert_eq!(answer.rejection_reason.as_deref(), Some("nonce_used"));
+    }
+
+    /// PR 2 note 13: the alert's body by the failure's cause, the fee's own
+    /// wire shape read as it is.
+    #[test]
+    fn the_estimate_alert_is_worded_by_its_cause() {
+        assert_eq!(
+            send_estimate_failure_body_key(r#"{"chain_read":{"rate_limited":false}}"#.into()),
+            "send.alertEstimateChainDownBody"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("internal".into()),
+            "componentsUi.gas.reasonInternal"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("timeout".into()),
+            "send.alertEstimateFailedBody"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("nonsense".into()),
+            "send.alertEstimateFailedBody"
+        );
     }
 
     fn entry(status: &str, outcome: &str, tx_hash: Option<&str>) -> String {

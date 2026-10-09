@@ -2481,6 +2481,19 @@ mod core_082_exports {
             Some("home.balanceDetailStatusRetrying")
         );
         assert_eq!(signing::fee_failure_reason_key("calculation_failed"), None);
+        // PR 2 note 13: Continue's failed estimate, worded by its cause.
+        assert_eq!(
+            signing::send_estimate_failure_body_key(r#"{"chain_read":{"rate_limited":false}}"#),
+            "send.alertEstimateChainDownBody"
+        );
+        assert_eq!(
+            signing::send_estimate_failure_body_key("internal"),
+            "componentsUi.gas.reasonInternal"
+        );
+        assert_eq!(
+            signing::send_estimate_failure_body_key("other"),
+            "send.alertEstimateFailedBody"
+        );
         assert_eq!(
             format_signed_token_amount("-1000", 18, "dot_comma").as_deref(),
             Some("\u{2212}0,000000000000001")
