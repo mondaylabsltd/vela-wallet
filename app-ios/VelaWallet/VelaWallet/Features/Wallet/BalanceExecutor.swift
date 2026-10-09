@@ -56,11 +56,13 @@ final class BalanceExecutor {
     /// worst endpoint takes.
     var onChainAssets: ([[String: Any]]) -> Void = { _ in }
 
-    /// One chain's registry facts — its stablecoins and wrapped coin — for
-    /// the core's read plan (spec 082 RE9). `nil` (the registry could not be
-    /// reached, or none is wired) reads the native coin and the person's own
-    /// tokens only: silence, never an invented list.
-    var chainFacts: @MainActor (Int) async -> ChainTokens.Facts? = { _ in nil }
+    /// One chain's registry document — its stablecoins and wrapped coin —
+    /// for the core's read plan (spec 082 RE9). No document (`absent`, or
+    /// none wired: tests, a gallery) reads the native coin and the person's
+    /// own tokens only: silence, never an invented list. An `unread` one
+    /// reads the same on a chain with a native coin, and fails a chain with
+    /// none (Tempo) as not read (`notRead`, PR 2 polish).
+    var chainDocument: @MainActor (Int) async -> ChainTokens.Document = { _ in .absent }
 
     private let store: VelaStore
     private let pool: RpcPool
@@ -108,18 +110,16 @@ final class BalanceExecutor {
             var tokens: [[String: Any]] = []
             var anyFailed = false
             for chainId in chains {
-                let facts = await chainFacts(chainId)
+                let document = await chainDocument(chainId)
                 let custom = customTokens(chainId: chainId)
                 let pool = pool
                 let deadline = chainDeadlineMs
                 // Bounded like the home's round (spec 092): one held-open
                 // connection must not keep a switcher row from settling.
                 let result = await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
-                    await TokenReads.read(
-                        address: address, chainId: chainId,
-                        tokens: custom, pool: pool,
-                        chainlinkPrices: chainlinkPrices,
-                        stables: facts?.stableRefs ?? [], wrappedNative: facts?.wrappedNative
+                    await Self.readChain(
+                        address: address, chainId: chainId, tokens: custom, pool: pool,
+                        chainlinkPrices: chainlinkPrices, document: document
                     )
                 }
                 tokens.append(contentsOf: result.tokens)
@@ -209,7 +209,7 @@ final class BalanceExecutor {
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
             for chainId in chainIds() {
                 let tokens = customTokens(chainId: chainId)
-                let facts = chainFacts
+                let documentOf = chainDocument
                 let deadline = chainDeadlineMs
                 group.addTask { [pool] in
                     // Bounded by the core's per-chain deadline (spec 092): a
@@ -219,12 +219,11 @@ final class BalanceExecutor {
                     await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
                         // The registry's stablecoins and wrapped coin join the
                         // plan (spec 082 RE9) — USDC on Base is counted.
-                        let registry = await facts(chainId)
-                        return await TokenReads.read(address: address, chainId: chainId,
-                                                     tokens: tokens, pool: pool,
-                                                     chainlinkPrices: chainlinkPrices,
-                                                     stables: registry?.stableRefs ?? [],
-                                                     wrappedNative: registry?.wrappedNative)
+                        let document = await documentOf(chainId)
+                        return await Self.readChain(
+                            address: address, chainId: chainId, tokens: tokens, pool: pool,
+                            chainlinkPrices: chainlinkPrices, document: document
+                        )
                     }
                 }
             }
@@ -275,6 +274,40 @@ final class BalanceExecutor {
             "internal_chain_ids": internalChains,
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
+    }
+
+    /// One chain's read over its registry document (spec 082 RE9): the
+    /// document's stablecoins and wrapped coin join the plan — unless the
+    /// chain was not read at all (`notRead`), which fails like a chain that
+    /// did not answer.
+    static func readChain(
+        address: String, chainId: Int, tokens: [CustomTokenRef], pool: RpcPool,
+        chainlinkPrices: [String: Double], document: ChainTokens.Document
+    ) async -> TokenReads.ChainResult {
+        if notRead(chainId: chainId, document: document, custom: tokens) {
+            return TokenReads.ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
+        }
+        let facts = document.facts
+        return await TokenReads.read(
+            address: address, chainId: chainId, tokens: tokens, pool: pool,
+            chainlinkPrices: chainlinkPrices,
+            stables: facts?.stableRefs ?? [], wrappedNative: facts?.wrappedNative
+        )
+    }
+
+    /// A chain NOT READ (PR 2 polish): its registry document could not be
+    /// read (`unread` — no answer, a 5xx, a 429, a body that is not one) and
+    /// the core's plan for it has no native slot — a chain with no native
+    /// coin, Tempo (4217 / 42431), whose registry stablecoins are what there
+    /// is to read. Reading the rest and calling it answered said "$0.00" for
+    /// a chain nobody asked about; it fails like a chain that did not answer
+    /// instead (its previous holdings carried, in the failed list). A chain
+    /// with a native coin keeps the native-only read; `absent` (a 404) is an
+    /// answer.
+    static func notRead(chainId: Int, document: ChainTokens.Document, custom: [CustomTokenRef]) -> Bool {
+        guard document.isUnread else { return false }
+        let plan = TokenReads.plan(chainId: chainId, stables: [], wrappedNative: nil, custom: custom)
+        return !plan.contains { $0.kind == "native" }
     }
 
     /// Which chains to read: the built-ins plus whatever the person added.
