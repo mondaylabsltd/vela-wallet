@@ -325,7 +325,7 @@ final class FeeStore {
         } }
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
-            publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
+            publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
             calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         )
         return await withCheckedContinuation { continuation in
@@ -353,7 +353,7 @@ final class FeeStore {
     ) {
         askInForce(Ask(
             chainId: chainId, account: account, deployed: deployed,
-            publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
+            publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
             calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         ))
     }

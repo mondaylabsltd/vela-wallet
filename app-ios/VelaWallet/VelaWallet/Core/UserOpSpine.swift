@@ -415,12 +415,17 @@ final class UserOpSpine {
             throw other("The operation could not be encoded.")
         }
         switch await relay.estimateUserOpGas(chainId: chainId, opJson: relayJson) {
-        case .estimated(let verification, let call, let preVerification):
+        case .estimated(let verification, let call, let preVerification, let settlement):
+            // The core's one rule for the limits signed: the relay's as
+            // returned (an undeployed Safe's floors; the 2M verification floor
+            // only for a relay without `settlementGas`), then the inner calls'
+            // own measured floor.
             if let applied = try? userOpApplyEstimate(
                 draft: draft,
                 verificationGasLimit: verification,
                 callGasLimit: call,
                 preVerificationGas: preVerification,
+                settlementGas: settlement,
                 floors: floors
             ) {
                 draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)

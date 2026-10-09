@@ -332,6 +332,40 @@ struct SendHoldingsAndFeesTests {
         #expect(port.counts["eth_estimateUserOperationGas"] == 2)
     }
 
+    /// The Ethereum fee fix: the relay's `settlementGas` crosses to the core
+    /// beside the limits — "0x0" or an absent field is no figure, never "0" —
+    /// and each tier's published in-band price crosses beside its cap.
+    @Test func theRelaysSettlementGasAndInBandPriceCrossToTheCore() async throws {
+        let port = StaggeredRelayPort()
+        port.staggerMs = 0
+        scriptFeeReads(port)
+        let limits: [String: Any] = [
+            "verificationGasLimit": "0x186a0", "callGasLimit": "0x1c0ce", "preVerificationGas": "0x18cf5",
+        ]
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        for (settlement, expected) in [("0x3086c", "198764"), ("0x0", nil), (nil, nil)] as [(String?, String?)] {
+            var answer = limits
+            if let settlement { answer["settlementGas"] = settlement }
+            port.rpc["eth_estimateUserOperationGas"] = .ok(answer)
+            switch await relay.estimateUserOpGas(chainId: 1, opJson: "{}") {
+            case .estimated(let verification, let call, let preVerification, let settled):
+                #expect([verification, call, preVerification] == ["100000", "114894", "101621"])
+                #expect(settled == expected, "\(settlement ?? "absent")")
+            default:
+                Issue.record("expected an estimate")
+            }
+        }
+        port.rpc["pimlico_getUserOperationGasPrice"] = .ok([
+            "standard": ["maxFeePerGas": "0x186f6d82e", "inBandFeePerGas": "0x20fbf28f2"] as [String: Any],
+            "fast": ["maxFeePerGas": "0x77359400"] as [String: Any],
+        ] as [String: Any])
+        let executor = FeeExecutor(relay: relay, accounts: ScriptedAccounts())
+        let standard = try CoreJSON.object(await executor.perform(["type": "fetch_bundler_quote", "chain_id": 1, "tier": "standard"]))
+        #expect((standard["quote"] as? [String: Any])?["in_band_fee_per_gas"] as? String == "8854120690")
+        let fast = try CoreJSON.object(await executor.perform(["type": "fetch_bundler_quote", "chain_id": 1, "tier": "fast"]))
+        #expect((fast["quote"] as? [String: Any])?["in_band_fee_per_gas"] is NSNull)
+    }
+
     /// The speed control open: the session in force and both previews price
     /// the same operation, and every relay question goes out ONCE — the three
     /// rows settle together instead of one after another.

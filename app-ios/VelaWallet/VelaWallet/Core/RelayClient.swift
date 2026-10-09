@@ -134,7 +134,16 @@ final class RelayClient {
     }
 
     enum EstimateAnswer {
-        case estimated(verificationGasLimit: String, callGasLimit: String, preVerificationGas: String)
+        /// The relay's limits, and its `settlementGas` — the gas it bills the
+        /// operation against — when it publishes one (`nil` otherwise, never
+        /// "0" in its place). The core reads both: for the fee, and for the
+        /// limits the operation is signed with.
+        case estimated(
+            verificationGasLimit: String,
+            callGasLimit: String,
+            preVerificationGas: String,
+            settlementGas: String?
+        )
         /// The relay answered and refused; the sentence is for the log and the
         /// core, never for arithmetic here.
         case refused(String)
@@ -444,6 +453,9 @@ final class RelayClient {
                 "max_priority_fee_per_gas": Self.decimalOfHex(row["maxPriorityFeePerGas"]).map { $0 as Any } ?? NSNull(),
                 "network_fee_per_gas": Self.decimalOfHex(row["networkFeePerGas"]).map { $0 as Any } ?? NSNull(),
                 "relayer_fee_per_gas": Self.decimalOfHex(row["relayerFeePerGas"]).map { $0 as Any } ?? NSNull(),
+                // The relay's published in-band price for the tier; the core
+                // pays it on the operation's settlement gas.
+                "in_band_fee_per_gas": Self.decimalOfHex(row["inBandFeePerGas"]).map { $0 as Any } ?? NSNull(),
             ]
             rows[tier] = quote
             // Never a zero cap, which the core rejects as degenerate: "the
@@ -517,7 +529,8 @@ final class RelayClient {
         return .estimated(
             verificationGasLimit: verification,
             callGasLimit: call,
-            preVerificationGas: preVerification
+            preVerificationGas: preVerification,
+            settlementGas: Self.decimalOfHex(result["settlementGas"]).flatMap { $0 == "0" ? nil : $0 }
         )
     }
 

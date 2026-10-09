@@ -70,7 +70,7 @@ struct FeeEstimateWire: Decodable, Equatable {
     /// The speed this estimate was priced at — `fast` / `standard` / `slow`
     /// (spec 069). The speed control reads it to tell one tier's figure from
     /// another's, and the submission names it on the wire.
-    var tier: String = "fast"
+    var tier: String = "standard"
     /// What this tier bids per gas now, and how high it will go — the two ends
     /// of the gas bid the speed control draws (issues 684/685), wei as decimal
     /// strings. `nil` means nothing honest to show, never 0.
@@ -92,7 +92,7 @@ struct FeeEstimateWire: Decodable, Equatable {
 
     init(
         chainId: Int, totalWei: String, maxFeePerGas: String, totalGas: String, deployed: Bool,
-        quoted: Bool, feeAsset: FeeAssetWire, feeRecipient: String?, tier: String = "fast",
+        quoted: Bool, feeAsset: FeeAssetWire, feeRecipient: String?, tier: String = "standard",
         effectiveGasPrice: String? = nil, maxGasPrice: String? = nil
     ) {
         self.chainId = chainId
@@ -118,7 +118,7 @@ struct FeeEstimateWire: Decodable, Equatable {
         quoted = try c.decode(Bool.self, forKey: .quoted)
         feeAsset = try c.decode(FeeAssetWire.self, forKey: .feeAsset)
         feeRecipient = try c.decodeIfPresent(String.self, forKey: .feeRecipient)
-        tier = try c.decodeIfPresent(String.self, forKey: .tier) ?? "fast"
+        tier = try c.decodeIfPresent(String.self, forKey: .tier) ?? "standard"
         effectiveGasPrice = try c.decodeIfPresent(String.self, forKey: .effectiveGasPrice)
         maxGasPrice = try c.decodeIfPresent(String.self, forKey: .maxGasPrice)
         networkFeePerGas = try c.decodeIfPresent(String.self, forKey: .networkFeePerGas) ?? "0"
