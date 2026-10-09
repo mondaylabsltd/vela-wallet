@@ -38,8 +38,37 @@ struct TypeRole {
     /// onboarding and the Trusted Signer's sheets among them; found 2026-09-23).
     /// A role that went through [`scaled`] says so here, and is left alone.
     var pinned: Bool = false
+    /// Whether the face's contextual alternates are on — Jakarta's one
+    /// contextual rule turns an `x` or a `-` after a digit into `×` or `−`,
+    /// so an address drawn in it read "0×14fB…" (iPhone pass 2026-10-09).
+    /// Off for a line that can carry an address or a hash ([`literal`]).
+    var contextual: Bool = true
 
     var font: Font { .custom(fontName, size: size, relativeTo: relativeTo) }
+
+    /// The same role drawn as written: contextual alternates off, so "0x"
+    /// stays "0x". For text that can carry an address, a hash or a name that
+    /// falls back to one — the rest of the app keeps the face as designed.
+    var literal: TypeRole {
+        TypeRole(
+            fontName: fontName, size: size, relativeTo: relativeTo, leading: leading,
+            pinned: pinned, contextual: false
+        )
+    }
+
+    /// The face at `size` with its contextual alternates off, Dynamic-Type
+    /// scaled for `traits` as `.custom(relativeTo:)` scales it.
+    func literalUIFont(_ traits: UITraitCollection? = nil) -> UIFont {
+        let base = UIFont(name: fontName, size: size) ?? .systemFont(ofSize: size)
+        let off = base.fontDescriptor.addingAttributes([
+            .featureSettings: [[
+                UIFontDescriptor.FeatureKey.type: kContextualAlternatesType,
+                UIFontDescriptor.FeatureKey.selector: kContextualAlternatesOffSelector,
+            ]],
+        ])
+        return UIFontMetrics(forTextStyle: relativeTo.uiStyle)
+            .scaledFont(for: UIFont(descriptor: off, size: size), compatibleWith: traits)
+    }
     /// Extra spacing SwiftUI needs to reach the token line height.
     var lineSpacing: CGFloat { size * (leading - 1) }
 
@@ -275,7 +304,8 @@ extension TypeRole {
             size: size * factor,
             relativeTo: relativeTo,
             leading: leading,
-            pinned: true
+            pinned: true,
+            contextual: contextual
         )
     }
 }
@@ -294,11 +324,21 @@ extension MonoTypeRole {
 /// subtree, and everything else inherits the one the root sets.
 private struct ScaledTypeRole: ViewModifier {
     @Environment(\.walletTextScale) private var scale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let role: TypeRole
 
     func body(content: Content) -> some View {
         let drawn = role.pinned ? role : role.scaled(scale)
-        return content.font(drawn.font).lineSpacing(drawn.lineSpacing)
+        return content.font(font(drawn)).lineSpacing(drawn.lineSpacing)
+    }
+
+    /// A `literal` role is a `UIFont` — SwiftUI's `Font` has no feature
+    /// settings — scaled here for the Dynamic Type size in force, which is
+    /// read from the environment so the line follows a change of it.
+    private func font(_ role: TypeRole) -> Font {
+        guard !role.contextual else { return role.font }
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+        return Font(role.literalUIFont(traits))
     }
 }
 

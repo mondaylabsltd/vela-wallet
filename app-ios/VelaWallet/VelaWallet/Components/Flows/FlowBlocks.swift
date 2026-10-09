@@ -442,10 +442,11 @@ struct StatusHeroView: View {
                 Text(verbatim: caption)
                     // The second caption is the one that says "you can leave" —
                     // true, useful, and not what the person is waiting to read.
+                    // A caption can be "0x14fB…eA5c · Base": drawn as written.
                     .typeRole(
                         index == 0
-                            ? Typography.body.scaled(textScale)
-                            : Typography.rowSub.scaled(textScale)
+                            ? Typography.body.literal.scaled(textScale)
+                            : Typography.rowSub.literal.scaled(textScale)
                     )
                     .foregroundStyle(index == 0 ? theme.fgMuted : theme.fgSubtle)
                     .multilineTextAlignment(.center)

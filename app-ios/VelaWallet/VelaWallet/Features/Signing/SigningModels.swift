@@ -261,6 +261,12 @@ struct SigningModel {
     /// The fee row's chevron: only where a tap opens a coin list. A failed
     /// quote is still asked again by a tap, but the refresh control says so.
     var feeChevron = true
+    /// The line whose room the fee row holds, unsaid, while the FIRST figure
+    /// is measured: "no coin can pay", when the core already knows no coin
+    /// has anything to pay from (`FeeView.nothing_to_pay_from`). The backup
+    /// sheet's confirm dropped 26 pt when that figure landed (iPhone pass
+    /// 2026-10-09); after a line has been said, `SigningFeeView` holds it.
+    var feeReserve: String?
 
     /// The wallet's own request leads with its outcome (issue #314): its
     /// first intent ("备份公钥") is the sheet's title, in the header row

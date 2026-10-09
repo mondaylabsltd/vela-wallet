@@ -555,6 +555,25 @@ pub fn font_ui() -> &'static str {
     "Plus Jakarta Sans"
 }
 
+/// The UI face's features, applied with [`font_ui`] at every page root:
+/// contextual alternates OFF. Plus Jakarta Sans has one contextual rule
+/// (`calt`): after a digit, `x` becomes `×` and `-` becomes `−` — so every
+/// address set in it read "0×14fB…", and a date's hyphens were minus signs
+/// (iPhone pass 2026-10-09; the four shells bundle the same font, byte for
+/// byte). The face has no other contextual rule to lose.
+pub fn font_ui_features() -> gpui::FontFeatures {
+    gpui::FontFeatures(std::sync::Arc::new(vec![("calt".into(), 0)]))
+}
+
+/// [`font_ui`] with [`font_ui_features`], for text measured outside an
+/// element (a shaped run's width), so it is measured as it is drawn.
+pub fn ui_font() -> gpui::Font {
+    gpui::Font {
+        features: font_ui_features(),
+        ..gpui::font(font_ui())
+    }
+}
+
 /// The four faces the app loads at startup (`main.rs`), from the repo's
 /// shared `assets/fonts/`. TTF, because gpui's font database reads TTF/OTF
 /// and not the woff2 the web ships. CJK and mono fall back to the host's
@@ -888,6 +907,42 @@ pub fn line_height_body() -> Pixels {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "0x14fB…" was drawn "0×14fB…" in the UI face (iPhone pass 2026-10-09):
+    /// its contextual alternates are off wherever the face is set — every
+    /// page root sets both, and a measured run carries them too.
+    #[test]
+    fn the_ui_face_draws_an_address_as_written() {
+        let calt = |features: &gpui::FontFeatures| {
+            features
+                .0
+                .iter()
+                .find(|(tag, _)| &**tag == "calt")
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(calt(&font_ui_features()), Some(0));
+        assert_eq!(calt(&ui_font().features), Some(0));
+        assert_eq!(&*ui_font().family, font_ui());
+        for (file, source) in [
+            ("wallet/page.rs", include_str!("wallet/page.rs")),
+            ("onboarding.rs", include_str!("onboarding.rs")),
+            ("gallery.rs", include_str!("gallery.rs")),
+            (
+                "wallet/page/menu_float.rs",
+                include_str!("wallet/page/menu_float.rs"),
+            ),
+        ] {
+            let roots = source.matches(".font_family(theme::font_ui())").count();
+            assert!(roots > 0, "{file} sets no UI face");
+            assert_eq!(
+                source
+                    .matches(".font_features(theme::font_ui_features())")
+                    .count(),
+                roots,
+                "{file}: a root sets the face without its features"
+            );
+        }
+    }
 
     /// WCAG 2.x relative luminance of an `Hsla` token.
     fn luminance(color: Hsla) -> f32 {

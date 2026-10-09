@@ -522,6 +522,7 @@ mod mac {
                 .items_start()
                 .p(px(FLOAT_PAD))
                 .font_family(theme::font_ui())
+                .font_features(theme::font_ui_features())
                 .text_color(ink)
                 // A press in the room around the card — its shadow — closes
                 // the menu, as a press anywhere else does.

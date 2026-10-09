@@ -63,7 +63,10 @@
 //!
 //! 1. On a page (the address bar of the page on screen) → that tab loads it.
 //! 2. Over the home, a PICKED site with a tab already on its origin → that
-//!    tab, resumed as it was left.
+//!    tab, resumed as it was left. An ADDRESS a tab is already on, exactly
+//!    as written → that tab, the same way: the same launch URL or deep link
+//!    handed in again is the page that tab shows (iPhone pass 2026-10-09:
+//!    every open from outside added a tab, nineteen of them on one URL).
 //! 3. Over the home, the selected tab when it is a start-page tab → it gets
 //!    its first page.
 //! 4. Otherwise a NEW tab, so a tab waiting unlit — a dApp left for the
@@ -82,8 +85,10 @@
 //! and picking it brings that tab back rather than a second copy of it. An
 //! address names a page: switching to a same-origin tab would drop the path
 //! somebody typed, and loading it there would replace the live dApp, so it
-//! takes rule 3 or 4. A page handed in from outside (deep link, scan, launch
-//! URL, the external-page sheet) is an address, and is never "on a page".
+//! takes rule 3 or 4 — unless a tab is on that very address, which drops
+//! nothing and replaces nothing: that tab is the page. A page handed in from
+//! outside (deep link, scan, launch URL, the external-page sheet) is an
+//! address, and is never "on a page".
 
 use serde::{Deserialize, Serialize};
 
@@ -344,6 +349,9 @@ pub fn open_target(
             return ExploreOpenTarget::Resume { id };
         }
     }
+    if let Some(id) = same_page(view, url) {
+        return ExploreOpenTarget::Resume { id };
+    }
     if let Some(id) = lit_tab(view, None, false) {
         return ExploreOpenTarget::Load { id };
     }
@@ -407,6 +415,14 @@ fn same_site(view: &ExploreView, url: &str) -> Option<String> {
     };
     super::explore_sites::by_recency(&view.tabs, &view.recent_tabs)
         .find(on_origin)
+        .map(|tab| tab.id.clone())
+}
+
+/// The tab already on `url`, exactly as written — most recently used first,
+/// then in strip order. An address names a page, and this tab shows it.
+fn same_page(view: &ExploreView, url: &str) -> Option<String> {
+    super::explore_sites::by_recency(&view.tabs, &view.recent_tabs)
+        .find(|tab| tab.url.as_deref() == Some(url))
         .map(|tab| tab.id.clone())
 }
 

@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.SessionCore
 
@@ -109,13 +110,23 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
      * the session the store's list again through `set_wallet` — the same
      * shape a boot restores, because `Boot` itself runs once per process.
      * Not a sign-out: nothing else on the device changes.
+     *
+     * The wallet in front afterwards is the one the person was on, not the
+     * first one (device pass 2026-10-09: leaving always landed on account 1).
+     * That is the account in front now when it is a real one — they switched
+     * to it inside the space — and otherwise [returnTo], the address that was
+     * in front when the space was entered. By address, a row's identity: a
+     * position moves when a row goes.
      */
-    suspend fun removeFixtureAccount(credentialIdHex: String) {
+    suspend fun removeFixtureAccount(credentialIdHex: String, returnTo: String? = null) {
+        val fixture = recordAddress(store.loadAccounts(), credentialIdHex)
+        val inFront = view.value.address.takeUnless { it.isBlank() || it.equals(fixture, ignoreCase = true) }
         store.removeAccount(credentialIdHex)
-        store.saveActiveIndex(0)
         val accounts = store.loadAccounts()
+        val index = indexOfAddress(accounts, inFront ?: returnTo)
+        store.saveActiveIndex(index)
         accountEstablished(
-            JSONObject().put("type", "set_wallet").put("accounts", accounts).put("active_index", 0),
+            JSONObject().put("type", "set_wallet").put("accounts", accounts).put("active_index", index),
         )
     }
 
@@ -133,4 +144,24 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     }
 
     private fun event(type: String): String = JSONObject().put("type", type).toString()
+
+    internal companion object {
+        /** The position of the record at [address] in [accounts]; 0 when it is not there (or none was given). */
+        fun indexOfAddress(accounts: JSONArray, address: String?): Int {
+            if (address.isNullOrBlank()) return 0
+            for (index in 0 until accounts.length()) {
+                val record = accounts.optJSONObject(index) ?: continue
+                if (record.optString("address").equals(address, ignoreCase = true)) return index
+            }
+            return 0
+        }
+
+        private fun recordAddress(accounts: JSONArray, id: String): String? {
+            for (index in 0 until accounts.length()) {
+                val record = accounts.optJSONObject(index) ?: continue
+                if (record.optString("id") == id) return record.optString("address")
+            }
+            return null
+        }
+    }
 }

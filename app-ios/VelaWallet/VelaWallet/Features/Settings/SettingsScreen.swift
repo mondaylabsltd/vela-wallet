@@ -185,18 +185,46 @@ struct SettingsScreen: View {
         } else {
             VStack(spacing: 0) {
                 ScrollViewReader { scroll in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            header
-                            if !model.rescue { pageBody }
+                    // A scroll view per page (`SettingsPage.keepsItsPlace`).
+                    // There was ONE for the home and every pushed page, so 网络
+                    // opened at the offset the home had been scrolled to, part
+                    // way down its list (device pass 2026-10-09). The home's
+                    // stays alive under a pushed page — hidden, untouchable,
+                    // silent — so the ‹ lands where the person left it; a
+                    // pushed page's is new each time one opens, at its top,
+                    // 网络 → 网络详情 included.
+                    ZStack(alignment: .top) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                homeHeader
+                                if !model.rescue { homeBody }
+                            }
+                            .padding(.horizontal, Tokens.Space.s24)
+                            .padding(.bottom, Tokens.Space.s32)
+                            // On the content: on the scroll view alone it
+                            // left every row readable under the page.
+                            .accessibilityHidden(!page.keepsItsPlace)
                         }
-                        .padding(.horizontal, Tokens.Space.s24)
-                        .padding(.bottom, Tokens.Space.s32)
-                    }
-                    // The viewport the slider's frame is measured in.
-                    .coordinateSpace(.named(Self.scrollSpace))
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                        sliderAnchor.viewport = height
+                        // The viewport the slider's frame is measured in.
+                        .coordinateSpace(.named(Self.scrollSpace))
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            sliderAnchor.viewport = height
+                        }
+                        .scrollIndicators(page.keepsItsPlace ? .automatic : .hidden)
+                        .opacity(page.keepsItsPlace ? 1 : 0)
+                        .allowsHitTesting(page.keepsItsPlace)
+                        .accessibilityHidden(!page.keepsItsPlace)
+                        if !page.keepsItsPlace {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    pageHeader
+                                    if !model.rescue { pageBody }
+                                }
+                                .padding(.horizontal, Tokens.Space.s24)
+                                .padding(.bottom, Tokens.Space.s32)
+                            }
+                            .id(page)
+                        }
                     }
                     // A size was chosen and the page above the slider re-laid
                     // out at it: scroll so the slider is where it was let go.
@@ -306,7 +334,8 @@ struct SettingsScreen: View {
         )
     }
 
-    @ViewBuilder private var header: some View {
+    /// The home's title — or, for SR2–SR4, the dimmed backdrop.
+    @ViewBuilder private var homeHeader: some View {
         if model.rescue {
             // SR2–SR4 are sheets over ANOTHER screen (the wallet, the send
             // flow), so the body behind them is a dimmed title rather than the
@@ -320,18 +349,26 @@ struct SettingsScreen: View {
             if let banner = model.rpcBanner {
                 RpcBannerView(banner: banner)
             }
-        } else if page == .home {
+        } else {
             Text(model.title)
                 .typeRole(Typography.display)
                 .foregroundStyle(theme.fgBase)
                 .padding(.top, Tokens.Space.s32)
                 .padding(.bottom, Tokens.Space.s16)
+        }
+    }
+
+    /// A pushed page's ‹ and title. The ‹ takes `SettingsPage.back`: the
+    /// Settings home from every pushed page, 网络详情 included.
+    @ViewBuilder private var pageHeader: some View {
+        if model.rescue {
+            homeHeader
         } else {
             SettingsNavHeader(
                 title: pageTitle.title,
                 subtitle: pageTitle.subtitle,
                 backLabel: model.closeLabel,
-                onBack: { page = .home }
+                onBack: { if let back = page.back { page = back } }
             )
         }
     }
@@ -349,9 +386,10 @@ struct SettingsScreen: View {
         }
     }
 
+    /// A pushed page's body. The home's is drawn in its own scroll view.
     @ViewBuilder private var pageBody: some View {
         switch page {
-        case .home: homeBody
+        case .home: EmptyView()
         case .networks: networksBody
         case .networkDetail:
             NetworkDetailBody(

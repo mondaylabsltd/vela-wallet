@@ -1205,6 +1205,9 @@ object SigningLive {
             refreshing = fee.busy,
             // The core's FeeMeasuring, as the gate reads it.
             measuring = fee.busy || ofAnotherTier(fee, speed),
+            // The core knows the first figure will land as "no coin can pay":
+            // its line's room is held from now (iPhone pass 2026-10-09).
+            reserve = ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS).takeIf { fee.nothing_to_pay_from },
             chevron = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->

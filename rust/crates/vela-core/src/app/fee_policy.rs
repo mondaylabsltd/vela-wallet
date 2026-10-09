@@ -2176,6 +2176,18 @@ pub struct FeeView {
     /// that predates it reads `false`.
     #[serde(default)]
     pub no_coin_pays: bool,
+    /// While the FIRST figure is measured: not one coin on offer has anything
+    /// left to pay a fee from (every row's balance, less what the operation
+    /// itself spends from it, is zero), so whatever the figure, the sheet
+    /// will say [`no_coin_pays`](Self::no_coin_pays) when it lands. A shell
+    /// holds that line's room — unsaid — from now, so the landing does not
+    /// move what is under it: the backup sheet's confirm dropped 26 pt when
+    /// its first quote landed on an account with nothing on Ethereum (iPhone
+    /// pass 2026-10-09). After a figure has landed, the shells' held line
+    /// does the same. `#[serde(default)]`: a reader that predates it reads
+    /// `false`.
+    #[serde(default)]
+    pub nothing_to_pay_from: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2364,6 +2376,13 @@ impl App for FeePolicy {
             && fee.is_some()
             && !options.is_empty()
             && options.iter().all(|option| option.short.is_some());
+        // Known before the figure: every coin's rows arrive while it is
+        // measured, and a coin with nothing to pay from is short of any fee.
+        let nothing_to_pay_from = busy
+            && failed.is_none()
+            && fee.is_none()
+            && !options.is_empty()
+            && picker_rows(model).all(|row| payable_balance(model, row) == 0);
         FeeView {
             busy,
             failed,
@@ -2373,6 +2392,7 @@ impl App for FeePolicy {
             options,
             confirm_fee_ready,
             no_coin_pays,
+            nothing_to_pay_from,
         }
     }
 }

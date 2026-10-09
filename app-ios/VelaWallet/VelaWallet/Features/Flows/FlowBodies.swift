@@ -1524,7 +1524,7 @@ struct SendConfirmBody: View {
                                         .lineLimit(1)
                                 } else {
                                     Text(verbatim: item.label)
-                                        .typeRole(Typography.body.scaled(textScale))
+                                        .typeRole(Typography.body.literal.scaled(textScale))
                                         .foregroundStyle(theme.fgBase)
                                         .lineLimit(1)
                                 }

@@ -422,7 +422,7 @@ struct StorageGroupView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: Tokens.Space.s8)
                     Text(item.meta)
-                        .typeRole(Typography.label)
+                        .typeRole(Typography.label.literal)
                         .foregroundStyle(theme.fgSubtle)
                         .lineLimit(1)
                         // The size is a number pair — "5 items · 1…" is worse

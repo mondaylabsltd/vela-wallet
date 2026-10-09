@@ -113,6 +113,13 @@ data class ActivityRowModel(
     val danger: Boolean = false,
     /** 083 F1 / spec 093: a swap's one coin back ("≈ +0.03 ETH"), drawn under the figure. */
     val received: String? = null,
+    /**
+     * A dApp row's [title] in its parts, so the verb is never the part cut:
+     * 「在 127.0.0.1:8137 合约交互」 beside an amount read 「在 127.0.0.1:8137 合约…」
+     * (the iPhone pass 2026-10-09 found it there; this row cut the same way).
+     * `null` on every other row.
+     */
+    val titlePlace: TitlePlace? = null,
 ) {
     /**
      * Whether the row has a figure to draw (087 F11). A dApp call that moved
@@ -256,3 +263,21 @@ private fun shortenAddress(address: String): String =
 
 private const val SHORT_ADDRESS_KEEP_HEAD = 6
 private const val SHORT_ADDRESS_KEEP_TAIL = 4
+
+/**
+ * A title that names a place — `history.dappRowTitle`, 「在 {{place}}
+ * {{intent}}」, "{{intent}} on {{place}}" — split around the place, in the
+ * locale's own order. The words either side are drawn whole; the place (a
+ * site's host) is the one part cut, in its middle.
+ */
+data class TitlePlace(
+    /** The words before the place, its edge spaces trimmed. */
+    val lead: String,
+    val place: String,
+    /** The words after it, its edge spaces trimmed. */
+    val trail: String,
+    /** The template had a space between the lead and the place… */
+    val gapBefore: Boolean,
+    /** …and between the place and the trail. */
+    val gapAfter: Boolean,
+)

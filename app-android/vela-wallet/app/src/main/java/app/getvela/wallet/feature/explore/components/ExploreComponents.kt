@@ -253,12 +253,17 @@ fun ExploreSearchField(
             Icon(VelaIcons.Search, null, tint = colors.fgSubtle)
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (text.isEmpty()) {
+                    // One line, cut with an ellipsis where it runs out of room,
+                    // as the iPhone's text field cuts its placeholder: clipped,
+                    // 360 dp showed "Search dApps, or type a web" with nothing
+                    // to say there was more (device pass 2026-10-09).
                     Text(
                         text = placeholder,
                         color = colors.fgSubtle,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.lg,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 BasicTextField(

@@ -363,6 +363,72 @@ mod navigation {
         );
     }
 
+    /// The same address handed in again — a launch URL, a deep link, a scan
+    /// — is the page a tab already shows: that tab, resumed as it was left,
+    /// not one more tab on it (iPhone pass 2026-10-09: nineteen identical
+    /// tabs). Exactly as written: another path, query, fragment or a missing
+    /// slash is another page, and takes the address rules; the most recently
+    /// used of two tabs on it is the one.
+    #[test]
+    fn an_address_a_tab_already_shows_resumes_that_tab() {
+        const PAGE: &str = "http://127.0.0.1:8137/";
+        let view = strip(
+            &[("t1", Some(PAGE)), ("t2", Some(UNISWAP))],
+            Some("t2"),
+            &["t2", "t1"],
+        );
+        assert_eq!(
+            open_target(&view, None, false, PAGE, ExploreOpenKind::Address),
+            resume("t1")
+        );
+        // From outside, the shell's own tab in front does not make it "on a page".
+        assert_eq!(
+            open_target(&view, Some("t2"), false, PAGE, ExploreOpenKind::Address),
+            resume("t1")
+        );
+        for other in [
+            "http://127.0.0.1:8137",
+            "http://127.0.0.1:8137/?x=1",
+            "http://127.0.0.1:8137/#a",
+            "http://127.0.0.1:8137/sign",
+        ] {
+            assert_eq!(
+                open_target(&view, None, false, other, ExploreOpenKind::Address),
+                ExploreOpenTarget::NewTab,
+                "{other}"
+            );
+        }
+        let twice = strip(
+            &[
+                ("t1", Some(PAGE)),
+                ("t2", Some(UNISWAP)),
+                ("t3", Some(PAGE)),
+            ],
+            Some("t2"),
+            &["t2", "t3", "t1"],
+        );
+        assert_eq!(
+            open_target(&twice, None, false, PAGE, ExploreOpenKind::Address),
+            resume("t3")
+        );
+        // On a page, its own bar still loads in it.
+        assert_eq!(
+            open_target(&view, Some("t2"), true, PAGE, ExploreOpenKind::Address),
+            load("t2")
+        );
+        assert_eq!(
+            open_target_json(
+                &serde_json::to_string(&view).expect("the view encodes"),
+                None,
+                false,
+                PAGE,
+                "address"
+            )
+            .as_deref(),
+            Some(r#"{"type":"resume","id":"t1"}"#)
+        );
+    }
+
     /// On a page, the address bar loads in that page, whatever was asked —
     /// the person is in it and typed over its address.
     #[test]
@@ -379,10 +445,21 @@ mod navigation {
                 "{kind:?}"
             );
         }
-        // "On a page" with no page shown is the home.
+        // "On a page" with no page shown is the home: a new tab for a page
+        // no tab is on, and the tab already on it for one that is.
+        assert_eq!(
+            open_target(
+                &view,
+                None,
+                true,
+                "https://app.uniswap.org/pools",
+                ExploreOpenKind::Address
+            ),
+            ExploreOpenTarget::NewTab
+        );
         assert_eq!(
             open_target(&view, None, true, UNISWAP, ExploreOpenKind::Address),
-            ExploreOpenTarget::NewTab
+            resume("t1")
         );
     }
 

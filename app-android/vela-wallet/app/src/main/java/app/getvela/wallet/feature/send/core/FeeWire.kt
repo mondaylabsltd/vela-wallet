@@ -324,6 +324,13 @@ data class FeeView(
      * force as though another could stand in.
      */
     val no_coin_pays: Boolean = false,
+    /**
+     * While the FIRST figure is measured, not one coin on offer has anything
+     * left to pay from: the figure will land as [no_coin_pays], and the sheet
+     * holds that line's room from now (iPhone pass 2026-10-09: the backup
+     * sheet's confirm dropped 26 pt when its first figure landed).
+     */
+    val nothing_to_pay_from: Boolean = false,
 )
 
 // -- what the machine asks for -----------------------------------------------

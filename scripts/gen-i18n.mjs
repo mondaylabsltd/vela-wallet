@@ -639,8 +639,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   CLDR categories, as `siteCount` did: the most common case, one tab,
 //   read "1 tabs open". Shells pass the count. 1789 − 1 + 4 = 1792 leaves,
 //   99 branches.
-if (PATHS.length !== 1891) fail(`expected 1891 paths (1792 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1792) fail(`expected 1792 leaf paths, got ${leafSet.size}`);
+// 1890 (device pass, 2026-10-09): + `onboarding.login.
+//   alertSignInFailedBodyAndroid` — Android's sign-in failure, "{{message}}
+//   / Make sure this device has a screen lock or fingerprint set up and try
+//   again." The shell picks the key, and `alertSignInFailedBody` names Face
+//   ID and Touch ID, an iPhone's and a Mac's words; Android had borrowed
+//   `onboarding.common.openBiometricSettings` for its second paragraph,
+//   which is a button's label (no full stop, an imperative in de/ja/ko).
+//   Each locale's screen-lock word is its `create.methodPlatformBody`'s.
+//   Its 249 bytes of `en`+`ja` put the SC-005 reduction at 85.79%, under the
+//   85.8% claimed; minus `onboarding.create.alertNotDiscoverable{Title,
+//   Body}`, read by no client — every shell says a passkey that did not sync
+//   with `onboarding.common.notDiscoverable{Title,Body}` (git grep: neither
+//   the full path nor the leaf name appears outside the corpus and the
+//   generated tables) — the room it needs, instead of a budget move. Same
+//   branches: 1792 + 1 - 2 = 1791 leaves.
+if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

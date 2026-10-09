@@ -143,7 +143,8 @@ struct SigningSheet: View {
                            speed: model.feeSpeed, onSpeed: onSpeed,
                            refresh: onRefreshFee == nil ? nil : model.feeRefresh,
                            onRefresh: onRefreshFee, chevron: model.feeChevron,
-                           measuring: model.feeRefresh?.refreshing ?? false)
+                           measuring: model.feeRefresh?.refreshing ?? false,
+                           reserve: model.feeReserve)
         }
         SigningSignerRow(label: model.signer.label, name: model.signer.name,
                          seed: model.signer.seed)

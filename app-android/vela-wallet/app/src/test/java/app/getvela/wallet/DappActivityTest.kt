@@ -816,4 +816,31 @@ class DappActivityTest {
         private fun fields(vararg pairs: Pair<String, String>) =
             JSONArray().apply { pairs.forEach { (name, type) -> put(JSONObject().put("name", name).put("type", type)) } }
     }
+
+    /**
+     * A row's title in its parts, so the verb is never the part cut: the
+     * one-line title cut its tail — 「在 127.0.0.1:8137 合约…」 — which is the
+     * verb in zh (iPhone pass 2026-10-09 found the same on the phone). In the
+     * locale's own order; the parts say the title; no place, no parts.
+     */
+    @Test
+    fun `a row's title is split around its place, verb whole`() {
+        val dapp = app.getvela.wallet.feature.wallet.core.FeedDapp(intent_term = "intentSwap", place = "127.0.0.1:8137")
+        val zhParts = WalletLive.dappTitleParts(dapp, zh)!!
+        assertEquals("在", zhParts.lead)
+        assertEquals("127.0.0.1:8137", zhParts.place)
+        assertEquals(zh.t("componentsUi.signing.intentSwap"), zhParts.trail)
+        assertTrue(zhParts.gapBefore && zhParts.gapAfter)
+        val enParts = WalletLive.dappTitleParts(dapp, en)!!
+        assertEquals(en.t("componentsUi.signing.intentSwap") + " on", enParts.lead)
+        assertEquals("", enParts.trail)
+        for ((strings, parts) in listOf(zh to zhParts, en to enParts)) {
+            assertEquals(
+                WalletLive.dappTitle(dapp, strings).replace(" ", ""),
+                (parts.lead + parts.place + parts.trail).replace(" ", ""),
+            )
+        }
+        assertEquals(null, WalletLive.dappTitleParts(dapp.copy(place = null), zh))
+    }
+
 }

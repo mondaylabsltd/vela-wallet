@@ -182,12 +182,30 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
         message = if (kind.phoneLink) {
             strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
         } else {
-            strings.t(I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY, mapOf("message" to kind.detail.orEmpty()))
+            signInFailedBody(kind.detail, strings)
         },
     )
     // Cannot happen while the core and this file agree; if a variant was added
     // in Rust and not here, say so loudly rather than showing an empty sheet.
     else -> error("unhandled prompt kind: ${kind.type}")
+}
+
+/**
+ * A failed sign-in's body, in this phone's terms: the platform's own words,
+ * then what to do about it. The corpus's sentence for iPhones and Macs
+ * (`onboarding.login.alertSignInFailedBody`) says to set up Face ID, Touch ID
+ * or a fingerprint (device pass 2026-10-09); Android's is
+ * `onboarding.login.alertSignInFailedBodyAndroid` — "{{message}} / Make sure
+ * this device has a screen lock or fingerprint set up and try again." It once
+ * borrowed `onboarding.common.openBiometricSettings` for that second
+ * paragraph, a button's label that read as one (no full stop) in de/ja/ko.
+ * With no words from the platform, the advice alone — not under two empty
+ * lines.
+ */
+internal fun signInFailedBody(detail: String?, strings: VelaStrings): String {
+    val words = detail?.takeIf { it.isNotBlank() }
+    val body = strings.t(I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY_ANDROID, mapOf("message" to words.orEmpty()))
+    return if (words == null) body.trimStart() else body
 }
 
 /**
