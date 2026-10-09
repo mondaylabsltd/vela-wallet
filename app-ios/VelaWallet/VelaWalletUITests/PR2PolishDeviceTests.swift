@@ -73,6 +73,10 @@ final class PR2PolishDeviceTests: XCTestCase {
             settle(1)
         }
         for _ in 0..<5 { swipePage(app, from: 0.3, to: 0.8) }
+        tapTab(["探索", "Explore"], in: app)
+        settle(2)
+        shoot(app, "\(label)-5-explore")
+        dump(app, "\(label)-5-explore")
         tapTab(["钱包", "Wallet"], in: app)
         settle(1)
         shoot(app, "\(label)-4-home-again")
@@ -146,10 +150,15 @@ final class PR2PolishDeviceTests: XCTestCase {
 
     func testInternalFault() throws {
         startServer()
-        let app = launchInSpace(extraArguments: ["-vela.faultPool", "1,100"])
+        // No `VELA_URL`: the launch lands on the home, which is what is read.
+        let app = launchInSpace(extraArguments: ["-vela.faultPool", "1,100"], page: false)
+        tapTab(["钱包", "Wallet"], in: app)
         settle(15)
         shoot(app, "fault-1-home")
         dump(app, "fault-1-home")
+        swipePage(app, from: 0.8, to: 0.4)
+        settle(1)
+        shoot(app, "fault-1-home-lower")
         let blamed = app.staticTexts.containing(NSPredicate(
             format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
             "暂时连不上 Ethereum", "连不上 Ethereum", "Can't reach Ethereum"
@@ -177,8 +186,9 @@ final class PR2PolishDeviceTests: XCTestCase {
         app.terminate()
 
         // The fault was the argument domain's: a plain launch reads again.
-        let healed = launchInSpace()
-        settle(10)
+        let healed = launchInSpace(page: false)
+        tapTab(["钱包", "Wallet"], in: healed)
+        settle(12)
         shoot(healed, "fault-3-healed-home")
         healed.terminate()
     }
@@ -187,82 +197,190 @@ final class PR2PolishDeviceTests: XCTestCase {
 
     func testHiddenBalance() throws {
         startServer()
-        let app = launchInSpace()
+        let app = launchInSpace(page: false)
+        tapTab(["钱包", "Wallet"], in: app)
         settle(8)
+        // The person's own setting, recorded before the walk; a re-run after
+        // a failed one starts from shown either way.
+        let keptHidden = ProcessInfo.processInfo.environment["KEPT_HIDDEN"] == "1"
+        if isHidden(app) { toggleHero(app); settle(2) }
         shoot(app, "hide-0-shown")
-        let shownHero = heroLabel(app)
-        note("hide-0-hero", shownHero ?? "nil")
+        note("hide-0-hero", heroLabel(app) ?? "nil")
 
         // On: tap the hero.
         toggleHero(app)
         settle(2)
+        XCTAssertTrue(isHidden(app), "the hero is not hidden")
         shoot(app, "hide-1-home")
         dump(app, "hide-1-home")
-        XCTAssertTrue(app.descendants(matching: .any)["显示余额"].exists
-                      || app.descendants(matching: .any)["Show balance"].exists,
-                      "the hero is not hidden")
-        swipePage(app, from: 0.8, to: 0.35)
-        settle(1)
-        shoot(app, "hide-2-home-lower")
-        dump(app, "hide-2-home-lower")
+        for page in 0..<3 {
+            swipePage(app, from: 0.8, to: 0.35)
+            settle(1)
+            shoot(app, "hide-2-home-lower-\(page)")
+            dump(app, "hide-2-home-lower-\(page)")
+        }
 
         // Holdings → a token's detail.
-        let firstAsset = app.cells.firstMatch
-        _ = firstAsset
-        if tapFirst(app, labels: ["xDAI", "USDC", "ETH"]) {
-            settle(2)
+        let holding = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "、••••、••••")).firstMatch
+        if holding.exists {
+            reachElement(holding, in: app)
+            holding.tap()
+            settle(2.5)
             shoot(app, "hide-3-token-detail")
             dump(app, "hide-3-token-detail")
-            goBack(app)
+            closeTop(app)
+        } else {
+            XCTFail("no masked holding row on the home")
         }
-        swipePage(app, from: 0.35, to: 0.85)
+        for _ in 0..<4 { swipePage(app, from: 0.35, to: 0.85) }
         settle(1)
 
         // Activity → a transfer's detail.
-        if tapFirst(app, labels: ["已发送", "Sent"]) {
-            settle(2)
+        let sent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "已发送")).firstMatch
+        if sent.exists {
+            reachElement(sent, in: app)
+            sent.tap()
+            settle(2.5)
             shoot(app, "hide-4-transfer-detail")
             dump(app, "hide-4-transfer-detail")
-            goBack(app)
+            closeTop(app)
+        } else {
+            XCTFail("no sent transfer in the activity")
         }
+        for _ in 0..<4 { swipePage(app, from: 0.35, to: 0.85) }
+        settle(1)
 
         // The account switcher: rows and total.
-        openSwitcher(app)
-        settle(2)
+        let account = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Parallel One")).firstMatch
+        if account.exists { account.tap() } else { openSwitcher(app) }
+        settle(2.5)
         shoot(app, "hide-5-switcher")
         dump(app, "hide-5-switcher")
-        dismissSheet(app)
+        closeTop(app)
 
         // Visible on purpose: Send, Receive, the signing sheet.
-        if tapFirst(app, labels: ["转账", "Send"]) {
-            settle(3)
-            shoot(app, "hide-6-send")
-            dump(app, "hide-6-send")
-            goBack(app)
-        }
-        if tapFirst(app, labels: ["收款", "Receive"]) {
-            settle(3)
-            shoot(app, "hide-7-receive")
-            dump(app, "hide-7-receive")
-            goBack(app)
-        }
+        app.buttons["转账"].firstMatch.tap()
+        settle(3)
+        shoot(app, "hide-6-send")
+        dump(app, "hide-6-send")
+        closeTop(app)
+        app.buttons["收款"].firstMatch.tap()
+        settle(3)
+        shoot(app, "hide-7-receive")
+        dump(app, "hide-7-receive")
+        closeTop(app)
+
         openExplore(app)
-        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        if !app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 10) {
+            // No resumable tab: open the page through its address.
+            app.terminate()
+            let page = launchInSpace()
+            openExplore(page)
+            XCTAssertTrue(page.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+            sheetWhileHidden(page)
+            restoreHidden(page, keptHidden)
+            return
+        }
+        sheetWhileHidden(app)
+        restoreHidden(app, keptHidden)
+    }
+
+    /// The account switcher while hidden — rows and total — and a sent
+    /// transfer's detail, each from the top of the home.
+    func testHiddenSwitcherAndTransfer() throws {
+        let app = launchInSpace(page: false)
+        tapTab(["钱包", "Wallet"], in: app)
+        settle(6)
+        let keptHidden = ProcessInfo.processInfo.environment["KEPT_HIDDEN"] == "1"
+        if !isHidden(app) { toggleHero(app); settle(2) }
+        XCTAssertTrue(isHidden(app), "the hero is not hidden")
+
+        let account = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Parallel One")).firstMatch
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "no account header")
+        account.tap()
+        settle(2.5)
+        shoot(app, "hide-5-switcher")
+        dump(app, "hide-5-switcher")
+        closeTop(app)
+        settle(1)
+
+        // The sent transfer sits below the newer rows: scroll to it.
+        let sent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "已发送")).firstMatch
+        var swipes = 0
+        while swipes < 8, !(sent.exists && sent.isHittable) {
+            swipePage(app, from: 0.75, to: 0.45)
+            settle(0.8)
+            swipes += 1
+        }
+        if sent.exists, sent.isHittable {
+            sent.tap()
+            settle(2.5)
+            shoot(app, "hide-4-transfer-detail")
+            dump(app, "hide-4-transfer-detail")
+            closeTop(app)
+        } else {
+            XCTFail("no sent transfer in the activity")
+        }
+        restoreHidden(app, keptHidden)
+    }
+
+    /// Hide balance put back to the person's own setting, and nothing else.
+    func testRestoreHidden() throws {
+        let app = launchInSpace(page: false)
+        settle(4)
+        restoreHidden(app, ProcessInfo.processInfo.environment["KEPT_HIDDEN"] == "1")
+    }
+
+    private func sheetWhileHidden(_ app: XCUIApplication) {
         connect(app)
         let reading = requestAndReadFee(app, shot: "hide-8-sheet")
         dump(app, "hide-8-sheet")
         XCTAssertTrue(reading.priced, "the sheet's fee is a figure while hidden: \(reading)")
         decline(app)
+    }
 
-        // Off again, as it was.
+    /// Hide balance back to what the person had.
+    private func restoreHidden(_ app: XCUIApplication, _ keptHidden: Bool) {
+        // Back out of any page that hides the tab bar first.
+        var backs = 0
+        while backs < 4, !app.buttons["钱包"].exists, !app.buttons["Wallet"].exists {
+            closeTop(app)
+            backs += 1
+        }
         tapTab(["钱包", "Wallet"], in: app)
         settle(2)
-        for _ in 0..<3 { swipePage(app, from: 0.3, to: 0.85) }
-        toggleHero(app)
+        for _ in 0..<4 { swipePage(app, from: 0.3, to: 0.85) }
+        if isHidden(app) != keptHidden { toggleHero(app) }
         settle(2)
-        shoot(app, "hide-9-shown-again")
-        XCTAssertFalse(app.descendants(matching: .any)["显示余额"].exists, "hide balance was not turned off")
+        shoot(app, "hide-9-restored")
+        XCTAssertEqual(isHidden(app), keptHidden, "hide balance was not put back")
         app.terminate()
+    }
+
+    private func isHidden(_ app: XCUIApplication) -> Bool {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@", "显示余额", "Show balance")
+        ).firstMatch.exists
+    }
+
+    /// Close whatever is on top: a sheet's ✕ (「关闭」), else a page's back
+    /// (「返回」), else the sheet's grabber — never a row.
+    private func closeTop(_ app: XCUIApplication) {
+        let close = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "关闭", "Close"))
+            .allElementsBoundByIndex.filter { $0.isHittable }.min { $0.frame.minY < $1.frame.minY }
+        if let close {
+            close.tap()
+            settle(1.5)
+            return
+        }
+        let back = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "返回", "Back"))
+            .allElementsBoundByIndex.first { $0.isHittable }
+        if let back {
+            back.tap()
+            settle(1.5)
+            return
+        }
+        dismissSheet(app)
     }
 
     // MARK: - Out of the space
@@ -348,12 +466,12 @@ final class PR2PolishDeviceTests: XCTestCase {
         }
     }
 
-    private func launchInSpace(extraArguments: [String] = []) -> XCUIApplication {
+    private func launchInSpace(extraArguments: [String] = [], page: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SIGNER"] = "0"
-        app.launchEnvironment["VELA_URL"] = LocalDappServer.url
+        if page { app.launchEnvironment["VELA_URL"] = LocalDappServer.url }
         app.launchArguments += extraArguments
         app.launch()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30), "not in the parallel space")
@@ -490,34 +608,6 @@ final class PR2PolishDeviceTests: XCTestCase {
         } else {
             XCTFail("no hero figure to toggle")
         }
-    }
-
-    private func tapFirst(_ app: XCUIApplication, labels: [String]) -> Bool {
-        for label in labels {
-            let element = app.staticTexts[label].firstMatch
-            if element.exists, element.isHittable {
-                element.tap()
-                return true
-            }
-            let button = app.buttons[label].firstMatch
-            if button.exists, button.isHittable {
-                button.tap()
-                return true
-            }
-        }
-        return false
-    }
-
-    private func goBack(_ app: XCUIApplication) {
-        let back = app.navigationBars.buttons.firstMatch
-        if back.exists, back.isHittable {
-            back.tap()
-        } else {
-            // The edge swipe back.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
-        }
-        settle(1.5)
     }
 
     private func openSwitcher(_ app: XCUIApplication) {
