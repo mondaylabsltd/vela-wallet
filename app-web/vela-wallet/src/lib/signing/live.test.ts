@@ -15,6 +15,8 @@ import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import { feeFailureReasonKey, feeRequoteDelayMs } from '$lib/core/kernels';
 import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
@@ -96,8 +98,30 @@ const QUOTED_FEE: FeeView = {
 	confirm_fee_ready: true,
 	no_coin_pays: false,
 	nothing_to_pay_from: false,
-	provisional: false
+	provisional: false,
+	failure: null
 };
+
+/**
+ * The failure as the core's fee view says it (`FeeFailureView::of`): its
+ * retry and its reason are the core's own kernels, so these tests read what
+ * the machine would publish. The real machine's output is pinned against the
+ * core itself in `flows/core/fee-retry.test.ts`.
+ */
+function failureOf(failed: NonNullable<FeeView['failed']>, retrying: boolean): FeeFailureView {
+	const auto = feeRequoteDelayMs(failed, 1) !== null;
+	return {
+		failure: failed,
+		reason_key: feeFailureReasonKey(failed),
+		auto_retry: auto,
+		retrying,
+		figure_key: !auto && !retrying ? 'componentsUi.gas.estimateFailed' : null,
+		footer_key:
+			auto || retrying
+				? 'componentsUi.signing.confirmBlock.feeRetrying'
+				: 'componentsUi.signing.confirmBlock.feeFailed'
+	};
+}
 
 function field(over: Partial<ClearSignField> = {}): ClearSignField {
 	return {
@@ -250,6 +274,7 @@ describe('the fee the sheet shows', () => {
 			fee: null,
 			busy: false,
 			failed: 'quote_unavailable' as const,
+			failure: failureOf('quote_unavailable', false),
 			options: [
 				{
 					symbol: 'ETH',
@@ -362,13 +387,21 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		spent_by_operation: false,
 		short: null
 	};
-	const failedWith = (failed: FeeView['failed']): FeeView => ({
+	const failedWith = (failed: NonNullable<FeeView['failed']>): FeeView => ({
 		...QUOTED_FEE,
 		fee: null,
 		busy: false,
 		failed,
 		confirm_fee_ready: false,
-		options: [ETH_OPTION]
+		options: [ETH_OPTION],
+		failure: failureOf(failed, false)
+	});
+	/** A re-ask after `failed` is out: busy, `failed` cleared, the failure kept. */
+	const retryingAfter = (failed: NonNullable<FeeView['failed']>): FeeView => ({
+		...failedWith(failed),
+		busy: true,
+		failed: null,
+		failure: failureOf(failed, true)
 	});
 
 	it('a shown fee carries the send form’s refresh, still while nothing is measuring', () => {
@@ -384,20 +417,30 @@ describe('the fee can be refreshed, and says why it failed', () => {
 	});
 
 	const NET = m.feeReasons['componentsUi.gas.reasonQuote'];
+	const RETRYING = m.confirmBlock['componentsUi.signing.confirmBlock.feeRetrying'];
+	const TAP_IT = m.confirmBlock['componentsUi.signing.confirmBlock.feeFailed'];
 
-	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
-		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
-		expect(fee).toMatchObject({
-			value: m.feeRetry,
+	it('a relay out of reach says so; the core asks again, so nothing asks for a tap (PR 2 note 1)', () => {
+		const model = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }));
+		expect(model?.fee).toMatchObject({
+			// The dash, never "Tap to retry" while the core retries by itself.
+			value: '—',
 			warning: NET,
+			// A tap still asks at once.
 			tappable: true,
 			// One coin: a tap asks again but opens no list, so no chevron.
 			chevron: false,
-			refreshLabel: m.feeRefresh
+			refreshLabel: m.feeRefresh,
+			refreshing: false
 		});
+		// The footer says the same thing: retrying — not "tap it".
+		expect(model?.confirm.enabled).toBe(false);
+		expect(model?.confirm.note).toBe(RETRYING);
+		expect(RETRYING).toBeTruthy();
+		expect(RETRYING).not.toBe(TAP_IT);
 	});
 
-	it('every failure a retry can clear gets its own sentence; the ones it cannot, none', () => {
+	it('every failure a retry can clear gets its own sentence; the ones it cannot, none — and a tap', () => {
 		// The core's schedule (`requote_delay_ms`) decides the retry; the core's
 		// key says which failure it was — never "check your connection" over a
 		// simulation the relay did not answer (Arbitrum, 2026-10-03).
@@ -410,27 +453,37 @@ describe('the fee can be refreshed, and says why it failed', () => {
 			const warning = m.feeReasons[key];
 			expect(warning, key).toBeTruthy();
 			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
+				value: '—',
 				warning
 			});
 		}
+		// Only a tap asks again: the row says so, and so does the footer.
 		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {
-			const fee = buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee;
-			expect(fee, failed).toMatchObject({ value: m.feeRetry, tappable: true });
+			const model = buildSigningModel(inputs({ fee: failedWith(failed) }));
+			expect(model?.fee, failed).toMatchObject({ value: m.feeRetry, tappable: true });
+			const fee = model?.fee;
 			expect(fee && 'warning' in fee ? fee.warning : undefined, failed).toBeUndefined();
+			expect(model?.confirm.note, failed).toBe(TAP_IT);
 		}
 	});
 
-	it('while the sheet asks again the reason is not said, but its line keeps its height (G47)', () => {
-		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
-		const again = buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee;
-		expect(again).toMatchObject({ value: m.feeEstimating, warningReserved: NET });
-		expect(again && 'warning' in again ? again.warning : undefined).toBeUndefined();
+	it('while the core asks again the reason stays, beside the turning sign — nothing flips (G47)', () => {
+		const failed = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }));
+		const again = buildSigningModel(inputs({ fee: retryingAfter('quote_unavailable') }));
+		// Never "estimating" in its place, and the same reason line, said.
+		expect(again?.fee).toMatchObject({ value: '—', warning: NET, refreshing: true });
+		expect(again?.fee).not.toMatchObject({ value: m.feeEstimating });
+		// The footer keeps its line through the re-ask too.
+		expect(again?.confirm.note).toBe(RETRYING);
+		expect(again?.confirm.note).toBe(failed?.confirm.note);
 		// A first measurement, with no failure behind it, says nothing yet.
-		const first = buildSigningModel(inputs({ fee: asking, feeFailing: null }))?.fee;
+		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
+		const first = buildSigningModel(inputs({ fee: asking }))?.fee;
+		expect(first).toMatchObject({ value: m.feeEstimating });
 		expect((first as { warning?: string } | undefined)?.warning).toBeUndefined();
 		expect((first as { warningReserved?: string } | undefined)?.warningReserved).toBeUndefined();
 		// The answer: a quote, and no sentence.
-		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
+		const answered = buildSigningModel(inputs())?.fee;
 		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
 	});
 
@@ -445,12 +498,14 @@ describe('the fee can be refreshed, and says why it failed', () => {
 			confirm_fee_ready: false,
 			nothing_to_pay_from: true
 		};
-		const held = buildSigningModel(inputs({ fee: first, feeFailing: null }))?.fee;
+		const held = buildSigningModel(inputs({ fee: first }))?.fee;
 		expect(held).toMatchObject({ value: m.feeEstimating, warningReserved: m.feeNoCoinPays });
 		expect(held && 'warning' in held ? held.warning : undefined).toBeUndefined();
-		// A failure being asked again keeps its own reason first (G47).
-		const failing = buildSigningModel(inputs({ fee: first, feeFailing: 'quote_unavailable' }))?.fee;
-		expect(failing).toMatchObject({ warningReserved: NET });
+		// A failure being asked again keeps its own reason, said (G47).
+		const failing = buildSigningModel(
+			inputs({ fee: { ...retryingAfter('quote_unavailable'), nothing_to_pay_from: true } })
+		)?.fee;
+		expect(failing).toMatchObject({ warning: NET });
 	});
 
 	it('a chain node, not Vela, is named when the chain read failed (RJ13, G48)', () => {
@@ -474,18 +529,17 @@ describe('the fee can be refreshed, and says why it failed', () => {
 	});
 
 	it('a fault inside Vela is said as that — never "can’t reach the chain" (issue 483)', () => {
-		const inside = buildSigningModel(inputs({ fee: failedWith('internal') }))?.fee;
-		expect(inside).toMatchObject({
-			value: m.feeRetry,
+		const inside = buildSigningModel(inputs({ fee: failedWith('internal') }));
+		expect(inside?.fee).toMatchObject({
+			value: '—',
 			tappable: true,
 			warning: m.feeReasons['componentsUi.gas.reasonInternal']
 		});
-		const words = inside && 'warning' in inside ? (inside.warning ?? '') : '';
+		const words = inside?.fee && 'warning' in inside.fee ? (inside.fee.warning ?? '') : '';
 		expect(words).not.toContain('Ethereum');
-		// The footer names the same cause: the core's gate says the fee failed.
-		const confirm = buildSigningModel(inputs({ fee: failedWith('internal') }))?.confirm;
-		expect(confirm?.enabled).toBe(false);
-		expect(confirm?.note).toBe(m.confirmBlock['componentsUi.signing.confirmBlock.feeFailed']);
+		// The footer names the same state: the core retries it by itself.
+		expect(inside?.confirm.enabled).toBe(false);
+		expect(inside?.confirm.note).toBe(RETRYING);
 	});
 
 	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {

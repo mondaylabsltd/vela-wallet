@@ -44,14 +44,8 @@
 	} from '$lib/signing/dapp-receipt';
 	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
-	import {
-		feeRequoteDelayMs,
-		feeRequoteTimeoutMs,
-		landingPace,
-		typicalInclusionSeconds
-	} from '$lib/core/kernels';
-	import { FeeRequoteTimer, heldFeeFailure } from '$lib/signing/fee-requote';
-	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+	import { landingPace, typicalInclusionSeconds } from '$lib/core/kernels';
+	import { FeeFailureLog } from '$lib/signing/fee-failure-log';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
@@ -394,8 +388,15 @@
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
-			// The request went: its one-shot speed goes with it.
-			if (quotedFor !== '') speedControl.reset();
+			// The request went: its one-shot speed goes with it — and so does
+			// its fee session (PR 2 note 1). The core asks a failed fee again by
+			// itself, on the timer this session answers; a sheet that has gone
+			// must not go on asking, so the session ends here and the next
+			// request starts a new one.
+			if (quotedFor !== '') {
+				speedControl.reset();
+				untrack(() => fee.dispose());
+			}
 			quotedFor = '';
 			return;
 		}
@@ -441,56 +442,28 @@
 	});
 
 	/**
-	 * Spec 079: a quote that failed for a reason that can pass (the relay out
-	 * of reach, a busy estimate) is asked again by itself, on the core's
-	 * schedule — while the sheet is up, for THIS request's fee, and nothing has
-	 * been approved or answered. On the Xiaomi the row said "点击重试" with the
-	 * relay down and stayed that way after it came back.
-	 */
-	/**
 	 * The fee in force, as the core says it (issue 483): an account the chain
 	 * could not be read for is the fee's own failure in its view —
 	 * `chain_read`, or `internal` when the read never left the app — so the
 	 * row, the footer and the retry all name the same cause, with nothing
 	 * laid over the view here.
+	 *
+	 * PR 2 note 1: the core asks a failed fee again by itself (`start_ttl`,
+	 * 3 s, 6 s, then every 8 s — answered by the fee session's own timer), and
+	 * its view says the failure once for the row and the footer
+	 * (`FeeView.failure`), kept through the re-ask. Nothing here schedules a
+	 * re-quote or holds a failure of its own.
 	 */
 	const feeShown = $derived(speedControl.feeInForce);
-	const requoter = new FeeRequoteTimer({
-		delayMs: feeRequoteDelayMs,
-		requote: () => speedControl.refresh(),
-		// Spec 082 RJ12: each automatic re-ask is bounded, and logged per chain.
-		timeoutMs: feeRequoteTimeoutMs,
-		chainId: () => untrack(() => signView.request?.chain_id ?? null)
-	});
+	/** Every failed run and every recovery is a `fee:` line (spec 082 G61). */
+	const feeFailures = new FeeFailureLog();
 	$effect(() => {
 		const view = feeShown;
-		const request = signView.request;
-		const open =
-			request !== null &&
-			signView.surface === 'sheet' &&
-			// This request's own quote — never the last request's failure
-			// left in the session (a message has no fee to ask about).
-			quotedFor === request.id &&
-			!signView.is_signing &&
-			!signView.is_submitting &&
-			signView.error === null &&
-			signView.blocked === null;
-		untrack(() => requoter.observe(view, open));
-	});
-	onMount(() => () => requoter.stop());
-	/**
-	 * The failure the row keeps saying while a re-ask is out
-	 * (`heldFeeFailure`) — for this request only: the last request's failure
-	 * is not carried onto the next one's "estimating".
-	 */
-	let feeFailing = $state<FeeFailure | null>(null);
-	let feeFailingFor = '';
-	$effect(() => {
-		const view = feeShown;
-		const id = signView.request?.id ?? '';
-		const previous = id === feeFailingFor ? untrack(() => feeFailing) : null;
-		feeFailingFor = id;
-		feeFailing = heldFeeFailure(previous, view);
+		const request = signView.request ?? null;
+		// This request's own quote — never the last request's failure left in
+		// the session (a message has no fee to ask about).
+		const mine = request !== null && signView.surface !== 'hidden' && quotedFor === request.id;
+		untrack(() => feeFailures.observe(mine ? view : null, request?.chain_id ?? null));
 	});
 
 	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
@@ -507,7 +480,6 @@
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
 			fee: feeShown,
-			feeFailing,
 			progress: signRequest.progress,
 			feeOpen,
 			speed: {
@@ -610,10 +582,14 @@
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {
-			// Failed → ask again. More than one coin → open the list, here in the
-			// sheet. Otherwise the host's own surface, if it has one.
-			if (feeShown.failed) fee.requote();
-			else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
+			// Failed → ask again, at once (the core drops its own pending re-ask
+			// with the attempt this moves on). More than one coin → open the
+			// list, here in the sheet. Otherwise the host's own surface, if any.
+			// While a re-ask is out (`retrying`), it is the answer awaited: a
+			// second tap asks nothing.
+			if (feeShown.failure) {
+				if (!feeShown.busy) fee.requote();
+			} else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
 			else onfee();
 		}}
 		onfeepick={(id) => {

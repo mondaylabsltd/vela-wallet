@@ -33,6 +33,7 @@ import { invalidateFeeSignals, type TransactionFeeEstimate } from '$lib/services
 import { resolvedFormatKeys } from '$lib/services/locale-format';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
+import { publicKeyShouldVanish } from '$lib/services/fault-injection';
 
 /**
  * The tier a request that names none is priced at: the core's own factory
@@ -54,7 +55,8 @@ export const IDLE_FEE_VIEW: FeeView = {
 	confirm_fee_ready: false,
 	no_coin_pays: false,
 	nothing_to_pay_from: false,
-	provisional: false
+	provisional: false,
+	failure: null
 };
 
 export interface FeeQuoteRequest {
@@ -119,8 +121,26 @@ export type FeeQuoteOutcome =
  * The core could not be loaded for this request: nothing was priced, and the
  * reason is Vela's own (`FeeFailure::Internal`) — said in the fee's words,
  * the confirm shut, the retry wired.
+ *
+ * The one failure the core cannot say itself (PR 2 note 1): with no core
+ * there is no machine to ask again on its schedule, so nothing here claims
+ * it is retrying — a tap is the one way (`requote` loads the core again).
+ * The words are the core's own for that case (`FeeFailureView::of` with no
+ * automatic retry): "Tap to retry" on the row, "Tap it to retry" under the
+ * confirm, and the internal reason line.
  */
-const CORE_LOST_VIEW: FeeView = { ...IDLE_FEE_VIEW, failed: 'internal' };
+const CORE_LOST_VIEW: FeeView = {
+	...IDLE_FEE_VIEW,
+	failed: 'internal',
+	failure: {
+		failure: 'internal',
+		reason_key: 'componentsUi.gas.reasonInternal',
+		auto_retry: false,
+		retrying: false,
+		figure_key: 'componentsUi.gas.estimateFailed',
+		footer_key: 'componentsUi.signing.confirmBlock.feeFailed'
+	}
+};
 
 /**
  * Which sessions have had `start` called. The shared effect loop draws a real
@@ -293,7 +313,9 @@ export class FeeQuote {
 		const seq = ++this.#seq;
 		this.#lastRequest = request;
 		this.#generation += 1;
-		this.#publicKey = request.publicKeyHex;
+		// The dev/e2e fault switch (`vela.forgetPublicKey()`): asked as if no
+		// key were known — the tap-only failure, reachable for a screenshot.
+		this.#publicKey = publicKeyShouldVanish() ? undefined : request.publicKeyHex;
 		this.asked = true;
 		// Settle the previous caller BEFORE anything else: the dispatch below
 		// supersedes its run inside the core, so its promise can never be
@@ -626,8 +648,8 @@ export class FeeQuote {
 	 * One masking point, so no consumer has to remember: a view that answers a
 	 * superseded question is not published at all. A request the core could
 	 * not even be loaded for is Vela's own failure (`internal`) — said, and
-	 * asked again by the refresh and the timer — never an idle row over an
-	 * open confirm.
+	 * asked again by a tap (there is no machine to retry it by itself) —
+	 * never an idle row over an open confirm.
 	 */
 	#publish(): void {
 		this.view = this.#coreLost ? CORE_LOST_VIEW : this.#raw;

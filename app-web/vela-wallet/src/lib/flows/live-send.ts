@@ -39,6 +39,8 @@ import {
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
+import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
+import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
@@ -282,8 +284,59 @@ function feeRowMark(coin: SendFeeCoin | null, template: FeeRowModel): TokenMarkM
 	return tokenMarkFor(coin.chain_id, coin.symbol, coin.contract);
 }
 
+/**
+ * A failed fee's words, as the core says them (`FeeView.failure`, PR 2 note
+ * 1): the row's figure — "Tap to retry" only when a tap is the one way
+ * (`figure_key`), else the dash — and the reason under it, by the core's key
+ * (`{{chain}}`: the form's chain). Copy is the corpus's only: a key this build
+ * does not carry draws the dash, or no line, never a dotted path.
+ */
+export function feeFailureWords(
+	failure: FeeFailureView,
+	chainId: number | null,
+	m: WalletFlowMessages
+): { figure: string; reason: string | undefined } {
+	const words = m as Readonly<Record<string, string | undefined>>;
+	const figure = failure.figure_key === null ? '—' : (words[failure.figure_key] ?? '—');
+	const reasonWords = failure.reason_key === null ? undefined : words[failure.reason_key];
+	const reason =
+		reasonWords === undefined
+			? undefined
+			: fill(reasonWords, { chain: chainId === null ? '' : chainName(chainId) });
+	return { figure, reason };
+}
+
+/** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
+function formChainOf(send: SendView): number | null {
+	return send.selected_token?.chain_id ?? send.multi_chain_id ?? null;
+}
+
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
+	// PR 2 note 1: the fee failed — said once by the core for this row and
+	// the line under the confirm, and kept through the re-ask it makes by
+	// itself. Nothing in hand is drawn over it: the send machine may still
+	// hold the last figure, and a figure the fee machine could not stand by
+	// is not one to show beside a reason it failed.
+	const failure = fee.failure;
+	if (failure) {
+		const words = feeFailureWords(failure, formChainOf(send), m);
+		return {
+			label: m['componentsUi.gas.networkFee'],
+			mark: feeRowMark(send.fee_coin, template),
+			value: words.figure,
+			valueFiat: undefined,
+			openLabel: template.openLabel,
+			refreshLabel: m['send.feeRefresh'],
+			// The measuring sign turns while a re-ask is out — the core's own,
+			// or a tap's — beside the reason it keeps.
+			refreshing: fee.busy || failure.retrying,
+			// In the line the row keeps for its note, so nothing below moves.
+			reason: words.reason,
+			// A tap on the row asks again at once (`requote`).
+			retries: true
+		};
+	}
 	const inHand = send.fee ?? fee.fee;
 	// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
 	//
@@ -861,7 +914,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the most that can be sent, where "exceeds your balance" does not. The
 		// order is the other three shells': ceiling, then the mode's own verdict.
 		alert:
-			alertWords(inputs.alert, m) ??
+			alertWords(inputs.alert, m, formChainOf(send)) ??
 			sameFeeWords(send, m) ??
 			(split
 				? send.split_over_balance
@@ -1007,7 +1060,9 @@ export function warningWords(
  */
 export function alertWords(
 	kind: SendAlertKind | null | undefined,
-	m: WalletFlowMessages
+	m: WalletFlowMessages,
+	/** The selected token's chain — the estimate alert names it (`{{chain}}`). */
+	chainId: number | null = null
 ): string | undefined {
 	if (!kind) return undefined;
 	switch (kind.type) {
@@ -1028,8 +1083,17 @@ export function alertWords(
 			return `${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`;
 		case 'load_tokens_failed':
 			return m['send.alertLoadTokensError'];
-		case 'estimate_failed':
-			return `${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`;
+		case 'estimate_failed': {
+			// PR 2 note 13: worded by its cause — the core picks the sentence
+			// (`sendEstimateFailureBodyKey`): the chain out of reach by name, a
+			// fault inside Vela as that, else the general sentence.
+			const key = sendEstimateFailureBodyKey(kind.kind);
+			const body = (m as Readonly<Record<string, string | undefined>>)[key];
+			return `${m['send.alertEstimateFailedTitle']} · ${fill(
+				body ?? m['send.alertEstimateFailedBody'],
+				{ chain: chainId === null ? '' : chainName(chainId) }
+			)}`;
+		}
 		case 'account_unavailable':
 			return m['send.alertAccountUnavailableBody'];
 	}
@@ -1083,7 +1147,8 @@ function recipientLine(send: SendView, m: WalletFlowMessages): string | undefine
  */
 function confirmHolds(
 	send: SendView,
-	m: WalletFlowMessages
+	m: WalletFlowMessages,
+	fee: FeeView
 ): Pick<SendConfirmModel, 'held' | 'error'> {
 	if (send.tx_status === 'error' && send.tx_error !== null) {
 		switch (send.tx_error) {
@@ -1112,7 +1177,16 @@ function confirmHolds(
 		}
 	}
 	const held = send.previous_pending;
-	if (held === null || held === undefined) return {};
+	if (held === null || held === undefined) {
+		// PR 2 note 1: else the fee's failure, in the line the signing sheet
+		// draws under its held confirm (`FeeView.failure.footer_key`) —
+		// "Retrying…" while the core asks again by itself (through the re-ask
+		// too), "Tap it to retry" only when a tap is the one way.
+		const footer = fee.failure?.footer_key;
+		const words =
+			footer === undefined ? undefined : (m as Readonly<Record<string, string>>)[footer];
+		return words === undefined ? {} : { held: words };
+	}
 	// The core names the line (`SendPreviousPending.key`); a key this build
 	// does not carry falls back to the same sentence rather than a dotted key.
 	const words = (m as Readonly<Record<string, string>>)[held.key];
@@ -1122,7 +1196,15 @@ function confirmHolds(
 /** SD3 — the confirm screen: what is about to be signed. */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
-	const holds = confirmHolds(send, m);
+	const holds = confirmHolds(send, m, inputs.fee);
+	// PR 2 note 1: a failed fee on the last screen says so in its own row —
+	// the dash and the core's reason — never the last figure the send machine
+	// still holds. The dash even where the form's row would say "Tap to
+	// retry": this row is a fact, not a control, and a tap it cannot honour
+	// is not offered (spec 081); the line under the confirm says the rest.
+	const feeFailure = inputs.fee.failure
+		? { ...feeFailureWords(inputs.fee.failure, formChainOf(send), m), figure: '—' }
+		: null;
 	const token = send.selected_token;
 	const usd =
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
@@ -1161,10 +1243,11 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		},
 		{
 			label:
-				(send.fee ?? inputs.fee.fee)?.quoted === false
+				!feeFailure && (send.fee ?? inputs.fee.fee)?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeText(send.fee ?? inputs.fee.fee, inputs)
+			value: feeFailure ? feeFailure.figure : feeText(send.fee ?? inputs.fee.fee, inputs),
+			note: feeFailure?.reason
 		}
 	];
 
@@ -1220,7 +1303,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			facts,
 			breakdown,
 			recipientTag,
-			alert: alertWords(inputs.alert, m),
+			alert: alertWords(inputs.alert, m, formChainOf(send)),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1261,7 +1344,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
-			alert: alertWords(inputs.alert, m),
+			alert: alertWords(inputs.alert, m, formChainOf(send)),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1279,7 +1362,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		facts,
 		breakdown: undefined,
 		recipientTag,
-		alert: alertWords(inputs.alert, m),
+		alert: alertWords(inputs.alert, m, formChainOf(send)),
 		...holds,
 		cta: m['send.confirmSendBtn']
 	};

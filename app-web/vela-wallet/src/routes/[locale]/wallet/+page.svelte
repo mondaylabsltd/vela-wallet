@@ -1095,9 +1095,15 @@
 		// Read so a late answer landing in the send machine re-runs this.
 		const held = sendView?.fee ?? null;
 		if (!sendSession || !view) return;
-		if (view.busy !== lastFeeBusy) {
-			lastFeeBusy = view.busy;
-			sendSession.dispatch({ type: 'fee_busy_changed', busy: view.busy });
+		// Not settled: a measurement is out — or the fee failed (PR 2 note 1),
+		// which the fee machine is asking again by itself or a tap must. Either
+		// way there is no figure the fee machine stands by, so the confirm
+		// holds (the send machine's own gate reads this mirror) instead of
+		// opening between re-asks on the last figure the send machine kept.
+		const unsettled = view.busy || view.failure !== null;
+		if (unsettled !== lastFeeBusy) {
+			lastFeeBusy = unsettled;
+			sendSession.dispatch({ type: 'fee_busy_changed', busy: unsettled });
 		}
 		// The form's chain: the selected token's, else the sweep's (the core's
 		// `form_chain`).

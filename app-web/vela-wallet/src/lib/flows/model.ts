@@ -562,6 +562,18 @@ export interface FeeRowModel {
 	 * people to fear a fee row that is doing its job.
 	 */
 	staleNote?: string;
+	/**
+	 * Why there is no fee (PR 2 note 1): the core's reason for the failure
+	 * (`FeeView.failure.reason_key`), drawn in the line the stale note keeps —
+	 * so its arrival moves nothing below — and kept through the re-ask the
+	 * core makes by itself, beside the turning measuring sign.
+	 */
+	reason?: string;
+	/**
+	 * The fee failed: a tap on the row asks again at once (`requote`) rather
+	 * than opening the coins — and there is no chevron to promise a list.
+	 */
+	retries?: boolean;
 }
 
 /** One row of the folded speed control (spec 068). */

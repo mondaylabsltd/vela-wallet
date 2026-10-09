@@ -72,18 +72,11 @@ beforeAll(() => loadCore());
 vi.mock('$lib/settings/core/currency.svelte', () => ({ currency: { view: {} } }));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', () => ({ explorerBaseURL: () => null }));
-vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => null }));
+vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
+vi.mock('$lib/signing/fee-balance-changes', () => ({ tellBalanceChanges: async () => {} }));
 vi.mock('$lib/core/kernels', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/core/kernels')>()),
-	feeRequoteDelayMs: () => 3_000,
 	typicalInclusionSeconds: () => 5
-}));
-vi.mock('$lib/signing/fee-requote', () => ({
-	FeeRequoteTimer: class {
-		observe() {}
-		stop() {}
-	},
-	heldFeeFailure: () => null
 }));
 vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 	SpeedControl: class {
@@ -103,7 +96,7 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 			return { open: false, rows: [] };
 		}
 		get feeInForce() {
-			return { busy: false, failed: false, options: [] };
+			return { busy: false, failed: null, failure: null, options: [] };
 		}
 		get feeQuote() {
 			return {};
@@ -201,6 +194,10 @@ class Fake {
 		progress: { stage: 'idle' } as any
 	});
 	dispatched: unknown[] = [];
+	/** What `feeCallsOf` answers: `null`, a request with no fee to ask about. */
+	calls: unknown[] | null = null;
+	quoted = 0;
+	disposed = 0;
 	trackerEntries: any[] = [];
 	trackerListeners = new Set<() => void>();
 	trackerChanged(): void {
@@ -231,7 +228,17 @@ const RECEIPT = {
 	submitting: 'Submitting to network...',
 	refused: 'The network refused it'
 };
-const FEE = { view: null, requote: () => {}, requestQuote: async () => {}, lastRequest: null };
+const FEE = {
+	view: null,
+	requote: () => {},
+	requestQuote: async () => {
+		fake.quoted += 1;
+	},
+	dispose: () => {
+		fake.disposed += 1;
+	},
+	lastRequest: null
+};
 const OP = `0x${'ab'.repeat(32)}`;
 
 function request(id: string, kind: string, origin = 'https://a.example') {
@@ -286,6 +293,61 @@ afterEach(() => {
 	panelSurface.stop();
 	delete (globalThis as { chrome?: unknown }).chrome;
 	fake = new Fake();
+});
+
+/**
+ * PR 2 note 1: the core asks a failed fee again by itself, through the timer
+ * the fee session answers. A sheet that has gone must not go on asking — in
+ * the wallet, in Settings' backup, and in the extension's request window
+ * alike, which all mount this host — so the request's fee session ends with
+ * the request, and the next request starts a new one.
+ */
+describe('the sheet’s fee session ends with its request (PR 2 note 1)', () => {
+	it('a request that goes takes its fee session, and the core’s re-asks, with it', async () => {
+		fake.calls = [{ to: '0x' + '11'.repeat(20), value: '0', data: '0x' }];
+		const view = mount();
+		fake.sign.view = {
+			...INITIAL_SIGN_VIEW,
+			surface: 'sheet' as const,
+			request: request('tx:1', 'transaction')
+		};
+		flushSync();
+		await tick();
+		expect(fake.quoted).toBe(1);
+		expect(fake.disposed).toBe(0);
+		// Answered, closed, or rejected: the sheet goes.
+		fake.sign.view = { ...INITIAL_SIGN_VIEW };
+		flushSync();
+		await tick();
+		expect(fake.disposed).toBe(1);
+		// The next request asks on a session of its own.
+		fake.sign.view = {
+			...INITIAL_SIGN_VIEW,
+			surface: 'sheet' as const,
+			request: request('tx:2', 'transaction')
+		};
+		flushSync();
+		await tick();
+		expect(fake.quoted).toBe(2);
+		await view.screen.unmount();
+	});
+
+	it('a message has no fee: nothing is asked, nothing ended', async () => {
+		const view = mount();
+		fake.sign.view = {
+			...INITIAL_SIGN_VIEW,
+			surface: 'sheet' as const,
+			request: request('m:1', 'personal_sign')
+		};
+		flushSync();
+		await tick();
+		fake.sign.view = { ...INITIAL_SIGN_VIEW };
+		flushSync();
+		await tick();
+		expect(fake.quoted).toBe(0);
+		expect(fake.disposed).toBe(0);
+		await view.screen.unmount();
+	});
 });
 
 describe('the write-ahead hand-off (spec 082 RJ1)', () => {

@@ -19,6 +19,7 @@ import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+import type { SendEstimateFailure } from '$lib/core/generated/SendEstimateFailure';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
 import type { ReadSlot } from '$lib/core/generated/ReadSlot';
 import type { SignEnding } from '$lib/core/generated/SignEnding';
@@ -927,6 +928,19 @@ export function feeRequoteTimeoutMs(): number {
  */
 export function feeFailureReasonKey(failure: FeeFailure): string | null {
 	return wasm.feeFailureReasonKey(feeFailureWire(failure)) ?? null;
+}
+
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`send.alertEstimateChainDownBody`, `{{chain}}`), a fault inside
+ * Vela as that (`componentsUi.gas.reasonInternal`), else the general
+ * sentence (`send.alertEstimateFailedBody`). The shell never picks it.
+ */
+export function sendEstimateFailureBodyKey(failure: SendEstimateFailure): string {
+	return wasm.sendEstimateFailureBodyKey(
+		typeof failure === 'string' ? failure : JSON.stringify(failure)
+	);
 }
 
 /**

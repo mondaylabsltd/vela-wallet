@@ -13,6 +13,25 @@
 
 import { VENUE_BLOCK_KEYS } from '$lib/settings/messages';
 
+/**
+ * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
+ * RJ13) — resolved at build time so the fee row (the sheet's and Send's) can
+ * look up whichever the core names. A key the core adds later and this list
+ * lacks draws no line.
+ */
+export const FEE_REASON_KEYS = [
+	'componentsUi.gas.reasonQuote',
+	'componentsUi.gas.reasonFeeToken',
+	'componentsUi.gas.reasonSimulation',
+	'componentsUi.gas.reasonQuoteHigh',
+	'home.balanceDetailStatusRetrying',
+	// Issue 483: the fee's own sentences — a chain out of reach ("Can't reach
+	// {{chain}} to price this"), and a fault inside Vela. The browser's
+	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
+	'componentsUi.gas.reasonChainDown',
+	'componentsUi.gas.reasonInternal'
+] as const;
+
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
 export const WALLET_FLOW_KEYS = [
 	// ---------------------------------------------------------------- chrome
@@ -227,6 +246,15 @@ export const WALLET_FLOW_KEYS = [
 	'send.continueBtn',
 	'componentsUi.gas.networkFee',
 
+	// send · a failed fee, in the core's words (PR 2 note 1): the reason
+	// under the row (`FeeView.failure.reason_key`), the row's figure when a
+	// tap is the one way (`figure_key`), and the line under the held confirm
+	// (`footer_key`) — "Retrying…" while the core asks again by itself.
+	...FEE_REASON_KEYS,
+	'componentsUi.gas.estimateFailed',
+	'componentsUi.signing.confirmBlock.feeRetrying',
+	'componentsUi.signing.confirmBlock.feeFailed',
+
 	// send · fee token
 	'send.feeTokenLabel',
 	'send.feeTokenHint',
@@ -321,6 +349,10 @@ export const WALLET_FLOW_KEYS = [
 	// send · the core's alerts, worded (spec 038 #D4)
 	'send.alertEstimateFailedTitle',
 	'send.alertEstimateFailedBody',
+	// PR 2 note 13: the estimate alert by its cause
+	// (`sendEstimateFailureBodyKey`) — the chain out of reach by name; a fault
+	// inside Vela is `componentsUi.gas.reasonInternal` (above).
+	'send.alertEstimateChainDownBody',
 	'send.alertAccountUnavailableBody',
 	'send.alertInvalidAddressTitle',
 	'send.alertInvalidAddressBody',

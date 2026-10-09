@@ -33,7 +33,15 @@
 
 <div class="fee">
 	<div class="row">
-		<button type="button" class="open" aria-label={fee.openLabel} onclick={onopen}>
+		<!-- A failed fee (PR 2 note 1): the row asks again at once — the
+		     refresh's own path — and promises no list. While a re-ask is out
+		     it is the answer awaited: a second tap asks nothing. -->
+		<button
+			type="button"
+			class="open"
+			aria-label={fee.retries ? fee.refreshLabel : fee.openLabel}
+			onclick={fee.retries ? () => fee.refreshing !== true && onrefresh?.() : onopen}
+		>
 			<span class="label">{fee.label}</span>
 			<!-- The label and the fee are two wholes (078 round 3): side by side
 			     while both fit; otherwise the label keeps a line of its own, WHOLE,
@@ -59,14 +67,17 @@
 						<span class="value">{fee.valueFiat}</span>
 					{/if}
 				</span>
-				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+				{#if !fee.retries}
+					<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+				{/if}
 			</span>
 		</button>
 		<FeeRefreshButton label={fee.refreshLabel} refreshing={fee.refreshing === true} {onrefresh} />
 	</div>
 	<!-- `FeeView.stale`, which had no consumer in this shell at all (spec
-	     068): a standing line whose INK is toggled — see `FeeStaleNote`. -->
-	<FeeStaleNote note={fee.staleNote} />
+	     068): a standing line whose INK is toggled — see `FeeStaleNote`. A
+	     failed fee's reason (PR 2 note 1) stands in the same line. -->
+	<FeeStaleNote note={fee.staleNote} reason={fee.reason} />
 </div>
 
 <style>

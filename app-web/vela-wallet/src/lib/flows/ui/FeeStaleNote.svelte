@@ -18,18 +18,34 @@
 	interface Props {
 		/** The note, or nothing — the line keeps its room either way. */
 		note?: string;
+		/**
+		 * Why the fee failed (PR 2 note 1) — the core's reason, in this same
+		 * standing line, so its arrival pushes nothing below it and it stays
+		 * put through every re-ask. Wins over the note: a failed fee has no
+		 * figure to be old.
+		 */
+		reason?: string;
 	}
 
-	let { note }: Props = $props();
+	let { note, reason }: Props = $props();
+	const text = $derived(reason ?? note);
 </script>
 
-<p class="stale" class:empty={!note} aria-hidden={note ? undefined : 'true'}>
-	{#if note}
+<p
+	class="stale"
+	class:empty={!text}
+	class:reason={reason !== undefined}
+	role={reason !== undefined ? 'status' : undefined}
+	aria-hidden={text ? undefined : 'true'}
+>
+	{#if reason !== undefined}
+		<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
+	{:else if note}
 		<Icon icon={UTILITY_ICONS.clock} size="sm" />
 	{/if}
 	<!-- A no-break space, not a plain one: a plain space collapses and the
 	     standing line would have no height to stand in. -->
-	<span>{note ?? '\u00a0'}</span>
+	<span>{text ?? '\u00a0'}</span>
 </p>
 
 <style>
@@ -53,5 +69,11 @@
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	/* A failed fee's reason: the signing sheet's fee-failure ink, so the two
+	   surfaces say one failure in one voice. */
+	.stale.reason {
+		color: var(--color-error-base);
 	}
 </style>
