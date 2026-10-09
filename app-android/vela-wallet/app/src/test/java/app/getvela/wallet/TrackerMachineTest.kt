@@ -242,9 +242,13 @@ class TrackerMachineTest {
         assertEquals(
             app.getvela.wallet.feature.send.core.TrackPendingRecord(
                 record_id = op, user_op_hash = op, chain_id = 100, submitted_at_ms = clock, maybe_sent = true, submit_block = 1000,
+                // The row's `from`, lower-cased: a restart still knows whose nonce it holds (`in_flight_ops`).
+                sender = "0x88cca0eedbf2c4426110bbfc998f048689266894",
             ),
             TrackerExecutor.pendingRecord(maybeSentRow(op, 1000)),
         )
+        // A row with no account on it holds nobody's nonce.
+        assertEquals(null, TrackerExecutor.pendingRecord(pendingRow(op).put("from", ""))!!.sender)
         val unknownHead = TrackerExecutor.pendingRecord(maybeSentRow(op, null))!!
         assertTrue(unknownHead.maybe_sent)
         assertEquals(null, unknownHead.submit_block)
@@ -349,5 +353,99 @@ class TrackerMachineTest {
         val again = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }.entries.single()
         assertEquals(TrackStatus.Pending, again.status)
         assertTrue("admitted: never may-have-been-sent", again.outcome != app.getvela.wallet.feature.send.core.TrackOutcome.MaybeSent)
+    }
+
+    // -- the correctness batch: one in flight per account and network ---------
+
+    private val signer = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+
+    /** `inFlightOps` of the tracker's view JSON exactly as the core wrote it — what the app forwards. */
+    private fun inFlight(host: CoreHost<TrackView>): List<app.getvela.wallet.feature.send.core.InFlightOp> =
+        app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+            kotlinx.serialization.builtins.ListSerializer(app.getvela.wallet.feature.send.core.InFlightOp.serializer()),
+            uniffi.vela_core_uniffi.inFlightOps(host.viewJson.value ?: "{}"),
+        )
+
+    /**
+     * A send the relay accepted holds its account's nonce on its chain: the
+     * core reads that from the tracker's OWN view JSON (`sender`, `stalled`
+     * and all — `CoreHost.viewJson`, never a re-encoded mirror). With the
+     * relay saying nothing new of it for ten minutes, it lets go — and the
+     * tracker keeps following it.
+     */
+    @Test
+    fun `an accepted op holds its account's nonce until ten minutes pass without progress`() = runBlocking {
+        val hash = "0x" + "9a".repeat(32)
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(pendingRow(hash)).toString()
+        port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        port.always("pimlico_getUserOperationStatus") { FakeRelayPort.body(JSONObject().put("status", "queued")) }
+        val host = host()
+        host.dispatch(
+            TrackEvent.Submitted(user_op_hash = hash, record_ids = listOf(hash), chain_id = 100, admitted = true, sender = signer),
+            TrackEvent.serializer(),
+        )
+        val entry = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == hash } } }.entries.single()
+        assertEquals("the account, lower-cased", signer.lowercase(), entry.sender)
+        withTimeout(5_000) { while (inFlight(host).isEmpty()) delay(20) }
+        assertEquals(
+            listOf(app.getvela.wallet.feature.send.core.InFlightOp(sender = signer.lowercase(), chain_id = 100, user_op_hash = hash)),
+            inFlight(host),
+        )
+        // The same answer, again and again, for ten minutes: no progress.
+        repeat(4) { tick(host, 60_000.0) }
+        assertEquals("still held inside the ten minutes", 1, inFlight(host).size)
+        repeat(4) { tick(host, 150_000.0) }
+        val stalled = withTimeout(10_000) { host.view.first { it.entries.single().stalled } }.entries.single()
+        assertTrue("still followed — only the nonce is released", stalled.polling)
+        assertTrue("released: ${host.viewJson.value}", inFlight(host).isEmpty())
+    }
+
+    /**
+     * A refusal is told by its reason (relay contract §2): the relay's
+     * `rejection_reason` reaches the core verbatim, and the entry's
+     * `refusal_key` is the one sentence every surface draws — the fee words
+     * only for a fee refusal. The receipt's outcome carries the reason whole.
+     */
+    @Test
+    fun `a refusal carries the relay's reason into the entry and the receipt`() = runBlocking {
+        val cases = listOf(
+            "nonce_used" to "componentsUi.signing.wentFirst",
+            "fee_below_market" to "send.txRejectedFees",
+            "simulation_failed" to "componentsUi.signing.refused",
+        )
+        for ((reason, key) in cases) {
+            val hash = "0x" + reason.length.toString(16).padStart(2, '0').repeat(32)
+            store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(pendingRow(hash)).toString()
+            port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+            port.always("pimlico_getUserOperationStatus") {
+                FakeRelayPort.body(JSONObject().put("status", "rejected").put("last_executor_stage", "in_band_settlement").put("rejection_reason", reason))
+            }
+            val host = host()
+            host.dispatch(TrackEvent.Submitted(user_op_hash = hash, record_ids = listOf(hash), chain_id = 100, admitted = true, sender = signer), TrackEvent.serializer())
+            repeat(8) { tick(host, 3_500.0) }
+            val entry = withTimeout(15_000) { host.view.first { it.entries.any { e -> e.user_op_hash == hash && e.status == TrackStatus.Rejected } } }
+                .entries.first { it.user_op_hash == hash }
+            assertEquals(reason, app.getvela.wallet.core.crux.Wire.json.encodeToJsonElement(app.getvela.wallet.feature.send.core.RefusalReason.serializer(), entry.refusal!!).toString().trim('"'))
+            assertEquals("$reason is told as $key", key, entry.refusal_key)
+            val outcome = app.getvela.wallet.feature.send.core.SendReceiptOutcomes.of(entry) as app.getvela.wallet.feature.send.core.SendReceiptOutcome.Failed
+            assertTrue(outcome.rejected)
+            assertEquals(entry.refusal, outcome.refusal)
+            assertTrue("a refused op holds no nonce", inFlight(host).isEmpty())
+        }
+    }
+
+    /** An older relay names no reason: the core reads the stage (relay contract §2's own derivation). */
+    @Test
+    fun `an older relay's refusal is read from its stage`() = runBlocking {
+        val hash = "0x" + "5c".repeat(32)
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(pendingRow(hash)).toString()
+        port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        port.always("pimlico_getUserOperationStatus") { FakeRelayPort.body(JSONObject().put("status", "rejected").put("last_executor_stage", "nonce")) }
+        val host = host()
+        host.dispatch(TrackEvent.Submitted(user_op_hash = hash, record_ids = listOf(hash), chain_id = 100, admitted = true), TrackEvent.serializer())
+        repeat(8) { tick(host, 3_500.0) }
+        val entry = withTimeout(15_000) { host.view.first { it.entries.any { e -> e.status == TrackStatus.Rejected } } }.entries.single()
+        assertEquals(app.getvela.wallet.feature.send.core.RefusalReason.NonceUsed, entry.refusal)
+        assertEquals("componentsUi.signing.wentFirst", entry.refusal_key)
     }
 }

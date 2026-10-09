@@ -187,6 +187,14 @@ object I18nKeys {
         const val RECOVER_CANCEL = "onboarding.login.recoverCancel"
         const val RECOVER_FAILED_TITLE = "onboarding.login.recoverFailedTitle"
         const val RECOVER_FAILED_BODY = "onboarding.login.recoverFailedBody"
+        /**
+         * Sign-in could not find out whether this passkey has a wallet record
+         * (the core's `registry_unreachable`, not on this device): "Can't Look
+         * Up Your Wallet" — nothing was saved, try again. Its free retry asks
+         * again from the signature already made; no new passkey prompt.
+         */
+        const val REGISTRY_UNREACHABLE_TITLE = "onboarding.login.registryUnreachableTitle"
+        const val REGISTRY_UNREACHABLE_BODY = "onboarding.login.registryUnreachableBody"
 
         // --- spec 019 ------------------------------------------------------
         const val ALERT_NOT_SUPPORTED_TITLE = "onboarding.login.alertNotSupportedTitle"
@@ -267,6 +275,9 @@ object I18nKeys {
 
     object Common {
         const val CANCEL = "common.cancel"
+
+        /** "Try again" — a retry that really retries (the sign-in lookup's, among others). */
+        const val TRY_AGAIN = "common.tryAgain"
 
         /**
          * An alert's acknowledgement (spec 078 round 2): "知道了" / "Got it".
@@ -784,6 +795,23 @@ object I18nKeys {
          * refused again.
          */
         const val SIGN_REFUSED = "componentsUi.signing.refused"
+        /**
+         * A refusal for a used nonce: another transaction of the account went
+         * through first. The core keys it (`refusal_key`); listed here so the
+         * smoke test holds it in the corpus.
+         */
+        const val SIGN_WENT_FIRST = "componentsUi.signing.wentFirst"
+        /**
+         * "Waiting for your last transaction on this network…" — the one line
+         * under a confirm held while the account's previous op on that chain
+         * is in flight (Send's `previous_pending`, the sheet's
+         * `ConfirmBlock.PreviousPending`), and the words of the relay's own
+         * "previous transaction pending" refusal, with Try again.
+         */
+        const val PREVIOUS_PENDING = "componentsUi.signing.confirmBlock.previousPending"
+        /** The fee's own reasons (issue #483): the chain's nodes out of reach (`{{chain}}`), or a fault inside the app. */
+        const val FEE_REASON_CHAIN_DOWN = "componentsUi.gas.reasonChainDown"
+        const val FEE_REASON_INTERNAL = "componentsUi.gas.reasonInternal"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"

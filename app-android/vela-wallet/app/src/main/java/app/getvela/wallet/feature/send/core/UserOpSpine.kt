@@ -238,6 +238,16 @@ class UserOpSpine(
         data class VenueBlocked(val block: VenueBlock) : Failure()
 
         /**
+         * Another operation of the account still holds the nonce on this chain
+         * (`RelayRejection::NonceHeld` — the relay's `nonce_in_flight`, or an
+         * older relay's `[existingHash:…]` marker). Nothing of this one went
+         * out. Send says "waiting for your last transaction" with Try again
+         * (`SendSubmitFailure.PreviousPending`); a page is told
+         * `userOpPreviousPendingDetail()`.
+         */
+        data object PreviousPending : Failure()
+
+        /**
          * Spec 082 RA1: the relay was never reached and nothing left the device
          * — the one failure after the passkey where "not sent, try again" is
          * true. A page is told the core's fixed sentence, never the pool's.
@@ -517,8 +527,7 @@ class UserOpSpine(
                     // 083: another operation of the account holds the nonce —
                     // its hash is never this request's; nothing of this one
                     // went out.
-                    is RelayRejection.NonceHeld ->
-                        Failure.Other(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
+                    is RelayRejection.NonceHeld -> Failure.PreviousPending
                 },
             )
         }

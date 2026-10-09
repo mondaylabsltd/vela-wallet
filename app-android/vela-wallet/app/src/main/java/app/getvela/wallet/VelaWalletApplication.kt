@@ -528,6 +528,12 @@ class AppContainer(private val app: Application) {
             wallet.onTrackVerdict = { entry ->
                 SendReceiptOutcomes.of(entry)?.let { outcome -> controller.receiptUpdate(entry.user_op_hash, outcome) }
             }
+            // One in flight per account and network: every tracker render's
+            // ops, as the core read them from the tracker's own view JSON —
+            // a second send on that chain waits for the first.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
+            }
         }
     }
 
@@ -797,6 +803,8 @@ class AppContainer(private val app: Application) {
                     override fun trackWithdrawn(userOpHash: String, recordIds: List<String>) = wallet.trackWithdrawn(userOpHash, recordIds)
                     // Spec 082 RJ4: the answer follows the tracker (`OpTracked`).
                     override fun trackerView() = wallet.tracker
+                    // One in flight per account and network (the core's read of the tracker's own JSON).
+                    override fun inFlightOps() = wallet.inFlightOps
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =

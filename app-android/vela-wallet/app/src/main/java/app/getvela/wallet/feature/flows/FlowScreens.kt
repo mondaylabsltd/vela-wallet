@@ -2014,6 +2014,21 @@ fun SendConfirmBody(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = model.ctaEnabled,
             )
+            // The held confirm's one line (the previous transaction on this
+            // network is in flight) — quiet, centred, as the signing sheet
+            // draws its own confirm-block line.
+            model.ctaHold?.takeIf { !model.ctaEnabled }?.let { hold ->
+                Spacer(modifier = Modifier.height(VelaSpacing.sm))
+                Text(
+                    text = hold,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

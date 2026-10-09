@@ -106,6 +106,14 @@ enum class ConfirmBlock {
 
     @SerialName("answered") Answered,
 
+    /**
+     * The account's previous transaction on this network is still in flight
+     * (`in_flight_ops`): a transaction signed now would take the same nonce.
+     * Ahead of every fee block, so a re-quote never swaps its line out;
+     * signatures never wait.
+     */
+    @SerialName("previous_pending") PreviousPending,
+
     @SerialName("reading") Reading,
 
     @SerialName("approval_choice") ApprovalChoice,
@@ -418,6 +426,8 @@ data class SignTrackerHandoff(
     val submit_block: Long? = null,
     /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
     val admitted: Boolean = false,
+    /** The account that signed it — forwarded to the tracker's `submitted` (`in_flight_ops`). */
+    val sender: String? = null,
 )
 
 /**
@@ -642,6 +652,16 @@ sealed class SignShellResult {
 
 @Serializable
 sealed class SignEvent {
+    /**
+     * Every operation in flight on this device, as the tracker last said
+     * (`inFlightOps` of its own view JSON, forwarded on every tracker render):
+     * a transaction of an account with one on the request's chain waits for it
+     * ([ConfirmBlock.PreviousPending]).
+     */
+    @Serializable
+    @SerialName("in_flight_ops")
+    data class InFlightOps(val ops: List<app.getvela.wallet.feature.send.core.InFlightOp> = emptyList()) : SignEvent()
+
     @Serializable
     @SerialName("networks_changed")
     data class NetworksChanged(val chain_ids: List<Int>) : SignEvent()

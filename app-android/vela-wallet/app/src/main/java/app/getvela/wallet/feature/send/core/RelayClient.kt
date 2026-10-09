@@ -209,6 +209,13 @@ class RelayClient(
             symbol = symbol,
             usd_balance = decimalText(row.opt("usdBalance")) ?: "0",
             usd_price = usdPrice,
+            // The relay's own floor for this row, verbatim (hex, as it writes
+            // it); the core reads it. An older relay publishes none.
+            minimum_amount = when (val minimum = row.opt("minimumAmount")) {
+                is String -> minimum.trim().ifBlank { null }
+                is Int, is Long, is java.math.BigInteger -> minimum.toString()
+                else -> null
+            },
         )
     }
 
@@ -572,8 +579,11 @@ class RelayClient(
         )
     }
 
-    /** One parsed relay status: the lifecycle word, the executor stage, the relay's bundle tx. */
-    data class StatusAnswer(val status: TrackLifecycle, val stage: String?, val txHash: String?)
+    /**
+     * One parsed relay status: the lifecycle word, the executor stage, the
+     * relay's bundle tx — and, on a refusal, the relay's reason verbatim.
+     */
+    data class StatusAnswer(val status: TrackLifecycle, val stage: String?, val txHash: String?, val rejectionReason: String? = null)
 
     /**
      * The relay's view of an op with no receipt (spec 082 RA7, G13): the one
@@ -588,7 +598,18 @@ class RelayClient(
         val status = runCatching {
             app.getvela.wallet.core.crux.Wire.json.decodeFromString(TrackLifecycle.serializer(), "\"${parsed.status}\"")
         }.getOrNull() ?: return null
-        return StatusAnswer(status, parsed.stage, parsed.txHash)
+        return StatusAnswer(status, parsed.stage, parsed.txHash, rejectionReason(body))
+    }
+
+    /**
+     * The relay's `rejection_reason`, verbatim — read where the core's own
+     * parser reads it (the status object, or the body's `result`), because the
+     * UniFFI record `parseUserOpStatus` returns does not carry it yet. What the
+     * reason MEANS (and an unknown one) is the core's (`RefusalReason::of`).
+     */
+    private fun rejectionReason(body: JSONObject): String? {
+        val result = if (body.has("status")) body else body.optJSONObject("result") ?: return null
+        return (result.opt("rejection_reason") as? String)?.takeIf { it.isNotEmpty() }
     }
 
     /** The pool's answer to the tracker's find-event, as it came (spec 082 ruling 8). */
@@ -728,8 +749,12 @@ class RelayClient(
      * read and cannot have it is the chain node's failure (`ChainRead`,
      * rate-limited or out of reach) — never the relay's.
      */
-    suspend fun deployedRead(chainId: Int, address: String): DeployedRead {
+    suspend fun deployedRead(chainId: Int, address: String, fresh: Boolean = false): DeployedRead {
         val key = "$chainId:${address.lowercase()}"
+        // `fresh` (issue #483: the fee's run after a failure): a retry is a
+        // real new read — past the held answer, and never joined to a read
+        // already out, which may be the one that just failed.
+        if (fresh) return readDeployed(chainId, address, key)
         synchronized(deployedSafes) { if (key in deployedSafes) return DeployedRead.Known(true) }
         return deployFlights.run(key) { readDeployed(chainId, address, key) }
     }

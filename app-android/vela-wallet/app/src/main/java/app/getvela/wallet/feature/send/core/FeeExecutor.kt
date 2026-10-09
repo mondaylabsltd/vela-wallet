@@ -11,8 +11,8 @@ import uniffi.vela_core_uniffi.userOpFloors
 import uniffi.vela_core_uniffi.userOpRelayJson
 
 /**
- * The `fee_policy` machine's seven arms (spec 043 T025; `MeasureInnerCalls`
- * since the issue #262 follow-up).
+ * The `fee_policy` machine's arms (spec 043 T025; `MeasureInnerCalls`
+ * since the issue #262 follow-up; `ReadDeployment` since issue #483).
  *
  * Numbers in, numbers out: the three gas signals, the relay's quote, the
  * in-band fee assets, the fee recipient, and a gas estimate for the batch the
@@ -47,10 +47,18 @@ class FeeExecutor(
         is FeeShellResult.InnerCallsMeasured -> "inner=${result.gas.joinToString(",") { it ?: "-" }}"
         FeeShellResult.TtlElapsed -> "ttl"
         FeeShellResult.DeadlineElapsed -> "deadline"
+        is FeeShellResult.Deployment -> when (val read = result.read) {
+            is DeploymentRead.Read -> "deployed=${read.deployed}"
+            is DeploymentRead.Unreachable -> "unreachable rateLimited=${read.rate_limited}"
+            is DeploymentRead.Internal -> "internal ${read.kind}"
+        }
     }
 
     private suspend fun arm(operation: FeeOperation): FeeShellResult = when (operation) {
         is FeeOperation.FetchGasPrice -> {
+            // A run after a failure (issue #483): a retry is a real new read,
+            // never the held reading that was there when it failed.
+            if (operation.fresh) relay.invalidateFeeSignals(operation.chain_id)
             val signals = relay.gasSignals(operation.chain_id, operation.want_tip)
             FeeShellResult.GasPrice(
                 eth_gas_price = signals.ethGasPrice,
@@ -58,6 +66,17 @@ class FeeExecutor(
                 priority_fee = signals.priorityFee,
             )
         }
+
+        // Issue #483: the account read is the fee's own. `eth_getCode` through
+        // the pool; a read the chain's nodes did not answer is the chain's,
+        // said as such. A read that never left the app (an exception here) is
+        // answered `internal` by [neutralAnswer] — never "can't reach".
+        is FeeOperation.ReadDeployment -> FeeShellResult.Deployment(
+            when (val read = relay.deployedRead(operation.chain_id, operation.account, fresh = operation.fresh)) {
+                is RelayClient.DeployedRead.Known -> DeploymentRead.Read(read.deployed)
+                is RelayClient.DeployedRead.Unanswered -> DeploymentRead.Unreachable(read.rateLimited)
+            },
+        )
 
         is FeeOperation.FetchBundlerQuote ->
             FeeShellResult.BundlerQuote(relay.bundlerQuote(operation.chain_id, operation.tier))
@@ -161,5 +180,8 @@ class FeeExecutor(
         is FeeOperation.MeasureInnerCalls -> FeeShellResult.InnerCallsMeasured(operation.calls.map { null })
         is FeeOperation.StartTtl -> FeeShellResult.TtlElapsed
         is FeeOperation.StartDeadline -> FeeShellResult.DeadlineElapsed
+        // The read threw inside the app: nothing reached the chain, so it is
+        // not the chain's failure (issue #483).
+        is FeeOperation.ReadDeployment -> FeeShellResult.Deployment(DeploymentRead.Internal("rpc: exception"))
     }
 }

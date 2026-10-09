@@ -770,6 +770,12 @@ data class SendConfirmModel(
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,
+    /**
+     * The one line under a confirm held while the account's previous
+     * transaction on this network is in flight (`SendView.previous_pending`):
+     * "Waiting for your last transaction on this network…". `null` otherwise.
+     */
+    val ctaHold: String? = null,
     /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
     val notice: String? = null,
     /** Spec 098 §4: the treasury stop's address, drawn under [notice]. */

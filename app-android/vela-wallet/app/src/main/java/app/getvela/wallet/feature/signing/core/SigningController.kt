@@ -141,6 +141,7 @@ class SigningController(
                 maybeSent = handoff.maybe_sent,
                 submitBlock = handoff.submit_block,
                 admitted = handoff.admitted,
+                sender = handoff.sender,
             ),
         )
         followTracker()
@@ -274,6 +275,14 @@ class SigningController(
 
         /** Spec 082 RJ4: the tracker's entries, which this request forwards to the core as `OpTracked`; `null` = none. */
         fun trackerView(): StateFlow<app.getvela.wallet.feature.send.core.TrackView>? = null
+
+        /**
+         * The operations holding their account's nonce, read by the core from
+         * the tracker's own view JSON (`WalletController.inFlightOps`) — told
+         * to this request's machine on every change: a transaction of an
+         * account with one on its chain waits for it. `null` = no tracker.
+         */
+        fun inFlightOps(): StateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>>? = null
 
         /** The descriptor endpoint base. */
         fun dataBase(): String
@@ -545,6 +554,14 @@ class SigningController(
         }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
+        // One in flight per account and network: what the tracker says now,
+        // and every change after — the machine holds the confirm with the one
+        // "waiting for your last transaction" line while this account's
+        // previous op on the request's chain is in flight (a signature never
+        // waits). An identical list is deduped by the machine.
+        ports.inFlightOps()?.let { ops ->
+            scope.launch { ops.collect { dispatchSign(SignEvent.InFlightOps(it)) } }
+        }
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
         dispatchSign(SignEvent.AccountsChanged(signers, 0))
         dispatchSign(

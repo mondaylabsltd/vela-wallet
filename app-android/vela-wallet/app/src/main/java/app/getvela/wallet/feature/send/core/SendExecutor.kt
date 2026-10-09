@@ -249,6 +249,7 @@ class SendExecutor(
                     maybeSent = operation.maybe_sent,
                     submitBlock = operation.submit_block,
                     admitted = operation.admitted,
+                    sender = operation.sender,
                 ),
             )
             SendShellResult.TrackHandedOff
@@ -527,6 +528,10 @@ class SendExecutor(
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
                 // Spec 102: this account cannot sign here — the confirm screen says why, translated.
                 is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
+                // The account's previous transaction still holds the nonce
+                // (the relay's `nonce_in_flight`): the core's own words for it,
+                // with Try again — never "other".
+                UserOpSpine.Failure.PreviousPending -> SendSubmitFailure.PreviousPending
             },
         )
     }
