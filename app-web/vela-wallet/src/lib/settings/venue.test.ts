@@ -23,8 +23,10 @@ import {
 	signingPageDomain,
 	signingPlan,
 	signingVenueBlock,
-	signingVenueChoices
+	signingVenueChoices,
+	venueBlockLine
 } from '$lib/core/kernels';
+import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import type { SigningPagesView } from '$lib/core/generated/SigningPagesView';
@@ -41,6 +43,7 @@ import {
 	buildMobileState,
 	webVenue
 } from './fixtures';
+import { VENUE_BLOCK_KEYS } from './messages';
 import { integrityLineModel, signingPagesModel, venueBlockText, venueModel } from './venue';
 
 const en = resolveSettingsMessages('en');
@@ -154,27 +157,53 @@ describe('Where you review and sign', () => {
 		expect(model.note).toBe('Home server · sign.example.com');
 	});
 
+	const BLOCKS = {
+		app: { type: 'app_cannot_reach', domain: 'x.example' },
+		page: { type: 'page_on_other_domain', page_domain: 'p.example', domain: 'getvela.app' },
+		web: { type: 'not_on_web' }
+	} satisfies Record<string, VenueBlock>;
+
+	it('a refusal’s sentence is the core’s: its line and the values that fill it', () => {
+		// `VenueBlock::key()` + `vars()` — which fact fills which placeholder
+		// is the core's, not a switch here.
+		expect(venueBlockLine(BLOCKS.app)).toEqual({
+			key: 'settings.venue.blockedApp',
+			vars: { domain: 'x.example' }
+		});
+		expect(venueBlockLine(BLOCKS.page)).toEqual({
+			key: 'settings.venue.blockedPage',
+			vars: { pageDomain: 'p.example', domain: 'getvela.app' }
+		});
+		expect(venueBlockLine(BLOCKS.web)).toEqual({ key: 'settings.venue.blockedWeb', vars: {} });
+		// Every line the core can name is one the manifests resolve.
+		expect(
+			Object.values(BLOCKS)
+				.map((block) => venueBlockLine(block)?.key)
+				.sort()
+		).toEqual([...VENUE_BLOCK_KEYS].sort());
+	});
+
 	it('every reason is said in every locale, with its domains filled in', () => {
 		for (const locale of SUPPORTED_LOCALES) {
 			const m = resolveSettingsMessages(locale);
-			const app = venueBlockText({ type: 'app_cannot_reach', domain: 'x.example' }, m);
-			const page = venueBlockText(
-				{ type: 'page_on_other_domain', page_domain: 'p.example', domain: 'getvela.app' },
-				m
-			);
-			const web = venueBlockText({ type: 'not_on_web' }, m);
+			const app = venueBlockText(BLOCKS.app, m.venue.blocked);
+			const page = venueBlockText(BLOCKS.page, m.venue.blocked);
+			const web = venueBlockText(BLOCKS.web, m.venue.blocked);
 			expect(app, locale).toContain('x.example');
 			expect(page, locale).toContain('p.example');
 			expect(page, locale).toContain('getvela.app');
-			expect(web, locale).toBe(m.venue.blockedWeb);
+			expect(web, locale).toBe(m.venue.blocked['settings.venue.blockedWeb']);
 			expect(web.length, locale).toBeGreaterThan(0);
 			expect(`${app}${page}${web}`, locale).not.toContain('{{');
 		}
-		expect(venueBlockText({ type: 'not_on_web' }, en)).toBe(
+		expect(venueBlockText(BLOCKS.web, en.venue.blocked)).toBe(
 			'Signing pages open from the Vela apps, not the web.'
 		);
-		expect(venueBlockText({ type: 'not_on_web' }, zh)).toBe(
+		expect(venueBlockText(BLOCKS.web, zh.venue.blocked)).toBe(
 			'签名页只能从 Vela 应用打开，网页版不支持。'
+		);
+		expect(venueBlockText(BLOCKS.page, en.venue.blocked)).toBe(
+			"This page is on p.example; this account's keys are on getvela.app."
 		);
 	});
 });
@@ -219,16 +248,16 @@ describe('the web’s venue', () => {
 		expect(model.rows.every((row) => !row.active)).toBe(true);
 		// R1's reason wins where both hold; the account's own page gets the web's.
 		expect(model.rows[0].blocked).toBe(
-			venueBlockText(signingVenueBlock('sign.example.com', { type: 'in_vela' })!, en)
+			venueBlockText(signingVenueBlock('sign.example.com', { type: 'in_vela' })!, en.venue.blocked)
 		);
 		expect(model.rows[1].blocked).toContain('getvela.app');
 		expect(model.rows[2]).toMatchObject({
-			blocked: en.venue.blockedWeb,
+			blocked: en.venue.blocked['settings.venue.blockedWeb'],
 			page: { name: 'Self-hosted · sign.example.com', hostShown: false }
 		});
 		expect(model.value).toBe('');
-		expect(model.note).toBe(en.venue.blockedWeb);
-		expect(model.summary).toBe(en.venue.blockedWeb);
+		expect(model.note).toBe(en.venue.blocked['settings.venue.blockedWeb']);
+		expect(model.summary).toBe(en.venue.blocked['settings.venue.blockedWeb']);
 	});
 
 	it('the live route’s reading is the fixture’s: the core asked with no saved pages', () => {

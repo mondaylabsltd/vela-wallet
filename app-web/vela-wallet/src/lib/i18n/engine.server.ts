@@ -25,7 +25,12 @@ import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
-import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
+import {
+	UNREACHABLE_LINE_KEYS,
+	VENUE_BLOCK_KEYS,
+	type SettingsMessages,
+	type VenueBlockKey
+} from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
 import type { PluralCopy } from './plural';
 
@@ -337,7 +342,17 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 	};
 }
 
-/** The serializable strings the settings screens render (spec 023). */
+/**
+ * Spec 102: a venue refusal's lines, by the corpus key the core names
+ * (`VenueBlock::key()`) — Settings and both sheets carry the same three.
+ */
+function venueBlockWords(k: (key: string) => string): Record<VenueBlockKey, string> {
+	return Object.fromEntries(VENUE_BLOCK_KEYS.map((key) => [key, k(key)])) as Record<
+		VenueBlockKey,
+		string
+	>;
+}
+
 /** Spec 102 (D4): the hand-off card's words — for the gallery's boards only. */
 export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	activate(locale);
@@ -368,6 +383,7 @@ export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	};
 }
 
+/** The serializable strings the settings screens render (spec 023). */
 export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
@@ -476,9 +492,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			inVelaBody: k('settings.venue.inVelaBody'),
 			page: k('settings.venue.page'),
 			pageBody: k('settings.venue.pageBody'),
-			blockedApp: k('settings.venue.blockedApp'),
-			blockedPage: k('settings.venue.blockedPage'),
-			blockedWeb: k('settings.venue.blockedWeb')
+			blocked: venueBlockWords(k)
 		},
 		integrity: {
 			checking: k('componentsUi.signing.integrity.checking'),
@@ -1124,11 +1138,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),
-		venueBlock: {
-			blockedApp: k('settings.venue.blockedApp'),
-			blockedPage: k('settings.venue.blockedPage'),
-			blockedWeb: k('settings.venue.blockedWeb')
-		},
+		venueBlock: venueBlockWords(k),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),

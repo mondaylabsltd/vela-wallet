@@ -124,12 +124,12 @@ export interface SettingsMessages {
 		inVelaBody: string;
 		page: string;
 		pageBody: string;
-		/** `{{domain}}` — R1's reason under Vela's own sheet. */
-		blockedApp: string;
-		/** `{{pageDomain}}`, `{{domain}}` — R1's reason under a page on another domain. */
-		blockedPage: string;
-		/** The web's reason under every page row: it opens no signing page (D-16). */
-		blockedWeb: string;
+		/**
+		 * Why a venue cannot be used, by the corpus key the core's
+		 * `VenueBlock::key()` names (`VENUE_BLOCK_KEYS`); the core supplies
+		 * the values that fill it (`venueBlockLine`).
+		 */
+		blocked: Record<VenueBlockKey, string>;
 	};
 	/**
 	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.
@@ -526,6 +526,22 @@ export const UNREACHABLE_LINE_KEYS = [
 ] as const;
 
 /**
+ * The lines a venue refusal can say (`VenueBlock::key()`): R1's two —
+ * `blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}` — and the
+ * web's `blockedWeb` (no vars: it opens no signing page, D-16). Only what a
+ * build-time manifest must resolve; which line a refusal says, and with
+ * which values, is the core's (`venueBlockLine`). `venue.test.ts` holds this
+ * list to the core.
+ */
+export const VENUE_BLOCK_KEYS = [
+	'settings.venue.blockedApp',
+	'settings.venue.blockedPage',
+	'settings.venue.blockedWeb'
+] as const;
+
+export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
+
+/**
  * Every corpus key the settings screens consume, in the order the manifest
  * declares them. The parity test iterates this, so a key that stops resolving
  * fails the build rather than shipping a dotted path onto a screen.
@@ -609,9 +625,7 @@ export const SETTINGS_KEYS = [
 	'settings.venue.inVelaBody',
 	'settings.venue.page',
 	'settings.venue.pageBody',
-	'settings.venue.blockedApp',
-	'settings.venue.blockedPage',
-	'settings.venue.blockedWeb',
+	...VENUE_BLOCK_KEYS,
 	'componentsUi.signing.integrity.checking',
 	'componentsUi.signing.integrity.matches',
 	'componentsUi.signing.integrity.trusted',

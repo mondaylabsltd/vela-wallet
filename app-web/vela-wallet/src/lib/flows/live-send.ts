@@ -1315,11 +1315,9 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			stage: 'failed',
 			title: m['componentsTx.receipt.statusFailed'],
 			captions: [
-				venueBlockText(send.tx_venue_block, {
-					blockedApp: m['settings.venue.blockedApp'],
-					blockedPage: m['settings.venue.blockedPage'],
-					blockedWeb: m['settings.venue.blockedWeb']
-				})
+				// The flow's words are keyed by corpus key already: the core's line
+				// is looked up in them as it is named.
+				venueBlockText(send.tx_venue_block, m)
 			],
 			hash: undefined,
 			cta: m['componentsTx.receipt.done'],

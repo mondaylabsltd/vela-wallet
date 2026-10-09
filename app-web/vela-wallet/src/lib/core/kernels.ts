@@ -25,6 +25,7 @@ import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
 import type { ReadSlot } from '$lib/core/generated/ReadSlot';
 import type { SignEnding } from '$lib/core/generated/SignEnding';
 import type { SignEndingState } from '$lib/core/generated/SignEndingState';
+import type { SignErrorKind } from '$lib/core/generated/SignErrorKind';
 import type { SignResponsePayload } from '$lib/core/generated/SignResponsePayload';
 import type { StableRef } from '$lib/core/generated/StableRef';
 import type { TokenRef } from '$lib/core/generated/TokenRef';
@@ -712,6 +713,24 @@ export function signingVenueBlock(domain: string, venue: SigningVenue): VenueBlo
 	return block === undefined ? null : (JSON.parse(block) as VenueBlock);
 }
 
+/**
+ * A venue refusal's sentence as the core says it (`VenueBlock::key()` with
+ * `VenueBlock::vars()`): the corpus key of the line, and the values it takes
+ * by the corpus's own names (`domain`, `pageDomain`). Translate `key`, fill it
+ * with `vars`, and the sentence is the core's whole — no shell decides which
+ * fact fills which placeholder.
+ */
+export interface VenueBlockLine {
+	key: string;
+	vars: Record<string, string>;
+}
+
+/** The words of a venue refusal (spec 102), or `null` for something that is not a `VenueBlock`. */
+export function venueBlockLine(block: VenueBlock): VenueBlockLine | null {
+	const line = wasm.venueBlockLine(JSON.stringify(block));
+	return line === undefined ? null : (JSON.parse(line) as VenueBlockLine);
+}
+
 /** The domain whose keys a page at `url` can use: its host, or `getvela.app` for `*.getvela.app`. */
 export function signingPageDomain(url: string): string {
 	return wasm.signingPageDomain(url);
@@ -1211,6 +1230,17 @@ export function parseUserOpStatus(resultJson: string): TrackStatusAnswer | null 
  */
 export function signAnswered(payload: SignResponsePayload): string | null {
 	return wasm.signAnswered(JSON.stringify(payload)) ?? null;
+}
+
+/**
+ * The message a page reads when signing ended in the error the core named
+ * `kind`, with the notice's `detail` — `dapp_rpc::sign_error_words`. For the
+ * dApp's developer, not the person: EIP-1193 messages are not UI (the person
+ * reads the sheet, in their language). `null` for a kind this core does not
+ * know.
+ */
+export function signErrorWords(kind: SignErrorKind, detail?: string | null): string | null {
+	return wasm.signErrorWords(kind, detail ?? undefined) ?? null;
 }
 
 /** What the answer to a request stands for, before the tracker is asked (RA8). */

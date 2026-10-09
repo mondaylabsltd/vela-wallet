@@ -5,9 +5,10 @@
  * layout shares them.
  */
 import { tick } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import { words } from './__fixtures__/words';
 import { buildMobileState } from './fixtures';
 import type { MobileSettingsStateId } from './model';
@@ -15,6 +16,9 @@ import type { SettingsNetEvent } from './net-events';
 import SettingsHome from './SettingsHome.svelte';
 
 const m = words();
+// The venue rows' refusals are the core's sentences (`venueBlockLine`), so
+// the fixtures are built over the loaded core.
+beforeAll(() => loadCore());
 const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 
 async function drawn(state: MobileSettingsStateId) {

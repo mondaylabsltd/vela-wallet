@@ -11,6 +11,8 @@
  * happen where the fixture knows the value, through spec 015's `fill`.
  */
 
+import { VENUE_BLOCK_KEYS } from '$lib/settings/messages';
+
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
 export const WALLET_FLOW_KEYS = [
 	// ---------------------------------------------------------------- chrome
@@ -206,9 +208,7 @@ export const WALLET_FLOW_KEYS = [
 	'send.recipientTokenContract',
 	'send.txErrorGeneric',
 	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).
-	'settings.venue.blockedApp',
-	'settings.venue.blockedPage',
-	'settings.venue.blockedWeb',
+	...VENUE_BLOCK_KEYS,
 	'send.scanAria',
 	'send.splitTotalLabel',
 	'send.continueBtn',

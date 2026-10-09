@@ -8,9 +8,10 @@
  * key it showed.
  */
 import { tick } from 'svelte';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import { words } from './__fixtures__/words';
 import { buildDesktopState } from './fixtures';
 import { withEraseFailure } from './live';
@@ -20,6 +21,9 @@ import type { SettingsPrefEvent } from './pref-events';
 import SettingsDesktop from './SettingsDesktop.svelte';
 
 const m = words();
+// The venue rows' refusals are the core's sentences (`venueBlockLine`), so
+// the fixtures are built over the loaded core.
+beforeAll(() => loadCore());
 const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 
 async function drawn(model: SettingsDesktopModel = buildDesktopState('dst1', m, IDENTICON)) {

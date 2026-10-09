@@ -13,7 +13,8 @@
  *   never an English sentence of ours, and offers no "Try again" — the same
  *   account would be refused the same way;
  * - the page, once the person closes the sheet, hears -32603 with the core's
- *   calm English ("This account cannot sign here").
+ *   own words (`signErrorWords` → `dapp_rpc::sign_error_words`: "This account
+ *   cannot sign here"), not a copy kept in the web.
  */
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it, vi } from 'vitest';
@@ -30,6 +31,7 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 });
 
 import type { SignView } from '$lib/core/generated/SignView';
+import { signErrorWords } from '$lib/core/kernels';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { signingStatus } from '../live';
 import { createSignRequestSession } from './sign-session';
@@ -136,12 +138,12 @@ describe('an account that cannot sign on the web (P2b-W1)', () => {
 			expect(status, locale).toMatchObject({
 				stage: 'failed',
 				title: m.receipt.failed,
-				captions: [m.venueBlock.blockedWeb],
+				captions: [m.venueBlock['settings.venue.blockedWeb']],
 				actions: { close: m.receipt.done }
 			});
 			expect(status?.actions?.retry, locale).toBeUndefined();
 		}
-		expect(resolveSigningMessages('zh').venueBlock.blockedWeb).toBe(
+		expect(resolveSigningMessages('zh').venueBlock['settings.venue.blockedWeb']).toBe(
 			'签名页只能从 Vela 应用打开，网页版不支持。'
 		);
 		await run.close();
@@ -153,14 +155,14 @@ describe('an account that cannot sign on the web (P2b-W1)', () => {
 		// Held while the failure is on screen (spec 096 F8).
 		expect(run.answers).toEqual([]);
 		await run.close();
+		// The refusal carries no detail, so the words are the core's alone.
+		const words = signErrorWords('venue_blocked', null);
+		expect(words).toBe('This account cannot sign here');
 		expect(run.answers).toEqual([
 			{
 				id: 'rid-102',
 				result: undefined,
-				error: expect.objectContaining({
-					code: -32603,
-					message: 'This account cannot sign here'
-				})
+				error: expect.objectContaining({ code: -32603, kind: 'venue_blocked', message: words })
 			}
 		]);
 	});

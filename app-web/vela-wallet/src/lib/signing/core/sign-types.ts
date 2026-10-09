@@ -215,6 +215,10 @@ export const CHAIN_MISMATCH_MESSAGE = 'chainId does not match the connected chai
  *
  * Pure and dependency-free so both the executor (which puts it on the wire)
  * and the provider (which renders it) can read it, on either platform.
+ *
+ * A kind with no provider wording to keep is not restated here: spec 102's
+ * `venue_blocked` reads the core's own words (`signErrorWords`, the core's
+ * `dapp_rpc::sign_error_words`), which the executor asks for itself.
  */
 export function signErrorMessage(notice: SignErrorNotice): string {
 	const detail = notice.detail ?? undefined;
@@ -248,11 +252,6 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':
 			return 'The quoted fee expired. Review the request again.';
-		case 'venue_blocked':
-			// Spec 102 (P2b-W1): the page's sentence is the core's
-			// (`dapp_rpc::sign_error_words`); the person reads the reason on
-			// the sheet, in their language. `venue-blocked.test.ts` pins it.
-			return 'This account cannot sign here';
 		case 'submit_failed':
 		default:
 			return detail ?? 'Signing failed';

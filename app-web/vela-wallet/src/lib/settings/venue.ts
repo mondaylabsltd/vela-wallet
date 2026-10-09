@@ -18,6 +18,7 @@ import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
+import { venueBlockLine } from '$lib/core/kernels';
 import { fill } from '$lib/wallet/messages';
 import type { SettingsMessages } from './messages';
 import type {
@@ -39,28 +40,23 @@ export function hostOf(url: string): string {
 	}
 }
 
-/** The three reasons' words — Settings' and, for a refusal at sign time, the sheets'. */
-export type VenueBlockWords = Pick<
-	SettingsMessages['venue'],
-	'blockedApp' | 'blockedPage' | 'blockedWeb'
->;
+/**
+ * The refusals' words, by the corpus key the core names for each
+ * (`VenueBlock::key()`) — Settings' and, for a refusal at sign time, the
+ * sheets'. A manifest resolves exactly `VENUE_BLOCK_KEYS` (`./messages`).
+ */
+export type VenueBlockWords = Readonly<Record<string, string>>;
 
 /**
- * Why a venue cannot be used, in the person's words — the corpus key the
- * core's `VenueBlock::key()` names for each variant, with its domains: R1's
- * two (`blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}`) and
- * the web's (`blockedWeb`, no vars — it opens no signing page, D-16).
+ * Why a venue cannot be used, in the person's words: the core's whole
+ * sentence (`venueBlockLine` — its corpus key and the values that fill it),
+ * translated. No variant is read here. Empty only for a line this build has
+ * no words for, which `VENUE_BLOCK_KEYS` and `venue.test.ts` rule out.
  */
-export function venueBlockText(block: VenueBlock, m: Words | VenueBlockWords): string {
-	const words: VenueBlockWords = 'venue' in m ? m.venue : m;
-	switch (block.type) {
-		case 'app_cannot_reach':
-			return fill(words.blockedApp, { domain: block.domain });
-		case 'page_on_other_domain':
-			return fill(words.blockedPage, { pageDomain: block.page_domain, domain: block.domain });
-		case 'not_on_web':
-			return words.blockedWeb;
-	}
+export function venueBlockText(block: VenueBlock, words: VenueBlockWords): string {
+	const line = venueBlockLine(block);
+	const template = line === null ? undefined : words[line.key];
+	return line === null || template === undefined ? '' : fill(template, line.vars);
 }
 
 /** `Keys on {{domain}}`. */
@@ -177,7 +173,7 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 				web === undefined
 					? choice.active
 					: web.blocked == null && sameVenue(choice.venue, web.venue),
-			blocked: choice.blocked ? venueBlockText(choice.blocked, m) : undefined
+			blocked: choice.blocked ? venueBlockText(choice.blocked, m.venue.blocked) : undefined
 		};
 	});
 	const active = rows.find((row) => row.active);
@@ -185,7 +181,7 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 	// under the first row.
 	const blocked =
 		web?.blocked != null
-			? venueBlockText(web.blocked, m)
+			? venueBlockText(web.blocked, m.venue.blocked)
 			: rows.length > 0 && rows.every((row) => row.blocked !== undefined)
 				? rows[0].blocked
 				: undefined;
