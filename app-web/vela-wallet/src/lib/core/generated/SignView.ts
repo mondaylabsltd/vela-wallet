@@ -69,16 +69,29 @@ failure_retryable: boolean,
  * the sheet (PR 2 note 9), drawn under the failure — the one field for
  * both ways a refusal arrives:
  * - at submit, the relay's answer: another operation of the account
- *   holds the nonce → `componentsUi.signing.confirmBlock.previousPending`
- *   (retryable, as on Send); any other refusal →
- *   `componentsUi.signing.refused`;
+ *   holds the nonce → `componentsUi.signing.notSentBody`
+ *   ([`super::sign_confirm::NOT_SENT_BODY_KEY`], under
+ *   [`Self::failure_not_sent`]'s calm title; retryable, as on Send); any
+ *   other refusal → `componentsUi.signing.refused`;
  * - after it, the tracker's verdict ([`Event::OpTracked`]'s `refusal`):
  *   its reason's sentence (`tx_tracker::refusal_key` — the fee sentence
  *   only for `fee_below_market`, "went first" for `nonce_used`).
  *
  * `None` for a failure that was no refusal. `#[serde(default)]`.
  */
-failure_refusal_key: string | null, notice: SignNotice | null, global_chain_id: number, 
+failure_refusal_key: string | null, 
+/**
+ * The failure on the sheet is no failure: the relay turned the operation
+ * back at submit because the account's previous one on this network
+ * still holds the nonce. Nothing was sent and nothing went wrong, so the
+ * sheet says it calmly — the title
+ * [`super::sign_confirm::NOT_SENT_TITLE_KEY`] ("Not sent yet") in place
+ * of "Failed", over [`Self::failure_refusal_key`]'s sentence, with no
+ * failure styling (no red mark, no error haptic) — and offers Try again
+ * ([`Self::failure_retryable`]). `#[serde(default)]`: a reader that
+ * predates it reads `false`.
+ */
+failure_not_sent: boolean, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

@@ -9,7 +9,8 @@ export type BalanceView = { address: string | null,
  * The ONE number the hero may render, in USD (the display-currency
  * machine owns conversion). `None` while the skeleton shows — never a
  * fake $0 (invariant ②) — AND while privacy hides: the fiat value is
- * withheld by construction, not masked downstream (invariant ⑧).
+ * withheld by construction, not masked downstream (invariant ⑧) — AND
+ * while [`Self::unreachable`]: nothing was read, so there is no figure.
  */
 display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
 /**
