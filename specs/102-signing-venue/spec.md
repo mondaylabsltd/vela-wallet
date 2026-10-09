@@ -83,6 +83,16 @@ Rules (owned by vela-core; shells draw):
 7. A corpus reason for venues the web cannot use; a `venue_blocked` failure kind for a sign-time refusal (translated).
 8. plan.md: on the web, P2-08 is not wired and P2-09 is read-only.
 9. The renaming in D6 (15 locales).
+10. Words for Settings → Signing pages: trust a version, rename, remove, the page's name (the phones borrowed other screens' keys).
+11. The signing plan carries the key's display name (item 3), so no shell reads the account record for it.
+12. A key ceremony on a self-hosted page has its own title (create / sign in / confirm), not the hand-off card's.
+13. A freshness check for an admitted page, across the bindings.
+14. The check fetches what a browser gets: the core names the request headers (a host rewrote HTML for navigations only).
+15. A page address is normalised (full-width forms a CJK keyboard types) and validated (scheme, ASCII host, port), or refused with a translated reason.
+16. The ceremony-request binding's doc no longer says `method = trusted_signer`.
+17. The key label never repeats the "Signing account" row: a key named after the wallet is named by its place.
+
+All seventeen are done in the core — see plan.md, "Core round after Phase 2" and "Phase 2b".
 
 ## Open items
 

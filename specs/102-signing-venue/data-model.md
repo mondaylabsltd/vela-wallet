@@ -34,12 +34,15 @@ pub fn locked_to_page(domain) -> bool    // R2: !is_app_domain
 pub enum VenueBlock {                    // R1's reasons; .key() → the corpus line
     AppCannotReach { domain },                      // settings.venue.blockedApp   {{domain}}
     PageOnOtherDomain { page_domain, domain },      // settings.venue.blockedPage  {{pageDomain}} {{domain}}
+    NotOnWeb,                                       // settings.venue.blockedWeb   (core round: the web's only)
 }
 pub fn reachability(domain, &SigningVenue) -> Result<(), VenueBlock>             // R1
 
-pub struct SigningPage { url: String, name: String }                             // a saved page
+pub struct SigningPage { url: String, name: String, trusted: Vec<String> }       // a saved page; `trusted`: its own trusted versions (core round)
+pub fn trusted_versions(saved, url) -> Vec<String>          // a page's trusted list; empty for the official page
 pub struct VenueChoice { venue, name, domain, official, active, blocked: Option<VenueBlock> }
 pub fn venue_choices(domain, active: &SigningVenue, saved: &[SigningPage]) -> Vec<VenueChoice>   // R1 + R2
+pub fn venue_choices_on_web(domain, active, saved) -> Vec<VenueChoice>   // + NotOnWeb on every page row R1 lets through
 pub fn default_venue(domain, pages) -> Option<SigningVenue>   // in_vela for getvela.app; else the first page on the domain
 
 pub fn ceremony_page(page: Option<&str>) -> Option<String>    // R3: Some only for a page on a custom domain
@@ -49,7 +52,11 @@ pub fn venue_for(kind, domain, &SigningVenue) -> SigningVenue // R4
 pub struct KeyRoute { credential_id, method, transports, hints: Vec<String> }    // R5
 pub fn hints_of(method) -> &[&str]   // platform → client-device · hybrid → hybrid · security_key → security-key
 
-pub struct SigningPlan { domain, venue, blocked: Option<VenueBlock>, key: Option<KeyRoute> }
+pub fn place_title_key(method) -> &'static str              // "This device" / "Phone or tablet" / "USB security key"
+pub struct KeyLabel { name: Option<String>, place_key: String }   // "Confirm with {key}": name ?? t(place_key)
+
+pub struct SigningPlan { domain, venue, blocked: Option<VenueBlock>, key: Option<KeyRoute>, key_label: KeyLabel }
+impl SigningPlan { fn on_web(self) -> Self }                // page venue on getvela.app → in Vela; custom domain → blocked NotOnWeb
 ```
 
 `venue_choices` order: Vela's sheet, the official page, the saved pages (deduplicated, invalid
@@ -70,10 +77,23 @@ pub fn admit(&Target, observed: Option<&str>, failure: CheckFailure,
 
 pub struct CheckedPage { target, verdict, checked_at_ms }  // private; made only by admit()
 impl CheckedPage {
-    fn url_launch(&self, request, callback, token, now_ms) -> Result<String, LaunchRefused>
-    fn ws_launch(&self, port, token, now_ms) -> Result<String, LaunchRefused>
-    fn is_fresh(now_ms) / line(now_ms) / target() / verdict() / checked_at_ms()
+    fn url_launch(&self, request, callback, token, lang, now_ms) -> Result<String, LaunchRefused>   // `&lang=` (core round)
+    fn ws_launch(&self, port, token, lang, now_ms) -> Result<String, LaunchRefused>
+    fn is_fresh(now_ms) / refresh_due(last_attempt, now_ms) / line(now_ms) / target() / verdict() / checked_at_ms()
 }
+impl Admission { fn is_fresh(now) / refresh_due(last_attempt, now) / version_to_trust() -> Option<&str> / line() / page() }
+
+// Core round — freshness, the background refresh, the fetch, the time
+pub const REFRESH_AFTER_MS: u64 = MAX_CHECK_AGE_MS / 2;    // 12 h
+pub const REFRESH_POLL_MS: u64 = 60 * 60 * 1000;           // ask hourly (plus start / foreground)
+pub const RETRY_AFTER_MS: u64 = 10 * 60 * 1000;            // rest after an attempt that could not complete
+pub const CHECK_HEADERS: &[(&str, &str)] = &[("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")];
+pub fn refresh_due(checked_at_ms: Option<u64>, last_attempt_ms: Option<u64>, now_ms) -> bool
+pub fn is_fresh_at(checked_at_ms, now_ms) -> bool
+pub fn keep_or_replace(previous: Option<Admission>, next: Admission, now_ms) -> Admission   // an offline refresh keeps a fresh admission
+pub fn keeps_previous(previous: Option<&Admission>, next: &Admission, now_ms) -> bool
+pub fn line_while_checking(previous: Option<&Admission>, now_ms) -> IntegrityLine          // fresh previous' line, else Checking
+pub fn checked_time(at, now, utc_offset_min, date_format, time_format, language) -> String // {{time}}: clock today, else date + time
 
 pub enum IntegrityState { Checking, Matches, TrustedHere, Unchecked, Mismatch, Blocked,
                           AskToTrust, CouldNotCheck, NoVersion, AllBlocked }
@@ -194,10 +214,15 @@ Nothing changes in the registry or on-chain.
 Ops:     ReadStored | WritePages { pages: SigningPage[], remove_legacy_url?: bool }
 Results: Stored { pages_json?: string, legacy_url?: string } | Written
 Events:  Refresh | PageAdded { url, name } | PageRenamed { url, name } | PageRemoved { url }
+         | VersionTrusted { url, version }                 // core round: "Trust this version"
 View:    { pages: SigningPageRow[] /* official first */, saved: SigningPage[],
            add_error?: "invalid" | "insecure" | "duplicate", loaded }
-SigningPageRow { url, name, domain, official }
+SigningPageRow { url, name, domain, official, trusted: string[] }
 ```
+
+`VersionTrusted` stores a sha256 on that page (saving it first when it was not saved); it is refused
+for the official page (any `sign.getvela.app` address), for anything that is not a sha256, and before
+the list was read. The stored shape gains `trusted` (omitted when empty).
 
 Edits are refused until the list was read (a write would replace pages it never saw). Removing a
 page changes no account's venue (`venue_choices` still lists an active page that is not saved).
@@ -247,6 +272,10 @@ Without it, as before.
   `settings.venue.{inVela,inVelaBody}`, `settings.venue.{page,pageBody}`,
   `onboarding.create.{ownPageTitle,ownPageBody}`.
 - `VenueBlock::key()`, `IntegrityState::key()` name the reason and integrity lines.
+- Core round: `VenueRow::OwnPage` → `VenueRow::SigningPage` (`"signing_page"`; `venue_words` still
+  reads `"own_page"`), keys `onboarding.create.{signingPageTitle,signingPageBody}`;
+  `Ceremony::title_key()` → `componentsUi.signing.ceremony{Create,SignIn,Confirm}`;
+  `KeyLabel.place_key` = the place rows' title keys.
 - Keys rows (`wallet_keys::WalletKeyRow.method`) are the key's reported place, never
   `trusted_signer`; `WalletKeyRow.signer_origin` and `DeviceKey.signer_origin` are gone.
 
@@ -260,3 +289,26 @@ trustedSignerDoneTab,signWith}`, `settings.signing.{pageTitle,pageSubtitle,pageF
 `onboarding.create.{methodBlockedHint,methodBlockedSigner}`, and three dead duplicates
 (`onboarding.create.{alertNotDiscoverableTitle,alertNotDiscoverableBody,verifyStuckHint}`).
 1905 paths = 1804 leaf + 101 branch.
+
+Core round (D6 and the shells' gaps): new `settings.venue.blockedWeb`,
+`settings.signing.{pageSelfHosted,pageTrust,pageRename,pageRemove,pageName}`,
+`componentsUi.signing.{ceremonyCreate,ceremonySignIn,ceremonyConfirm}`; renamed
+`onboarding.create.{ownPageTitle,ownPageBody}` → `{signingPageTitle,signingPageBody}` ("Use a trusted
+signing page"); reworded `settings.venue.{inVela,page}`, `settings.signing.{pageOfficial,pageAdd}`,
+`componentsUi.signing.handoffTitle`; retired `home.rescanNativeNote` (dead since spec 004).
+1913 paths = 1812 leaf + 101 branch.
+
+## 8. The send and sign cores: a venue that cannot be used here (core round)
+
+| Core | Was | Now |
+|---|---|---|
+| `sign_request` | a shell refusing for the venue reported `Failed { message }` (English) | `SignSubmitOutcome::VenueBlocked { block }` → `SignErrorKind::VenueBlocked` (-32603, not retryable), `SignErrorNotice.venue_block`; record reason `SignerUnavailable` |
+| `send` | `SendSubmitFailure::Other` → `send.txErrorGeneric` | `SendSubmitFailure::VenueBlocked { block }` → `SendTxErrorKey::VenueBlocked`, `SendView.tx_venue_block` |
+| `sign_confirm` | — | `handoff_fee(FeeView?, FeeSpeedView?) → HandoffFee { fee, tier?, tier_key? }` (the hand-off card's row) |
+
+## 9. Page addresses (`trusted_signer::signer_url`, core round)
+
+Full-width forms are folded (U+FF01–FF5E → ASCII, U+3000 → space, `。`/`｡` → `.`), then only
+`https` (or `http` on loopback), an ASCII host (LDH labels ≤ 63, ≤ 253 total; `xn--` IDNs; IPv4;
+`[IPv6]`), and a port 1–65535 pass; a default port is dropped, user info refused, a non-ASCII path
+percent-encoded. `http：／／localhost：8140` → `http://localhost:8140/`; `https://例子.中国/` → invalid.

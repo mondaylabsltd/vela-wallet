@@ -249,9 +249,13 @@ Wire summary every shell shares:
 - [ ] P2-07 [desktop] Wire the ported checker: `checked_page` for every launch, check every page in
   use at start and when stale, `line()` on the card.
 - [ ] P2-08 [all] Settings → Signing pages (`SigningPagesCore`; add / rename / remove; official first;
-  each row's domain and integrity line); the 071 URL field removed.
+  each row's domain and integrity line); the 071 URL field removed. **Web (Phase 2 report): NOT
+  wired** — the board exists in the gallery, no route reaches it; see P2b-W3.
 - [ ] P2-09 [all] Account settings → "Where you review and sign" (`signing_venue_choices`; disabled
-  rows with `VenueBlock` reasons; custom-domain accounts locked; `signing_venue_chosen`).
+  rows with `VenueBlock` reasons; custom-domain accounts locked; `signing_venue_chosen`). **Web
+  (Phase 2 report): READ-ONLY** — it draws the account's venue and rows but sends no
+  `signing_venue_chosen`; by design now (the web opens no page, so every page row is disabled with
+  `settings.venue.blockedWeb`, P2b-W2).
 - [ ] P2-10 [all] Keys list: captions by place, never "Trusted Signer"; a custom-domain account
   shows its domain (`settings.signing.keysOn`).
 - [ ] P2-11 [web] The web opens no page (owner, 2026-09-23): a page venue on a `getvela.app` account
@@ -321,3 +325,204 @@ Wire summary every shell shares:
   no client); the budget did not move.
 - **D-12 Removing a saved page changes no account** (its venue still names it, and the venue list
   still shows it as active).
+
+## Core round after Phase 2 (2026-10-09) — the gaps the shells hit
+
+The shells' Phase 2 reports (desktop, web, Android, iOS) and the page found seventeen things the core
+did not yet say. Each is now a core rule with its bindings and tests; the shells adopt them in
+Phase 2b (below). Tests: `tests/signing_venue_102b.rs` (21), plus `app_signing_pages`,
+`app_sign_request::a_blocked_venue_is_said_and_not_retried`,
+`app_send::a_blocked_venue_is_said_with_its_reason`, `method_words::a_key_label_names_its_place_…`,
+and the bridges' `trusted_signer_bridge::tests::{freshness_and_the_background_refresh,
+trust_time_and_titles_across_the_boundary}`, `tests_102_core_round::*`.
+
+| # | Gap | Rule (core) | UniFFI | wasm |
+|---|---|---|---|---|
+| 1 | Trust an unknown version of a self-hosted page | `SigningPagesEvent::VersionTrusted {url, version}` stores it on THAT page (`SigningPage.trusted`, `SigningPageRow.trusted`); refused for the official page, a non-sha256, an unread list; an unsaved page is saved by it. The trusted list a check takes is the page's (`signing_venue::trusted_versions`); `launch::{target, admit}` ignore `trusted` for the official page. Question = the `integrity.askTrust` line; button = `settings.signing.pageTrust` | `SignerPageAdmission.version_to_trust()`, `signing_page_trusted(saved_json, url)`; the event rides `SigningPagesCore` | event rides `SigningPagesCore` |
+| 2 | `checked {{time}}` | `launch::checked_time(at, now, utc_offset_min, date_format, time_format, language)`: the clock time in the person's format when the check ran today, else date + time | `signer_integrity_time(…)` | `signerIntegrityTime(…)` |
+| 3, 11, 17 | "Confirm with {key}" | `KeyLabel {name?, place_key}` — the sign-in key's own label when it is not the wallet's name (trimmed, any case), else its place's title; a record with no sign-in key names its first key's reported place. `Account::key_label()`, carried as `SigningPlan.key_label` | in `signing_plan` JSON | in `signingPlan` JSON |
+| 4, 13 | Stale checks: "checking", background refresh, freshness | `launch::{REFRESH_AFTER_MS (12 h), REFRESH_POLL_MS (1 h), RETRY_AFTER_MS (10 min), refresh_due, is_fresh_at, keep_or_replace, keeps_previous, line_while_checking}`, `Admission::{is_fresh, refresh_due}`, `CheckedPage::refresh_due` | `SignerPageAdmission.{is_fresh, checked_at_ms, refresh_due}`, `signer_page_keep_or_replace`, `signer_integrity_line_while_checking`, `signer_page_refresh_due`, `signer_page_refresh_schedule` | `signerCheckFresh`, `signerCheckRefreshDue` |
+| 5 | Hand-off card fee + speed row | `sign_confirm::handoff_fee(FeeView?, FeeSpeedView?) → HandoffFee {fee, tier?, tier_key?}` — the card reads the SAME `FeeView` (session in force) and `FeeSpeedView` the sheet drives; no row unless the fee is settled for the speed in force; no control on the card; Open = `sign_confirm_state.enabled && line.opens` | `handoff_fee_row(fee_json?, speed_json?)` | `handoffFeeRow` |
+| 6 | `lang=` on the launch | `CheckedPage::url_launch(request, callback, token, lang, now)` / `ws_launch(port, token, lang, now)` put `&lang=<tag>` in the query (a malformed tag is left out); the page resolves it by the apps' rule | `SignerPageAdmission.url_launch(request_json, token, lang, now_ms)` / `ws_launch(port, token, lang, now_ms)` — **breaking** | — |
+| 7 | The web's reason; a translated sign-time refusal | `VenueBlock::NotOnWeb` (`settings.venue.blockedWeb`); `venue_choices_on_web` (page rows R1 does not block get it); `SigningPlan::on_web` (page venue on `getvela.app` → in Vela; custom domain → `blocked: not_on_web`). `SignSubmitOutcome::VenueBlocked {block}` → `SignErrorKind::VenueBlocked` + `SignErrorNotice.venue_block` (not retryable; page hears -32603 "This account cannot sign here"; record `SignerUnavailable`). `SendSubmitFailure::VenueBlocked {block}` → `SendTxErrorKey::VenueBlocked` + `SendView.tx_venue_block` | via JSON | `signingPlan(account, "web")`, `signingVenueChoices(…, "web")` |
+| 9 | D6 naming | values reworded in 15 locales; `onboarding.create.{ownPageTitle,ownPageBody}` RENAMED `{signingPageTitle,signingPageBody}` (the entry lists Vela's official page too — "own page" misnamed it); `VenueRow::SigningPage` (`"signing_page"`; `"own_page"` still reads) | `venue_words("signing_page")` | `venueWords("signing_page")` |
+| 10 | Signing pages' own words | `settings.signing.{pageTrust, pageRename, pageRemove, pageName, pageSelfHosted}` | — | — |
+| 12 | A ceremony's own title | `Ceremony::title_key()`: create a key → `componentsUi.signing.ceremonyCreate`; sign in + recovery proofs → `ceremonySignIn`; a new key's proof, a member proof → `ceremonyConfirm` | `trusted_signer_ceremony_title_key(operation_json)` | — (the web runs no page ceremony) |
+| 14 | The check fetches what a browser gets | `launch::CHECK_HEADERS` — a navigation `Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8`; documented beside the rule (Cloudflare's beacon was injected into `text/html` answers only; the page's `_headers` now say `no-transform`) | `signer_page_check_headers() → [SignerHttpHeader {name, value}]` | `signerPageCheckHeaders()` (JSON pairs) |
+| 15 | Full-width input stored as an address | `trusted_signer::signer_url` folds the full-width forms a CJK keyboard types (U+FF01–FF5E, U+3000, `。`/`｡`), then accepts only https (or http on loopback), an ASCII host (LDH labels, `xn--` IDNs, IPv4, `[IPv6]`), a port 1–65535; drops a default port; percent-encodes a non-ASCII path; refuses user info. Refusals are `invalid` / `insecure` (`settings.signing.pageInvalid` / `pageInsecure`) | (all URL inputs go through it) | (same) |
+| 16 | Stale doc | `trusted_signer_ceremony_request`'s doc: an op whose `page` is set, `method` = the key's place | — | — |
+
+### Decisions taken in this round — for the owner
+
+- **D-13 `{{time}}` is a moment, not "2 min ago".** Every locale's integrity line already says
+  "checked AT {{time}}" (「检查于 {{time}}」, 「{{time}} に確認」, "{{time}} kontrol edildi"), so a
+  clock time reads right in all fifteen with no new words, never goes stale on an open card, and is
+  what all four shells had reached for on their own. The relative words the corpus has ("2m",
+  「2分钟前」) are an activity list's and read wrongly there. A check can be up to a day old, so a
+  check from before today carries its date ("10/08/2026, 14:32") — "14:32" alone could be read as
+  later than now.
+- **D-14 Background refresh: half a day.** A page in use (each account's page venue + every saved
+  page) is re-checked when its check is older than 12 h — on start, on every return to the
+  foreground, and hourly while the app runs; an attempt that could not complete rests 10 min. An
+  offline refresh keeps a still-fresh admission; a completed one (a mismatch included) replaces it.
+  So Open almost never waits; when it does (a stale check), the card reads "checking" with Open off.
+- **D-15 Trust is per page and per device.** "Trust this version" stores the version on that saved
+  page (`vela.signingPages`), not in the device-wide `vela.signerPage.trusted` list (no longer read
+  or written by 102 shells — a self-hoster answers the question again, once per page). The official
+  page can never be trusted into opening something else: the core ignores `trusted` for it even when
+  a shell passes it.
+- **D-16 The web.** Page rows are shown, disabled, with "Signing pages open from the Vela apps, not
+  the web." R1's reason wins where both hold. A `getvela.app` account whose venue is a page signs in
+  Vela on the web (P2-11, unchanged); a custom-domain account is refused there with the same line.
+- **D-17 Key label.** "Confirm with YubiKey 5C" for a key the person named; "Confirm with Phone or
+  tablet" when the key carries the wallet's name (the card's "Signing account" row already says it).
+- **D-18 The hand-off card's Open is the sheet's confirm** (`sign_confirm_state`) AND the integrity
+  line's `opens` — the fee must be settled for the speed in force before the page opens, because the
+  page signs the operation the app assembled, fee leg included. No fee control on the card.
+- **D-19 D6, the venue rows.** Besides the owner's wording for the page row ("Review and sign on a
+  trusted signing page"), "In Vela" became "Review and sign in Vela" / 「在 Vela 里预览并签名」 so the
+  two rows of one choice read alike. The official page's NAME is now "Vela's official signing page"
+  (`settings.signing.pageOfficial`, which the shells draw as the row's name — the web also used it as
+  a tag, which it no longer needs).
+- **D-20 Addresses in other scripts are refused, not converted.** A self-hosted page on an IDN must be
+  added in its `xn--` form: the passkey's relying party is the host the BROWSER computes, and a second
+  home-made IDNA conversion is how the two would disagree. The full-width fold is the part of NFKC an
+  address can contain; the core carries no normalisation tables (wasm size).
+- **D-21 Residency.** The new lines (+9 leaves, net) fit under SC-005 without a budget move by
+  retiring `home.rescanNativeNote` — the longest `home.rescan*` line, with zero call sites since
+  spec 004's research (git grep, every 102 worktree). The rest of `home.rescan*` is equally dead and
+  left for its own clean-up.
+
+## Phase 2b — each shell adopts the core round
+
+Wire summary (what changes for every shell):
+
+| Was | Now |
+|---|---|
+| shell formats `{{time}}` itself (desktop `clock`, Android `sameDay`+`Formats`, iOS `Formats.time`) | `signer_integrity_time` / `signerIntegrityTime` / `launch::checked_time` |
+| key name read from the account record (`keys[].name` vs `account.name`) | `SigningPlan.key_label` → `name ?? t(place_key)` |
+| `url_launch(request_json, token, now_ms)`, `ws_launch(port, token, now_ms)` | `+ lang` before `now_ms` (the app's language tag) |
+| fetch the target with the HTTP client's default `Accept` | send `signer_page_check_headers()` / `CHECK_HEADERS` |
+| trusted = device-wide `vela.signerPage.trusted` | trusted = the page's own list (`signing_page_trusted(saved_json, url)` / `SigningPageRow.trusted`) |
+| AskToTrust: no action (or borrowed "Confirm") | button `settings.signing.pageTrust` → `version_trusted {url, version: admission.version_to_trust()}`, then check again |
+| stale check re-runs at Open with no state | draw `signer_integrity_line_while_checking(previous, now)`; refresh in the background by `signer_page_refresh_due` + `signer_page_refresh_schedule`; keep the result through `signer_page_keep_or_replace` |
+| ceremony on a page titled `handoffTitle` | `trusted_signer_ceremony_title_key(op_json)` |
+| borrowed `onboarding.create.confirmKeyBtn` / `explore.rename` / `onboarding.create.removeKeyBtn` / `contacts.nameLabel` on Signing pages | `settings.signing.{pageTrust, pageRename, pageRemove, pageName}` |
+| `onboarding.create.{ownPageTitle,ownPageBody}`, `venue_words("own_page")` | `onboarding.create.{signingPageTitle,signingPageBody}`, `venue_words("signing_page")` |
+| a self-hosted row named by its host | `settings.signing.pageSelfHosted` ("Self-hosted · {{domain}}") unless the person named it |
+| a sign-time venue refusal in English | `SignSubmitOutcome::venue_blocked {block}` / `SendSubmitFailure::venue_blocked {block}`; draw `VenueBlock::key()` (`blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}`, `blockedWeb`) |
+| `VenueBlock` had two variants | three: `not_on_web` (no vars) — exhaustive matches/unions must handle it |
+
+### Desktop — `app-desktop/vela-wallet/src` (Rust, links `vela-core`)
+
+- [ ] P2b-D1 `executor/trusted_signer.rs:785` `page.url_launch(…, lang, now)` and `trusted_signer_e2e.rs`
+  `ws_launch(port, token, lang, now)` — `lang` = the app's language (`loc.language()`).
+- [ ] P2b-D2 `signing/integrity.rs:73-99` `text()`/`clock()` → `launch::checked_time(at, now, offset,
+  date, time, lang)` with `format_prefs::current()`'s date and time words.
+- [ ] P2b-D3 `executor/signer_integrity.rs`: `fetch_and_hash` (`:160`) and the index fetch (`:101`) send
+  `launch::CHECK_HEADERS`; `trusted` per page (`signing_venue::trusted_versions(saved, base)`);
+  `record` keeps a fresh admission through an offline refresh (`launch::keep_or_replace` /
+  `keeps_previous`); `line` while running → `launch::line_while_checking`; `wants_check` →
+  `launch::refresh_due(checked_at, last_attempt, now)`; poll every `REFRESH_POLL_MS` and on focus
+  (`prime_in_background`).
+- [ ] P2b-D4 Trust: on an `AskToTrust` line (card, Settings → Signing pages, the choosers' picker) a
+  `settings.signing.pageTrust` button → `SigningPagesEvent::VersionTrusted { url,
+  version: admission.version_to_trust() }`, then `forget_refusal` + check.
+- [ ] P2b-D5 `executor/send.rs:160-169` (`key_name`) → `plan.key_label` (`KeyLabel::text(|k| loc.t(k))`);
+  `gallery.rs:476-514`, `signing/trusted_signer.rs:516-571` fixtures follow.
+- [ ] P2b-D6 Hand-off card: `sign_confirm::handoff_fee(Some(&fee_view), speed_view.as_ref())` as one
+  quiet row under the key line; Open enabled iff `confirm_state_of(…).enabled && line.opens`.
+- [ ] P2b-D7 Ceremony on a page: title `Ceremony::of(op)?.title_key()` instead of `handoffTitle`
+  (`signing/trusted_signer.rs:339,436`).
+- [ ] P2b-D8 D6: `loc.rs:504-505` and `signing/pages.rs:209-210` → `onboarding.create.signingPage{Title,Body}`
+  (or `venue_words("signing_page")`); self-hosted rows `settings.signing.pageSelfHosted`; Signing
+  pages' rename/remove/name → `settings.signing.page{Rename,Remove,Name}`.
+- [ ] P2b-D9 A venue refusal at sign time → `SignSubmitOutcome::VenueBlocked{block}` /
+  `SendSubmitFailure::VenueBlocked{block}`; draw `SignErrorNotice.venue_block` / `SendView.tx_venue_block`.
+
+### Android — `app-android/vela-wallet/app/src/main/java/app/getvela/wallet`
+
+- [ ] P2b-A1 `feature/signing/trustedsigner/TrustedSignerScheme.kt:104` `admission.urlLaunch(request, token,
+  lang, nowMs)`.
+- [ ] P2b-A2 `SignerPageChecks.kt:237-256` (`words`, `sameDay`) → `signerIntegrityTime(checkedAtMs, now,
+  offsetMinutes, dateFormat, timeFormat, language)`.
+- [ ] P2b-A3 `SignerPageChecks.kt:263-290`: request headers from `signerPageCheckHeaders()` (replacing the
+  hand-set `Accept`); `trusted` from `signingPageTrusted(savedJson, url)`; keep through
+  `signerPageKeepOrReplace`; draw `signerIntegrityLineWhileChecking` while a check runs; refresh by
+  `signerPageRefreshDue` / `signerPageRefreshSchedule()` on start, `ON_RESUME`, hourly.
+- [ ] P2b-A4 Trust: `feature/settings/SettingsLive.kt:161` `trust` → `settings.signing.pageTrust`; send
+  `version_trusted {url, version}` from `admission.versionToTrust()`; same button on the hand-off
+  card's AskToTrust line.
+- [ ] P2b-A5 `SettingsLive.kt:151-152` (+ remove) → `settings.signing.page{Name,Rename,Remove}`;
+  `core/i18n/I18nKeys.kt:124-125,430` borrowings retire from this screen.
+- [ ] P2b-A6 `feature/signing/trustedsigner/SigningVenue.kt:80` (`keyName`) and
+  `feature/send/core/UserOpSpine.kt:96-145` → `plan.key_label`.
+- [ ] P2b-A7 Hand-off card fee row: `handoffFeeRow(feeJson, speedJson)`; Open = `signConfirmState`
+  enabled && `line.opens`.
+- [ ] P2b-A8 `feature/signing/SigningLive.kt:102`: a ceremony's title is
+  `trustedSignerCeremonyTitleKey(opJson)`.
+- [ ] P2b-A9 D6: `feature/onboarding/flow/OwnPage.kt:75,96` `venueWords("signing_page")`; self-hosted rows
+  `settings.signing.pageSelfHosted`; `FlowFixtures.kt:52`, `FlowCopy.kt:87` doc.
+- [ ] P2b-A10 Venue refusals (hard-coded English in `UserOpSpine.kt`) → the `venue_blocked` outcome /
+  failure.
+
+### iOS — `app-ios/VelaWallet/VelaWallet` (`vela_core_uniffi.swift` regenerated in this round)
+
+- [ ] P2b-I1 `Features/Signing/TrustedSigner/TrustedSignerChannel.swift:217`
+  `admission.urlLaunch(requestJson:token:lang:nowMs:)`.
+- [ ] P2b-I2 `SignerPageChecks.swift:308-320` (`text`) → `signerIntegrityTime(…)`.
+- [ ] P2b-I3 `SignerPageChecks.swift`: fetch with `signerPageCheckHeaders()`; per-page `trusted`
+  (`signingPageTrusted`); `signerPageKeepOrReplace`; `signerIntegrityLineWhileChecking`; refresh by
+  `signerPageRefreshDue` on `scenePhase == .active` and hourly.
+- [ ] P2b-I4 `Features/Settings/SigningSettings.swift:161-164` → `settings.signing.page{Rename,Remove,Trust,Name}`;
+  trust sends `version_trusted`.
+- [ ] P2b-I5 `Core/SigningVenue.swift:170-209` (`keyName` from the record), `App/RootView.swift:3820`,
+  `Core/UserOpSpine.swift:561`, `Features/Signing/Core/SigningController.swift:183` → `plan.key_label`.
+- [ ] P2b-I6 `Features/Signing/TrustedSigner/HandoffCard.swift:141` ceremony titles; fee row via
+  `handoffFeeRow`; Open = confirm gate && `opens`.
+- [ ] P2b-I7 D6: `Features/Onboarding/I18nKeys.swift:87-88,221` → `signingPage{Title,Body}`;
+  `SigningPagePicker.swift:109,301` `venueWords(row: "signing_page")`; UI test
+  `SigningVenueChooserDeviceTests.swift:33` (「使用我自己的签名页」 → 「使用可信签名页」); unit tests
+  `TrustedSignerRouteTests.swift:365`, `FlowFixturesTests.swift:164`.
+- [ ] P2b-I8 Venue refusals → `venue_blocked`.
+
+### Web — `app-web/vela-wallet/src` (opens no page)
+
+- [ ] P2b-W1 `lib/signing/sign-challenge.ts:74,108`: `signingPlan(record, 'web')` (`lib/core/kernels.ts:668`
+  gains the `surface` argument); a `blocked` plan refuses with `VenueBlockedError` AND reports
+  `{type:'venue_blocked', block}` to the sign/send core, so the sheet draws the reason
+  (`SignErrorNotice.venue_block` / `SendView.tx_venue_block`) in the person's language.
+- [ ] P2b-W2 P2-09 (read-only, by design): `lib/settings/venue.ts:101` `signingVenueChoices(…, 'web')`;
+  `venueBlockText` (`:41`) handles `not_on_web` (`settings.venue.blockedWeb`, no vars) — the TS union
+  grew; `messages.ts` / `i18n/engine.server.ts` carry `settings.venue.blockedWeb`.
+- [ ] P2b-W3 P2-08 (not wired): recommended to stay so — nothing on the web opens a saved page. For
+  the same reason the web's choosers gain nothing from "Use a trusted signing page": a self-hosted
+  page's ceremonies run only on that page (R3), which the web cannot open, and the official page's
+  run in the app and sign in Vela on the web anyway (P2-11). Recommended: drop the entry on the web
+  (coordinator's call — P2-02 listed it for every shell). If it stays, a self-hosted row is drawn
+  disabled with `settings.venue.blockedWeb` (a row whose `signingPageDomain(url)` is not
+  `getvela.app`).
+- [ ] P2b-W4 D6: `lib/core/kernels.ts:706` `venueWords` type `'signing_page'`; tests
+  `ui/onboarding/v2/add-method-picker.svelte.test.ts:74,82-83` → `signingPage{Title,Body}`;
+  `settings.signing.pageOfficial` is now the official row's NAME (`venue.ts:195` `officialTag` drops).
+- [ ] P2b-W5 The gallery boards that draw integrity lines and the hand-off card use
+  `signerIntegrityTime` and `handoffFeeRow`.
+
+### The page — `app-web/trusted-signer`
+
+- [ ] P2b-P1 Already reads `?lang=` (`src/sign.js:27`); nothing to change — the apps now send it.
+
+### Gates for this round
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings`, `cargo clippy -p vela-core-wasm --target wasm32-unknown-unknown -- -D warnings` | clean |
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,820 passed, 0 failed, 2 ignored |
+| `node rust/scripts/gen-core-types.mjs --check` / `gen-onboarding-types.mjs --check` | current (`HandoffFee`, `KeyLabel` new) |
+| `node rust/scripts/build-web.mjs --check` | current (wasm 4,840,468 B, ceiling 8,000,000) |
+| `node rust/scripts/verify-web.mjs` | 51,511 cases green |
+| `./rust/scripts/smoke-kotlin.sh` | 51,466 cases green + onboarding bridge |
+| `./rust/scripts/build-ios-xcframework.sh` + `smoke-swift.sh` | bindings regenerated and committed; 51,466 cases green |
+| `node scripts/gen-i18n.mjs` (pins 1913 = 1812 + 101), `dump:vectors`, `lint-i18n-corpus`, `verify-i18n-parity` | regenerated; no new defects; 77,180 comparisons, 0 divergences |
+| `tests/i18n_residency.rs` | ja + en **144,550 B** runtime-JSON route (was 144,269), 140,242 B compiled (was 139,979), budget 145,400 unmoved; reduction 85.84 % (≥ 85.8) |
+| `app-desktop/vela-wallet/scripts/check-windows.sh` | ok |
