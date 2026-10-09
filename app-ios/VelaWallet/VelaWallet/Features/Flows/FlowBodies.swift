@@ -854,6 +854,10 @@ struct SendFormBody: View {
     var onScan: () -> Void = {}
     var onRecipientAction: (RecipientAction) -> Void = { _ in }
     var onRemoveRecipient: (Int) -> Void = { _ in }
+    /// A split row's own address book and scanner, by the core's row id
+    /// (issue #471): what either fills lands in THAT row.
+    var onPickRecipientRow: (String) -> Void = { _ in }
+    var onScanRecipientRow: (String) -> Void = { _ in }
     var onFee: () -> Void = {}
     var onDenom: () -> Void = {}
     var onMax: (Int) -> Void = { _ in }
@@ -966,6 +970,8 @@ struct SendFormBody: View {
                 RecipientCardView(
                     recipient: recipient,
                     onRemove: { onRemoveRecipient(index) },
+                    onPick: { onPickRecipientRow(recipient.rowId) },
+                    onScan: { onScanRecipientRow(recipient.rowId) },
                     address: live?.address,
                     amount: live?.amount
                 )
@@ -1047,18 +1053,16 @@ struct KeepsInViewAboveKeyboard: ViewModifier {
     }
 }
 
-/// SD2e — choosing who gets the money.
+/// SD2e — choosing who gets the money, from the address book.
 ///
-/// Scan sits at the top, above the saved people. Most sends go to someone
-/// already in the book, but the ones that don't are the ones where a person is
-/// holding a phone in one hand and an address in the other — so the escape
-/// hatch is the first thing, not the last.
+/// Contacts only (issue #471). A code is scanned from the recipient row's own
+/// scan icon, beside the icon that opened this — "Scan to fill the address"
+/// in here was a second door to the same camera, hidden one sheet deep.
 struct ContactPickBody: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
 
     let model: ContactPickModel
-    var onScan: () -> Void = {}
     /// The tapped group's id.
     var onGroup: (String) -> Void = { _ in }
     /// The tapped person's ADDRESS (issue #467) — never a position in a list
@@ -1077,24 +1081,6 @@ struct ContactPickBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             FlowSearchField(placeholder: model.searchPlaceholder, text: $query)
-            Button(action: onScan) {
-                HStack(spacing: Tokens.Space.s8) {
-                    LucideIcon(.qrCode, size: LucideIconSize.flowRowAction)
-                        .foregroundStyle(theme.fgSubtle)
-                    Text(verbatim: model.scanRow)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                    Spacer(minLength: Tokens.Space.s8)
-                    LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgSubtle)
-                }
-                .padding(Tokens.Space.s12)
-                .background(
-                    RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised)
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
 
             if !model.groups.isEmpty && query.isEmpty {
                 sectionCaption(model.groupsTitle)

@@ -138,6 +138,10 @@ struct FlowHost: View {
     /// Split: a row was removed, or a row was added.
     var onRemoveRecipient: ((Int) -> Void)?
     var onAddRecipient: (() -> Void)?
+    /// Split (issue #471): a row's own address book and scanner, by the
+    /// core's row id. Absent where the form is a picture.
+    var onPickRecipientRow: ((String) -> Void)?
+    var onScanRecipientRow: ((String) -> Void)?
     /// Split: "Use X for the empty rows".
     var onFillEmpty: ((String) -> Void)?
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
@@ -386,6 +390,8 @@ struct FlowHost: View {
                         }
                     },
                     onRemoveRecipient: { index in onRemoveRecipient?(index) },
+                    onPickRecipientRow: { id in onPickRecipientRow?(id) },
+                    onScanRecipientRow: { id in onScanRecipientRow?(id) },
                     onFee: { onNavigate(.feeToken) },
                     onDenom: { onDenom?() },
                     onMax: { _ in onMax?() },
@@ -647,7 +653,6 @@ private struct FlowSheetHost: View {
         case .contactPick(let m):
             ContactPickBody(
                 model: m,
-                onScan: { onNavigate(.scan) },
                 onGroup: { id in onPickGroup?(id) },
                 onSelect: { address in onPickContact?(address) }
             )

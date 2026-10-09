@@ -243,12 +243,12 @@ struct ContactPickerTests {
         #expect(reading.contacts.isEmpty)
         #expect(reading.groups.isEmpty)
         #expect(reading.title == drawn.title)
-        #expect(reading.scanRow == drawn.scanRow, "the scan row stays: an address can still be scanned")
+        #expect(reading.searchPlaceholder == drawn.searchPlaceholder)
     }
 
     /// The stack loses a level only for a state that IS a sheet: the
-    /// picker's scan row pushes the scanner, which takes the sheet away — a
-    /// pop then would close the camera just opened.
+    /// scanner is a whole screen pushed over the form, the picker a sheet —
+    /// a pop for the scanner would close the camera just opened.
     @Test func theScannerIsNotASheetThePickerIs() {
         #expect(WalletFlowFixtures.build(.s1, loc: loc).sheet == nil)
         #expect(WalletFlowFixtures.build(.sd2e, loc: loc).sheet != nil)

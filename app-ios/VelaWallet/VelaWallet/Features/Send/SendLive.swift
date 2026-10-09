@@ -572,6 +572,8 @@ enum SendLive {
                 identiconSeed: !row.address.isEmpty && issue?.address != .invalid ? row.address : "",
                 amount: "\(trim(row.amount)) \(symbol)",
                 removeLabel: loc.t("send.removeRecipient"),
+                pickLabel: loc.t("send.recipientPickAria"),
+                scanLabel: loc.t("send.scanAria"),
                 rowId: row.id,
                 problem: rowProblem(row, in: view, loc: loc)
             )
@@ -1941,7 +1943,6 @@ enum SendLive {
             title: model.title,
             closeLabel: model.closeLabel,
             searchPlaceholder: model.searchPlaceholder,
-            scanRow: model.scanRow,
             groupsTitle: model.groupsTitle,
             groups: book.groups.enumerated().map { index, group in
                 ContactGroupModel(
@@ -1972,14 +1973,13 @@ enum SendLive {
     }
 
     /// The picker while the book is still being read: the drawn chrome —
-    /// title, search, the scan row — and nobody in it. Never the drawing's
+    /// title and search — and nobody in it. Never the drawing's
     /// people (issue #467).
     static func contactSheetReading(on model: ContactPickModel) -> ContactPickModel {
         ContactPickModel(
             title: model.title,
             closeLabel: model.closeLabel,
             searchPlaceholder: model.searchPlaceholder,
-            scanRow: model.scanRow,
             groupsTitle: model.groupsTitle,
             groups: [],
             contactsTitle: model.contactsTitle,

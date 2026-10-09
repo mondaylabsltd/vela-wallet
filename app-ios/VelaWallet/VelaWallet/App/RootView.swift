@@ -193,6 +193,9 @@ struct RootView: View {
     /// the round trip (Android found it on the device).
     @State private var recipientDraft = ""
     @State private var amountDraft = ""
+    /// The split row a scan was opened FROM (issue #471), handed to the core
+    /// with `open_scanner` when the viewfinder comes up, then spent.
+    @State private var scanTarget: String?
     /// The importer's two fields. Local for the same reason every other field
     /// here is: a field bound straight to a machine loses characters on the
     /// round trip.
@@ -912,10 +915,17 @@ struct RootView: View {
                     // asked for and a battery nobody budgeted.
                     if state == .s1 {
                         camera.onScan = { text in scannedCode(text) }
-                        send.openScanner()
+                        // A split row's own icon names its row (issue #471);
+                        // every other door opens the targetless scan.
+                        send.openScanner(target: scanTarget)
+                        scanTarget = nil
                         await camera.start()
                     } else {
                         camera.stop()
+                        // Left without a code (back, a swipe): the core drops
+                        // the row the scan was aimed at, so it steers nothing
+                        // later. After a code the core has closed it already.
+                        if send.view?.showScanner == true { send.closeScanner() }
                     }
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
@@ -2481,9 +2491,9 @@ struct RootView: View {
     /// form (issue #467). The book is app-resident from the home; opening it
     /// here too costs nothing (`boot` is idempotent) and covers a send that
     /// started somewhere else, a scanned code say.
-    private func openContactPicker() {
+    private func openContactPicker(target: String? = nil) {
         contacts.open(myAddress: session.view.address)
-        send.openContactPicker(target: nil)
+        send.openContactPicker(target: target)
     }
 
     /// Somebody was picked from the address book — by ADDRESS (issue #467).
@@ -2924,6 +2934,14 @@ struct RootView: View {
                     },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
+                    // Issue #471: a row's own icons. The picker is the core's
+                    // flag (as the person icon's); the scanner is a pushed
+                    // screen that names its row when it opens.
+                    onPickRecipientRow: { id in openContactPicker(target: id) },
+                    onScanRecipientRow: { id in
+                        scanTarget = id
+                        flows.push(.scan)
+                    },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: {
