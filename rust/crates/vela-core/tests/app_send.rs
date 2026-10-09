@@ -8692,3 +8692,36 @@ fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
     );
     assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
 }
+
+/// The fee card failed on the confirm page (a catch-up that could not price
+/// again, or the core's re-ask after a failure): the confirm is held, and
+/// the figure kept from Continue is dropped — it never opens on a figure the
+/// fee machine discarded, between two re-asks. A settled quote opens it.
+#[test]
+fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+
+    sut.dispatch(Event::FeeFailedChanged { failed: true });
+    let view = sut.view();
+    assert!(!view.can_confirm, "held while the fee card has failed");
+    assert_eq!(view.fee, None, "the discarded figure is not drawn");
+    // Between two re-asks the busy flag drops: still held.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    assert!(!sut.view().can_confirm);
+    assert!(sut
+        .dispatch(Event::SlideConfirm)
+        .iter()
+        .all(|op| !matches!(op, Op::SubmitUserOp { .. })));
+
+    // The re-ask lands.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_200),
+    });
+    sut.dispatch(Event::FeeFailedChanged { failed: false });
+    let view = sut.view();
+    assert!(view.can_confirm);
+    assert_eq!(view.fee.map(|fee| fee.total_wei), Some("1200".to_owned()));
+}

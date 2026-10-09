@@ -1516,6 +1516,17 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
+    /// The fee card's `FeeView.failure` is set — a failure, or the core's own
+    /// re-ask after one — or no longer is. The fee machine holds no figure
+    /// then. Mirrored by the same bridge as [`Event::FeeBusyChanged`], sent
+    /// when it changes. While true the confirm is held, and on the confirm
+    /// page the figure this machine kept from Continue is dropped: between
+    /// two of the core's re-asks the confirm used to open on a figure the fee
+    /// machine had discarded, and shut again with the next re-ask (PR 2
+    /// integration). A settled quote ([`Event::FeeUpdated`]) clears it too.
+    FeeFailedChanged {
+        failed: bool,
+    },
     /// The fee card's coin in force — `FeeView.fee_token`, verbatim (`None` =
     /// the chain's own coin). It names the fee row's coin while no estimate
     /// is in hand ([`SendView::fee_coin`]) — when nobody chose, the fee
@@ -1926,6 +1937,9 @@ pub struct Model {
     fee_estimate: Option<FeeEstimate>,
     estimating_gas: bool,
     fee_busy: bool,
+    /// [`Event::FeeFailedChanged`]: the fee card has failed (or is re-asking
+    /// after a failure) and holds no figure.
+    fee_failed: bool,
     gas_fee_token: Option<String>,
     /// The person picked the fee coin (078 M-03). Until then `None` is "the
     /// fee machine's choice" and a quote in any coin is its answer; after a
@@ -2573,6 +2587,18 @@ impl Send {
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
                 model.fee_busy = busy;
+                render()
+            }
+            Event::FeeFailedChanged { failed } => {
+                if model.fee_failed == failed {
+                    return Command::done();
+                }
+                model.fee_failed = failed;
+                if failed && model.step == SendStep::Confirm {
+                    // The fee machine discarded its figure: so does the
+                    // confirm, which draws the failure in its place.
+                    model.fee_estimate = None;
+                }
                 render()
             }
             Event::FeeTokenChanged { fee_token } => {
@@ -5850,6 +5876,8 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
         return Command::done();
     };
     model.fee_estimate = Some(fee);
+    // A settled quote is no failure, whatever the bridge says next.
+    model.fee_failed = false;
     if model.step == SendStep::Confirm {
         // A sweep's sim depends on the estimate (reserve math): re-run it
         // when its calls moved, and only then.
@@ -6573,6 +6601,7 @@ fn confirm_gate_open(model: &Model) -> bool {
         && model.tx_error.is_none()
         && !model.estimating_gas
         && !model.fee_busy
+        && !model.fee_failed
         && !relay_stopped(model)
         && previous_in_flight(model).is_none()
 }
