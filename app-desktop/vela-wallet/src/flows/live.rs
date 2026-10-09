@@ -1663,6 +1663,13 @@ fn send_fee_failure(i: &SendInputs<'_>) -> Option<crate::flows::FeeFailureLines>
 
 pub(crate) fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
     let failure = send_fee_failure(i);
+    // The relay answered that it fails (`would_fail`): the core names no
+    // reason for the row — the line under a held confirm says it. The form
+    // has no held confirm, so its line under the fee says that fact itself
+    // (the failure's `footer_key`), in the room the reasons keep.
+    let would_fail = form_fee_failure(i.fee, i.send).is_some_and(|failure| {
+        failure.failure == vela_core::app::fee_policy::FeeFailure::WouldFail
+    });
     let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
     // path where a pick re-measures, the estimate in hand still belongs to the
@@ -1728,7 +1735,11 @@ pub(crate) fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
             room.push(i.s.fee_stale.clone());
             room
         },
-        reason: failure.and_then(|failure| failure.reason),
+        reason: failure.and_then(|failure| {
+            failure
+                .reason
+                .or_else(|| would_fail.then_some(failure.footer))
+        }),
     }
 }
 
@@ -5539,6 +5550,7 @@ mod tests {
         assert_eq!(held.as_ref(), Some(&retrying));
 
         let (row, fact, held) = draw(&send, &failures.tap);
+        assert_eq!(row.reason, None, "only would_fail borrows the footer");
         assert_eq!(row.value, loc.t(ESTIMATE_FAILED_KEY));
         assert_eq!(fact.value, loc.t(ESTIMATE_FAILED_KEY));
         assert_eq!(held, Some(loc.t(FEE_FAILED_KEY)));
@@ -5614,6 +5626,12 @@ mod tests {
         let row = send_fee_row(&i);
         assert_eq!(row.value, loc.t(PAY_WITH_ANOTHER_COIN_KEY));
         assert!(row.control, "a tap opens the coins");
+        // The form has no held confirm: its line under the fee says the fact,
+        // in the room the reasons keep.
+        assert_eq!(row.reason, Some(loc.t(FEE_WOULD_FAIL_KEY)));
+        assert!(row.room.contains(&loc.t(FEE_WOULD_FAIL_KEY)));
+        // The confirm says it once, under the confirm — not on its fee line.
+        assert_eq!(confirm_fee_fact(&i).note, None);
         assert_eq!(confirm_fee_fact(&i).value, loc.t(PAY_WITH_ANOTHER_COIN_KEY));
         assert!(confirm_fee_control(&i));
         assert_eq!(confirm_held_line(&i), Some(loc.t(FEE_WOULD_FAIL_KEY)));
@@ -5629,6 +5647,7 @@ mod tests {
         let i = inputs_for(&send, &nothing, &s, &wallet);
         let row = send_fee_row(&i);
         assert_eq!(row.value.as_ref(), "—");
+        assert_eq!(row.reason, Some(loc.t(FEE_WOULD_FAIL_KEY)));
         assert!(!row.control, "nothing a tap could do: no chevron, no click");
         assert!(!confirm_fee_control(&i));
         assert_eq!(send_confirm(&i).fee_fact, None);

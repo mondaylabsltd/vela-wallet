@@ -743,13 +743,15 @@ impl FeeFailureWords {
             .map(|(_, text)| SharedString::from(crate::wallet::fill(text, "chain", chain)))
     }
 
-    /// Every sentence the line under a fee row can come to say for `chain` —
-    /// each failure's reason. The Send form keeps room for the tallest of
-    /// them, so whichever lands moves nothing under it.
+    /// Every sentence the line under the Send form's fee row can come to say
+    /// for `chain` — each failure's reason, and "This would fail if sent as
+    /// it is." for the one with none (`would_fail`, said there for want of a
+    /// held confirm). The form keeps room for the tallest of them, so
+    /// whichever lands moves nothing under it.
     #[must_use]
     pub fn reasons(&self, chain: &str) -> Vec<SharedString> {
         let mut out: Vec<SharedString> = Vec::new();
-        for key in reason_keys() {
+        for key in reason_keys().chain([vela_core::app::fee_policy::FEE_WOULD_FAIL_KEY]) {
             if let Some(text) = self.text(key, chain)
                 && !out.contains(&text)
             {
@@ -1305,6 +1307,7 @@ mod tests {
                 "Ethereum"
             )));
             assert!(reasons.contains(&loc.t(vela_core::app::fee_policy::REASON_INTERNAL_KEY)));
+            assert!(reasons.contains(&loc.t(vela_core::app::fee_policy::FEE_WOULD_FAIL_KEY)));
             assert!(reasons.iter().all(|line| !line.contains("{{")), "{tag}");
         }
     }
