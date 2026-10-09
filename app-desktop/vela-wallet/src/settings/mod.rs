@@ -39,20 +39,24 @@ pub struct SettingsStrings {
     pub nav_fee_speed: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
-    /// The Trusted Signer (spec 071): the nav row is the page's title — and
-    /// the caption of a key that lives behind a page — the sentence under it,
-    /// and the page's section. How a signature is routed is not a setting
-    /// (founder, 2026-09-26), so the page no longer offers a "Sign with".
+    /// Settings → Signing pages (spec 102): the nav row and the sentence
+    /// under it — the pages a person trusts, the official one first. Which
+    /// page an account signs on is the account's own setting ("Where you
+    /// review and sign"), never this page's.
     pub nav_signing: SharedString,
     pub signing_subtitle: SharedString,
-    pub signer_page_title: SharedString,
-    pub signer_page_subtitle: SharedString,
-    pub signer_page_official: SharedString,
     pub signer_page_invalid: SharedString,
     pub signer_page_insecure: SharedString,
-    pub signer_page_foreign: SharedString,
-    pub signer_page_reset: SharedString,
-    pub signer_page_save: SharedString,
+    pub signer_page_duplicate: SharedString,
+    pub signer_page_add: SharedString,
+    /// The account's "Where you review and sign" (spec 102 D1): its title,
+    /// the sentence under it, and the two venue rows' words.
+    pub venue_title: SharedString,
+    pub venue_subtitle: SharedString,
+    pub venue_in_vela: SharedString,
+    pub venue_in_vela_body: SharedString,
+    pub venue_page: SharedString,
+    pub venue_page_body: SharedString,
     pub nav_about: SharedString,
     /// The Feedback page (078 S-03): its nav row, and the web's
     /// `componentsUi.bugReport.*` words for the report itself.
@@ -358,16 +362,18 @@ impl SettingsStrings {
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
-            nav_signing: s("componentsUi.signing.trustedSignerTitle"),
-            signing_subtitle: s("componentsUi.signing.trustedSignerBody"),
-            signer_page_title: s("settings.signing.pageTitle"),
-            signer_page_subtitle: s("settings.signing.pageSubtitle"),
-            signer_page_official: s("settings.signing.pageOfficial"),
+            nav_signing: s("settings.signing.title"),
+            signing_subtitle: s("settings.signing.subtitle"),
             signer_page_invalid: s("settings.signing.pageInvalid"),
             signer_page_insecure: s("settings.signing.pageInsecure"),
-            signer_page_foreign: s("settings.signing.pageForeign"),
-            signer_page_reset: s("settings.signing.pageReset"),
-            signer_page_save: s("settings.signing.pageSave"),
+            signer_page_duplicate: s("settings.signing.pageDuplicate"),
+            signer_page_add: s("settings.signing.pageAdd"),
+            venue_title: s("settings.venue.title"),
+            venue_subtitle: s("settings.venue.subtitle"),
+            venue_in_vela: s("settings.venue.inVela"),
+            venue_in_vela_body: s("settings.venue.inVelaBody"),
+            venue_page: s("settings.venue.page"),
+            venue_page_body: s("settings.venue.pageBody"),
             nav_about: s("settings.about.title"),
             nav_feedback: s("settings.feedback.title"),
             nav_community: s("settings.sections.community"),
@@ -726,28 +732,36 @@ mod tests {
         );
     }
 
-    /// The Trusted Signer page's words (spec 071), every one of them a key the
-    /// corpus already carries in fifteen languages.
+    /// Settings → Signing pages and the account's "Where you review and
+    /// sign" (spec 102), every word a key the corpus carries in fifteen
+    /// languages — in every one of them.
     #[test]
-    fn the_trusted_signer_words_resolve() {
-        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
-        for (value, key) in [
-            (&s.nav_signing, "componentsUi.signing.trustedSignerTitle"),
-            (
-                &s.signing_subtitle,
-                "componentsUi.signing.trustedSignerBody",
-            ),
-            (&s.signer_page_title, "settings.signing.pageTitle"),
-            (&s.signer_page_subtitle, "settings.signing.pageSubtitle"),
-            (&s.signer_page_official, "settings.signing.pageOfficial"),
-            (&s.signer_page_invalid, "settings.signing.pageInvalid"),
-            (&s.signer_page_insecure, "settings.signing.pageInsecure"),
-            (&s.signer_page_foreign, "settings.signing.pageForeign"),
-            (&s.signer_page_reset, "settings.signing.pageReset"),
-            (&s.signer_page_save, "settings.signing.pageSave"),
-        ] {
-            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
-            assert!(!value.is_empty(), "`{key}` resolved empty");
+    fn the_signing_page_and_venue_words_resolve() {
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let s = SettingsStrings::resolve(&loc);
+            for (value, key) in [
+                (&s.nav_signing, "settings.signing.title"),
+                (&s.signing_subtitle, "settings.signing.subtitle"),
+                (&s.signer_page_invalid, "settings.signing.pageInvalid"),
+                (&s.signer_page_insecure, "settings.signing.pageInsecure"),
+                (&s.signer_page_duplicate, "settings.signing.pageDuplicate"),
+                (&s.signer_page_add, "settings.signing.pageAdd"),
+                (&s.venue_title, "settings.venue.title"),
+                (&s.venue_subtitle, "settings.venue.subtitle"),
+                (&s.venue_in_vela, "settings.venue.inVela"),
+                (&s.venue_in_vela_body, "settings.venue.inVelaBody"),
+                (&s.venue_page, "settings.venue.page"),
+                (&s.venue_page_body, "settings.venue.pageBody"),
+            ] {
+                assert_ne!(value.as_ref(), key, "{tag}: `{key}` echoed the key");
+                assert!(!value.is_empty(), "{tag}: `{key}` resolved empty");
+            }
+            // No "Trusted Signer" left anywhere on these surfaces.
+            assert!(
+                !s.nav_signing.to_lowercase().contains("trusted signer"),
+                "{tag}: {}",
+                s.nav_signing
+            );
         }
     }
 }

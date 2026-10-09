@@ -146,32 +146,32 @@ pub fn touch_card(
     }
 }
 
-/// The four ways to sign in — this device, a phone by scan, a security key, the
-/// Trusted Signer — the same set creating a wallet offers per key. A wallet that
-/// lives on a security key, a phone or a signer page is reachable even where a
-/// platform passkey would be the silent default. `Platform` has no route on the
-/// desktop and shows as unavailable-with-a-reason, exactly as it does in the
-/// create picker.
 /// The method rows' mark size — the web's `--icon-lg`.
 pub const METHOD_ICON_PX: u32 = 24;
 
-/// The four passkey routes the CREATE chooser offers, in its order: the key on
-/// the desk, this device, a phone by scan, and the Trusted Signer (spec 075).
-pub const CREATE_ROUTES: [KeyMethod; 4] = [
+/// The three places a key lives, as the CREATE chooser offers them, in its
+/// order: the key on the desk, this device, a phone by scan.
+///
+/// Spec 102: three, no fourth. The trusted page is where a person REVIEWS and
+/// signs — an account's venue, chosen in its settings — not a place a key
+/// lives; the same three places exist on the page too. A wallet on the
+/// person's OWN signing page is the choosers' advanced entry ("Use my own
+/// signing page"), under these rows.
+pub const CREATE_ROUTES: [KeyMethod; 3] = [
     KeyMethod::SecurityKey,
     KeyMethod::Platform,
     KeyMethod::Hybrid,
-    KeyMethod::TrustedSigner,
 ];
 
-/// The same four on the SIGN-IN chooser, in its own order — a wallet reached
-/// from a phone or a signer page is the interesting case at sign-in, and "this
-/// device" is the row most likely to be greyed.
-pub const SIGNIN_ROUTES: [KeyMethod; 4] = [
+/// The same three on the SIGN-IN chooser, in its own order — a wallet reached
+/// from a phone is the interesting case at sign-in, and "this device" is the
+/// row most likely to be greyed. `Platform` has no route on every desktop and
+/// shows as unavailable-with-a-reason, exactly as it does in the create
+/// picker.
+pub const SIGNIN_ROUTES: [KeyMethod; 3] = [
     KeyMethod::SecurityKey,
     KeyMethod::Hybrid,
     KeyMethod::Platform,
-    KeyMethod::TrustedSigner,
 ];
 
 /// A route's title key and its create-chooser line key — the core's words
@@ -225,11 +225,19 @@ const THIS_DEVICE: DeviceUnlock = if cfg!(windows) {
 
 /// May this route run on this machine? Only "this device" can answer no: a
 /// platform authenticator needs a system passkey service, which in this app's
-/// reach only Windows has. A key on the desk, a phone by scan and a signer
-/// page are reachable from every desktop.
+/// reach only Windows has. A key on the desk and a phone by scan are reachable
+/// from every desktop.
 #[must_use]
 pub fn method_available(method: KeyMethod) -> bool {
     method != KeyMethod::Platform || crate::executor::passkey::platform_supported()
+}
+
+/// May this place be asked for where the ceremony runs? On the person's own
+/// signing page (spec 102 R3) the BROWSER runs it, and a browser reaches this
+/// device's own authenticator on every desktop — so every place is open there.
+#[must_use]
+pub fn place_available(method: KeyMethod, on_page: bool) -> bool {
+    on_page || method_available(method)
 }
 
 /// What a screen does when the person picks a way to sign in. An `Arc` rather
@@ -237,10 +245,95 @@ pub fn method_available(method: KeyMethod) -> bool {
 /// gpui's own listeners are not `Clone`.
 pub type PickMethod = std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>;
 
+/// What a chooser row does when it is pressed.
+pub type RowAction = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// The choosers' advanced entry (spec 102): "Use my own signing page", and —
+/// once a page is chosen — that page, drawn above the three places, with a
+/// way back to Vela's own keys.
+pub struct OwnPage<'a> {
+    /// The chosen page's row, when one is chosen.
+    pub chosen: Option<&'a crate::signing::pages::PageRow>,
+    /// The glyphs the chosen page's row draws with.
+    pub icons: &'a RefCell<crate::icons::IconCache>,
+    /// Open the page picker.
+    pub on_open: RowAction,
+    /// Back to Vela's own keys.
+    pub on_clear: RowAction,
+    /// The chosen page runs the ceremony itself (a custom domain, R3): every
+    /// place is open there, this machine's own authenticator included.
+    pub on_page: bool,
+}
+
+/// The advanced entry's row, as both choosers draw it under the three places:
+/// set apart by a rule, the page's eye, "Use my own signing page" and what it
+/// means for the keys.
+pub fn own_page_row(
+    id: &'static str,
+    theme: &Theme,
+    loc: &Loc,
+    icons: &RefCell<PasskeyIconCache>,
+    palette: Palette,
+    on_open: RowAction,
+) -> Div {
+    let words = vela_core::app::method_words::venue_row_words(
+        vela_core::app::method_words::VenueRow::OwnPage,
+    );
+    let mark = icons
+        .borrow_mut()
+        .image(PasskeyIcon::Eye, palette, METHOD_ICON_PX);
+    div().w_full().pt(px(FLOW_GAP_SM)).child(
+        div()
+            .id(id)
+            .w_full()
+            .flex()
+            .items_center()
+            .gap(px(FLOW_GAP_MD))
+            .py(px(FLOW_GAP_MD))
+            .cursor_pointer()
+            .hover(|s| s.bg(theme.bg_well))
+            .on_click(move |_, window, cx| on_open(window, cx))
+            .child(
+                img(ImageSource::Render(mark))
+                    .w(px(METHOD_ICON_PX as f32))
+                    .h(px(METHOD_ICON_PX as f32))
+                    .flex_none(),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_card_title())
+                            .text_color(theme.fg_base)
+                            .child(loc.t(words.title_key)),
+                    )
+                    .child(body(
+                        theme,
+                        words
+                            .line_key()
+                            .map_or_else(SharedString::default, |key| loc.t(key)),
+                    )),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(theme::text_card_title())
+                    .text_color(theme.fg_subtle)
+                    .child("›"),
+            ),
+    )
+}
+
 pub fn signin_method_card(
     theme: &Theme,
     loc: &Loc,
     icons: &RefCell<PasskeyIconCache>,
+    own_page: Option<OwnPage<'_>>,
     on_pick: PickMethod,
     on_dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
@@ -255,8 +348,9 @@ pub fn signin_method_card(
     // "This device" is real on exactly one desktop. Windows has Windows Hello
     // behind `webauthn.dll`; macOS and Linux reach no platform authenticator
     // from gpui at all, so there the row stays greyed and says why.
+    let on_page = own_page.as_ref().is_some_and(|own| own.on_page);
     let entry = |method: KeyMethod| {
-        let available = method_available(method);
+        let available = place_available(method, on_page);
         let (title_key, _) = method_words(method);
         // The one row that can be unavailable says why in its own line.
         let line = if available {
@@ -308,12 +402,44 @@ pub fn signin_method_card(
         }
     };
 
-    // Spec 075: four rows, the Trusted Signer among them — a wallet whose key
-    // was created on a signer page can only be signed into through one.
+    // Spec 102: three places — and, under them, the advanced entry for a
+    // wallet on the person's own signing page. Once that page is chosen it
+    // heads the list: the three places are then asked on THAT page.
     let mut sheet = card(theme).child(title(theme, loc.t("onboarding.login.header")));
-    for method in SIGNIN_ROUTES {
-        sheet = sheet.child(entry(method));
+    if let Some(chosen) = own_page.as_ref().and_then(|own| own.chosen) {
+        let clear = own_page
+            .as_ref()
+            .map(|own| std::rc::Rc::clone(&own.on_clear));
+        sheet = sheet.child(crate::signing::pages::chosen_page_banner(
+            theme,
+            &mut own_page
+                .as_ref()
+                .map(|own| own.icons)
+                .unwrap_or_else(|| unreachable!("a chosen page has its icons"))
+                .borrow_mut(),
+            chosen,
+            move |_, window, cx| {
+                if let Some(clear) = clear.as_ref() {
+                    clear(window, cx);
+                }
+            },
+        ));
     }
+    let mut rows = div().w_full().flex().flex_col();
+    for method in SIGNIN_ROUTES {
+        rows = rows.child(entry(method));
+    }
+    if let Some(own) = own_page.as_ref().filter(|own| own.chosen.is_none()) {
+        rows = rows.child(own_page_row(
+            "signin-own-page",
+            theme,
+            loc,
+            icons,
+            palette,
+            std::rc::Rc::clone(&own.on_open),
+        ));
+    }
+    sheet = sheet.child(rows);
     sheet.child(vela_button(
         "signin-methods-cancel",
         ButtonVariant::Secondary,
@@ -632,22 +758,33 @@ mod tests {
 
     use crate::passkey_icons::PasskeyIcon;
 
-    /// **Five routes where there were four** (spec 075 SC-001, the owner's
-    /// count): both choosers offer every passkey route the core knows —
-    /// "这台设备 / 手机或平板 / USB 安全密钥" and the Trusted Signer — each exactly
-    /// once, and neither screen can grow or lose one without the other.
+    /// **Three places, no fourth** (spec 102 P2-01): both choosers offer
+    /// every place a key can live — "这台设备 / 手机或平板 / USB 安全密钥" — each
+    /// exactly once, and neither screen can grow or lose one without the
+    /// other. The trusted page is where a person reviews and signs, not a
+    /// place: it is the account's venue, never a row here.
     #[test]
-    fn both_choosers_offer_every_route_exactly_once() {
+    fn both_choosers_offer_every_place_exactly_once() {
         for (screen, routes) in [("create", CREATE_ROUTES), ("sign in", SIGNIN_ROUTES)] {
-            for method in [
-                KeyMethod::Platform,
-                KeyMethod::Hybrid,
-                KeyMethod::SecurityKey,
-                KeyMethod::TrustedSigner,
-            ] {
+            assert_eq!(routes.len(), KeyMethod::ALL.len(), "{screen}");
+            for method in KeyMethod::ALL {
                 let offered = routes.iter().filter(|row| **row == method).count();
                 assert_eq!(offered, 1, "{screen} offers {method:?} {offered} times");
             }
+        }
+    }
+
+    /// The advanced entry has its own words, and they are not a place's.
+    #[test]
+    fn the_own_page_entry_is_worded_and_is_not_a_place() {
+        let loc = crate::loc::Loc::from_env();
+        let words = vela_core::app::method_words::venue_row_words(
+            vela_core::app::method_words::VenueRow::OwnPage,
+        );
+        let title = loc.t(words.title_key);
+        assert_ne!(title.as_ref(), words.title_key);
+        for method in KeyMethod::ALL {
+            assert_ne!(loc.t(method_words(method).0), title, "{method:?}");
         }
     }
 
@@ -678,17 +815,12 @@ mod tests {
         );
         marks.dedup();
         assert_eq!(marks.len(), CREATE_ROUTES.len(), "two routes share a mark");
-        // The Trusted Signer's glyph says what that route claims: a page you
-        // READ. Not a lock and not a key.
-        assert_eq!(
-            PasskeyIcon::for_method(KeyMethod::TrustedSigner),
-            PasskeyIcon::Eye
-        );
+        // The page's eye is no place's mark: it is the own-page entry's.
+        assert!(!marks.contains(&PasskeyIcon::Eye));
     }
 
     /// Only "this device" can be unavailable, and it is the only row whose
-    /// line changes when it is. A greyed Trusted Signer row would be a wallet
-    /// telling somebody their own page is out of reach — it never is.
+    /// line changes when it is.
     #[test]
     fn only_this_device_can_be_out_of_reach() {
         for method in CREATE_ROUTES {
@@ -701,6 +833,17 @@ mod tests {
             method_available(KeyMethod::Platform),
             crate::executor::passkey::platform_supported()
         );
+    }
+
+    /// Spec 102 R3: on the person's own page the browser runs the ceremony,
+    /// so every place is open there — this machine's own authenticator too,
+    /// on the desktops where the app itself cannot reach one.
+    #[test]
+    fn every_place_is_open_on_the_persons_own_page() {
+        for method in KeyMethod::ALL {
+            assert!(place_available(method, true), "{method:?}");
+            assert_eq!(place_available(method, false), method_available(method));
+        }
     }
 
     /// 083 W16: the sign-in sheet's phone row creates nothing, and "this
@@ -727,12 +870,9 @@ mod tests {
         #[cfg(target_os = "macos")]
         assert_eq!(this_device.as_ref(), "Touch ID");
 
-        for method in [KeyMethod::SecurityKey, KeyMethod::TrustedSigner] {
-            assert_eq!(
-                method_line(&loc, method, Chooser::SignIn),
-                method_line(&loc, method, Chooser::Create),
-                "{method:?}"
-            );
-        }
+        assert_eq!(
+            method_line(&loc, KeyMethod::SecurityKey, Chooser::SignIn),
+            method_line(&loc, KeyMethod::SecurityKey, Chooser::Create),
+        );
     }
 }

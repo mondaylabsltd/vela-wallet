@@ -500,8 +500,9 @@ mod tests {
         "onboarding.create.keysSubtitleFull",
         "onboarding.create.keysTitle",
         "onboarding.create.keysTitleBlocked",
-        "onboarding.create.methodBlockedHint",
-        "onboarding.create.methodBlockedSigner",
+        // Spec 102: the choosers' "Use my own signing page" entry.
+        "onboarding.create.ownPageTitle",
+        "onboarding.create.ownPageBody",
         "onboarding.create.methodHybridTitle",
         "onboarding.create.methodHybridUnavailable",
         "onboarding.create.methodPlatformTitle",
