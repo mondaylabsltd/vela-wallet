@@ -3663,7 +3663,7 @@ fn static_auto_pick(
 ) -> Option<Option<String>> {
     let provisional = static_total_gas(ctx, None);
     let native = find_quote(rows, None)?;
-    let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, &native);
+    let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, native);
     pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
 }
 
@@ -4745,7 +4745,7 @@ fn fee_amount_for_option(model: &Model, option: &ParsedQuote) -> Option<u128> {
         ));
     }
     let native = find_quote(&model.quotes, None)?;
-    model.charge?.amount(estimate.total_gas, option, &native)
+    model.charge?.amount(estimate.total_gas, option, native)
 }
 
 // ---------------------------------------------------------------------------
