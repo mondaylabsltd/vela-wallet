@@ -32,7 +32,9 @@ import org.junit.runner.RunWith
  *   home (a closed tab's neighbour), gets no engine — runs no page — until
  *   somebody resumes it;
  * - an open from the home never shows the dApp left there while its new tab
- *   is on its way (the old page flashed up before the new one).
+ *   is on its way (the old page flashed up before the new one);
+ * - an open into a full strip lands in the tab the core spares: selected
+ *   first, then loaded, the dApp left untouched.
  *
  * ```bash
  * adb -s <emulator> shell am instrument -w -e class app.getvela.wallet.BrowserControllerWakeTest \
@@ -160,6 +162,35 @@ class BrowserControllerWakeTest {
         }
     }
 
+    @Test
+    fun anOpenIntoAFullStripSelectsTheSparedTabThenLoadsIt() {
+        onMain {
+            val browser = controller(MemoryStore())
+            browser.start()
+            browser.ready()
+            browser.open(DAPP)
+            val dapp = browser.explore.first { it.tabs.size == 1 && it.selected_tab != null }.selected_tab!!
+            val dappEngine = browser.frontIs(dapp)
+            // The rest of the strip: start pages, up to the core's 24.
+            repeat(23) { browser.newTab() }
+            browser.explore.first { it.tabs.size == 24 }
+            browser.selectTab(dapp)
+            assertSame(dappEngine, browser.frontIs(dapp))
+            browser.landedHome()
+
+            // The core's Load names a tab that is not selected: the controller
+            // selects it, then loads it — the dApp out of front meanwhile.
+            val opening = fronts(browser, act = { browser.open(LATE) }) { it != null && it !== dappEngine }
+            val view = browser.explore.first { v -> v.tabs.any { it.id == v.selected_tab && LATE_HOST in it.url.orEmpty() } }
+            val spared = view.selected_tab!!
+            assertTrue("never the dApp while the spared tab is selected: $opening", opening.drop(1).none { it === dappEngine })
+            assertEquals(spared, opening.last()?.id)
+            assertTrue(LATE_HOST in opening.last()!!.state.value.let { it.pending ?: it.url }.orEmpty())
+            assertEquals("no tab was added past the cap", 24, view.tabs.size)
+            assertTrue("the dApp keeps its page", view.tabs.first { it.id == dapp }.url.orEmpty().contains(DAPP_HOST))
+        }
+    }
+
     /**
      * Every engine put in front while [act] runs, until one satisfies [until]
      * — the first entry is the one in front before. Recorded as each is set
@@ -192,7 +223,11 @@ class BrowserControllerWakeTest {
         const val SETTLE_MS = 600L
         const val ONE_HOST = "example.com"
         const val TWO_HOST = "example.org"
+        const val DAPP_HOST = "example.net"
+        const val LATE_HOST = "example.edu"
         const val ONE = "https://$ONE_HOST/"
         const val TWO = "https://$TWO_HOST/"
+        const val DAPP = "https://$DAPP_HOST/"
+        const val LATE = "https://$LATE_HOST/"
     }
 }
