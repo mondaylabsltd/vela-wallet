@@ -3073,14 +3073,6 @@ struct RootView: View {
             handoffPage: live?.venuePage,
             handoffKeyLabel: live?.venueKeyLabel,
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
-            // The card's fee row: the fee the sheet settled, for the speed in
-            // force — the core's ruling on the two views as last rendered.
-            handoffFee: live.flatMap { live in
-                live.venuePage == nil ? nil : HandoffFeeModel.of(
-                    feeJson: live.feeJson, speedJson: live.speedJson, fee: live.fee,
-                    display: WalletLive.Display.from(settings.currency), networks: walletNetworks, loc: loc
-                )
-            },
             handoffPageName: live?.venuePage.flatMap(savedPageName),
             feeStartFailure: live?.quoteStartFailure,
             networks: walletNetworks
@@ -3855,7 +3847,7 @@ struct RootView: View {
         // still changeable — a second row would say the fee twice.
         return HandoffCardModel.build(
             page: page,
-            keyLabel: plan.keyText(loc),
+            keyLabel: plan.keyLabel,
             line: SignerPageChecks.shared.line(for: page),
             loc: loc,
             name: savedPageName(page)

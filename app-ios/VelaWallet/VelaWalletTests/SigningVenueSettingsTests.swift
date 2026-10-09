@@ -204,7 +204,7 @@ struct SigningVenueSettingsTests {
     // MARK: - D4: the signing sheet hands off
 
     private func signingModel(
-        line: SignerIntegrityLine?, page: String?, gateOpen: Bool = true, fee: HandoffFeeModel? = nil
+        line: SignerIntegrityLine?, page: String?, gateOpen: Bool = true, fee: FeeViewWire? = nil
     ) -> SigningModel {
         let request = SigningController.Incoming(
             id: "r1", method: "personal_sign",
@@ -225,10 +225,9 @@ struct SigningVenueSettingsTests {
         context.handoffPage = page
         context.handoffKeyLabel = KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle")
         context.handoffLine = line
-        context.handoffFee = fee
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: sign,
-            clear: .empty, guard: .empty, fee: nil, context: context,
+            clear: .empty, guard: .empty, fee: fee, context: context,
             gate: SignConfirmStateWire(enabled: gateOpen, block: nil, key: nil)
         )
     }
@@ -236,10 +235,10 @@ struct SigningVenueSettingsTests {
     @Test func aPageVenueGetsTheHandoffCardNotASecondPreview() throws {
         let model = signingModel(line: line(official), page: official)
         let card = try #require(model.handoff)
-        #expect(card.title == "Review and sign on your trusted signing page")
+        #expect(card.title == "Review and sign on a trusted signing page")
         #expect(card.page == "sign.getvela.app")
         #expect(card.pageName == "Vela's official signing page")
-        #expect(card.key == "Confirm with \(loc.t("onboarding.create.methodPlatformTitle"))")
+        #expect(card.key == HandoffKeyRow(label: "Confirm with", value: "This device"))
         #expect(card.opens)
         #expect(model.confirm?.enabled == true)
         #expect(model.confirmAsButton)
@@ -267,18 +266,20 @@ struct SigningVenueSettingsTests {
         #expect(signingModel(line: line(official), page: official, gateOpen: false).confirm?.enabled == false)
     }
 
-    /// Core round 5: the fee row the context carries is the card's — and a
-    /// message (no fee) has none.
-    @Test func theCardCarriesTheFeeRow() throws {
-        var model = signingModel(line: line(official), page: official)
-        #expect(model.handoff?.fee == nil)
-        let fee = try #require(HandoffFeeModel.of(
-            feeJson: HandoffFeeFixtures.feeJson, speedJson: HandoffFeeFixtures.speedJson,
-            fee: nil, display: .usd, networks: .builtin, loc: loc
-        ))
-        model = signingModel(line: line(official), page: official, fee: fee)
-        #expect(model.handoff?.fee == fee)
-        #expect(fee.tier == "Standard")
+    /// Polish 5/6: the fee is said once. The sheet keeps its own fee row (its
+    /// figure, speed and coin — chosen before the hand-off, D-18) and the
+    /// card draws none.
+    @Test func theSheetKeepsItsFeeRowAndTheCardDrawsNone() throws {
+        let feeView = try #require(HandoffFeeFixtures.feeView)
+        let model = signingModel(line: line(official), page: official, fee: feeView)
+        #expect(model.handoff != nil)
+        #expect(model.handoff?.fee == nil, "the card said the fee a second time")
+        guard case .onchain(_, let value, _, _, _)? = model.fee else {
+            Issue.record("the sheet lost its fee row in the hand-off: \(String(describing: model.fee))")
+            return
+        }
+        #expect(value.hasPrefix("~"), "\(value)")
+        #expect(value.contains("USDC"), "\(value)")
     }
 
     /// Core round 7: a sign-time venue refusal is said in the person's

@@ -207,7 +207,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         // The signing sheet was the hand-off card, and its Open is what asked
         // for this: a page that is admitted opens at once. One that is not
         // keeps the card up, with the line that says why.
-        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel?.text(loc), waitForOpen: false)
+        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel, waitForOpen: false)
         // A signature is a flow of one: the page is told so rather than left
         // on its waiting screen.
         endFlow()
@@ -222,12 +222,10 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         deployment: SignerRegistryDeployment? = nil
     ) async -> TrustedSignerCeremonyStep {
         let id = UUID().uuidString.lowercased()
-        let operation = try? CoreJSON.object(operationJson)
-        // The key's place (`method`): a ceremony makes or proves a key there,
-        // and a key being made is no name to confirm with yet (D-17's rule
-        // never says "Confirm with <the wallet's name>").
-        let place = (operation?["method"] as? String).flatMap(KeyMethod.init(rawValue:))
-        let keyLabel = place.map { Self.keyLabel($0, loc: loc) }
+        // The key row, the core's (spec 102 integration): "New key on | This
+        // device" while a key is made, "Confirm with | Phone or tablet" when
+        // one signs in or proves — by its place, never a name (D-17).
+        let keyLabel = KeyLabelWire.ofCeremony(operationJson: operationJson)
         // Its own title (core round 12): create / sign in / confirm — a
         // ceremony has nothing to review.
         let title = trustedSignerCeremonyTitleKey(operationJson: operationJson).map { loc.t($0) }
@@ -261,12 +259,6 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         }
     }
 
-    /// "Confirm with This device" — the place's title, as the choosers name
-    /// it (`keyMethodWords`).
-    static func keyLabel(_ place: KeyMethod, loc: Loc) -> String {
-        methodCopy(place, chooser: .signIn, loc: loc).title
-    }
-
     func endFlow() {
         conversation?.end()
         conversation = nil
@@ -281,7 +273,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     /// Puts `ask` to the flow's session, opening one — through the hand-off
     /// card and the integrity check — when there is none.
     private func run(
-        _ ask: TrustedSignerAsk, page: String, title: String?, keyLabel: String?, waitForOpen: Bool
+        _ ask: TrustedSignerAsk, page: String, title: String?, keyLabel: KeyLabelWire?, waitForOpen: Bool
     ) async -> TrustedSignerChannel.Ending {
         if let conversation {
             model?.stage = .waiting

@@ -55,14 +55,14 @@ enum SigningLive {
         /// Spec 079: this account signs on a trusted page — the page's own
         /// slide is the one consent.
         var trustedSignerRoute = false
-        /// Spec 102 D4: that page (the account's venue), the plan's name for
-        /// its key, this phone's integrity line for the page, and the fee the
-        /// page will sign (`handoffFeeRow`) — the hand-off card. `nil` page:
-        /// the account signs in Vela.
+        /// Spec 102 D4: that page (the account's venue), the plan's key row
+        /// and this phone's integrity line for the page — the hand-off card.
+        /// `nil` page: the account signs in Vela. No fee here: the sheet keeps
+        /// its own fee row, speed and coin in the hand-off (D-18), and the fee
+        /// is said once.
         var handoffPage: String?
         var handoffKeyLabel: KeyLabelWire?
         var handoffLine: SignerIntegrityLine?
-        var handoffFee: HandoffFeeModel?
         /// The person's own label for that page, when they gave it one.
         var handoffPageName: String?
         /// Spec 082 RF5: the quote could not even start (the account's
@@ -281,15 +281,15 @@ enum SigningLive {
 
         // Spec 102 D4: an account whose venue is a page gets the hand-off card,
         // and its Open is shut until this phone's check admitted the page —
-        // the core's answer, as the gate's is.
+        // the core's answer, as the gate's is. The card draws no fee: the
+        // sheet's own fee row stays above Open (the fee is said once).
         let handoff: HandoffCardModel? = refused ? nil : context.handoffPage.map { page in
             HandoffCardModel.build(
                 page: page,
-                keyLabel: context.handoffKeyLabel?.text(loc),
+                keyLabel: context.handoffKeyLabel,
                 line: context.handoffLine ?? SignerPageChecks.checking,
                 loc: loc,
-                name: context.handoffPageName,
-                fee: context.handoffFee
+                name: context.handoffPageName
             )
         }
         var model = SigningModel(

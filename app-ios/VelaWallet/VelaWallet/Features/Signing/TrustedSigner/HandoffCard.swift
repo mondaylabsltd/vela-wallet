@@ -9,23 +9,29 @@
 //  transaction a second time — the page is the authority. What the app says
 //  is short and checkable:
 //
-//      Review and sign on your trusted signing page
-//      Confirm with Phone or tablet
+//      Review and sign on a trusted signing page
+//      Confirm with                     Phone or tablet
 //      ┌──────────────────────────────────────────────┐
 //      │ Vela's official signing page  sign.getvela.app│
-//      │ Network fee            ~$0.01 · Standard      │
 //      │ ✓ Version 0ba8ee8c · matches Vela's published │
 //      │   build list · checked 14:32                  │
 //      └──────────────────────────────────────────────┘
 //      [ Continue to signing page ]
 //
+//  The key is a row, drawn as the signing sheet's "Signing account | name"
+//  row is: the core's label ("Confirm with", or "New key on" while a ceremony
+//  makes the key) and its value (the key's name, else its place).
+//
 //  The integrity line is what backs the word "trusted": it is the core's
 //  ruling on the bytes this phone fetched (`SignerPageChecks`), never a claim
 //  of "verified" or "untampered". A refusal takes the line's place, in the
-//  warning colour, and the button stays disabled. The fee row (core round 5)
-//  is the fee the sheet settled, for the speed in force — the page signs the
-//  operation the app assembled, fee leg included — and no control: a
-//  different fee is a different operation.
+//  warning colour, and the button stays disabled.
+//
+//  The fee is said once per screen. The screens that hand off — the signing
+//  sheet and the send confirm — keep their own fee rows (and the speed, which
+//  is chosen before the hand-off, D-18), so the card there draws none. The
+//  card's compact fee row (core round 5, `handoffFeeRow`) is for a screen with
+//  no fee of its own.
 //
 
 import SwiftUI
@@ -59,8 +65,11 @@ struct IntegrityLineView: View {
             ZStack(alignment: .topLeading) {
                 // Two lines' room — what a verdict usually takes — so the
                 // check landing ("checking" → "… checked 14:32") does not
-                // move what is under it.
-                Text(verbatim: "\u{00A0}\n\u{00A0}")
+                // move what is under it. Each reserved line carries a run in
+                // the version's mono face too: a line holding the version is
+                // a third of a point taller than one without, which moved
+                // Open by a pixel when the check landed.
+                reserved
                     .typeRole(Typography.flowCaption)
                     .hidden()
                     .accessibilityHidden(true)
@@ -71,6 +80,12 @@ struct IntegrityLineView: View {
                     .accessibilityIdentifier("integrity.\(Self.id(line.state))")
             }
         }
+    }
+
+    /// Two empty lines, each as tall as a line holding the version.
+    private var reserved: Text {
+        let mono = Text(verbatim: "\u{00A0}").font(Typography.monoSmall.font)
+        return Text(verbatim: "\u{00A0}") + mono + Text(verbatim: "\n\u{00A0}") + mono
     }
 
     /// The version — eight hex characters — in the mono face.
@@ -114,6 +129,37 @@ struct IntegrityLineView: View {
     }
 }
 
+/// "Trust this version" — the answer to an `AskToTrust` line, drawn under the
+/// line and aligned with its words, on every surface that asks it (D-15):
+/// Signing pages, the account's venue rows, the choosers' list and chosen
+/// page, and the hand-off card.
+struct SigningPageTrustButton: View {
+    @Environment(\.theme) private var theme
+    let title: String
+    /// The UI tests' hook, per surface.
+    let id: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .typeRole(Typography.actionLabel)
+                .foregroundStyle(theme.accentBase)
+                .frame(minHeight: Tokens.Layout.hitTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, LucideIconSize.rowGlyph + Tokens.Space.s8)
+        .accessibilityIdentifier(id)
+    }
+
+    /// The app's one checker stores `version` on the page and checks it
+    /// again — what a surface with no host of its own does.
+    static func trust(_ url: String, version: String) {
+        Task { @MainActor in await SignerPageChecks.shared.trust(url, version: version) }
+    }
+}
+
 /// The card's fee row: the fee in force, drawn as the sheet's folded fee row
 /// draws it, and the speed it was priced at.
 struct HandoffFeeModel: Equatable {
@@ -149,6 +195,21 @@ struct HandoffFeeModel: Equatable {
     }
 }
 
+/// The key row in words: 「确认方式 | 手机或平板」, 「新钥匙存在 | 这台设备」.
+struct HandoffKeyRow: Equatable {
+    let label: String
+    let value: String
+
+    init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+
+    init(_ key: KeyLabelWire, loc: Loc) {
+        self.init(label: key.label(loc), value: key.text(loc))
+    }
+}
+
 /// What the card says, already in words.
 struct HandoffCardModel: Equatable {
     /// `componentsUi.signing.handoffTitle` — or a ceremony's own title.
@@ -158,12 +219,16 @@ struct HandoffCardModel: Equatable {
     let pageName: String
     /// …and by host, drawn beside the name when they differ.
     let page: String
-    /// "Confirm with {{key}}" — `nil` when the page is told no single key.
-    let key: String?
+    /// The key row — `nil` when the page is told no single key, and on the
+    /// waiting card.
+    let key: HandoffKeyRow?
+    /// The waiting card's one line under its title: where to look.
+    var hint: String? = nil
     let line: SignerIntegrityLine
     /// The line in words.
     let lineText: String
-    /// The fee and speed the page will sign — `nil`: no row.
+    /// The fee and speed the page will sign — only on a screen that shows no
+    /// fee of its own; `nil`: no row.
     var fee: HandoffFeeModel? = nil
     /// The page's address, for "Trust this version".
     var pageUrl: String = ""
@@ -181,13 +246,13 @@ struct HandoffCardModel: Equatable {
     /// as its title, where to look as its line — the page and its check stay.
     func waiting(title: String, hint: String?, down: Bool) -> HandoffCardModel {
         HandoffCardModel(
-            title: title, pageName: pageName, page: page, key: hint,
-            line: line, lineText: lineText, fee: fee, pageUrl: pageUrl, trust: nil, down: down
+            title: title, pageName: pageName, page: page, key: nil, hint: hint,
+            line: line, lineText: lineText, fee: nil, pageUrl: pageUrl, trust: nil, down: down
         )
     }
 
     static func build(
-        page: String, keyLabel: String?, line: SignerIntegrityLine, loc: Loc,
+        page: String, keyLabel: KeyLabelWire?, line: SignerIntegrityLine, loc: Loc,
         name: String? = nil, title: String? = nil, fee: HandoffFeeModel? = nil
     ) -> HandoffCardModel {
         HandoffCardModel(
@@ -196,7 +261,7 @@ struct HandoffCardModel: Equatable {
                 url: page, label: name ?? "", official: SigningPageNames.isOfficial(page), loc: loc
             ),
             page: SigningPageNames.host(page),
-            key: keyLabel.map { loc.t("componentsUi.signing.handoffKey", vars: ["key": $0]) },
+            key: keyLabel.map { HandoffKeyRow($0, loc: loc) },
             line: line,
             lineText: line.text(loc),
             fee: fee,
@@ -212,6 +277,7 @@ struct HandoffCardModel: Equatable {
 /// Buttons are the host's.
 struct HandoffCardView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
     let model: HandoffCardModel
     /// "Trust this version". `nil`: the app's one checker stores it on the
     /// page and checks again (`SignerPageChecks.trustAsked`).
@@ -227,13 +293,30 @@ struct HandoffCardView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("handoff.title")
-            if let key = model.key {
-                Text(key)
+            if let hint = model.hint {
+                Text(hint)
                     .typeRole(Typography.body)
                     .foregroundStyle(theme.fgMuted)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("handoff.key")
+                    .accessibilityIdentifier("handoff.hint")
+            }
+            // Which key confirms, as a row — the sheet's "Signing account |
+            // name" row's roles, colours and alignment (`SigningSignerRow`).
+            if let key = model.key {
+                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                    Text(verbatim: key.label)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                    Spacer(minLength: Tokens.Space.s8)
+                    Text(verbatim: key.value)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.trailing)
+                }
+                .padding(.top, Tokens.Space.s4)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("handoff.key")
             }
 
             // What is trusted, in one place: the page, and what was checked.
@@ -267,22 +350,14 @@ struct HandoffCardView: View {
                 IntegrityLineView(line: model.line, text: model.lineText)
                 // The answer to "Trust it on this device?", beside the question.
                 if let trust = model.trust {
-                    Button {
+                    SigningPageTrustButton(title: trust, id: "handoff.trust") {
                         if let onTrust {
                             onTrust()
                         } else {
                             let page = model.pageUrl
                             Task { @MainActor in await SignerPageChecks.shared.trustAsked(page) }
                         }
-                    } label: {
-                        Text(trust)
-                            .typeRole(Typography.actionLabel)
-                            .foregroundStyle(theme.accentBase)
-                            .frame(minHeight: Tokens.Layout.hitTarget)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.leading, LucideIconSize.rowGlyph + Tokens.Space.s8)
-                    .accessibilityIdentifier("handoff.trust")
                 }
             }
             .padding(.horizontal, Tokens.Space.s20)

@@ -357,14 +357,23 @@ struct HandoffCardTests {
         )
         let card = HandoffCardModel.build(
             page: "https://sign.getvela.app/",
-            keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodHybridTitle").text(loc),
+            keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodHybridTitle"),
             line: line, loc: loc
         )
-        #expect(card.title == "Review and sign on your trusted signing page")
+        #expect(card.title == "Review and sign on a trusted signing page")
         // D6/D-19: the official page is named, not tagged.
         #expect(card.pageName == "Vela's official signing page")
         #expect(card.page == "sign.getvela.app")
-        #expect(card.key == "Confirm with \(loc.t("onboarding.create.methodHybridTitle"))")
+        // A row, as the sheet draws "Signing account | name" — never a
+        // sentence with the place inflected inside it.
+        #expect(card.key == HandoffKeyRow(label: "Confirm with", value: "Phone or tablet"))
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let zhCard = HandoffCardModel.build(
+            page: "https://sign.getvela.app/",
+            keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodHybridTitle"), line: line, loc: zh
+        )
+        #expect(zhCard.title == "在可信签名页上预览并签名")
+        #expect(zhCard.key == HandoffKeyRow(label: "确认方式", value: "手机或平板"))
         #expect(card.opens)
         #expect(card.trust == nil, "the official page never asks to be trusted")
         let text = line.text(loc)
@@ -386,10 +395,17 @@ struct HandoffCardTests {
     /// wallet's name is named by its place — the core's label, drawn.
     @Test func theKeyIsNamedAsThePlanNamesIt() {
         #expect(KeyLabelWire(name: "YubiKey 5C", placeKey: "onboarding.create.methodSecurityKeyTitle").text(loc) == "YubiKey 5C")
+        // A label written before the row had one reads "Confirm with".
+        let old = try? CoreJSON.decoder.decode(
+            KeyLabelWire.self, from: Data(#"{"place_key":"onboarding.create.methodPlatformTitle"}"#.utf8)
+        )
+        #expect(old?.labelKey == "componentsUi.signing.confirmWithLabel")
+        #expect(old?.label(loc) == "Confirm with")
         #expect(KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle").text(loc)
                 == loc.t("onboarding.create.methodPlatformTitle"))
         let plan = SigningPlanWire.of(accountJson: TrustedSignerFixture().pageRecordJson)
         #expect(plan?.keyLabel?.placeKey == "onboarding.create.methodPlatformTitle")
+        #expect(plan?.keyLabel?.labelKey == "componentsUi.signing.confirmWithLabel")
         #expect(plan?.keyLabel?.name == nil, "a key named after the wallet repeated the account row")
     }
 
@@ -422,6 +438,24 @@ struct HandoffCardTests {
                                           loc: loc, title: loc.t(create))
         #expect(card.title == "Create your key on your signing page")
         #expect(trustedSignerCeremonyTitleKey(operationJson: #"{"type":"nothing"}"#) == nil)
+    }
+
+    /// Spec 102 integration: a ceremony's card has its key row, the core's —
+    /// "New key on | This device" while a key is made, "Confirm with | Phone
+    /// or tablet" when one signs in. By place, never a name.
+    @Test func aCeremonyHasItsKeyRow() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let create = try #require(KeyLabelWire.ofCeremony(
+            operationJson: #"{"type":"register_passkey","name":"Everyday wallet","method":"platform"}"#
+        ))
+        #expect(create.name == nil, "a key being made was named")
+        #expect(HandoffKeyRow(create, loc: loc) == HandoffKeyRow(label: "New key on", value: "This device"))
+        #expect(HandoffKeyRow(create, loc: zh) == HandoffKeyRow(label: "新钥匙存在", value: "这台设备"))
+        let signIn = try #require(KeyLabelWire.ofCeremony(
+            operationJson: #"{"type":"authenticate_passkey","method":"hybrid"}"#
+        ))
+        #expect(HandoffKeyRow(signIn, loc: zh) == HandoffKeyRow(label: "确认方式", value: "手机或平板"))
+        #expect(KeyLabelWire.ofCeremony(operationJson: #"{"type":"nothing"}"#) == nil)
     }
 
     /// Core round 5: the card's fee row is the fee settled for the speed in

@@ -110,10 +110,6 @@ final class SigningController {
     var fee: FeeViewWire? { fees.view }
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     var speed: FeeSpeedViewWire? { fees.speed }
-    /// The same two views as the core wrote them — the hand-off card's fee
-    /// row reads them whole (`handoffFeeRow`, spec 102).
-    var feeJson: String? { fees.viewJson }
-    var speedJson: String? { fees.speedJson }
 
     /// The fee view of the session pricing `tier`, for that option's line.
     func feeView(of tier: String) -> FeeViewWire? { fees.view(of: tier) }

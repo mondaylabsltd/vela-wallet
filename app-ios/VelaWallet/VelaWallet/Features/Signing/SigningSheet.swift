@@ -136,7 +136,13 @@ struct SigningSheet: View {
             ForEach(model.handoffBlocks) { block in
                 blockView(block)
             }
-            Spacer(minLength: Tokens.Space.s16)
+            // The fee, its speed and its coin are chosen here, before the
+            // hand-off (D-18): the sheet's own fee row stays, with every
+            // control it has, and the card says no fee of its own — the fee
+            // is said once. Then whose account signs, as on every sheet.
+            feeView
+            SigningSignerRow(label: model.signer.label, name: model.signer.name,
+                             seed: model.signer.seed)
         } else {
             // The wallet's own request: its intent is already the header's title.
             ForEach(model.formBlocks) { block in
@@ -148,14 +154,7 @@ struct SigningSheet: View {
             if !model.tech.isEmpty {
                 TechDetailsView(tech: model.tech, open: techOpen)
             }
-            if let fee = model.fee {
-                SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
-                               speed: model.feeSpeed, onSpeed: onSpeed,
-                               refresh: onRefreshFee == nil ? nil : model.feeRefresh,
-                               onRefresh: onRefreshFee, chevron: model.feeChevron,
-                               measuring: model.feeRefresh?.refreshing ?? false,
-                               reserve: model.feeReserve)
-            }
+            feeView
             SigningSignerRow(label: model.signer.label, name: model.signer.name,
                              seed: model.signer.seed)
         }
@@ -190,6 +189,20 @@ struct SigningSheet: View {
                     .hidden()
                     .accessibilityHidden(true)
             }
+        }
+    }
+
+    /// The fee row, its speed control and its coin list — the same in Vela
+    /// and in the hand-off.
+    @ViewBuilder
+    private var feeView: some View {
+        if let fee = model.fee {
+            SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
+                           speed: model.feeSpeed, onSpeed: onSpeed,
+                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
+                           onRefresh: onRefreshFee, chevron: model.feeChevron,
+                           measuring: model.feeRefresh?.refreshing ?? false,
+                           reserve: model.feeReserve)
         }
     }
 

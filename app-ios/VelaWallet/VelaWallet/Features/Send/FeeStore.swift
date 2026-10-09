@@ -51,9 +51,6 @@ final class FeeStore {
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
-    /// The same view as the core wrote it, for `handoffFeeRow` (spec 102);
-    /// `nil` while `speed` is.
-    private(set) var speedJson: String?
     /// The resolved number preset `configureSpeed` was last given: every fee
     /// request carries it, and the core writes a coin's shortfall in it
     /// (issue #408).
@@ -577,7 +574,6 @@ final class FeeStore {
     private func speedChanged(_ view: FeeSpeedViewWire) {
         guard view != speed else { return }
         speed = view
-        speedJson = speedCore.json
         settleSpeed()
     }
 

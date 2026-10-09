@@ -119,23 +119,53 @@ extension VenueBlockWire: Decodable {
     }
 }
 
-/// `signing_venue::KeyLabel` — "Confirm with {{key}}": the key's own label
-/// when the core kept one (never the wallet's name), else its place's title.
+/// `signing_venue::KeyLabel` — the key row, 「确认方式 | 手机或平板」 /
+/// "Confirm with | Phone or tablet": its label from `labelKey`, its value the
+/// key's own label when the core kept one (never the wallet's name), else its
+/// place's title. A ceremony's row is the core's too
+/// (`trustedSignerCeremonyKeyLabel`): "New key on | This device" while a key
+/// is made.
 struct KeyLabelWire: Decodable, Equatable, Hashable {
     /// The key's own label, drawn as it is.
     let name: String?
     /// The corpus key of the key's place — always set.
     let placeKey: String
+    /// The corpus key of the row's label — "Confirm with" unless the core
+    /// says otherwise (a label written before it had one reads the same).
+    let labelKey: String
 
-    init(name: String? = nil, placeKey: String) {
+    static let confirmWithLabel = "componentsUi.signing.confirmWithLabel"
+
+    private enum CodingKeys: String, CodingKey { case name, placeKey, labelKey }
+
+    init(name: String? = nil, placeKey: String, labelKey: String = KeyLabelWire.confirmWithLabel) {
         self.name = name
         self.placeKey = placeKey
+        self.labelKey = labelKey
     }
 
-    /// The words: `name`, else the place's title.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decodeIfPresent(String.self, forKey: .name)
+        placeKey = try values.decode(String.self, forKey: .placeKey)
+        labelKey = try values.decodeIfPresent(String.self, forKey: .labelKey) ?? Self.confirmWithLabel
+    }
+
+    /// The row's label: "Confirm with", "New key on".
+    func label(_ loc: Loc) -> String { loc.t(labelKey) }
+
+    /// The row's value: `name`, else the place's title.
     func text(_ loc: Loc) -> String {
         if let name, !name.isEmpty { return name }
         return loc.t(placeKey)
+    }
+
+    /// A ceremony's key row (`create` / `sign in` / a proof), as the core
+    /// names it for `operationJson` — `nil` for an operation that is not one.
+    static func ofCeremony(operationJson: String) -> KeyLabelWire? {
+        trustedSignerCeremonyKeyLabel(operationJson: operationJson).flatMap {
+            try? CoreJSON.decoder.decode(KeyLabelWire.self, from: Data($0.utf8))
+        }
     }
 }
 
@@ -193,8 +223,8 @@ struct SigningPlanWire: Decodable, Equatable {
     /// The key this device signs with. `nil` for a record from before the
     /// sign-in key was kept, which signs as it always did.
     let key: KeyRouteWire?
-    /// "Confirm with {{key}}" — the core's name for that key (D-17). `nil`
-    /// only from a core too old to say.
+    /// The key row — "Confirm with | {{key}}" — the core's name for that key
+    /// (D-17). `nil` only from a core too old to say.
     let keyLabel: KeyLabelWire?
 
     private enum CodingKeys: String, CodingKey { case domain, venue, blocked, key, keyLabel }
@@ -224,10 +254,6 @@ struct SigningPlanWire: Decodable, Equatable {
 
     /// The account is on Vela's own domain — its keys answer in the app.
     var onAppDomain: Bool { domain.caseInsensitiveCompare(Self.appDomain) == .orderedSame }
-
-    /// "Confirm with …"'s key, in words — the core's label, never the record
-    /// read here.
-    func keyText(_ loc: Loc) -> String? { keyLabel?.text(loc) }
 
     /// The core's plan for a stored account record — `nil` for a record this
     /// build cannot read.

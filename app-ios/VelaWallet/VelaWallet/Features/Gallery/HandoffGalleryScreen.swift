@@ -8,18 +8,23 @@
 //  - `sheet` / `sheet-checking` / `sheet-refused` / `sheet-ask` — a site's
 //    transaction on the signing sheet, for an account whose venue is a page,
 //    drawn by the production builder (`SigningLive.model`): the hand-off card
-//    in place of a second preview — "Confirm with …" from the plan's key
-//    label, the fee and speed the page will sign (`handoffFeeRow`), and the
-//    integrity line with its "checked {{time}}" (`signerIntegrityTime`). Open
-//    is shut until the page's check admits it; `sheet-ask` is a self-hosted
-//    page's own build, with "Trust this version" beside the question;
+//    in place of a second preview — the key row 「确认方式 | …」 from the
+//    plan's key label and the integrity line with its "checked {{time}}"
+//    (`signerIntegrityTime`) — over the sheet's own fee row and speed, which
+//    stay (D-18; the card draws no fee). Open is shut until the page's check
+//    admits it; `sheet-ask` is a self-hosted page's own build, with "Trust
+//    this version" beside the question;
 //  - `sheet-blocked` — the same request refused at sign time because the
 //    account cannot sign here (`venue_blocked`), the reason in the person's
 //    language;
 //  - `card`, `checking`, `refused`, `couldNotCheck`, `ask` — the trusted
 //    page's own sheet before anything opens; `ceremony` is a self-hosted
-//    page's create, with its own title;
-//  - `waiting`, `down` — the page has the request, or could not open.
+//    page's create — its own title and 「新钥匙存在 | 这台设备」 — and
+//    `ceremony-signin` its sign-in, 「确认方式 | 手机或平板」, both the core's;
+//  - `waiting`, `down` — the page has the request, or could not open;
+//  - `send` / `send-checking` — the send confirm (SD3) for such an account:
+//    its own figures, the estimated fee among them, then the card — which
+//    therefore draws no fee of its own.
 //
 //  Fixture data only: nothing here is checked, signed or opened.
 //
@@ -37,6 +42,9 @@ struct HandoffGalleryScreen: View {
         switch state {
         case "sheet", "sheet-checking", "sheet-refused", "sheet-ask", "sheet-blocked":
             SigningSheet(model: signingModel)
+        case "send", "send-checking":
+            // Open shut until the page is admitted, as `sendCtaDisabled` says.
+            FlowHost(model: sendModel, sendCtaDisabled: !line.opens)
         default:
             TrustedSignerSheet(loc: loc, model: sheetModel)
         }
@@ -48,7 +56,7 @@ struct HandoffGalleryScreen: View {
     /// The board's page: a self-hosted one where the board is about it.
     private var page: String {
         switch state {
-        case "ask", "sheet-ask", "ceremony": Self.selfHosted
+        case "ask", "sheet-ask", "ceremony", "ceremony-signin": Self.selfHosted
         default: Self.official
         }
     }
@@ -58,7 +66,7 @@ struct HandoffGalleryScreen: View {
 
     private var line: SignerIntegrityLine {
         switch state {
-        case "checking", "sheet-checking": SignerPageChecks.checking
+        case "checking", "sheet-checking", "send-checking": SignerPageChecks.checking
         case "refused", "sheet-refused":
             SignerIntegrityLine(
                 state: .mismatch, version: "5f0c2e19", checkedAtMs: Self.checkedAt,
@@ -74,7 +82,7 @@ struct HandoffGalleryScreen: View {
                 state: .askToTrust, version: "3f9a1c22", checkedAtMs: Self.checkedAt,
                 key: "componentsUi.signing.integrity.askTrust", opens: false
             )
-        case "ceremony":
+        case "ceremony", "ceremony-signin":
             SignerIntegrityLine(
                 state: .trustedHere, version: "3f9a1c22", checkedAtMs: Self.checkedAt,
                 key: "componentsUi.signing.integrity.trusted", opens: true
@@ -86,7 +94,7 @@ struct HandoffGalleryScreen: View {
     private var sheetModel: TrustedSignerSheetModel {
         let model = TrustedSignerSheetModel()
         model.page = page
-        model.keyLabel = KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle").text(loc)
+        model.keyLabel = KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle")
         model.line = line
         model.open = {}
         model.recheck = {}
@@ -99,14 +107,32 @@ struct HandoffGalleryScreen: View {
             model.stage = .waiting
             model.reopen = {}
             model.unreachable = true
-        case "ceremony":
-            // A self-hosted page's create: its own title, through the core.
+        case "ceremony", "ceremony-signin":
+            // A self-hosted page's create or sign-in: its own title and its
+            // key row, both through the core.
+            let operation = state == "ceremony"
+                ? #"{"type":"register_passkey","method":"platform","page":"\#(Self.selfHosted)","name":"Everyday wallet"}"#
+                : #"{"type":"authenticate_passkey","method":"hybrid","page":"\#(Self.selfHosted)"}"#
             model.stage = .handoff
-            model.title = trustedSignerCeremonyTitleKey(
-                operationJson: #"{"type":"register_passkey","method":"platform","page":"\#(Self.selfHosted)","name":"Everyday wallet"}"#
-            ).map { loc.t($0) }
+            model.title = trustedSignerCeremonyTitleKey(operationJson: operation).map { loc.t($0) }
+            model.keyLabel = KeyLabelWire.ofCeremony(operationJson: operation)
         default:
             model.stage = .handoff
+        }
+        return model
+    }
+
+    /// The send confirm with the hand-off under its figures, and the CTA
+    /// that goes to the page — as `RootView` builds it (`sendHandoff`).
+    private var sendModel: FlowScreenModel {
+        var model = WalletFlowFixtures.build(.sd3, loc: loc)
+        if case .sendConfirm(var confirm) = model.base {
+            confirm.handoff = HandoffCardModel.build(
+                page: page, keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle"),
+                line: line, loc: loc
+            )
+            confirm.cta = loc.t("componentsUi.signing.openSigner")
+            model.base = .sendConfirm(confirm)
         }
         return model
     }
@@ -140,15 +166,14 @@ struct HandoffGalleryScreen: View {
         context.handoffPage = page
         context.handoffKeyLabel = KeyLabelWire(name: "YubiKey 5C", placeKey: "onboarding.create.methodSecurityKeyTitle")
         context.handoffLine = line
-        // The fee the sheet settled, through the core's own row — there while
-        // the page is still being checked, and Open shut all the same.
-        context.handoffFee = HandoffFeeModel.of(
-            feeJson: HandoffFeeFixtures.feeJson, speedJson: HandoffFeeFixtures.speedJson,
-            fee: nil, display: .usd, networks: .builtin, loc: loc
-        )
+        // The fee the sheet settled and its speed, drawn by the sheet's own
+        // fee row — there while the page is still being checked, and Open
+        // shut all the same.
+        let fee = HandoffFeeFixtures.feeView
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: sign,
-            clear: .empty, guard: .empty, fee: nil, context: context,
+            clear: .empty, guard: .empty, fee: fee, context: context,
+            speed: HandoffFeeFixtures.speedView.map { SendLive.SpeedInputs(view: $0, feeView: { _ in fee }) },
             gate: SignConfirmStateWire(enabled: true, block: nil, key: nil)
         )
     }
@@ -181,6 +206,15 @@ enum HandoffFeeFixtures {
 
     static var feeJson: String { feeJson() }
     static var speedJson: String { speedJson() }
+
+    /// The same two views, decoded as the sheet reads them.
+    static var feeView: FeeViewWire? {
+        try? CoreJSON.decoder.decode(FeeViewWire.self, from: Data(feeJson.utf8))
+    }
+
+    static var speedView: FeeSpeedViewWire? {
+        try? CoreJSON.decoder.decode(FeeSpeedViewWire.self, from: Data(speedJson.utf8))
+    }
 }
 
 #endif

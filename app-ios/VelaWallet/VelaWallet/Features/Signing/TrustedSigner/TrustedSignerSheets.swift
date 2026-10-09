@@ -7,8 +7,8 @@
 //
 //  ONE sheet, two stages:
 //
-//  - **hand-off** (spec 102 D4): "Review and sign on your trusted page", the
-//    key the person will confirm with, the page's integrity line, and Open —
+//  - **hand-off** (spec 102 D4): "Review and sign on a trusted signing page",
+//    the key the person will confirm with, the page's integrity line, and Open —
 //    enabled only when the core admitted the bytes this phone fetched. A
 //    refusal takes the line's place and nothing opens.
 //  - **waiting**: the page has the request. "Open the page again" and the way
@@ -38,10 +38,11 @@ final class TrustedSignerSheetModel {
     /// The page's base address.
     var page: String = ""
     /// A ceremony's own title (create / sign in / confirm); `nil` is the
-    /// hand-off's "Review and sign on your trusted signing page".
+    /// hand-off's "Review and sign on a trusted signing page".
     var title: String?
-    /// The key's name or its place's title — "Confirm with {{key}}".
-    var keyLabel: String?
+    /// The key row, the core's: the plan's `key_label` for a signature, the
+    /// ceremony's (`trustedSignerCeremonyKeyLabel`) for a ceremony.
+    var keyLabel: KeyLabelWire?
     /// The page's integrity line, as the core ruled on it.
     var line: SignerIntegrityLine = SignerPageChecks.checking
     /// The card's Open — set while the card waits for it.
