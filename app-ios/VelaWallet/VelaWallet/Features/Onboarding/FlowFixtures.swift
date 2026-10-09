@@ -56,7 +56,9 @@ enum FlowFixtures {
         address: String? = nil,
         syncErrorDetail: String? = nil,
         addMethods: [KeyMethod] = KeyMethod.allCases,
-        addBlocked: AddBlocked? = nil
+        signingDomain: String = "getvela.app",
+        signingPage: String? = nil,
+        canChoosePage: Bool = false
     ) -> CreateView {
         CreateView(
             stage: stage,
@@ -77,7 +79,9 @@ enum FlowFixtures {
             address: address,
             syncErrorDetail: syncErrorDetail,
             addMethods: addMethods,
-            addBlocked: addBlocked
+            signingDomain: signingDomain,
+            signingPage: signingPage,
+            canChoosePage: canChoosePage
         )
     }
 
@@ -90,9 +94,6 @@ enum FlowFixtures {
         confirmed: Bool = true,
         synced: Bool = true
     ) -> CreateKeyRow {
-        // A page's key reports `platform` too — the ceremony ran in a browser —
-        // but the vault holding it is not this device's, and the row must not
-        // claim one (spec 075).
         let platformKey = method == .platform || method == .hybrid
         return CreateKeyRow(
             name: name,
@@ -149,26 +150,18 @@ enum FlowFixtures {
             keys: [key("Everyday wallet", synced: false), key("Key 2")],
             canFinish: true
         ))
-        // Spec 075: a wallet's keys all belong to one relying party. Both ways
-        // the picker narrows — the sentence under the list is the only thing
-        // that tells a person what to do about it.
-        flow("keys · signer page elsewhere", base(
+        // Spec 102: before the first key a person may choose their own
+        // signing page; once chosen, the screen says which domain the keys
+        // will belong to. Three places either way — never a fourth.
+        flow("keys · own page offered", base(
             stage: .addKeys,
-            keys: [key("Everyday wallet", synced: false)],
-            needsSecondKey: true,
-            addMethods: [.platform, .hybrid, .securityKey],
-            addBlocked: AddBlocked(
-                relyingParty: "getvela.app",
-                page: "http://localhost:8140/sign.html",
-                pageRelyingParty: "localhost"
-            )
+            canChoosePage: true
         ))
-        flow("keys · a page's own set", base(
+        flow("keys · on my own page", base(
             stage: .addKeys,
-            keys: [key("Everyday wallet", method: .trustedSigner, synced: false)],
-            needsSecondKey: true,
-            addMethods: [.trustedSigner],
-            addBlocked: AddBlocked(relyingParty: "sign.example.com", page: nil, pageRelyingParty: nil)
+            signingDomain: "sign.example.com",
+            signingPage: "https://sign.example.com/",
+            canChoosePage: true
         ))
         flow("keys · unconfirmed row", base(
             stage: .addKeys,

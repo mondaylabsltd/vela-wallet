@@ -384,7 +384,7 @@ final class SigningController {
         let nowMs = Date().timeIntervalSince1970 * 1000
         trustedSignerRoute = false
         Task { [weak self, spine, wallet] in
-            let route = await spine.signsOnTrustedSigner(account: wallet.address)
+            let route = await spine.plan(account: wallet.address)?.venue.pageUrl != nil
             guard let self, self.request == incoming else { return }
             self.trustedSignerRoute = route
         }

@@ -763,33 +763,13 @@ final class SendExecutor {
 struct SendAccountPort: UserOpSpine.AccountPort {
     let accounts: AccountStore
 
-    /// The record as stored, `signed_in_with` and all — never a projection of
-    /// it, so the core reads the same account the sign-in wrote.
+    /// The record as stored, `sign_in_key`, `signing_domain`, `signing_venue`
+    /// and all — never a projection of it, so the core reads the same account
+    /// the sign-in wrote (spec 102's plan comes from this alone).
     func accountJson(of address: String) async -> String? {
         guard let record = await record(for: address),
               let data = try? JSONSerialization.data(withJSONObject: record)
         else { return nil }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    func keyRoutesJson(of address: String) async -> String {
-        guard let record = await record(for: address) else { return "[]" }
-        let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
-            var route = [
-                "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
-                "transports": key["transports"] as? String ?? "",
-            ]
-            // Spec 075: a key minted or found through the Trusted Signer lives
-            // behind that page, and `sign_route` will not find its way back
-            // there without this. Dropping it here would silently send the
-            // ceremony to a platform sheet that cannot see the key.
-            if let origin = key["signer_origin"] as? String ?? key["signerOrigin"] as? String,
-               !origin.isEmpty {
-                route["signer_origin"] = origin
-            }
-            return route
-        }
-        let data = (try? JSONSerialization.data(withJSONObject: routes)) ?? Data("[]".utf8)
         return String(decoding: data, as: UTF8.self)
     }
 

@@ -97,7 +97,7 @@ struct SendReceiptFollowsTrackerTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
         let fixture = self.fixture
         spine.trustedSigner = ScriptedTrustedSigner { digest in
@@ -107,7 +107,7 @@ struct SendReceiptFollowsTrackerTests {
             ))
         }
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        defaults.set("[\(fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod))]",
+        defaults.set("[\(fixture.pageRecordJson)]",
                      forKey: VelaStore.Key.accounts)
         let store = VelaStore(defaults: defaults)
         let accountStore = AccountStore(defaults: defaults)

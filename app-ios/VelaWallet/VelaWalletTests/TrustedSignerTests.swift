@@ -2,13 +2,15 @@
 //  TrustedSignerTests.swift
 //  VelaWalletTests
 //
-//  Spec 071 on iOS: the Trusted Signer's loopback channel, the spine's branch
-//  and the two preferences, with nothing mocked that the core decides.
+//  Specs 071 and 102 on iOS: the trusted page's channel, the spine's branch
+//  for an account whose venue is a page, and Settings → Signing pages, with
+//  nothing mocked that the core decides.
 //
-//  The channel is spoken to the way the page speaks to it — a TCP socket, an
-//  HTTP upgrade with an `Origin`, masked frames, the token, the answer — and
-//  the answer is signed by a real P-256 key standing in for the passkey, so
-//  the verdicts below are the core's own, run for real.
+//  The channel is spoken to the way the page speaks to it — the request out of
+//  the launch URL the CHECKED page builds (`SignerPageAdmission.urlLaunch`),
+//  the answer back through the scheme — and the answer is signed by a real
+//  P-256 key standing in for the passkey, so the verdicts below are the
+//  core's own, run for real.
 //
 
 import Compression
@@ -39,9 +41,13 @@ struct TrustedSignerFixture {
         [WalletKeyRecord(credentialId: credentialHex, publicKeyHex: Self.hex(key.publicKey.x963Representation))]
     }
 
-    /// This wallet's stored record (`app::Account`), signed in with its key
-    /// over `method`.
-    func recordJson(signedInWith method: String) -> String {
+    /// This wallet's stored record (`app::Account`, spec 102): signed in with
+    /// its key, which lives in `place`, reviewing and signing at `venue` —
+    /// the official page unless said otherwise.
+    func recordJson(
+        place: String = "platform",
+        venue: [String: Any] = ["type": "page", "url": "https://sign.getvela.app/"]
+    ) -> String {
         let publicKeyHex = Self.hex(key.publicKey.x963Representation)
         let record: [String: Any] = [
             "id": credentialHex, "name": "Mine", "address": account,
@@ -50,10 +56,15 @@ struct TrustedSignerFixture {
                 "credential_id": credentialHex, "public_key_hex": publicKeyHex,
                 "name": "Mine", "transports": "internal",
             ]],
-            "signed_in_with": ["credential_id": credentialHex, "method": method],
+            "sign_in_key": ["credential_id": credentialHex, "method": place],
+            "signing_domain": "getvela.app",
+            "signing_venue": venue,
         ]
         return String(decoding: try! JSONSerialization.data(withJSONObject: record), as: UTF8.self)
     }
+
+    /// A record whose venue is the official page — every signature goes there.
+    var pageRecordJson: String { recordJson() }
 
     /// `{credentialId, signature (r‖s), authenticatorData, clientDataJSON}`
     /// for `digest`, user-verified — what the page's ceremony returns.
@@ -97,6 +108,28 @@ struct TrustedSignerFixture {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+/// A page this device "checked": the core's own target for `base`, admitted
+/// by naming the bytes as the version the target asks for — which is what a
+/// fetch of those very bytes would hash to. Hermetic: no network, and the
+/// launch URL is still the core's (spec 102 R6).
+@MainActor
+enum TestAdmissions {
+    static let official = "https://sign.getvela.app/"
+
+    static func admitted(_ base: String = official) -> SignerPageAdmission {
+        let target = SignerPageTarget.choose(base: base, index: nil, trusted: [], blocked: [])
+        return signerPageAdmit(
+            target: target, observedHash: target.version(), failure: .notChecked,
+            trusted: [], blocked: [], verificationOff: false,
+            checkedAtMs: UInt64(Date().timeIntervalSince1970 * 1000)
+        )
+    }
+
+    static func launcher(_ base: String = official) -> TrustedSignerChannel.Launcher {
+        TrustedSignerChannel.launcher(admitted(base))
     }
 }
 
@@ -196,7 +229,8 @@ struct TrustedSignerChannelTests {
         _ fixture: TrustedSignerFixture, digest: Data, timeout: TimeInterval = TrustedSignerChannel.defaultTimeout
     ) throws -> TrustedSignerChannel {
         TrustedSignerChannel(
-            signerUrl: fixture.signerUrl, requestJson: try fixture.messageRequest(),
+            signerUrl: fixture.signerUrl, launch: TestAdmissions.launcher(fixture.signerUrl),
+            requestJson: try fixture.messageRequest(),
             digest: digest, keys: fixture.keys, timeout: timeout
         )
     }
@@ -212,13 +246,16 @@ struct TrustedSignerChannelTests {
         let url = try #require(channel.start())
 
         let launch = url.absoluteString
-        // Spec 079: the phones open the pinned, content-addressed version
-        // (`integrity::LAUNCH`, `/b/<sha256>/sign`) — cacheable, so it opens
-        // with no network — never the root page.
+        // Spec 102 R6: the phones open the CHECKED, content-addressed version
+        // (`/b/<sha256>/sign`) — the very URL the check fetched — never the
+        // root page.
         #expect(launch.hasPrefix("https://sign.getvela.app/b/"))
         #expect(launch.components(separatedBy: "#")[0].hasSuffix("/sign?ch=url"))
         let version = launch.dropFirst("https://sign.getvela.app/b/".count).prefix { $0 != "/" }
         #expect(version.count == 64 && version.allSatisfy(\.isHexDigit), "a sha-256 names the version")
+        let checked = SignerPageTarget.choose(base: fixture.signerUrl, index: nil, trusted: [], blocked: [])
+        let checkedUrl = try #require(checked.url())
+        #expect(launch.hasPrefix(checkedUrl), "the URL that opens is the URL that was checked")
         // The request is in the FRAGMENT, which no server is sent. A query
         // would be in the log of the server that serves the page.
         #expect(launch.contains("#i="))
@@ -386,17 +423,17 @@ struct TrustedSignerChannelTests {
 
 final class ScriptedTrustedSigner: TrustedSignerPort {
     var answer: (_ digest: Data) -> TrustedSignerChannel.Ending
-    private(set) var asked: [(request: [String: Any], digest: Data, page: String?)] = []
+    private(set) var asked: [(request: [String: Any], digest: Data, page: String, place: KeyMethod?)] = []
 
     init(answer: @escaping (_ digest: Data) -> TrustedSignerChannel.Ending) {
         self.answer = answer
     }
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String, place: KeyMethod?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
-        asked.append((request, digest, signerOrigin))
+        asked.append((request, digest, page, place))
         return answer(digest)
     }
 }
@@ -410,9 +447,9 @@ struct TrustedSignerSpineTests {
     ) -> UserOpSpine {
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        // The account signed in on the Trusted Signer, so every signature
-        // goes back there.
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        // The account reviews and signs on the official page (spec 102), so
+        // every signature goes there.
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(
             relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { signer }
@@ -459,6 +496,72 @@ struct TrustedSignerSpineTests {
         let context = try #require(asked.request["context"] as? [String: Any])
         #expect(context["operation"] == nil, "a message carries no operation")
         #expect(context["allowCredentials"] as? [String] == [TrustedSignerFixture.base64url(fixture.credential)])
+        // R5: the page is told which key, and where it lives, so the browser
+        // asks for that key only — no generic "where is your passkey?".
+        let route = try #require(context["keyRoute"] as? [String: Any])
+        #expect(route["credentialId"] as? String == TrustedSignerFixture.base64url(fixture.credential))
+        #expect(route["place"] as? String == "platform")
+        #expect(route["hints"] as? [String] == ["client-device"])
+        #expect(asked.page == "https://sign.getvela.app/")
+        #expect(asked.place == .platform, "the card says which key the person confirms with")
+    }
+
+    /// The same account, its venue In Vela: the page is never asked, and the
+    /// passkey is pinned to the sign-in key over its place.
+    @Test func anAccountThatSignsInVelaNeverReachesThePage() async throws {
+        let signer = CountingSigner()
+        let page = honestPage()
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.recordJson(venue: ["type": "in_vela"])
+        let spine = UserOpSpine(
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            accounts: accounts, signer: { signer }
+        )
+        spine.trustedSigner = page
+        do {
+            _ = try await spine.signMessage(
+                chainId: 100, account: fixture.account, originalHash: Data(repeating: 1, count: 32),
+                asked: .init(method: "personal_sign", paramsJson: #"["0x00"]"#, origin: "https://a.example")
+            )
+            Issue.record("the counting signer signed")
+        } catch let refused as UserOpSpine.Refused {
+            #expect(refused.failure == .passkeyCancelled)
+        }
+        #expect(signer.calls == 1, "In Vela is the app's own sheet")
+        #expect(page.asked.isEmpty, "an account that signs in Vela opened a page")
+    }
+
+    /// R1: an account on a domain nothing here can reach signs NOTHING — not
+    /// the page, not the passkey — and says why, in the core's words.
+    @Test func anAccountNothingHereCanReachIsRefusedBeforeAnyPrompt() async throws {
+        let signer = CountingSigner()
+        let page = honestPage()
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        var record = try CoreJSON.object(fixture.recordJson(venue: ["type": "in_vela"]))
+        record["signing_domain"] = "sign.example.com"
+        accounts.recordJson = String(decoding: try JSONSerialization.data(withJSONObject: record), as: UTF8.self)
+        let stored = try #require(accounts.recordJson)
+        let plan = try #require(SigningPlanWire.of(accountJson: stored))
+        let blocked = try #require(plan.blocked, "the core lets an unreachable account sign")
+        let spine = UserOpSpine(
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            accounts: accounts, signer: { signer }
+        )
+        spine.trustedSigner = page
+        do {
+            _ = try await spine.signMessage(
+                chainId: 100, account: fixture.account, originalHash: Data(repeating: 1, count: 32),
+                asked: .init(method: "personal_sign", paramsJson: #"["0x00"]"#, origin: "https://a.example")
+            )
+            Issue.record("an account nothing can reach signed")
+        } catch let refused as UserOpSpine.Refused {
+            #expect(refused.failure == .trustedSigner(.blocked(blocked)))
+        }
+        #expect(signer.calls == 0 && page.asked.isEmpty)
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        #expect(TrustedSignerNotice.blocked(blocked).text(loc).contains("sign.example.com"))
     }
 
     /// The wallet's own send: the core builds `wallet_sendCalls` from the
@@ -500,6 +603,10 @@ struct TrustedSignerSpineTests {
     /// Nothing is signed and nothing is submitted on any other ending; the
     /// sentence that goes on the sheet is the contract's (§5).
     @Test func everyOtherEndingIsARefusalInTheContractsWords() async throws {
+        let mismatchLine = SignerIntegrityLine(
+            state: .mismatch, version: "deadbeef", checkedAtMs: nil,
+            key: "componentsUi.signing.integrity.mismatch", opens: false
+        )
         let cases: [(TrustedSignerChannel.Ending, TrustedSignerNotice)] = [
             (.outcome(.refused(refusal: .declined)), .closed),
             (.outcome(.refused(refusal: .pageRefused(code: "unlimited_approval"))), .refused),
@@ -507,6 +614,12 @@ struct TrustedSignerSpineTests {
             (.outcome(.refused(refusal: .foreignKey)), .mismatch),
             (.outcome(.refused(refusal: .malformed(detail: "x"))), .mismatch),
             (.timedOut, .timeout),
+            // A ceremony answer to a signature is a shell bug — never English
+            // on the sheet, but the contract's own sentence.
+            (.ceremony(.refused(refusal: .declined)), .mismatch),
+            (.unavailable, .unavailable),
+            // R6: the check refused the page; it was never opened.
+            (.notOpened(mismatchLine), .notOpened(mismatchLine)),
         ]
         for (ending, notice) in cases {
             let spine = spine(ScriptedRelayPort(), CountingSigner(), clear: ScriptedTrustedSigner { _ in ending })
@@ -522,19 +635,42 @@ struct TrustedSignerSpineTests {
         }
         #expect(TrustedSignerNotice.closed.key == "componentsUi.signing.trustedSignerClosed")
         #expect(TrustedSignerNotice.mismatch.key == "componentsUi.signing.trustedSignerMismatch")
+        #expect(TrustedSignerNotice.unavailable.key == "componentsUi.signing.signerDown")
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        #expect(TrustedSignerNotice.notOpened(mismatchLine).text(loc)
+                == "Version deadbeef isn't on Vela's published build list. Not opened.")
+        // Every sentence is the corpus's: none of them is English the shell
+        // wrote (research §4's hard-coded errors).
+        for notice in cases.map(\.1) {
+            #expect(notice.text(loc) != notice.key, "\(notice) has no sentence in the corpus")
+        }
+
+        // Left on the hand-off card before anything opened: a cancelled sheet.
+        let spine = spine(ScriptedRelayPort(), CountingSigner(), clear: ScriptedTrustedSigner { _ in .cancelled })
+        do {
+            _ = try await spine.signMessage(
+                chainId: 100, account: fixture.account, originalHash: Data(repeating: 1, count: 32),
+                asked: .init(method: "personal_sign", paramsJson: #"["0x00"]"#, origin: "https://a.example")
+            )
+            Issue.record("a cancelled card signed")
+        } catch let refused as UserOpSpine.Refused {
+            #expect(refused.failure == .passkeyCancelled)
+        }
     }
 }
 
-// MARK: - The Trusted Signer page preference
+// MARK: - Settings → Signing pages (spec 102)
 
 @MainActor
-struct SignPrefTests {
+struct SigningPagesTests {
     private var loc: Loc { Loc(overrideTag: "en", preferredLanguages: []) }
 
     /// Drives the machine the way `CoreStore` does — dispatch, perform each
     /// operation against the store, resolve — so the round trip is the
     /// executor's and the core's, not a copy of their rules.
-    private func run(_ core: SignPrefCore, _ executor: SignPrefExecutor, _ event: [String: Any]) throws -> SignPrefViewWire {
+    static func run(
+        _ core: SigningPagesCore, _ executor: SigningPagesExecutor, _ event: [String: Any]
+    ) throws -> SigningPagesViewWire {
         var result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(event)))
         var pending = result["effects"] as? [[String: Any]] ?? []
         while !pending.isEmpty {
@@ -544,66 +680,64 @@ struct SignPrefTests {
             result = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: answer))
             pending += result["effects"] as? [[String: Any]] ?? []
         }
-        return try CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object(core.view()))
+        return try CoreJSON.decode(SigningPagesViewWire.self, from: CoreJSON.object(core.view()))
     }
 
-    @Test func thePagePersistsUnderItsKeyAndReadsBack() throws {
+    /// The list persists under its own key and reads back: the official page
+    /// first and never stored, refusals store nothing, and a page can be
+    /// renamed and removed.
+    @Test func pagesPersistUnderTheirKeyAndReadBack() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
-        let executor = SignPrefExecutor(store: store)
-        let core = SignPrefCore()
+        let executor = SigningPagesExecutor(store: store)
+        let core = SigningPagesCore()
 
-        var view = try run(core, executor, ["type": "refresh"])
-        #expect(view.signerUrlIsDefault && view.signerUsesWalletPasskeys)
+        var view = try Self.run(core, executor, ["type": "refresh"])
+        #expect(view.loaded)
+        #expect(view.pages.map(\.official) == [true], "the official page alone, first")
+        #expect(view.pages.first?.domain == "getvela.app")
+        #expect(view.saved.isEmpty)
 
-        // Refused: nothing stored, the old page stands, and the sheet says why.
-        view = try run(core, executor, ["type": "signer_url_submitted", "text": "http://192.168.1.4/"])
-        #expect(view.signerUrlError == "insecure")
-        #expect(store.readString(VelaStore.Key.trustedSignerUrl) == nil)
+        // Refused: nothing stored, and the sheet can say why.
+        view = try Self.run(core, executor, ["type": "page_added", "url": "http://192.168.1.4/", "name": ""])
+        #expect(view.addError == "insecure")
+        #expect(SigningPagesViewWire.addErrorKey(view.addError) == "settings.signing.pageInsecure")
+        #expect(store.rawValue(VelaStore.Key.signingPages) == nil)
 
-        view = try run(core, executor, ["type": "signer_url_submitted", "text": "http://localhost:8141/"])
-        #expect(view.signerUrlError == nil && !view.signerUrlIsDefault)
-        #expect(!view.signerUsesWalletPasskeys, "a page off getvela.app cannot use the wallet's passkeys")
-        let stored = try #require(store.readString(VelaStore.Key.trustedSignerUrl))
+        view = try Self.run(core, executor, ["type": "page_added", "url": "https://sign.example.com", "name": "Mine"])
+        #expect(view.addError == nil)
+        let mine = try #require(view.pages.last)
+        #expect(!mine.official && mine.domain == "sign.example.com" && mine.name == "Mine")
+        #expect(store.rawValue(VelaStore.Key.signingPages)?.contains("sign.example.com") == true)
+
+        view = try Self.run(core, executor, ["type": "page_added", "url": "https://sign.example.com/", "name": ""])
+        #expect(view.addError == "duplicate")
 
         // A second launch reads it back.
-        let again = try run(SignPrefCore(), SignPrefExecutor(store: store), ["type": "refresh"])
-        #expect(again.signerUrl == stored)
+        let again = try Self.run(SigningPagesCore(), SigningPagesExecutor(store: store), ["type": "refresh"])
+        #expect(again.saved.map(\.url) == [mine.url])
 
-        view = try run(core, executor, ["type": "signer_url_reset"])
-        #expect(view.signerUrlIsDefault)
-        #expect(store.readString(VelaStore.Key.trustedSignerUrl) == nil)
+        view = try Self.run(core, executor, ["type": "page_renamed", "url": mine.url, "name": "Work"])
+        #expect(view.pages.last?.name == "Work")
+        view = try Self.run(core, executor, ["type": "page_removed", "url": mine.url])
+        #expect(view.saved.isEmpty)
     }
 
-    /// Settings: the page row says which page is in force, and the page sheet
-    /// carries the core's verdicts — never a rule of its own. There is no
-    /// "Sign with" row: how a signature is routed is chosen at sign-in, never
-    /// here (founder, 2026-09-26).
-    @Test func settingsShowsThePageAndWhyAPageCannotSign() throws {
+    /// The 071 field's page is imported once, as a saved page, and the old
+    /// key removed — so removing it later does not bring it back.
+    @Test func theOldTrustedSignerPageIsImportedOnce() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
-        let executor = SignPrefExecutor(store: store)
-        let core = SignPrefCore()
-        let base = SettingsFixtures.build(.st1, loc: loc)
+        store.writeString(VelaStore.Key.trustedSignerUrl, "https://sign.example.com/")
+        let view = try Self.run(SigningPagesCore(), SigningPagesExecutor(store: store), ["type": "refresh"])
+        #expect(view.saved.map(\.url) == ["https://sign.example.com/"])
+        #expect(store.readString(VelaStore.Key.trustedSignerUrl) == nil, "the old key was left to import again")
+    }
 
-        let official = SettingsLive.withSignPref(try run(core, executor, ["type": "refresh"]), on: base, loc: loc)
-        let rows = official.sections.flatMap(\.rows)
-        #expect(rows.first { $0.id == SettingsFixtures.signerPageRow }?.value == "Official")
+    /// Settings has no free-text "Trusted Signer page" row any more, and no
+    /// "Sign with" chosen per signature (founder, 2026-09-26).
+    @Test func settingsHasNoTrustedSignerUrlField() {
+        let rows = SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows)
+        #expect(!rows.contains { $0.id == "signer-page" })
         #expect(!rows.contains { $0.title == "Sign with" }, "a default \"Sign with\" is back in Settings")
-        #expect(official.signerPage?.reset == nil)
-        #expect(official.signerPage?.foreign == nil)
-
-        let own = SettingsLive.withSignPref(
-            try run(core, executor, ["type": "signer_url_submitted", "text": "http://localhost:8141/"]),
-            on: base, loc: loc
-        )
-        let ownRows = own.sections.flatMap(\.rows)
-        #expect(ownRows.first { $0.id == SettingsFixtures.signerPageRow }?.value == "localhost")
-        #expect(own.signerPage?.reset == "Use the official page")
-        #expect(own.signerPage?.foreign?.hasPrefix("Your passkeys belong to getvela.app") == true)
-
-        let refused = SettingsLive.withSignPref(
-            try run(core, executor, ["type": "signer_url_submitted", "text": "not a page"]), on: base, loc: loc
-        )
-        #expect(refused.signerPage?.error == "That is not a web address.")
     }
 }
 
@@ -630,9 +764,12 @@ struct TrustedSignerPageTests {
         let page = try #require(Self.page)
         let fixture = TrustedSignerFixture()
         let request = try fixture.messageRequest()
-        let host = TrustedSigner(loc: Loc(overrideTag: "en", preferredLanguages: []), signerUrl: { page })
+        let host = TrustedSigner(loc: Loc(overrideTag: "en", preferredLanguages: []), checks: .shared)
         let signing = Task {
-            await host.sign(requestJson: request, digest: Data(repeating: 7, count: 32), keys: fixture.keys)
+            await host.sign(
+                requestJson: request, digest: Data(repeating: 7, count: 32), keys: fixture.keys,
+                page: page, place: .platform
+            )
         }
         print("[trusted-signer-e2e] page opening: \(page)")
         try await Task.sleep(for: .seconds(Self.dwell))

@@ -71,12 +71,9 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
         WalletKeyRecord(credentialId: "cred-0", publicKeyHex: "04" + String(repeating: "11", count: 64)),
     ]
 
-    /// Spec 075: what `sign_route` is asked about — `nil` keeps the default
-    /// ("nothing known", so the ceremony routes as it always did).
-    var routesJson: String?
     var accountName: String?
-    /// The stored record `signInRoute` reads — `nil` is no record, which signs
-    /// as a record written before the sign-in key did.
+    /// The stored record `signingPlan` reads — `nil` is no record, which signs
+    /// as a record written before the sign-in key did, in Vela.
     var recordJson: String?
 
     func accountJson(of address: String) async -> String? { recordJson }
@@ -84,7 +81,6 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
     func routing(of address: String) async -> (transports: String, method: KeyMethod) {
         ("internal", .platform)
     }
-    func keyRoutesJson(of address: String) async -> String { routesJson ?? "[]" }
     func name(of address: String) async -> String? { accountName }
 }
 

@@ -71,10 +71,6 @@ struct SettingsScreen: View {
     /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
     /// whether there is anything to send.
     var onEthereumBackup: (() -> Void)?
-    /// The Trusted Signer page's Save and reset (spec 071). Save answers whether
-    /// the core took the address.
-    var onSaveSignerUrl: ((String) -> Bool)?
-    var onResetSignerUrl: (() -> Void)?
     /// The relay's Save and reset (spec 075) — the same pair against the
     /// other key.
     /// A link on the page — About's three, the language sheet's "suggest a
@@ -141,8 +137,6 @@ struct SettingsScreen: View {
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
         onEthereumBackup: (() -> Void)? = nil,
-        onSaveSignerUrl: ((String) -> Bool)? = nil,
-        onResetSignerUrl: (() -> Void)? = nil,
         onOpenLink: ((String) -> Void)? = nil,
         onRevealDebugMode: (() -> Void)? = nil,
         onDebugMode: ((Bool) -> Void)? = nil
@@ -165,8 +159,6 @@ struct SettingsScreen: View {
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
-        self.onSaveSignerUrl = onSaveSignerUrl
-        self.onResetSignerUrl = onResetSignerUrl
         self.onOpenLink = onOpenLink
         self.onRevealDebugMode = onRevealDebugMode
         self.onDebugMode = onDebugMode
@@ -287,8 +279,6 @@ struct SettingsScreen: View {
                         pendingConfirm?.action()
                         pendingConfirm = nil
                     },
-                    onSaveSignerUrl: onSaveSignerUrl,
-                    onResetSignerUrl: onResetSignerUrl,
                     onOpenLink: onOpenLink,
                     feedbackSender: feedbackSender
                 )
@@ -561,7 +551,7 @@ struct SettingsScreen: View {
 
     /// Rows a tap navigates from; everything else opens an overlay.
     private func select(_ id: String) {
-        if let sheet = Self.overlay(forRow: id, hasSignerPage: model.signerPage != nil) {
+        if let sheet = Self.overlay(forRow: id) {
             if sheet == .feedback {
                 // A fresh form — unless a report is still on its way, whose
                 // sheet this then reopens on.
@@ -594,12 +584,11 @@ struct SettingsScreen: View {
     /// The sheet a row raises, if it raises one. Pure, so a test can hold
     /// every row to its sheet — the feedback row had a route and no row for
     /// two specs (2026-09-27).
-    static func overlay(forRow id: String, hasSignerPage: Bool) -> SettingsOverlay? {
+    static func overlay(forRow id: String) -> SettingsOverlay? {
         switch id {
         case "language": .language
         case "currency": .currency
         case SettingsFixtures.feeSpeedRow: .feeSpeed
-        case SettingsFixtures.signerPageRow: hasSignerPage ? .signerPage : nil
         case "number-format": .numberFormat
         case "date-format": .dateFormat
         case "time-format": .timeFormat

@@ -2,22 +2,25 @@
 //  TrustedSignerRouteTests.swift
 //  VelaWalletTests
 //
-//  Spec 075 on iOS: the Trusted Signer as a fourth PASSKEY ROUTE.
+//  Spec 102 on iOS: the trusted page is WHERE a person reviews and signs, not
+//  a fourth place a key lives.
 //
-//  071's tests (`TrustedSignerTests`) cover it as a way to sign. These cover
-//  what it became:
+//  071's tests (`TrustedSignerTests`) cover signing there. These cover the
+//  rest of the model:
 //
-//  - a session of several requests on one page visit — create, then that
-//    key's member proof, then `bye` — spoken to the way the page speaks to it;
-//  - the create and sign-in choosers listing four routes;
-//  - `signer_origin` round-tripping through the account record and taking the
-//    ceremony back to the page the key lives behind;
-//  - the onboarding executor reporting the core's verdict as the machine
-//    result, and a closed page as a cancel rather than an error.
+//  - a wallet on its own domain runs its key ceremonies on its page (R3) — a
+//    session of several requests, create then that key's member proof, spoken
+//    to the way the page speaks to it;
+//  - the create and sign-in choosers listing THREE places, and the venue's
+//    words;
+//  - the account's signing plan — key, domain, venue — taking each signature
+//    where it belongs, old records migrated by the core;
+//  - the onboarding executor routing by the operation's `page`, reporting the
+//    core's verdict as the machine result, a closed page as a cancel.
 //
 //  Nothing here fakes a verdict. Every answer goes through the core
-//  (`trustedSignerVerifyCeremony`, `trustedSignerVerify`, `signRoute`), and the
-//  attestation is the conformance vectors' real one.
+//  (`trustedSignerVerifyCeremony`, `trustedSignerVerify`, `signingPlan`), and
+//  the attestation is the conformance vectors' real one.
 //
 
 import CryptoKit
@@ -28,12 +31,14 @@ import VelaCore
 
 // MARK: - A page that runs ceremonies
 
-/// What a Trusted Signer page answers for the four ceremonies, built from the
-/// repository's own conformance vectors so the core judges real bytes.
+/// What a wallet's own signing page answers for the four ceremonies, built from
+/// the repository's own conformance vectors so the core judges real bytes.
+/// The page is on the person's own domain: only such a wallet runs its
+/// ceremonies on a page (R3).
 struct TrustedSignerCeremonyFixture {
     let key = P256.Signing.PrivateKey()
-    let signerUrl = "https://sign.getvela.app/"
-    let origin = "https://sign.getvela.app"
+    let signerUrl = "https://sign.example.com/"
+    let origin = "https://sign.example.com"
     /// The credential the vector's attestation object carries.
     let credential = Data(repeating: 0xCD, count: 16)
 
@@ -99,12 +104,12 @@ struct TrustedSignerCeremonyFixture {
         ]
     }
 
-    /// A `register_passkey` operation with `method = trusted_signer`, as the
-    /// create machine sends it.
-    func registerOperation(name: String = "Mine") -> [String: Any] {
+    /// A `register_passkey` on this wallet's page, as the create machine
+    /// sends it: the place is the method, the page is `page` (spec 102).
+    func registerOperation(name: String = "Mine", method: String = "platform") -> [String: Any] {
         [
             "type": "register_passkey", "name": name,
-            "exclude_credential_ids": [] as [String], "method": "trusted_signer",
+            "exclude_credential_ids": [] as [String], "method": method, "page": signerUrl,
         ]
     }
 
@@ -115,7 +120,7 @@ struct TrustedSignerCeremonyFixture {
             "type": "sign_member_proof", "credential_id": credentialHex,
             "public_key_hex": "04" + String(repeating: "cd", count: 64),
             "attestation_hex": "", "transports": "internal",
-            "method": "trusted_signer", "group_public_key_hex": groupPublicKey,
+            "method": "platform", "group_public_key_hex": groupPublicKey, "page": signerUrl,
         ]
     }
 
@@ -140,7 +145,7 @@ struct TrustedSignerSessionTests {
     /// them one flow is this side: the same channel, the same page, one
     /// `end()`, and a fresh one-time token for each.
     ///
-    /// This is the shape of the whole 075 create flow.
+    /// This is the shape of a create on the person's own signing page.
     @Test func aCreateAndItsMemberProofRunOnOneFlow() async throws {
         let page = TrustedSignerCeremonyFixture()
         let registry = "https://p256-index-v2.getvela.app"
@@ -151,7 +156,7 @@ struct TrustedSignerSessionTests {
             deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
-            signerUrl: page.signerUrl,
+            signerUrl: page.signerUrl, launch: TestAdmissions.launcher(page.signerUrl),
             first: .ceremony(
                 request: registerRequest,
                 operationJson: TrustedSignerCeremonyFixture.json(register),
@@ -165,6 +170,13 @@ struct TrustedSignerSessionTests {
         //    own challenge; the wallet only checks what comes back.
         #expect(first.intent["method"] as? String == "vela_createPasskey")
         #expect(first.context["walletName"] as? String == "Mine")
+        // The page the wallet CHECKED is the page that opened (R6), on the
+        // wallet's own domain — not the official one.
+        #expect(first.url.absoluteString.hasPrefix(page.signerUrl + "b/"))
+        // R5: told where the key is to live, so the browser goes straight there.
+        let createParams = try #require((first.intent["params"] as? [[String: Any]])?.first)
+        #expect(createParams["place"] as? String == "platform")
+        #expect(createParams["hints"] as? [String] == ["client-device"])
         #expect(first.answer(page.createAnswer()))
         guard case .ceremony(.registered(let registrationJson)) = await channel.ending() else {
             Issue.record("the page's registration was not accepted")
@@ -236,7 +248,7 @@ struct TrustedSignerSessionTests {
             deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
-            signerUrl: page.signerUrl,
+            signerUrl: page.signerUrl, launch: TestAdmissions.launcher(page.signerUrl),
             first: .ceremony(request: request,
                              operationJson: TrustedSignerCeremonyFixture.json(register),
                              memberChallenge: nil)
@@ -278,7 +290,7 @@ struct TrustedSignerSessionTests {
             deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
-            signerUrl: page.signerUrl,
+            signerUrl: page.signerUrl, launch: TestAdmissions.launcher(page.signerUrl),
             first: .ceremony(
                 request: request,
                 operationJson: TrustedSignerCeremonyFixture.json(member),
@@ -303,7 +315,7 @@ struct TrustedSignerSessionTests {
             deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
-            signerUrl: page.signerUrl,
+            signerUrl: page.signerUrl, launch: TestAdmissions.launcher(page.signerUrl),
             first: .ceremony(request: request,
                              operationJson: TrustedSignerCeremonyFixture.json(register),
                              memberChallenge: nil)
@@ -333,120 +345,128 @@ struct TrustedSignerChooserTests {
     private var loc: Loc { Loc(overrideTag: "zh", preferredLanguages: []) }
 
     /// The create key-method picker and the sign-in method sheet both render
-    /// `KeyMethod.allCases`, so this is what puts the fourth route on both of
-    /// them (spec 075 SC-001): four routes, no `auto`, each with a title and a
-    /// line in the person's language.
-    @Test func theCreateAndSignInChoosersListFourRoutes() {
-        #expect(KeyMethod.allCases == [.platform, .hybrid, .securityKey, .trustedSigner])
+    /// `KeyMethod.allCases`: three places, no fourth (spec 102), each with a
+    /// title and a line in the person's language. The core no longer knows a
+    /// `trusted_signer` method either.
+    @Test func theCreateAndSignInChoosersListThreePlaces() {
+        #expect(KeyMethod.allCases == [.platform, .hybrid, .securityKey])
         for chooser in [KeyChooser.create, .signIn] {
             let titles = KeyMethod.allCases.map { methodCopy($0, chooser: chooser, loc: loc).title }
-            #expect(titles.last == "可信签名器")
-            #expect(Set(titles).count == 4, "two routes share a title")
-            #expect(methodCopy(.trustedSigner, chooser: chooser, loc: loc).body == "在独立的页面上核对并签名——所见即所签。")
+            #expect(!titles.contains("可信签名器"))
+            #expect(Set(titles).count == 3, "two places share a title")
         }
-        // A method that arrives from the core by name resolves to the route.
-        #expect(KeyMethod(rawValue: "trusted_signer") == .trustedSigner)
+        #expect(KeyMethod(rawValue: "trusted_signer") == nil)
+        #expect(keyMethodWords(method: "trusted_signer", chooser: "create", unlock: "face_id") == nil)
+    }
+
+    /// "Use my own signing page" is the venue's words, not a fourth place —
+    /// and so are the two rows of "Where you review and sign".
+    @Test func theVenueHasItsOwnWords() throws {
+        let own = try #require(venueWords(row: "own_page"))
+        #expect(loc.t(own.titleKey) == "使用我自己的签名页")
+        #expect(own.lineKey.map { loc.t($0) } == "高级：钥匙属于你页面的域名，只能在那里签名")
+        let inVela = try #require(venueWords(row: "in_vela"))
+        let onAPage = try #require(venueWords(row: "page"))
+        #expect(loc.t(inVela.titleKey) == "在 Vela 里")
+        #expect(loc.t(onAPage.titleKey) == "在可信签名页")
+        #expect(venueWords(row: "trusted_signer") == nil)
     }
 
     /// Settings has no pairing-service row at all: the channel went on
     /// 2026-09-23 and its address went with it. A row left behind would be a
     /// setting for something the wallet no longer opens.
-    @Test func settingsHasNoPairingServiceRow() throws {
-        let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
-        let executor = SignPrefExecutor(store: store)
-        let view = try Self.run(SignPrefCore(), executor, ["type": "refresh"])
-        let model = SettingsLive.withSignPref(view, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
-        let ids = model.sections.flatMap(\.rows).map(\.id)
+    @Test func settingsHasNoPairingServiceRow() {
+        let ids = SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows).map(\.id)
         #expect(!ids.contains { $0.localizedCaseInsensitiveContains("tunnel") })
         #expect(!ids.contains { $0.localizedCaseInsensitiveContains("relay") })
     }
-
-    /// Drives the machine the way `CoreStore` does — dispatch, perform each
-    /// operation against the store, resolve.
-    static func run(
-        _ core: SignPrefCore, _ executor: SignPrefExecutor, _ event: [String: Any]
-    ) throws -> SignPrefViewWire {
-        var result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(event)))
-        var pending = result["effects"] as? [[String: Any]] ?? []
-        while !pending.isEmpty {
-            let effect = pending.removeFirst()
-            let id = (effect["id"] as? NSNumber)?.uint64Value ?? 0
-            let answer = executor.perform(effect["operation"] as? [String: Any] ?? [:])
-            result = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: answer))
-            pending += result["effects"] as? [[String: Any]] ?? []
-        }
-        return try CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object(core.view()))
-    }
 }
 
-// MARK: - `signer_origin`: where a key lives
+// MARK: - The signing plan: key, domain, venue
 
 @MainActor
-struct SignerOriginTests {
+struct SigningPlanTests {
+    private let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
-    /// The account record carries it, whole, through a write and a read — and
-    /// it reaches `sign_route` in the shape the core reads.
-    ///
-    /// **This is the one that loses a wallet if it drifts.** A key minted
-    /// behind somebody's own signer page is reachable nowhere else; a mapper
-    /// that dropped `signer_origin` would send its ceremony to a platform
-    /// sheet that cannot see the key, and the person would be told their own
-    /// passkey does not exist.
-    @Test func anAccountRecordRoundTripsSignerOriginAndItReachesTheRoute() async throws {
-        let store = AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
-        let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
-        let origin = "https://sign.example"
-        await store.saveAccount([
+    private func record(_ extra: [String: Any], keyOrigin: String? = nil) -> String {
+        var key: [String: Any] = [
+            "credential_id": "cred-1", "public_key_hex": "04" + String(repeating: "11", count: 64),
+            "name": "Mine", "transports": "internal",
+        ]
+        if let keyOrigin { key["signer_origin"] = keyOrigin }
+        var record: [String: Any] = [
             "id": "cred-1", "address": address, "name": "Mine",
             "public_key_hex": "04" + String(repeating: "11", count: 64),
-            "keys": [[
-                "credential_id": "cred-1",
-                "public_key_hex": "04" + String(repeating: "11", count: 64),
-                "name": "Mine", "transports": "internal", "signer_origin": origin,
-            ]],
-        ])
-        let reloaded = try #require(await store.loadAccounts().first)
-        let key = try #require((reloaded["keys"] as? [[String: Any]])?.first)
-        #expect(key["signer_origin"] as? String == origin, "the record forgot where its key lives")
-
-        let port = SendAccountPort(accounts: store)
-        let routes = await port.keyRoutesJson(of: address)
-        let decoded = (try? JSONSerialization.jsonObject(with: Data(routes.utf8))) as? [[String: Any]]
-        #expect(decoded?.first?["signer_origin"] as? String == origin,
-                "the route the core reads lost where the key lives: \(routes)")
-
-        // `auto` follows the key to its page — the core's ruling, read here
-        // through the same door the spine uses.
-        let auto = try #require(signRoute(deviceKeysJson: routes, method: "auto"))
-        let route = try CoreJSON.decoder.decode(SignRouteWire.self, from: Data(auto.utf8))
-        #expect(route.method == "trusted_signer")
-        #expect(route.signerOrigin == origin)
-        #expect(route.credentialId == "cred-1")
+            "created_at_iso": "2026-09-01T00:00:00.000Z", "keys": [key],
+        ]
+        record.merge(extra) { _, new in new }
+        return String(decoding: try! JSONSerialization.data(withJSONObject: record), as: UTF8.self)
     }
 
-    /// A wallet whose key is NOT behind a page routes as it always did:
-    /// `auto` answers nothing, and the ceremony is the platform sheet's.
-    @Test func anOrdinaryKeyIsNotRoutedToAPage() async throws {
-        let routes = #"[{"credential_id":"cred-1","transports":"internal"}]"#
-        #expect(signRoute(deviceKeysJson: routes, method: "auto") == nil)
-        let named = try #require(signRoute(deviceKeysJson: routes, method: "platform"))
-        let route = try CoreJSON.decoder.decode(SignRouteWire.self, from: Data(named.utf8))
-        #expect(route.method == "platform")
-        #expect(route.signerOrigin.isEmpty, "absent on the wire, empty here")
+    /// A new record: its key, its domain and its venue, as written.
+    @Test func aNewRecordIsReadAsWritten() throws {
+        let plan = try #require(SigningPlanWire.of(accountJson: record([
+            "sign_in_key": ["credential_id": "cred-1", "method": "security_key", "transports": "usb,nfc"],
+            "signing_domain": "getvela.app",
+            "signing_venue": ["type": "page", "url": "https://sign.getvela.app/"],
+        ])))
+        #expect(plan.onAppDomain)
+        #expect(plan.venue == .page(url: "https://sign.getvela.app/"))
+        #expect(plan.blocked == nil)
+        let key = try #require(plan.key)
+        #expect(key.credentialId == "cred-1" && key.place == .securityKey)
+        #expect(key.hints == ["security-key"])
     }
 
-    /// The spine opens the page the KEY lives behind, not the one Settings
-    /// names — for a record written before the sign-in key existed, whose
-    /// signatures go where they always went.
-    @Test func theSpineOpensThePageTheKeyLivesBehind() async throws {
+    /// Spec 102's migration, as the core reads ≤ 0.9.7 records: a Trusted
+    /// Signer sign-in on the official page (or none named) reviews on the
+    /// official page; one on somebody's own page is locked to it; a place
+    /// sign-in signs in Vela. The key's place comes from its transports — the
+    /// fourth "method" is gone.
+    @Test func oldRecordsMigrateToAVenue() throws {
+        let official = try #require(SigningPlanWire.of(accountJson: record([
+            "signed_in_with": ["credential_id": "cred-1", "method": "trusted_signer",
+                               "signer_origin": "https://sign.getvela.app"],
+        ])))
+        #expect(official.onAppDomain && official.venue == .page(url: "https://sign.getvela.app/"))
+        #expect(official.key?.place == .platform)
+
+        let unnamed = try #require(SigningPlanWire.of(accountJson: record([
+            "signed_in_with": ["credential_id": "cred-1", "method": "trusted_signer"],
+        ])))
+        #expect(unnamed.venue == .page(url: "https://sign.getvela.app/"))
+
+        let own = try #require(SigningPlanWire.of(accountJson: record([
+            "signed_in_with": ["credential_id": "cred-1", "method": "trusted_signer",
+                               "signer_origin": "https://sign.example.com"],
+        ], keyOrigin: "https://sign.example.com")))
+        #expect(own.domain == "sign.example.com" && !own.onAppDomain)
+        #expect(own.venue.pageUrl?.hasPrefix("https://sign.example.com") == true)
+
+        let app = try #require(SigningPlanWire.of(accountJson: record([
+            "signed_in_with": ["credential_id": "cred-1", "method": "platform"],
+        ])))
+        #expect(app.venue == .inVela && app.onAppDomain)
+
+        let before = try #require(SigningPlanWire.of(accountJson: record([:])))
+        #expect(before.key == nil, "a record from before the sign-in key names none")
+        #expect(before.venue == .inVela)
+    }
+
+    /// The spine opens the page the PLAN names — the account's own page, for
+    /// an account locked to its domain — and offers it every founding key
+    /// when the record names no sign-in key.
+    @Test func theSpineOpensThePageThePlanNames() async throws {
         let fixture = TrustedSignerFixture()
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.routesJson = TrustedSignerCeremonyFixture.json([
-            "credential_id": fixture.credentialHex,
-            "transports": "internal",
-            "signer_origin": "https://sign.example",
-        ]).withSquareBrackets
+        var stored = try CoreJSON.object(record([:], keyOrigin: "https://sign.example.com"))
+        stored["keys"] = [[
+            "credential_id": fixture.credentialHex, "public_key_hex": fixture.keys[0].publicKeyHex,
+            "name": "Mine", "transports": "internal", "signer_origin": "https://sign.example.com",
+        ]]
+        stored["address"] = fixture.account
+        accounts.recordJson = String(decoding: try JSONSerialization.data(withJSONObject: stored), as: UTF8.self)
         let signer = CountingSigner()
         let page = ScriptedTrustedSigner { digest in
             let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
@@ -462,23 +482,19 @@ struct SignerOriginTests {
             chainId: 100, account: fixture.account, originalHash: Data(repeating: 1, count: 32),
             asked: .init(method: "personal_sign", paramsJson: #"["0x00"]"#, origin: "https://a.example")
         )
-        #expect(signer.calls == 0, "a key behind a page must never reach the platform sheet")
-        #expect(page.asked.first?.page == "https://sign.example")
+        #expect(signer.calls == 0, "a key on its own domain must never reach the platform sheet")
+        #expect(page.asked.first?.page.hasPrefix("https://sign.example.com") == true)
+        #expect(page.asked.first?.place == nil, "a record with no sign-in key names no place")
     }
-}
-
-private extension String {
-    /// The one-element array `sign_route` reads.
-    var withSquareBrackets: String { "[\(self)]" }
 }
 
 // MARK: - The executor
 
-/// The Trusted Signer as the onboarding executor reaches it, scripted.
+/// The wallet's own page as the onboarding executor reaches it, scripted.
 @MainActor
 final class ScriptedCeremonyPort: TrustedSignerCeremonyPort {
     var answer: (_ operationJson: String) -> TrustedSignerCeremonyStep
-    private(set) var asked: [(operationJson: String, registry: String, walletName: String, challenge: Data?, page: String?)] = []
+    private(set) var asked: [(operationJson: String, registry: String, walletName: String, challenge: Data?, page: String)] = []
     private(set) var ended = 0
 
     init(answer: @escaping (_ operationJson: String) -> TrustedSignerCeremonyStep) {
@@ -491,7 +507,7 @@ final class ScriptedCeremonyPort: TrustedSignerCeremonyPort {
 
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?,
+        expectedMemberChallenge: Data?, page: String,
         deployment: SignerRegistryDeployment?
     ) async -> TrustedSignerCeremonyStep {
         asked.append((operationJson, registry, walletName, expectedMemberChallenge, page))
@@ -516,10 +532,10 @@ struct TrustedSignerExecutorTests {
         )
     }
 
-    /// A `register_passkey` with `method = trusted_signer` goes to the page, and
-    /// the core's `Registration` — `signer_origin` and all — is reported as
-    /// the result a platform ceremony would have given.
-    @Test func aCreateOnTheTrustedSignerIsReportedAsPasskeyRegistered() async throws {
+    /// A `register_passkey` that names a page goes to THAT page (R3), and the
+    /// core's `Registration` — `signer_origin` and all — is reported as the
+    /// result a platform ceremony would have given.
+    @Test func aCreateOnItsOwnPageIsReportedAsPasskeyRegistered() async throws {
         let page = TrustedSignerCeremonyFixture()
         let registration = TrustedSignerCeremonyFixture.json([
             "credential_id": page.credentialHex,
@@ -533,7 +549,9 @@ struct TrustedSignerExecutorTests {
         let reported = try #require(answer["registration"] as? [String: Any])
         #expect(reported["signer_origin"] as? String == page.origin)
         #expect(reported["credential_id"] as? String == page.credentialHex)
-        // The page is told the wallet's own name and its own registry.
+        // The page is the operation's own, and told the wallet's name and
+        // registry.
+        #expect(port.asked.first?.page == page.signerUrl)
         #expect(port.asked.first?.walletName == "Mine")
         #expect(port.asked.first?.registry == "https://r.test")
         // The operation goes over verbatim, so nothing is copied wrongly.
@@ -556,78 +574,82 @@ struct TrustedSignerExecutorTests {
         #expect(other["message"] as? String == "the page said no")
     }
 
-    /// Chosen where no page can be opened — a preview, the gallery — fails
-    /// closed rather than silently signing with the platform authenticator.
-    @Test func theRouteWithNoPageFailsClosed() async throws {
+    /// A page named where none can be opened — a preview, the gallery — fails
+    /// closed rather than silently signing with the platform authenticator,
+    /// in the corpus's words.
+    @Test func aPageWithNoWayToOpenItFailsClosed() async throws {
         let page = TrustedSignerCeremonyFixture()
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
         let executor = OnboardingExecutor(
             passkey: PasskeyExecutor(),
             registry: RegistryClient(baseURL: "https://r.test", transport: IndexScript.unreachable),
             store: AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
             deps: NoDeps(),
-            trustedSigner: nil
+            trustedSigner: nil,
+            words: { loc.t($0) }
         )
         let answer = try CoreJSON.object(await executor.perform(page.registerOperation()))
         #expect(answer["type"] as? String == "passkey_failed")
         #expect(answer["kind"] as? String == "not_supported")
+        #expect(answer["message"] as? String == loc.t("componentsUi.signing.signerDown"))
     }
 
-    /// Every other route is untouched — and this is checked on the DECISION
-    /// rather than by running the other route, because running it raises the
-    /// system passkey sheet and a unit test has nobody to answer it (this test
-    /// hung the whole suite when it was written the other way round).
-    @Test func anotherRouteNeverReachesThePage() throws {
+    /// Only an operation that NAMES a page goes to one — checked on the
+    /// decision rather than by running the other route, because running it
+    /// raises the system passkey sheet and a unit test has nobody to answer
+    /// it. The method is the place, never a route: no value of it opens a
+    /// page.
+    @Test func onlyAnOperationThatNamesAPageReachesIt() throws {
         var operation = TrustedSignerCeremonyFixture().registerOperation()
-        #expect(OnboardingExecutor.routesToTheTrustedSigner(operation))
-        for other in ["platform", "hybrid", "security_key", "", "something_else"] {
-            operation["method"] = other
-            #expect(!OnboardingExecutor.routesToTheTrustedSigner(operation),
-                    "\(other) would have opened a page")
+        #expect(OnboardingExecutor.page(of: operation) == "https://sign.example.com/")
+        for method in ["platform", "hybrid", "security_key", "trusted_signer", ""] {
+            operation["method"] = method
+            #expect(OnboardingExecutor.page(of: operation) != nil)
         }
-        operation.removeValue(forKey: "method")
-        #expect(!OnboardingExecutor.routesToTheTrustedSigner(operation),
-                "an operation with no method must route as it always did")
+        operation["page"] = ""
+        #expect(OnboardingExecutor.page(of: operation) == nil, "an empty page is no page")
+        operation.removeValue(forKey: "page")
+        operation["method"] = "trusted_signer"
+        #expect(OnboardingExecutor.page(of: operation) == nil,
+                "an old method name must not open a page on its own")
     }
 
     /// The re-publish's LIVE member proof (recovery's third signature) goes to
-    /// the page the CORE named for that member — `RegistryPublishMember`'s own
-    /// `signer_origin`, never a lookup here and never the page Settings holds.
-    /// A member with no page is not routed to one at all.
-    @Test func aPublishMemberSignsOnThePageTheCoreNamedForIt() throws {
+    /// the page the CORE named on the publish — the operation's `page`, never
+    /// a lookup here — over the publish's place; with no page, to none.
+    @Test func aPublishMemberSignsOnThePageThePublishNames() throws {
         let group = "04" + String(repeating: "ab", count: 64)
-        let behindAPage = PublishMember(json: [
+        let member = PublishMember(json: [
             "credential_id": "cred-1", "public_key_hex": "04" + String(repeating: "11", count: 64),
             "attestation_hex": "beef", "transports": "internal",
-            "signer_origin": "https://sign.example",
         ])
-        #expect(behindAPage.signerOrigin == "https://sign.example",
-                "the member's own page was dropped on the way in")
-        let routed = OnboardingExecutor.memberProofOperation(behindAPage, groupPublicKey: group)
-        #expect(routed["method"] as? String == "trusted_signer")
-        #expect(routed["signer_origin"] as? String == "https://sign.example")
+        let routed = OnboardingExecutor.memberProofOperation(
+            member, groupPublicKey: group, method: .hybrid, page: "https://sign.example.com/"
+        )
+        #expect(routed["method"] as? String == "hybrid")
+        #expect(routed["page"] as? String == "https://sign.example.com/")
         #expect(routed["credential_id"] as? String == "cred-1")
         #expect(routed["group_public_key_hex"] as? String == group)
+        #expect(OnboardingExecutor.page(of: routed) == "https://sign.example.com/")
         // The core reads it as the ceremony it is, from this very JSON.
         let request = trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(routed),
             id: "x", walletName: "Mine", registry: "https://r.test",
             deployment: TEST_DEPLOYMENT
         )
-        #expect(request != nil)
         // The deployment reaches the page's params, which is what lets it
-        // compute the member challenge without asking the network (076).
+        // compute the member challenge without asking the network (076) — and
+        // the place, so the browser asks for the key where it lives (R5).
         let built = try CoreJSON.object(try #require(request))
         let intent = try #require(built["intent"] as? [String: Any])
         let params = try #require((intent["params"] as? [[String: Any]])?.first)
         #expect((params["chainId"] as? NSNumber)?.uint64Value == TEST_DEPLOYMENT.chainId)
         #expect(params["registryContract"] as? String == TEST_DEPLOYMENT.contract)
+        #expect(params["place"] as? String == "hybrid")
 
-        let ordinary = PublishMember(json: [
-            "credential_id": "cred-2", "public_key_hex": "04" + String(repeating: "22", count: 64),
-        ])
-        #expect(ordinary.signerOrigin.isEmpty)
-        let unrouted = OnboardingExecutor.memberProofOperation(ordinary, groupPublicKey: group)
-        #expect(unrouted["method"] as? String == "", "a key that is not behind a page must not be sent to one")
+        let unrouted = OnboardingExecutor.memberProofOperation(member, groupPublicKey: group, method: .platform, page: nil)
+        #expect(unrouted["page"] == nil, "a wallet in the app must not be sent to a page")
+        #expect(OnboardingExecutor.page(of: unrouted) == nil)
     }
 }
 

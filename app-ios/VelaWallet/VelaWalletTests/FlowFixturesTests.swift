@@ -13,6 +13,7 @@
 //
 
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -54,8 +55,8 @@ struct FlowFixturesTests {
             "name · draft waiting": .name,
             "keys · one, needs a second": .keys,
             "keys · two, ready": .keys,
-            "keys · signer page elsewhere": .keys,
-            "keys · a page's own set": .keys,
+            "keys · own page offered": .keys,
+            "keys · on my own page": .keys,
             "keys · unconfirmed row": .keys,
             "keys · at the cap": .keys,
             "progress · verify": .progress,
@@ -133,17 +134,14 @@ struct FlowFixturesTests {
     }
 
     /// Every semantic variant the core emits has copy. Exhaustive by enum.
-    @Test func everySemanticVariantHasCopy() {
+    @Test func everySemanticVariantHasCopy() throws {
         for status in StatusKey.allCases {
             #expect(statusKeyToI18n(status).hasPrefix("onboarding."))
         }
         for label in SubmitLabel.allCases {
             #expect(submitLabelToI18n(label).hasPrefix("onboarding."))
         }
-        // Spec 075: the fourth route's two lines come from the SIGNING
-        // namespace on purpose — they are the same sentences the "Sign with"
-        // sheet shows, and one route must not have two pairs of words. Both
-        // namespaces are corpus paths, which is what this checks.
+        // Both namespaces are corpus paths, which is what this checks.
         let namespaces = ["onboarding.", "componentsUi.signing."]
         let corpus = { (key: String) in namespaces.contains { key.hasPrefix($0) } }
         let loc = Loc(overrideTag: "zh", preferredLanguages: [])
@@ -160,7 +158,11 @@ struct FlowFixturesTests {
                 }
             }
         }
-        #expect(methodCopy(.trustedSigner, chooser: .create, loc: loc).title == loc.t("componentsUi.signing.trustedSignerTitle"))
+        // Spec 102: three places — the trusted page is a venue, with its own
+        // words ("Use my own signing page"), never a fourth row here.
+        #expect(KeyMethod.allCases.count == 3)
+        let own = try #require(venueWords(row: "own_page"))
+        #expect(!corpus(loc.t(own.titleKey)))
     }
 
     /// 087 F01: 这台设备 names what unlocks a passkey on THIS device — an

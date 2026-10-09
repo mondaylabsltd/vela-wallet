@@ -2,16 +2,21 @@
 //  TrustedSignerSheets.swift
 //  VelaWallet
 //
-//  What the Trusted Signer puts on screen while the page holds the request
-//  (specs 071 and 075).
+//  What the app puts on screen while a signing page holds the request (specs
+//  071, 075, 102).
 //
-//  ONE sheet. It used to walk through four screens — where is your signer,
-//  the pairing code, the six digits, then the wait — because the signer could
-//  be on another device. The owner retired those channels on 2026-09-23, so
-//  all that is left is the wait, with "open the page again" and the way out.
-//  It stays a sheet with a model rather than becoming a view with arguments:
-//  presenting a second sheet while a first is dismissing fails silently on
-//  iOS, and a session that reopens its page must not risk that.
+//  ONE sheet, two stages:
+//
+//  - **hand-off** (spec 102 D4): "Review and sign on your trusted page", the
+//    key the person will confirm with, the page's integrity line, and Open —
+//    enabled only when the core admitted the bytes this phone fetched. A
+//    refusal takes the line's place and nothing opens.
+//  - **waiting**: the page has the request. "Open the page again" and the way
+//    out; when the page could not open at all (spec 079), that, with a retry.
+//
+//  It stays a sheet with a model rather than a view with arguments: presenting
+//  a second sheet while a first is dismissing fails silently on iOS, and a
+//  session that reopens its page must not risk that.
 //
 //  The model is driven from `TrustedSigner`; nothing here decides anything.
 //
@@ -19,15 +24,27 @@
 import SwiftUI
 import VelaCore
 
-/// What the Trusted Signer's sheet is showing.
+/// What the signing page's sheet is showing.
 @Observable
 final class TrustedSignerSheetModel {
     enum Stage: Equatable {
+        /// The card: which page, which key, whether the page may open.
+        case handoff
         /// The page has the request.
         case waiting
     }
 
-    var stage: Stage = .waiting
+    var stage: Stage = .handoff
+    /// The page's base address.
+    var page: String = ""
+    /// The key's name or its place's title — "Confirm with {{key}}".
+    var keyLabel: String?
+    /// The page's integrity line, as the core ruled on it.
+    var line: SignerIntegrityLine = SignerPageChecks.checking
+    /// The card's Open — set while the card waits for it.
+    var open: (() -> Void)?
+    /// Check the page again — offered when the check itself could not run.
+    var recheck: (() -> Void)?
     /// Only while a page is open on this device.
     var reopen: (() -> Void)?
     var cancel: () -> Void = {}
@@ -35,7 +52,7 @@ final class TrustedSignerSheetModel {
     /// to its address). The card says so, and its button is a retry.
     var unreachable = false
 
-    /// What the card says, in the corpus's words.
+    /// What the waiting card says, in the corpus's words.
     struct Copy: Equatable {
         let title: String
         /// `nil`: no hint line — a page that could not open needs none.
@@ -65,6 +82,13 @@ final class TrustedSignerSheetModel {
                 cancel: loc.t("common.cancel"), busy: true
             )
     }
+
+    /// Whether "try again" belongs on the card: the check itself did not run
+    /// to a verdict (a network, a server). A page that was checked and refused
+    /// gets no retry — checking the same bytes again says the same thing.
+    static func offersRecheck(_ line: SignerIntegrityLine) -> Bool {
+        line.state == .couldNotCheck
+    }
 }
 
 struct TrustedSignerSheet: View {
@@ -72,76 +96,86 @@ struct TrustedSignerSheet: View {
     let loc: Loc
     @Bindable var model: TrustedSignerSheetModel
 
-    private var copy: TrustedSignerSheetModel.Copy {
-        TrustedSignerSheetModel.copy(unreachable: model.unreachable, loc: loc)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            waiting
-            Spacer(minLength: Tokens.Space.s8)
-            if let reopen = model.reopen, model.stage == .waiting {
-                VelaButton(title: copy.reopen, kind: copy.reopenPrimary ? .primary : .secondary,
-                           action: reopen)
-                    .accessibilityIdentifier(model.unreachable ? "trustedSigner.retry" : "trustedSigner.reopen")
+        Group {
+            switch model.stage {
+            case .handoff: handoff
+            case .waiting: waiting
             }
-            VelaButton(title: copy.cancel, kind: .secondary, action: model.cancel)
         }
         .padding(Tokens.Space.s24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.bgBase.ignoresSafeArea())
     }
 
-    private var waiting: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            HStack(spacing: Tokens.Space.s12) {
-                if copy.busy {
-                    ProgressView()
-                } else {
-                    LucideIcon(.triangleAlert, size: LucideIconSize.rowGlyph)
-                        .foregroundStyle(theme.warningBase)
-                        .accessibilityHidden(true)
-                }
-                Text(copy.title)
-                    .typeRole(Typography.title)
-                    .foregroundStyle(theme.fgBase)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier(model.unreachable ? "trustedSigner.signerDown" : "trustedSigner.waiting")
+    // MARK: - Hand-off
+
+    private var handoff: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            HandoffCardView(
+                loc: loc,
+                model: HandoffCardModel.build(page: model.page, keyLabel: model.keyLabel, line: model.line, loc: loc)
+            )
+            Spacer(minLength: Tokens.Space.s8)
+            VelaButton(
+                title: loc.t("componentsUi.signing.openSigner"),
+                kind: .primary,
+                enabled: model.line.opens && model.open != nil,
+                loading: model.line.state == .checking
+            ) { model.open?() }
+                .accessibilityIdentifier("handoff.open")
+            if TrustedSignerSheetModel.offersRecheck(model.line), let recheck = model.recheck {
+                VelaButton(title: loc.t("common.tryAgain"), kind: .secondary, action: recheck)
+                    .accessibilityIdentifier("handoff.recheck")
             }
-            if let hint = copy.hint {
-                Text(hint)
-                    .typeRole(Typography.flowCaption)
-                    .foregroundStyle(theme.fgSubtle)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            VelaButton(title: loc.t("common.cancel"), kind: .secondary, action: model.cancel)
+                .accessibilityIdentifier("handoff.cancel")
         }
     }
-}
 
-/// The module matrix as pixels — black on white in both appearances, because
-/// a camera reads contrast and an inverted code does not scan. The encoder is
-/// the core's, the same one the receive screen and the caBLE QR draw with.
-struct TrustedSignerQrView: View {
-    let matrix: QrMatrix
+    // MARK: - Waiting
 
-    var body: some View {
-        Canvas { context, size in
-            let width = Int(matrix.width)
-            let quiet = 2
-            let units = CGFloat(width + quiet * 2)
-            let cell = min(size.width, size.height) / units
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
-            for row in 0..<width {
-                for col in 0..<width where matrix.modules[row * width + col] {
-                    let rect = CGRect(
-                        x: (CGFloat(col) + CGFloat(quiet)) * cell,
-                        y: (CGFloat(row) + CGFloat(quiet)) * cell,
-                        width: cell.rounded(.up),
-                        height: cell.rounded(.up)
-                    )
-                    context.fill(Path(rect), with: .color(.black))
+    private var copy: TrustedSignerSheetModel.Copy {
+        TrustedSignerSheetModel.copy(unreachable: model.unreachable, loc: loc)
+    }
+
+    private var waiting: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+                HStack(spacing: Tokens.Space.s12) {
+                    if copy.busy {
+                        ProgressView()
+                    } else {
+                        LucideIcon(.triangleAlert, size: LucideIconSize.rowGlyph)
+                            .foregroundStyle(theme.warningBase)
+                            .accessibilityHidden(true)
+                    }
+                    Text(copy.title)
+                        .typeRole(Typography.title)
+                        .foregroundStyle(theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier(model.unreachable ? "trustedSigner.signerDown" : "trustedSigner.waiting")
+                }
+                if let hint = copy.hint {
+                    Text(hint)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgSubtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // Which page holds the request, and the check that let it
+                // open — the same line the card drew.
+                if !model.page.isEmpty {
+                    IntegrityLineView(loc: loc, line: model.line)
+                        .padding(.top, Tokens.Space.s4)
                 }
             }
+            Spacer(minLength: Tokens.Space.s8)
+            if let reopen = model.reopen {
+                VelaButton(title: copy.reopen, kind: copy.reopenPrimary ? .primary : .secondary,
+                           action: reopen)
+                    .accessibilityIdentifier(model.unreachable ? "trustedSigner.retry" : "trustedSigner.reopen")
+            }
+            VelaButton(title: copy.cancel, kind: .secondary, action: model.cancel)
         }
     }
 }

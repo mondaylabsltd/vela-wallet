@@ -83,7 +83,11 @@ final class OnboardingModel {
 
     /// The sign-in method picker is open (opened from Welcome's "I already have
     /// a wallet"). Lives here, not on the screen, so the one shared sheet owns it.
-    var showSignInMethods = false
+    var showSignInMethods = false {
+        // A sheet opened afresh starts in the app: a page chosen on an earlier
+        // visit is not a choice made for this one.
+        didSet { if showSignInMethods && !oldValue { signInPage = nil } }
+    }
 
     /// Held from the instant an app-owned sign-in method is chosen until the
     /// login machine goes idle — it keeps the shared sheet on screen across the
@@ -151,11 +155,14 @@ final class OnboardingModel {
     func pickSignInMethod(_ method: KeyMethod) {
         showSignInMethods = false
         signInMethod = method
-        if method != .platform {
+        let page = signInPage
+        // A page on its own domain puts up its own card, not this hold.
+        let onAPage = page.map { signingPageDomain(url: $0) }.map { !$0.isEmpty && $0 != SigningPlanWire.appDomain } ?? false
+        if method != .platform && !onAPage {
             signInConnecting = true
             sawBusySinceConnect = false
         }
-        signIn(method: method)
+        signIn(method: method, page: page)
     }
 
     /// The route the person picked, so the connecting hold's words match it —
@@ -243,19 +250,19 @@ final class OnboardingModel {
         cableQrCreates = creates
     }
 
-    /// Spec 075: the fourth passkey route. Set by the host once the sign_pref
-    /// store exists (it names the page and the relay); `nil` in previews and
-    /// the gallery, where choosing it fails closed rather than silently
-    /// signing with something else.
+    /// Spec 102 R3: the page a wallet on its own domain runs its ceremonies
+    /// on. Set by the host; `nil` in previews and the gallery, where an
+    /// operation naming a page fails closed rather than silently signing with
+    /// something else.
     var trustedSigner: TrustedSignerCeremonyPort?
 
-    /// The Trusted Signer page Settings names, attached by the host (spec 075).
-    ///
-    /// A key minted on that page belongs to ITS domain, and a wallet's keys all
-    /// belong to one relying party — so which page is configured decides
-    /// whether that route can add to the set being assembled. The core cannot
-    /// read the setting; this is how it learns.
-    var signerPage: (() -> String?)?
+    /// The person's words, for the one sentence the executor says itself.
+    /// Set by the host; the key itself until then.
+    var words: (String) -> String = { $0 }
+
+    /// Spec 102: the page chosen on the sign-in sheet's "Use my own signing
+    /// page", for the sign-in it is about to start. `nil` signs in in the app.
+    var signInPage: String?
 
     private let session: SessionController
     private let store: AccountStore
@@ -321,7 +328,14 @@ final class OnboardingModel {
         )
         create = driver
         driver.dispatch(Self.event("start"))
-        driver.dispatch(Self.event("signer_page_changed", ["url": signerPage?() ?? ""]))
+    }
+
+    /// Spec 102: "Use my own signing page" — a saved page, before the first
+    /// key (`can_choose_page`); `nil` goes back to Vela's own. The core
+    /// normalises the address and decides the wallet's signing domain from
+    /// it: a page on its own domain is where every key ceremony then runs.
+    func chooseSigningPage(_ url: String?) {
+        create?.dispatch(Self.event("signing_page_chosen", ["url": url ?? NSNull()]))
     }
 
     func toggleAck(_ index: Int) { create?.dispatch(Self.event("ack_toggled", ["index": index])) }
@@ -355,7 +369,11 @@ final class OnboardingModel {
 
     // MARK: - Sign in
 
-    func signIn(method: KeyMethod = .platform) {
+    /// `page` is the sign-in sheet's "Use my own signing page" (spec 102):
+    /// on a custom domain the ceremony runs there and the account is locked
+    /// to it; a `getvela.app` page signs in in the app and becomes the
+    /// account's venue. `nil`: the app, and the account's venue as it was.
+    func signIn(method: KeyMethod = .platform, page: String? = nil) {
         applyConfiguredRegistry()
         if login == nil {
             let driver = CoreDriver(
@@ -391,7 +409,7 @@ final class OnboardingModel {
             login = driver
             driver.dispatch(Self.event("start"))
         }
-        login?.dispatch(Self.event("sign_in", ["method": method.rawValue]))
+        login?.dispatch(Self.event("sign_in", ["method": method.rawValue, "page": page ?? NSNull()]))
     }
 
     // MARK: - Prompts
@@ -424,7 +442,8 @@ final class OnboardingModel {
             trustedSigner: trustedSigner,
             // The page's card says whose wallet this is. Sign-in has no name
             // yet — the page then shows the request alone.
-            walletName: { [weak self] in self?.createView?.name ?? "" }
+            walletName: { [weak self] in self?.createView?.name ?? "" },
+            words: words
         )
     }
 

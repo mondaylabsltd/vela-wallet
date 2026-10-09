@@ -109,7 +109,7 @@ enum SigningLive {
     /// a person's own decision, told calmly; a refusal or a mismatch is not.
     static func trustedSignerBlocks(_ notice: TrustedSignerNotice?, loc: Loc) -> [SigningBlock] {
         guard let notice else { return [] }
-        return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
+        return [.warning(tone: notice.calm ? .caution : .danger, text: notice.text(loc))]
     }
 
     /// The core's words in the reader's language. A clear-signing result is

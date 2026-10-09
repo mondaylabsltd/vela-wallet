@@ -45,11 +45,7 @@ struct SettingsSheet: View {
     /// network's bin, "reset to defaults" — and its "yes".
     var pendingConfirm: ConfirmSheetModel?
     var onConfirmPending: (() -> Void)?
-    /// The Trusted Signer page's Save (spec 071): `true` when the core took the
-    /// address, which is what closes the sheet. Absent in the gallery.
-    var onSaveSignerUrl: ((String) -> Bool)?
-    var onResetSignerUrl: (() -> Void)?
-    /// The relay's Save and reset (spec 075) — the same pair, the other key.
+    /// The relay's Save and reset (spec 075).
     var onSaveTunnelUrl: ((String) -> Bool)?
     var onResetTunnelUrl: (() -> Void)?
     /// The language sheet's "suggest a fix". Absent in the gallery.
@@ -103,21 +99,6 @@ struct SettingsSheet: View {
                         sheet: model.feeSpeedSheet,
                         onPick: { id in onPick?(.feeSpeed, id) }
                     )
-                case .signerPage:
-                    if let page = model.signerPage {
-                        SignerPageSheetBody(
-                            model: page,
-                            onSave: { text in
-                                if onSaveSignerUrl?(text) == true { onDismiss() }
-                            },
-                            onReset: onResetSignerUrl.map { reset in
-                                {
-                                    reset()
-                                    onDismiss()
-                                }
-                            }
-                        )
-                    }
                 case .numberFormat:
                     SelectSheetBody(
                         sheet: model.numberSheet,
@@ -276,51 +257,6 @@ private struct SelectSheetBody: View {
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.infoBase)
                 .padding(.top, Tokens.Space.s8)
-        }
-    }
-}
-
-/// The Trusted Signer page (spec 071): the address, Save, and the way back to
-/// the official page. What is under the field is the core's to say — a refused
-/// address, and that a page off `getvela.app` cannot use this wallet's
-/// passkeys.
-private struct SignerPageSheetBody: View {
-    @Environment(\.theme) private var theme
-    let model: SignerPageModel
-    let onSave: (String) -> Void
-    var onReset: (() -> Void)?
-
-    /// Local, seeded from the address in force: what is half-typed is nobody
-    /// else's business until Save hands it to the core.
-    @State private var text: String
-
-    init(model: SignerPageModel, onSave: @escaping (String) -> Void, onReset: (() -> Void)?) {
-        self.model = model
-        self.onSave = onSave
-        self.onReset = onReset
-        _text = State(initialValue: model.field.value)
-    }
-
-    var body: some View {
-        SheetTitle(title: model.title, subtitle: model.subtitle)
-        SettingsUrlField(field: model.field, text: $text, onCommit: { onSave(text) })
-            .padding(.bottom, Tokens.Space.s8)
-        if let error = model.error {
-            Text(error)
-                .typeRole(Typography.flowCaption)
-                .foregroundStyle(theme.errorBase)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, Tokens.Space.s8)
-        }
-        if let foreign = model.foreign {
-            SettingsCallout(callout: CalloutModel(tone: .warning, text: foreign))
-                .padding(.vertical, Tokens.Space.s8)
-        }
-        VelaButton(title: model.save, kind: .primary) { onSave(text) }
-            .padding(.top, Tokens.Space.s8)
-            .padding(.bottom, Tokens.Space.s12)
-        if let reset = model.reset, let onReset {
-            VelaButton(title: reset, kind: .secondary, action: onReset)
         }
     }
 }

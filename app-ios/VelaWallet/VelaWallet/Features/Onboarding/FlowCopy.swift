@@ -99,8 +99,7 @@ enum ThisDevice {
 /// create picker, the sign-in sheet and the QR card cannot disagree.
 ///
 /// The line is a corpus key, or the authenticator's own product name ("Face
-/// ID"), which is drawn as it is. The Trusted Signer's two lines are the
-/// signing sheet's own (spec 075) — the core names them.
+/// ID"), which is drawn as it is.
 func methodCopy(
     _ method: KeyMethod,
     chooser: KeyChooser,
@@ -126,9 +125,6 @@ func providerLineFor(_ kind: KeyMethod) -> String {
     case .platform: I18nKeys.Create.methodPlatformTitle
     case .hybrid: I18nKeys.Create.methodHybridTitle
     case .securityKey: I18nKeys.Create.providerSecurityKey
-    // The row says where the key lives, and a Trusted Signer key lives behind
-    // a page — which is what its own title says.
-    case .trustedSigner: I18nKeys.TrustedSigner.title
     }
 }
 

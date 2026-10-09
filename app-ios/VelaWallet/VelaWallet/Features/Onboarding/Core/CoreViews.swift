@@ -44,23 +44,23 @@ enum SubmitLabel: String, Decodable, CaseIterable {
     case finishVerify = "finish_verify"
 }
 
-/// `KeyMethod` — how the person chose to mint a founding key.
+/// `KeyMethod` — where a key lives: this device, a phone or tablet, a USB
+/// security key. Three, and no fourth (spec 102).
 ///
 /// The CHOICE, not the report: `CreateKeyRow` separately carries what the
 /// authenticator said about itself, and the two can legitimately disagree. The
 /// ceremony follows the choice; the row's provider line shows the report.
 ///
-/// Spec 075 adds a FOURTH, and it is a peer of the other three rather than a
-/// special case: the Trusted Signer is our own passkey route — a page that shows
-/// what is being signed and runs the ceremony itself — offered wherever "this
-/// device", "a nearby device" and "a security key" are. `allCases` is what the
-/// create and sign-in choosers list, so it is also what makes it appear on
-/// both of them.
+/// Spec 075 drew the Trusted Signer as a fourth place beside these. It never
+/// was one — the same three places exist on the page too — so spec 102 made it
+/// what the code always said it was: WHERE a person reviews and signs (the
+/// account's signing venue), chosen apart from where its key lives. A key
+/// ceremony that runs on a page says so with the operation's own `page`, never
+/// with a method. `allCases` is what the create and sign-in choosers list.
 enum KeyMethod: String, Decodable, CaseIterable {
     case platform
     case hybrid
     case securityKey = "security_key"
-    case trustedSigner = "trusted_signer"
 }
 
 /// `SessionRoute` — where the app is allowed to be.
@@ -99,21 +99,8 @@ struct CreateKeyRow: Decodable, Equatable, Identifiable {
     var id: String { "\(name)-\(aaguid)-\(method.rawValue)" }
 }
 
-/// `AddBlocked` — why a key route is not on offer (spec 075).
-///
-/// A wallet's keys all belong to ONE relying party, because the registry files
-/// a unit under one `rpId`. Once the first key is minted, a route that would
-/// mint for a different party cannot add to the set — and the row says so,
-/// naming both sides, because the Trusted Signer's page is a setting the person
-/// can change.
-struct AddBlocked: Decodable, Equatable {
-    let relyingParty: String
-    let page: String?
-    let pageRelyingParty: String?
-}
-
 /// `CreateView`.
-struct CreateView: Decodable, Equatable {
+struct CreateView: Equatable {
     let stage: CreateStage
     let name: String
     let nameEditable: Bool
@@ -131,10 +118,58 @@ struct CreateView: Decodable, Equatable {
     let canGoBack: Bool
     let address: String?
     let syncErrorDetail: String?
-    /// Spec 075: the routes that may still mint a key for THIS set.
+    /// The places a key may be minted in — always the three (spec 102).
     let addMethods: [KeyMethod]
-    /// Why the others may not, when some may not.
-    let addBlocked: AddBlocked?
+    /// Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
+    /// or the domain of the page chosen with "Use my own signing page". Shown,
+    /// so a person sees which site their keys will belong to.
+    var signingDomain: String = "getvela.app"
+    /// That page, normalised, when one was chosen. On a custom domain every
+    /// ceremony runs there (R3); a `getvela.app` page runs them in the app and
+    /// becomes the new account's venue.
+    var signingPage: String? = nil
+    /// May a signing page still be chosen? Only before the first key: the
+    /// first key commits the set to one domain.
+    var canChoosePage: Bool = false
+}
+
+extension CreateView: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case stage, name, nameEditable, nameTooLong, acks, canSubmit, submitLabel
+        case showStartOver, busy, status, keys, canAddKey, canFinish, needsSecondKey
+        case canGoBack, address, syncErrorDetail, addMethods
+        case signingDomain, signingPage, canChoosePage
+    }
+
+    /// Written out for the three spec-102 fields: a decode failure here is
+    /// swallowed by the model (`OnboardingModel`'s `try?`), which freezes the
+    /// create screen on its last view with nothing in any log — so a field the
+    /// wire grows or drops costs only itself. The rest stay required: a view
+    /// missing them is not one this build can draw.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        stage = try values.decode(CreateStage.self, forKey: .stage)
+        name = try values.decode(String.self, forKey: .name)
+        nameEditable = try values.decode(Bool.self, forKey: .nameEditable)
+        nameTooLong = try values.decode(Bool.self, forKey: .nameTooLong)
+        acks = try values.decode([Bool].self, forKey: .acks)
+        canSubmit = try values.decode(Bool.self, forKey: .canSubmit)
+        submitLabel = try values.decode(SubmitLabel.self, forKey: .submitLabel)
+        showStartOver = try values.decode(Bool.self, forKey: .showStartOver)
+        busy = try values.decode(Bool.self, forKey: .busy)
+        status = try values.decodeIfPresent(StatusKey.self, forKey: .status)
+        keys = try values.decode([CreateKeyRow].self, forKey: .keys)
+        canAddKey = try values.decode(Bool.self, forKey: .canAddKey)
+        canFinish = try values.decode(Bool.self, forKey: .canFinish)
+        needsSecondKey = try values.decode(Bool.self, forKey: .needsSecondKey)
+        canGoBack = try values.decode(Bool.self, forKey: .canGoBack)
+        address = try values.decodeIfPresent(String.self, forKey: .address)
+        syncErrorDetail = try values.decodeIfPresent(String.self, forKey: .syncErrorDetail)
+        addMethods = try values.decodeIfPresent([KeyMethod].self, forKey: .addMethods) ?? KeyMethod.allCases
+        signingDomain = try values.decodeIfPresent(String.self, forKey: .signingDomain) ?? "getvela.app"
+        signingPage = try values.decodeIfPresent(String.self, forKey: .signingPage)
+        canChoosePage = try values.decodeIfPresent(Bool.self, forKey: .canChoosePage) ?? false
+    }
 }
 
 /// `LoginView` — two booleans, and it stays that way (data-model §4).

@@ -48,8 +48,6 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
-    /// The Trusted Signer page (spec 071): an address, saved or refused.
-    case signerPage
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
     /// tap used to be a drawing of a bin, and the other shells removed on it.
     case removeNetwork
@@ -187,22 +185,6 @@ struct AccountsSheetModel {
     var remove: String = ""
     var removeBody: String = ""
     var removeCancel: String = ""
-}
-
-/// The Trusted Signer page's sheet (spec 071): the address in force, what the
-/// core said about the last one typed, and — whenever it is not a
-/// `getvela.app` page — that this wallet's passkeys will not sign there.
-struct SignerPageModel {
-    let title: String
-    let subtitle: String
-    let field: UrlFieldModel
-    /// `settings.signing.pageInvalid` / `pageInsecure`: nothing was stored.
-    let error: String?
-    /// `settings.signing.pageForeign`.
-    let foreign: String?
-    let save: String
-    /// "Use the official page" — only when another one is chosen.
-    let reset: String?
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.
@@ -682,8 +664,6 @@ struct SettingsScreenContent {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
-    /// Spec 071: the Trusted Signer page.
-    var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

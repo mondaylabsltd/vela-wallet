@@ -359,21 +359,16 @@ struct RootView: View {
         // the moment Settings saves a new one — it used to take a relaunch.
         settingsStore.onEndpointsWritten = { endpoints in Marks.adopt(endpoints) }
         _settings = State(initialValue: settingsStore)
-        // ONE Trusted Signer for the whole app (spec 075). It is a passkey
-        // route now, not only a way to sign: onboarding's ceremonies and the
-        // money path's signatures go through the same object, which is what
-        // keeps "one page, one session, one sheet" true — two instances would
-        // be two sheets racing to present over each other.
-        let trustedSigner = TrustedSigner(
-            loc: loc,
-            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl }
-        )
+        // ONE trusted page for the whole app (specs 075, 102): an account's
+        // signatures whose venue is a page, and the ceremonies of a wallet on
+        // its own domain, go through the same object — which is what keeps
+        // "one page, one session, one sheet" true; two instances would be two
+        // sheets racing to present over each other. It opens nothing this
+        // phone did not check first (`SignerPageChecks`, R6).
+        let trustedSigner = TrustedSigner(loc: loc, checks: .shared)
         spine.trustedSigner = trustedSigner
         onboarding.trustedSigner = trustedSigner
-        // Spec 075: the founding-key picker needs the page's DOMAIN, not the
-        // page — a key minted there belongs to it, and a wallet's keys all
-        // belong to one relying party.
-        onboarding.signerPage = { [settingsStore] in settingsStore.signPref?.signerUrl }
+        onboarding.words = { [loc] key in loc.t(key) }
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -1322,10 +1317,10 @@ struct RootView: View {
                         // …and so is the default speed (spec 069): the send
                         // form's folded control shows it from the first open.
                         settings.openFeeTier()
-                        // …and which Trusted Signer page this device opens
-                        // (spec 071): an account that signs there opens it
-                        // from Send or a page's sheet, Settings unvisited.
-                        settings.openSignPref()
+                        // …and the signing pages this device trusts (spec
+                        // 102): an account's "Where you review and sign" and
+                        // the choosers list them, Settings unvisited.
+                        settings.openSigningPages()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
                         // `network_admin` that had not been opened yet made the
@@ -2569,7 +2564,7 @@ struct RootView: View {
                 // cancelled ceremony and kept the confirmation up; this says
                 // why nothing was sent. The core's own notice goes first.
                 if live.notice == nil, let notice = send.trustedSignerNotice {
-                    live.notice = loc.t(notice.key)
+                    live.notice = notice.text(loc)
                 }
                 model.base = .sendConfirm(live)
             }
@@ -3574,14 +3569,6 @@ struct RootView: View {
                 else { return }
                 openEthereumBackup(call)
             },
-            // The core validates the address and stores only what it accepts;
-            // the sheet closes on its verdict, and keeps the refusal on screen
-            // otherwise (spec 071).
-            onSaveSignerUrl: { text in
-                settings.submitSignerUrl(text)
-                return settings.signPref?.signerUrlError == nil
-            },
-            onResetSignerUrl: { settings.resetSignerUrl() },
             onOpenLink: { openExternal($0) },
             // Settings' hidden debug mode (spec 091): the preference and the
             // browser are told in one place, so they cannot disagree.
@@ -3685,9 +3672,6 @@ struct RootView: View {
         }
         if let view = settings.feeTier {
             model = SettingsLive.withFeeTier(view, on: model, loc: loc)
-        }
-        if let view = settings.signPref {
-            model = SettingsLive.withSignPref(view, on: model, loc: loc)
         }
         // The switcher's rows are the SESSION's, with the balance core's
         // cached totals — after the currency, because the figures it writes

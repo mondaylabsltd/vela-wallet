@@ -35,8 +35,8 @@ struct TrustedSignerUnreachableTests {
             draft: nil
         )
         let channel = TrustedSignerChannel(
-            signerUrl: fixture.signerUrl, requestJson: request,
-            digest: Data(repeating: 0xAB, count: 32), keys: fixture.keys
+            signerUrl: fixture.signerUrl, launch: TestAdmissions.launcher(fixture.signerUrl),
+            requestJson: request, digest: Data(repeating: 0xAB, count: 32), keys: fixture.keys
         )
         var probed: [URL] = []
         var told: [Bool] = []

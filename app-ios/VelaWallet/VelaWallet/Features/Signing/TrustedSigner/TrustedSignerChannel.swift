@@ -7,10 +7,13 @@
 //  back as a `velawallet://sign-result?…` the system hands this app.
 //
 //  Everything that decides anything is the core's. This file builds no URL of
-//  its own (`trustedSignerUrlLaunch`), reads no callback of its own
-//  (`trustedSignerParseCallback`) and judges no answer of its own
-//  (`trustedSignerVerify`, `trustedSignerVerifyCeremony`). It owns a clock, a
-//  one-time token and the bookkeeping of who is waiting — and nothing else.
+//  its own — the launch is the CHECKED page's (`SignerPageAdmission.urlLaunch`,
+//  spec 102 R6: the URL that opens is the version this device fetched and
+//  hashed, and a page whose check did not admit it opens nothing) — reads no
+//  callback of its own (`trustedSignerParseCallback`) and judges no answer of
+//  its own (`trustedSignerVerify`, `trustedSignerVerifyCeremony`). It owns a
+//  clock, a one-time token and the bookkeeping of who is waiting — and nothing
+//  else.
 //
 //  ## Why a scheme, and not the loopback socket it replaces
 //
@@ -104,13 +107,26 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         case timedOut
         /// The request could not be put to a page at all.
         case unavailable
+        /// Spec 102: the person left the hand-off card before any page opened
+        /// — a cancelled passkey sheet, never an error.
+        case cancelled
+        /// Spec 102 R6: the page's integrity check did not admit it, so it was
+        /// never opened. The line says why.
+        case notOpened(SignerIntegrityLine)
     }
 
     /// The contract's five minutes — idle, so a flow of several requests is
     /// not cut off halfway (contract §1.5).
     static let defaultTimeout: TimeInterval = 5 * 60
 
+    /// The page's base address — the origin every ceremony answer is checked
+    /// against by the core.
     let signerUrl: String
+    /// Builds one visit's URL from the request and its token: the admitted
+    /// page's `urlLaunch` (spec 102 R6), and nothing else. `nil` when the core
+    /// would not — a check gone stale, a request that is not JSON.
+    typealias Launcher = (_ requestJson: String, _ token: String) -> String?
+    private let launcher: Launcher
     /// The CURRENT visit's one-time token. A new one per request, so
     /// "one-time" is literally true and no answer can be read as another
     /// request's.
@@ -165,10 +181,12 @@ final class TrustedSignerChannel: TrustedSignerConversation {
 
     init(
         signerUrl: String,
+        launch: @escaping Launcher,
         first: TrustedSignerAsk,
         timeout: TimeInterval = TrustedSignerChannel.defaultTimeout
     ) {
         self.signerUrl = signerUrl
+        self.launcher = launch
         self.current = first
         self.timeout = timeout
         self.token = Self.freshToken()
@@ -177,6 +195,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
     /// The 071 door: one signature, one page visit.
     convenience init(
         signerUrl: String,
+        launch: @escaping Launcher,
         requestJson: String,
         digest: Data,
         keys: [WalletKeyRecord],
@@ -184,9 +203,22 @@ final class TrustedSignerChannel: TrustedSignerConversation {
     ) {
         self.init(
             signerUrl: signerUrl,
+            launch: launch,
             first: .signature(request: requestJson, digest: digest, keys: keys),
             timeout: timeout
         )
+    }
+
+    /// The launcher for an admitted page: the core's, at this moment's clock.
+    /// A refused admission — or one whose check is now too old — builds
+    /// nothing, and nothing opens.
+    static func launcher(_ admission: SignerPageAdmission) -> Launcher {
+        { requestJson, token in
+            try? admission.urlLaunch(
+                requestJson: requestJson, token: token,
+                nowMs: UInt64(Date().timeIntervalSince1970 * 1000)
+            )
+        }
     }
 
     /// Whether anything more can happen here.
@@ -229,9 +261,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         case .ceremony(let request, _, _): request
         case .signature(let request, _, _): request
         }
-        guard let launch = try? trustedSignerUrlLaunch(
-            base: signerUrl, requestJson: requestJson, token: token
-        ), let url = URL(string: launch) else { return nil }
+        guard let launch = launcher(requestJson, token), let url = URL(string: launch) else { return nil }
         launchUrl = url
         TrustedSignerCallbacks.await(token) { [weak self] callback in
             self?.answered(callback)

@@ -25,7 +25,7 @@ import VelaCore
 extension NetworkAdminCore: CoreBridge {}
 extension DisplayCurrencyCore: CoreBridge {}
 extension FeeTierPrefCore: CoreBridge {}
-extension SignPrefCore: CoreBridge {}
+extension SigningPagesCore: CoreBridge {}
 
 /// Which of a network's two editable endpoints an `override_field_edited`
 /// names (`NetOverrideField` in the core).
@@ -57,11 +57,11 @@ final class SettingsStore {
     /// Settings shows it and every send starts at it.
     private(set) var feeTier: FeeTierPrefViewWire?
 
-    /// Which Trusted Signer page this device opens (spec 071) — app-wide like
-    /// the speed: a signature routed there opens it wherever it started.
-    /// Seeded with the machine's own first view, so a signature asked for
-    /// before the stored value lands opens the official page.
-    private(set) var signPref: SignPrefViewWire?
+    /// The signing pages this device trusts (spec 102, Settings → Signing
+    /// pages) — app-wide: the create and sign-in choosers' "Use my own signing
+    /// page" and an account's "Where you review and sign" list them too.
+    /// Seeded with the machine's own first view (the official page alone).
+    private(set) var signingPages: SigningPagesViewWire?
 
     /// `true` once the core has read all four stores. Mutations sent before it
     /// are dropped by the core.
@@ -77,7 +77,7 @@ final class SettingsStore {
     private var core: CoreStore<NetViewWire>!
     private var currencyCore: CoreStore<CurrencyViewWire>!
     private var feeTierCore: CoreStore<FeeTierPrefViewWire>!
-    private var signPrefCore: CoreStore<SignPrefViewWire>!
+    private var signingPagesCore: CoreStore<SigningPagesViewWire>!
 
     /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
     /// machine needs it because its first rate rung is Chainlink's fiat feeds
@@ -123,13 +123,13 @@ final class SettingsStore {
             onView: { [weak self] view in self?.feeTier = view },
             onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") }
         )
-        self.signPref = SignPrefViewWire.initial
-        let signPrefExecutor = SignPrefExecutor(store: store)
-        self.signPrefCore = CoreStore(
-            bridge: SignPrefCore(),
-            perform: { operation in signPrefExecutor.perform(operation) },
-            onView: { [weak self] view in self?.signPref = view },
-            onFault: { print("[vela-wallet] sign_pref fault: \($0)") }
+        self.signingPages = SigningPagesViewWire.initial
+        let signingPagesExecutor = SigningPagesExecutor(store: store)
+        self.signingPagesCore = CoreStore(
+            bridge: SigningPagesCore(),
+            perform: { operation in signingPagesExecutor.perform(operation) },
+            onView: { [weak self] view in self?.signingPages = view },
+            onFault: { print("[vela-wallet] signing_pages fault: \($0)") }
         )
         // Spec 100: the add-network sheet's endings, read when they happen so
         // the app can wire the browser after both exist.
@@ -158,22 +158,27 @@ final class SettingsStore {
         feeTierCore.dispatch(CoreJSON.string(["type": "user_chose", "tier": tier]))
     }
 
-    /// Boot the Trusted Signer page's machine. App-wide and idempotent: the
-    /// first signature routed there opens what it read, whether or not
-    /// anybody has opened Settings.
-    func openSignPref() {
-        signPrefCore.boot(CoreJSON.string(["type": "refresh"]))
+    /// Boot the signing pages' machine. App-wide and idempotent: the
+    /// choosers and an account's venue list read it, whether or not anybody
+    /// has opened Settings — and its first read imports the 071 page once.
+    func openSigningPages() {
+        signingPagesCore.boot(CoreJSON.string(["type": "refresh"]))
     }
 
-    /// The Trusted Signer page, as typed. The core validates, and stores
-    /// nothing it refuses.
-    func submitSignerUrl(_ text: String) {
-        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_submitted", "text": text]))
+    /// "Add a page": the address as typed, and an optional label. The core
+    /// validates, and stores nothing it refuses (`add_error`).
+    func addSigningPage(url: String, name: String = "") {
+        signingPagesCore.dispatch(CoreJSON.string(["type": "page_added", "url": url, "name": name]))
     }
 
-    /// Back to the official page.
-    func resetSignerUrl() {
-        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_reset"]))
+    /// A saved page's new label; empty clears it.
+    func renameSigningPage(url: String, name: String) {
+        signingPagesCore.dispatch(CoreJSON.string(["type": "page_renamed", "url": url, "name": name]))
+    }
+
+    /// Forget a saved page. No account changes (its venue still names it).
+    func removeSigningPage(url: String) {
+        signingPagesCore.dispatch(CoreJSON.string(["type": "page_removed", "url": url]))
     }
 
     /// USD → that currency, through the display machine's own waterfall.
@@ -190,9 +195,9 @@ final class SettingsStore {
     func open() {
         openNetworks()
         openCurrency()
-        // The Trusted Signer page row reads what is stored, however Settings
-        // was reached (spec 071).
-        openSignPref()
+        // Settings → Signing pages reads what is stored, however Settings was
+        // reached (spec 102).
+        openSigningPages()
     }
 
     /// Boot the networks machine alone — it reads its four stores once and

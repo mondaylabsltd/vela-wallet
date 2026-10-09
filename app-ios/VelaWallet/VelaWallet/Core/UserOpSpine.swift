@@ -25,24 +25,26 @@
 //  operation the relay must reject is a prompt wasted — and on this platform it
 //  is also a Face ID sheet somebody has to dismiss for nothing.
 //
-//  ## Every signature goes where the account signed in (founder, 2026-09-26)
+//  ## Every signature follows the account's signing plan (spec 102)
 //
 //  A person says where their passkey is when they create the wallet or sign
-//  in, and never again. The stored record names that key and route
-//  (`signed_in_with`), and the core reads it (`signInRoute`): every ceremony
-//  below is pinned to THAT credential over THAT route. There is no choice at
-//  signing time; a key that stops answering is replaced by signing out and
-//  signing in with another. A record written before the field existed signs
-//  as it always did.
+//  in, and never again (founder, 2026-09-26). The core reads the stored record
+//  (`signingPlan`) and answers three things: the key (credential, place,
+//  transports — R5), the account's signing domain, and its VENUE — where its
+//  transactions and messages are reviewed and signed (R4). There is no choice
+//  at signing time; a record written before the sign-in key was kept signs as
+//  it always did, pinned to its first key.
 //
-//  ## The Trusted Signer is a ceremony, not a second path (spec 071)
+//  ## A trusted page is a venue, not a second path (specs 071, 102)
 //
-//  When the account signs there, the SAME digest the passkey would have signed
-//  goes to a separate page with the request it covers — the core builds what
-//  the page receives (`trustedSignerRequest`) and verifies what comes back —
-//  and an accepted answer continues exactly where an assertion does:
-//  `userOpSign`, `eip1271Signature`. Every other ending is a `trustedSigner`
-//  failure the sheet puts into words, and nothing is submitted.
+//  When the venue is a page, the SAME digest the passkey would have signed
+//  goes to that page with the request it covers — the core builds what the
+//  page receives (`trustedSignerRequest`, with the key route so the browser
+//  asks for that key only) and verifies what comes back — and an accepted
+//  answer continues exactly where an assertion does: `userOpSign`,
+//  `eip1271Signature`. The page opens only once this phone's check of it was
+//  admitted (R6). Every other ending is a `trustedSigner` failure the sheet
+//  puts into words — in the corpus's words — and nothing is submitted.
 //
 //  ## Why `signMessage` lives here and 052 never calls it
 //
@@ -57,42 +59,8 @@ import Foundation
 import VelaCore
 
 extension UserOpSpine.AccountPort {
-    /// Nothing known: the ceremony routes as it always did.
-    func keyRoutesJson(of address: String) async -> String { "[]" }
-    /// Nothing known: the Trusted Signer's page shows the address alone.
+    /// Nothing known: the trusted page shows the address alone.
     func name(of address: String) async -> String? { nil }
-}
-
-/// `wallet_keys::SignRoute` — where one signing ceremony goes.
-///
-/// `signer_origin` is `skip_serializing_if = "String::is_empty"` on the Rust
-/// side, so it is ABSENT rather than empty on every route but the Clear
-/// Signer's. `decodeIfPresent` is what keeps a wire that grows a field from
-/// failing to decode on a shell that predates it — the rule every mirror in
-/// this app follows.
-struct SignRouteWire: Decodable, Equatable {
-    let credentialId: String
-    let transports: String
-    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
-    let method: String
-    /// Spec 075: the page a Trusted Signer key lives behind. Empty means the
-    /// person's page from Settings.
-    let signerOrigin: String
-
-    /// Spelled out because a hand-written `init(from:)` suppresses the
-    /// synthesized set. The names are the decoder's post-`convertFromSnakeCase`
-    /// ones, which is the strategy every mirror in this app decodes with.
-    private enum CodingKeys: String, CodingKey {
-        case credentialId, transports, method, signerOrigin
-    }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        credentialId = try values.decodeIfPresent(String.self, forKey: .credentialId) ?? ""
-        transports = try values.decodeIfPresent(String.self, forKey: .transports) ?? ""
-        method = try values.decodeIfPresent(String.self, forKey: .method) ?? ""
-        signerOrigin = try values.decodeIfPresent(String.self, forKey: .signerOrigin) ?? ""
-    }
 }
 
 @MainActor
@@ -116,16 +84,13 @@ final class UserOpSpine {
         /// against a different account.
         func keys(of address: String) async -> [WalletKeyRecord]
         /// The stored account record, whole, as JSON — what the core's
-        /// `signInRoute` reads the account's signing key and route from.
+        /// `signingPlan` reads the account's key, domain and venue from.
         /// `nil` when no record holds `address`.
         func accountJson(of address: String) async -> String?
         /// The pinned key's stored transports and method, for the ceremony's
         /// routing of a record that names no sign-in key.
         func routing(of address: String) async -> (transports: String, method: KeyMethod)
-        /// Every founding key's credential id and stored transports, as JSON for
-        /// the core's `signRoute` — `[{credential_id, transports}]`.
-        func keyRoutesJson(of address: String) async -> String
-        /// The account's own name, for the Trusted Signer's page.
+        /// The account's own name, for the trusted page.
         func name(of address: String) async -> String?
     }
 
@@ -143,10 +108,6 @@ final class UserOpSpine {
         var seenByBrowser = false
     }
 
-    /// The Trusted Signer's route name — not a place a passkey is, so a route
-    /// naming it opens a page instead of a passkey sheet.
-    static let trustedSignerMethod = "trusted_signer"
-
     enum Failure: Equatable {
         case passkeyCancelled
         /// The passkey ceremony failed, as the passkey classifier read the
@@ -155,8 +116,10 @@ final class UserOpSpine {
         /// never offer, or another failure. Never `cancelled`, which is
         /// `passkeyCancelled`. Nothing was signed.
         case signer(kind: FailureKind, message: String)
-        /// The Trusted Signer ended without an answer the wallet accepts.
-        /// Nothing was signed; the sheet says which of its sentences applies.
+        /// The trusted page ended without an answer the wallet accepts — or
+        /// was never opened (its check refused it, or nothing on this device
+        /// can reach the account's keys). Nothing was signed; the sheet says
+        /// which of its sentences applies.
         case trustedSigner(TrustedSignerNotice)
         case relayerUnavailable
         case bundlerUnderfunded
@@ -273,14 +236,14 @@ final class UserOpSpine {
         signingStarted()
         let signed = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
-            buildRequest: { accountName, offered in
+            buildRequest: { accountName, offered, keyRoute in
                 // A message carries no calls and no operation: the page reads
                 // the site's own params.
                 guard let asked else { return nil }
                 return try trustedSignerRequest(
                     input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
-                        accountName: accountName, keys: offered, calls: []
+                        accountName: accountName, keys: offered, keyRouteJson: keyRoute, calls: []
                     ),
                     draft: nil
                 )
@@ -465,13 +428,13 @@ final class UserOpSpine {
         let assembled = draft
         let answer = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
-            buildRequest: { accountName, offered in
+            buildRequest: { accountName, offered, keyRoute in
                 // The ASSEMBLED operation — the one the digest covers — and
                 // the calls before its fee leg, which the core appends last.
                 try trustedSignerRequest(
                     input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
-                        accountName: accountName, keys: offered, calls: calls
+                        accountName: accountName, keys: offered, keyRouteJson: keyRoute, calls: calls
                     ),
                     draft: assembled
                 )
@@ -550,49 +513,52 @@ final class UserOpSpine {
 
     // MARK: - The one ceremony
 
-    /// The Trusted Signer (spec 071). `nil` where there is no screen to open a
-    /// page on — a route to it there is refused before anything is signed.
+    /// The trusted page (specs 071, 102). `nil` where there is no screen to
+    /// open a page on — an account whose venue is a page is then refused
+    /// before anything is signed.
     var trustedSigner: TrustedSignerPort?
 
     /// One signature over `challenge`: the account's own passkey, or the
-    /// Trusted Signer's answer, which the core has already verified over this
+    /// trusted page's answer, which the core has already verified over this
     /// very digest by a key the page was offered. `buildRequest` makes what
-    /// the page receives, given the account's name and the keys it is
-    /// offered, and runs only when it is asked.
+    /// the page receives, given the account's name, the keys it is offered
+    /// and the key route, and runs only when it is asked.
     private func ceremony(
         account: String,
         pinned: WalletKeyRecord,
         keys: [WalletKeyRecord],
         challenge: Data,
-        buildRequest: (_ accountName: String?, _ offered: [WalletKeyRecord]) throws -> String?
+        buildRequest: (_ accountName: String?, _ offered: [WalletKeyRecord], _ keyRouteJson: String?) throws -> String?
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
-        // The route is the CORE's: the key the account signed in with, over
-        // the route that reached it — a Trusted Signer sign-in included.
-        let route = await route(account: account)
-        guard let route, route.wire.method == Self.trustedSignerMethod else {
-            let assertion = try await assert(account: account, pinned: pinned, route: route?.wire, challenge: challenge)
+        // The plan is the CORE's: the key the account signed in with, where
+        // it lives, and where this account reviews and signs (R4, R5).
+        let plan = await plan(account: account)
+        if let blocked = plan?.blocked {
+            // R1: nothing on this device can reach the account's keys.
+            throw Refused(failure: .trustedSigner(.blocked(blocked)))
+        }
+        guard let plan, let page = plan.venue.pageUrl else {
+            let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
         guard let trustedSigner else {
-            throw other("The Trusted Signer cannot be opened here.")
+            throw Refused(failure: .trustedSigner(.unavailable))
         }
-        // An account signed in through the page signs there with that key
-        // alone: the page is offered it and no other, and an answer by any
-        // other founding key is refused like any mismatch — the rule a passkey
+        // An account with a sign-in key signs there with that key alone: the
+        // page is offered it and no other, and an answer by any other
+        // founding key is refused like any mismatch — the rule a passkey
         // ceremony pinned to it keeps. A record from before the sign-in key
         // offers every founding key, as it did.
-        let offered = route.signedIn
-            ? keys.filter { $0.credentialId.caseInsensitiveCompare(route.wire.credentialId) == .orderedSame }
-            : keys
+        let offered = plan.key.map { key in
+            keys.filter { $0.credentialId.caseInsensitiveCompare(key.credentialId) == .orderedSame }
+        } ?? keys
         let accountName = await accounts.name(of: account)
-        guard let request = try? buildRequest(accountName, offered) else {
-            throw other("The Trusted Signer's request could not be built.")
+        guard let request = try? buildRequest(accountName, offered, plan.key?.json) else {
+            throw Refused(failure: .trustedSigner(.unavailable))
         }
         let ending = await trustedSigner.sign(
-            requestJson: request, digest: challenge, keys: offered,
-            // Empty means the page from Settings; a key behind somebody's own
-            // page names it, and that is the one that opens.
-            signerOrigin: route.wire.signerOrigin
+            requestJson: request, digest: challenge, keys: offered, page: page,
+            place: plan.key?.place
         )
         switch ending {
         case .outcome(.accepted(let credentialIdHex, let assertion)):
@@ -600,21 +566,28 @@ final class UserOpSpine {
         case .outcome(.refused(let refusal)):
             throw Refused(failure: .trustedSigner(TrustedSignerNotice(refusal)))
         case .ceremony:
-            // A signature was asked for; a ceremony verdict is a shell bug.
-            throw other("The Trusted Signer answered the wrong kind of request.")
+            // A signature was asked for; a ceremony verdict is a shell bug,
+            // and an answer that is not the one asked for is a mismatch.
+            throw Refused(failure: .trustedSigner(.mismatch))
         case .timedOut:
             throw Refused(failure: .trustedSigner(.timeout))
         case .unavailable:
-            throw other("The Trusted Signer could not be opened.")
+            throw Refused(failure: .trustedSigner(.unavailable))
+        case .cancelled:
+            // Left on the hand-off card: nothing opened, like a cancelled
+            // passkey sheet.
+            throw Refused(failure: .passkeyCancelled)
+        case .notOpened(let line):
+            throw Refused(failure: .trustedSigner(.notOpened(line)))
         }
     }
 
-    /// Spec 079 (owner: one slide, not two): whether this account's
-    /// signatures go to the Trusted Signer's page — the core's route, the one
-    /// `ceremony` takes. The sheet then offers a button that goes there; the
-    /// page's own slide is the one consent.
-    func signsOnTrustedSigner(account: String) async -> Bool {
-        await route(account: account)?.wire.method == Self.trustedSignerMethod
+    /// Where this account's signatures go — the core's plan, the one
+    /// `ceremony` follows. The signing sheet reads it too, so the sheet that
+    /// says "review on your trusted page" and the ceremony that opens it
+    /// cannot disagree. `nil` for an account with no readable record.
+    func plan(account: String) async -> SigningPlanWire? {
+        await accounts.accountJson(of: account).flatMap(SigningPlanWire.of(accountJson:))
     }
 
     /// What the page is told: a site's request as it asked, or — `asked`
@@ -625,6 +598,7 @@ final class UserOpSpine {
         account: String,
         accountName: String?,
         keys: [WalletKeyRecord],
+        keyRouteJson: String? = nil,
         calls: [UserOpCall]
     ) -> TrustedSignerInput {
         let chain = ChainCatalog.meta(chainId)
@@ -639,46 +613,20 @@ final class UserOpSpine {
             account: account,
             accountName: accountName,
             credentialIdsHex: keys.map(\.credentialId),
+            keyRouteJson: keyRouteJson,
             calls: calls
         )
-    }
-
-    /// Where this account's signatures go: the credential a ceremony is pinned
-    /// to, how it is reached, and — for the Trusted Signer — the page.
-    /// `signedIn` says the route is the account's sign-in key, the one key it
-    /// may sign with.
-    private struct Route {
-        let wire: SignRouteWire
-        let signedIn: Bool
-    }
-
-    /// The account's sign-in key first (`signInRoute`, founder 2026-09-26).
-    /// A record written before that existed names none and signs exactly as
-    /// it did: `auto`, which answers nothing — `nil`, the pinned key's stored
-    /// route — except for a key created or found through the Trusted Signer,
-    /// which routes itself back to its page (spec 075).
-    private func route(account: String) async -> Route? {
-        if let json = await accounts.accountJson(of: account).flatMap({ signInRoute(accountJson: $0) }) {
-            return Self.decodeRoute(json).map { Route(wire: $0, signedIn: true) }
-        }
-        let json = signRoute(deviceKeysJson: await accounts.keyRoutesJson(of: account), method: "auto")
-        return json.flatMap(Self.decodeRoute).map { Route(wire: $0, signedIn: false) }
-    }
-
-    private static func decodeRoute(_ json: String) -> SignRouteWire? {
-        try? CoreJSON.decoder.decode(SignRouteWire.self, from: Data(json.utf8))
     }
 
     private func assert(
         account: String,
         pinned: WalletKeyRecord,
-        route: SignRouteWire?,
+        key: KeyRouteWire?,
         challenge: Data
     ) async throws -> Assertion {
         let routing: (credentialId: String, transports: String, method: KeyMethod)
-        if let route, !route.credentialId.isEmpty,
-           let method = KeyMethod(rawValue: route.method), method != .trustedSigner {
-            routing = (route.credentialId, route.transports, method)
+        if let key, !key.credentialId.isEmpty, let place = key.place {
+            routing = (key.credentialId, key.transports, place)
         } else {
             let stored = await accounts.routing(of: account)
             routing = (pinned.credentialId, stored.transports, stored.method)

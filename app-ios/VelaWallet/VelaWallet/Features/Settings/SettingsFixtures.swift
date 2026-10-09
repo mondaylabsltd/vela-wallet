@@ -191,10 +191,6 @@ enum SettingsFixtures {
                     SettingsRowModel(id: feeSpeedRow, title: loc.t("settings.advanced.feeSpeedTitle"),
                                      icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
                                      value: loc.t("send.gasTier.fast")),
-                    // Spec 071: which Trusted Signer page this device opens —
-                    // beside the speed, as every client places it.
-                    SettingsRowModel(id: signerPageRow, title: loc.t("settings.signing.pageTitle"),
-                                     icon: .link2, value: loc.t("settings.signing.pageOfficial")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
                                      icon: .hardDrive, subtitle: loc.t(k.storageSubtitle)),
                 ],
@@ -591,8 +587,6 @@ enum SettingsFixtures {
         )
     }
 
-    /// The Settings row id of the Trusted Signer page (spec 071, 075).
-    static let signerPageRow = "signer-page"
 
     private static func currencySheet(_ loc: Loc) -> SelectSheetModel {
         let k = I18nKeys.SettingsUi.self
