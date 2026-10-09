@@ -18,7 +18,7 @@ import type { APIToken, CustomToken } from './tokens-model';
 import { tokenUsdValue, tokenChainId, isNativeToken } from './tokens-model';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from './networks';
 import { loadCustomTokens } from './records';
-import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
+import { poolRpcCall, getFailedRpcChains, PoolFailedError } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
 import { balanceChainReadDeadlineMs, balanceReadPlan } from '$lib/core/kernels';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
@@ -118,6 +118,26 @@ class ChainUnreachableError extends Error {
 }
 
 /**
+ * Whether a chain's read failed INSIDE the app — nothing of it left the
+ * device (PR 2 note 11, issue 483): the request pool faulted or never booted
+ * (`PoolFailedError.internal`, which `vela.faultPool(chain)` stands in for),
+ * or this code threw before a request was built or sent (a read plan or an
+ * encode that broke). Home says that as Vela's own fault, never "Can't reach
+ * Ethereum". A chain that did not answer — every node away or rate-limited,
+ * an RPC error, an empty or unreadable answer (`ChainUnreachableError` over
+ * anything but an internal pool fault), or the per-chain deadline — is the
+ * network's.
+ */
+export function readFailedInsideApp(error: unknown): boolean {
+	if (error instanceof ChainUnreachableError) {
+		const cause = error.cause;
+		return cause instanceof PoolFailedError && cause.internal;
+	}
+	if (error instanceof PoolFailedError) return error.internal;
+	return true;
+}
+
+/**
  * The previous snapshot's holdings on chains that did not answer, kept
  * alongside the ones that did.
  *
@@ -168,8 +188,9 @@ type TokenCacheEntry = {
 	 * caller that JOINED that round hears them too: it used to get the tokens
 	 * alone, and a balance-machine fetch that joined a launch-time blip
 	 * reported "every chain answered", which the machine took at its word.
+	 * `internal`: the subset whose read never left the app (PR 2 note 11).
 	 */
-	inFlightFailed?: Promise<number[]>;
+	inFlightFailed?: Promise<FailedChains>;
 };
 
 const tokenCache = new Map<string, TokenCacheEntry>();
@@ -181,9 +202,16 @@ export type FetchTokensOptions = {
 	includeZeroBalance?: boolean;
 	/** Called each time a chain finishes, with the accumulated tokens so far (sorted by USD value). */
 	onProgress?: (tokens: APIToken[]) => void;
-	/** Called after all chains finish, with the chain IDs whose RPC endpoints all failed. */
-	onFailedChains?: (chainIds: number[]) => void;
+	/**
+	 * Called after all chains finish, with the chain IDs this round could not
+	 * read — and, second, the subset whose read never left the app
+	 * (`readFailedInsideApp`, PR 2 note 11): never "can't reach" those.
+	 */
+	onFailedChains?: (chainIds: number[], internalIds: number[]) => void;
 };
+
+/** The chains a round could not read, and which of them failed inside the app. */
+type FailedChains = { failed: number[]; internal: number[] };
 
 // ---------------------------------------------------------------------------
 // Public API (same interface as before)
@@ -203,15 +231,16 @@ export async function fetchTokens(
 	if (!options.forceRefresh && !options.includeZeroBalance && cached) {
 		if (cached.inFlight) {
 			const tokens = await cached.inFlight;
-			const failed = (await cached.inFlightFailed?.catch(() => [])) ?? [];
-			if (failed.length > 0) options.onFailedChains?.(failed);
+			const none: FailedChains = { failed: [], internal: [] };
+			const { failed, internal } = (await cached.inFlightFailed?.catch(() => none)) ?? none;
+			if (failed.length > 0) options.onFailedChains?.(failed, internal);
 			return cloneTokens(tokens);
 		}
 		if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
 	}
 
 	let partial = false;
-	let failedIds: number[] = [];
+	let failedIds: FailedChains = { failed: [], internal: [] };
 	const request = fetchAllChainTokens(
 		address,
 		// The snapshot a chain falls back to when it does not answer. The
@@ -219,10 +248,10 @@ export async function fetchTokens(
 		// (uncached) shape, so it carries nothing over.
 		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
 		options.onProgress,
-		(ids) => {
+		(ids, internal) => {
 			partial = ids.length > 0;
-			failedIds = ids;
-			options.onFailedChains?.(ids);
+			failedIds = { failed: ids, internal };
+			options.onFailedChains?.(ids, internal);
 		},
 		options.includeZeroBalance
 	);
@@ -350,7 +379,7 @@ async function fetchAllChainTokens(
 	address: string,
 	previous: readonly APIToken[],
 	onProgress?: (tokens: APIToken[]) => void,
-	onFailedChains?: (chainIds: number[]) => void,
+	onFailedChains?: (chainIds: number[], internalIds: number[]) => void,
 	includeZeroBalance?: boolean
 ): Promise<APIToken[]> {
 	// Phase 1: load prerequisites in parallel
@@ -360,6 +389,8 @@ async function fetchAllChainTokens(
 	const networks = getAllNetworksSync();
 	const accumulated: APIToken[] = [];
 	const answered = new Set<number>();
+	/** Chains whose read failed inside the app this round (PR 2 note 11). */
+	const insideApp = new Set<number>();
 	const carryable = new Set(previous.map(tokenChainId));
 
 	const sortAndFilter = () =>
@@ -382,7 +413,10 @@ async function fetchAllChainTokens(
 				clPrices
 			).then(
 				(tokens) => ({ answered: true, tokens }),
-				() => ({ answered: false, tokens: [] })
+				(error: unknown) => {
+					if (readFailedInsideApp(error)) insideApp.add(net.chainId);
+					return { answered: false, tokens: [] };
+				}
 			);
 			const bounded = Promise.race([
 				chainTokensP,
@@ -415,7 +449,10 @@ async function fetchAllChainTokens(
 	const failed = networks
 		.map((n) => n.chainId)
 		.filter((id) => getFailedRpcChains().has(id) || !answered.has(id));
-	if (failed.length > 0) onFailedChains?.(failed);
+	// …and which of them never left the app: a subset, as the core's
+	// `internal_chain_ids` is of `failed_chain_ids`.
+	const internal = failed.filter((id) => insideApp.has(id) && !answered.has(id));
+	if (failed.length > 0) onFailedChains?.(failed, internal);
 
 	return sortAndFilter();
 }
@@ -587,9 +624,12 @@ async function queryChainAssets(
 	// 3. Execute multicall
 	if (calls.length === 0) return [];
 
+	// Built before the read: a batch this code could not encode never left
+	// the app, and is thrown as that (`readFailedInsideApp`, PR 2 note 11) —
+	// not as a chain that did not answer.
+	const encoded = encAggregate3(calls);
 	let results: McResult[];
 	try {
-		const encoded = encAggregate3(calls);
 		const raw = await ethCall(chainId, MULTICALL3, encoded);
 		results = decAggregate3(raw);
 	} catch (cause) {

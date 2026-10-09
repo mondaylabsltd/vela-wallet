@@ -16,7 +16,7 @@ import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-we
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
 import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
-import type { WalletMessages } from '$lib/wallet/messages';
+import { BALANCE_INTERNAL_KEYS, type WalletMessages } from '$lib/wallet/messages';
 import type { ContactsMessages } from '$lib/contacts/messages';
 import { INTRO_KEYS } from '$lib/intro/slides';
 import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
@@ -199,7 +199,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyTitle: k('assets.emptyTitle'),
 			emptyCaption: k('assets.emptySubtext'),
 			unreachableOne: k('assets.unreachableOne'),
-			unreachableMany: k('assets.unreachableMany')
+			unreachableMany: k('assets.unreachableMany'),
+			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
 			pillAll: k('componentsUi.networkFilter.pillAll'),
@@ -704,6 +705,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			unreachableMany: k('assets.unreachableMany'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
+			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)])),
 			lines: Object.fromEntries(UNREACHABLE_LINE_KEYS.map((key) => [key, k(key)])),
 			rpcFix: k('assets.rpcFix'),
 			rpcFixTitle: k('assets.rpcFixTitle'),
