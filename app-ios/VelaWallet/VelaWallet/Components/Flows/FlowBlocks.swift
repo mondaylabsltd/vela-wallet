@@ -900,7 +900,9 @@ struct FeeRowView: View {
             // draw it. Round 2's full-height block beside the card grew into a
             // slab at the largest text size.
             HStack(alignment: .center, spacing: Tokens.Space.s8) {
-                Button(action: onOpen) {
+                // A failed fee is asked again by a tap on its row (PR 2 note
+                // 1) — the refresh's own action; there is no coin to pick.
+                Button(action: fee.tapRetries ? (onRefresh ?? onOpen) : onOpen) {
                     // Label and value side by side while both fit whole; the
                     // label on its own line and the value under it otherwise.
                     // It used to break the label inside a word
@@ -916,15 +918,17 @@ struct FeeRowView: View {
                                 .typeRole(Typography.body.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
                                 .fixedSize(horizontal: false, vertical: true)
-                            LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                                .foregroundStyle(theme.fgMuted)
+                            if !fee.tapRetries {
+                                LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                                    .foregroundStyle(theme.fgMuted)
+                            }
                         }
                     }
                     .padding(.vertical, Tokens.Space.s12)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(fee.openLabel)
+                .accessibilityLabel(fee.tapRetries ? (fee.refreshLabel ?? fee.openLabel) : fee.openLabel)
                 if let refreshLabel = fee.refreshLabel {
                     FeeRefreshButton(label: refreshLabel, refreshing: fee.refreshing, onRefresh: onRefresh)
                 }

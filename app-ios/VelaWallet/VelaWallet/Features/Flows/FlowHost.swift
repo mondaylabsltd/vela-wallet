@@ -418,7 +418,8 @@ struct FlowHost: View {
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
                     onNoticeSecondary: { onNoticeSecondary?() },
-                    onNoticeReport: { onRelayReport?() }
+                    onNoticeReport: { onRelayReport?() },
+                    onRefreshFee: onRefreshFee
                 )
             } footer: {
                 // A hairline over the pinned hand-off: figures that run past

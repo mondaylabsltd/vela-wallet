@@ -286,6 +286,7 @@ final class SendExecutor {
             return CoreJSON.string(["type": "alert_acknowledged"])
 
         case "close":
+            journeyEnded()
             ports.closed()
             return CoreJSON.string(["type": "closed"])
 
@@ -514,19 +515,29 @@ final class SendExecutor {
     }
 
     /// The send machine's `SendEstimateFailure` for a fee failure: the fee
-    /// vocabulary it shares, else `other`. A fee failure the send vocabulary
-    /// has no word for (`chain_read`, `internal`, `would_fail`) used to go
-    /// through as it came and was refused by the machine's decode — an answer
-    /// the send never heard. The fee row says the precise cause from the fee
-    /// view itself.
-    static func estimateFailure(_ failed: String?) -> String {
-        let shared: Set<String> = [
-            "missing_public_key", "fee_token_unavailable", "quote_unavailable",
-            "calculation_failed", "estimate_failed", "gas_quote_too_high",
-        ]
-        guard let failed, shared.contains(failed) else { return "other" }
+    /// machine's own, AS IT IS (PR 2 note 13). The send vocabulary holds every
+    /// `FeeFailure` in the same wire shape — `"quote_unavailable"`,
+    /// `{"chain_read":{"rate_limited":false}}`, `"would_fail"`, `"internal"` —
+    /// so the alert can say its real cause (`sendEstimateFailureBodyKey`):
+    /// mapping the ones it once lacked to `other` made every one of them
+    /// "Could not build a valid transaction estimate". `other` only when no
+    /// failure was said at all.
+    static func estimateFailure(_ failed: String?) -> Any {
+        guard let failed, !failed.isEmpty else { return "other" }
+        // The object form, as an object: the core reads the wire shape, not
+        // a string holding it.
+        if failed.hasPrefix("{"),
+           let object = try? JSONSerialization.jsonObject(with: Data(failed.utf8)) as? [String: Any] {
+            return object
+        }
         return failed
     }
+
+    /// The journey this fee was priced for is gone (the core closed it, or
+    /// the person left it by another door): its fee sessions stop asking and
+    /// answering — the core's own re-ask after a failure and its block-time
+    /// tick both run on `start_ttl`, and nobody is looking (PR 2 note 1).
+    func journeyEnded() { fees.end() }
 
     // MARK: - Submit
 

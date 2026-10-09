@@ -24,6 +24,20 @@
 import SwiftUI
 import VelaCore
 
+/// The fee's failure in words (PR 2 note 1) — what every fee row draws: the
+/// Send form's, the confirm's and the signing sheet's.
+extension FeeFailureViewWire {
+    /// The row's figure: the core's key ("Tap to retry" only when a tap is
+    /// the one way), else the dash.
+    func figure(_ loc: Loc) -> String { self.figureKey.map { loc.t($0) } ?? "—" }
+
+    /// The row's reason line, `{{chain}}` filled with the chain's name; `nil`
+    /// when the core gives none (not the network's doing).
+    func reason(_ loc: Loc, chain: String) -> String? {
+        self.reasonKey.map { loc.t($0, vars: ["chain": chain]) }
+    }
+}
+
 enum SendLive {
 
     /// Which drawn state the live view is in.
@@ -717,6 +731,15 @@ enum SendLive {
         // flight: a number in the fee slot is a promise about what this costs,
         // and the drawing's number is a promise about somebody else's send.
         let waiting = busy ? loc.t("send.estimatingFee") : "—"
+        // The fee machine's failure, said ONCE for the row and the footer
+        // (PR 2 note 1): its figure ("Tap to retry" only when a tap is the
+        // one way, else the dash) and its reason, kept through the core's own
+        // re-ask with the measuring sign turning — never "Estimating…" in its
+        // place, so the row does not flip every few seconds. A failure means
+        // no figure stands (the machine's own `fee` is gone), so it wins
+        // over the send machine's last estimate.
+        let failure = ofAnotherTier ? nil : fee?.failure
+        let chainName = view.selectedToken.flatMap { networks.meta($0.chainId)?.displayName } ?? ""
         return FeeRowModel(
             label: fallback.label,
             // The fee is paid on THIS chain, in THIS coin — the core's answer.
@@ -725,7 +748,7 @@ enum SendLive {
             // chain known there is no coin to name: an empty disc.
             mark: feeCoinMark(view)
                 ?? TokenMarkModel(ticker: "", badgeColor: fallback.mark.badgeColor, badgeHidden: true),
-            value: ofAnotherTier ? loc.t("send.estimatingFee") : (text ?? waiting),
+            value: ofAnotherTier ? loc.t("send.estimatingFee") : (failure?.figure(loc) ?? text ?? waiting),
             openLabel: fallback.openLabel,
             refreshLabel: speed.map { _ in loc.t("send.feeRefresh") },
             // A measurement is out — whoever started it — the same fact the
@@ -734,15 +757,14 @@ enum SendLive {
             // `FeeView.stale` had no visible consumer on iOS: the 30 s TTL ran
             // out and nothing said so. Not while a fresh measurement is out, and
             // not over a row with no figure of its own on it.
-            staleNote: (speed != nil && fee?.stale == true && !busy && text != nil)
+            staleNote: (speed != nil && fee?.stale == true && !busy && text != nil && failure == nil)
                 ? loc.t("send.feeStale") : nil,
-            // The fee machine's failure, in its own words (issue #483): the
-            // chain's name for a chain read, Vela's own fault for an internal
-            // one — never a blank "—" with nothing said. Asked again on the
-            // core's schedule and by the refresh (a real new read).
-            failNote: busy || text != nil ? nil : fee?.failed
-                .flatMap { feeFailureReasonKey(failure: $0) }
-                .map { loc.t($0, vars: ["chain": view.selectedToken.flatMap { networks.meta($0.chainId)?.displayName } ?? ""]) }
+            // Why there is no fee, in the core's words (`failure.reason_key`):
+            // the chain by name for a chain read, Vela's own fault for an
+            // internal one (issue #483) — never a blank "—" with nothing said.
+            failNote: failure?.reason(loc, chain: chainName),
+            // A tap on a failed row asks again at once (the core's `requote`).
+            tapRetries: failure != nil
         )
     }
 
@@ -969,6 +991,10 @@ enum SendLive {
         // The network the signature moves money on: a sweep's locked chain,
         // else the token's. Never 0.
         let networkChainId = (view.multiSelectMode ? view.multiChainId : nil) ?? token?.chainId
+        // The fee machine's failure (PR 2 note 1): the row's figure and
+        // reason, the same one state the form's row and the footer read.
+        let failure = fee?.failure
+        let failureChain = networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain
 
         var facts = [
             // Who pays, with the face every other shell draws beside it.
@@ -996,14 +1022,22 @@ enum SendLive {
                 // With no estimate the row says so, as the form's row does —
                 // never the drawing's "~0.0021 ETH · ≈$0.55", a promise about
                 // somebody else's send (the web's `feeText`: `send.fee ?? fee.fee`).
-                value: (view.fee ?? fee?.fee).map {
-                    "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
-                }
+                // A failure is no figure at all: its own (the dash, or "Tap to
+                // retry" only when a tap is the one way), kept through the
+                // core's re-ask — never "Estimating…" and back.
+                value: failure?.figure(loc)
+                    ?? (view.fee ?? fee?.fee).map {
+                        "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
+                    }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
                         ? loc.t("send.estimatingFee") : "—"),
+                // Why, under the row: the chain by name, the relay, or Vela's
+                // own fault — the core's words.
+                note: failure?.reason(loc, chain: failureChain),
                 // The coin's figure and its price in the person's currency:
                 // a second line between the two, never a figure cut short.
-                wraps: true
+                wraps: true,
+                tapRetries: failure != nil
             ),
         ]
         // The speed, but only when it was CHOSEN for this send, or taken
@@ -1123,11 +1157,19 @@ enum SendLive {
                 : !view.splitMode && view.recipientRisk?.firstTime == true
                     ? loc.t("componentsUi.signing.firstTimeTag") : nil,
             cta: live.cta,
-            // PR 2 §3: "Waiting for your last transaction on this network…" —
-            // the core's key, one line, no timer; it does not move with the
-            // fee's busy state.
-            heldNote: view.previousPending.map { loc.t($0.key) }
+            heldNote: heldNote(view, fee: fee, loc: loc)
         )
+    }
+
+    /// The ONE line under the held confirm: the previous transaction on this
+    /// network first (PR 2 §3: the core's key, no timer; it does not move
+    /// with the fee's busy state), else the fee's failure in the line the
+    /// signing sheet draws for it (PR 2 note 1, `failure.footer_key`):
+    /// "Retrying…" while the core asks again by itself, "Tap it to retry"
+    /// only when a tap is the one way. Else nothing.
+    static func heldNote(_ view: SendViewWire, fee: FeeViewWire?, loc: Loc) -> String? {
+        if let held = view.previousPending { return loc.t(held.key) }
+        return fee?.failure.map { loc.t($0.footerKey) }
     }
 
     /// A split's payees, one row each: the amount from the core's drafts, who
@@ -1309,7 +1351,9 @@ enum SendLive {
     }
 
     /// Title and body for every alert the core raises, in the core's words.
-    static func alertText(_ kind: [String: Any], loc: Loc) -> (title: String, body: String) {
+    /// `chain`: the selected token's network by name, for a body that names
+    /// the chain it could not reach.
+    static func alertText(_ kind: [String: Any], loc: Loc, chain: String = "") -> (title: String, body: String) {
         switch kind["type"] as? String ?? "" {
         case "invalid_address":
             return (loc.t("send.alertInvalidAddressTitle"), loc.t("send.alertInvalidAddressBody"))
@@ -1320,11 +1364,28 @@ enum SendLive {
         case "load_tokens_failed":
             return (loc.t("send.alertLoadTokensError"), "")
         case "estimate_failed":
-            return (loc.t("send.alertEstimateFailedTitle"), loc.t("send.alertEstimateFailedBody"))
+            // Worded by its cause (PR 2 note 13), the core's choice
+            // (`sendEstimateFailureBodyKey`): the chain out of reach by its
+            // name, a fault inside Vela as that — never "can't reach the
+            // chain" — else the general sentence.
+            return (
+                loc.t("send.alertEstimateFailedTitle"),
+                loc.t(sendEstimateFailureBodyKey(failure: estimateFailureText(kind["kind"])), vars: ["chain": chain])
+            )
         case "account_unavailable":
             return (loc.t("send.alertEstimateFailedTitle"), loc.t("send.alertAccountUnavailableBody"))
         default:
             return (loc.t("send.alertEstimateFailedTitle"), "")
+        }
+    }
+
+    /// A `SendEstimateFailure` as the core's functions take it back: the wire
+    /// name, or the JSON of one that carries data (`{"chain_read":{…}}`).
+    static func estimateFailureText(_ raw: Any?) -> String {
+        switch raw {
+        case let name as String: return name
+        case let object as [String: Any]: return CoreJSON.string(object)
+        default: return "other"
         }
     }
 

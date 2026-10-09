@@ -153,6 +153,9 @@ struct FactRowModel: Identifiable {
     /// (`FactRowView.unbreakable`). The confirm's fee: cut to one line it
     /// read "~0.000173…B · ≈¥0.85" (iPhone pass 2026-10-09).
     var wraps = false
+    /// The confirm's fee failed (PR 2 note 1): a tap on the row asks again at
+    /// once — the form's refresh, the core's `requote`.
+    var tapRetries = false
 }
 
 enum StatusTone {
@@ -545,8 +548,13 @@ struct FeeRowModel {
     var staleNote: String? = nil
     /// Why there is no fee (issue #483): the fee machine's own failure in its
     /// words — the chain out of reach, the relay, or Vela's own fault — in the
-    /// same line `staleNote` keeps, so nothing jumps when it appears.
+    /// same line `staleNote` keeps, so nothing jumps when it appears. Kept
+    /// while the core asks again by itself (PR 2 note 1).
     var failNote: String? = nil
+    /// The fee failed (`FeeView.failure`): a tap on the row asks again at
+    /// once — the refresh's own action — instead of opening the coin sheet,
+    /// and the row draws no chevron.
+    var tapRetries = false
 }
 
 /// One option of the speed control (spec 068).

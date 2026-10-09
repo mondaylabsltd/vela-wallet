@@ -122,6 +122,8 @@ final class SendStore {
     /// meantime must not draw the journey just left. Dropped before the
     /// machine's first boot, when there is nothing to forget.
     func leave() {
+        // The fee priced for the journey left stops asking (PR 2 note 1).
+        executor.journeyEnded()
         core.dispatch(CoreJSON.string([
             "type": "open",
             "account": NSNull(),

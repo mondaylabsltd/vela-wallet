@@ -368,7 +368,8 @@ enum SigningLive {
         }
         if !refused {
             model.feeRefresh = feeRefresh(clear: clear, fee: fee, loc: loc)
-            model.feeChevron = (fee?.options.count ?? 0) > 1
+            // A failed fee's tap asks again (`feeTapped`): no list to open.
+            model.feeChevron = fee?.failure == nil && (fee?.options.count ?? 0) > 1
             model.feeReserve = feeReserve(fee, loc: loc)
         }
         return model
@@ -1363,8 +1364,12 @@ enum SigningLive {
             // explicit that these two surfaces must not drift.
             value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
                                            networks: context.networks)
-        } else if fee?.failed != nil {
-            value = context.loc.t("componentsUi.gas.estimateFailed")
+        } else if let failure = fee?.failure {
+            // The core's one state for the row and the footer (PR 2 note 1):
+            // "Tap to retry" only when a tap is the one way, else the dash —
+            // kept through the core's own re-ask, so the row never flips to
+            // "Estimating…" and back every few seconds.
+            value = failure.figure(context.loc)
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
         }
@@ -1417,20 +1422,20 @@ enum SigningLive {
             // spends (the PancakeSwap USDC swap, fee in USDC). The core
             // flags it; said under the fee while that coin is the one paying.
             warning = context.loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": selected.symbol])
-        } else if let failed = fee?.failed, let key = feeFailureReasonKey(failure: failed) {
-            // Spec 079: why there is no fee, and that it will be asked again
-            // (the row said "点击重试" with the relay down and stayed so).
-            // Which words is the core's (spec 082 RJ13): the relay for a
+        } else if let reason = fee?.failure?.reason(context.loc, chain: context.chainName) {
+            // Spec 079: why there is no fee. Which words is the core's
+            // (`FeeView.failure.reason_key`, PR 2 note 1): the relay for a
             // relay's failure, the chain's node — rate-limited, or named
             // unreachable — for a chain read, and none for a failure that is
             // not the network's (G48: a public node's rate limit read "Can't
             // reach Vela"). A read that never left the app is Vela's own
             // fault, said as that (issue #483) — never "Can't reach <chain>".
-            warning = context.loc.t(key, vars: ["chain": context.chainName])
+            // Kept while the core asks again, the measuring sign beside it.
+            warning = reason
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failed != nil || options.count > 1
+        let tappable = fee?.failure != nil || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
     }

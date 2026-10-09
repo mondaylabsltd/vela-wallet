@@ -131,11 +131,12 @@ final class SigningController {
     /// ETH was quoted in ETH with no way to choose the coin it has).
     private(set) var feeOpen = false
 
-    /// A tap on the fee row: a failed quote is asked again; with more than one
-    /// coin, the list opens or closes.
+    /// A tap on the fee row: a failed quote is asked again at once (the
+    /// core's `requote` — it drops its own timer for the next re-ask); with
+    /// more than one coin, the list opens or closes.
     func feeTapped() {
         guard let fee else { return }
-        if fee.failed != nil {
+        if fee.failure != nil {
             // Measured again for real — the held readings dropped first.
             fees.refresh()
         } else if fee.options.count > 1 {
@@ -313,7 +314,6 @@ final class SigningController {
         signJson = signCore.json
         clearJson = clearCore.json
         guardJson = guardCore.json
-        fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
             respond: { [weak self] transportId, id, payload in
@@ -562,6 +562,9 @@ final class SigningController {
     /// .stopped`: every held `timer` of the fee sessions runs out now.
     func elapseFeeTimer(_ timer: String) { fees.elapse(timer) }
 
+    /// No fee read is out — only timers a stopped clock holds (tests).
+    var feeIdle: Bool { fees.isIdle }
+
     // MARK: - The speed control (spec 069)
 
     /// `nil` folds or unfolds the control; a tier is a one-shot pick, never
@@ -589,7 +592,6 @@ final class SigningController {
 
     /// The confirm was tapped.
     func approve() {
-        cancelRequote()
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
@@ -760,6 +762,7 @@ final class SigningController {
         }
         if view.surface == .hidden, view.request == nil, request != nil, answered {
             closed = true
+            endFees()
         }
         // The page left and the pipeline has stopped with nothing sent
         // (`asker_gone`, RB2): nobody will be answered, so nothing keeps this
@@ -767,128 +770,23 @@ final class SigningController {
         if askerGone, view.phase == .idle, !view.isSigning, !view.isSubmitting,
            submittedHash == nil, request != nil {
             closed = true
+            endFees()
         }
     }
 
-    private func commitFee(_ view: FeeViewWire) {
-        // A quote on the sheet is priced again by the fee core itself, once a
-        // block (`requote_interval_ms`) and at once when that fails — `stale`
-        // is only ever up while it does — so nothing here re-asks it. What is
-        // asked again is a quote that FAILED, on the core's schedule.
-        scheduleRequote(view)
+    /// The sheet is over (the page has its answer, or the controller is
+    /// closed): its fee stops asking and answering — the core's own re-ask
+    /// after a failure and its block-time tick both run on `start_ttl`, and a
+    /// sheet nobody looks at must not keep reading the chain (PR 2 note 1).
+    /// The last fee view stays drawn: the sheet turning into its ending keeps
+    /// its row as it stood.
+    private func endFees() {
+        guard !feesEnded else { return }
+        feesEnded = true
+        fees.end(keepingView: true)
     }
 
-    // MARK: - Asking again (spec 079)
-
-    /// Automatic re-quotes made for the failure on screen; reset by a quote.
-    private var requoteAttempt: UInt32 = 0
-    private var requoteTask: Task<Void, Never>?
-    /// The bound on the automatic re-quote in flight (RJ12).
-    private var requoteWatch: Task<Void, Never>?
-    /// The failure the schedule is for — the core's text, whole.
-    private var requoteFailure: String?
-
-    /// Whether a re-quote may still go out: the sheet is up, nothing is
-    /// signing or submitting, and the page has no answer yet.
-    private var requoteAllowed: Bool {
-        !answered && sign.surface == .sheet && !sign.isSigning && !sign.isSubmitting
-    }
-
-    /// A quote that failed for a reason that can pass (the relay unreachable,
-    /// a busy estimate, a chain read) is asked again on the core's schedule —
-    /// 3 s, 6 s, then every 8 s (`feeRequoteDelayMs`, spec 082 RJ12) — while
-    /// the sheet is up and nothing is signing. Android's pass: the row said
-    /// "点击重试" with the relay down and stayed that way after it came back.
-    ///
-    /// A measurement still out is not a verdict: the schedule neither resets
-    /// nor advances on it (a busy view has no `failed`, and reading that as a
-    /// success kept every re-quote at 3 s). Each automatic re-quote is bounded
-    /// by `feeRequoteTimeoutMs`; one that does not answer in time is a
-    /// failure again (`watchRequote`).
-    private func scheduleRequote(_ view: FeeViewWire) {
-        guard !view.busy else { return }
-        let chain = request?.chainId ?? 0
-        guard let failure = view.failed else {
-            if requoteAttempt > 0, view.fee != nil {
-                VelaLog.feeQuoteBack(chain: chain, after: requoteAttempt)
-            }
-            requoteAttempt = 0
-            requoteFailure = nil
-            cancelRequote()
-            return
-        }
-        requoteWatch?.cancel()
-        requoteWatch = nil
-        guard requoteTask == nil else { return }
-        let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
-        // A failure no re-quote follows is said once, however often the view
-        // is drawn again.
-        if wait == nil, requoteFailure == failure { return }
-        requoteFailure = failure
-        VelaLog.feeQuoteFailed(
-            chain: chain, cause: FeeFailureText(failure).cause, requote: requoteAttempt + 1, inMs: wait
-        )
-        guard let wait else { return }
-        requoteAttempt += 1
-        requoteTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-            guard let self, !Task.isCancelled else { return }
-            requoteTask = nil
-            guard fee?.failed != nil, requoteAllowed else { return }
-            fees.refresh()
-            watchRequote()
-        }
-    }
-
-    /// The bound on one automatic re-quote (spec 082 RJ12): not answered in
-    /// `feeRequoteTimeoutMs` is a failure again — the next re-quote goes out
-    /// on the schedule, asked from the start (the core abandons the run that
-    /// hung), instead of waiting out a pool's whole sweep.
-    private func watchRequote() {
-        requoteWatch?.cancel()
-        let attempt = requoteAttempt
-        requoteWatch = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(feeRequoteTimeoutMs()) * 1_000_000)
-            guard let self, !Task.isCancelled, requoteAttempt == attempt,
-                  fee?.busy == true, requoteAllowed, requoteTask == nil
-            else { return }
-            requoteWatch = nil
-            let failure = requoteFailure ?? "quote_unavailable"
-            let wait = feeRequoteDelayMs(failure: failure, attempt: attempt + 1)
-            VelaLog.feeQuoteFailed(
-                chain: request?.chainId ?? 0, cause: "timeout", requote: attempt + 1, inMs: wait
-            )
-            guard let wait else { return }
-            requoteAttempt += 1
-            requoteTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-                guard let self, !Task.isCancelled else { return }
-                requoteTask = nil
-                guard fee?.busy == true || fee?.failed != nil, requoteAllowed else { return }
-                fees.reask()
-                watchRequote()
-            }
-        }
-    }
-
-    /// The wait before automatic re-quote `attempt` of the quote on screen,
-    /// or `nil` for none: no failure, one still being measured, a failure no
-    /// retry can fix (the core's schedule says so), or a sheet that can no
-    /// longer use a fee (approved, answered, closed).
-    static func requoteDelay(_ view: FeeViewWire, attempt: UInt32, allowed: Bool) -> UInt32? {
-        guard allowed, !view.busy, let failure = view.failed else { return nil }
-        return feeRequoteDelayMs(failure: failure, attempt: attempt)
-    }
-
-    /// A re-quote is scheduled (tests read it; the sheet does not).
-    var requotePending: Bool { requoteTask != nil }
-
-    private func cancelRequote() {
-        requoteTask?.cancel()
-        requoteTask = nil
-        requoteWatch?.cancel()
-        requoteWatch = nil
-    }
+    private var feesEnded = false
 
     /// `persist_record` wrote `recordId`: a hand-off naming it may go.
     private func recordLanded(_ recordId: String) {
@@ -978,7 +876,7 @@ final class SigningController {
 
     private func markAnswered() {
         answered = true
-        cancelRequote()
+        endFees()
         if sign.surface == .hidden { closed = true }
     }
 

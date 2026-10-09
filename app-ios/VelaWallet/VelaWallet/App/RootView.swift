@@ -3119,7 +3119,11 @@ struct RootView: View {
     /// The refusal the core raised, in the core's words.
     private var sendRefusal: FlowAlertModel? {
         guard let kind = send.alert else { return nil }
-        let text = SendLive.alertText(kind, loc: loc)
+        // The network the estimate was for, by the wallet's own name for it —
+        // the body may say it could not be reached (PR 2 note 13).
+        let chain = (send.view?.selectedToken?.chainId ?? send.view?.multiChainId)
+            .flatMap { walletNetworks.meta($0)?.displayName } ?? ""
+        let text = SendLive.alertText(kind, loc: loc, chain: chain)
         return FlowAlertModel(title: text.title, message: text.body, dismiss: loc.t("common.gotIt"))
     }
 

@@ -1416,6 +1416,8 @@ struct SendConfirmBody: View {
     var onNoticeSecondary: () -> Void = {}
     /// Issue #466: the stop's "Report this".
     var onNoticeReport: () -> Void = {}
+    /// A failed fee's row, tapped: asked again at once (PR 2 note 1).
+    var onRefreshFee: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -1452,7 +1454,14 @@ struct SendConfirmBody: View {
             VStack(spacing: Tokens.Space.s0) {
                 ForEach(Array(model.facts.enumerated()), id: \.element.id) { index, fact in
                     if index > 0 { FlowDivider() }
-                    FactRowView(fact: fact)
+                    if fact.tapRetries, let onRefreshFee {
+                        Button(action: onRefreshFee) {
+                            FactRowView(fact: fact).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        FactRowView(fact: fact)
+                    }
                 }
             }
             .padding(.horizontal, Tokens.Space.s12)
