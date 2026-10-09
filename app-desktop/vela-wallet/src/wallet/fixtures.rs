@@ -403,11 +403,12 @@ fn row(
     }
 }
 
-/// The four D1 activity rows, timestamps included (desktop subtitles carry
-/// `· <day> <clock>` per the D1 mock).
+/// The three D1 activity rows, timestamps included (desktop subtitles carry
+/// `· <day> <clock>` per the D1 mock). Three because the home draws the
+/// core's cut, the newest three (`FeedView.home_rows`, issue 469); History
+/// draws every row.
 pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
     let today = s.today.as_ref();
-    let yesterday = s.yesterday.as_ref();
     let mut rows = vec![
         row(
             s,
@@ -439,22 +440,9 @@ pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
             false,
             chain_bnb(),
         ),
-        row(
-            s,
-            ActivityKind::Received,
-            format!(
-                "{} · {yesterday} 20:15",
-                fill(&s.from_name, "name", "Alice")
-            ),
-            "+50",
-            "USDC",
-            true,
-            chain_base(),
-        ),
     ];
     // The web's D1 files them under their days (spec 038 #E3).
     rows[0].day = Some(s.today.clone());
-    rows[3].day = Some(s.yesterday.clone());
     rows
 }
 
@@ -838,7 +826,8 @@ mod tests {
         let rows = activity_default(&s);
         assert_eq!(rows[0].title.as_ref(), "已发送");
         assert_eq!(rows[0].subtitle.as_ref(), "至 hold on · 今天 14:02");
-        assert_eq!(rows[3].subtitle.as_ref(), "来自 Alice · 昨天 20:15");
+        assert_eq!(rows.len(), 3, "the home draws the newest three (#469)");
+        assert_eq!(rows[1].subtitle.as_ref(), "来自 0x9F3c…21aE · 今天 11:20");
 
         assert_eq!(receive_network_detail(&s).as_ref(), "BNB Chain · 链 ID 56");
         assert_eq!(

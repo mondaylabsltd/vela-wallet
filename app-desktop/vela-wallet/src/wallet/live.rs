@@ -864,10 +864,27 @@ mod tests {
             address: "0xme".to_owned(),
         });
         FeedView {
+            home_rows: home_cut(&rows),
             rows,
             transactions,
             ..host.view()
         }
+    }
+
+    /// The core's home cut over hand-built rows: everything up to and
+    /// including the third item, headers included (the core's `view()`).
+    fn home_cut(rows: &[FeedRow]) -> Vec<FeedRow> {
+        let mut items = 0;
+        let mut end = 0;
+        for (i, row) in rows.iter().enumerate() {
+            if matches!(row, FeedRow::Item { .. }) {
+                items += 1;
+                if items <= vela_core::app::activity_feed::HOME_ACTIVITY_ITEMS {
+                    end = i + 1;
+                }
+            }
+        }
+        rows[..end].to_vec()
     }
 
     /// A celebration, produced the way the machine produces one: a first pass
@@ -1099,6 +1116,54 @@ mod tests {
             summary: None,
             settlement: None,
         }
+    }
+
+    /// Issue 469: the home's Activity is the core's cut — the newest three —
+    /// and History is every row. Through the REAL feed core, five records on
+    /// two days: the home draws three rows, they are History's first three in
+    /// the same order (so drawn row N opens record N on either surface), and
+    /// only the days that head a drawn row are named.
+    #[test]
+    fn the_home_draws_the_newest_three_and_history_every_row() {
+        use vela_core::app::activity_feed::FeedTxStatus;
+        let s = strings();
+        let flow = flow_strings();
+        let records: Vec<_> = (0..5u32)
+            .map(|i| {
+                let mut record = dapp_record(&format!("dapp-{i}-tx"), FeedTxStatus::Confirmed);
+                // Newest first; the last two fall on the day before.
+                record.timestamp = 1_756_000_000.0 - f64::from(i) * 30_000.0;
+                record
+            })
+            .collect();
+        let view = feed_of(records);
+
+        let history: Vec<String> = crate::flows::live::history_ids(&view);
+        assert_eq!(history.len(), 5, "History keeps every row");
+        let all: usize = crate::flows::live::history(&view, &flow, &s, false)
+            .iter()
+            .map(|group| group.rows.len())
+            .sum();
+        assert_eq!(all, 5, "…and draws every one");
+
+        let home = activity_rows(&view, &s, &flow, false);
+        assert_eq!(
+            home.len(),
+            vela_core::app::activity_feed::HOME_ACTIVITY_ITEMS,
+            "the home draws the core's cut"
+        );
+        let home_ids = history_item_ids(&view);
+        assert_eq!(home_ids.len(), home.len(), "an id behind every drawn row");
+        assert_eq!(home_ids[..], history[..3], "the newest three, in order");
+        assert!(home[0].day.is_some(), "the first row carries its day");
+        // No header rides alone: every day named on the home heads a row.
+        let days = home.iter().filter(|row| row.day.is_some()).count();
+        let headers = view
+            .home_rows
+            .iter()
+            .filter(|row| matches!(row, FeedRow::Header { .. }))
+            .count();
+        assert_eq!(days, headers);
     }
 
     /// Spec 082 L-D3 (T072, RG1–RG2), spec 093: a dApp's transaction is in
@@ -2754,13 +2819,15 @@ pub fn receipt_toast(view: &FeedView, s: &WalletStrings) -> Option<SharedString>
 
 /// The ids of the feed ITEMS, in the order the home preview draws them.
 ///
-/// The preview drops the core's day headers, so this is the header-free walk;
-/// `flows::live::history_ids` is the same list for the full panel, which keeps
-/// them. Both exist because the two surfaces draw different shapes of the same
-/// feed, and a row must open its own transaction on either.
+/// The home draws the core's cut (`FeedView.home_rows`, issue 469: the newest
+/// three and their day headers), and this walks the SAME rows as
+/// [`activity_rows`], so drawn row N opens record N and the glow lands on the
+/// row it names. `flows::live::history_ids` is the full list for History,
+/// which keeps every row. Both exist because the two surfaces draw different
+/// shapes of the same feed, and a row must open its own transaction on either.
 #[must_use]
 pub fn history_item_ids(view: &FeedView) -> Vec<String> {
-    view.rows
+    view.home_rows
         .iter()
         .filter_map(|row| match row {
             FeedRow::Item { item } => Some(item.id.clone()),
@@ -2912,10 +2979,14 @@ pub(crate) fn badge(chain_id: u32) -> gpui::Hsla {
 
 /// The activity rows the home preview shows.
 ///
-/// `FeedView::rows` interleaves the core's day headers with the items. The
-/// home used to drop them ("the mocks draw no headings") — the web files its
-/// preview under its days (spec 038 #E3, 078 H-04), so a header now rides on
-/// the first item of its day as `day`, and row N is still feed item N.
+/// The home draws `FeedView::home_rows` — the core's cut of the feed (issue
+/// 469): the newest three items and the day headers over them, so Assets is
+/// never pushed off the page; "All" opens History, which draws every row.
+/// The cut is the core's, never taken here. The rows interleave the day
+/// headers with the items. The home used to drop them ("the mocks draw no
+/// headings") — the web files its preview under its days (spec 038 #E3, 078
+/// H-04), so a header now rides on the first item of its day as `day`, and
+/// row N is still the cut's item N ([`history_item_ids`]).
 #[must_use]
 pub fn activity_rows(
     view: &FeedView,
@@ -2925,7 +2996,7 @@ pub fn activity_rows(
 ) -> Vec<ActivityRowModel> {
     let mut rows = Vec::new();
     let mut day = None;
-    for row in &view.rows {
+    for row in &view.home_rows {
         match row {
             FeedRow::Header { day_start_ms, .. } => {
                 day = Some(crate::flows::live::day_label(*day_start_ms, flow));
