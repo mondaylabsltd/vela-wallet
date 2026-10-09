@@ -671,6 +671,20 @@ pub fn sign_confirm_state(
     )
 }
 
+/// The hand-off card's compact fee + speed row (spec 102, D4): the fee view of
+/// the session in force and the speed control's view (`None` without one), as
+/// last rendered (JSON) — a `HandoffFee` JSON (`{fee, tier?, tier_key?}`;
+/// draw `fee` exactly as the sheet's folded fee row draws `FeeView.fee`, and
+/// `tier_key` beside it), or `None`: no row (a message, or a fee not settled
+/// for the speed in force). The card's Open is the sheet's confirm: enabled
+/// only when `sign_confirm_state` is AND the integrity line opens. See
+/// `vela_core::app::sign_confirm::handoff_fee`.
+#[uniffi::export]
+#[must_use]
+pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> Option<String> {
+    vela_core::app::sign_confirm::handoff_fee_json(fee_json.as_deref(), speed_json.as_deref())
+}
+
 /// The landing's countdown (spec 099 R6), counted from when the relay put the
 /// bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
 /// JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.
@@ -708,9 +722,10 @@ pub fn key_method_words(method: String, chooser: String, unlock: String) -> Opti
     })
 }
 
-/// A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"own_page"` —
-/// the choosers' "Use my own signing page". `None` for a name the core does
-/// not know. See `vela_core::app::method_words::venue_words`.
+/// A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"signing_page"`
+/// — the choosers' "Use a trusted signing page" (D6; `"own_page"`, its name
+/// before, still reads). `None` for a name the core does not know. See
+/// `vela_core::app::method_words::venue_words`.
 #[uniffi::export]
 #[must_use]
 pub fn venue_words(row: String) -> Option<KeyMethodWords> {
@@ -723,13 +738,16 @@ pub fn venue_words(row: String) -> Option<KeyMethodWords> {
 }
 
 /// How an account signs on this device (spec 102), as JSON — a `SigningPlan`:
-/// `{domain, venue, blocked?, key?}`. `venue` is where its transactions and
-/// messages are reviewed and signed (`{"type":"in_vela"}` or
+/// `{domain, venue, blocked?, key?, key_label}`. `venue` is where its
+/// transactions and messages are reviewed and signed (`{"type":"in_vela"}` or
 /// `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
 /// set only when nothing on this device can; `key` is the key route
 /// (`{credential_id, method, transports, hints}`), absent for a record
-/// written before the sign-in key was kept. `None` for a record this build
-/// cannot read. See `vela_core::app::Account::signing_plan`.
+/// written before the sign-in key was kept; `key_label` is "Confirm with
+/// {key}"'s name — `{name?, place_key}`: draw `name` when set, else the
+/// translation of `place_key` (the key's own label when it is not the
+/// wallet's name, else its place). `None` for a record this build cannot
+/// read. See `vela_core::app::Account::signing_plan`.
 #[uniffi::export]
 #[must_use]
 pub fn signing_plan(account_json: String) -> Option<String> {
@@ -755,6 +773,19 @@ pub fn signing_venue_choices(
         &domain, &active, &saved,
     ))
     .ok()
+}
+
+/// The versions the person trusted for the page at `url` on this device
+/// (spec 102) — what to pass as `trusted` to `SignerPageTarget::choose` and
+/// `signer_page_admit` when checking that page. `saved_json` is the
+/// `SigningPage[]` `SigningPagesCore` keeps (`saved`). Empty for the official
+/// page, a page that is not saved, and a list that does not read.
+#[uniffi::export]
+#[must_use]
+pub fn signing_page_trusted(saved_json: String, url: String) -> Vec<String> {
+    let saved: Vec<vela_core::signing_venue::SigningPage> =
+        serde_json::from_str(&saved_json).unwrap_or_default();
+    vela_core::signing_venue::trusted_versions(&saved, &url)
 }
 
 /// The domain whose keys a page at `url` can use (spec 102): its host, or
@@ -3493,5 +3524,54 @@ mod tests_082 {
         let tempo = balance_read_plan(4217, "[]".into(), None, "[]".into()).unwrap();
         assert!(tempo.iter().all(|slot| slot.kind != "native"));
         assert!(balance_read_plan(8453, "{".into(), None, String::new()).is_err());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests_102_core_round {
+    use super::*;
+
+    /// A page's trusted versions come out of the saved list by its address —
+    /// never for the official page, nothing for a list that does not read.
+    #[test]
+    fn a_pages_trusted_versions_by_its_address() {
+        let own = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455";
+        let saved = format!(r#"[{{"url":"https://sign.example.com/","trusted":["{own}"]}}]"#);
+        assert_eq!(
+            signing_page_trusted(saved.clone(), "sign.example.com".to_owned()),
+            vec![own.to_owned()]
+        );
+        assert!(signing_page_trusted(saved, "https://sign.getvela.app/".to_owned()).is_empty());
+        assert!(signing_page_trusted("nope".to_owned(), "https://x.test/".to_owned()).is_empty());
+    }
+
+    /// The hand-off card's row: none for views that do not read, or no fee.
+    #[test]
+    fn the_hand_off_row_needs_a_fee() {
+        assert_eq!(handoff_fee_row(None, None), None);
+        assert_eq!(handoff_fee_row(Some("{".to_owned()), None), None);
+    }
+
+    /// The plan names the key the person confirms with.
+    #[test]
+    fn the_plan_carries_the_key_label() {
+        let record = serde_json::json!({
+            "id": "aa", "name": "Savings", "address": "0x1",
+            "public_key_hex": "04", "created_at_iso": "",
+            "keys": [{"credential_id": "aa", "public_key_hex": "04", "name": "Savings",
+                      "transports": "usb"}],
+            "sign_in_key": {"credential_id": "aa", "method": "security_key", "transports": "usb"}
+        });
+        let plan: serde_json::Value =
+            serde_json::from_str(&signing_plan(record.to_string()).unwrap()).unwrap();
+        assert_eq!(
+            plan["key_label"],
+            serde_json::json!({"place_key": "onboarding.create.methodSecurityKeyTitle"})
+        );
+        assert_eq!(
+            venue_words("own_page".to_owned()).map(|w| w.title_key),
+            Some("onboarding.create.signingPageTitle".to_owned())
+        );
     }
 }
