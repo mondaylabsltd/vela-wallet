@@ -110,8 +110,13 @@ final class ExploreNavigationScreenTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 5),
                       "‹ with no history did not return to the home")
 
-        // The header's action: the switcher; Done is the home again.
-        app.buttons["标签页"].firstMatch.tap()
+        // The header's action: the switcher; Done is the home again. Its
+        // target is a full 44 each way, and a finger near its top edge, off
+        // the words, still opens the switcher.
+        let action = app.buttons["标签页"].firstMatch
+        XCTAssertGreaterThanOrEqual(action.frame.height, 44, "the header's action is under a 44 target")
+        XCTAssertGreaterThanOrEqual(action.frame.width, 44, "the header's action is under a 44 target")
+        action.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         attach(app.screenshot(), named: "walk-06-switcher-from-home")
         app.buttons["完成"].tap()

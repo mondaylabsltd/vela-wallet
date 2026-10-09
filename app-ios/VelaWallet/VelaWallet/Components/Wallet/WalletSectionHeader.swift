@@ -19,6 +19,16 @@ struct WalletSectionHeader: View {
     var chevron: Bool = true
     /// Spec 021: the trailing action opens a flow. Absent in the gallery.
     var onAction: (() -> Void)?
+    /// The action is a control of its own and takes a full hit target
+    /// (`Tokens.Layout.hitTarget`, 44) — the Explore home's resume header,
+    /// whose 标签页 › opens the tab switcher (Android's `actionHitTarget`).
+    /// Off by default: the other headers keep their targets as they are.
+    var actionHitTarget = false
+
+    /// How far the action's target reaches past its words on each side when
+    /// `actionHitTarget` is on: any words at least 12 across make a target
+    /// of at least 44 (`Tokens.Layout.hitTarget`) each way.
+    static let hitOutset = Tokens.Space.s16
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -27,8 +37,17 @@ struct WalletSectionHeader: View {
                 .foregroundStyle(theme.fgBase)
             Spacer(minLength: Tokens.Space.s12)
             if let onAction {
-                Button(action: onAction) { trailing.contentShape(Rectangle()) }
-                    .buttonStyle(.plain)
+                // The target grows AROUND the words and is laid out at their
+                // size: the header keeps the board's height and baseline, and
+                // only the area that answers a finger is larger.
+                let outset = actionHitTarget ? Self.hitOutset : 0
+                Button(action: onAction) {
+                    trailing
+                        .padding(outset)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(-outset)
             } else {
                 trailing
             }

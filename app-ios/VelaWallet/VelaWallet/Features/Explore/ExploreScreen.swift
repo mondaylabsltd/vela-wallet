@@ -933,9 +933,12 @@ struct ExploreScreen: View {
     /// left; the header's action is the switcher.
     private func resumeSection(_ section: ResumeSectionModel) -> some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+            // The action is a control of its own, the way to the switcher
+            // from the home: a full 44 target, like Android's.
             WalletSectionHeader(
                 title: section.title, action: section.action,
-                onAction: { openTabs(from: .start) }
+                onAction: { openTabs(from: .start) },
+                actionHitTarget: true
             )
             .padding(.vertical, Tokens.Space.s12)
             .accessibilityIdentifier("explore.resume.header")
