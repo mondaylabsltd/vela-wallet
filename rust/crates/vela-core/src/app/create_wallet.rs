@@ -77,6 +77,14 @@ use ts_rs::TS;
 /// is consenting to.
 pub const ACK_COUNT: usize = 3;
 
+/// The keys screen's heading over the three places (issue 475), with no key
+/// yet: the list is the only way forward, so it is open and says what it is.
+pub const ADD_HEADING_FIRST: &str = "onboarding.create.addKeyBtn";
+/// … with a key or more and room for another: the list folds under this.
+pub const ADD_HEADING_ANOTHER: &str = "onboarding.create.addMethodLabel";
+/// … with the set full.
+pub const ADD_HEADING_FULL: &str = "onboarding.create.keyLimitReached";
+
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
@@ -481,6 +489,18 @@ pub struct CreateView {
     pub can_choose_page: bool,
     /// The places a key may be minted in — always the three.
     pub add_methods: Vec<KeyMethod>,
+    /// The corpus key of the heading over them (issue 475):
+    /// [`ADD_HEADING_FIRST`] ("Add a passkey") with no key yet,
+    /// [`ADD_HEADING_ANOTHER`] ("Add another") with room for one more,
+    /// [`ADD_HEADING_FULL`] ("Limit of 7 reached") at the cap. It is the
+    /// screen's only add affordance — no "+ Add a passkey" row beside it.
+    #[serde(default)]
+    pub add_heading_key: String,
+    /// The three places are drawn open, with no fold to tap: no key yet and
+    /// one may be added. Otherwise they fold under the heading (closed until
+    /// tapped) — or, at the cap, are not drawn.
+    #[serde(default)]
+    pub methods_pinned: bool,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
     /// The sole drafted key is NOT a synced passkey: one lost device would
@@ -576,6 +596,7 @@ impl App for CreateWallet {
         };
 
         let at_key_list = model.stage == Stage::AddKeys;
+        let can_add_key = at_key_list && model.drafts.len() < crate::safe::MAX_MULTI_KEYS;
         CreateView {
             stage,
             name: model.name.clone(),
@@ -636,17 +657,30 @@ impl App for CreateWallet {
                     }
                 })
                 .collect(),
-            can_add_key: at_key_list && model.drafts.len() < crate::safe::MAX_MULTI_KEYS,
+            can_add_key,
             signing_domain: super::new_signing(model.signing_page.as_deref()).0,
             signing_page: model.signing_page.clone(),
             can_choose_page: !busy && !has_draft,
             add_methods: methods_for(),
+            add_heading_key: add_heading_key(model.drafts.len()).to_owned(),
+            methods_pinned: !has_draft && can_add_key,
             can_finish: at_key_list
                 && has_draft
                 && model.drafts.iter().all(|draft| draft.proof.is_some())
                 && !needs_second_key(&model.drafts),
             needs_second_key: needs_second_key(&model.drafts),
         }
+    }
+}
+
+/// The heading over the three places for a set of `keys` drafted keys
+/// ([`CreateView::add_heading_key`]).
+#[must_use]
+pub fn add_heading_key(keys: usize) -> &'static str {
+    match keys {
+        0 => ADD_HEADING_FIRST,
+        n if n < crate::safe::MAX_MULTI_KEYS => ADD_HEADING_ANOTHER,
+        _ => ADD_HEADING_FULL,
     }
 }
 

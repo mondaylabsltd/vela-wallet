@@ -8,7 +8,10 @@
 mod support;
 
 use support::{Driver, NOW};
-use vela_core::app::create_wallet::{CreateStage, CreateWallet, Event, SubmitLabel, ACK_COUNT};
+use vela_core::app::create_wallet::{
+    add_heading_key, CreateStage, CreateWallet, Event, SubmitLabel, ACK_COUNT, ADD_HEADING_ANOTHER,
+    ADD_HEADING_FIRST, ADD_HEADING_FULL,
+};
 use vela_core::app::shell::{ShellOperation, ShellResult};
 use vela_core::app::{FailureKind, KeyMethod, PromptKind, StatusKey};
 
@@ -667,6 +670,64 @@ fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     // ROW says, whatever was tapped. A row that drew the tap could show a
     // hardware fob for a passkey that lives on this laptop.
     assert_eq!(keys[1].kind, KeyMethod::Platform, "the row says what it IS");
+}
+
+/// Issue #475: the core heads the three places, and says whether they are
+/// drawn open. With no key the list is the only way forward — open, headed
+/// "Add a passkey" (it read "Add another" with nothing added). With a key it
+/// folds under "Add another"; at the cap, "Limit of 7 reached".
+#[test]
+fn the_keys_screen_heading_follows_the_count() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    let view = sut.view();
+    assert!(view.keys.is_empty());
+    assert_eq!(view.add_heading_key, ADD_HEADING_FIRST);
+    assert!(view.methods_pinned, "nothing else on the screen to tap");
+
+    let view = registered("Ann").view();
+    assert_eq!(view.keys.len(), 1);
+    assert_eq!(view.add_heading_key, ADD_HEADING_ANOTHER);
+    assert!(!view.methods_pinned, "folded under the heading");
+
+    let view = two_keys("Ann").view();
+    assert_eq!(view.add_heading_key, ADD_HEADING_ANOTHER);
+    assert!(!view.methods_pinned);
+
+    assert_eq!(add_heading_key(0), ADD_HEADING_FIRST);
+    assert_eq!(add_heading_key(6), ADD_HEADING_ANOTHER);
+    assert_eq!(add_heading_key(7), ADD_HEADING_FULL);
+    assert_eq!(add_heading_key(8), ADD_HEADING_FULL);
+}
+
+/// Mid-registration of the first key nothing can be added; the heading
+/// still names what the list is for, and the list is not pinned open over
+/// the ceremony.
+#[test]
+fn the_heading_waits_out_the_first_ceremony() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Platform,
+    });
+    let view = sut.view();
+    assert!(!view.can_add_key);
+    assert_eq!(view.add_heading_key, ADD_HEADING_FIRST);
+    assert!(!view.methods_pinned);
+}
+
+#[test]
+fn the_heading_keys_are_in_the_corpus() {
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [ADD_HEADING_FIRST, ADD_HEADING_ANOTHER, ADD_HEADING_FULL] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 /// Form → group key → (a signing page chosen) → key 1 registered on `page`'s
