@@ -3,12 +3,15 @@ package app.getvela.wallet
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeExecutor
 import app.getvela.wallet.feature.send.core.FeeTier
+import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SpeedControl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
@@ -43,14 +46,20 @@ class SpeedControlQuoteTest {
     @Volatile
     private var inBandUp = true
 
+    /** The chain's gas price, in gwei — every price the script quotes scales with it. */
+    @Volatile
+    private var gwei = 1L
+
+    private fun wei(gweis: Long) = "0x" + (gweis * 1_000_000_000L).toString(16)
+
     private fun script() {
         port.always("eth_getCode") { FakeRelayPort.body("0x6080") }
         port.always("eth_call") { FakeRelayPort.body("0x" + "0".repeat(63) + "7") }
-        port.always("eth_gasPrice") { FakeRelayPort.body("0x3b9aca00") }
-        port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", "0x3b9aca00")) }
+        port.always("eth_gasPrice") { FakeRelayPort.body(wei(gwei)) }
+        port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", wei(gwei))) }
         port.always("eth_maxPriorityFeePerGas") { FakeRelayPort.body("0x5f5e100") }
         port.always("pimlico_getUserOperationGasPrice") {
-            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", "0x77359400").put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")))
+            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", wei(2 * gwei)).put("networkFeePerGas", wei(gwei)).put("relayerFeePerGas", wei(gwei))))
         }
         port.always("vela_getInBandGasQuote") {
             if (!inBandUp) {
@@ -112,6 +121,56 @@ class SpeedControlQuoteTest {
             assertNull("attempt $it answered with the stale failure: ${next.view.failed}", next.view.failed)
             assertNotNull(next.view.fee)
         }
+    }
+
+    /** Every view [SpeedControl.fee] shows, from now on — written by the control's threads. */
+    private fun SpeedControl.watch(): MutableList<FeeView> {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<FeeView>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
+        scope.launch { fee.collect { seen += it } }
+        return seen
+    }
+
+    /**
+     * The fee core prices the quote on screen again by itself, once a block
+     * (`requote_interval_ms`: 6 s on Gnosis): a dearer block reaches [fee]
+     * with nothing in the shell asking. That is why the send and signing
+     * controllers no longer re-ask a `stale` quote (spec 045 US4's
+     * `requoteStale`): the core already does, every block.
+     */
+    @Test
+    fun `the core prices a settled quote again by itself, a block later`() {
+        val speed = control()
+        val first = (speed.ask() as SpeedControl.Quoted.Settled).view.fee
+        assertNotNull(first)
+        val seen = speed.watch()
+        gwei = 2 // the next block is dearer
+        val next = runBlocking { withTimeout(20_000) { speed.fee.first { it.fee != null && it.fee != first } } }
+        assertTrue(
+            "priced at the dearer block: $first → ${next.fee}",
+            next.fee!!.network_fee_per_gas.toBigInteger() > first!!.network_fee_per_gas.toBigInteger(),
+        )
+        assertTrue("never stale while idle: $seen", seen.none { it.stale && !it.busy })
+    }
+
+    /**
+     * And when that pricing fails, the figure older than a block is priced
+     * again at once — `stale` and `busy` together, so every confirm waits —
+     * and a second failure takes the figure away and says so. A view that is
+     * stale and idle never shows, so a shell's "stale and not busy: ask again"
+     * could never fire.
+     */
+    @Test
+    fun `a re-pricing that fails is caught up by the core, never left stale and idle`() {
+        val speed = control()
+        assertNotNull((speed.ask() as SpeedControl.Quoted.Settled).view.fee)
+        val seen = speed.watch()
+        // The relay's fee rows go down. The first block re-prices from the
+        // rows read with the quote (held 8 s); the next one cannot.
+        inBandUp = false
+        val failed = runBlocking { withTimeout(30_000) { speed.fee.first { it.failed != null } } }
+        assertNull("the figure older than a block is taken away", failed.fee)
+        assertTrue("never stale while idle: $seen", seen.none { it.stale && !it.busy })
     }
 
     private companion object {

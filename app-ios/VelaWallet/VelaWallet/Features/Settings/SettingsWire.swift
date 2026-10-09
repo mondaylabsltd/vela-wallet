@@ -337,7 +337,7 @@ struct NetDappAddViewWire: Decodable, Equatable {
 // MARK: - fee_tier_pref (spec 069)
 
 /// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
-/// real one, the factory `fast` when nothing was chosen.
+/// real one, the factory `standard` when nothing was chosen.
 struct FeeTierPrefViewWire: Decodable, Equatable {
     let tier: String
     /// `false` ⇒ the factory default is showing, not a choice.

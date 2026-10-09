@@ -16,7 +16,7 @@ class FeeTierExecutor(private val store: KeyValueStore) {
 
     suspend fun perform(operation: FeeTierPrefOperation): FeeTierPrefShellResult = when (operation) {
         // Raw, and absent means "never chose": a name this build does not
-        // know reads as the factory `fast` in the core rather than being
+        // know reads as the factory `standard` in the core rather than being
         // coerced here into something that would then go on the wire.
         is FeeTierPrefOperation.ReadStoredTier ->
             FeeTierPrefShellResult.StoredTier(store.read(KeyValueStore.Keys.FEE_TIER))

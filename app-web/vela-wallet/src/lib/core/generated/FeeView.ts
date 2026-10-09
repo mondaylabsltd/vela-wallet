@@ -14,7 +14,12 @@ busy: boolean, failed: FeeFailure | null,
  */
 fee: FeeEstimateView | null, 
 /**
- * The 30s TTL elapsed — advisory; the shell shows a refresh affordance.
+ * The figure on screen is older than a block — a background re-pricing
+ * failed, or the shell said the app slept ([`Event::QuoteExpired`]) —
+ * and the machine is already pricing it again, `busy`, before anything
+ * may sign it: a shell has nothing to ask. Left `true` without `busy`
+ * only when the confirm is left mid-way ([`Event::LeaveConfirm`]), on a
+ * figure the form's Continue prices again anyway.
  */
 stale: boolean, fee_token: string | null, options: Array<FeeOptionView>, 
 /**

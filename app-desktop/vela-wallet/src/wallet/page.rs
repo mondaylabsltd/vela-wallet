@@ -11203,15 +11203,15 @@ impl WalletPage {
             .offered
             .iter()
             .map(|tier| {
+                // `offered` never holds the dead `rapid`; were it there, it
+                // would read as the core reads it — the factory `standard`.
                 let (name, hint) = match tier {
-                    FeeTier::Standard => (
+                    FeeTier::Standard | FeeTier::Rapid => (
                         s.gas_tier_standard.clone(),
                         s.gas_tier_hint_standard.clone(),
                     ),
                     FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
-                    FeeTier::Fast | FeeTier::Rapid => {
-                        (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
-                    }
+                    FeeTier::Fast => (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone()),
                 };
                 (name, Some(hint), *tier == view.tier)
             })

@@ -543,7 +543,7 @@ export function withLiveCurrency(
  *
  * One shape for both layouts: the row shows the tier in force and the picker
  * marks it. `view.tier` is ALWAYS a real tier — the core answers the factory
- * `fast` when nothing was stored — so neither surface ever has to draw an
+ * `standard` when nothing was stored — so neither surface ever has to draw an
  * "unknown speed", and neither can disagree with the send screen's folded
  * control, which reads the same view.
  */

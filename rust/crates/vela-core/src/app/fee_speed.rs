@@ -377,8 +377,9 @@ pub fn speed_is_free(preferred: FeeTier, rows: &[(FeeTier, Option<&FeeEstimateVi
 /// their default while it runs upgraded.
 ///
 /// `None` — so not one extra quote — for everybody whose default is already
-/// the fastest (the factory default, so most people); `None` the moment the
-/// person picks a tier on this send, because an upgrade may never overrule a
+/// the fastest (a stored `fast`: the factory default is `standard`, so most
+/// people's form prices the fastest beside it); `None` the moment the person
+/// picks a tier on this send, because an upgrade may never overrule a
 /// decision; and `None` once the send has left its form, because the confirm
 /// is the last screen before a signature and the tier it names must not change
 /// under somebody reading it.

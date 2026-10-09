@@ -25,6 +25,7 @@ import {
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { fill } from '$lib/wallet/messages';
+import { FeeTierPrefCore } from '$lib/core/client';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
@@ -637,11 +638,18 @@ describe('the default transaction speed, live (spec 068)', () => {
 	});
 
 	// A device that never chose still has to read as something, and the
-	// something is the factory default — what every shell did before 068.
+	// something is the factory default — the core's own view before any read,
+	// `standard` since the Ethereum fee fix (it was `fast`).
 	it('reads as the factory default when nothing was ever chosen', () => {
-		const model = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), view('fast', false));
-		expect(row(model)?.value).toBe(m.feeSpeed.fast);
-		expect(model.feeSpeedSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual(['fast']);
+		const core = new FeeTierPrefCore();
+		const factory = JSON.parse(core.view()) as FeeTierPrefView;
+		core.free();
+		expect(factory).toMatchObject({ tier: 'standard', committed: false });
+		const model = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), factory);
+		expect(row(model)?.value).toBe(m.feeSpeed.standard);
+		expect(model.feeSpeedSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual([
+			'standard'
+		]);
 	});
 
 	it('never offers the dead `rapid` tier', () => {

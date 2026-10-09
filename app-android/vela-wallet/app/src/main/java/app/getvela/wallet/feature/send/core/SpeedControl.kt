@@ -402,24 +402,6 @@ class SpeedControl(
     }
 
     /**
-     * The quote in force went stale (the policy's TTL): ask the same question
-     * again, if one was asked and nothing is measuring. The fresh estimate
-     * arrives on [fee].
-     */
-    fun requoteStale(): Boolean {
-        val session = inForce.value
-        val ask = session.ask ?: return false
-        val deployed = session.deployed ?: return false
-        if (session.reading || session.view.busy) return false
-        VelaLog.event("$area.fee", "re-quote on stale", "chain" to ask.chainId)
-        synchronized(sessionLock) {
-            session.host.dispatch(ask.event(deployed, numberPreset()), FeeEvent.serializer())
-            tellMeasured(session)
-        }
-        return true
-    }
-
-    /**
      * A question dispatched: to which session, the estimate it held before, and
      * the question's event number there (`CoreHost.dispatchNumbered`) — or,
      * [chainRead], the deployment read that kept it from being dispatched at

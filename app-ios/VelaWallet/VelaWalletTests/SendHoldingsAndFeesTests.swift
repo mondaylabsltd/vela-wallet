@@ -443,6 +443,104 @@ struct SendHoldingsAndFeesTests {
         }
     }
 
+    // MARK: - The core prices the quote on screen again by itself
+
+    /// The clock a test moves: what the relay holds ages on it, and
+    /// `FeeStore.elapse` runs the fee machine's timer out on it.
+    private final class TestClock {
+        var ms: Double = 0
+    }
+
+    /// One block on Gnosis — `requote_interval_ms` is 6 s there (the floor of
+    /// 6–30 s): the chain's held readings (5 s) are past their window, the
+    /// relay's fee rows (8 s) are not, and the fee machine's re-pricing timer
+    /// runs out. Waits until whatever that set going has settled.
+    private func aBlockPasses(_ clock: TestClock, _ fees: FeeStore) async {
+        clock.ms += 6_000
+        fees.elapse("start_ttl")
+        await Wait.until { fees.isIdle }
+    }
+
+    /// The chain twice as dear as `scriptFeeReads` has it: 2 gwei where it says 1.
+    private func scriptADearerBlock(_ port: StaggeredRelayPort) {
+        port.rpc["eth_gasPrice"] = .ok("0x77359400")
+        port.rpc["eth_getBlockByNumber"] = .ok(["baseFeePerGas": "0x77359400"] as [String: Any])
+        port.rpc["eth_maxPriorityFeePerGas"] = .ok("0x77359400")
+        port.rpc["pimlico_getUserOperationGasPrice"] = .ok([
+            "slow": ["maxFeePerGas": "0x77359400"] as [String: Any],
+            "standard": ["maxFeePerGas": "0xb2d05e00"] as [String: Any],
+            "fast": ["maxFeePerGas": "0xee6b2800"] as [String: Any],
+        ] as [String: Any])
+    }
+
+    private func settledQuote(_ port: StaggeredRelayPort, _ clock: TestClock) async throws -> (FeeStore, FeeEstimateWire) {
+        port.baseMs = 0
+        port.staggerMs = 0
+        scriptFeeReads(port)
+        let relay = RelayClient(port: port, now: { clock.ms }, retryDelayMs: 0)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
+        let view = await fees.quote(
+            chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
+            calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+            feeToken: nil
+        )
+        let fee = try #require(view?.fee, "\(String(describing: view))")
+        await Wait.until { fees.isIdle }
+        return (fees, fee)
+    }
+
+    /// The fee core prices the quote on screen again by itself, a block on
+    /// (`requote_interval_ms`): a dearer block reaches the fee row with
+    /// nothing in the shell asking. That is why the send confirm and the
+    /// signing sheet no longer re-ask a `stale` quote (spec 045 US4's TTL
+    /// re-ask): the core already does, every block.
+    @Test func theCorePricesASettledQuoteAgainByItselfABlockLater() async throws {
+        let port = StaggeredRelayPort()
+        let clock = TestClock()
+        let (fees, first) = try await settledQuote(port, clock)
+        #expect(first.networkFeePerGas != "0", "\(first)")
+        var seen: [FeeViewWire] = []
+        fees.onInForce = { seen.append($0) }
+
+        scriptADearerBlock(port)
+        await aBlockPasses(clock, fees)
+
+        let next = try #require(fees.view?.fee, "\(String(describing: fees.view))")
+        #expect(
+            (Decimal(string: next.networkFeePerGas) ?? 0) > (Decimal(string: first.networkFeePerGas) ?? 0),
+            "priced at the dearer block: \(first.networkFeePerGas) → \(next.networkFeePerGas)"
+        )
+        #expect((port.counts["eth_gasPrice"] ?? 0) > 1, "the chain was read again: \(port.counts)")
+        #expect(!seen.isEmpty, "the re-pricing never reached the fee row")
+        #expect(!seen.contains { $0.stale && !$0.busy }, "stale and idle: \(seen)")
+    }
+
+    /// And when that pricing fails, the figure older than a block is priced
+    /// again at once — `stale` and `busy` together, so every confirm waits —
+    /// and a second failure takes the figure away and says so. A view that is
+    /// stale and idle never shows, so a shell's "stale and not busy: ask
+    /// again" could never fire.
+    @Test func aRepricingThatFailsIsCaughtUpByTheCoreNeverLeftStaleAndIdle() async throws {
+        let port = StaggeredRelayPort()
+        let clock = TestClock()
+        let (fees, _) = try await settledQuote(port, clock)
+        var seen: [FeeViewWire] = []
+        fees.onInForce = { seen.append($0) }
+
+        // The relay's fee rows go down. The first block re-prices from the
+        // rows read with the quote (held 8 s); the next one cannot.
+        port.rpc["vela_getInBandGasQuote"] = .failed(rateLimited: false)
+        await aBlockPasses(clock, fees)
+        #expect(fees.view?.fee != nil && fees.view?.failed == nil, "\(String(describing: fees.view))")
+        await aBlockPasses(clock, fees)
+
+        let failed = try #require(fees.view)
+        #expect(failed.failed != nil, "the core's failure is said: \(failed)")
+        #expect(failed.fee == nil, "the figure older than a block is taken away")
+        #expect(seen.contains { $0.stale && $0.busy }, "caught up at once, stale and busy: \(seen)")
+        #expect(!seen.contains { $0.stale && !$0.busy }, "stale and idle: \(seen)")
+    }
+
     // MARK: - The fee coin nobody chose
 
     /// 0 xDAI and 500 USDC: asked with the coin left to the machine, the quote

@@ -724,8 +724,8 @@ function sendForm(
 
 	// Drawn FOLDED, which is how the control always arrives (spec 068): the
 	// board shows what a person sees on opening the form, not the picker. The
-	// summary is `fast` here because that is the factory default; live, it is
-	// whatever this person chose in Settings.
+	// summary is `fast` here — somebody who chose it in Settings (the factory
+	// default is `standard`); live, it is whatever this person chose.
 	const speed = {
 		label: m['send.feeSpeedLabel'],
 		value: m['send.gasTier.fast'],
