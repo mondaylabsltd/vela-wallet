@@ -59,7 +59,7 @@ use vela_core::app::send::{
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
     SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
-use vela_core::app::tx_tracker::TxTracker;
+use vela_core::app::tx_tracker::{InFlightOp, TxTracker};
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
@@ -212,6 +212,10 @@ pub struct SendHost {
     /// relay then acknowledges changes its outcome while its status stays
     /// `pending` (spec 082 RA10).
     last_receipt: Option<SendReceiptOutcome>,
+    /// The operations holding their account's nonce, as last told to the send
+    /// machine (`tx_tracker::in_flight_ops` of the tracker's own view) — told
+    /// again only when the list changes.
+    in_flight_fed: Option<Vec<InFlightOp>>,
     /// When the tracker learned the relay put this send on the network
     /// (spec 099 R6): what the landing's countdown counts from.
     pub relay_sent_at_ms: Option<f64>,
@@ -325,6 +329,7 @@ impl SendHost {
             relay_sent_at_ms: None,
             tracked_hash: None,
             last_receipt: None,
+            in_flight_fed: None,
             submits: Submits::default(),
         };
 
@@ -349,6 +354,9 @@ impl SendHost {
         let tracked = resident::resident::<TxTracker>(cx);
         cx.observe(&tracked, |host, tracked, cx| host.on_tracker(&tracked, cx))
             .detach();
+        // What is in flight already holds its nonce for the first confirm,
+        // not only from the tracker's next render.
+        host.forward_in_flight(&tracked, cx);
 
         // The stored default speed, read once now and again whenever Settings
         // changes it — a send already open follows the new default until the
@@ -804,6 +812,7 @@ impl SendHost {
                 maybe_sent,
                 submit_block,
                 admitted,
+                sender,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
                 self.last_receipt = None;
@@ -815,6 +824,7 @@ impl SendHost {
                         maybe_sent: *maybe_sent,
                         submit_block: *submit_block,
                         admitted: *admitted,
+                        sender: sender.clone(),
                     },
                     cx,
                 );
@@ -1079,7 +1089,25 @@ impl SendHost {
 
     // -- the tracker ----------------------------------------------------------
 
+    /// Every operation in flight on this device, from the tracker's own view
+    /// (`tx_tracker::in_flight_ops`, which reads `sender` and `stalled`), to
+    /// the send machine: while the account has one on the form's chain, the
+    /// confirm is held (`SendView.previous_pending`) — a second send signed
+    /// now would take the same nonce. The machine dedupes too; this only
+    /// keeps an unchanged list from being dispatched on every render.
+    fn forward_in_flight(
+        &mut self,
+        tracked: &Entity<ResidentCore<TxTracker>>,
+        cx: &mut Context<Self>,
+    ) {
+        let view = tracked.read(cx).view();
+        if let Some(ops) = tracker::in_flight_news(&view, &mut self.in_flight_fed) {
+            self.dispatch(SendEvent::InFlightOps { ops }, cx);
+        }
+    }
+
     fn on_tracker(&mut self, tracked: &Entity<ResidentCore<TxTracker>>, cx: &mut Context<Self>) {
+        self.forward_in_flight(tracked, cx);
         let Some(hash) = self.tracked_hash.clone() else {
             return;
         };
@@ -1286,12 +1314,6 @@ impl SpeedHost for SendHost {
         self.pending_fee.is_some()
     }
 
-    fn unreadable(&mut self, cx: &mut Context<Self>) {
-        if let Some(id) = self.pending_fee.take() {
-            self.resolve_send(id, estimate_failed(), cx);
-        }
-    }
-
     fn fees_moved(&mut self, cx: &mut Context<Self>) {
         self.ensure_watcher(cx);
     }
@@ -1314,9 +1336,12 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
         FeeFailure::CalculationFailed => SendEstimateFailure::CalculationFailed,
         FeeFailure::EstimateFailed => SendEstimateFailure::EstimateFailed,
         FeeFailure::GasQuoteTooHigh => SendEstimateFailure::GasQuoteTooHigh,
-        // A chain read the quote needed got no answer (spec 082 RJ13): to the
-        // send machine, a quote that could not be had.
-        FeeFailure::ChainRead { .. } => SendEstimateFailure::QuoteUnavailable,
+        // A chain read the quote needed got no answer (spec 082 RJ13), or the
+        // read never left the app (issue #483): to the send machine, a quote
+        // that could not be had. The fee row says which, in the core's words.
+        FeeFailure::ChainRead { .. } | FeeFailure::Internal => {
+            SendEstimateFailure::QuoteUnavailable
+        }
         // Spec 083 fee: the relay answered that the operation fails. The send
         // screen has no sentence of its own for it and says what it said for
         // this refusal before the fee machine could tell it apart.

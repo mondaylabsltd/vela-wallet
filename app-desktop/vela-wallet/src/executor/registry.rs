@@ -229,6 +229,10 @@ struct KeyGroups {
 pub struct KeyStatus {
     pub registered: bool,
     pub unit_ids: Vec<u32>,
+    /// Who vouched for the answer — the resolver's `Done.verified_by`, passed
+    /// to the core untouched. Only Gnosis (the record's home) makes a "no
+    /// record" a verdict the core may offer the two-signature rebuild on.
+    pub verified_by: vela_core::registry_resolve::VerifiedBy,
 }
 
 pub fn query_by_public_key(public_key_hex: &str) -> Result<KeyStatus> {
@@ -237,6 +241,12 @@ pub fn query_by_public_key(public_key_hex: &str) -> Result<KeyStatus> {
     })?;
     // Whoever listed this key's units is who is asked about them.
     set_unit_source(&resolved.source);
+    key_status(&resolved)
+}
+
+/// What a resolved key question says, for the core: registered, its units,
+/// and who vouched for it — the resolver's own `verified_by`, untouched.
+fn key_status(resolved: &Resolved) -> Result<KeyStatus> {
     let profile: KeyProfile = serde_json::from_str(&resolved.body).map_err(|error| {
         RegistryError::answered(format!("Query returned unreadable JSON: {error}"))
     })?;
@@ -261,6 +271,7 @@ pub fn query_by_public_key(public_key_hex: &str) -> Result<KeyStatus> {
     Ok(KeyStatus {
         registered: profile.entry.is_some_and(|entry| !entry.is_null()),
         unit_ids,
+        verified_by: resolved.verified_by,
     })
 }
 
@@ -562,10 +573,6 @@ struct Resolved {
     body: String,
     source: String,
     /// Which chain PROVED the answer; `None` = nobody could.
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "read by the live tests; no screen says it yet")
-    )]
     verified_by: vela_core::registry_resolve::VerifiedBy,
     index_discarded: bool,
 }
@@ -1260,6 +1267,49 @@ fn urlencode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The correctness batch, item 1: who vouched for a key's answer reaches
+    /// the core untouched — only Gnosis's "no record" may offer the
+    /// two-signature rebuild, and an answer the index alone gave (or
+    /// Ethereum's empty one) is nobody's verdict.
+    #[test]
+    fn a_key_status_carries_who_vouched_for_it() {
+        use vela_core::registry_resolve::VerifiedBy;
+        let resolved = |body: &str, verified_by| Resolved {
+            body: body.to_owned(),
+            source: "index".to_owned(),
+            verified_by,
+            index_discarded: false,
+        };
+        let nothing = r#"{"entry":null,"groups":{"unitIds":[]}}"#;
+        let gnosis = key_status(&resolved(nothing, VerifiedBy::Gnosis)).unwrap();
+        assert!(!gnosis.registered);
+        assert_eq!(gnosis.verified_by, VerifiedBy::Gnosis);
+        for unvouched in [VerifiedBy::None, VerifiedBy::Ethereum] {
+            assert_eq!(
+                key_status(&resolved(nothing, unvouched))
+                    .unwrap()
+                    .verified_by,
+                unvouched
+            );
+        }
+        let listed = key_status(&resolved(
+            r#"{"entry":{"x":"0x1"},"groups":{"unitIds":[10]}}"#,
+            VerifiedBy::None,
+        ))
+        .unwrap();
+        assert!(listed.registered);
+        assert_eq!(listed.unit_ids, vec![10]);
+        assert_eq!(listed.verified_by, VerifiedBy::None);
+        // And on the wire, as the core reads it.
+        let wire = serde_json::to_value(vela_core::app::shell::ShellResult::RegistryKeyStatus {
+            registered: gnosis.registered,
+            unit_ids: gnosis.unit_ids,
+            verified_by: gnosis.verified_by,
+        })
+        .unwrap();
+        assert_eq!(wire["verified_by"], "gnosis");
+    }
 
     /// Spec 102 R3: a publish files its unit under its page's domain, and
     /// under the wallet's own relying party when it ran in the app — the

@@ -1632,6 +1632,12 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
     });
     let quote = in_hand.filter(|_| !of_another_tier);
     let measuring = i.send.fee_busy || i.fee.busy;
+    // A coin just switched to (correctness batch item 4): its figure is drawn
+    // at once, with the measuring sign, while the core measures it again with
+    // that coin's fee leg — `provisional`, and unconfirmable until it lands.
+    // Never "…" over a figure the person just chose, never a figure that
+    // claims to be settled.
+    let provisional = i.fee.provisional && quote.is_some();
     FeeRow {
         // A figure the relay did not quote — a local fallback from defaults —
         // is an ESTIMATE and is labelled as one (spec 038 finding 14).
@@ -1641,7 +1647,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
             i.s.network_fee.clone()
         },
         mark: fee_mark(i.send),
-        value: if measuring || of_another_tier {
+        value: if (measuring && !provisional) || of_another_tier {
             i.s.fee_pending.clone()
         } else {
             SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale, i.money))
@@ -1649,7 +1655,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         refresh: i.speed.map(|_| i.s.fee_refresh.clone()),
         // A measurement is out — whoever started it — the same fact the "…"
         // reads, so the row never claims to be settled and measuring at once.
-        refreshing: measuring,
+        refreshing: measuring || provisional,
         // `FeeView.stale` had no consumer on the desktop: the 30 s TTL ran out
         // and nothing said so. Not while a fresh measurement is out ("old" is
         // about to stop being true), and not over a row with no figure of its
@@ -3594,6 +3600,9 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     send.tx_error.map(|key| match key {
         vela_core::app::send::SendTxErrorKey::Generic => s.tx_error_generic.clone(),
         vela_core::app::send::SendTxErrorKey::BundlerFund => s.tx_error_bundler_fund.clone(),
+        // The relay refused it: another transaction of this account holds
+        // the nonce. Not a network failure — "Try again" waits for it.
+        vela_core::app::send::SendTxErrorKey::PreviousPending => s.previous_pending.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
@@ -3687,7 +3696,21 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     let sweep = send
         .multi_select_mode
         .then(|| sweep_breakdown(send, i.locale, i.money));
+    // The confirm held for the account's previous transaction (correctness
+    // batch item 3): one line under it, the core's key — whatever `fee_busy`
+    // says, and nothing else in its place.
+    let held = send
+        .previous_pending
+        .as_ref()
+        .map(|_| s.previous_pending.clone());
+    // The relay refused the last attempt for the same reason: said once —
+    // by the held line while the first is still in flight, else here.
+    let refused_for_previous =
+        send.tx_error == Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
     let notice = send_notice(i, true).or_else(|| {
+        if refused_for_previous && held.is_some() {
+            return None;
+        }
         tx_error_text(send, s).map(|body| SendNotice {
             dismiss: None,
             title: None,
@@ -3798,7 +3821,13 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             .then(|| s.first_time_tag.clone())
         },
         notice,
-        cta: s.confirm_send.clone(),
+        // After the relay's "previous transaction pending", the confirm is
+        // "Try again" — it waits for the first like any held confirm.
+        cta: if refused_for_previous {
+            s.try_again.clone()
+        } else {
+            s.confirm_send.clone()
+        },
         // Signing and submitting are waits; `can_confirm` is the core's gate
         // (fee settled ∧ nothing re-quoting ∧ no ceiling breach ∧ idle).
         cta_state: if send.sending
@@ -3812,6 +3841,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         } else {
             CtaState::Disabled
         },
+        held,
         handoff: None,
     }
 }
@@ -3925,7 +3955,18 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         .as_ref()
         .and_then(|receipt| receipt.hold_reason);
     let held = (hold == Some(SendHoldReason::FeeHold)).then(|| s.tx_held_fees.clone());
-    let rejected = (hold == Some(SendHoldReason::FeeRejected)).then(|| s.tx_rejected_fees.clone());
+    // A refusal is told by its reason (correctness batch item 3): the core's
+    // `refusal_key` — the fee sentence only for a fee refusal, "another
+    // transaction went first" for a nonce already used, else the plain one.
+    // A core that names none and still says "fee rejected" keeps that.
+    let rejected = send
+        .receipt
+        .as_ref()
+        .and_then(|receipt| receipt.refusal_key.as_deref())
+        .map(|key| s.refusal(Some(key)))
+        .or_else(|| {
+            (hold == Some(SendHoldReason::FeeRejected)).then(|| s.tx_rejected_fees.clone())
+        });
     // The relay holds it while it tops up its gas on the chain: why it waits,
     // in place of a wait that reads like the network's (098 follow-up).
     let funding = (hold == Some(SendHoldReason::RelayFunding)).then(|| s.tx_relay_funding.clone());
@@ -4920,6 +4961,33 @@ mod tests {
         status: vela_core::app::send::SendReceiptStatus,
         hold: Option<vela_core::app::send::SendHoldReason>,
     ) -> SendReceipt {
+        receipt_refused(status, hold, None)
+    }
+
+    /// The confirm page over `send`, with a pristine fee.
+    fn confirm_of(send: &SendView) -> SendConfirm {
+        let s = strings();
+        let wallet = wallet_strings();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        send_confirm(&SendInputs {
+            send,
+            fee: &fee,
+            s: &s,
+            wallet: &wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+            relay_sent_at_ms: None,
+        })
+    }
+
+    fn receipt_refused(
+        status: vela_core::app::send::SendReceiptStatus,
+        hold: Option<vela_core::app::send::SendHoldReason>,
+        refusal_key: Option<&str>,
+    ) -> SendReceipt {
         use vela_core::app::send::{Send, SendReceiptCoin, SendReceiptView};
         let s = strings();
         let wallet = wallet_strings();
@@ -4928,6 +4996,7 @@ mod tests {
         send.receipt = Some(SendReceiptView {
             status,
             hold_reason: hold,
+            refusal_key: refusal_key.map(str::to_owned),
             kind: None,
             transfers: Vec::new(),
             coins: vec![SendReceiptCoin {
@@ -5038,6 +5107,7 @@ mod tests {
         send.receipt = Some(SendReceiptView {
             status: SendReceiptStatus::Confirmed,
             hold_reason: None,
+            refusal_key: None,
             kind: Some(SendReceiptKind::Split),
             transfers: vec![
                 transfer(&format!("0x{}", "cd".repeat(20)), Some("Alice"), "0.2"),
@@ -5131,6 +5201,108 @@ mod tests {
         let plain = receipt_with(SendReceiptStatus::Submitted, None);
         assert_eq!(plain.captions, vec![s.tx_relay_sending.clone()]);
         assert_eq!(plain.progress, None);
+    }
+
+    /// The correctness batch, item 3: a refusal is told by its reason, the
+    /// core's `refusal_key` — a nonce another transaction already used is
+    /// "another transaction went first", never "fees stayed above"; only a
+    /// fee refusal says that; every other reason is the plain refusal.
+    #[test]
+    fn a_refusal_is_told_by_its_reason() {
+        use vela_core::app::send::SendReceiptStatus;
+        use vela_core::app::tx_tracker::{RefusalReason, refusal_key};
+        let s = strings();
+        let loc = crate::loc::Loc::from_env();
+        let went_first = receipt_refused(
+            SendReceiptStatus::Failed,
+            None,
+            Some(refusal_key(Some(RefusalReason::NonceUsed))),
+        );
+        assert_eq!(went_first.stage, ReceiptStage::Failed);
+        assert_eq!(
+            went_first.captions,
+            vec![loc.t("componentsUi.signing.wentFirst")]
+        );
+        assert_ne!(went_first.captions, vec![s.tx_rejected_fees.clone()]);
+        let fees = receipt_refused(
+            SendReceiptStatus::Failed,
+            Some(vela_core::app::send::SendHoldReason::FeeRejected),
+            Some(refusal_key(Some(RefusalReason::FeeBelowMarket))),
+        );
+        assert_eq!(fees.captions, vec![s.tx_rejected_fees.clone()]);
+        for other in [
+            RefusalReason::SimulationFailed,
+            RefusalReason::RelayGaveUp,
+            RefusalReason::Unknown,
+        ] {
+            let plain = receipt_refused(
+                SendReceiptStatus::Failed,
+                None,
+                Some(refusal_key(Some(other))),
+            );
+            assert_eq!(plain.captions, vec![s.failed_refused.clone()], "{other:?}");
+        }
+        // A key this build does not know is the plain refusal, never the fee's.
+        let unknown = receipt_refused(
+            SendReceiptStatus::Failed,
+            None,
+            Some("componentsUi.signing.somethingNewer"),
+        );
+        assert_eq!(unknown.captions, vec![s.failed_refused.clone()]);
+    }
+
+    /// The relay refused the submit because the account's previous
+    /// transaction holds the nonce: the confirm says so in the held line's
+    /// words and offers "Try again" — never the generic failure.
+    #[test]
+    fn a_previous_pending_refusal_says_so_and_tries_again() {
+        use vela_core::app::send::{Send, SendStage, SendTxErrorKey, SendTxStatus};
+        let s = strings();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.tx_status = SendTxStatus::Error;
+        send.tx_error = Some(SendTxErrorKey::PreviousPending);
+        send.can_confirm = true;
+        let confirm = confirm_of(&send);
+        assert_eq!(confirm.cta, s.try_again);
+        assert_eq!(
+            confirm.notice.as_ref().map(|notice| notice.body.clone()),
+            Some(s.previous_pending.clone())
+        );
+        assert!(confirm.held.is_none(), "nothing in flight here");
+    }
+
+    /// The confirm held for the account's previous transaction on this
+    /// network (`SendView.previous_pending`): shut, one line under it — the
+    /// core's key — and the refusal's notice not said twice.
+    #[test]
+    fn a_held_confirm_says_one_line() {
+        use vela_core::app::send::{
+            Send, SendPreviousPending, SendStage, SendTxErrorKey, SendTxStatus,
+        };
+        let s = strings();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.can_confirm = false;
+        send.fee_busy = true;
+        send.previous_pending = Some(SendPreviousPending {
+            chain_id: 100,
+            user_op_hash: "0xfirst".to_owned(),
+            key: vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY.to_owned(),
+        });
+        let held = confirm_of(&send);
+        assert_eq!(held.cta_state, CtaState::Disabled);
+        assert_eq!(held.held, Some(s.previous_pending.clone()));
+        assert!(held.notice.is_none());
+        assert_eq!(
+            crate::loc::Loc::from_env().t(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
+            s.previous_pending
+        );
+        send.tx_status = SendTxStatus::Error;
+        send.tx_error = Some(SendTxErrorKey::PreviousPending);
+        let refused = confirm_of(&send);
+        assert_eq!(refused.held, Some(s.previous_pending.clone()));
+        assert!(refused.notice.is_none(), "one line, not two");
     }
 
     /// A fee rejection is not a generic failure: nothing was sent, and the
@@ -5805,6 +5977,7 @@ mod tests {
                 dapp: None,
                 subtitle: Vec::new(),
                 priced: true,
+                figure_maskable: true,
             };
             let s = strings();
             let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s);
@@ -6183,6 +6356,7 @@ mod tests {
                 dapp: None,
                 subtitle: Vec::new(),
                 priced: true,
+                figure_maskable: true,
             };
             let view = FeedView {
                 rows: vec![
@@ -6789,6 +6963,7 @@ mod tests {
                 dapp: None,
                 subtitle: Vec::new(),
                 priced: true,
+                figure_maskable: true,
             },
         };
         let view = FeedView {
@@ -7424,6 +7599,7 @@ mod tests {
             dapp: None,
             subtitle: Vec::new(),
             priced: false,
+            figure_maskable: true,
         };
         let view = FeedView {
             rows: vec![
@@ -8865,6 +9041,7 @@ mod payee_tests {
             let receipt = |status| SendReceiptView {
                 status,
                 hold_reason: None,
+                refusal_key: None,
                 kind: Some(SendReceiptKind::MultiSelect),
                 transfers: Vec::new(),
                 coins: vec![
@@ -8949,6 +9126,7 @@ mod payee_tests {
             view.receipt = Some(SendReceiptView {
                 status: SendReceiptStatus::Confirmed,
                 hold_reason: None,
+                refusal_key: None,
                 kind: None,
                 transfers: Vec::new(),
                 coins: vec![coin("0.5", "ETH", None)],

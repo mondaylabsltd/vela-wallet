@@ -723,6 +723,16 @@ fn entries() -> Vec<Entry> {
     sheet("incompatible", PromptKind::IncompatibleCreate, false);
     sheet("incompatible · login", PromptKind::IncompatibleLogin, false);
     sheet("recover offer", PromptKind::RecoverOffer, true);
+    sheet(
+        "registry unreachable",
+        PromptKind::RegistryUnreachable { local: false },
+        true,
+    );
+    sheet(
+        "registry unreachable · local",
+        PromptKind::RegistryUnreachable { local: true },
+        true,
+    );
     sheet("recover failed", PromptKind::RecoverFailed, false);
     sheet(
         "create failed · unknown",
@@ -1250,6 +1260,14 @@ mod tests {
             ("create failed · no key", OutcomeKind::Unsupported),
             ("create failed · unknown", OutcomeKind::Unknown),
             ("sign-in failed", OutcomeKind::SignInFailed),
+            (
+                "registry unreachable",
+                OutcomeKind::RegistryUnreachable { local: false },
+            ),
+            (
+                "registry unreachable · local",
+                OutcomeKind::RegistryUnreachable { local: true },
+            ),
         ];
         for entry in entries() {
             let Fixture::Sheet { kind, .. } = &entry.fixture else {

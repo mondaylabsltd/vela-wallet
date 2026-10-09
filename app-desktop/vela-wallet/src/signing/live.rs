@@ -1991,7 +1991,9 @@ pub fn fee_model(
             .or(reason),
         warning_held: false,
         refresh: Some(s.fee_refresh.clone()),
-        refreshing: fee.busy,
+        // A figure switched to another coin is measured again before it can
+        // be confirmed (`provisional`): drawn, with the measuring sign.
+        refreshing: fee.busy || fee.provisional,
         // "From a while ago" is a fact about a number: not over a row with no
         // figure, and not while a fresh one is being measured.
         stale_note: (fee.stale && !fee.busy && !another_tier && fee.fee.is_some())
@@ -1999,31 +2001,13 @@ pub fn fee_model(
     }
 }
 
-/// The speed control's deployment read got no answer (spec 082 RJ13): the
-/// failure the shell gives it — `FeeFailure::ChainRead`, rate-limited or
-/// not — and the chain whose node it was.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ChainReadFailure {
-    pub failure: vela_core::app::fee_policy::FeeFailure,
-    pub chain_id: u32,
-}
-
-/// Spec 079: what the fee row knows that the fee machine does not — the
-/// speed control's own deployment read. A read that could not answer never
-/// reaches the core (guessing would price a different operation), so the
-/// core's view shows no failure; the row says why in the core's words for a
-/// chain read (082 RJ13, G48: "rate-limited · retrying", or the chain out of
-/// reach — never "can't reach Vela"), and the control turns while a read is
-/// out.
-pub fn fee_row_state(
-    model: &mut FeeModel,
-    measuring: bool,
-    unanswered: Option<ChainReadFailure>,
-    s: &SigningStrings,
-) {
+/// Spec 079: what the fee row knows that the fee machine's figure alone does
+/// not — a measurement is out on the speed control (a speed just picked, a
+/// coin switched and measured again), so the control turns and "from a while
+/// ago" gives way. Every failure, the account read's included (issue #483),
+/// is the core's own `fee.failed`, which [`fee_model`] already says.
+pub fn fee_row_state(model: &mut FeeModel, measuring: bool) {
     if let FeeModel::OnChain {
-        value,
-        warning,
         refreshing,
         stale_note,
         ..
@@ -2032,15 +2016,6 @@ pub fn fee_row_state(
         *refreshing |= measuring;
         if measuring {
             *stale_note = None;
-        }
-        if let Some(read) = unanswered
-            && !measuring
-        {
-            *value = SharedString::default();
-            if warning.is_none() {
-                *warning =
-                    s.fee_reason(read.failure, &crate::flows::live::chain_name(read.chain_id));
-            }
         }
     }
 }
@@ -4266,6 +4241,186 @@ mod fee_tests {
         SigningStrings::resolve(&crate::loc::Loc::from_env())
     }
 
+    /// Correctness batch item 4: a fee coin switched to is measured again
+    /// with that coin's fee leg before it can be confirmed. Driven through
+    /// the real `fee_policy` core: quoted in ETH, then USDC picked — the
+    /// switched figure is drawn at once with the measuring sign (the sheet's
+    /// row and the send form's), and the confirm says "working out the fee";
+    /// once the USDC leg is measured, the sign stops and the confirm opens.
+    #[test]
+    fn a_switched_fee_coin_is_provisional_until_measured() {
+        use crate::core_host::{CoreHost, Pending};
+        use vela_core::app::fee_policy::{
+            DeploymentRead, Event as FeeEvent, FeeAssetKind, FeeAssetQuote, FeeBundlerQuote,
+            FeeCall, FeeGasOutcome, FeeOperation, FeeShellResult as Res,
+        };
+        use vela_core::app::sign_confirm::ConfirmBlock;
+        const USDC: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        let row = |native: bool| FeeAssetQuote {
+            recipient: "0x1111111111111111111111111111111111111111".to_owned(),
+            asset: if native {
+                FeeAssetKind::Native
+            } else {
+                FeeAssetKind::Erc20
+            },
+            fee_token: (!native).then(|| USDC.to_owned()),
+            balance: if native {
+                "1000000000000000000"
+            } else {
+                "50000000"
+            }
+            .to_owned(),
+            decimals: if native { 18 } else { 6 },
+            symbol: if native { "ETH" } else { "USDC" }.to_owned(),
+            usd_balance: if native { "2500" } else { "50" }.to_owned(),
+            usd_price: Some(if native { "2500" } else { "1" }.to_owned()),
+            native_usd_floor_price: None,
+            minimum_amount: None,
+        };
+        let answer = |host: &mut CoreHost<FeePolicy>, mut pending: Vec<Pending<FeeOperation>>| {
+            while let Some(effect) = pending.pop() {
+                let result = match effect.operation {
+                    FeeOperation::ReadDeployment { .. } => Res::Deployment {
+                        read: DeploymentRead::Read { deployed: true },
+                    },
+                    FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
+                        eth_gas_price: Some("1000000000".to_owned()),
+                        base_fee: Some("1000000000".to_owned()),
+                        priority_fee: Some("1000000".to_owned()),
+                    },
+                    FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
+                        quote: Some(FeeBundlerQuote {
+                            max_fee_per_gas: "2000000000".to_owned(),
+                            max_priority_fee_per_gas: None,
+                            network_fee_per_gas: Some("1000000000".to_owned()),
+                            relayer_fee_per_gas: Some("1000000000".to_owned()),
+                            in_band_fee_per_gas: None,
+                        }),
+                    },
+                    FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
+                        quotes: Some(vec![row(true), row(false)]),
+                    },
+                    FeeOperation::EstimateUserOpGas { .. } => Res::UserOpGas {
+                        outcome: FeeGasOutcome::Estimated {
+                            verification_gas_limit: "100000".to_owned(),
+                            call_gas_limit: "300000".to_owned(),
+                            pre_verification_gas: "50000".to_owned(),
+                            settlement_gas: None,
+                        },
+                    },
+                    FeeOperation::MeasureInnerCalls { calls, .. } => Res::InnerCallsMeasured {
+                        gas: calls.iter().map(|_| None).collect(),
+                    },
+                    // Timers stay out: nothing here waits on a clock.
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+        };
+        let mut host = CoreHost::<FeePolicy>::new();
+        let pending = host.dispatch(FeeEvent::QuoteRequested {
+            chain_id: 8453,
+            account: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+            deployed: false,
+            public_key_available: true,
+            tier: FeeTier::Standard,
+            calls: vec![FeeCall {
+                to: "0x2222222222222222222222222222222222222222".to_owned(),
+                value: "1000".to_owned(),
+                data: "0x".to_owned(),
+            }],
+            fee_token: None,
+            auto_fee_token: false,
+            number: Default::default(),
+            read_deployment: Some(true),
+        });
+        answer(&mut host, pending);
+        let settled = host.view();
+        assert!(
+            settled.confirm_fee_ready && !settled.provisional,
+            "{settled:?}"
+        );
+
+        let s = strings();
+        let clear = CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let mut sign = CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
+        sign.confirm_gate_open = true;
+        let mut guard = CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new().view();
+        guard.confirm_allowed = true;
+        let row_of = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            8453,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
+            FeeModel::OnChain {
+                value, refreshing, ..
+            } => (value, refreshing),
+            _ => unreachable!("a transaction has a fee row"),
+        };
+        let (value, refreshing) = row_of(&settled);
+        assert!(!value.is_empty() && !refreshing);
+        assert!(confirm_state(&sign, &guard, &clear, &settled, None).enabled);
+
+        // The chip: USDC. Its figure at once — provisional, measured again.
+        let pending = host.dispatch(FeeEvent::SelectFeeAsset {
+            token: Some(USDC.to_owned()),
+        });
+        let switched = host.view();
+        assert!(switched.provisional, "{switched:?}");
+        assert!(!switched.confirm_fee_ready);
+        let (value, refreshing) = row_of(&switched);
+        assert!(
+            value.contains("USDC"),
+            "the switched figure, drawn: {value}"
+        );
+        assert!(refreshing, "with the measuring sign");
+        let held = confirm_state(&sign, &guard, &clear, &switched, None);
+        assert!(!held.enabled);
+        assert_eq!(held.block, Some(ConfirmBlock::FeeMeasuring));
+
+        // The send form's row says the same of the same view.
+        let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let mut send = CoreHost::<vela_core::app::send::Send>::new().view();
+        send.fee_busy = true;
+        send.fee = switched.fee.clone();
+        let inputs = crate::flows::live::SendInputs {
+            send: &send,
+            fee: &switched,
+            s: &flow,
+            wallet: &wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+            relay_sent_at_ms: None,
+        };
+        let form_row = crate::flows::live::send_form(&inputs).fee;
+        assert!(form_row.refreshing);
+        assert!(
+            form_row.value.contains("USDC"),
+            "never \"…\" over the coin just chosen: {}",
+            form_row.value
+        );
+
+        // Measured with the USDC leg: settled, the sign stops, the confirm opens.
+        answer(&mut host, pending);
+        let measured = host.view();
+        assert!(
+            !measured.provisional && measured.confirm_fee_ready,
+            "{measured:?}"
+        );
+        let (value, refreshing) = row_of(&measured);
+        assert!(value.contains("USDC") && !refreshing);
+        assert!(confirm_state(&sign, &guard, &clear, &measured, None).enabled);
+    }
+
     fn option(
         symbol: &str,
         contract: Option<&str>,
@@ -4426,24 +4581,9 @@ mod fee_tests {
         assert!(refreshing, "the control turns while it measures");
         assert!(stale.is_none(), "not old while a fresh one is coming");
 
-        // The speed control's own deployment read, which the core never saw.
-        let unanswered = |rate_limited| ChainReadFailure {
-            failure: FeeFailure::ChainRead { rate_limited },
-            chain_id: 1,
-        };
+        // A measurement out on the speed control turns the row's sign.
         let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
-        fee_row_state(&mut model, false, Some(unanswered(false)), &s);
-        let (value, warning, ..) = parts(model);
-        assert_eq!(
-            warning,
-            s.fee_reason(
-                unanswered(false).failure,
-                &crate::flows::live::chain_name(1)
-            )
-        );
-        assert!(value.is_empty());
-        let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
-        fee_row_state(&mut model, true, None, &s);
+        fee_row_state(&mut model, true);
         let (_, _, _, refreshing, _) = parts(model);
         assert!(refreshing);
     }
@@ -4460,30 +4600,36 @@ mod fee_tests {
         let s = strings();
         let clear =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
-        let warning_of = |read: ChainReadFailure, s: &SigningStrings| {
-            let mut model = fee_model(
+        let warning_of = |failure: FeeFailure, s: &SigningStrings| {
+            let fee = FeeView {
+                failed: Some(failure),
+                ..crate::core_host::CoreHost::<FeePolicy>::new().view()
+            };
+            let model = fee_model(
                 &clear,
-                &crate::core_host::CoreHost::<FeePolicy>::new().view(),
-                read.chain_id,
+                &fee,
+                1,
                 false,
                 s,
                 "zh",
                 None,
                 crate::wallet::live::Money::usd(),
             );
-            fee_row_state(&mut model, false, Some(read), s);
             match model {
-                FeeModel::OnChain { warning, value, .. } => {
+                FeeModel::OnChain {
+                    warning,
+                    value,
+                    tappable,
+                    ..
+                } => {
                     assert!(value.is_empty());
+                    assert!(tappable, "a failed fee can be asked again");
                     warning
                 }
                 _ => unreachable!("a transaction has a fee row"),
             }
         };
-        let limited = ChainReadFailure {
-            failure: FeeFailure::ChainRead { rate_limited: true },
-            chain_id: 1,
-        };
+        let limited = FeeFailure::ChainRead { rate_limited: true };
         assert_eq!(
             warning_of(limited, &zh).as_deref(),
             Some("被限流 · 正在自动重试")
@@ -4491,17 +4637,69 @@ mod fee_tests {
         let relay = s.fee_reason(FeeFailure::QuoteUnavailable, "Ethereum");
         assert_ne!(warning_of(limited, &s), relay, "never the relay's words");
         let down = warning_of(
-            ChainReadFailure {
-                failure: FeeFailure::ChainRead {
-                    rate_limited: false,
-                },
-                chain_id: 1,
+            FeeFailure::ChainRead {
+                rate_limited: false,
             },
             &s,
         )
         .unwrap_or_default();
         assert!(down.contains(&crate::flows::live::chain_name(1)), "{down}");
-        assert_ne!(Some(down), relay);
+        assert_ne!(Some(down.clone()), relay);
+        // Issue #483: a fault inside the app is never "can't reach the chain".
+        let internal = warning_of(FeeFailure::Internal, &s).unwrap_or_default();
+        assert!(!internal.is_empty());
+        assert!(
+            !internal.contains(&crate::flows::live::chain_name(1)),
+            "{internal}"
+        );
+        assert_ne!(internal, down);
+    }
+
+    /// Issue #483: the fee row and the footer under the confirm say the same
+    /// thing — the account read failed, so the row names why and the footer
+    /// says the fee could not be worked out, never "working out the fee…"
+    /// over a row that has given up.
+    #[test]
+    fn the_fee_row_and_the_footer_name_the_same_failure() {
+        use vela_core::app::fee_policy::FeeFailure;
+        use vela_core::app::sign_confirm::ConfirmBlock;
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let mut sign =
+            crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
+        sign.confirm_gate_open = true;
+        let mut guard =
+            crate::core_host::CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new()
+                .view();
+        guard.confirm_allowed = true;
+        for failure in [
+            FeeFailure::ChainRead {
+                rate_limited: false,
+            },
+            FeeFailure::Internal,
+        ] {
+            let fee = FeeView {
+                failed: Some(failure),
+                ..crate::core_host::CoreHost::<FeePolicy>::new().view()
+            };
+            let FeeModel::OnChain { warning, .. } = fee_model(
+                &clear,
+                &fee,
+                137,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            ) else {
+                unreachable!("a transaction has a fee row");
+            };
+            assert_eq!(warning, s.fee_reason(failure, "Polygon"), "{failure:?}");
+            let state = confirm_state(&sign, &guard, &clear, &fee, None);
+            assert!(!state.enabled);
+            assert_eq!(state.block, Some(ConfirmBlock::FeeFailed), "{failure:?}");
+        }
     }
 
     /// The coin list opens in the sheet with every coin the relay takes —

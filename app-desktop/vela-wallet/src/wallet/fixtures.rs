@@ -147,8 +147,10 @@ pub struct BalanceModel {
     pub updating: SharedString,
 }
 
-pub const MASK: &str = "••••";
-pub const BALANCE_MASK: &str = "••••••";
+/// The masks are the core's (`app::privacy`): the same glyphs on every
+/// surface and every shell.
+pub const MASK: &str = vela_core::app::privacy::MASK;
+pub const BALANCE_MASK: &str = vela_core::app::privacy::BALANCE_MASK;
 
 /// The default balance every D-state shows.
 pub fn balance_default(s: &WalletStrings) -> BalanceModel {
@@ -208,6 +210,7 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             open: false,
             loading: false,
             balances: Vec::new(),
+            hidden: false,
         },
     }
 }

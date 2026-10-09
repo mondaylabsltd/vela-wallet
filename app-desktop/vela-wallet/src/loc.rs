@@ -446,7 +446,7 @@ mod tests {
     /// Var-bearing keys (`{{seconds}}` …) resolve with the placeholder left in
     /// place under default options — still a non-echo, non-empty value, which
     /// is all this sweep asserts about them.
-    const FLOW_KEYS: [&str; 118] = [
+    const FLOW_KEYS: [&str; 121] = [
         "common.cancel",
         "onboarding.create.keyUnreadableTitle",
         "onboarding.create.keyUnreadableBody",
@@ -560,6 +560,9 @@ mod tests {
         "onboarding.login.recoverFailedTitle",
         "onboarding.login.recoverOfferBody",
         "onboarding.login.recoverOfferTitle",
+        "onboarding.login.registryUnreachableTitle",
+        "onboarding.login.registryUnreachableBody",
+        "common.tryAgain",
         "onboarding.login.signInFailedBody",
         "onboarding.settings.endpointUrlLabel",
         "onboarding.settings.passkeyHint",

@@ -3559,13 +3559,27 @@ fn send_confirm(
         );
     }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
-    col.child(cta_button(
+    col = col.child(cta_button(
         "flow-confirm-cta",
         theme,
         model.cta.clone(),
         model.cta_state,
         advance,
-    ))
+    ));
+    // Held for the account's previous transaction: the one line, under the
+    // confirm it holds — no spinner, no countdown (correctness batch item 3).
+    if let Some(held) = &model.held {
+        col = col.child(
+            div()
+                .w_full()
+                .flex()
+                .justify_center()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(held.clone()),
+        );
+    }
+    col
 }
 
 fn send_receipt(

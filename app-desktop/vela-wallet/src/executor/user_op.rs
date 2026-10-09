@@ -34,7 +34,6 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Duration;
 
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
@@ -44,7 +43,6 @@ use vela_core::app::fee_policy::{
     user_op_gas_floors,
 };
 use vela_core::app::send::SendSubmitFailure;
-use vela_core::app::tx_tracker::WAIT_WINDOW_MS;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
 use vela_core::signing_venue::{KeyRoute, VenueBlock};
@@ -61,7 +59,6 @@ use vela_core::user_op::{
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
 use crate::diag::{short, vlog};
-use crate::executor::landing::{self, Landing};
 use crate::executor::passkey::PasskeyFailure;
 use crate::executor::trusted_signer::{self, Ask, Channel};
 use crate::executor::{chain, pool, relay};
@@ -101,6 +98,12 @@ pub enum SubmitFailure {
         kind: FailureKind,
         message: String,
     },
+    /// The relay refused it because another operation of this account holds
+    /// its nonce (`RelayRejection::NonceHeld`): nothing was sent. Send says
+    /// "waiting for your last transaction" with Try again
+    /// (`SendSubmitFailure::PreviousPending`); a page hears
+    /// `PREVIOUS_PENDING_DETAIL`.
+    PreviousPending,
     /// Spec 102: the account's venue cannot be used here — nothing on this
     /// device can reach its keys (`SigningPlan::blocked`). No prompt was
     /// raised and no page opened; the core says why, in the person's
@@ -126,6 +129,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
                 message: Some("the request was withdrawn; nothing was sent".to_owned()),
             },
             SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
+            SubmitFailure::PreviousPending => SendSubmitFailure::PreviousPending,
             SubmitFailure::Other(message)
             | SubmitFailure::Refused(message)
             | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
@@ -652,11 +656,12 @@ fn account_context(
     keys: &[WalletKey],
 ) -> Result<(bool, String, Vec<u8>), SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
-    // 083: the account's previous operation lands first — before the
-    // deployment read (it may be the deploying one) and the nonce.
-    let floor = settle_previous(chain_id, safe, |previous| {
-        landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT)
-    })?;
+    // The account's previous operation on this chain was waited for BEFORE
+    // the prompt — the core holds the confirm while it is in flight
+    // (`tx_tracker::in_flight_ops`, the one rule on every platform). What is
+    // left here is the floor it leaves once it has landed: a node that has
+    // not seen the landing yet still reads its nonce.
+    let floor = nonce_floor(chain_id, safe);
     chain::forget_gas_price(chain_id);
     // …and the fee session's held readings (issue 212): a submit, and the
     // first quote after it, landed or not, measure again.
@@ -1035,24 +1040,13 @@ fn sign_and_submit(
         submit_block,
         tail.before_post,
         tail.asked,
-        // 083 S3b: another operation of the account holds the nonce — wait
-        // for it to land, then send this one again, as signed.
-        || {
-            after_collision(
-                relay::send_user_op(&op, chain_id, extra, tier, &local_hash),
-                |previous| landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT),
-                || relay::send_user_op(&op, chain_id, extra, tier, &local_hash),
-            )
-        },
-        // RA5: the local nonce moves only for an operation the relay holds.
-        // One that may have been sent keeps nonce N, so a second attempt can
-        // never become a second payment: the EntryPoint lets at most one
-        // operation with N land.
-        |accepted| {
-            chain::bump_nonce(safe, chain_id);
-            // The next submit for this account waits for this one (083).
-            note_submitted(chain_id, safe, accepted, &op.nonce);
-        },
+        // Another operation of the account holds the nonce: refused at once,
+        // "previous transaction pending" with Try again — which the core
+        // holds while the tracker follows that operation.
+        || relay::send_user_op(&op, chain_id, extra, tier, &local_hash),
+        // RA5: an operation that may have been sent leaves no floor: a second
+        // attempt reuses nonce N and can never become a second payment.
+        |accepted| note_submitted(chain_id, safe, accepted, &op.nonce),
     )
 }
 
@@ -1106,7 +1100,10 @@ fn clear_and_post(
             None => SubmitFailure::NotSent,
             Some(RelayRejection::RelayerUnavailable) => SubmitFailure::RelayerUnavailable,
             Some(RelayRejection::BundlerUnderfunded) => SubmitFailure::BundlerUnderfunded,
-            Some(RelayRejection::NonceHeld { .. }) => other(PREVIOUS_PENDING),
+            // Another operation of this account holds the nonce: not a failure
+            // of the network — "previous transaction pending" (Send) or the
+            // core's detail for it (a dApp).
+            Some(RelayRejection::NonceHeld { .. }) => SubmitFailure::PreviousPending,
             Some(RelayRejection::Other(message)) => SubmitFailure::Refused(message),
         }),
     }
@@ -1116,13 +1113,9 @@ fn clear_and_post(
 // This account's previous operation (083)
 // ---------------------------------------------------------------------------
 
-/// How long a submit waits for the account's previous operation to land —
-/// the tracker's active window — before it gives up and says so.
-const PREVIOUS_OP_WAIT: Duration = Duration::from_millis(WAIT_WINDOW_MS as u64);
-
-/// What a request that could not go out behind another of the account's
-/// operations tells its page — for the developer; the screen has its own
-/// words.
+/// What a request refused because another of the account's operations
+/// holds the nonce tells its page — for the developer; the screen has its
+/// own words.
 pub const PREVIOUS_PENDING: &str = vela_core::user_op::PREVIOUS_PENDING_DETAIL;
 
 /// The last operation this app submitted for an account on a chain, and
@@ -1180,60 +1173,17 @@ fn previous_of(chain_id: u32, safe: &str) -> Option<Previous> {
         .cloned()
 }
 
-/// Forget the account's previous operation — only if it is still `hash`.
-fn forget_previous(chain_id: u32, safe: &str, hash: &str) {
-    if let Ok(mut previous) = PREVIOUS.lock()
-        && let Some(map) = previous.as_mut()
-    {
-        let key = account_key(chain_id, safe);
-        if map
-            .get(&key)
-            .is_some_and(|entry| entry.user_op_hash.eq_ignore_ascii_case(hash))
-        {
-            map.remove(&key);
-        }
-    }
-}
-
-/// Before a new operation is built (083, S3b): the account's previous one —
-/// Uniswap's approval, when its swap comes next — must land first, or the
-/// new one is signed over the same nonce and the relay refuses it. Waits up
-/// to [`PREVIOUS_OP_WAIT`] (the column says "preparing" meanwhile), and
-/// answers the nonce the new operation may not go below: the previous one's
-/// plus one, whatever a lagging node says.
-///
-/// Not landed by then: this request fails clearly, before any prompt — and
-/// the account is let go, so the next attempt asks the relay rather than
-/// waiting on an operation that may never land.
-fn settle_previous(
-    chain_id: u32,
-    safe: &str,
-    wait: impl FnOnce(&str) -> Option<Landing>,
-) -> Result<Option<u128>, SubmitFailure> {
-    let Some(previous) = previous_of(chain_id, safe) else {
-        return Ok(None);
-    };
-    if !previous.landed {
-        eprintln!(
-            "[vela-wallet] submit: waiting for this account's previous operation {} to land",
-            previous.user_op_hash
-        );
-        match wait(&previous.user_op_hash) {
-            Some(Landing::Landed(_) | Landing::Reverted(_)) => {
-                note_landed(&previous.user_op_hash);
-            }
-            // Refused: it will never spend its nonce.
-            Some(Landing::Refused) => {
-                forget_previous(chain_id, safe, &previous.user_op_hash);
-                return Ok(None);
-            }
-            None => {
-                forget_previous(chain_id, safe, &previous.user_op_hash);
-                return Err(other(PREVIOUS_PENDING));
-            }
-        }
-    }
-    Ok(Some(previous.nonce.saturating_add(1)))
+/// The nonce a new operation may not go below: the one after this app's
+/// last operation for the account, once that one has LANDED — a node that
+/// has not seen the landing yet reads the old nonce, which the relay would
+/// refuse. Nothing waits here any more: the core holds the confirm while the
+/// previous one is in flight (`tx_tracker::in_flight_ops`), and releases it
+/// when it is final or has stalled. One not seen to land leaves no floor —
+/// never a nonce N+1 parked behind an N that may yet be refused.
+fn nonce_floor(chain_id: u32, safe: &str) -> Option<u128> {
+    previous_of(chain_id, safe)
+        .filter(|previous| previous.landed)
+        .map(|previous| previous.nonce.saturating_add(1))
 }
 
 /// The nonce read, raised to `floor` when it is below it.
@@ -1242,42 +1192,6 @@ fn at_least(nonce: String, floor: Option<u128>) -> String {
         (Ok(read), Some(floor)) if read < floor => format!("0x{floor:x}"),
         _ => nonce,
     }
-}
-
-/// The relay refused a signed operation because another of the account's
-/// is already pending at its nonce (083, S3b; the core's
-/// `RelayRejection::NonceHeld`). That operation's hash is NEVER this
-/// request's answer — answered with it, Uniswap reported a swap done when
-/// only its approval had happened. So wait for it to land
-/// ([`PREVIOUS_OP_WAIT`]), then send this one again, as signed: the relay
-/// takes it when the two nonces differ, and refuses it when they were the
-/// same (the earlier operation spent it). When the other never lands, or the
-/// relay still refuses, nothing of this one went out and the request fails
-/// clearly ([`PREVIOUS_PENDING`]). Any other verdict passes through.
-fn after_collision(
-    verdict: SubmitVerdict,
-    wait: impl FnOnce(&str) -> Option<Landing>,
-    resubmit: impl FnOnce() -> SubmitVerdict,
-) -> SubmitVerdict {
-    let SubmitVerdict::NotSent {
-        rejection: Some(RelayRejection::NonceHeld {
-            user_op_hash: previous,
-        }),
-    } = &verdict
-    else {
-        return verdict;
-    };
-    vlog!(
-        "relay",
-        "another operation of this account is pending ({}); waiting for it",
-        short(previous)
-    );
-    match wait(previous) {
-        Some(Landing::Landed(_) | Landing::Reverted(_)) => note_landed(previous),
-        Some(Landing::Refused) => {}
-        None => return verdict,
-    }
-    resubmit()
 }
 
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
@@ -1443,106 +1357,51 @@ mod tests {
         }
     }
 
-    /// 083 S3b: the relay names ANOTHER pending operation of the account —
-    /// Uniswap's approval, when its swap is submitted (the core's
-    /// `NonceHeld`). That hash is never the swap's answer: the swap waits for
-    /// the approval to land, then goes out as signed; if the relay still will
-    /// not take it, the request fails clearly and nothing of it went out.
+    /// The relay names ANOTHER pending operation of the account (the core's
+    /// `NonceHeld`, an older relay's `[existingHash:…]` or the new
+    /// `nonce_in_flight`): this request is refused at once as "previous
+    /// transaction pending" — never that operation's hash as its answer, and
+    /// no wait inside the submit (the core holds the confirm instead).
     #[test]
-    fn another_pending_operation_is_never_this_requests_hash() {
-        // It lands; this one goes out after it.
-        let mut waited_for = None;
-        let sent = after_collision(
-            held_by(APPROVAL),
-            |previous| {
-                waited_for = Some(previous.to_owned());
-                Some(Landing::Landed("0xtx".to_owned()))
-            },
-            || accepted(OWN),
-        );
-        assert_eq!(sent, accepted(OWN), "this operation's own hash");
-        assert_eq!(waited_for.as_deref(), Some(APPROVAL));
-
-        // It lands, and the relay refuses this one: the approval spent the
-        // nonce it was signed with. The relay's refusal stands — not sent.
-        let refused = SubmitVerdict::NotSent {
-            rejection: Some(RelayRejection::Other(
-                "Transaction nonce mismatch. Please try again.".to_owned(),
-            )),
-        };
-        let spent = after_collision(
-            held_by(APPROVAL),
-            |_| Some(Landing::Landed("0xtx".to_owned())),
-            || refused.clone(),
-        );
-        assert_eq!(spent, refused);
-
-        // It never lands in the window: nothing is sent again, and the
-        // request fails as held behind it.
-        let mut resent = false;
-        let stuck = after_collision(
-            held_by(APPROVAL),
-            |_| None,
+    fn another_pending_operation_is_previous_pending_at_once() {
+        let mut posts = 0;
+        let refused = clear_and_post(
+            OWN,
+            None,
+            &|_, _| true,
+            &|| true,
             || {
-                resent = true;
-                accepted(OWN)
+                posts += 1;
+                held_by(APPROVAL)
             },
+            |_| unreachable!("not accepted"),
         );
-        assert_eq!(stuck, held_by(APPROVAL));
-        assert!(!resent);
-
-        for answer in [&sent, &spent, &stuck] {
-            assert_ne!(*answer, accepted(APPROVAL), "the approval's hash");
-        }
-        assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
-    }
-
-    /// Any other verdict passes through untouched — nothing to wait for,
-    /// nothing to resend.
-    #[test]
-    fn a_verdict_without_a_held_nonce_passes_through() {
-        for verdict in [
-            accepted(OWN),
-            SubmitVerdict::MaybeSent {
-                user_op_hash: OWN.to_owned(),
-            },
-            SubmitVerdict::NotSent { rejection: None },
-        ] {
-            let answer = after_collision(
-                verdict.clone(),
-                |_| unreachable!("nothing to wait for"),
-                || unreachable!("nothing to resend"),
-            );
-            assert_eq!(answer, verdict);
-        }
-    }
-
-    /// Before building: this app's previous operation for the account lands
-    /// first, and the new one's nonce is never below the one after it — a
-    /// node that has not seen the landing yet reads the old nonce, which the
-    /// relay would refuse. Not landed in the window: a clear failure before
-    /// any prompt, and the account is let go so the next attempt asks the
-    /// relay. The registry is per chain and account.
-    #[test]
-    fn the_previous_operation_lands_before_the_next_is_built() {
-        let safe = "0xAAAA000000000000000000000000000000000001";
+        assert_eq!(refused, Err(SubmitFailure::PreviousPending));
+        assert_eq!(posts, 1, "one POST, no resend");
         assert_eq!(
-            settle_previous(100, safe, |_| unreachable!("nothing submitted yet")),
-            Ok(None)
+            SendSubmitFailure::from(SubmitFailure::PreviousPending),
+            SendSubmitFailure::PreviousPending
         );
+        assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
+        let _ = accepted(OWN);
+    }
+
+    /// The floor a landed operation leaves — and none from one that has not
+    /// landed: the core's hold already waited for it, and a nonce raised past
+    /// an operation that may yet be refused would park the next one behind
+    /// it. The registry is per chain and account.
+    #[test]
+    fn only_a_landed_operation_leaves_a_nonce_floor() {
+        let safe = "0xAAAA000000000000000000000000000000000001";
+        assert_eq!(nonce_floor(100, safe), None, "nothing submitted yet");
 
         note_submitted(100, safe, APPROVAL, "0x7");
-        let mut waited = None;
-        let floor = settle_previous(100, &safe.to_lowercase(), |hash| {
-            waited = Some(hash.to_owned());
-            Some(Landing::Reverted("0xtx".to_owned()))
-        });
-        assert_eq!(floor, Ok(Some(8)), "a reverted op spent its nonce too");
-        assert_eq!(waited.as_deref(), Some(APPROVAL));
+        assert_eq!(nonce_floor(100, safe), None, "in flight: no floor, no wait");
+        note_landed(APPROVAL);
         assert_eq!(
-            settle_previous(100, safe, |_| unreachable!("seen landed")),
-            Ok(Some(8)),
-            "once landed, only the floor is left"
+            nonce_floor(100, &safe.to_lowercase()),
+            Some(8),
+            "landed (or reverted): its nonce is spent"
         );
         assert_eq!(at_least("0x7".to_owned(), Some(8)), "0x8", "a lagging node");
         assert_eq!(
@@ -1550,30 +1409,13 @@ mod tests {
             format!("0x{:064x}", 9)
         );
         assert_eq!(at_least("0x7".to_owned(), None), "0x7");
-        assert_eq!(
-            settle_previous(137, safe, |_| unreachable!("another chain")),
-            Ok(None)
-        );
+        assert_eq!(nonce_floor(137, safe), None, "another chain");
 
         // The next one, seen by the tracker or the page's wait.
         note_submitted(100, safe, OWN, "0x8");
+        assert_eq!(nonce_floor(100, safe), None);
         note_landed(&OWN.to_uppercase().replace("0X", "0x"));
-        assert_eq!(settle_previous(100, safe, |_| unreachable!()), Ok(Some(9)));
-
-        // Stuck: fail clearly, and let the account go.
-        note_submitted(100, safe, APPROVAL, "0x9");
-        assert_eq!(
-            settle_previous(100, safe, |_| None),
-            Err(other(PREVIOUS_PENDING))
-        );
-        assert_eq!(settle_previous(100, safe, |_| unreachable!()), Ok(None));
-
-        // Refused by the relay: its nonce is free again — no floor.
-        note_submitted(100, safe, APPROVAL, "0x9");
-        assert_eq!(
-            settle_previous(100, safe, |_| Some(Landing::Refused)),
-            Ok(None)
-        );
+        assert_eq!(nonce_floor(100, safe), Some(9));
     }
 
     #[test]
@@ -2009,6 +1851,7 @@ mod tests {
             usd_balance: "0".to_owned(),
             usd_price: None,
             native_usd_floor_price: None,
+            minimum_amount: None,
         };
         let usdc = "0x2222222222222222222222222222222222222222";
         let quotes = vec![

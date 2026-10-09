@@ -93,8 +93,8 @@ pub enum BadgeVariant {
     Info,
 }
 
-/// The ten a failure sheet can raise. See the module note for the eight that
-/// are screens now.
+/// Every outcome a failure sheet can raise. See the module note for the
+/// eight that are screens now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutcomeKind {
     /// A key is plugged in and this process cannot open it.
@@ -108,6 +108,14 @@ pub enum OutcomeKind {
     Unknown,
     RecoverOffer,
     RecoverFailed,
+    /// Sign-in could not find out which wallet this passkey opens — a lookup
+    /// failed, or nobody but the index vouched for its answer. Nothing was
+    /// saved; "Try again" asks again from the signature already made, with
+    /// no new passkey prompt. `local`: every failed lookup never left this
+    /// device, so the sheet says "check your network" instead.
+    RegistryUnreachable {
+        local: bool,
+    },
     SignInFailed,
     /// The link to the other device failed, not the authenticator — the
     /// core's `phone_link` (issue #446): scan again, not "set up Face ID".
@@ -184,6 +192,18 @@ impl OutcomeKind {
                 loc.t("onboarding.login.recoverFailedTitle"),
                 loc.t("onboarding.login.recoverFailedBody"),
             ),
+            // A warning, not an offer and not a failure of the person's: the
+            // answer is "a little later", and asking again costs nothing.
+            Self::RegistryUnreachable { local: false } => (
+                BadgeVariant::Warning,
+                loc.t("onboarding.login.registryUnreachableTitle"),
+                loc.t("onboarding.login.registryUnreachableBody"),
+            ),
+            Self::RegistryUnreachable { local: true } => (
+                BadgeVariant::Warning,
+                loc.t("onboarding.common.networkTitle"),
+                loc.t("onboarding.common.networkBody"),
+            ),
             Self::SignInFailed => (
                 BadgeVariant::Error,
                 loc.t("onboarding.login.alertSignInFailedTitle"),
@@ -203,9 +223,22 @@ impl OutcomeKind {
         }
     }
 
+    /// The two buttons of a confirmable sheet — what accepting and declining
+    /// it are called. The rebuild offer asks for a signature; the registry
+    /// sheet only asks again.
+    pub fn answers(self) -> (&'static str, &'static str) {
+        match self {
+            Self::RegistryUnreachable { .. } => ("common.tryAgain", "common.cancel"),
+            _ => (
+                "onboarding.login.recoverConfirm",
+                "onboarding.login.recoverCancel",
+            ),
+        }
+    }
+
     /// Which outcome a core prompt is.
     ///
-    /// Nine `PromptKind` variants, ten outcomes: the two that carry a `detail`
+    /// Ten `PromptKind` variants, thirteen outcomes: the two that carry a `detail`
     /// string are refined by reading it, which is where the extra ones come
     /// from. See the module note on what that refinement is allowed to change —
     /// a sentence, never a path.
@@ -220,6 +253,9 @@ impl OutcomeKind {
             PromptKind::IncompatibleCreate | PromptKind::IncompatibleLogin => Self::Incompatible,
             PromptKind::RecoverOffer => Self::RecoverOffer,
             PromptKind::RecoverFailed => Self::RecoverFailed,
+            PromptKind::RegistryUnreachable { local } => {
+                Self::RegistryUnreachable { local: *local }
+            }
             PromptKind::CreateFailed {
                 phone_link: true, ..
             }
@@ -313,7 +349,10 @@ impl Prompt {
     pub fn offers_endpoint(&self) -> bool {
         matches!(
             OutcomeKind::for_prompt(&self.kind),
-            OutcomeKind::Network | OutcomeKind::Server | OutcomeKind::Timeout
+            OutcomeKind::Network
+                | OutcomeKind::Server
+                | OutcomeKind::Timeout
+                | OutcomeKind::RegistryUnreachable { .. }
         )
     }
 }
@@ -377,11 +416,8 @@ pub fn outcome_sheet(
     }
 
     let (primary_id, primary_key, secondary) = if prompt.confirmable {
-        (
-            ActionId::Accept,
-            "onboarding.login.recoverConfirm",
-            Some((ActionId::Decline, "onboarding.login.recoverCancel")),
-        )
+        let (accept, decline) = OutcomeKind::for_prompt(&prompt.kind).answers();
+        (ActionId::Accept, accept, Some((ActionId::Decline, decline)))
     } else {
         (ActionId::Decline, "onboarding.common.back", None)
     };
@@ -539,6 +575,51 @@ mod tests {
         assert_eq!(
             OutcomeKind::for_prompt(&PromptKind::NotSupportedCreate { security_key: true }),
             OutcomeKind::Unsupported
+        );
+    }
+
+    /// The correctness batch, item 1: a lookup nobody could answer is its
+    /// own sheet — a warning that names the registry (or, when nothing left
+    /// the device, the network), whose buttons are "Try again" and "Cancel",
+    /// never the rebuild offer's "sign once more".
+    #[test]
+    fn a_registry_nobody_answered_asks_again_and_offers_nothing() {
+        let loc = Loc::from_env();
+        for local in [false, true] {
+            let kind = OutcomeKind::for_prompt(&PromptKind::RegistryUnreachable { local });
+            assert_eq!(kind, OutcomeKind::RegistryUnreachable { local });
+            let spec = kind.spec(&loc);
+            assert_eq!(spec.badge, BadgeVariant::Warning, "local={local}");
+            let (title, body) = if local {
+                (
+                    "onboarding.common.networkTitle",
+                    "onboarding.common.networkBody",
+                )
+            } else {
+                (
+                    "onboarding.login.registryUnreachableTitle",
+                    "onboarding.login.registryUnreachableBody",
+                )
+            };
+            assert_eq!(spec.headline, loc.t(title));
+            assert_eq!(spec.body, loc.t(body));
+            assert_eq!(kind.answers(), ("common.tryAgain", "common.cancel"));
+            assert!(
+                Prompt::new(PromptKind::RegistryUnreachable { local }, true, 1).offers_endpoint(),
+                "the index endpoint is one way out"
+            );
+        }
+        // The rebuild offer keeps its own words — it asks for a signature.
+        assert_eq!(
+            OutcomeKind::RecoverOffer.answers(),
+            (
+                "onboarding.login.recoverConfirm",
+                "onboarding.login.recoverCancel"
+            )
+        );
+        assert_eq!(
+            OutcomeKind::RecoverOffer.spec(&loc).badge,
+            BadgeVariant::Info
         );
     }
 }

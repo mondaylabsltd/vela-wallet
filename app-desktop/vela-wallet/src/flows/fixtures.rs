@@ -831,6 +831,11 @@ pub struct SendConfirm {
     pub cta: SharedString,
     /// The core's `can_confirm`, plus signing / submitting.
     pub cta_state: CtaState,
+    /// The account's previous transaction on this network is still going
+    /// through (`SendView.previous_pending`): the confirm is held, and this
+    /// one line says why, under it — plainly, for as long as it holds, with
+    /// no countdown and nothing else in its place.
+    pub held: Option<SharedString>,
     /// Spec 102 D4: the account reviews and signs on a trusted page — the
     /// page, the key and the integrity line, drawn above the CTA, which then
     /// says where it goes and opens only when the page may. `None` in Vela.
@@ -1675,6 +1680,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
+        held: None,
         handoff: None,
     }
 }

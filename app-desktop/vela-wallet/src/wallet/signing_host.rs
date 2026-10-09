@@ -64,18 +64,6 @@ impl SpeedHost for SigningHost {
     fn in_force_changed(&mut self, cx: &mut Context<Self>) {
         self.schedule_requote(cx);
     }
-
-    fn unreadable(&mut self, cx: &mut Context<Self>) {
-        self.schedule_requote(cx);
-    }
-}
-
-/// Why the fee in force needs asking again, if it does: the core's failure,
-/// or — the deployment read got no answer, so nothing reached the core — the
-/// chain read's (spec 082 RJ13, G48): the chain's node, rate-limited or out
-/// of reach, never "Vela" and never the person's network.
-fn requote_failure(fee: &FeeView, chain_read: Option<FeeFailure>) -> Option<FeeFailure> {
-    fee.failed.or(chain_read)
 }
 
 /// When the fee in force is asked again by itself (spec 079 FR-008, 082
@@ -439,6 +427,9 @@ pub struct SigningHost {
     /// The tracker's entry for the in-flight op as last told to the core
     /// (spec 082 RJ4): `(op hash, status, tx hash)`.
     tracked_fed: Option<Tracked>,
+    /// The operations holding their account's nonce, as last told to the core
+    /// (`tx_tracker::in_flight_ops` of the tracker's own view).
+    in_flight_fed: Option<Vec<vela_core::app::tx_tracker::InFlightOp>>,
     /// Spec 079: how the request ended, read off the answer the core sent —
     /// a message signed, a transaction landed, or the operation hash because
     /// the wait ran out. The page keeps it on screen after the core closes
@@ -568,6 +559,7 @@ impl SigningHost {
             handoff_fed: None,
             withdraw_fed: None,
             tracked_fed: None,
+            in_flight_fed: None,
             ending: None,
             seen_submitted_ms: None,
             approved: false,
@@ -592,6 +584,9 @@ impl SigningHost {
         let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
         cx.observe(&tracker, |host, _, cx| host.forward_tracked(cx))
             .detach();
+        // What is already in flight holds its account's nonce from the first
+        // render: a transaction asked for meanwhile waits for it.
+        host.forward_in_flight(cx);
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
         // ends, or wants the page opened. The stream ends with the host.
         cx.spawn(async move |host, cx| {
@@ -1085,18 +1080,6 @@ impl SigningHost {
         self.speed.measuring()
     }
 
-    /// The fee in force was never asked of the core: its deployment read got
-    /// no answer (spec 082 RJ13) — the chain read's failure, and the chain it
-    /// names, for the fee row's words.
-    pub fn fee_unanswered(&self) -> Option<crate::signing::live::ChainReadFailure> {
-        self.speed
-            .chain_read()
-            .map(|failure| crate::signing::live::ChainReadFailure {
-                failure,
-                chain_id: self.chain_id,
-            })
-    }
-
     /// The person can still decide: the sheet is up, nothing is signing,
     /// and nothing has been approved or answered.
     fn on_form(&self) -> bool {
@@ -1114,7 +1097,9 @@ impl SigningHost {
     /// with the relay down and stay that way after it came back, and then
     /// (082) come back 15.8–19 s after the relay did, with no log line.
     fn schedule_requote(&mut self, cx: &mut Context<Self>) {
-        let failure = requote_failure(self.speed.fee_view(), self.speed.chain_read());
+        // Why the fee in force needs asking again, if it does — the core's
+        // failure, the account read's included (issue #483).
+        let failure = self.speed.fee_view().failed;
         let steps =
             self.requoter
                 .observe(failure, self.speed.measuring(), self.on_form(), now_ms());
@@ -1126,7 +1111,9 @@ impl SigningHost {
         if seq != self.requote_seq {
             return;
         }
-        let failure = requote_failure(self.speed.fee_view(), self.speed.chain_read());
+        // Why the fee in force needs asking again, if it does — the core's
+        // failure, the account read's included (issue #483).
+        let failure = self.speed.fee_view().failed;
         let steps = self
             .requoter
             .due(failure, self.speed.measuring(), self.on_form(), now_ms());
@@ -1380,6 +1367,7 @@ impl SigningHost {
                     maybe_sent: handoff.maybe_sent,
                     submit_block: handoff.submit_block,
                     admitted: handoff.admitted,
+                    sender: handoff.sender,
                 },
                 cx,
             );
@@ -1429,7 +1417,23 @@ impl SigningHost {
     /// flight — the answer to the page follows it (a landed op's tx hash, a
     /// refusal, a proven "not sent") instead of waiting out the receipt poll.
     /// Each change once; which change answers what is the core's.
+    /// Every operation in flight on this device, from the tracker's own view
+    /// (`tx_tracker::in_flight_ops` — it reads `sender` and `stalled`), to the
+    /// signing machine on every tracker render: a transaction of an account
+    /// with one in flight on the request's chain is held with
+    /// `ConfirmBlock::PreviousPending` until the first is final or has made
+    /// no progress for ten minutes. Signatures never wait.
+    fn forward_in_flight(&mut self, cx: &mut Context<Self>) {
+        let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
+        let view = tracker.read(cx).view();
+        if let Some(ops) = crate::executor::tracker::in_flight_news(&view, &mut self.in_flight_fed)
+        {
+            self.dispatch_sign(SignEvent::InFlightOps { ops }, cx);
+        }
+    }
+
     fn forward_tracked(&mut self, cx: &mut Context<Self>) {
+        self.forward_in_flight(cx);
         let Some(op) = self.view.pending_op_hash.clone() else {
             return;
         };
@@ -2307,35 +2311,78 @@ mod tests {
         assert_eq!(approved_changes(&[], false), None);
     }
 
-    /// Spec 082 RJ13 (G48): a deployment read that got no answer never
-    /// reached the core. It is the chain read's failure — rate-limited or
-    /// not, from the pool's own signal — and asked again on the same
-    /// schedule; never the relay's `QuoteUnavailable`.
+    /// Issue #483 (spec 082 RJ13, G48): the account read is the fee
+    /// machine's own. A read the chain's nodes did not answer, or one that
+    /// never left the app, is `FeeView.failed` — the cause the row, the
+    /// footer and the retry all read — and it is asked again by itself, as
+    /// a real new read (`fresh`), never the answer that just failed.
     #[test]
-    fn an_unanswered_read_is_a_chain_read() {
-        let quiet = crate::core_host::CoreHost::<FeePolicy>::new().view();
-        assert_eq!(requote_failure(&quiet, None), None);
-        let limited = FeeFailure::ChainRead { rate_limited: true };
-        assert_eq!(requote_failure(&quiet, Some(limited)), Some(limited));
-        assert_eq!(
-            vela_core::app::fee_policy::failure_reason_key(limited),
-            Some("home.balanceDetailStatusRetrying")
-        );
-        assert!(
-            !Requoter::default()
-                .observe(Some(limited), false, true, 0.0)
-                .is_empty(),
-            "asked again by itself"
-        );
-        let failed = FeeView {
-            failed: Some(FeeFailure::EstimateFailed),
-            ..quiet
+    fn a_failed_account_read_is_the_fee_s_own_failure() {
+        use vela_core::app::fee_policy::{
+            DeploymentRead, Event as FeeEvent, FeeOperation, FeeShellResult, failure_reason_key,
         };
+        let failed_with = |read: DeploymentRead| {
+            let mut host = crate::core_host::CoreHost::<FeePolicy>::new();
+            let pending = host.dispatch(FeeEvent::QuoteRequested {
+                chain_id: 137,
+                account: "0xabc".to_owned(),
+                deployed: false,
+                public_key_available: true,
+                tier: FeeTier::Standard,
+                calls: Vec::new(),
+                fee_token: None,
+                auto_fee_token: true,
+                number: Default::default(),
+                read_deployment: Some(true),
+            });
+            let asked = pending
+                .iter()
+                .find(|effect| matches!(effect.operation, FeeOperation::ReadDeployment { .. }))
+                .unwrap_or_else(|| unreachable!("the account read comes first"));
+            let id = asked.id;
+            let _ = host.resolve(id, FeeShellResult::Deployment { read });
+            let view = host.view();
+            assert!(!view.busy);
+            // The retry reads the account again, past anything held.
+            let again = host.dispatch(FeeEvent::Requote);
+            assert!(
+                again.iter().any(|effect| matches!(
+                    effect.operation,
+                    FeeOperation::ReadDeployment { fresh: true, .. }
+                )),
+                "a retry is a real new read"
+            );
+            view.failed
+        };
+        let down = failed_with(DeploymentRead::Unreachable {
+            rate_limited: false,
+        });
         assert_eq!(
-            requote_failure(&failed, Some(limited)),
-            Some(FeeFailure::EstimateFailed),
-            "the core's own reason first"
+            down,
+            Some(FeeFailure::ChainRead {
+                rate_limited: false
+            })
         );
+        assert_eq!(
+            down.and_then(failure_reason_key),
+            Some("componentsUi.gas.reasonChainDown")
+        );
+        let internal = failed_with(DeploymentRead::Internal {
+            kind: "rpc: pool_unavailable".to_owned(),
+        });
+        assert_eq!(internal, Some(FeeFailure::Internal));
+        assert_eq!(
+            internal.and_then(failure_reason_key),
+            Some("componentsUi.gas.reasonInternal")
+        );
+        for failure in [down, internal] {
+            assert!(
+                !Requoter::default()
+                    .observe(failure, false, true, 0.0)
+                    .is_empty(),
+                "{failure:?} is asked again by itself"
+            );
+        }
     }
 
     /// Spec 082 RJ1 (the review's key): the write-ahead hands the op over
@@ -2352,6 +2399,7 @@ mod tests {
             maybe_sent: true,
             submit_block: Some(48_487_620),
             admitted: false,
+            sender: None,
         };
         let admitted = SignTrackerHandoff {
             maybe_sent: false,
@@ -2397,6 +2445,10 @@ mod tests {
             outcome: TrackOutcome::Landing,
             relay_tx_hash: None,
             relay_sent_at_ms: None,
+            sender: None,
+            refusal: None,
+            refusal_key: None,
+            stalled: false,
         };
         let pending = [entry(TrackStatus::Pending)];
         let (fed, event) = tracked_event(OP, &pending, None, 1.0)
