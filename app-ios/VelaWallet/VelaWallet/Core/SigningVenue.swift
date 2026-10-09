@@ -69,8 +69,8 @@ extension SigningVenueWire: Decodable {
 }
 
 /// `signing_venue::VenueBlock` — why a venue cannot be used for an account
-/// (R1, and the web's). The sentence is the corpus's (`key`), with both sides
-/// named.
+/// (R1, and the web's). Typed so the executors can hand it back whole; its
+/// sentence is the core's (`venueBlockLine`), never a table kept here.
 enum VenueBlockWire: Equatable, Hashable {
     /// Vela's own sheet signs only with `getvela.app` keys.
     case appCannotReach(domain: String)
@@ -80,24 +80,14 @@ enum VenueBlockWire: Equatable, Hashable {
     /// answer on a phone; read so a record or a view carrying it still draws.
     case notOnWeb
 
-    /// `VenueBlock::key`.
-    var key: String {
-        switch self {
-        case .appCannotReach: "settings.venue.blockedApp"
-        case .pageOnOtherDomain: "settings.venue.blockedPage"
-        case .notOnWeb: "settings.venue.blockedWeb"
-        }
+    /// The refusal in the person's language: the corpus key and the values
+    /// its line takes, both the core's (`VenueBlock::key` + `vars`) — which
+    /// fact fills which placeholder is not decided here. Empty only for a
+    /// block this build's core cannot read.
+    func text(_ loc: Loc) -> String {
+        guard let line = venueBlockLine(blockJson: CoreJSON.string(wire)) else { return "" }
+        return line.vars.isEmpty ? loc.t(line.key) : loc.t(line.key, vars: line.vars)
     }
-
-    var vars: [String: String] {
-        switch self {
-        case .appCannotReach(let domain): ["domain": domain]
-        case .pageOnOtherDomain(let pageDomain, let domain): ["pageDomain": pageDomain, "domain": domain]
-        case .notOnWeb: [:]
-        }
-    }
-
-    func text(_ loc: Loc) -> String { vars.isEmpty ? loc.t(key) : loc.t(key, vars: vars) }
 
     /// The block as the core reads it back — `SignSubmitOutcome::venue_blocked`
     /// and `SendSubmitFailure::venue_blocked` carry it whole.
