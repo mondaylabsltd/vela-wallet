@@ -200,9 +200,11 @@ struct ExploreScreen: View {
     }
 
     /// The Explore home, with every tab kept as it was — ‹ with no history,
-    /// a closed page, the gallery's 探索.
+    /// a closed page, the gallery's 探索. Nothing is shown, so no tab is
+    /// asked for: none wakes behind the home (`BrowserController.wanted`).
     private func goHome() {
         viewOverride = .start
+        controller?.landedHome()
     }
 
     /// The tab bar inside Explore. 探索 again is the way home from a page;
@@ -641,6 +643,7 @@ struct ExploreScreen: View {
         .onChange(of: visit) { _, _ in
             viewOverride = nil
             followTabs = false
+            if landing == .home { controller?.landedHome() }
         }
         // The landing names a tab that is not in front (a request waiting in
         // another tab): bring it forward, so the page is the one that asks.
@@ -725,11 +728,22 @@ struct ExploreScreen: View {
         case .tabs:
             ExploreTabsScreen(
                 tabs: switcherTabs, copy: model.tabsScreen,
-                // Back to where it was opened from: the home, or the page —
-                // if that page is still there to go back to.
+                // Back to where it was opened from: the home, or the page.
+                // From a page that is the tab in front NOW — the person may
+                // have closed the one they came from, and the core's
+                // selection is what they return to, asked for (as Android
+                // does); a start page in front is the home.
                 onDone: {
-                    let page = controller == nil || engine != nil
-                    viewOverride = tabsFrom == .browsing && page ? .browsing : .start
+                    guard let controller else {
+                        viewOverride = tabsFrom
+                        return
+                    }
+                    guard tabsFrom == .browsing, let id = controller.explore.selectedTab else {
+                        goHome()
+                        return
+                    }
+                    controller.selectTab(id)
+                    if engine != nil { viewOverride = .browsing } else { goHome() }
                 },
                 onOpen: { id in
                     controller?.selectTab(id)
@@ -737,10 +751,16 @@ struct ExploreScreen: View {
                     let startPage = model.tabs.first { $0.id == id }?.startPage ?? false
                     viewOverride = startPage ? .start : .browsing
                 },
+                // The person is tidying the strip, not leaving it: the
+                // switcher stays, with the cards that are left (Android
+                // does the same). Nothing behind it wakes — the neighbour
+                // a close selects is not a tab anybody asked to see.
                 onClose: { id in
-                    controller?.closeTab(id)
-                    // With a live browser the strip decides what is left.
-                    if controller == nil { goHome() } else { followTheTabs() }
+                    guard let controller else {
+                        goHome()
+                        return
+                    }
+                    controller.closeTab(id)
                 },
                 onNew: {
                     controller?.newTab()
@@ -930,14 +950,18 @@ struct ExploreScreen: View {
     /// left; the header's action is the switcher.
     private func resumeSection(_ section: ResumeSectionModel) -> some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+            // The action is a control of its own, the way to the switcher
+            // from the home: a full 44 target, like Android's.
             WalletSectionHeader(
                 title: section.title, action: section.action,
-                onAction: { openTabs(from: .start) }
+                onAction: { openTabs(from: .start) },
+                actionHitTarget: true
             )
             .padding(.vertical, Tokens.Space.s12)
             .accessibilityIdentifier("explore.resume.header")
             ForEach(section.tabs) { row in
-                SiteRowView(site: row.site) { _ in resume(tab: row.id) }
+                // The host is cut from its start, like the pill's.
+                SiteRowView(site: row.site, hostLine: true) { _ in resume(tab: row.id) }
                     .accessibilityIdentifier("explore.resume.row")
             }
         }

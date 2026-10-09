@@ -98,8 +98,12 @@ final class ExploreNavigationScreenTests: XCTestCase {
         XCTAssertTrue(app.buttons["explore.bar.back"].waitForExistence(timeout: 5),
                       "Done did not return to the page it was opened from")
 
-        // 探索 while browsing: the home.
-        app.buttons["探索"].firstMatch.tap()
+        // 探索 while browsing: the home. It is the selected tab and still a
+        // button that can be pressed — for VoiceOver too, the way home.
+        let explore = app.buttons["探索"].firstMatch
+        XCTAssertTrue(explore.isSelected, "探索 is not marked selected under a page")
+        XCTAssertTrue(explore.isEnabled, "the selected 探索 cannot be pressed")
+        explore.tap()
         XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 5),
                       "探索 while browsing did not return to the home")
 
@@ -110,8 +114,13 @@ final class ExploreNavigationScreenTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 5),
                       "‹ with no history did not return to the home")
 
-        // The header's action: the switcher; Done is the home again.
-        app.buttons["标签页"].firstMatch.tap()
+        // The header's action: the switcher; Done is the home again. Its
+        // target is a full 44 each way, and a finger near its top edge, off
+        // the words, still opens the switcher.
+        let action = app.buttons["标签页"].firstMatch
+        XCTAssertGreaterThanOrEqual(action.frame.height, 44, "the header's action is under a 44 target")
+        XCTAssertGreaterThanOrEqual(action.frame.width, 44, "the header's action is under a 44 target")
+        action.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         attach(app.screenshot(), named: "walk-06-switcher-from-home")
         app.buttons["完成"].tap()
@@ -202,6 +211,67 @@ final class ExploreNavigationScreenTests: XCTestCase {
         app.buttons["explore.bar.back"].tap()
         XCTAssertTrue(openTabsHeader(app).waitForExistence(timeout: 10),
                       "‹ with no history did not return to the home")
+        app.terminate()
+    }
+
+    /// Closing a card in the switcher is tidying the strip, not leaving it:
+    /// the switcher stays, one card fewer (as on Android) — it used to hand
+    /// the screen to whatever page the strip had left. Done then goes back
+    /// to the page it was opened from, which is the tab in front now: the
+    /// core's selection, or the home when that has no page.
+    func testClosingACardKeepsTheSwitcher() throws {
+        let server = try LocalDappServer(html: try LocalDappServer.page())
+        server.start()
+        defer { server.stop() }
+
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SIGNER"] = "0"
+        app.launchEnvironment["VELA_URL"] = LocalDappServer.url
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 40),
+                      "the space must be open")
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 40),
+                      "the launch URL did not land on its page")
+
+        // The switcher, from the page.
+        let box = app.buttons["explore.bar.tabs"]
+        let count = try XCTUnwrap(Int(box.value as? String ?? ""), "the count box says no number")
+        box.tap()
+        let done = app.buttons["完成"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the switcher did not open")
+        attach(app.screenshot(), named: "close-01-switcher")
+
+        // The last card is the page's own — a launch URL's new tab goes at the
+        // end of the strip. The grid is lazy, so it is scrolled to first.
+        let closeAll = app.buttons["关闭全部标签页"]
+        for _ in 0..<12 where !(closeAll.exists && closeAll.isHittable) { app.swipeUp() }
+        let closes = app.buttons.matching(NSPredicate(format: "label == %@", "关闭标签页"))
+        XCTAssertGreaterThan(closes.count, 0, "no card to close")
+        closes.element(boundBy: closes.count - 1).tap()
+
+        // The switcher stays.
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(done.exists, "closing a card left the switcher")
+        XCTAssertFalse(app.buttons["explore.bar.back"].exists, "closing a card opened a page")
+        XCTAssertFalse(openTabsHeader(app).exists, "closing a card went to the home")
+        attach(app.screenshot(), named: "close-02-switcher-kept")
+
+        // Done: the tab in front now — the core's selection, as it was left —
+        // or the home when that tab has no page.
+        done.tap()
+        let page = app.buttons["explore.bar.back"]
+        let home = app.descendants(matching: .any)["explore.searchField"]
+        XCTAssertTrue(page.waitForExistence(timeout: 10) || home.exists,
+                      "Done went neither to a page nor to the home")
+        if page.exists {
+            XCTAssertEqual(box.value as? String, String(count - 1), "the strip is not one tab shorter")
+        }
+        attach(app.screenshot(), named: "close-03-done")
         app.terminate()
     }
 

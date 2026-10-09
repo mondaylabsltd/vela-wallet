@@ -14,7 +14,19 @@ struct SiteRowView: View {
     @Environment(\.walletTextScale) private var textScale
 
     let site: SiteModel
+    /// The second line is a host to be judged by — a resume row's (DESIGN N):
+    /// cut, it loses its START, as the browsing bar's pill does, because the
+    /// end of a host is its registrable domain. `app.uniswap.org.evil.xyz`
+    /// reads `…uniswap.org.evil.xyz`, never `app.uniswap.or…` — Uniswap to
+    /// anybody glancing at it. The web board's `hostLine`, Android's
+    /// `TextOverflow.StartEllipsis`. Recent dApps rows keep the tail cut.
+    var hostLine = false
     var onOpen: (String) -> Void = { _ in }
+
+    /// Where the second line is cut when it does not fit.
+    static func secondLineTruncation(hostLine: Bool) -> Text.TruncationMode {
+        hostLine ? .head : .tail
+    }
 
     /// The row's two lines — the core's `browserSiteLabel` (spec 082 RE7,
     /// G8): a page whose title IS its host is named once, with no second
@@ -47,6 +59,7 @@ struct SiteRowView: View {
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
                             .lineLimit(1)
+                            .truncationMode(Self.secondLineTruncation(hostLine: hostLine))
                     }
                 }
                 Spacer(minLength: Tokens.Space.s12)
