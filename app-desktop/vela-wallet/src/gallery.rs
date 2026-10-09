@@ -494,10 +494,7 @@ fn entries() -> Vec<Entry> {
     };
     // What the sheet settled before the hand-off: the fee in its coin, its
     // fiat, and the speed it is priced at.
-    const FEE: Option<(&str, &str)> = Some((
-        "componentsUi.gas.networkFee",
-        "0.0012 USDC · ≈$0.01 · send.gasTier.standard",
-    ));
+    const FEE: Option<(&str, &str)> = Some(("componentsUi.gas.networkFee", "0.0012 USDC · ≈$0.01"));
     signer(
         "hand-off · matches",
         Fixture::Handoff(official_handoff.clone(), official_checked(), FEE),
@@ -706,8 +703,14 @@ impl GalleryView {
         // the arrow keys OR take a picture, and "launch it once per fixture and
         // see whether it survives a frame" is the only end-to-end check left —
         // `scripts/sweep-gallery.sh` is that loop.
+        // An index, or a fixture's own code (`hand-off · checking`) — so a
+        // screenshot pass names the state it means, not where it sits today.
         let selected = crate::dev_env::var!("VELA_GALLERY_STATE")
-            .and_then(|raw| raw.parse::<usize>().ok())
+            .and_then(|raw| {
+                raw.parse::<usize>()
+                    .ok()
+                    .or_else(|| entries.iter().position(|entry| entry.code == raw.trim()))
+            })
             .filter(|index| *index < entries.len())
             .unwrap_or(0);
         eprintln!(
@@ -953,15 +956,16 @@ impl GalleryView {
             Fixture::Handoff(handoff, line, fee) => {
                 let mut model =
                     crate::signing::trusted_signer::handoff_model(&self.loc, handoff, Some(line));
-                // The fee row in the corpus's words: the label, and the
-                // speed's name in place of its key.
-                model.fee = fee.map(|(label, value)| {
-                    let speed = "send.gasTier.standard";
-                    (
-                        self.loc.t(label),
-                        SharedString::from(value.replace(speed, &self.loc.t(speed))),
-                    )
-                });
+                // The fee row in the corpus's words: the label, the figure
+                // the sheet's formatter would draw, and the speed's name.
+                model.fee =
+                    fee.map(
+                        |(label, figure)| crate::signing::trusted_signer::HandoffFeeRow {
+                            label: self.loc.t(label),
+                            figure: SharedString::from(figure),
+                            speed: Some(self.loc.t("send.gasTier.standard")),
+                        },
+                    );
                 let on_open: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 let on_recheck: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 let on_trust: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});

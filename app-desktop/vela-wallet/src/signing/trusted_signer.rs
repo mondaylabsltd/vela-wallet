@@ -64,11 +64,10 @@ pub struct HandoffModel {
     /// Where that key lives, for its mark.
     pub place: KeyMethod,
     /// The fee the person chose on the sheet, and its speed — one quiet row
-    /// under the key (core round 5): `(label, "0.0012 USDC · ≈$0.01 ·
-    /// Standard")`. `None` when the sheet has no settled fee for the speed in
-    /// force (a message, a fee still measuring), or when the screen already
-    /// shows the fee above the card (the send's own confirm).
-    pub fee: Option<(SharedString, SharedString)>,
+    /// under the key (core round 5). `None` when the sheet has no settled fee
+    /// for the speed in force (a message, a fee still measuring), or when the
+    /// screen already shows the fee above the card (the send's own confirm).
+    pub fee: Option<HandoffFeeRow>,
     /// The integrity line and its tone; `None` when no page is involved.
     pub integrity: Option<(SharedString, Tone)>,
     /// Why nothing on this device can sign for the account (R1).
@@ -85,6 +84,17 @@ pub struct HandoffModel {
     pub open_label: SharedString,
     /// "Try again", under a refused line.
     pub recheck_label: SharedString,
+}
+
+/// The hand-off's fee row, worded: "Network fee", the figure as the sheet's
+/// folded fee row draws it ("0.0012 USDC · ≈$0.01"), and — where the network
+/// offers more than one — the speed it is priced at ("Standard"), on its own
+/// quiet line so a narrow column never breaks the figure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HandoffFeeRow {
+    pub label: SharedString,
+    pub figure: SharedString,
+    pub speed: Option<SharedString>,
 }
 
 /// The place a key label names, for its mark: the place whose title key it
@@ -194,19 +204,20 @@ pub fn handoff_model(loc: &Loc, handoff: &Handoff, line: Option<&IntegrityLine>)
     }
 }
 
-/// The hand-off's fee row value: the sheet's own folded fee line for the
-/// quote in force (`figure`, drawn by the sheet's formatter) and, where the
-/// network offers more than one speed, the speed it was priced at — the
-/// core's `HandoffFee`, worded.
+/// The hand-off's fee row: `label`, the sheet's own folded fee line for the
+/// quote in force (`figure`, drawn by the sheet's formatter) and the speed the
+/// core's `HandoffFee` names, if it names one.
 #[must_use]
-pub fn handoff_fee_value(
+pub fn handoff_fee_row(
     loc: &Loc,
+    label: SharedString,
     fee: &vela_core::app::sign_confirm::HandoffFee,
     figure: &str,
-) -> SharedString {
-    match fee.tier_key.as_deref() {
-        Some(tier) => SharedString::from(format!("{figure} · {}", loc.t(tier))),
-        None => SharedString::from(figure.to_owned()),
+) -> HandoffFeeRow {
+    HandoffFeeRow {
+        label,
+        figure: SharedString::from(figure.to_owned()),
+        speed: fee.tier_key.as_deref().map(|tier| loc.t(tier)),
     }
 }
 
@@ -289,7 +300,26 @@ pub fn handoff_facts(
             .text_color(theme.fg_base)
             .child(model.key.clone()),
     ));
-    if let Some((label, value)) = &model.fee {
+    if let Some(fee) = &model.fee {
+        let value = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .items_end()
+            .gap(px(2.))
+            .child(
+                div()
+                    .text_right()
+                    .text_color(theme.fg_base)
+                    .child(fee.figure.clone()),
+            )
+            .children(fee.speed.clone().map(|speed| {
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(speed)
+            }));
         rows.push(fact(
             icon_img(icons, Icon::Coins, false, theme.fg_muted, 16.).into_any_element(),
             div()
@@ -302,14 +332,9 @@ pub fn handoff_facts(
                     div()
                         .flex_none()
                         .text_color(theme.fg_muted)
-                        .child(label.clone()),
+                        .child(fee.label.clone()),
                 )
-                .child(
-                    div()
-                        .min_w(px(0.))
-                        .text_color(theme.fg_base)
-                        .child(value.clone()),
-                ),
+                .child(value),
         ));
     }
     if let Some(blocked) = &model.blocked {
@@ -779,12 +804,12 @@ mod tests {
             tier_key: tier.map(|_| "send.gasTier.standard".to_owned()),
         };
         let figure = "0.0012 USDC · ≈$0.01";
-        let said = handoff_fee_value(&loc, &fee(Some(FeeTier::Standard)), figure);
-        assert_eq!(
-            said.as_ref(),
-            format!("{figure} · {}", loc.t("send.gasTier.standard"))
-        );
-        assert_eq!(handoff_fee_value(&loc, &fee(None), figure).as_ref(), figure);
+        let label = loc.t("componentsUi.gas.networkFee");
+        let row = handoff_fee_row(&loc, label.clone(), &fee(Some(FeeTier::Standard)), figure);
+        assert_eq!(row.label, label);
+        assert_eq!(row.figure.as_ref(), figure);
+        assert_eq!(row.speed, Some(loc.t("send.gasTier.standard")));
+        assert_eq!(handoff_fee_row(&loc, label, &fee(None), figure).speed, None);
     }
 
     #[test]

@@ -1340,6 +1340,17 @@ impl WalletPage {
         {
             self.settings_page = page;
         }
+        // `VELA_SIGNING_RENAME=<url>`: Signing pages with that saved page's
+        // name field open — a rename is a click a screenshot pass cannot make.
+        if let Some(url) = crate::dev_env::var!("VELA_SIGNING_RENAME") {
+            let url = crate::executor::signer_integrity::key_of(&url);
+            let name = crate::executor::signing_pages::saved()
+                .into_iter()
+                .find(|page| crate::executor::signer_integrity::key_of(&page.url) == url)
+                .map(|page| page.name)
+                .unwrap_or_default();
+            self.signer_page_rename = Some((url, name));
+        }
     }
 
     /// What the header, the receive panel and the identicon are drawn from.
@@ -10020,7 +10031,32 @@ impl WalletPage {
                 &line,
             );
             let body = if reachable {
-                crate::signing::pages::page_row_body(theme, &mut self.icons, &row)
+                // A page that asks about its build, or whose check refused
+                // it, can be answered here too — this is where a person finds
+                // that their account's page will not open.
+                let (trust_url, again) = (url.clone(), url.clone());
+                let actions = crate::signing::pages::line_actions(
+                    theme,
+                    &mut self.icons,
+                    SharedString::from(format!("settings-venue-line-{index}")),
+                    &row,
+                    self.loc.t("common.tryAgain"),
+                    Some(Box::new(move |_, _, cx| {
+                        crate::signing::integrity::trust(&trust_url, cx);
+                    })),
+                    Some(Box::new(move |_, _, cx| {
+                        crate::signing::integrity::recheck(&again, cx);
+                    })),
+                );
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(crate::signing::pages::page_row_body(
+                        theme,
+                        &mut self.icons,
+                        &row,
+                    ))
+                    .children(actions)
             } else {
                 let block = choice.blocked.clone();
                 div()
@@ -17801,9 +17837,11 @@ impl WalletPage {
                         &self.locale,
                         &currency,
                     );
-                    card.fee = Some((
+                    card.fee = Some(signing_trusted_signer::handoff_fee_row(
+                        &self.loc,
                         self.signing.fee_label.clone(),
-                        signing_trusted_signer::handoff_fee_value(&self.loc, &fee, &figure),
+                        &fee,
+                        &figure,
                     ));
                 }
             }

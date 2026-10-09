@@ -941,6 +941,48 @@ mod tests {
         );
     }
 
+    /// A self-hosted deployment of a build Vela did not publish, over a real
+    /// socket: the check asks (`AskToTrust`, with the version to trust), and
+    /// once that version is the page's trusted one the same check opens it,
+    /// "trusted on this device" — at the checked address.
+    ///
+    /// ```sh
+    /// SIGNER_SELF_HOSTED=http://localhost:8931/ cargo test self_hosted_build -- --ignored
+    /// ```
+    /// (any static host serving `index.json` and `b/<sha256>/sign.html`.)
+    #[test]
+    #[ignore = "needs a self-hosted deployment at $SIGNER_SELF_HOSTED"]
+    fn a_self_hosted_build_is_asked_about_then_trusted() {
+        let Ok(base) = std::env::var("SIGNER_SELF_HOSTED") else {
+            return;
+        };
+        let asked = check_with(&base, &[], &[]);
+        let Verdict::AskToTrust { actual } = asked.clone() else {
+            unreachable!("not asked: {asked:?}")
+        };
+        assert_eq!(version_to_trust(&base).as_deref(), Some(actual.as_str()));
+        let now = crate::executor::now_ms() as u64;
+        assert_eq!(
+            line(&base, now).key,
+            "componentsUi.signing.integrity.askTrust"
+        );
+        assert!(
+            checked_page(&base, now).is_none(),
+            "opened before it was trusted"
+        );
+        let trusted = vec![actual.clone()];
+        assert_eq!(check_with(&base, &trusted, &[]), Verdict::Open);
+        let now = crate::executor::now_ms() as u64;
+        let said = line(&base, now);
+        assert_eq!(said.key, "componentsUi.signing.integrity.trusted");
+        let page = checked_page(&base, now).unwrap_or_else(|| unreachable!("admitted"));
+        assert!(
+            page.target()
+                .url()
+                .ends_with(&format!("/b/{actual}/sign.html"))
+        );
+    }
+
     /// Spec 082 G67: an index request that reached nothing (a dead dev
     /// proxy) is "could not fetch <host> (<kind>)" and "could not be checked"
     /// — never "publishes no version … update the wallet".

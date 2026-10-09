@@ -209,4 +209,58 @@ mod tests {
             ));
         });
     }
+
+    /// D-15: "Trust this version" is stored on THAT page, and it is that
+    /// page's list — not a device-wide one — the next check is given. The
+    /// official page is never trusted into anything.
+    #[test]
+    fn a_trusted_version_is_the_pages_own_and_feeds_its_check() {
+        with_temp_state("signing-pages-trust", || {
+            const PAGE: &str = "https://sign.example.com/";
+            const OTHER: &str = "https://other.example.com/";
+            let version = "ab".repeat(32);
+            let mut host = CoreHost::<SigningPages>::new();
+            drive(&mut host, Event::Refresh);
+            drive(
+                &mut host,
+                Event::PageAdded {
+                    url: OTHER.to_owned(),
+                    name: String::new(),
+                },
+            );
+            // Not saved yet: the trust saves it.
+            let view = drive(
+                &mut host,
+                Event::VersionTrusted {
+                    url: PAGE.to_owned(),
+                    version: version.clone(),
+                },
+            );
+            let row = view.pages.iter().find(|row| row.url == PAGE);
+            assert_eq!(
+                row.map(|row| row.trusted.clone()),
+                Some(vec![version.clone()])
+            );
+            use crate::executor::signer_integrity::trusted_for_page;
+            assert_eq!(trusted_for_page(PAGE), vec![version.clone()]);
+            assert!(
+                trusted_for_page(OTHER).is_empty(),
+                "another page vouched for"
+            );
+            // The official page: refused, nothing stored.
+            drive(
+                &mut host,
+                Event::VersionTrusted {
+                    url: DEFAULT_SIGNER_URL.to_owned(),
+                    version: version.clone(),
+                },
+            );
+            assert!(trusted_for_page(DEFAULT_SIGNER_URL).is_empty());
+            // The device-wide list of before is neither read nor written.
+            assert!(matches!(
+                storage::read_value("vela.signerPage.trusted"),
+                Ok(None)
+            ));
+        });
+    }
 }

@@ -200,7 +200,12 @@ pub fn line_actions(
         actions = actions.child(
             action(icons, Icon::Check, label)
                 .id(gpui::ElementId::Name(format!("{id}-trust").into()))
-                .on_click(on_trust),
+                // A row that is itself a choice (the account's venue rows)
+                // must not also be chosen by its line's action.
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_trust(event, window, cx);
+                }),
         );
         any = true;
     }
@@ -208,7 +213,10 @@ pub fn line_actions(
         actions = actions.child(
             action(icons, Icon::RefreshCw, try_again)
                 .id(gpui::ElementId::Name(format!("{id}-recheck").into()))
-                .on_click(on_recheck),
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_recheck(event, window, cx);
+                }),
         );
         any = true;
     }
@@ -243,23 +251,9 @@ pub fn own_page_sheet(
         let pick = Rc::clone(&on_pick);
         let url = row.url.clone();
         let pickable = !row.refused && row.trust.is_none();
-        let entry = div()
-            .id(("own-page", index))
-            .w_full()
-            .py(px(12.))
-            .px(px(8.))
-            .rounded(px(10.))
-            .child(page_row_body(theme, icons, row));
-        let entry = if pickable {
-            entry
-                .cursor_pointer()
-                .hover(|style| style.bg(theme.bg_well))
-                .on_click(move |_, window, cx| pick(url.clone(), window, cx))
-        } else if row.refused {
-            entry.opacity(0.55)
-        } else {
-            entry
-        };
+        // "Trust this version" under a self-hosted page's question, inside
+        // the row and under its words — the row itself is not picked until
+        // the question is answered.
         let trust = Rc::clone(&on_trust);
         let trusted_url = row.url.clone();
         let actions = line_actions(
@@ -273,10 +267,25 @@ pub fn own_page_sheet(
             })),
             None,
         );
-        let wrap = div()
+        let entry = div()
+            .id(("own-page", index))
             .w_full()
-            .child(entry)
-            .children(actions.map(|a| a.pb(px(8.))));
+            .py(px(12.))
+            .px(px(8.))
+            .rounded(px(10.))
+            .child(page_row_body(theme, icons, row))
+            .children(actions);
+        let entry = if pickable {
+            entry
+                .cursor_pointer()
+                .hover(|style| style.bg(theme.bg_well))
+                .on_click(move |_, window, cx| pick(url.clone(), window, cx))
+        } else if row.refused {
+            entry.opacity(0.55)
+        } else {
+            entry
+        };
+        let wrap = div().w_full().child(entry);
         list = list.child(if index > 0 {
             wrap.border_t_1().border_color(theme.divider)
         } else {
