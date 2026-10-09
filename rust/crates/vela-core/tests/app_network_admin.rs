@@ -19,14 +19,15 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::network_admin::{
-    build_provider_rpc_url, clean_endpoint_value, default_endpoint, explorer_base_url,
-    is_builtin_chain, is_code_deployed, is_localhost_http, p256_call_indicates_support,
-    parse_chain_data, provider_chain_ids, rank_search, Event, NetChainIndexEntry, NetCustomNetwork,
-    NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField,
-    NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind,
-    NetServiceEndpoints, NetServiceHealth, NetShellResult as Res, NetStoredEndpoints,
-    NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
-    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE,
+    build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
+    explorer_base_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
+    p256_call_indicates_support, parse_chain_data, provider_chain_ids, rank_search, Event,
+    NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
+    NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
+    NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth,
+    NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
+    BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE,
     REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
@@ -574,6 +575,14 @@ fn a_chain_missing_any_required_contract_never_saves() {
     assert_eq!(compat.contracts[4].name, "Safe L2");
     assert_eq!(compat.p256_available, Some(true));
     assert!(!view.wizard.can_add);
+    // Contracts can be deployed: the line says so, and the button opens
+    // Chain Setup on THIS network.
+    assert_eq!(compat.blocker, Some(NetBlocker::MissingContracts));
+    assert_eq!(compat.hint_key.as_deref(), Some(MISSING_CONTRACTS_HINT));
+    assert_eq!(
+        compat.setup_url.as_deref(),
+        Some("https://getvela.app/chain-setup?chain=7777")
+    );
 
     // The confirm is inert — nothing is written, nothing enters the ledger.
     assert!(sut
@@ -612,11 +621,55 @@ fn a_chain_without_the_p256_precompile_never_saves() {
     let compat = sut.view().wizard.compat.expect("checked");
     assert!(!compat.compatible);
     assert_eq!(compat.p256_available, Some(false));
+    // A precompile is the chain's own: nothing to deploy, so no Chain Setup
+    // button — the line says Vela cannot work here and money would be stuck.
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.hint_key.as_deref(), Some(NO_P256_HINT));
+    assert_eq!(compat.setup_url, None);
     assert!(sut
         .dispatch(Event::AddConfirmed {
             now_iso: NOW_ISO.to_owned()
         })
         .is_empty());
+}
+
+/// No verifier AND missing contracts: the verifier is the answer. Deploying
+/// every contract would still leave a chain no passkey can sign on, so the
+/// tool is not offered (the Chain Setup page's own `blocked` verdict).
+#[test]
+fn no_p256_wins_over_missing_contracts() {
+    assert_eq!(net_blocker(false, false), Some(NetBlocker::NoP256));
+    assert_eq!(net_blocker(false, true), Some(NetBlocker::NoP256));
+    assert_eq!(net_blocker(true, false), Some(NetBlocker::MissingContracts));
+    assert_eq!(net_blocker(true, true), None);
+
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_result(RPC_FAST, address, Some("0x")));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    let compat = sut.view().wizard.compat.expect("checked");
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.setup_url, None);
+}
+
+#[test]
+fn the_setup_link_carries_the_chain_and_the_hints_are_in_the_corpus() {
+    assert_eq!(
+        chain_setup_url(42_220),
+        "https://getvela.app/chain-setup?chain=42220"
+    );
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [NO_P256_HINT, MISSING_CONTRACTS_HINT] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 #[test]
@@ -711,6 +764,8 @@ fn a_chain_without_safes_signer_factory_is_single_key_only() {
         !compat.multi_key_ready,
         "a wallet with two to seven keys does not"
     );
+    assert_eq!(compat.blocker, None, "not refused");
+    assert_eq!(compat.setup_url, None);
     let missing: Vec<_> = compat
         .contracts
         .iter()
@@ -889,6 +944,8 @@ fn all_rpcs_failing_reads_unable_to_verify_not_incompatible() {
     assert_eq!(compat.rpc_failure, Some(NetRpcFailureKind::AllProbesFailed));
     assert!(!compat.compatible);
     assert_eq!(compat.p256_available, None, "never probed — no verdict");
+    assert_eq!(compat.blocker, None, "inconclusive is not a refusal");
+    assert_eq!((compat.hint_key, compat.setup_url), (None, None));
     assert!(compat.contracts.iter().all(|c| !c.deployed));
     assert!(!view.wizard.can_add);
     assert!(sut

@@ -192,6 +192,24 @@ pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
 pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
 
+/// Vela's Chain Setup page — which contracts a network lacks, and who can
+/// deploy them. It reads `?chain=<id>` ([`chain_setup_url`]).
+pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
+
+/// [`CHAIN_SETUP_URL`] opened on one network, so the page starts on the chain
+/// the person was checking instead of an empty search.
+#[must_use]
+pub fn chain_setup_url(chain_id: u32) -> String {
+    format!("{CHAIN_SETUP_URL}?chain={chain_id}")
+}
+
+/// The line under a refused network's check when it has no P-256 verifier
+/// ([`NetBlocker::NoP256`]).
+pub const NO_P256_HINT: &str = "settingsModals.addNetwork.noP256Hint";
+/// … when the verifier is there and contracts are missing
+/// ([`NetBlocker::MissingContracts`]).
+pub const MISSING_CONTRACTS_HINT: &str = "settingsModals.addNetwork.incompatibleHint";
+
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
 /// `service` field each endpoint must report. A passkey index pointed at the
 /// wrong service is a LOGIN SAFETY problem, not a latency problem
@@ -884,6 +902,26 @@ pub enum NetRpcFailureKind {
     AllProbesFailed,
 }
 
+/// Why a checked network cannot run Vela wallets
+/// ([`NetCompatibility::blocker`]). Each has its own words and its own next
+/// step, because what can be done about them is opposite.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NetBlocker {
+    /// No P-256 verifier at `0x100` (EIP-7951 / RIP-7212). It is a precompile
+    /// — part of the chain's own client — so nothing can be deployed to add
+    /// it; only the network's team can, by an upgrade. A passkey signature
+    /// cannot be checked here, every wallet's verifier word names `0x100`,
+    /// and money sent to a Vela address here cannot be moved out (invariant
+    /// ②). No deploy button: Chain Setup's own verdict for such a chain is
+    /// "Vela cannot run here". Wins over [`Self::MissingContracts`].
+    NoP256,
+    /// The verifier is there and contracts Vela needs are not (yet). Chain
+    /// Setup lists which, and who can deploy them ([`chain_setup_url`]).
+    MissingContracts,
+}
+
 /// Mirror of `CompatibilityResult` (models/types.ts:257-271), with the
 /// English `error` strings replaced by data the shell words itself.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -904,6 +942,21 @@ pub struct NetCompatibility {
     /// `Some` = inconclusive, show "unable to verify" + Retry — NEVER
     /// "not compatible" (invariant ③).
     pub rpc_failure: Option<NetRpcFailureKind>,
+    /// Why the network was refused — `Some` exactly when the check answered
+    /// and `compatible` is false. Both places a network is added (Settings
+    /// and a dApp's `wallet_addEthereumChain` sheet) draw their line and
+    /// their button from this, never from `compatible` alone.
+    #[serde(default)]
+    pub blocker: Option<NetBlocker>,
+    /// The corpus key of the line under the refusal: [`NO_P256_HINT`] or
+    /// [`MISSING_CONTRACTS_HINT`]. `None` with no blocker.
+    #[serde(default)]
+    pub hint_key: Option<String>,
+    /// Where "Open Chain Setup Tool" goes ([`chain_setup_url`]) — only for
+    /// [`NetBlocker::MissingContracts`]. `None` = no such button: for a
+    /// network with no P-256 verifier there is nothing to deploy.
+    #[serde(default)]
+    pub setup_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -2151,6 +2204,11 @@ fn unverified(chain_id: u32, kind: NetRpcFailureKind) -> NetCompatibility {
         best_rpc_url: None,
         best_rpc_latency_ms: None,
         rpc_failure: Some(kind),
+        // Inconclusive is not a refusal (invariant ③): no blocker, no hint
+        // about deploying anything.
+        blocker: None,
+        hint_key: None,
+        setup_url: None,
     }
 }
 
@@ -2369,6 +2427,7 @@ fn contracts_verdict(phase: &WizardPhase) -> Step {
         .all(|c| c.deployed);
     let compatible = single_key_deployed && p256_available;
     let multi_key_ready = compatible && contracts.iter().all(|c| c.deployed);
+    let blocker = net_blocker(p256_available, single_key_deployed);
 
     Step::Done(NetCompatibility {
         chain_id,
@@ -2379,7 +2438,31 @@ fn contracts_verdict(phase: &WizardPhase) -> Step {
         best_rpc_url: Some(best_url.clone()),
         best_rpc_latency_ms: Some(best_latency_ms),
         rpc_failure: None,
+        blocker,
+        hint_key: blocker.map(|why| {
+            match why {
+                NetBlocker::NoP256 => NO_P256_HINT,
+                NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+            }
+            .to_owned()
+        }),
+        setup_url: (blocker == Some(NetBlocker::MissingContracts))
+            .then(|| chain_setup_url(chain_id)),
     })
+}
+
+/// Why a network that answered the check is refused: no P-256 verifier
+/// first — deploying the contracts would not make it work — else missing
+/// contracts. `None` when a one-key wallet can run.
+#[must_use]
+pub fn net_blocker(p256_available: bool, single_key_deployed: bool) -> Option<NetBlocker> {
+    if !p256_available {
+        Some(NetBlocker::NoP256)
+    } else if !single_key_deployed {
+        Some(NetBlocker::MissingContracts)
+    } else {
+        None
+    }
 }
 
 fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffect, Event> {

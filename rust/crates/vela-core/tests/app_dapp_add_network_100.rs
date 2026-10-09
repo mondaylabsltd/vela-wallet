@@ -21,9 +21,9 @@ use vela_core::app::dapp_rpc::{
     add_chain_ask, add_outcome_error, usable_rpc_url, DappAddOutcome, DappChainAsk,
 };
 use vela_core::app::network_admin::{
-    Event as NEvent, NetCustomNetwork, NetDappAddPhase, NetOperation as NOp, NetProviderKeys,
-    NetRawChainData, NetShellResult as NRes, NetStoredEndpoints, NetWizardPhase, NetworkAdmin,
-    REQUIRED_CONTRACTS,
+    Event as NEvent, NetBlocker, NetCustomNetwork, NetDappAddPhase, NetOperation as NOp,
+    NetProviderKeys, NetRawChainData, NetShellResult as NRes, NetStoredEndpoints, NetWizardPhase,
+    NetworkAdmin, REQUIRED_CONTRACTS,
 };
 
 type Browser = DomainDriver<DappBrowser>;
@@ -686,6 +686,14 @@ fn an_incompatible_chain_is_refused_and_nothing_is_added() {
     let sheet = sut.view().dapp_add.unwrap();
     assert_eq!(sheet.phase, NetDappAddPhase::NotCompatible);
     assert!(!sheet.can_add);
+    // The sheet says why, as Settings does: here the contracts are missing,
+    // so Chain Setup opens on this network.
+    let compat = sheet.compat.expect("the check");
+    assert_eq!(compat.blocker, Some(NetBlocker::MissingContracts));
+    assert_eq!(
+        compat.setup_url,
+        Some(format!("https://getvela.app/chain-setup?chain={NEW_CHAIN}"))
+    );
     // "Add" cannot act on it.
     let ops = sut.dispatch(NEvent::DappAddApproved {
         now_iso: NOW_ISO.to_owned(),
@@ -695,6 +703,51 @@ fn an_incompatible_chain_is_refused_and_nothing_is_added() {
     assert_eq!(settled(&ops), Some(DappAddOutcome::NotCompatible));
     assert!(writes(&ops).is_none());
     assert!(!sut.view().networks.iter().any(|n| n.chain_id == NEW_CHAIN));
+}
+
+/// A page asking for a network with no P-256 verifier: refused, with no
+/// tool to deploy anything — the precompile is the chain's own.
+#[test]
+fn a_chain_without_the_verifier_is_refused_with_no_setup_link() {
+    let mut sut = admin();
+    requested(&mut sut, site_ask(NEW_CHAIN, &[]));
+    catalog(&mut sut, Some(catalog_entry()));
+    probed(&mut sut, CATALOG_RPC, Some(NEW_CHAIN));
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        let wanted = (*address).to_owned();
+        sut.resolve_matching(
+            move |op| matches!(op, NOp::RpcGetCode { address, .. } if *address == wanted),
+            NRes::Code {
+                url: CATALOG_RPC.to_owned(),
+                address: (*address).to_owned(),
+                code: Some("0x6080604052".to_owned()),
+            },
+        );
+    }
+    sut.resolve_matching(
+        |op| matches!(op, NOp::RpcCallP256 { .. }),
+        NRes::P256Call {
+            url: CATALOG_RPC.to_owned(),
+            result: Some("0x".to_owned()),
+        },
+    );
+    sut.resolve_matching(
+        |op| matches!(op, NOp::RpcGetCode { .. }),
+        NRes::Code {
+            url: CATALOG_RPC.to_owned(),
+            address: "0x0000000000000000000000000000000000000100".to_owned(),
+            code: Some("0x".to_owned()),
+        },
+    );
+    let sheet = sut.view().dapp_add.unwrap();
+    assert_eq!(sheet.phase, NetDappAddPhase::NotCompatible);
+    let compat = sheet.compat.expect("the check");
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(
+        compat.hint_key.as_deref(),
+        Some("settingsModals.addNetwork.noP256Hint")
+    );
+    assert_eq!(compat.setup_url, None);
 }
 
 #[test]
