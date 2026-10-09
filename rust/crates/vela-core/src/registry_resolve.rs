@@ -46,6 +46,9 @@ use crate::registry_backup::{call_data, decode, returned, REGISTRY, UNIT_TUPLE};
 use crate::registry_chain::{self, READ_CHAINS};
 use crate::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
+#[cfg(feature = "bindings")]
+use ts_rs::TS;
+
 const SIG_UNIT_BY_GROUP_KEY: &str = "getUnitByGroupKey(bytes)";
 /// A wallet's founding set is at most seven keys; the index is asked for the
 /// whole of it in one page.
@@ -83,11 +86,18 @@ impl Source {
 
 /// Which chain PROVED the answer. `None` = the index answered and no chain
 /// could confirm or deny it (unreachable, or the group has not landed yet).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Also what a shell hands the sign-in machine with a key's status
+/// (`ShellResult::RegistryKeyStatus`): only a Gnosis verdict may say a key has
+/// no record. The default is `None`, so a shell that does not pass it fails
+/// closed — "nobody vouched for this", never "this key is unknown".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
 pub enum VerifiedBy {
     Gnosis,
     Ethereum,
+    #[default]
     None,
 }
 
