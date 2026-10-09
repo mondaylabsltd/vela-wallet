@@ -444,7 +444,8 @@ export function liveBalance(
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	// Nothing known (`unreachable`): the first read failed — or settled with
 	// every chain it asked failed (PR 2 integration) — and nothing is cached.
-	// The core may still carry that round's 0 as its total; it is no figure.
+	// The core gives no figure for it (`display_total_usd` is null, PR 2
+	// polish); the skeleton and the reason, never a zero.
 	if (total === null || view.unreachable) {
 		return {
 			...base,

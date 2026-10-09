@@ -30,7 +30,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { MediaQuery, SvelteMap } from 'svelte/reactivity';
+	import { MediaQuery } from 'svelte/reactivity';
 	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
 	import SettingsHome from '$lib/settings/SettingsHome.svelte';
 	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
@@ -52,6 +52,7 @@
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
 	import {
+		switcherBalances,
 		withLiveAccounts,
 		withLiveAccountsDesktop,
 		withLiveConnections,
@@ -490,17 +491,10 @@
 	// core's switcher cache, with the live total standing in for the active
 	// account's. A pick is answered by the session, which persists the index.
 	const accountsInput = $derived.by(() => {
-		const balances = new SvelteMap<string, number>();
-		for (const entry of balance.view.switcher.balances) {
-			balances.set(entry.address.toLowerCase(), entry.usd);
-		}
-		// The live total stands in for the active row only while it is shown:
-		// hidden, the core withholds every switcher figure (`app::privacy`) and
-		// the rows and the total draw the mask.
+		// The live total stands in for the active row only while it is a
+		// figure — not hidden, not a home that read nothing (`switcherBalances`).
+		const balances = switcherBalances(balance.view, view.address);
 		const hidden = balance.view.switcher.hidden;
-		if (!hidden && balance.view.display_total_usd !== null && view.address !== '') {
-			balances.set(view.address.toLowerCase(), balance.view.display_total_usd);
-		}
 		return {
 			rows: view.accounts,
 			activeIndex: view.active_index,

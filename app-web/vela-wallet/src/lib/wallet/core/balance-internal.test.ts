@@ -15,6 +15,7 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { liveBalance, withLiveWallet } from '$lib/wallet/live';
+import { switcherBalances } from '$lib/settings/live';
 import { buildMobileState } from '$lib/wallet/fixtures';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
@@ -102,6 +103,8 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 		// "Deposit your first asset" under Vela's own error.
 		const view = homeAfter(() => ({ ...settled([1, 100], [1, 100]), tokens: [] }));
 		expect(view.unreachable).toBe(true);
+		// PR 2 polish: the core gives no figure for a round that read nothing.
+		expect(view.display_total_usd).toBeNull();
 		expect(view.internal_key).toBe('componentsUi.gas.reasonInternal');
 		const model = liveBalance(view, USD, m);
 		expect(model.state).toBe('loading');
@@ -121,6 +124,7 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 		// …and the same with every chain simply down: the network's sentence.
 		const down = homeAfter(() => ({ ...settled([1, 100], []), tokens: [] }));
 		expect(down.unreachable).toBe(true);
+		expect(down.display_total_usd).toBeNull();
 		expect(down.internal_key).toBeNull();
 		expect(liveBalance(down, USD, m)).toMatchObject({
 			state: 'loading',
@@ -136,8 +140,33 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 			internal: true
 		}));
 		expect(view.internal_key).toBe('componentsUi.gas.reasonInternal');
+		expect(view.unreachable).toBe(true);
+		expect(view.display_total_usd).toBeNull();
 		const model = liveBalance(view, USD, m);
 		expect(model.status?.text).toBe(m.assets.internal['componentsUi.gas.reasonInternal']);
 		expect(model.status?.text).not.toBe(m.balance.unreachable);
+		expect(model.state).toBe('loading');
+		expect(model.integer).toBeUndefined();
+	});
+});
+
+/**
+ * PR 2 polish: a balance that read nothing has no figure
+ * (`display_total_usd` is null while `unreachable`). The account switcher
+ * stood the live total in for the active row, and a 0 there read as "$0.00"
+ * on an account nobody had read.
+ */
+describe('the switcher over a home that read nothing (PR 2 polish)', () => {
+	it('the active row is not given a figure nobody read', () => {
+		const view = homeAfter(() => ({ ...settled([1, 100], []), tokens: [] }));
+		expect(view.unreachable).toBe(true);
+		const balances = switcherBalances(view, ADDRESS);
+		expect(balances.has(ADDRESS.toLowerCase())).toBe(false);
+	});
+
+	it('a read that answered still stands in for the active row', () => {
+		const view = homeAfter(() => settled([], []));
+		expect(view.display_total_usd).toBe(10);
+		expect(switcherBalances(view, ADDRESS).get(ADDRESS.toLowerCase())).toBe(10);
 	});
 });
