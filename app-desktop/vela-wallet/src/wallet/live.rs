@@ -154,7 +154,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         };
     }
 
-    let Some(usd) = view.display_total_usd.or(view.cached_total_usd) else {
+    // Nothing could be read and nothing is known (`unreachable`: a fetch that
+    // threw, or a round where every chain it asked failed, with no cache):
+    // a skeleton and the reason, never a settled-looking $0.00 — the core
+    // still hands a zero total then, since the round did end.
+    let known = (!view.unreachable)
+        .then(|| view.display_total_usd.or(view.cached_total_usd))
+        .flatten();
+    let Some(usd) = known else {
         return BalanceModel {
             label: s.total_balance.clone(),
             currency: SharedString::from(money.code().to_owned()),
@@ -641,8 +648,9 @@ mod tests {
         let s = strings();
         let money = Money::usd();
         let ethereum = crate::wallet::fill(&s.unreachable_one, "name", "Ethereum");
-        // Boot an account and answer its first fetch with `settle`.
-        let run = |settle: &dyn Fn(bool) -> Res| {
+        // Boot an account and answer its first fetch with `settle`, over a
+        // cached total of $12.
+        let run_cached = |cached: Option<f64>, settle: &dyn Fn(bool) -> Res| {
             let mut host = CoreHost::<BalanceDashboard>::new();
             let mut pending = host.dispatch(BalanceEvent::AccountChanged {
                 address: ADDR.to_owned(),
@@ -651,7 +659,7 @@ mod tests {
                 let result = match &effect.operation {
                     BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
                         address: address.clone(),
-                        usd: Some(12.0),
+                        usd: cached,
                     },
                     BalanceOperation::FetchTokens { pull, .. } => settle(*pull),
                     _ => continue,
@@ -660,6 +668,7 @@ mod tests {
             }
             host.view()
         };
+        let run = |settle: &dyn Fn(bool) -> Res| run_cached(Some(12.0), settle);
         let settled = |failed: Vec<u32>, internal: Vec<u32>| {
             move |pull: bool| Res::FetchSettled {
                 address: ADDR.to_owned(),
@@ -700,6 +709,32 @@ mod tests {
         );
         let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line, Some(s.balance_internal.clone()));
+
+        // Every chain asked failed inside Vela and nothing is cached: nothing
+        // is known — the skeleton and Vela's own line, never "$0.00", and no
+        // "Deposit your first asset" under it.
+        let nothing = run_cached(None, &settled(vec![1, 56], vec![1, 56]));
+        assert!(nothing.unreachable, "the core says nothing is known");
+        let hero = balance(&nothing, &s, "en", money);
+        assert_eq!(hero.state, crate::wallet::fixtures::BalanceState::Loading);
+        assert!(hero.integer.is_empty(), "no figure: {}", hero.integer);
+        assert_eq!(
+            hero.status.map(|(_, line)| line),
+            Some(s.balance_internal.clone())
+        );
+        assert!(
+            !assets_strip_empty(&nothing, None),
+            "nothing read, not nothing held"
+        );
+        // A chain down beside it instead: still nothing known, the network's line.
+        let down = run_cached(None, &settled(vec![1, 56], Vec::new()));
+        assert!(down.unreachable);
+        assert!(balance(&down, &s, "en", money).integer.is_empty());
+        assert!(!assets_strip_empty(&down, None));
+        // One chain answered with nothing: a real zero, and the empty strip.
+        let zero = run_cached(None, &settled(vec![1], Vec::new()));
+        assert!(!zero.unreachable);
+        assert!(assets_strip_empty(&zero, None));
 
         // The gallery's DSR7 is the same state through the same core.
         let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", money);
@@ -2642,13 +2677,16 @@ pub fn chain_rows(
 
 /// Whether the home's asset strip says "nothing here" — the web's
 /// `assetsMode(..) === 'empty'`: once the core has actually looked and there
-/// is nothing held, or when the sidebar's chain holds nothing while others do.
+/// is nothing held, or when the sidebar's chain holds nothing while others do
+/// — never when nothing could be read (`unreachable`).
 /// A blank strip under a pill reads as a list that failed to load; while the
 /// core is still counting it stays blank, because the hero says "counting".
 #[must_use]
 pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
     if view.tokens.is_empty() {
-        return !view.holdings_loading && !view.balance_unknown;
+        // Nothing read at all is not "nothing held": no "Deposit your first
+        // asset" under a hero that says the read failed.
+        return !view.holdings_loading && !view.balance_unknown && !view.unreachable;
     }
     filter.is_some() && visible_token_indices(view, filter).is_empty()
 }
