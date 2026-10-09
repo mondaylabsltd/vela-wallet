@@ -115,9 +115,11 @@ pub enum Refusal {
 pub enum NotOpened {
     /// R6: the page's check did not admit it — the integrity line says why
     /// ("couldn't check the page, so it won't open", "isn't on Vela's
-    /// published build list", …). (Keys out of reach, R1, are not a page
+    /// published build list", "Version … is new to Vela. Trust it on this
+    /// device?" …) — and `page` is the page it was about, so a question can
+    /// be answered where it is said. (Keys out of reach, R1, are not a page
     /// left unopened: the submit ends `VenueBlocked`, and the core says why.)
-    Integrity(IntegrityLine),
+    Integrity { line: IntegrityLine, page: String },
 }
 
 impl Refusal {
@@ -860,7 +862,10 @@ impl Line for SchemeLine {
                     crate::diag::host_of(&self.page),
                     line.key
                 );
-                channel.refuse_open(NotOpened::Integrity(line));
+                channel.refuse_open(NotOpened::Integrity {
+                    line,
+                    page: self.page.clone(),
+                });
                 return Err(Refusal::NotOpened);
             }
         };
@@ -1742,11 +1747,12 @@ pub(crate) mod tests {
         assert_eq!(channel.take_page(), None, "a refused page was handed out");
         assert!(!channel.waiting());
         assert_eq!(channel.ended(), Some(Refusal::NotOpened));
-        let Some(NotOpened::Integrity(line)) = channel.not_opened() else {
+        let Some(NotOpened::Integrity { line, page }) = channel.not_opened() else {
             unreachable!("no reason given: {:?}", channel.not_opened())
         };
         assert!(!line.opens);
         assert_eq!(line.key, "componentsUi.signing.integrity.couldNotCheck");
+        assert_eq!(page, base, "the refusal names the page it was about");
         // Read, it is gone; the next attempt starts clean.
         channel.forget();
         assert_eq!(channel.not_opened(), None);

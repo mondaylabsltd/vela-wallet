@@ -922,11 +922,24 @@ impl OnboardingPage {
                 channel.not_opened().as_ref(),
             );
             let forget = Arc::clone(&channel);
+            // A self-hosted page asking about its build is answered here:
+            // stored on that page and checked again, and the card goes —
+            // the next attempt opens it.
+            let on_trust =
+                trusted_signer_cards::asked_page(channel.not_opened().as_ref()).map(|page| {
+                    let read = Arc::clone(&channel);
+                    Box::new(move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
+                        crate::signing::integrity::trust(&page, cx);
+                        read.forget();
+                    }) as trusted_signer_cards::Click
+                });
             trusted_signer_cards::ended_card(
                 theme,
+                &mut self.icons.borrow_mut(),
                 &self.loc,
                 self.loc.t(channel.title_key()),
                 said,
+                on_trust,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| forget.forget(),
             )
         };

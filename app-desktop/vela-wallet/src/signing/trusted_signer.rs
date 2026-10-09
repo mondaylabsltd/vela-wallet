@@ -586,24 +586,50 @@ pub fn waiting_card(
 #[must_use]
 pub fn ended_words(loc: &Loc, refusal: Refusal, not_opened: Option<&NotOpened>) -> SharedString {
     match (refusal, not_opened) {
-        (Refusal::NotOpened, Some(NotOpened::Integrity(line))) => integrity::text(loc, line),
+        (Refusal::NotOpened, Some(NotOpened::Integrity { line, .. })) => integrity::text(loc, line),
         (refusal, _) => loc.t(refusal.key()),
     }
 }
 
+/// The page whose check asked about its build (`AskToTrust`), when that is
+/// why the page was never opened — the ended card says the question, and
+/// answers it beside it (polish 9).
+#[must_use]
+pub fn asked_page(not_opened: Option<&NotOpened>) -> Option<String> {
+    match not_opened? {
+        NotOpened::Integrity { line, page } => {
+            (line.state == IntegrityState::AskToTrust).then(|| page.clone())
+        }
+    }
+}
+
 /// Why the last attempt ended unsigned. Nothing was signed and nothing was
-/// sent, whichever sentence it is.
+/// sent, whichever sentence it is. `on_trust`: the sentence is a self-hosted
+/// page's "Trust it on this device?" ([`asked_page`]) — its answer, "Trust
+/// this version", under it, as on every surface that asks.
 pub fn ended_card(
     theme: &Theme,
+    icons: &mut IconCache,
     loc: &Loc,
     heading: SharedString,
     said: SharedString,
+    on_trust: Option<Click>,
     on_done: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
     card(theme)
         .items_center()
         .child(title(theme, heading))
         .child(body(theme, said))
+        .children(on_trust.map(|on_trust| {
+            line_action(
+                theme,
+                icons,
+                "trusted-signer-trust",
+                Icon::Check,
+                loc.t("settings.signing.pageTrust"),
+                on_trust,
+            )
+        }))
         .child(vela_button(
             "trusted-signer-done",
             ButtonVariant::Primary,
@@ -659,8 +685,28 @@ mod tests {
             "",
             None,
         );
-        let said = ended_words(&loc, Refusal::NotOpened, Some(&NotOpened::Integrity(line)));
+        let page = "https://sign.example.com/".to_owned();
+        let refused = NotOpened::Integrity {
+            line,
+            page: page.clone(),
+        };
+        let said = ended_words(&loc, Refusal::NotOpened, Some(&refused));
         assert!(said.contains("cdcdcdcd"), "{said}");
+        // A refusal is not a question: nothing to trust.
+        assert_eq!(asked_page(Some(&refused)), None);
+        // A self-hosted build nobody decided about is: answered on the card.
+        let asks = NotOpened::Integrity {
+            line: IntegrityLine::of(
+                &Verdict::AskToTrust {
+                    actual: "3f".repeat(32),
+                },
+                "",
+                None,
+            ),
+            page: page.clone(),
+        };
+        assert_eq!(asked_page(Some(&asks)), Some(page));
+        assert_eq!(asked_page(None), None);
         // Any other ending is its own sentence, whatever was last refused.
         assert_eq!(
             ended_words(&loc, Refusal::Closed, None),

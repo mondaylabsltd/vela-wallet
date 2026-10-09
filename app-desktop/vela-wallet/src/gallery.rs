@@ -684,9 +684,22 @@ fn entries() -> Vec<Entry> {
         "ended · page not opened",
         Fixture::TrustedSignerEnded(
             crate::executor::trusted_signer::Refusal::NotOpened,
-            Some(crate::executor::trusted_signer::NotOpened::Integrity(
-                could_not_check(),
-            )),
+            Some(crate::executor::trusted_signer::NotOpened::Integrity {
+                line: could_not_check(),
+                page: vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),
+            }),
+        ),
+    );
+    // A self-hosted page's new build, met at sign-in: the question, and its
+    // answer beside it.
+    signer(
+        "ended · a new version asks",
+        Fixture::TrustedSignerEnded(
+            crate::executor::trusted_signer::Refusal::NotOpened,
+            Some(crate::executor::trusted_signer::NotOpened::Integrity {
+                line: asks_to_trust(),
+                page: OWN_PAGE.to_owned(),
+            }),
         ),
     );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {
@@ -1020,15 +1033,29 @@ impl GalleryView {
             }
             // Spec 075: bare, like the cable's — the gallery IS the backdrop.
             Fixture::TrustedSignerEnded(refusal, not_opened) => {
+                // The question is met at a ceremony's launch (a sign-in, here);
+                // the other endings are a signature's.
+                let asked = crate::signing::trusted_signer::asked_page(not_opened.as_ref());
+                let heading = self.loc.t(if asked.is_some() {
+                    "componentsUi.signing.ceremonySignIn"
+                } else {
+                    "componentsUi.signing.handoffTitle"
+                });
+                let on_trust = asked.map(|_| {
+                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {})
+                        as crate::signing::trusted_signer::Click
+                });
                 crate::signing::trusted_signer::ended_card(
                     theme,
+                    &mut self.icons.borrow_mut(),
                     &self.loc,
-                    self.loc.t("componentsUi.signing.handoffTitle"),
+                    heading,
                     crate::signing::trusted_signer::ended_words(
                         &self.loc,
                         *refusal,
                         not_opened.as_ref(),
                     ),
+                    on_trust,
                     |_, _, _| {},
                 )
             }
