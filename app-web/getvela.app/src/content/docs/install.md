@@ -73,9 +73,9 @@ work. See [build the apps yourself](/docs/self-hosting#web-app).
 
 A checksum tells you that two files are identical. It cannot tell you who made
 the file — and the list of checksums sits on the same page as the download. So
-every package we attach to a release is also **attested**: the workflow run that
-built it signs a statement naming the file, the commit and the run, and GitHub
-keeps it. Checking it takes one command with the
+every package we attach to a release is also **attested**: the release workflow
+signs a statement naming the file, the commit and the run, and GitHub keeps it.
+Checking it takes one command with the
 [GitHub CLI](https://cli.github.com) (sign in once with `gh auth login`; the
 check is free):
 
@@ -84,12 +84,16 @@ gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wall
 ```
 
 It prints who built the file and from which commit, or it fails. Nothing on your
-machine has to trust us for that answer: the signature is GitHub's, made at build
-time, and it cannot be produced by someone who merely re-uploads a file
-somewhere.
+machine has to trust us for that answer: the signature is GitHub's, made when the
+release is published, and it cannot be produced by someone who merely re-uploads
+a file somewhere.
 
-Mac images are signed with our Developer ID and notarized by Apple, which macOS
-checks for you when you open one. To ask it yourself:
+Mac images are the exception. They are built, signed with our Developer ID and
+notarized by Apple by hand, so no workflow built them; a separate workflow attests
+them afterwards, from the bytes as published (add
+`--signer-workflow mondaylabsltd/vela-wallet/.github/workflows/macos-attest.yml`
+to check that). Apple's notarization, which macOS checks when you open one, is
+their first proof. To ask for it yourself:
 
 ```bash
 xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg

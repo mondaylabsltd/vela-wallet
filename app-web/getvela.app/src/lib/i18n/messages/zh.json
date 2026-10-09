@@ -4,6 +4,7 @@
 			"alpha": "早期版本",
 			"blog": "博客",
 			"docs": "文档",
+			"notes": "札记",
 			"about": "关于",
 			"whyVela": "我们为什么做它",
 			"howItWorks": "工作原理",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "文档",
+				"notes": "札记",
 				"whitepaper": "白皮书",
 				"audits": "审计与已知问题",
 				"roadmap": "路线图",

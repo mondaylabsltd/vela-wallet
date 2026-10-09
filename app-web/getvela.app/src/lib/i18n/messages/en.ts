@@ -46,6 +46,8 @@ export const en = {
 			alpha: 'Alpha',
 			blog: 'Blog',
 			docs: 'Docs',
+			/** Spec 101. English-only section; the label is chrome, so it is translated. */
+			notes: 'Notes',
 			about: 'About',
 			whyVela: 'Why we built it',
 			howItWorks: 'How it works',
@@ -68,6 +70,7 @@ export const en = {
 			},
 			links: {
 				docs: 'Docs',
+				notes: 'Notes',
 				whitepaper: 'Whitepaper',
 				audits: 'Audits & known issues',
 				roadmap: 'Roadmap',

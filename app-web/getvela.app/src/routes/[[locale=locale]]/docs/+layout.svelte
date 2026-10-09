@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { DOCS_INDEX_SLUG, sidebar } from '$lib/content/sidebar';
 	import { pathFor, splitLocalePath } from '$lib/i18n/locales';
@@ -26,14 +27,11 @@
 	}
 </script>
 
+<ReadingFonts locale={data.locale} />
 <SiteHeader locale={data.locale} />
 
-<div class="docs">
-	<button
-		class="sidebar-toggle"
-		onclick={() => (menuOpen = !menuOpen)}
-		aria-expanded={menuOpen}
-	>
+<div class="docs reading">
+	<button class="sidebar-toggle" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen}>
 		<span class="bars" aria-hidden="true"></span>
 		{menuOpen ? m.chrome.docs.ui.hide : m.chrome.docs.ui.browse}
 	</button>
@@ -90,13 +88,14 @@
 	.group {
 		margin-bottom: 26px;
 	}
+	/* The same quiet sidebar as the notes (spec 101): normal-case group names,
+	   and where you are shown in ink, not orange. */
 	.group-title {
-		font-size: max(0.72rem, var(--floor-label));
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
+		font-size: max(0.84rem, var(--floor-meta));
 		color: var(--text-muted);
-		font-weight: 600;
-		margin-bottom: 10px;
+		font-weight: 500;
+		margin-bottom: 6px;
+		padding: 0 12px;
 	}
 	.group ul {
 		list-style: none;
@@ -117,8 +116,8 @@
 		background: var(--bg-raised);
 	}
 	.group li a.active {
-		color: var(--accent);
-		background: var(--accent-soft);
+		color: var(--text);
+		background: var(--bg-raised);
 		font-weight: 500;
 	}
 	.content {

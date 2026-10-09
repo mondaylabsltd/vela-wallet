@@ -4,6 +4,7 @@
 			"alpha": "Alpha",
 			"blog": "Blog",
 			"docs": "Dokumentasi",
+			"notes": "Catatan",
 			"about": "Tentang",
 			"whyVela": "Kenapa kami membuatnya",
 			"howItWorks": "Cara kerjanya",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "Dokumentasi",
+				"notes": "Catatan",
 				"whitepaper": "Whitepaper",
 				"audits": "Audit & masalah yang diketahui",
 				"roadmap": "Peta jalan",

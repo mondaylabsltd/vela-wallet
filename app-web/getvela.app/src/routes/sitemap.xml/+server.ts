@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { getAllPosts } from '$lib/content/blog';
+import { getNotes, partsWithNotes } from '$lib/content/notes';
 import { ENGLISH_ONLY_PAGES, localizedPages, urlsFor } from '$lib/i18n/urls';
 import { pathFor } from '$lib/i18n/locales';
 import { seoConfig } from '$lib/seo';
@@ -27,8 +28,7 @@ export const GET: RequestHandler = () => {
 	for (const page of localizedPages()) {
 		const alternates = urlsFor(page)
 			.map(
-				(u) =>
-					`\t\t<xhtml:link rel="alternate" hreflang="${u.locale}" href="${domain}${u.path}"/>`
+				(u) => `\t\t<xhtml:link rel="alternate" hreflang="${u.locale}" href="${domain}${u.path}"/>`
 			)
 			.join('\n');
 		const xDefault = `\t\t<xhtml:link rel="alternate" hreflang="x-default" href="${domain}${page.englishPath}"/>`;
@@ -51,6 +51,35 @@ ${xDefault}
 		<changefreq>${page.changefreq}</changefreq>
 		<priority>${page.priority}</priority>
 	</url>`);
+	}
+
+	// Notes (spec 101): English-only, so no alternates. A note's lastmod is the
+	// day its facts were last checked against the code, which is the change a
+	// reader cares about. Drafts are not in a production build at all.
+	const notes = getNotes();
+	if (notes.length > 0) {
+		blocks.push(`	<url>
+		<loc>${domain}/notes</loc>
+		<changefreq>weekly</changefreq>
+		<priority>0.7</priority>
+	</url>`);
+		for (const { modules } of partsWithNotes()) {
+			for (const { module } of modules) {
+				blocks.push(`	<url>
+		<loc>${domain}/notes/${module.slug}</loc>
+		<changefreq>weekly</changefreq>
+		<priority>0.6</priority>
+	</url>`);
+			}
+		}
+		for (const note of notes) {
+			blocks.push(`	<url>
+		<loc>${domain}/notes/${note.module}/${note.slug}</loc>
+		<lastmod>${note.checked.slice(0, 10)}</lastmod>
+		<changefreq>monthly</changefreq>
+		<priority>0.6</priority>
+	</url>`);
+		}
 	}
 
 	for (const post of getAllPosts()) {
