@@ -117,6 +117,7 @@ class I18nEngineSmokeTest {
         I18nKeys.Login.ALERT_INCOMPATIBLE_BODY,
         I18nKeys.Login.ALERT_INCOMPATIBLE_BODY_CREATE,
         I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY,
+        I18nKeys.Login.ALERT_SIGN_IN_FAILED_BODY_ANDROID,
         I18nKeys.Login.SWITCH_DEVICE_BTN,
         I18nKeys.Settings.SECTION_PASSKEY_INDEX,
         I18nKeys.Settings.ENDPOINT_URL_LABEL,

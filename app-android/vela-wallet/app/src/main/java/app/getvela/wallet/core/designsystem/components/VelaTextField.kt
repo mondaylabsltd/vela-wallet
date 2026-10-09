@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
@@ -99,6 +100,8 @@ fun VelaTextField(
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.regular,
                     fontSize = VelaTextSize.lg,
+                    // An address typed or pasted reads "0x", not "0×".
+                    fontFeatureSettings = VelaFontFeatures,
                 ),
                 cursorBrush = SolidColor(colors.accentBase),
                 interactionSource = interactionSource,

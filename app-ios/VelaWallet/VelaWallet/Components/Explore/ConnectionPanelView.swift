@@ -102,7 +102,7 @@ struct ConnectionPanelView: View {
                                         tappable: false)
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                             Text(verbatim: connection.account.name)
-                                .typeRole(Typography.rowTitle.scaled(textScale))
+                                .typeRole(Typography.rowTitle.literal.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
                             Text(verbatim: connection.account.address)
                                 .typeRole(Typography.monoSmall.scaled(textScale))

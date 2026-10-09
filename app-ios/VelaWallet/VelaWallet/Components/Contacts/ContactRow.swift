@@ -78,7 +78,7 @@ struct ContactRow: View {
                 IdenticonAvatar(seed: contact.addressFull, size: avatar, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: contact.name)
-                        .typeRole(Typography.rowTitle.scaled(textScale))
+                        .typeRole(Typography.rowTitle.literal.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                         .truncationMode(.tail)

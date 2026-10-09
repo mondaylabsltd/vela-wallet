@@ -47,7 +47,8 @@ import uniffi.vela_dev_fixtures.fixtureMultiAddress
  * device may be the founder's, with a real wallet on it. So entering APPENDS
  * the fixture account (`add_account`, which also makes it active) rather than
  * replacing the list (`set_wallet` would overwrite the real accounts), and
- * leaving removes exactly that record and re-reads the store.
+ * leaving removes exactly that record, re-reads the store, and puts the
+ * person back on the wallet that was in front when they came in.
  *
  * **Which wallet.** The MULTI-key one every fixture key co-owns — the golden
  * Safe the web's and the desktop's parallel spaces send dust from — with the
@@ -126,6 +127,12 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
                 VelaLog.event("parallel", "enter refused", "stored" to stored, "seen" to settled.accounts.size)
                 return@launch
             }
+            // The wallet in front before the space, for the way out: leaving
+            // used to land on the first account whichever one the person had
+            // been on (device pass 2026-10-09). Kept here, beside the flag, so
+            // a relaunch inside the space still knows it.
+            val before = settled.address.takeIf { settled.hasWallet && !it.equals(address, ignoreCase = true) }
+            prefs.edit().putString(KEY_RETURN_TO, before).apply()
             runCatching { container.session.addAccount(account) }
                 .onFailure {
                     prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
@@ -136,12 +143,13 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
 
     override fun leave() {
         if (!active()) return
-        prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
+        val returnTo = prefs.getString(KEY_RETURN_TO, null)
+        prefs.edit().putBoolean(KEY_ACTIVE, false).remove(KEY_RETURN_TO).apply()
         val pinned = fixtureAccounts().first()
-        VelaLog.event("parallel", "leave", "address" to fixtureMultiAddress())
+        VelaLog.event("parallel", "leave", "address" to fixtureMultiAddress(), "returnTo" to (returnTo != null))
         val container = (app as VelaWalletApplication).container
         scope.launch {
-            container.session.removeFixtureAccount(pinned.credentialIdHex)
+            container.session.removeFixtureAccount(pinned.credentialIdHex, returnTo)
         }
     }
 
@@ -167,6 +175,9 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
     private companion object {
         const val KEY_ACTIVE = "active"
         const val KEY_SIGN_WITH = "signWith"
+
+        /** The address in front when the space was entered — where leaving goes back to. */
+        const val KEY_RETURN_TO = "returnTo"
     }
 }
 

@@ -16,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -30,6 +32,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.wallet.ActivityKind
 import app.getvela.wallet.feature.wallet.ActivityRowModel
+import app.getvela.wallet.feature.wallet.TitlePlace
 
 /**
  * Day-group label above activity rows (今天 / 昨天; spec vocabulary #8).
@@ -86,15 +89,20 @@ fun ActivityRow(model: ActivityRowModel, modifier: Modifier = Modifier) {
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = model.title,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.semibold,
-                fontSize = VelaTextSize.lg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val parts = model.titlePlace
+            if (parts != null) {
+                PlaceTitle(parts, model.title)
+            } else {
+                Text(
+                    text = model.title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.lg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = model.subtitle,
                 color = colors.fgMuted,
@@ -176,4 +184,36 @@ private fun AmountLine(model: ActivityRowModel, amountColor: Color) {
         fontFamily = VelaFontFamily,
         textAlign = TextAlign.End,
     )
+}
+
+/**
+ * A dApp row's title on its one line, the verb never the part cut: the words
+ * either side of the place keep their width, and the place — a site's host —
+ * takes what is left, cut in its middle (「在 127.0…8137 合约交互」). The tail
+ * ellipsis cut the verb instead: 「在 127.0.0.1:8137 合约…」. Said as the one
+ * title it is.
+ */
+@Composable
+private fun PlaceTitle(parts: TitlePlace, title: String) {
+    val colors = VelaTheme.colors
+    @Composable
+    fun part(text: String, modifier: Modifier = Modifier, overflow: TextOverflow = TextOverflow.Clip) = Text(
+        text = text,
+        color = colors.fgBase,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.semibold,
+        fontSize = VelaTextSize.lg,
+        maxLines = 1,
+        softWrap = false,
+        overflow = overflow,
+        modifier = modifier,
+    )
+    Row(
+        modifier = Modifier.clearAndSetSemantics { contentDescription = title },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (parts.lead.isNotEmpty()) part(if (parts.gapBefore) parts.lead + " " else parts.lead)
+        part(parts.place, Modifier.weight(1f, fill = false), TextOverflow.MiddleEllipsis)
+        if (parts.trail.isNotEmpty()) part(if (parts.gapAfter) " " + parts.trail else parts.trail)
+    }
 }

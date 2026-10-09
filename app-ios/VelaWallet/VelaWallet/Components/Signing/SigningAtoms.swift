@@ -358,7 +358,7 @@ struct SigningPartyRow: View {
             HStack(alignment: .top, spacing: Tokens.Space.s12) {
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: name)
-                        .typeRole(Typography.rowTitle.scaled(textScale))
+                        .typeRole(Typography.rowTitle.literal.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                     if let address {
                         Text(verbatim: address)

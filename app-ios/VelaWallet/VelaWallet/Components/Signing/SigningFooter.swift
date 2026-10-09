@@ -31,6 +31,9 @@ struct SigningFeeView: View {
     /// The fee is being measured again (the 30 s re-quote, a refresh, a new
     /// speed): the line under the card holds its height (`heldWarning`).
     var measuring = false
+    /// Before any line was said: the one the core already knows the first
+    /// figure will bring (`SigningModel.feeReserve`), held the same way.
+    var reserve: String?
 
     /// The line under the card, the last time it was said. While the fee is
     /// measured again that verdict is about the last quote, so it is not said
@@ -55,8 +58,10 @@ struct SigningFeeView: View {
                 if let warning {
                     reason(warning)
                         .accessibilityIdentifier("signing.fee.reason")
-                } else if measuring, let heldWarning {
-                    reason(heldWarning)
+                } else if measuring, let held = heldWarning ?? reserve {
+                    // The last line said, or — before any was — the one the
+                    // core already knows the first figure will bring.
+                    reason(held)
                         .hidden()
                         .accessibilityHidden(true)
                 }

@@ -5,7 +5,8 @@
 //  One card in the tab switcher (mock E5): the page as it was last seen
 //  (spec 079 — every card used to be the same drawing), the site's mark and
 //  title, and the ✕ that closes it. The selected card carries an accent
-//  border — the only accent on that screen.
+//  border — the only accent on that screen — and, for VoiceOver, the
+//  selected trait on the button named by its title.
 //
 //  Spec 082 RE12 (G25): ONE skeleton per cell, so every card in a row is the
 //  same height. The preview's size comes from a clear box of the card's
@@ -65,6 +66,13 @@ struct TabCardView: View {
                 preview
             }
             .buttonStyle(.plain)
+            // To VoiceOver the card is its title, and "this tab" is said, not
+            // only drawn: the accent border was all that marked it, and a
+            // snapshot or the start page's sail gave the button no words at
+            // all (device pass 2026-10-09). Selected the way the app's other
+            // picked rows are (WalletTabBar, the fee speeds).
+            .accessibilityLabel(Text(verbatim: tab.title))
+            .accessibilityAddTraits(tab.selected ? [.isSelected] : [])
 
             HStack(spacing: Tokens.Space.s8) {
                 if let site = tab.site {
@@ -74,6 +82,8 @@ struct TabCardView: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .lineLimit(1)
+                    // Said once, by the card's button above.
+                    .accessibilityHidden(true)
                 Spacer(minLength: Tokens.Space.s4)
                 Button {
                     onClose(tab.id)

@@ -94,7 +94,8 @@ const QUOTED_FEE: FeeView = {
 	fee_token: null,
 	options: [],
 	confirm_fee_ready: true,
-	no_coin_pays: false
+	no_coin_pays: false,
+	nothing_to_pay_from: false
 };
 
 function field(over: Partial<ClearSignField> = {}): ClearSignField {
@@ -430,6 +431,25 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		// The answer: a quote, and no sentence.
 		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
 		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('a first figure the core knows no coin can pay holds that line from its measurement', () => {
+		// iPhone pass 2026-10-09: the backup sheet's confirm dropped 26 pt when
+		// its first figure landed as "no coin can pay". The core knows it while
+		// the figure is measured (`nothing_to_pay_from`): held, not said.
+		const first: FeeView = {
+			...QUOTED_FEE,
+			fee: null,
+			busy: true,
+			confirm_fee_ready: false,
+			nothing_to_pay_from: true
+		};
+		const held = buildSigningModel(inputs({ fee: first, feeFailing: null }))?.fee;
+		expect(held).toMatchObject({ value: m.feeEstimating, warningReserved: m.feeNoCoinPays });
+		expect(held && 'warning' in held ? held.warning : undefined).toBeUndefined();
+		// A failure being asked again keeps its own reason first (G47).
+		const failing = buildSigningModel(inputs({ fee: first, feeFailing: 'quote_unavailable' }))?.fee;
+		expect(failing).toMatchObject({ warningReserved: NET });
 	});
 
 	it('a chain node, not Vela, is named when the chain read failed (RJ13, G48)', () => {

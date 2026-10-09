@@ -221,11 +221,16 @@ struct FeeViewWire: Decodable, Equatable {
     /// `short`). The sheet says so instead of naming the coin in force as
     /// though another could stand in. Absent on the wire reads `false`.
     var noCoinPays = false
+    /// While the first figure is measured, not one coin on offer has anything
+    /// left to pay from: the figure will land as `noCoinPays`, and the sheet
+    /// holds that line's room from now (D6, iPhone pass 2026-10-09). Absent
+    /// on the wire reads `false`.
+    var nothingToPayFrom = false
 }
 
 extension FeeViewWire {
     private enum CodingKeys: String, CodingKey {
-        case busy, failed, fee, stale, feeToken, options, confirmFeeReady, noCoinPays
+        case busy, failed, fee, stale, feeToken, options, confirmFeeReady, noCoinPays, nothingToPayFrom
     }
 
     /// Written out for `failed` alone: a `FeeFailure` is a string for every
@@ -241,6 +246,7 @@ extension FeeViewWire {
         options = try c.decode([FeeOptionWire].self, forKey: .options)
         confirmFeeReady = try c.decode(Bool.self, forKey: .confirmFeeReady)
         noCoinPays = try c.decodeIfPresent(Bool.self, forKey: .noCoinPays) ?? false
+        nothingToPayFrom = try c.decodeIfPresent(Bool.self, forKey: .nothingToPayFrom) ?? false
     }
 }
 

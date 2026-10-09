@@ -236,7 +236,7 @@ fun SigningSheetContent(
         val feeLine = remember(model.requestKey) { HeldLine() }
         model.fee?.let { drawn ->
             val fee = if (drawn is FeeModel.OnChain) {
-                val line = feeLine.next(drawn.warning, drawn.measuring)
+                val line = feeLine.next(drawn.warning, drawn.measuring, drawn.reserve)
                 drawn.copy(heldWarning = line.takeIf { drawn.warning == null })
             } else {
                 drawn

@@ -204,6 +204,7 @@ object WalletLive {
                 item.kind == FeedTxKind.Receive || received -> ActivityKind.Received
                 else -> ActivityKind.Sent
             },
+            titlePlace = dapp?.let { dappTitleParts(it, strings) },
             title = when {
                 dapp != null -> dappTitle(dapp, strings)
                 // A dApp payload this build could not read: the plain word.
@@ -234,13 +235,34 @@ object WalletLive {
      * place the core named (`history.dappRowTitle`), or the verb alone.
      */
     fun dappTitle(dapp: FeedDapp, strings: VelaStrings): String {
-        val verb = dapp.intent_term
-            ?.let { term -> (I18nKeys.Wallet.SIGNING_TERM_PREFIX + term).let { key -> strings.t(key).takeIf { it.isNotBlank() && it != key } } }
-            ?: dapp.intent?.takeIf { it.isNotBlank() }
-            ?: strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+        val verb = dappVerb(dapp, strings)
         return dapp.place?.takeIf { it.isNotBlank() }
             ?.let { place -> strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to verb, "place" to place)) }
             ?: verb
+    }
+
+    private fun dappVerb(dapp: FeedDapp, strings: VelaStrings): String = dapp.intent_term
+        ?.let { term -> (I18nKeys.Wallet.SIGNING_TERM_PREFIX + term).let { key -> strings.t(key).takeIf { it.isNotBlank() && it != key } } }
+        ?: dapp.intent?.takeIf { it.isNotBlank() }
+        ?: strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+
+    /**
+     * [dappTitle] split around its place, as the locale orders them — `null`
+     * when the title names no place, or the template does not name it once.
+     */
+    fun dappTitleParts(dapp: FeedDapp, strings: VelaStrings): TitlePlace? {
+        val place = dapp.place?.takeIf { it.isNotBlank() } ?: return null
+        val mark = "\uFFFC"
+        val pieces = strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to dappVerb(dapp, strings), "place" to mark))
+            .split(mark)
+        if (pieces.size != 2) return null
+        return TitlePlace(
+            lead = pieces[0].trim(),
+            place = place,
+            trail = pieces[1].trim(),
+            gapBefore = pieces[0].lastOrNull()?.isWhitespace() == true,
+            gapAfter = pieces[1].firstOrNull()?.isWhitespace() == true,
+        )
     }
 
     /**

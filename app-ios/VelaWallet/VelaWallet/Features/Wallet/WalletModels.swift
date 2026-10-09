@@ -127,6 +127,27 @@ struct ActivityRowModel: Identifiable {
     /// What came back, beside the figure — a swap's coin, "≈ +0.03 ETH"
     /// (083 F1, spec 093). `nil` on every other row.
     var received: String? = nil
+    /// A dApp row's `title` in its parts, so the verb is never the part cut:
+    /// 「在 127.0.0.1:8137 合约交互」 beside an amount wrapped after 「在」 and
+    /// cut the host — and the verb with it — to 「127.0.0.1:813…」 (iPhone
+    /// pass 2026-10-09). `nil` on every other row.
+    var titlePlace: TitlePlace? = nil
+}
+
+/// A title that names a place — `history.dappRowTitle`, 「在 {{place}}
+/// {{intent}}」, "{{intent}} on {{place}}" — split around the place, in the
+/// locale's own order. The words either side are drawn whole; the place (a
+/// site's host) is the one part that is cut, in its middle.
+struct TitlePlace: Equatable {
+    /// The words before the place, its edge spaces trimmed.
+    let lead: String
+    let place: String
+    /// The words after it, its edge spaces trimmed.
+    let trail: String
+    /// The template had a space between the lead and the place.
+    let gapBefore: Bool
+    /// …and between the place and the trail.
+    let gapAfter: Bool
 }
 
 struct ActivityGroupModel: Identifiable {

@@ -73,6 +73,9 @@ struct SigningSheetSteadyTests {
         /// A fee landed that no coin can pay: the shortfall under the card,
         /// the gate shut with nothing more to say.
         case short
+        /// The first figure measured, and the core already knows no coin has
+        /// anything to pay from (`FeeView.nothing_to_pay_from`).
+        case firstNothingToPay
     }
 
     private var measuringNote: String { loc.t("componentsUi.signing.confirmBlock.feeMeasuring") }
@@ -100,6 +103,10 @@ struct SigningSheetSteadyTests {
         case .short:
             fee = .onchain(label: label, value: figure, selector: nil, warning: noCoin, tappable: false)
             (enabled, note, measuring) = (false, nil, false)
+        case .firstNothingToPay:
+            fee = .onchain(label: label, value: loc.t("componentsUi.gas.estimating"), selector: nil,
+                           tappable: false)
+            (enabled, note, measuring) = (false, measuringNote, true)
         }
         var model = SigningModel(
             id: base.id, dapp: base.dapp, network: base.network, blocks: base.blocks,
@@ -110,6 +117,7 @@ struct SigningSheetSteadyTests {
         model.dappOwn = base.dappOwn
         model.closeLabel = loc.t("common.close")
         model.feeRefresh = FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: measuring)
+        if step == .firstNothingToPay { model.feeReserve = noCoin }
         return model
     }
 
@@ -246,6 +254,24 @@ struct SigningSheetSteadyTests {
         for (index, frame) in walked.frames.enumerated().dropFirst(2) {
             #expect(frame == walked.frames[1], "step \(index): \(frame) vs \(walked.frames[1])")
         }
+    }
+
+    /// The first figure, on an account with nothing to pay from (the backup
+    /// sheet on Ethereum, iPhone pass 2026-10-09): the core says so while
+    /// the figure is measured, the line's room is held from then, and the
+    /// figure's landing does not move the confirm — 26 pt on the phone.
+    @Test func aFirstFigureNoCoinCanPayLandsWithoutMovingTheConfirm() async throws {
+        let walked = try await walk([.firstNothingToPay, .short, .requote, .short])
+        for (index, frame) in walked.frames.enumerated() {
+            #expect(frame == walked.frames[0], "step \(index): \(frame) vs \(walked.frames[0])")
+        }
+        // Held, not said: nothing is claimed before the figure.
+        #expect(!walked.trees[0].contains { $0.label == noCoin })
+        #expect(!walked.trees[0].contains { $0.id == "signing.fee.reason" })
+        // Without the core's word the first landing still moves it — the
+        // held line covers only what was said.
+        let unknown = try await walk([.newSpeed, .short])
+        #expect(unknown.frames[1].confirm > unknown.frames[0].confirm)
     }
 
     /// A held line is space and nothing else: not read aloud, not a hook a

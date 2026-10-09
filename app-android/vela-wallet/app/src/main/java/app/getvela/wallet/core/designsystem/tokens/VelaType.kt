@@ -128,6 +128,17 @@ val VelaFontFamily: FontFamily = FontFamily(
 )
 
 /**
+ * The UI face's OpenType features: contextual alternates OFF. Plus Jakarta
+ * Sans has one contextual rule (`calt`): after a digit, `x` becomes `×` and
+ * `-` becomes `−` — so every address set in it read "0×14fB…", and a date's
+ * hyphens were minus signs (iPhone pass 2026-10-09; the four shells bundle the
+ * same font, byte for byte). The face has no other contextual rule to lose.
+ * Carried by the theme's type scale (`VelaTheme`), so every Text that takes
+ * its style from the theme has it, and by the text fields' own styles.
+ */
+const val VelaFontFeatures: String = "calt 0"
+
+/**
  * font.mono projection. No mono face is bundled (DV-004), so this resolves to
  * the platform monospace family — enough for the fixed-width hex blocks the
  * spec-018 mocks render (contact-row addresses, the C2 地址 block). Declared in

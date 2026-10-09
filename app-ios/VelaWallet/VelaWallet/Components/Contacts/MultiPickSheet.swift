@@ -176,7 +176,7 @@ struct MultiPickSheet: View {
                     .foregroundStyle(theme.fgBase)
                     .lineLimit(1)
                 Text(verbatim: row.subtitle)
-                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .typeRole(Typography.rowSub.literal.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .lineLimit(1)
             }

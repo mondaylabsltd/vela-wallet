@@ -738,7 +738,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				// Asking again after a failure (spec 082 G47): the last ask's
 				// reason is not this one's, so it is not said under
 				// "estimating" — but its line keeps its height, so nothing jumps.
-				warningReserved: fee.busy ? reason(inputs.feeFailing) : undefined,
+				// And a first figure the core already knows no coin can pay
+				// (`nothing_to_pay_from`): its line's room is held from now, so
+				// its landing does not move the confirm (iPhone pass 2026-10-09).
+				warningReserved: fee.busy
+					? (reason(inputs.feeFailing) ?? (fee.nothing_to_pay_from ? m.feeNoCoinPays : undefined))
+					: undefined,
 				...refresh
 			};
 		}
