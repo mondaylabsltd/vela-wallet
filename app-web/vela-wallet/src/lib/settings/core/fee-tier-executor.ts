@@ -15,7 +15,7 @@
  *
  * The stored value is handed back RAW. Judging whether a string is a tier is
  * the core's job (`parse_stored`), so a value this build does not understand
- * reads as "never chose" — the factory `fast` — rather than being coerced
+ * reads as "never chose" — the factory `standard` — rather than being coerced
  * here into something that would then go on the wire.
  *
  * Failure contract (shared effect loop): nothing rejects.
@@ -54,10 +54,9 @@ export function feeTierPrefOperationFailure(effect: FeeTierPrefEffect): FeeTierP
 	switch (operation.type) {
 		case 'read_stored_tier':
 			// An unreadable preference means "the person never chose" — which is
-			// the factory `fast`, i.e. exactly what this wallet did before the
-			// preference existed. It must never read as a slower tier: a storage
-			// hiccup is not a reason to make somebody's transaction cheaper and
-			// later than the one they sent yesterday.
+			// the factory `standard`. It must never read as a slower tier: a
+			// storage hiccup is not a reason to make somebody's transaction
+			// cheaper and later than the default.
 			return { type: 'stored_tier', raw: null };
 		case 'write_stored_tier':
 			// Best effort, as the currency's write always was. What is on screen

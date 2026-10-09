@@ -12,7 +12,9 @@
 //
 //  **Nothing here spends.** The send form is opened, its speed control opened
 //  and a speed picked — and it is never confirmed. The Settings pick is put
-//  back to the factory `fast` before the test ends.
+//  back to the speed that was stored before the test — read off the Settings
+//  row, or 标准 (`standard`, the factory default since 2026-10-09) when the
+//  row says nothing this test can read.
 //
 
 import XCTest
@@ -61,29 +63,42 @@ final class FeeSpeedDeviceTests: XCTestCase {
     }
 
     /// 设置 › 高级 › 交易速度: three speeds with what each buys; a pick is
-    /// stored and read back after a relaunch — then put back to 超快.
+    /// stored and read back after a relaunch — then the speed stored before
+    /// the test is put back.
     func testSettingsKeepsADefaultSpeed() {
         var app = launch()
-        openSpeedSheet(app)
+        let before = openSpeedSheet(app)
         attach(app.screenshot(), named: "settings-speed-sheet")
         XCTAssertTrue(app.staticTexts["手续费最低，适合不着急时"].exists, "the speeds carry no line on what they buy")
-        tap(app.staticTexts["标准"].firstMatch, "标准")
+        // A speed that is not the one stored, so the relaunch has a change to keep.
+        let pick = before == "较慢" ? "标准" : "较慢"
+        tap(option(app, pick), pick)
         settle(2)
-        attach(app.screenshot(), named: "settings-speed-standard")
+        attach(app.screenshot(), named: "settings-speed-picked")
         app.terminate()
 
         app = launch()
-        openSpeedSheet(app)
+        let after = openSpeedSheet(app)
         attach(app.screenshot(), named: "settings-speed-after-relaunch")
+        XCTAssertEqual(after, pick, "the pick was not read back after a relaunch")
         // Put the phone back where it was.
-        tap(app.staticTexts["超快（默认）"].exists ? app.staticTexts["超快（默认）"] : app.staticTexts["超快"].firstMatch, "超快")
+        tap(option(app, before), before)
         settle(1)
         app.terminate()
     }
 
     // MARK: - Plumbing
 
-    private func openSpeedSheet(_ app: XCUIApplication) {
+    /// The three speeds as the Settings row and its sheet name them (zh).
+    private static let speeds = ["超快", "标准", "较慢"]
+    /// The factory default (`standard`): what the phone is put back to when
+    /// the row's value cannot be read.
+    private static let factoryDefault = "标准"
+
+    /// Opens 设置 › 高级 › 交易速度 and answers the speed the row named before
+    /// it was tapped — the one stored.
+    @discardableResult
+    private func openSpeedSheet(_ app: XCUIApplication) -> String {
         XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 40), "the home never appeared")
         let settingsTab = app.buttons["设置"].exists ? app.buttons["设置"] : app.staticTexts["设置"]
         tap(settingsTab, "设置")
@@ -95,9 +110,35 @@ final class FeeSpeedDeviceTests: XCTestCase {
         if !row.exists { tap(app.staticTexts["高级"].firstMatch, "高级") }
         settle(1)
         if !row.isHittable { app.swipeUp() }
+        let stored = storedSpeed(app, row: row)
         tap(row, "交易速度")
         XCTAssertTrue(app.staticTexts["较慢"].waitForExistence(timeout: 10), "the speed sheet did not open")
         settle(1)
+        return stored
+    }
+
+    /// The row's value: the speed text level with the 交易速度 title — beside
+    /// it, or just under it when the two do not fit on one line.
+    private func storedSpeed(_ app: XCUIApplication, row: XCUIElement) -> String {
+        guard row.exists else { return Self.factoryDefault }
+        let title = row.frame
+        let candidates = Self.speeds.flatMap { name in
+            app.staticTexts.matching(NSPredicate(format: "label == %@", name)).allElementsBoundByIndex
+                .map { (name: name, gap: abs($0.frame.midY - title.midY)) }
+        }
+        guard let nearest = candidates.min(by: { $0.gap < $1.gap }), nearest.gap < title.height * 2 else {
+            return Self.factoryDefault
+        }
+        return nearest.name
+    }
+
+    /// A speed in the open sheet. The sheet is the last thing drawn, so its
+    /// row is the last match — the Settings row behind it can carry the same
+    /// name as its value.
+    private func option(_ app: XCUIApplication, _ name: String) -> XCUIElement {
+        let matches = app.staticTexts.matching(NSPredicate(format: "label == %@", name))
+        let count = matches.count
+        return count > 0 ? matches.element(boundBy: count - 1) : matches.firstMatch
     }
 
     private func launch() -> XCUIApplication {

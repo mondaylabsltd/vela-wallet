@@ -559,7 +559,25 @@ extension WalletLive {
             received: dapp.received.map { change in
                 [changeFigure(change, hidden: hidden), change.symbol]
                     .filter { !$0.isEmpty }.joined(separator: " ")
-            }
+            },
+            titlePlace: dappTitleParts(dapp, loc: loc)
+        )
+    }
+
+    /// `dappTitle` split around its place, as the locale orders them — `nil`
+    /// when the title names no place, or the template does not name it once.
+    static func dappTitleParts(_ dapp: FeedDappWire, loc: Loc) -> TitlePlace? {
+        guard let place = dapp.place, !place.isEmpty else { return nil }
+        let mark = "\u{FFFC}"
+        let pieces = loc.t("history.dappRowTitle", vars: ["intent": dappVerb(dapp, loc: loc), "place": mark])
+            .components(separatedBy: mark)
+        guard pieces.count == 2 else { return nil }
+        return TitlePlace(
+            lead: pieces[0].trimmingCharacters(in: .whitespaces),
+            place: place,
+            trail: pieces[1].trimmingCharacters(in: .whitespaces),
+            gapBefore: pieces[0].last?.isWhitespace ?? false,
+            gapAfter: pieces[1].first?.isWhitespace ?? false
         )
     }
 

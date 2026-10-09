@@ -252,6 +252,14 @@ sealed interface FeeModel {
          * nothing to say. Set by the sheet, never by the builder.
          */
         val heldWarning: String? = null,
+        /**
+         * Before any [warning] was said: the line the core already knows the
+         * first figure will bring — "no coin can pay", when no coin has
+         * anything to pay from ([FeeView.nothing_to_pay_from]) — held the
+         * same way while it is measured, so its landing does not move the
+         * confirm.
+         */
+        val reserve: String? = null,
         /** The chevron: only where a tap opens the coin list. */
         val chevron: Boolean = true,
     ) : FeeModel
@@ -400,12 +408,15 @@ internal class HeldLine {
 
     /**
      * The line under the fee card: [line] when there is one; while
-     * [measuring], the last one there was (to hold its room, not to say it);
-     * otherwise none — a fee landed with nothing to say lets it go.
+     * [measuring], the last one there was (to hold its room, not to say it),
+     * or — before any — [reserve]; otherwise none — a fee landed with
+     * nothing to say lets it go.
      */
-    fun next(line: String?, measuring: Boolean): String? {
+    fun next(line: String?, measuring: Boolean, reserve: String? = null): String? {
         if (line != null || !measuring) last = line
-        return line ?: last
+        // Before any line was said, while measuring: the one the core already
+        // knows the first figure will bring ([FeeModel.OnChain.reserve]).
+        return line ?: last ?: reserve.takeIf { measuring }
     }
 
     /**

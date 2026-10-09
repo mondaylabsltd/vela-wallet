@@ -8,7 +8,7 @@
 //! ```text
 //! QuoteRequested{fee_token} ─► Gathering ──(gas price ∥ bundler quote ∥
 //!   in-band quotes)──► Estimating ──(real-calldata UserOp simulation, fee leg
-//!   included)──► Quoted ──30s──► stale
+//!   included)──► Quoted ──a block──► priced again
 //!        │                                              │
 //!        └── any fatal step ─► Failed{semantic variant}  └─ SelectFeeAsset:
 //!                                                           local recompute
@@ -642,7 +642,9 @@ pub enum FeeOperation {
         from: String,
         calls: Vec<FeeCall>,
     },
-    /// Quote staleness timer.
+    /// The re-pricing timer: answer [`FeeShellResult::TtlElapsed`] after `ms`
+    /// ([`requote_interval_ms`], the chain's block time) and the machine
+    /// prices the quote on screen again.
     StartTtl { ms: u32 },
     /// The bound on this whole run ([`QUOTE_DEADLINE_MS`], spec 094 S9):
     /// answer [`FeeShellResult::DeadlineElapsed`] after `ms`. A run still
@@ -2151,7 +2153,12 @@ pub struct FeeView {
     pub failed: Option<FeeFailure>,
     /// Present only when valid for the current form chain (invariant ①).
     pub fee: Option<FeeEstimateView>,
-    /// The 30s TTL elapsed — advisory; the shell shows a refresh affordance.
+    /// The figure on screen is older than a block — a background re-pricing
+    /// failed, or the shell said the app slept ([`Event::QuoteExpired`]) —
+    /// and the machine is already pricing it again, `busy`, before anything
+    /// may sign it: a shell has nothing to ask. Left `true` without `busy`
+    /// only when the confirm is left mid-way ([`Event::LeaveConfirm`]), on a
+    /// figure the form's Continue prices again anyway.
     pub stale: bool,
     pub fee_token: Option<String>,
     pub options: Vec<FeeOptionView>,
@@ -2169,6 +2176,18 @@ pub struct FeeView {
     /// that predates it reads `false`.
     #[serde(default)]
     pub no_coin_pays: bool,
+    /// While the FIRST figure is measured: not one coin on offer has anything
+    /// left to pay a fee from (every row's balance, less what the operation
+    /// itself spends from it, is zero), so whatever the figure, the sheet
+    /// will say [`no_coin_pays`](Self::no_coin_pays) when it lands. A shell
+    /// holds that line's room — unsaid — from now, so the landing does not
+    /// move what is under it: the backup sheet's confirm dropped 26 pt when
+    /// its first quote landed on an account with nothing on Ethereum (iPhone
+    /// pass 2026-10-09). After a figure has landed, the shells' held line
+    /// does the same. `#[serde(default)]`: a reader that predates it reads
+    /// `false`.
+    #[serde(default)]
+    pub nothing_to_pay_from: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2357,6 +2376,13 @@ impl App for FeePolicy {
             && fee.is_some()
             && !options.is_empty()
             && options.iter().all(|option| option.short.is_some());
+        // Known before the figure: every coin's rows arrive while it is
+        // measured, and a coin with nothing to pay from is short of any fee.
+        let nothing_to_pay_from = busy
+            && failed.is_none()
+            && fee.is_none()
+            && !options.is_empty()
+            && picker_rows(model).all(|row| payable_balance(model, row) == 0);
         FeeView {
             busy,
             failed,
@@ -2366,6 +2392,7 @@ impl App for FeePolicy {
             options,
             confirm_fee_ready,
             no_coin_pays,
+            nothing_to_pay_from,
         }
     }
 }

@@ -639,6 +639,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   CLDR categories, as `siteCount` did: the most common case, one tab,
 //   read "1 tabs open". Shells pass the count. 1789 − 1 + 4 = 1792 leaves,
 //   99 branches.
+// 1890 (device pass, 2026-10-09): + `onboarding.login.
+//   alertSignInFailedBodyAndroid` — Android's sign-in failure, "{{message}}
+//   / Make sure this device has a screen lock or fingerprint set up and try
+//   again." The shell picks the key, and `alertSignInFailedBody` names Face
+//   ID and Touch ID, an iPhone's and a Mac's words; Android had borrowed
+//   `onboarding.common.openBiometricSettings` for its second paragraph,
+//   which is a button's label (no full stop, an imperative in de/ja/ko).
+//   Each locale's screen-lock word is its `create.methodPlatformBody`'s.
+//   Its 249 bytes of `en`+`ja` put the SC-005 reduction at 85.79%, under the
+//   85.8% claimed; minus `onboarding.create.alertNotDiscoverable{Title,
+//   Body}`, read by no client — every shell says a passkey that did not sync
+//   with `onboarding.common.notDiscoverable{Title,Body}` (git grep: neither
+//   the full path nor the leaf name appears outside the corpus and the
+//   generated tables) — the room it needs, instead of a budget move. Same
+//   branches: 1792 + 1 - 2 = 1791 leaves.
 // 1905 (spec 102, 2026-10-09): where you review and sign — in Vela, or on a
 //   page you trust. The Trusted Signer stops being a fourth key method and
 //   becomes each account's signing VENUE. + the `settings.venue` branch (title,
@@ -663,7 +678,7 @@ for (let i = 1; i < PATHS.length; i++) {
 //   verifyStuckHint}` — the ja + en room the new lines need under SC-005,
 //   instead of a budget move. 1792 − 13 + 25 = 1804 leaves, 99 + 2 = 101
 //   branches.
-// 1914 (spec 102 core round, 2026-10-09): the owner's naming (D6) and the
+// 1913 (spec 102 core round, 2026-10-09): the owner's naming (D6) and the
 //   gaps the shells hit in Phase 2. + `settings.venue.blockedWeb` (the web
 //   opens no signing page: its page rows are drawn disabled with this
 //   reason, and a custom-domain account's refusal there says it), +
@@ -685,8 +700,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   call sites (still none in any shell: git grep, every 102 worktree) — the
 //   ja + en room the new lines need under SC-005 instead of a budget move.
 //   1804 − 2 + 2 + 1 + 5 + 3 − 1 = 1812 leaves, 101 branches.
-if (PATHS.length !== 1913) fail(`expected 1913 paths (1812 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1812) fail(`expected 1812 leaf paths, got ${leafSet.size}`);
+// 1914 (main's device pass merged into spec 102, 2026-10-09): the 1890
+//   entry above landed on main beside 1905 and 1913. Its minus
+//   (`onboarding.create.alertNotDiscoverable{Title,Body}`) is 1905's too, so
+//   only its plus is new here: `onboarding.login.alertSignInFailedBodyAndroid`.
+//   1812 + 1 = 1813 leaves, 101 branches.
+if (PATHS.length !== 1914) fail(`expected 1914 paths (1813 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1813) fail(`expected 1813 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

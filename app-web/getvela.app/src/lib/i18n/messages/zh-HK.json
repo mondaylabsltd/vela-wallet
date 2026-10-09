@@ -4,6 +4,7 @@
 			"alpha": "Alpha 版",
 			"blog": "網誌",
 			"docs": "文件",
+			"notes": "札記",
 			"about": "關於",
 			"whyVela": "我們為甚麼做 Vela",
 			"howItWorks": "運作原理",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "文件",
+				"notes": "札記",
 				"whitepaper": "白皮書",
 				"audits": "審計與已知問題",
 				"roadmap": "發展路線圖",

@@ -33,9 +33,13 @@ export interface SpeedWords {
 	names: Record<OfferedTier, string>;
 }
 
-/** The dead `rapid` reads as the factory `fast` — the core's own answer for it. */
+/**
+ * The dead `rapid` reads as the factory default, `standard` — the core's own
+ * answer for it (`fee_speed::offered`, `fee_tier_pref::FACTORY_DEFAULT`), and
+ * the name iOS, Android and the desktop give it.
+ */
 export function offeredTier(tier: FeeTier): OfferedTier {
-	return tier === 'rapid' ? 'fast' : tier;
+	return tier === 'rapid' ? 'standard' : tier;
 }
 
 /**

@@ -872,6 +872,7 @@
    "alertSignInFailedTitle": "Giriş Başarısız",
    "alertSelectorUnresponsive": "Sistemin passkey seçicisi yanıt vermiyor. Bu cihazda bu cüzdan için çok fazla passkey kayıtlı olduğunda bu durum oluşabilir. Tekrar deneyin veya başka bir cihazla ya da güvenlik anahtarıyla giriş yapın.",
    "alertSignInFailedBody": "{{message}}\n\nCihazınızda Face ID, Touch ID veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",
+   "alertSignInFailedBodyAndroid": "{{message}}\n\nBu cihazda ekran kilidi veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",
    "alertIncompatibleBodyCreate": "Cihazınızın kimlik sağlayıcısı bu cüzdanla uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin.",
    "recoverOfferTitle": "Cüzdanı kurtar",
    "recoverOfferBody": "Anahtar sunucusunda bu geçiş anahtarına ait kayıt yok. Bir imza daha onaylayın; açık anahtar ve cüzdan adresiniz bu cihazda yeniden oluşturulsun.",

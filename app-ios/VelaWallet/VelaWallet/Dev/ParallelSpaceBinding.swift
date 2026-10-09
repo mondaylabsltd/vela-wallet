@@ -31,6 +31,16 @@
 //  the trap Android hit from the other direction: `session.add_account` stores
 //  only the active index, and `set_wallet` would overwrite the real wallet.
 //
+//  ## The way out goes back to the wallet that was in front
+//
+//  Leaving used to save active index 0, so whichever wallet the person had
+//  been on, they came out on the first one (device pass 2026-10-09, the same
+//  finding as Android's). Entering now remembers the address in front beside
+//  the flag (`vela.parallelReturnTo`), and leaving lands on the account in
+//  front when that is a real one — the person switched to it inside the
+//  space — otherwise on the remembered one, found by address because a
+//  position moves when a row goes; with neither, the first.
+//
 
 #if DEBUG
 
@@ -44,6 +54,9 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
     static let flagKey = "vela.parallelSpace"
     /// `vela.parallelSigner` — which fixture key signs.
     static let signerKey = "vela.parallelSigner"
+    /// `vela.parallelReturnTo` — the address in front when the space was
+    /// entered: where leaving goes back to.
+    static let returnToKey = "vela.parallelReturnTo"
 
     private(set) var isActive = false
     private var preferredSigner: UInt32?
@@ -54,7 +67,11 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
     }
 
     func applyIfRequested(store: VelaStore, accounts: AccountStore) async {
-        let environment = ProcessInfo.processInfo.environment
+        await apply(environment: ProcessInfo.processInfo.environment, store: store, accounts: accounts)
+    }
+
+    /// The same, with the launch environment handed in — what a test drives.
+    func apply(environment: [String: String], store: VelaStore, accounts: AccountStore) async {
         let requested = environment["VELA_PARALLEL_SPACE"]
         let persisted = store.readString(Self.flagKey) == "1"
 
@@ -73,7 +90,7 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         preferredSigner = store.readString(Self.signerKey).flatMap(UInt32.init)
 
         if wanted {
-            await enter(store: store, accounts: accounts)
+            await enter(store: store, accounts: accounts, alreadyInside: persisted)
         } else if persisted || requested != nil {
             await leave(store: store, accounts: accounts)
         }
@@ -85,12 +102,26 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
 
     // MARK: - Enter and leave
 
-    private func enter(store: VelaStore, accounts: AccountStore) async {
+    /// `alreadyInside`: the flag was persisted — a relaunch inside the space,
+    /// which enters again.
+    private func enter(store: VelaStore, accounts: AccountStore, alreadyInside: Bool) async {
         guard let fixtures = try? fixtureAccounts(), let first = fixtures.first,
               let address = try? fixtureMultiAddress()
         else {
             print("[vela-wallet] parallel space: the keyset could not be read")
             return
+        }
+
+        // The wallet in front before the space, for the way out. On the way
+        // in it is whatever was in front (none, when the space's own record
+        // is); on a relaunch inside, the space's record is in front unless
+        // the person switched to a real wallet before it — and that wallet is
+        // where they asked to be, so it is the one to go back to.
+        let inFront = Self.realAccount(
+            in: await accounts.loadAccounts(), at: await accounts.loadActiveIndex(), fixtureId: first.credentialIdHex
+        )
+        if !alreadyInside || inFront != nil {
+            store.writeString(Self.returnToKey, inFront)
         }
 
         // The address is a function of EVERY key, so the whole set is written.
@@ -134,11 +165,39 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
 
     private func leave(store: VelaStore, accounts: AccountStore) async {
         isActive = false
+        let returnTo = store.readString(Self.returnToKey)
         store.writeString(Self.flagKey, nil)
+        store.writeString(Self.returnToKey, nil)
         guard let first = (try? fixtureAccounts())?.first else { return }
+        // A real wallet in front was chosen inside the space; otherwise the
+        // one that was in front when it was entered.
+        let inFront = Self.realAccount(
+            in: await accounts.loadAccounts(), at: await accounts.loadActiveIndex(), fixtureId: first.credentialIdHex
+        )
         await accounts.removeAccount(id: first.credentialIdHex)
-        await accounts.saveActiveIndex(0)
-        print("[vela-wallet] parallel space: left")
+        let index = Self.index(of: inFront ?? returnTo, in: await accounts.loadAccounts())
+        await accounts.saveActiveIndex(index)
+        print("[vela-wallet] parallel space: left, active index \(index)")
+    }
+
+    // MARK: - Which wallet is in front
+
+    /// The address of the record at `index` when it is a real wallet — not
+    /// the space's own record (`fixtureId`) — or `nil`.
+    static func realAccount(in accounts: [[String: Any]], at index: Int, fixtureId: String) -> String? {
+        guard accounts.indices.contains(index), (accounts[index]["id"] as? String) != fixtureId,
+              let address = accounts[index]["address"] as? String, !address.isEmpty
+        else { return nil }
+        return address
+    }
+
+    /// The position of the record at `address`, whatever its case; 0 when it
+    /// is not there, or none was given.
+    static func index(of address: String?, in accounts: [[String: Any]]) -> Int {
+        guard let address, !address.isEmpty else { return 0 }
+        return accounts.firstIndex {
+            ($0["address"] as? String)?.caseInsensitiveCompare(address) == .orderedSame
+        } ?? 0
     }
 }
 

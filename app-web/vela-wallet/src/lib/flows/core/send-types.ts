@@ -109,7 +109,7 @@ export interface SendShellPorts {
 	holdings?(address: string): Promise<SendHoldingsAnswer> | SendHoldingsAnswer;
 	/**
 	 * The speed this send is priced at (spec 068), read when `PrewarmFees`
-	 * warms the relay's gas quote. Omitted = `fast`, the factory default.
+	 * warms the relay's gas quote. Omitted = `standard`, the factory default.
 	 */
 	feeTier?(): FeeTier;
 }

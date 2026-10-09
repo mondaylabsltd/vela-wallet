@@ -31,8 +31,10 @@ phone app — and choose **Create a wallet**.
    a security key, or Windows Hello — the app asks for a second one, because a
    single unsynced key is one lost device away from a lost wallet.
 5. **Create.** The app computes your wallet's address from the full set of keys
-   and publishes the set to the public registry on Gnosis Chain. When that record
-   is on-chain, your wallet opens.
+   and publishes the set to the public registry on Gnosis Chain. A one-key wallet
+   opens as soon as the registry has accepted the record, and the record lands
+   on-chain in the background; a wallet with several keys opens once its record is
+   on-chain.
 
 <Callout type="warning" title="Choose your keys now">
 Your address is computed from the keys you finish with, so keys can't be added,

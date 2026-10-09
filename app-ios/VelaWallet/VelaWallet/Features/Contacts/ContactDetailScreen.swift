@@ -209,7 +209,7 @@ struct ContactDetailScreen: View {
         VStack(spacing: Tokens.Space.s0) {
             IdenticonAvatar(seed: model.contact.addressFull, size: ContactsGeometry.detailAvatar)
             Text(verbatim: model.contact.name)
-                .typeRole(Typography.title.scaled(model.textScale))
+                .typeRole(Typography.title.literal.scaled(model.textScale))
                 .foregroundStyle(theme.fgBase)
                 .multilineTextAlignment(.center)
                 .padding(.top, Tokens.Space.s16)

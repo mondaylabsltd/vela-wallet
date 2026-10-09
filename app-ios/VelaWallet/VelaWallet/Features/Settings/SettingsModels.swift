@@ -35,6 +35,18 @@ enum SettingsPage: Equatable {
     case home, networks, networkDetail, addNetwork, rpcProviders, endpoints, storage, about
     /// Spec 102: the pages this device trusts to show and sign requests.
     case signingPages
+
+    /// Where the page's ‹ goes: a pushed page goes back to the Settings home.
+    /// `nil` on the home, which has no way back inside Settings. Android
+    /// reads the same rule (`SettingsPage.back`) for its system Back too.
+    var back: SettingsPage? { self == .home ? nil : .home }
+
+    /// Whether this page keeps its scroll across a visit to another. Only the
+    /// home does — Back lands where the person left it; a pushed page opens
+    /// at its top every time (device pass 2026-10-09: 设置 → 高级 → 网络
+    /// opened part-way down, at the offset the home had been scrolled to,
+    /// because every page shared the home's one scroll view).
+    var keepsItsPlace: Bool { self == .home }
 }
 
 /// Which sheet is over it. `none` is a real state, not an absence of one.

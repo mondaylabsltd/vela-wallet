@@ -240,6 +240,7 @@
       "alertSignInFailedTitle": "登入失敗",
       "alertSelectorUnresponsive": "系統通行密鑰選擇器沒有回應。當此裝置上為本錢包儲存了過多通行密鑰時，可能發生這種情況。請重試，或改用其他裝置或安全金鑰登入。",
       "alertSignInFailedBody": "{{message}}\n\n請確認您的裝置已設定 Face ID、Touch ID 或指紋後再試一次。",
+      "alertSignInFailedBodyAndroid": "{{message}}\n\n請確認這台裝置已設定螢幕鎖定或指紋後再試一次。",
       "alertIncompatibleBodyCreate": "您裝置的身分提供者與此錢包不相容。請至系統設定切換為 Google 密碼管理工具後再試一次。",
       "recoverOfferTitle": "找回錢包",
       "recoverOfferBody": "伺服器暫無這枚通行密鑰的記錄。再確認一次簽章，即可在本機重建公鑰和錢包地址。",

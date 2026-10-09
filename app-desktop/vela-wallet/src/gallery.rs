@@ -1093,6 +1093,7 @@ impl Render for GalleryView {
             .size_full()
             .flex()
             .font_family(theme::font_ui())
+            .font_features(theme::font_ui_features())
             .bg(theme.bg_base)
             .text_color(theme.fg_base)
             .track_focus(&self.focus_handle)

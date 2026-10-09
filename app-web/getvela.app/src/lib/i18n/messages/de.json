@@ -4,6 +4,7 @@
 			"alpha": "Alpha",
 			"blog": "Blog",
 			"docs": "Dokumentation",
+			"notes": "Notizen",
 			"about": "Über uns",
 			"whyVela": "Warum wir es gebaut haben",
 			"howItWorks": "So funktioniert es",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "Dokumentation",
+				"notes": "Notizen",
 				"whitepaper": "Whitepaper",
 				"audits": "Audits und bekannte Probleme",
 				"roadmap": "Roadmap",

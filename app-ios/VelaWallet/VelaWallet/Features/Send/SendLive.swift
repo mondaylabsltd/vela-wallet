@@ -990,7 +990,10 @@ enum SendLive {
                     "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
                 }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
-                        ? loc.t("send.estimatingFee") : "—")
+                        ? loc.t("send.estimatingFee") : "—"),
+                // The coin's figure and its price in the person's currency:
+                // a second line between the two, never a figure cut short.
+                wraps: true
             ),
         ]
         // The speed, but only when it was CHOSEN for this send, or taken
@@ -1580,8 +1583,13 @@ enum SendLive {
                                       tokenAddress: option.contract, color: chainColor(chain))
                 } ?? TokenMarkModel(ticker: option.symbol, badgeColor: chainColor(0), badgeHidden: true),
                 symbol: option.symbol,
-                balanceLabel: trim(fromBase(option.balance, decimals: option.decimals)),
-                fee: option.amount.map { "~\(trim(fromBase($0, decimals: option.decimals))) \(option.symbol)" } ?? "—",
+                // The app's own figures: a balance as the asset list reads it
+                // (`tokenAmountText`), a fee as the confirm reads it
+                // (`feeFromBase`, six places, rounded up). Full precision —
+                // "0.000300194967818323", "~0.0001720278 BNB" — wrapped mid-
+                // number on a phone (iPhone pass 2026-10-09).
+                balanceLabel: WalletLive.tokenAmountText(fromBase(option.balance, decimals: option.decimals)),
+                fee: option.amount.map { "~\(feeFromBase($0, decimals: option.decimals)) \(option.symbol)" } ?? "—",
                 selected: option.selected,
                 // The core's verdict, passed on: every published row is drawn,
                 // and the ones that cannot pay are drawn as that.

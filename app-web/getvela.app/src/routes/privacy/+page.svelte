@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 7 October 2026</p>
+	<p class="updated">Last updated: 9 October 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -115,8 +115,8 @@
 				its operators. With every request, the apps also send it the RPC address they use for that
 				network — the one you set for it, the one built from a provider key you added, or the
 				built-in one — <strong>including any API key that address contains</strong>. The relay reads
-				the network through it, which is what lets it serve a network you added yourself; it may also
-				submit your transactions through it on a network its own directory cannot reach. The apps
+				the network through it, which is what lets it serve a network you added yourself. It never
+				submits your transactions through it: it broadcasts only through its own endpoints. The apps
 				say this where you set an RPC address or a provider key. To keep your key from the relay,
 				use an address without one, or point the apps at your own relay.
 			</li>

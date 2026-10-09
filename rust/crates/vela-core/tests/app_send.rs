@@ -26,10 +26,10 @@ use vela_core::app::send::{
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
     SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
     SendOperation as Op, SendPayee, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
-    SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res, SendStage,
-    SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin,
-    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
-    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
+    SendRecipientDraft, SendRecipientRisk, SendRowFieldState, SendScan, SendShellResult as Res,
+    SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
+    SendTreasuryCoin, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord,
+    SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -4031,22 +4031,13 @@ fn a_requote_before_the_slide_signs_the_new_number_not_the_old_one() {
         amount: "10".to_owned(),
     });
     continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
-    // The GasFeeCard re-quotes: $1 → $2. The sim re-runs (it depends on the
-    // estimate) — settle its probes.
+    // The GasFeeCard re-quotes: $1 → $2. A transfer's calls do not move with
+    // the fee, so nothing is asked again
+    // (`a_requote_on_confirm_asks_a_transfer_nothing_again`).
     let probes = sut.dispatch(Event::FeeUpdated {
         estimate: usdc_fee(1, 2_000_000),
     });
-    for op in probes {
-        match op {
-            Op::ResolveRisk { .. } => {
-                sut.resolve(Res::RiskResolved { risk: None });
-            }
-            Op::SimulateCalls { .. } => {
-                sut.resolve(Res::SimResolved { sim_json: None });
-            }
-            other => panic!("unexpected probe {other:?}"),
-        }
-    }
+    assert!(probes.is_empty(), "{probes:?}");
     let submit = slide_to_submit(&mut sut);
     let Op::SubmitUserOp {
         quoted_fee: Some(quoted),
@@ -4056,6 +4047,152 @@ fn a_requote_before_the_slide_signs_the_new_number_not_the_old_one() {
         panic!("quote expected");
     };
     assert_eq!(quoted.amount, "2000000", "① holds across requotes");
+}
+
+/// What the shell's simulation said, opaque to the core.
+const SIM_JSON: &str = r#"{"changes":[]}"#;
+
+/// Answer the confirm's two probes: a first-time recipient, and a simulation.
+fn answer_confirm_probes(sut: &mut Sut) {
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::SimulateCalls { .. }),
+        Res::SimResolved {
+            sim_json: Some(SIM_JSON.to_owned()),
+        },
+    );
+}
+
+fn first_time() -> SendRecipientRisk {
+    SendRecipientRisk {
+        is_contract: Some(false),
+        first_time: Some(true),
+    }
+}
+
+/// The confirm's quote is priced again once a block while the page is up
+/// (`fee_policy::requote_interval_ms`), and each new figure reaches this
+/// machine. A transfer's calls do not move with the fee, so nothing is asked
+/// again: the simulation and the recipient's risk stay on screen as they
+/// were, instead of blanking and being fetched once a block for the same
+/// answer — and the slide still signs the newest figure.
+#[test]
+fn a_requote_on_confirm_asks_a_transfer_nothing_again() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    let ops = sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    assert!(
+        matches!(ops.first(), Some(Op::EstimateFee { .. })),
+        "{ops:?}"
+    );
+    sut.resolve(fee_ok(usdc_fee(1, 1_000_000)));
+    drop_the_precheck_timer(&mut sut);
+    let probes = sut.resolve(covered());
+    assert_eq!(sut.view().stage, SendStage::Confirm);
+    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    answer_confirm_probes(&mut sut);
+
+    // Three blocks: a dearer figure, another, and the same one again.
+    for amount in [1_100_000, 1_250_000, 1_250_000] {
+        let ops = sut.dispatch(Event::FeeUpdated {
+            estimate: usdc_fee(1, amount),
+        });
+        assert!(ops.is_empty(), "asked again at {amount}: {ops:?}");
+        let view = sut.view();
+        assert_eq!(
+            view.sim_json.as_deref(),
+            Some(SIM_JSON),
+            "the simulation stays"
+        );
+        assert_eq!(view.recipient_risk, Some(first_time()), "the risk stays");
+    }
+    let submit = slide_to_submit(&mut sut);
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("quote expected: {submit:?}");
+    };
+    assert_eq!(quoted.amount, "1250000", "① the newest figure is signed");
+}
+
+/// A sweep holds the fee back from the line in the fee's coin, so a figure
+/// priced again moves the calls it signs: the simulation is asked again —
+/// about exactly those calls — and the recipient's risk is not. The same
+/// figure again moves nothing and asks nothing.
+#[test]
+fn a_requote_on_a_sweep_s_confirm_simulates_the_moved_calls_again() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: eth("2").id(),
+    });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: usdc("5").id(),
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.resolve(credential(Some(PK)));
+    sut.resolve(fee_ok(native_fee(1, 500_000_000_000_000_000)));
+    set_recipient(&mut sut, RECIPIENT);
+    let ops = sut.dispatch(Event::Continue);
+    assert!(
+        matches!(ops.first(), Some(Op::EstimateFee { .. })),
+        "{ops:?}"
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 500_000_000_000_000_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert_eq!(sut.view().stage, SendStage::Confirm);
+    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    answer_confirm_probes(&mut sut);
+
+    // The next block: 0.5 → 0.6 ETH held back, so the ETH line is 1.4.
+    let ops = sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 600_000_000_000_000_000),
+    });
+    let [Op::SimulateCalls {
+        calls, chain_id, ..
+    }] = ops.as_slice()
+    else {
+        panic!("only the simulation, asked again: {ops:?}");
+    };
+    assert_eq!(*chain_id, 1);
+    assert_eq!(calls[0].to, RECIPIENT);
+    assert_eq!(calls[0].value, "1400000000000000000", "the moved line");
+    let view = sut.view();
+    assert_eq!(
+        view.sim_json, None,
+        "the old simulation is not shown for new calls"
+    );
+    assert_eq!(view.recipient_risk, Some(first_time()), "the risk stays");
+    sut.resolve_matching(
+        |op| matches!(op, Op::SimulateCalls { .. }),
+        Res::SimResolved {
+            sim_json: Some(SIM_JSON.to_owned()),
+        },
+    );
+    assert_eq!(sut.view().sim_json.as_deref(), Some(SIM_JSON));
+
+    // The same figure again: the same calls, nothing asked.
+    let ops = sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 600_000_000_000_000_000),
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(sut.view().sim_json.as_deref(), Some(SIM_JSON));
 }
 
 #[test]

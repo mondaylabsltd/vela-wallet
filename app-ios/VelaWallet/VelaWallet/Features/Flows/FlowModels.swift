@@ -148,6 +148,11 @@ struct FactRowModel: Identifiable {
     /// one line each in the signing sheet's own form and tones. Drawn in
     /// place of `value` when present.
     var lines: [BalanceDeltaRow] = []
+    /// The value may take a second line, broken only between its ` · `
+    /// parts — never inside a figure or between a figure and its unit
+    /// (`FactRowView.unbreakable`). The confirm's fee: cut to one line it
+    /// read "~0.000173…B · ≈¥0.85" (iPhone pass 2026-10-09).
+    var wraps = false
 }
 
 enum StatusTone {

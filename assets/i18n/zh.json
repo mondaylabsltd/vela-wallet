@@ -879,6 +879,7 @@
    "alertSignInFailedTitle": "登录失败",
    "alertSelectorUnresponsive": "系统通行密钥选择器没有响应。当此设备上为本钱包保存了过多通行密钥时，可能出现这种情况。请重试，或改用其他设备或安全密钥登录。",
    "alertSignInFailedBody": "{{message}}\n\n请确保您的设备已设置 Face ID、Touch ID 或指纹，然后重试。",
+   "alertSignInFailedBodyAndroid": "{{message}}\n\n请确保这台设备已设置屏幕锁或指纹，然后重试。",
    "alertIncompatibleBodyCreate": "您的设备身份提供商与此钱包不兼容。请在系统设置中切换到 Google 密码管理器后重试。",
    "recoverOfferTitle": "找回钱包",
    "recoverOfferBody": "服务器暂无这枚通行密钥的记录。再确认一次签名，即可在本机重建公钥和钱包地址。",

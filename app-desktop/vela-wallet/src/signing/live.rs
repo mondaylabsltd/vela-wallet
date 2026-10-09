@@ -188,13 +188,20 @@ impl HeldLines {
     /// view falls to is said in its place. Settled, what is drawn is the
     /// truth — a fee that lands with nothing to say lets the line go — and is
     /// what is held next.
+    ///
+    /// `reserve`: before any line was settled, the one the core already
+    /// knows the first figure will bring ([`reserve_warning`]) — held the
+    /// same way while it is measured, so its landing moves nothing.
     pub fn warning(
         &mut self,
         measuring: bool,
         drawn: Option<SharedString>,
+        reserve: Option<SharedString>,
     ) -> (Option<SharedString>, bool) {
         if measuring {
-            (self.warning.clone(), self.warning.is_some())
+            let held = self.warning.clone().or(reserve);
+            let is_held = held.is_some();
+            (held, is_held)
         } else {
             self.warning.clone_from(&drawn);
             (drawn, false)
@@ -217,15 +224,30 @@ impl HeldLines {
 }
 
 /// [`HeldLines::warning`] on the fee row, where it has one.
-pub fn hold_fee_warning(model: &mut FeeModel, held: &mut HeldLines, measuring: bool) {
+pub fn hold_fee_warning(
+    model: &mut FeeModel,
+    held: &mut HeldLines,
+    measuring: bool,
+    reserve: Option<SharedString>,
+) {
     if let FeeModel::OnChain {
         warning,
         warning_held,
         ..
     } = model
     {
-        (*warning, *warning_held) = held.warning(measuring, warning.take());
+        (*warning, *warning_held) = held.warning(measuring, warning.take(), reserve);
     }
+}
+
+/// The line a first figure will bring, known before it lands: no coin on
+/// offer has anything to pay from (`FeeView::nothing_to_pay_from`), so the
+/// figure lands as [`no_coin_pays_warning`]. Its room is held from now — the
+/// backup sheet's confirm dropped 26 pt when that figure landed (iPhone pass
+/// 2026-10-09).
+#[must_use]
+pub fn reserve_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    fee.nothing_to_pay_from.then(|| s.fee_no_coin_pays.clone())
 }
 
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681) — the
@@ -4623,6 +4645,72 @@ mod fee_tests {
         });
     }
 
+    /// The first figure, on an account with nothing to pay from (iPhone pass
+    /// 2026-10-09, the backup sheet: its confirm dropped 26 pt when that
+    /// figure landed): the core says so while it is measured
+    /// (`nothing_to_pay_from`), the line's room is held from then, unsaid,
+    /// and the figure lands as the words held for it. Without that word the
+    /// first measurement still holds nothing.
+    #[test]
+    fn a_first_figure_no_coin_can_pay_is_held_from_its_measurement() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| {
+            fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            )
+        };
+        let line = |model: &FeeModel| match model {
+            FeeModel::OnChain {
+                warning,
+                warning_held,
+                ..
+            } => (warning.clone(), *warning_held),
+            _ => unreachable!("an on-chain row"),
+        };
+        let no_coin = Some(s.fee_no_coin_pays.clone());
+        let mut settled = quoted(vec![option("ETH", None, true, true)], false);
+        settled.no_coin_pays = true;
+        let mut first = settled.clone();
+        first.busy = true;
+        first.no_coin_pays = false;
+        first.fee = None;
+        first.nothing_to_pay_from = true;
+        assert_eq!(reserve_warning(&first, &s), no_coin);
+        assert_eq!(reserve_warning(&settled, &s), None);
+
+        let mut held = HeldLines::default();
+        let mut drawn = row(&first);
+        hold_fee_warning(&mut drawn, &mut held, true, reserve_warning(&first, &s));
+        assert_eq!(line(&drawn), (no_coin.clone(), true), "held, not said");
+        let mut drawn = row(&settled);
+        hold_fee_warning(&mut drawn, &mut held, false, reserve_warning(&settled, &s));
+        assert_eq!(
+            line(&drawn),
+            (no_coin.clone(), false),
+            "lands as the line held for it"
+        );
+
+        let mut unknown = first.clone();
+        unknown.nothing_to_pay_from = false;
+        let mut fresh = HeldLines::default();
+        let mut drawn = row(&unknown);
+        hold_fee_warning(&mut drawn, &mut fresh, true, reserve_warning(&unknown, &s));
+        assert_eq!(
+            line(&drawn),
+            (None, false),
+            "no word from the core: nothing held"
+        );
+    }
+
     /// Nothing moves while a figure is measured (the Android device's jump
     /// on every refresh, speed switch and 30 s re-quote; the web's rule).
     /// The core says "no coin can pay" only of a settled figure, so the line
@@ -4677,31 +4765,31 @@ mod fee_tests {
         let mut held = HeldLines::default();
         // The first measurement has nothing to hold, and says nothing.
         let mut drawn = row(&measuring);
-        hold_fee_warning(&mut drawn, &mut held, true);
+        hold_fee_warning(&mut drawn, &mut held, true, None);
         assert_eq!(line(&drawn), (None, false));
         let mut drawn = row(&settled);
-        hold_fee_warning(&mut drawn, &mut held, false);
+        hold_fee_warning(&mut drawn, &mut held, false, None);
         assert_eq!(line(&drawn), (no_coin.clone(), false), "said");
         for during in [&measuring, &unpriced, &measuring] {
             let mut drawn = row(during);
-            hold_fee_warning(&mut drawn, &mut held, true);
+            hold_fee_warning(&mut drawn, &mut held, true, None);
             assert_eq!(
                 line(&drawn),
                 (no_coin.clone(), true),
                 "the settled words keep the line, held and not said"
             );
             let mut drawn = row(&settled);
-            hold_fee_warning(&mut drawn, &mut held, false);
+            hold_fee_warning(&mut drawn, &mut held, false, None);
             assert_eq!(line(&drawn), (no_coin.clone(), false));
         }
         // The fee lands and the coin can pay: the line goes, for real…
         let paid = quoted(vec![option("ETH", None, false, true)], true);
         let mut drawn = row(&paid);
-        hold_fee_warning(&mut drawn, &mut held, false);
+        hold_fee_warning(&mut drawn, &mut held, false, None);
         assert_eq!(line(&drawn), (None, false));
         // …and the next measurement has nothing to hold.
         let mut drawn = row(&measuring);
-        hold_fee_warning(&mut drawn, &mut held, true);
+        hold_fee_warning(&mut drawn, &mut held, true, None);
         assert_eq!(line(&drawn), (None, false), "nothing to hold once it went");
 
         // The confirm's note: no line until one has been said; then its

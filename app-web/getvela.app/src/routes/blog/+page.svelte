@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 	import { seoConfig } from '$lib/seo';
 	import { formatDate } from '$lib/format';
@@ -32,9 +33,10 @@
 	{jsonLd}
 />
 
+<ReadingFonts />
 <SiteHeader />
 
-<main class="wrap">
+<main class="wrap reading">
 	<header class="intro">
 		<h1>Blog</h1>
 		<p>Build notes, release notes, and the story of building Vela in public.</p>
@@ -82,8 +84,9 @@
 		margin-bottom: 44px;
 	}
 	.intro h1 {
-		font-size: 2.6rem;
-		font-weight: 600;
+		font-size: 3rem;
+		line-height: 1.05;
+		font-weight: 800;
 		letter-spacing: -0.02em;
 	}
 	.intro p {
@@ -135,8 +138,9 @@
 	}
 	.card h2 {
 		margin: 10px 0 8px;
-		font-size: 1.4rem;
-		font-weight: 600;
+		font-size: 1.6rem;
+		line-height: 1.15;
+		font-weight: 750;
 		letter-spacing: -0.01em;
 		color: var(--text);
 	}

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
@@ -96,6 +97,7 @@ fun ContactsSearchField(
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.regular,
                     fontSize = VelaTextSize.base,
+                    fontFeatureSettings = VelaFontFeatures,
                 ),
                 cursorBrush = SolidColor(colors.accentBase),
                 keyboardOptions = KeyboardOptions(

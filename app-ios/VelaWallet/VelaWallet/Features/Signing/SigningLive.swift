@@ -373,6 +373,7 @@ enum SigningLive {
         if !refused {
             model.feeRefresh = feeRefresh(clear: clear, fee: fee, loc: loc)
             model.feeChevron = (fee?.options.count ?? 0) > 1
+            model.feeReserve = feeReserve(fee, loc: loc)
         }
         return model
     }
@@ -1422,6 +1423,12 @@ enum SigningLive {
             || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
+    }
+
+    /// The line the fee row holds room for while the first figure is
+    /// measured: "no coin can pay", when the core knows it already.
+    static func feeReserve(_ fee: FeeViewWire?, loc: Loc) -> String? {
+        fee?.nothingToPayFrom == true ? loc.t("componentsUi.gas.noCoinPays") : nil
     }
 
     /// Spec 079: the fee row's refresh — the send form's own control, dimmed

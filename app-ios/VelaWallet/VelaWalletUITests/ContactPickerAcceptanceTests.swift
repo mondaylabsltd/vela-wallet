@@ -62,7 +62,9 @@ final class ContactPickerAcceptanceTests: XCTestCase {
         let recipient = toTheForm(app)
 
         // 1. The icon opens the picker, with the person's own book in it.
-        let icon = app.buttons["选择收款人或扫码"]
+        // The person icon names the pick alone (`send.recipientPickAria`,
+        // #468): scanning has its own door.
+        let icon = app.buttons["从通讯录选择"]
         tap(icon, "the person icon")
         let title = app.staticTexts["选择联系人"]
         XCTAssertTrue(title.waitForExistence(timeout: 10), "the person icon opened nothing (#467)")

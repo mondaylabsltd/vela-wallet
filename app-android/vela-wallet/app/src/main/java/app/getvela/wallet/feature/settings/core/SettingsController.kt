@@ -171,9 +171,9 @@ class SettingsController(
     private val feeTierHost = CoreHost(
         bridge = FeeTierPrefCore().asBridge(),
         scope = scope,
-        // The factory `fast`, uncommitted: what every send did before there
-        // was a choice, so a surface drawn before the read lands shows today's
-        // behaviour rather than a guess.
+        // The factory `standard`, uncommitted: what a send starts at when
+        // nobody chose, so a surface drawn before the read lands shows the
+        // core's default rather than a guess.
         initial = FeeTierPrefView(),
         serializer = FeeTierPrefView.serializer(),
         perform = JsonShell.perform(

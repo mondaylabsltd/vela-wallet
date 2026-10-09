@@ -708,7 +708,7 @@ impl SigningHost {
         }
         let public_key_available = !self.ctx.keys.is_empty();
         // HOW FAST is the speed control's to say (spec 069): the person's
-        // stored default — `fast` for everybody who never chose — until the
+        // stored default — `standard` for everybody who never chose — until the
         // sheet's own control picks another. The quoted fee carries it to the
         // relay beside the amount.
         //

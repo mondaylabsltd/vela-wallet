@@ -240,6 +240,7 @@
       "alertSignInFailedTitle": "Gagal Masuk",
       "alertSelectorUnresponsive": "Pemilih passkey sistem tidak merespons. Hal ini dapat terjadi jika terlalu banyak passkey untuk dompet ini tersimpan di perangkat ini. Coba lagi, atau masuk dengan perangkat lain atau kunci keamanan.",
       "alertSignInFailedBody": "{{message}}\n\nPastikan perangkat Anda telah menyiapkan Face ID, Touch ID, atau sidik jari lalu coba lagi.",
+      "alertSignInFailedBodyAndroid": "{{message}}\n\nPastikan kunci layar atau sidik jari sudah disiapkan di perangkat ini, lalu coba lagi.",
       "alertIncompatibleBodyCreate": "Penyedia identitas perangkat Anda tidak kompatibel dengan dompet ini. Beralihlah ke Google Password Manager di pengaturan sistem lalu coba lagi.",
       "recoverOfferTitle": "Pulihkan Dompet",
       "recoverOfferBody": "Server kunci tidak memiliki catatan passkey ini. Konfirmasi satu tanda tangan lagi untuk membangun kembali kunci publik — dan alamat dompet Anda — di perangkat ini.",

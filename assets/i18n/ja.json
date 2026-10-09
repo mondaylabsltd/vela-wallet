@@ -872,6 +872,7 @@
    "alertSignInFailedTitle": "サインインに失敗しました",
    "alertSelectorUnresponsive": "システムのパスキー選択画面が応答しません。この端末にこのウォレットのパスキーが多数保存されていると発生することがあります。もう一度試すか、別の端末またはセキュリティキーでサインインしてください。",
    "alertSignInFailedBody": "{{message}}\n\n端末に Face ID、Touch ID、または指紋認証が設定されていることを確認してから、もう一度お試しください。",
+   "alertSignInFailedBodyAndroid": "{{message}}\n\nこの端末に画面ロックまたは指紋認証が設定されていることを確認してから、もう一度お試しください。",
    "alertIncompatibleBodyCreate": "お使いの端末の本人確認プロバイダーはこのウォレットと互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。",
    "recoverOfferTitle": "ウォレットを復元",
    "recoverOfferBody": "鍵サーバーにこのパスキーの記録がありません。もう一度署名を確認すれば、この端末上で公開鍵とウォレットアドレスを再構築できます。",

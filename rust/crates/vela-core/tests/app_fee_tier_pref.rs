@@ -1,8 +1,9 @@
 //! Rules of the stored transaction speed (spec 068), one test per rule.
 //!
 //! The machine's whole job is refusing to invent a preference: an unreadable
-//! or unrecognised key must land on the factory `fast` — today's behaviour for
-//! every shell — never on some other tier, and never on the dead `rapid`.
+//! or unrecognised key must land on the factory `standard` — the same default
+//! every shell starts from — never on some other tier, and never on the dead
+//! `rapid`.
 
 #![cfg(feature = "crux")]
 

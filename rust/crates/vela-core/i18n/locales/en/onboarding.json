@@ -240,6 +240,7 @@
       "alertSignInFailedTitle": "Sign In Failed",
       "alertSelectorUnresponsive": "The system passkey picker is not responding. This can happen when too many passkeys are saved for this wallet on this device. Try again, or sign in with another device or a security key.",
       "alertSignInFailedBody": "{{message}}\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.",
+      "alertSignInFailedBodyAndroid": "{{message}}\n\nMake sure this device has a screen lock or fingerprint set up and try again.",
       "alertIncompatibleBodyCreate": "Your device's identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.",
       "recoverOfferTitle": "Recover Your Wallet",
       "recoverOfferBody": "The key server has no record of this passkey yet. Confirm one more signature to rebuild its public key — and your wallet address — on this device.",

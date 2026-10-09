@@ -11648,15 +11648,15 @@ impl WalletPage {
             .offered
             .iter()
             .map(|tier| {
+                // `offered` never holds the dead `rapid`; were it there, it
+                // would read as the core reads it — the factory `standard`.
                 let (name, hint) = match tier {
-                    FeeTier::Standard => (
+                    FeeTier::Standard | FeeTier::Rapid => (
                         s.gas_tier_standard.clone(),
                         s.gas_tier_hint_standard.clone(),
                     ),
                     FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
-                    FeeTier::Fast | FeeTier::Rapid => {
-                        (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
-                    }
+                    FeeTier::Fast => (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone()),
                 };
                 (name, Some(hint), *tier == view.tier)
             })
@@ -17692,7 +17692,12 @@ impl WalletPage {
                     let measuring = fee.busy
                         || host.fee_measuring()
                         || signing_live::fee_of_another_tier(fee, speed_tier);
-                    signing_live::hold_fee_warning(&mut confirm.fee, held, measuring);
+                    signing_live::hold_fee_warning(
+                        &mut confirm.fee,
+                        held,
+                        measuring,
+                        signing_live::reserve_warning(fee, &self.signing),
+                    );
                     held_note = Some(
                         held.note(
                             confirm
@@ -20563,6 +20568,7 @@ impl Render for WalletPage {
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
+            .font_features(theme::font_ui_features())
             .relative()
             .bg(theme.bg_base)
             .text_color(theme.fg_base)

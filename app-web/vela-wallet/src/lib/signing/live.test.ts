@@ -94,7 +94,8 @@ const QUOTED_FEE: FeeView = {
 	fee_token: null,
 	options: [],
 	confirm_fee_ready: true,
-	no_coin_pays: false
+	no_coin_pays: false,
+	nothing_to_pay_from: false
 };
 
 function field(over: Partial<ClearSignField> = {}): ClearSignField {
@@ -430,6 +431,25 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		// The answer: a quote, and no sentence.
 		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
 		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('a first figure the core knows no coin can pay holds that line from its measurement', () => {
+		// iPhone pass 2026-10-09: the backup sheet's confirm dropped 26 pt when
+		// its first figure landed as "no coin can pay". The core knows it while
+		// the figure is measured (`nothing_to_pay_from`): held, not said.
+		const first: FeeView = {
+			...QUOTED_FEE,
+			fee: null,
+			busy: true,
+			confirm_fee_ready: false,
+			nothing_to_pay_from: true
+		};
+		const held = buildSigningModel(inputs({ fee: first, feeFailing: null }))?.fee;
+		expect(held).toMatchObject({ value: m.feeEstimating, warningReserved: m.feeNoCoinPays });
+		expect(held && 'warning' in held ? held.warning : undefined).toBeUndefined();
+		// A failure being asked again keeps its own reason first (G47).
+		const failing = buildSigningModel(inputs({ fee: first, feeFailing: 'quote_unavailable' }))?.fee;
+		expect(failing).toMatchObject({ warningReserved: NET });
 	});
 
 	it('a chain node, not Vela, is named when the chain read failed (RJ13, G48)', () => {
@@ -780,6 +800,22 @@ describe('the speed under the fee', () => {
 		const model = buildSigningModel(
 			inputs({ speed: { view: speedView('fast'), feeOptions: () => [] } })
 		);
+		expect(model?.confirm.enabled).toBe(true);
+	});
+
+	// The dead `rapid` reads as the factory default, Standard — the core's
+	// answer, and the desktop's, iOS's and Android's. Read as Fast, a quote
+	// naming it under a Standard speed was "another tier's figure": the row
+	// said "estimating" and the confirm stayed shut.
+	it('takes a quote at the dead `rapid` as Standard’s own', () => {
+		const view = speedView('standard');
+		expect(view.tier).toBe('standard');
+		const rapid: FeeView = { ...QUOTED_FEE, fee: { ...QUOTED_FEE.fee!, tier: 'rapid' } };
+		const model = buildSigningModel(inputs({ fee: rapid, speed: { view, feeOptions: () => [] } }));
+		const fee = model?.fee;
+		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
+		expect(fee.value).not.toBe(m.feeEstimating);
+		expect(fee.speed?.value).toBe(m.speed.names.standard);
 		expect(model?.confirm.enabled).toBe(true);
 	});
 });

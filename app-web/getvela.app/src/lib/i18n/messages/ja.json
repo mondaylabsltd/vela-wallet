@@ -4,6 +4,7 @@
 			"alpha": "アルファ版",
 			"blog": "ブログ",
 			"docs": "ドキュメント",
+			"notes": "ノート",
 			"about": "Vela について",
 			"whyVela": "なぜ作ったか",
 			"howItWorks": "しくみ",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "ドキュメント",
+				"notes": "ノート",
 				"whitepaper": "ホワイトペーパー",
 				"audits": "監査と既知の問題",
 				"roadmap": "ロードマップ",

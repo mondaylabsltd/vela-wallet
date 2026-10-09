@@ -36,7 +36,7 @@ use crate::wallet::fill;
 use vela_core::app::batch_import::{BatchFileFailure, BatchRateStatus, BatchUnit, BatchView};
 use vela_core::app::contacts::ContactsView;
 use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView};
-use vela_core::app::fee_speed::FeeSpeedView;
+use vela_core::app::fee_speed::{FeeSpeedView, offered};
 use vela_core::app::send::{
     SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendNameSource, SendPayee,
     SendReceiptCoin, SendReceiptStatus, SendRecipientDraft, SendStage, SendToken, SendTxStatus,
@@ -1422,12 +1422,13 @@ impl SpeedInputs {
 }
 
 /// A tier's NAME — the speed itself, never a number. `rapid` is dead (spec
-/// 068) and reads as the factory `fast`, the core's own answer for it.
+/// 068) and is named as the core reads it (`fee_speed::offered`): the factory
+/// default, `standard` — as iOS, Android and the web name it.
 fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
-    match tier {
-        FeeTier::Standard => s.gas_tier_standard.clone(),
+    match offered(tier) {
+        FeeTier::Fast => s.gas_tier_fast.clone(),
         FeeTier::Slow => s.gas_tier_slow.clone(),
-        FeeTier::Fast | FeeTier::Rapid => s.gas_tier_fast.clone(),
+        FeeTier::Standard | FeeTier::Rapid => s.gas_tier_standard.clone(),
     }
 }
 
@@ -7650,6 +7651,52 @@ mod speed_tests {
                 .options
                 .iter()
                 .all(|o| o.value != "…" && o.value != "—")
+        );
+    }
+
+    /// The dead `rapid` is named Standard — the core's factory default, its
+    /// own answer for it (`fee_speed::offered`), and the name iOS, Android
+    /// and the web give it. It was named Fast here, the factory default when
+    /// this was written.
+    #[test]
+    fn the_dead_rapid_is_named_as_the_core_reads_it() {
+        let (s, wallet) = strings();
+        assert_eq!(tier_name(&s, FeeTier::Rapid), s.gas_tier_standard);
+        assert_eq!(
+            tier_name(&s, FeeTier::Rapid),
+            tier_name(&s, offered(FeeTier::Rapid))
+        );
+        for (tier, name) in [
+            (FeeTier::Fast, &s.gas_tier_fast),
+            (FeeTier::Standard, &s.gas_tier_standard),
+            (FeeTier::Slow, &s.gas_tier_slow),
+        ] {
+            assert_eq!(&tier_name(&s, tier), name);
+        }
+        // A view that somehow names it: the folded control and its option.
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let mut speed = speed(FeeTier::Standard, false, true, None, &floor_clamped());
+        speed.view.tier = FeeTier::Rapid;
+        for option in &mut speed.view.options {
+            if option.tier == FeeTier::Standard {
+                option.tier = FeeTier::Rapid;
+            }
+        }
+        let model = send_speed(&inputs(&send, &fee, &s, &wallet, Some(&speed)))
+            .unwrap_or_else(|| unreachable!("a live control"));
+        assert_eq!(model.value, s.gas_tier_standard);
+        assert_eq!(
+            model
+                .options
+                .iter()
+                .map(|o| o.label.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                s.gas_tier_fast.clone(),
+                s.gas_tier_standard.clone(),
+                s.gas_tier_slow.clone()
+            ]
         );
     }
 

@@ -46,7 +46,8 @@ final class FeeStore {
     /// R7); `nil` while `view` is.
     private(set) var viewJson: String?
     /// Told every view of the session in force — for an owner that reacts to
-    /// one (the signing sheet re-asks a stale quote). Promotions included.
+    /// one (the signing sheet asks a failed quote again on the core's
+    /// schedule). Promotions included.
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
@@ -113,31 +114,54 @@ final class FeeStore {
         }
     }
 
-    /// How the timers the fee machine asks for run out: `start_ttl` (a
-    /// quote's staleness) and `start_deadline` (the bound on a whole run,
-    /// spec 094 S9 — 15 s).
+    /// How the timers the fee machine asks for run out: `start_ttl` (the
+    /// quote on screen priced again a block later, `requote_interval_ms`) and
+    /// `start_deadline` (the bound on a whole run, spec 094 S9 — 15 s).
     enum Timers {
         /// The app's: each runs out on the wall clock, after its `ms`.
         case wallClock
-        /// A test's, under a scripted relay: none runs out — no time passes.
-        /// A starved CI runner took longer than 15 s to hand a scripted quote
-        /// its answers, and the deadline failed it (`chain_read`,
-        /// `quote_unavailable`): a failure the code never had, measured on a
-        /// clock (`Waits.swift`). A timer held here is not in flight for
-        /// `isIdle` — nothing but time could answer it.
+        /// A test's, under a scripted relay: none runs out by itself — no time
+        /// passes until the test moves the clock (`elapse`). A starved CI
+        /// runner took longer than 15 s to hand a scripted quote its answers,
+        /// and the deadline failed it (`chain_read`, `quote_unavailable`): a
+        /// failure the code never had, measured on a clock (`Waits.swift`). A
+        /// timer held here is not in flight for `isIdle` — nothing but time
+        /// could answer it.
         case stopped
     }
 
     /// A session's timers under `.stopped`: held until the machine abandons
-    /// them, never answered, and counted so `isIdle` tells them from a read.
+    /// them or a test runs them out (`elapse`), and counted so `isIdle` tells
+    /// them from a read.
     @MainActor
     private final class HeldTimers {
-        private(set) var count = 0
+        private var nextId = 0
+        /// The timers held now, by the operation each stands for.
+        private var held: [Int: (timer: String, wake: CheckedContinuation<Void, Never>)] = [:]
+        /// How many are held. One run out stops counting at once, before its
+        /// answer is in, so `isIdle` waits for whatever that answer sets going.
+        var count: Int { held.count }
 
-        func hold() async {
-            count += 1
-            defer { count -= 1 }
-            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3_600)) }
+        /// Until the machine abandons `timer` (the effect's task is cancelled)
+        /// or the test runs it out.
+        func hold(_ timer: String) async {
+            let id = nextId
+            nextId += 1
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { wake in
+                    if Task.isCancelled { wake.resume() } else { held[id] = (timer, wake) }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.held.removeValue(forKey: id)?.wake.resume() }
+            }
+        }
+
+        /// Every held `timer` runs out now.
+        func elapse(_ timer: String) {
+            for (id, entry) in held where entry.timer == timer {
+                held.removeValue(forKey: id)
+                entry.wake.resume()
+            }
         }
 
         nonisolated deinit {}
@@ -193,6 +217,13 @@ final class FeeStore {
         ([inForce!] + previews).allSatisfy { $0.core.inFlight == $0.held.count } && speedCore.isIdle
     }
 
+    /// A test's clock moving, under `.stopped`: every `timer` the stopped
+    /// clock holds (`start_ttl`, `start_deadline`) runs out now, in every
+    /// session, and the machine hears it as it would from the wall clock.
+    func elapse(_ timer: String) {
+        for session in [inForce!] + previews { session.held.elapse(timer) }
+    }
+
     /// Who is waiting for the quote in flight, and for which attempt.
     private var waiting: [(generation: Int, resume: (FeeViewWire?) -> Void)] = []
     private var generation = 0
@@ -245,8 +276,11 @@ final class FeeStore {
         let core = CoreStore<FeeViewWire>(
             bridge: FeePolicyCore(),
             perform: { operation in
-                if stopped, FeeExecutor.timers.contains(operation["type"] as? String ?? "") {
-                    await held.hold()
+                if stopped, let timer = operation["type"] as? String, FeeExecutor.timers.contains(timer) {
+                    // Abandoned, the answer is dropped (`CoreDriver`); run out
+                    // by the test, it is the timer's own: `ttl_elapsed`,
+                    // `deadline_elapsed`.
+                    await held.hold(timer)
                     return FeeExecutor.neutralAnswer(operation)
                 }
                 return await executor.perform(operation)
@@ -465,8 +499,11 @@ final class FeeStore {
         settleSpeed()
     }
 
-    /// The core re-runs the request it priced (a stale quote on the confirm).
-    func requote() { inForce.send(CoreJSON.string(["type": "requote"])) }
+    /// The core re-runs the request it priced — `refresh`'s, once the held
+    /// readings are gone. Nothing else asks: a figure on screen is priced
+    /// again by the core itself once a block (`requote_interval_ms`), and
+    /// `stale` is only ever up while it does.
+    private func requote() { inForce.send(CoreJSON.string(["type": "requote"])) }
 
     /// The refresh control (spec 068): measure AGAIN. The held readings go
     /// first (issue 212), so this is a new measurement rather than the number

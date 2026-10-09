@@ -3,15 +3,18 @@ package app.getvela.wallet.core.designsystem.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.TextStyle
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.designsystem.tokens.VelaColors
 import app.getvela.wallet.core.designsystem.tokens.VelaColorsDark
 import app.getvela.wallet.core.designsystem.tokens.VelaColorsLight
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 
 val LocalVelaColors = staticCompositionLocalOf { VelaColorsLight }
@@ -64,9 +67,36 @@ fun VelaTheme(
     ) {
         MaterialTheme(
             colorScheme = colors.toMaterialScheme(darkTheme),
+            typography = VelaTypography,
             content = content,
         )
     }
+}
+
+/**
+ * Material's type scale with [VelaFontFeatures]: the theme hands its body
+ * style to every Text as `LocalTextStyle`, so text that names only a family
+ * and a size still draws "0x" as written.
+ */
+internal val VelaTypography: Typography = Typography().let { scale ->
+    fun TextStyle.literal() = copy(fontFeatureSettings = VelaFontFeatures)
+    Typography(
+        displayLarge = scale.displayLarge.literal(),
+        displayMedium = scale.displayMedium.literal(),
+        displaySmall = scale.displaySmall.literal(),
+        headlineLarge = scale.headlineLarge.literal(),
+        headlineMedium = scale.headlineMedium.literal(),
+        headlineSmall = scale.headlineSmall.literal(),
+        titleLarge = scale.titleLarge.literal(),
+        titleMedium = scale.titleMedium.literal(),
+        titleSmall = scale.titleSmall.literal(),
+        bodyLarge = scale.bodyLarge.literal(),
+        bodyMedium = scale.bodyMedium.literal(),
+        bodySmall = scale.bodySmall.literal(),
+        labelLarge = scale.labelLarge.literal(),
+        labelMedium = scale.labelMedium.literal(),
+        labelSmall = scale.labelSmall.literal(),
+    )
 }
 
 private fun VelaColors.toMaterialScheme(dark: Boolean): ColorScheme {

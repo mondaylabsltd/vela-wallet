@@ -333,12 +333,15 @@ class SendController(
             }
         }
         // The fee session's later word flows into the send machine: a
-        // re-quote after a fee-token pick or a TTL expiry replaces the
+        // re-quote after a fee-token pick, a refresh, or the fee core's own
+        // re-pricing once a block (`requote_interval_ms`) replaces the
         // estimate the confirm screen shows (desktop `sync_fee_to_send`).
+        // Nothing here re-asks a stale quote: the core prices the figure on
+        // screen again itself, and `stale` is only ever up while it does
+        // (`FeeView.stale`).
         scope.launch {
             var lastFee: FeeEstimateView? = null
             var lastBusy = false
-            var lastStale = false
             fee.collect { view ->
                 if (view.busy != lastBusy) {
                     lastBusy = view.busy
@@ -348,19 +351,6 @@ class SendController(
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
                     dispatch(SendEvent.FeeUpdated(estimate))
-                }
-                // Spec 045 US4: a quote goes stale while the person reads the
-                // confirm page (the policy's TTL). Re-ask once per stale flip,
-                // with the same request, while the page is open and idle; the
-                // fresh estimate flows back through FeeUpdated above.
-                if (view.stale != lastStale) {
-                    lastStale = view.stale
-                    val current = send.value
-                    if (view.stale && !view.busy &&
-                        current.stage == SendStage.Confirm && current.tx_status == SendTxStatus.Idle && !current.sending
-                    ) {
-                        speedControl.requoteStale()
-                    }
                 }
             }
         }

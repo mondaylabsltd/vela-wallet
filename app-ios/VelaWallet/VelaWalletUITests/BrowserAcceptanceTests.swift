@@ -115,6 +115,19 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// clock per check and the harness became slower than the chain it was
     /// waiting for.
     @discardableResult
+    /// The "已签名！" sheet that follows a signature stays up a moment over the
+    /// page; a tap on the page under it lands on the sheet, and the page's
+    /// "Verify sign" was never pressed. Wait for it to go.
+    private func waitForTheSignedSheetToLeave(_ app: XCUIApplication, timeout: TimeInterval = 15) {
+        let signed = app.staticTexts["已签名！"]
+        guard signed.waitForExistence(timeout: 3) else { return }
+        let gone = XCTWaiter().wait(
+            for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: signed)],
+            timeout: timeout
+        )
+        XCTAssertEqual(gone, .completed, "the 已签名！ sheet never left the page")
+    }
+
     private func waitForVerdict(
         _ app: XCUIApplication, containing fragment: String, timeout: TimeInterval = 30
     ) -> Bool {
@@ -487,7 +500,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// three speeds, a pick folding it onto the new one.
     ///
     /// **Nothing here spends.** The confirm is never touched: the sheet is
-    /// swiped away, which is the refusal, and the page is answered 4001.
+    /// closed with its ✕, which is the refusal, and the page is answered 4001.
     func testTheDappSheetOffersASpeedAndNeverSignsOneItLeft() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
@@ -518,10 +531,13 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(speed.label.contains("较慢"), "the control does not name the speed picked: \(speed.label)")
         attach(app.screenshot(), named: "dapp-speed-picked-slow")
 
-        // Away, unsigned: the refusal.
-        app.swipeDown(velocity: .fast)
+        // Away, unsigned: the refusal. The sheet's own ✕ — a swipe down
+        // started on the open speed list scrolled it instead of the sheet.
+        let close = app.buttons["signing.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10), "the sheet has no ✕")
+        close.tap()
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sendTransaction err 4001", timeout: 30),
-                      "dismissing the sheet did not refuse the page")
+                      "closing the sheet did not refuse the page")
     }
 
     // MARK: - US5: an unlimited approval never leaves
@@ -679,6 +695,7 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict personal_sign ok", timeout: 90),
                       "the page never got a signature")
 
+        waitForTheSignedSheetToLeave(app)
         app.webViews.buttons["Verify sign"].firstMatch.tap()
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict verify valid 0x1626ba7e", timeout: 90),
                       "the Safe did not accept its own signature — the EIP-1271 envelope, the message hash, or the read proxy is wrong")
@@ -714,6 +731,7 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "the envelope does not name the second key's signer: \(signed)")
         XCTAssertFalse(signed.contains(firstKeySigner), "the first key signed, not the sign-in key")
 
+        waitForTheSignedSheetToLeave(app)
         app.webViews.buttons["Verify sign"].firstMatch.tap()
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict verify valid 0x1626ba7e", timeout: 90),
                       "the Safe did not accept its second key's signature")

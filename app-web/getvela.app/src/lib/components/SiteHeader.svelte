@@ -25,9 +25,13 @@
 	const m = $derived(catalog(active));
 	let open = $state(false);
 
+	// Notes (spec 101) are English-only, and linked only once a build has any.
 	const links = $derived([
 		{ href: '/blog', label: m.chrome.nav.blog, englishOnly: true },
 		{ href: '/docs', label: m.chrome.nav.docs, englishOnly: false },
+		...(__NOTES_PUBLISHED__ > 0
+			? [{ href: '/notes', label: m.chrome.nav.notes, englishOnly: true }]
+			: []),
 		{ href: '/about', label: m.chrome.nav.about, englishOnly: false }
 	]);
 

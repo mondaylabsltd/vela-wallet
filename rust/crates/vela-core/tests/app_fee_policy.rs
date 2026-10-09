@@ -1853,6 +1853,65 @@ fn issue_408_none_can_pay_is_not_said_while_requoting() {
     assert!(!view.no_coin_pays);
 }
 
+/// The first figure on an account with nothing to pay from (iPhone pass
+/// 2026-10-09, the backup sheet on Ethereum): once the coins' rows are in,
+/// while the figure is still measured, the view says so — and the figure
+/// lands as "no coin pays". Before the rows, after the landing, with a coin
+/// that holds something, or once a figure has landed and is measured again
+/// (the shells' held line covers that), it says nothing.
+#[test]
+fn nothing_to_pay_from_is_known_while_the_first_figure_is_measured() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    assert!(sut.view().busy);
+    assert!(!sut.view().nothing_to_pay_from, "no coin is known yet");
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some(ISSUE_408_GAS_PRICE.to_owned()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "1976000000".to_owned(),
+            max_priority_fee_per_gas: None,
+            network_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            relayer_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            in_band_fee_per_gas: None,
+        }),
+    });
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![issue_408_eth_row("0"), issue_408_usdt_row("0")]),
+    });
+    let measuring = sut.view();
+    assert!(measuring.busy && measuring.fee.is_none(), "{measuring:?}");
+    assert!(measuring.nothing_to_pay_from, "{measuring:?}");
+    assert!(!measuring.no_coin_pays, "nothing is SAID before the figure");
+
+    sut.resolve(estimated());
+    let landed = sut.view();
+    assert!(
+        landed.no_coin_pays,
+        "the figure lands as the line held for it"
+    );
+    assert!(!landed.nothing_to_pay_from);
+
+    sut.dispatch(Event::Requote);
+    assert!(sut.view().busy);
+    assert!(
+        !sut.view().nothing_to_pay_from,
+        "a figure has landed: the held line covers it"
+    );
+
+    // A coin that holds something might pay: nothing is known before the figure.
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![issue_408_eth_row("0"), issue_408_usdt_row("754189")]),
+    });
+    assert!(sut.view().busy);
+    assert!(!sut.view().nothing_to_pay_from);
+}
+
 /// What the coin has is what it can pay FROM: once the operation's balance
 /// changes are measured (spec 083), the USDC a swap spends is not there to
 /// pay with, and the shortfall says what is left — not the balance before.

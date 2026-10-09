@@ -616,6 +616,53 @@ struct DappActivityTests {
 
     // MARK: - Rows (WalletLive)
 
+    /// A row's title in its parts, so the verb is never the part cut (iPhone
+    /// pass 2026-10-09: 「在 127.0.0.1:8137 合约交互」 beside an amount read
+    /// 「在 / 127.0.0.1:813…」). In the locale's own order — the verb after the
+    /// place in zh and ja, before it in en — and the parts say the title.
+    @Test func aRowsTitleIsSplitAroundItsPlace() throws {
+        let view = try feed(F.stored(nowMs: now))
+        let ja = Loc(overrideTag: "ja", preferredLanguages: [])
+        for (loc, lead, trail, gaps) in [
+            (zh, "在", zh.t("componentsUi.signing.intentSwap"), (true, true)),
+            (en, en.t("componentsUi.signing.intentSwap") + " on", "", (true, false)),
+            (ja, "", "で" + ja.t("componentsUi.signing.intentSwap"), (false, false)),
+        ] {
+            let row = WalletLive.activityRow(try item("dapp-swap-tx", in: view), loc: loc, hidden: false)
+            let parts = try #require(row.titlePlace, "no parts for \(loc.resolvedLanguage)")
+            #expect(parts.lead == lead)
+            #expect(parts.place == "Uniswap")
+            #expect(parts.trail == trail)
+            #expect(parts.gapBefore == gaps.0 && parts.gapAfter == gaps.1)
+            let spoken = [parts.lead, parts.place, parts.trail].filter { !$0.isEmpty }
+            #expect(row.title.replacingOccurrences(of: " ", with: "") == spoken.joined().replacingOccurrences(of: " ", with: ""))
+        }
+        // A row with no place has no parts: its title is the verb alone.
+        let rows = items(view).map { WalletLive.activityRow($0, loc: zh, hidden: false) }
+        #expect(rows.filter { $0.kind != .dapp }.allSatisfy { $0.titlePlace == nil })
+    }
+
+    /// The layout behind it: one line when the whole title fits; else the
+    /// verb keeps its width and the place takes what is left — on line 1
+    /// before a trailing verb, on line 2 after a leading one.
+    @Test func thePlaceIsThePartCutNeverTheVerb() {
+        typealias L = PlaceTitleLayout
+        // Fits: one line, in order, a space either side of the place.
+        #expect(L.arrange(lead: 16, place: 120, trail: 64, gapBefore: 5, gapAfter: 5, available: 300) == [
+            L.Slot(x: 0, line: 0, width: 16), L.Slot(x: 21, line: 0, width: 120), L.Slot(x: 146, line: 0, width: 64),
+        ])
+        // 「在 127.0.0.1:8137 合约交互」 in 170 pt: the verb whole on line 2,
+        // the host cut to the rest of line 1.
+        #expect(L.arrange(lead: 16, place: 160, trail: 64, gapBefore: 5, gapAfter: 5, available: 170) == [
+            L.Slot(x: 0, line: 0, width: 16), L.Slot(x: 21, line: 0, width: 149), L.Slot(x: 0, line: 1, width: 64),
+        ])
+        // "Contract interaction on 127.0.0.1:8137" in 170 pt: the words on
+        // line 1, the host on line 2, cut to the line.
+        #expect(L.arrange(lead: 150, place: 200, trail: 0, gapBefore: 5, gapAfter: 0, available: 170) == [
+            L.Slot(x: 0, line: 0, width: 150), L.Slot(x: 0, line: 1, width: 170), L.Slot(x: 0, line: 1, width: 0),
+        ])
+    }
+
     /// Each row is titled by the core's verb at its place, with the core's
     /// second line: 「在 Uniswap 兑换」 ≈ −100 USDC with ≈ +0.03 ETH back;
     /// 「在 Uniswap 授权签名」 无限额 USDC in the danger tone; 「在
