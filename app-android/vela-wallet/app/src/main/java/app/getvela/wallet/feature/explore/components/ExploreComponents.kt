@@ -58,16 +58,15 @@ internal object ExploreMetrics {
     val rowAvatar: Dp = VelaSpacing.xl4 + VelaSpacing.md
     /** Start-page search box (mock E2: y116–163). */
     val searchField: Dp = VelaSpacing.xl5
-    /** Browsing address pill and the toolbar under the page (mock E4). */
+    /** Browsing address pill (board E4: `size.addressPill`). */
     val addressPill: Dp = VelaSpacing.xl4 + VelaSpacing.md
-    val browserBar: Dp = VelaSizing.emptyStateCircle
-    /** The boxed tab count, in the header and in the toolbar (mock E2/E4). */
+    /** The boxed tab count's inner box, in the browsing top bar (board E4: `size.tabCount`). */
     val tabCount: Dp = VelaSpacing.xl3 + VelaSpacing.xs
     /** dApp avatar in the signing header, and the chip beside it (mock CS1).  */
     val signingAvatar: Dp = VelaSizing.controlSm
     val networkChip: Dp = VelaSpacing.xl3 + VelaSpacing.xs
-    /** The identicon in a chip. */
-    val chipAvatar: Dp = VelaIconSize.base
+    /** The connected account's identicon in the browsing top bar (board E4: `icon.2xl`). */
+    val barAvatar: Dp = VelaIconSize.xl2
 }
 
 /**
@@ -161,9 +160,18 @@ fun SiteTile(tile: TileModel, onOpen: (String) -> Unit, modifier: Modifier = Mod
     }
 }
 
-/** A site inside a group: mark, name, blurb, and the recent group's timestamp. */
+/**
+ * A site inside a group: mark, name, blurb, and the recent group's timestamp.
+ *
+ * [hostLine]: the second line is a host to be judged by — a resume row's
+ * (spec 099 navigation) — so when it must be cut it loses its START, as the
+ * browsing bar's pill does: the end of a host is the registrable domain, the
+ * part that says who you are talking to. `app.uniswap.org.evil.xyz` reads
+ * `…uniswap.org.evil.xyz`, never `app.uniswap.or…` (the web board's SiteRow
+ * `hostLine`). Recent dApps rows keep the end cut.
+ */
 @Composable
-fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
+fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modifier, hostLine: Boolean = false) {
     val colors = VelaTheme.colors
     Row(
         modifier = modifier
@@ -193,7 +201,9 @@ fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modi
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    // A head cut needs one unwrapped line, as in the pill.
+                    softWrap = !hostLine,
+                    overflow = if (hostLine) TextOverflow.StartEllipsis else TextOverflow.Ellipsis,
                 )
             }
         }

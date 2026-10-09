@@ -183,7 +183,13 @@ private fun MenuRows(items: List<SiteMenuItem>, onPick: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
         ) {
-            val ink = if (item.danger) colors.errorBase else colors.fgBase
+            // A row that cannot act now is drawn in the subtle ink at the
+            // disabled opacity (spec 099 navigation: Forward with nothing ahead).
+            val ink = when {
+                !item.enabled -> colors.fgSubtle
+                item.danger -> colors.errorBase
+                else -> colors.fgBase
+            }
             Icon(item.icon, null, tint = ink)
             Text(
                 text = item.label,

@@ -199,6 +199,56 @@ fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
     }
 }
 
+/// Where a click on 探索 in the sidebar lands, and the column that comes
+/// with it (spec 099 navigation, the core's `explore_landing`): from another
+/// section, or again while Explore is up, its start page — the dApp's tab
+/// kept, live and unlit in the strip, one click from its page as it was
+/// left — and `panel` as the switch left it.
+///
+/// A request waiting on the person is never left with nothing on screen:
+/// - a signing column that comes back with Explore (RJ18, `panel` is
+///   `Signing` again) comes back with the page whose request it holds:
+///   `signing_tab`, `None` for the wallet's own;
+/// - otherwise what the browser machine holds in front of the person
+///   (`dapp`, the core's `waiting_tab`: a consent, then a signature, then an
+///   add-network) brings its page, and its column: the Connection column for
+///   a consent or an add-network — the one place the desktop asks them — and
+///   for a signature its own column, when one is open (`signing_column`).
+fn explore_landing_from_sidebar(
+    view: &vela_core::app::explore_sites::ExploreView,
+    from: Section,
+    panel: PanelId,
+    signing_tab: Option<&str>,
+    dapp: Option<&vela_core::app::dapp_browser::DbrView>,
+    signing_column: bool,
+) -> (vela_core::app::browser_tabs::ExploreLanding, PanelId) {
+    use vela_core::app::browser_tabs::{
+        ExploreEntry, ExploreLanding, explore_landing, waiting_tab,
+    };
+    let entry = if from == Section::Explore {
+        ExploreEntry::Reselect
+    } else {
+        ExploreEntry::Section
+    };
+    if panel == PanelId::Signing {
+        return (explore_landing(view, entry, signing_tab), panel);
+    }
+    let waiting = dapp.and_then(waiting_tab);
+    let landing = explore_landing(view, entry, waiting.as_deref());
+    let column = match (&landing, dapp) {
+        (ExploreLanding::Tab { id }, Some(dapp)) if waiting.as_deref() == Some(id.as_str()) => {
+            let signature = dapp.consent.is_none() && dapp.signing.is_some();
+            match (signature, signing_column) {
+                (true, true) => PanelId::Signing,
+                (true, false) => panel,
+                (false, _) => PanelId::Connection,
+            }
+        }
+        _ => panel,
+    };
+    (landing, column)
+}
+
 /// What becomes of a send parked under "Report this" (issue 466) once the
 /// person is somewhere new.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -850,7 +900,9 @@ pub struct WalletPage {
     /// bar says "reloaded to save memory" until it is left.
     reloaded_tab: Option<String>,
     /// Spec 082 RD6: the tab whose page is in the webview — `None` at launch,
-    /// when a restored tab waits unlit for a click.
+    /// when a restored tab waits unlit for a click. Under the start page it
+    /// may still name a page (spec 099 navigation: Explore entered again
+    /// lands on its start page), live and hidden until its tab is clicked.
     shown_tab: Option<String>,
     /// Spec 082 G54: the tab strip's measure and scroll, kept across frames.
     tab_strip: explore_components::TabStripScroll,
@@ -3570,12 +3622,16 @@ impl WalletPage {
                         this.signing_hidden = true;
                     }
                     let kept = this.signing_hidden && this.signing_to_show();
+                    let from = this.section;
                     this.section = destination;
                     this.panel = panel_after_switch(destination, kept);
                     if this.panel == PanelId::Signing {
                         this.signing_hidden = false;
                     }
                     this.menu = None;
+                    if destination == Section::Explore {
+                        this.land_in_explore(from, cx);
+                    }
                     cx.notify();
                 })),
                 None => row,
@@ -12826,14 +12882,93 @@ impl WalletPage {
         if url.trim().is_empty() {
             return;
         }
-        self.open_here(url, cx);
+        // Handed in from outside: an address, never a site to resume.
+        self.open_here(
+            url,
+            vela_core::app::browser_tabs::ExploreOpenKind::Address,
+            cx,
+        );
     }
 
     /// The tab the strip lights (spec 082 RD6): the one whose page is in the
     /// webview, or a selected start-page tab over the start page. A restored
     /// tab waits unlit until somebody clicks it.
     fn lit_tab(&self, view: &vela_core::app::explore_sites::ExploreView) -> Option<String> {
-        crate::wallet::browser_host::lit_tab(view, self.shown_tab.as_deref(), self.browsing)
+        vela_core::app::browser_tabs::lit_tab(view, self.shown_tab.as_deref(), self.browsing)
+    }
+
+    /// Explore, chosen in the sidebar (spec 099 navigation): where it lands
+    /// is the core's (`explore_landing_from_sidebar`). The start page only
+    /// hides the page: its tab stays selected, live and unlit, and a click on
+    /// it is `switch_to_tab` — the page as it was left, no load. A tab whose
+    /// connect or add-network waits on the person comes up instead, with
+    /// the Connection column that asks it.
+    fn land_in_explore(&mut self, from: Section, cx: &mut Context<Self>) {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let signing_tab = self.signing_column_tab(cx);
+        #[cfg(not(target_os = "linux"))]
+        let signing_column = self.signing_host.is_some();
+        #[cfg(target_os = "linux")]
+        let signing_column = false;
+        let host = self.browser_host.clone();
+        let (landing, column) = explore_landing_from_sidebar(
+            &explore,
+            from,
+            self.panel,
+            signing_tab.as_deref(),
+            host.as_ref().map(|host| &host.read(cx).view),
+            signing_column,
+        );
+        if column != self.panel {
+            crate::diag::vlog!(
+                "browser",
+                "explore lands with a request waiting ({column:?})"
+            );
+            self.panel = column;
+            if column == PanelId::Signing {
+                self.signing_hidden = false;
+            }
+        }
+        match landing {
+            ExploreLanding::Home => {
+                if self.browsing {
+                    crate::diag::vlog!(
+                        "browser",
+                        "explore home, tab={} kept",
+                        self.shown_tab.as_deref().unwrap_or("-")
+                    );
+                }
+                self.browsing = false;
+                // All off over the start page (RD6). The poll that would say
+                // so stopped while another section was in front, and a dimmed
+                // arrow still asks this at the click — of the hidden page.
+                self.nav_enabled = [false; 3];
+            }
+            ExploreLanding::Tab { id } => {
+                let url = explore
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .and_then(|tab| tab.url.clone());
+                self.browser_go(crate::wallet::browser_host::Go::Tab { id, url }, cx);
+            }
+        }
+    }
+
+    /// The tab whose request the signing column holds (RJ18): the live
+    /// request's page, or the page whose request's ending it shows. `None`
+    /// for the wallet's own requests, which no page made.
+    fn signing_column_tab(&self, cx: &gpui::App) -> Option<String> {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = &self.signing_host {
+            return host.read(cx).tab.clone();
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
+        self.dapp_landing
+            .as_ref()
+            .and_then(|landing| landing.tab.clone())
     }
 
     /// Every navigation the page starts goes through here (spec 082 RD1):
@@ -12841,27 +12976,13 @@ impl WalletPage {
     /// (spec 099 FR-003: a switch retires no page).
     fn browser_go(&mut self, go: crate::wallet::browser_host::Go, cx: &mut Context<Self>) {
         use crate::wallet::browser_host::{Go, Went, went};
+        use vela_core::app::browser_tabs::ExploreOpenKind;
         let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
         let lit = self.lit_tab(&explore);
         match went(&go, lit.as_deref()) {
             Went::AlreadyThere => {}
             Went::Go => match go {
-                Go::Tab { id, url } => {
-                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
-                            cx,
-                        );
-                    });
-                    match url {
-                        Some(url) => self.switch_to_tab(id, url, cx),
-                        // A start-page tab: the wallet's own screen.
-                        None => {
-                            self.show_tab(Some(id), cx);
-                            self.browsing = false;
-                        }
-                    }
-                }
+                Go::Tab { id, url } => self.select_strip_tab(id, url, cx),
                 Go::NewTab => {
                     // A new tab is the START page: a browser does not decide
                     // where somebody wants to go next.
@@ -12877,7 +12998,10 @@ impl WalletPage {
                     });
                     self.browsing = false;
                 }
-                Go::Typed(url) | Go::Open(url) => self.open_here(url, cx),
+                // A typed address names a page; a picked site names a site,
+                // which a tab already on it is (the core's open rule).
+                Go::Typed(url) => self.open_here(url, ExploreOpenKind::Address, cx),
+                Go::Open(url) => self.open_here(url, ExploreOpenKind::Site, cx),
                 Go::OpenInNewTab(url) => self.open_in_new_tab(url, None, cx),
                 Go::Reload => {
                     // Over the failure panel, reload is its Retry: the
@@ -12986,15 +13110,16 @@ impl WalletPage {
                 host.view
                     .pending_op_hash
                     .clone()
-                    .map(|op| (op, host.chain_id, host.seen_submitted_ms))
+                    .map(|op| (op, host.chain_id, host.seen_submitted_ms, host.tab.clone()))
             });
-            if let Some((user_op_hash, chain_id, seen_submitted_ms)) = following {
+            if let Some((user_op_hash, chain_id, seen_submitted_ms, tab)) = following {
                 self.dapp_landing_seq += 1;
                 self.dapp_landing = Some(DappLanding {
                     ending: vela_core::app::sign_request::SignEnding::StillConfirming {
                         user_op_hash,
                     },
                     chain_id,
+                    tab,
                     seq: self.dapp_landing_seq,
                     seen_submitted_ms,
                     closing: false,
@@ -13006,15 +13131,27 @@ impl WalletPage {
         let _ = cx;
     }
 
-    /// An address, in the page on screen (RD6): the shown tab's page; over
-    /// the start page, the selected start-page tab; otherwise — a restored
-    /// tab waiting unlit — a NEW tab, leaving the waiting one intact.
-    fn open_here(&mut self, url: String, cx: &mut Context<Self>) {
+    /// An address or a site, opened where the core's open rule says (RD6,
+    /// spec 099 navigation): the shown tab's page; over the start page, a
+    /// picked site's own tab already on it — resumed as it was left — else
+    /// the selected start-page tab; otherwise — a dApp or a restored tab
+    /// waiting unlit — a NEW tab, leaving the waiting one intact. A full
+    /// strip has no room for one: the core names a tab it can spare (never
+    /// the dApp just left), which is selected here before it loads.
+    fn open_here(
+        &mut self,
+        url: String,
+        kind: vela_core::app::browser_tabs::ExploreOpenKind,
+        cx: &mut Context<Self>,
+    ) {
+        use vela_core::app::browser_tabs::{ExploreOpenTarget, open_target};
         let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let target = crate::wallet::browser_host::open_target(
+        let target = open_target(
             &explore,
             self.shown_tab.as_deref(),
             self.browsing,
+            &url,
+            kind,
         );
         crate::diag::vlog!(
             "browser",
@@ -13028,11 +13165,50 @@ impl WalletPage {
             crate::ui::editor::is_composing(&self.address_focus)
         );
         match target {
-            Some(id) => {
+            ExploreOpenTarget::Load { id } => {
+                // A full strip's spare tab is not the selected one: the core
+                // hears it chosen, as for a click on it. Its new page is a
+                // load, not a page reloaded to save memory.
+                if explore.selected_tab.as_deref() != Some(id.as_str()) {
+                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
+                            cx,
+                        );
+                    });
+                }
+                self.suspended.remove(&id);
                 self.show_tab(Some(id), cx);
                 self.navigate_to(url);
             }
-            None => self.open_in_new_tab(url, None, cx),
+            ExploreOpenTarget::Resume { id } => {
+                let url = explore
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .and_then(|tab| tab.url.clone());
+                self.select_strip_tab(id, url, cx);
+            }
+            ExploreOpenTarget::NewTab => self.open_in_new_tab(url, None, cx),
+        }
+    }
+
+    /// A tab of the strip, chosen (RD1): the core hears it selected, and its
+    /// page comes to the front (`switch_to_tab`); a start-page tab is the
+    /// wallet's own screen.
+    fn select_strip_tab(&mut self, id: String, url: Option<String>, cx: &mut Context<Self>) {
+        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
+                cx,
+            );
+        });
+        match url {
+            Some(url) => self.switch_to_tab(id, url, cx),
+            None => {
+                self.show_tab(Some(id), cx);
+                self.browsing = false;
+            }
         }
     }
 
@@ -13187,7 +13363,10 @@ impl WalletPage {
     /// The neighbour rule is the machine's (right, then left); this only obeys
     /// the answer. Only the tab on screen has a document behind it: closing
     /// one in the background changes nothing on screen (it used to reload the
-    /// page in front, cancelling what it had asked — W14). Closing the tab of
+    /// page in front, cancelling what it had asked — W14). Over the start
+    /// page only its lit tab is on screen (`browser_host::closing`): a dApp
+    /// kept unlit behind it (探索 entered again) takes its view with it and
+    /// leaves the start page where it is. Closing the tab of
     /// an open request is never held: its page goes at the close, and the
     /// core answers the request 4900 and stops its column
     /// (`browser_host::tab_close`) — not at the neighbour's hello, which a
@@ -13195,8 +13374,12 @@ impl WalletPage {
     fn close_browser_tab(&mut self, id: &str, cx: &mut Context<Self>) {
         use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
-        let was_shown = self.shown_tab.as_deref() == Some(id)
-            || (!self.browsing && resident.read(cx).view().selected_tab.as_deref() == Some(id));
+        let closing = crate::wallet::browser_host::closing(
+            &resident.read(cx).view(),
+            self.shown_tab.as_deref(),
+            self.browsing,
+            &[id.to_owned()],
+        );
         resident.update(cx, |resident, cx| {
             resident.dispatch(
                 vela_core::app::explore_sites::Event::TabClosed { id: id.to_owned() },
@@ -13219,12 +13402,10 @@ impl WalletPage {
             .as_ref()
             .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
             .map(|tab| (tab.id.clone(), tab.url.clone()));
-        if was_shown {
-            // Its watch went with it.
-            self.load = crate::wallet::browser_host::LoadDriver::default();
-            self.shown_tab = None;
+        if closing.shown {
+            self.forget_shown_tab();
         }
-        match crate::wallet::browser_host::tab_close(was_shown, next) {
+        match crate::wallet::browser_host::tab_close(closing.on_screen, next) {
             TabClose::Background => {}
             // The neighbour's page comes to the front, as it was.
             TabClose::Neighbour { id, url } => self.switch_to_tab(id, url, cx),
@@ -13242,20 +13423,28 @@ impl WalletPage {
     /// "close tabs to the right", "close all tabs"). Which ones is the core's
     /// (`tabs_closed_by`); each one's page goes with its view, and the core
     /// settles what it had open, as for a single close. The selection then
-    /// follows the explore machine's rule, as it does for one.
+    /// follows the explore machine's rule, as it does for one, and what is on
+    /// screen follows a single close's rule (`browser_host::closing`): over
+    /// the start page a dApp kept unlit behind it is not on screen.
     fn close_browser_tabs(
         &mut self,
         scope: &vela_core::app::explore_sites::TabCloseScope,
         cx: &mut Context<Self>,
     ) {
+        use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
-        let ids =
-            vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
+        let before = resident.read(cx).view();
+        let ids = vela_core::app::explore_sites::tabs_closed_by(&before.tabs, scope);
         if ids.is_empty() {
             return;
         }
         crate::diag::vlog!("browser", "close tabs n={} ({scope:?})", ids.len());
-        let shown_closed = self.shown_tab.as_ref().is_some_and(|id| ids.contains(id));
+        let closing = crate::wallet::browser_host::closing(
+            &before,
+            self.shown_tab.as_deref(),
+            self.browsing,
+            &ids,
+        );
         for id in &ids {
             #[cfg(not(target_os = "linux"))]
             crate::webview::close(id);
@@ -13272,32 +13461,36 @@ impl WalletPage {
                 cx,
             );
         });
-        if shown_closed || !self.browsing {
-            if shown_closed {
-                self.load = crate::wallet::browser_host::LoadDriver::default();
-                self.shown_tab = None;
-            }
-            let view = resident.read(cx).view();
-            let next = view
-                .selected_tab
-                .as_ref()
-                .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
-                .map(|tab| (tab.id.clone(), tab.url.clone()));
-            match next {
-                Some((id, Some(url))) if self.browsing || shown_closed => {
-                    self.switch_to_tab(id, url, cx);
-                }
-                Some((id, _)) => {
-                    self.show_tab(Some(id), cx);
-                    self.browsing = false;
-                }
-                None => {
-                    self.show_tab(None, cx);
-                    self.browsing = false;
-                }
+        if closing.shown {
+            self.forget_shown_tab();
+        }
+        let view = resident.read(cx).view();
+        let next = view
+            .selected_tab
+            .as_ref()
+            .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
+            .map(|tab| (tab.id.clone(), tab.url.clone()));
+        match crate::wallet::browser_host::tab_close(closing.on_screen, next) {
+            TabClose::Background => {}
+            TabClose::Neighbour { id, url } => self.switch_to_tab(id, url, cx),
+            TabClose::StartPage => {
+                self.show_tab(view.selected_tab, cx);
+                self.browsing = false;
             }
         }
         cx.notify();
+    }
+
+    /// The tab whose view the column held was closed: its watch and its
+    /// committed address go with it, and the column holds no view until a
+    /// tab is shown again — never a closed tab's, which the next frame would
+    /// otherwise build again.
+    fn forget_shown_tab(&mut self) {
+        self.load = crate::wallet::browser_host::LoadDriver::default();
+        self.shown_tab = None;
+        self.bar_committed = None;
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::show(None);
     }
 
     /// Every page is closed, not merely hidden (an erase): their requests are
@@ -15584,7 +15777,14 @@ impl WalletPage {
         let window_handle = self.window_handle;
         let account = account.clone();
         let host = cx.new(|cx| {
-            crate::wallet::signing_host::SigningHost::open(&account, request, window_handle, cx)
+            let mut host = crate::wallet::signing_host::SigningHost::open(
+                &account,
+                request,
+                window_handle,
+                cx,
+            );
+            host.tab = tab.clone();
+            host
         });
         let observed = tab.clone();
         cx.observe(&host, move |page, host, cx| {
@@ -15631,6 +15831,7 @@ impl WalletPage {
                     read.ending.clone().map(|ending| DappLanding {
                         ending,
                         chain_id: read.chain_id,
+                        tab: read.tab.clone(),
                         seq: 0,
                         seen_submitted_ms: read.seen_submitted_ms,
                         closing: false,
@@ -19858,6 +20059,9 @@ enum AddressKey {
 struct DappLanding {
     ending: vela_core::app::sign_request::SignEnding,
     chain_id: u32,
+    /// The tab whose request ended (RJ18): the column comes back with its
+    /// page. `None` for the wallet's own.
+    tab: Option<String>,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,
     /// When the column first saw the operation accepted.
@@ -20036,6 +20240,7 @@ mod tests {
             favorites_full: false,
             tabs_full: false,
             recent_tabs: Vec::new(),
+            resumable: Vec::new(),
             ready: true,
         };
         let [favorites, recent] = explore_group_rows(&view, &strings, &loc);
@@ -20078,6 +20283,163 @@ mod tests {
         // Closed by the person (✕, Done): nothing comes back.
         assert!(!keeps_ending(PanelId::None, false));
         assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Spec 099 navigation (desktop): 探索 from another section, or again
+    /// while a page shows, lands on the start page with the dApp's tab kept;
+    /// a signing column that comes back with Explore (RJ18) brings its own
+    /// page — the tab whose request it holds, not merely the one last shown.
+    #[test]
+    fn explore_from_the_sidebar_lands_home_unless_a_signing_column_comes_back() {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        let view = landing_strip();
+        let home = ExploreLanding::Home;
+        let page = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
+        let land = |from, panel, signing_tab| {
+            explore_landing_from_sidebar(&view, from, panel, signing_tab, None, false).0
+        };
+        // From the wallet, and a re-click while a page shows: the start page.
+        assert_eq!(land(Section::Wallet, PanelId::None, None), home);
+        assert_eq!(land(Section::Explore, PanelId::None, None), home);
+        // A column for t2's request, hidden by 钱包, comes back with t2's page.
+        let back = panel_after_switch(Section::Explore, true);
+        assert_eq!(land(Section::Wallet, back, Some("t2")), page("t2"));
+        // A re-click with the column on screen keeps it, and its page.
+        assert_eq!(land(Section::Explore, back, Some("t1")), page("t1"));
+        // A column the person closed is no reason to leave the start page.
+        let closed = panel_after_switch(Section::Explore, false);
+        assert_eq!(land(Section::Wallet, closed, Some("t2")), home);
+        // The wallet's own request (no page asked), or a tab since closed.
+        assert_eq!(land(Section::Wallet, back, None), home);
+        assert_eq!(land(Section::Wallet, back, Some("gone")), home);
+    }
+
+    /// The strip the landing tests land in: two dApps, t1 selected.
+    fn landing_strip() -> vela_core::app::explore_sites::ExploreView {
+        use vela_core::app::explore_sites::{ExploreTab, ExploreView};
+        let tab = |id: &str, url: &str| ExploreTab {
+            id: id.to_owned(),
+            url: Some(url.to_owned()),
+            title: String::new(),
+            host: crate::diag::host_of(url),
+        };
+        ExploreView {
+            tabs: vec![
+                tab("t1", "https://app.uniswap.org/"),
+                tab("t2", "https://polymarket.com/"),
+            ],
+            selected_tab: Some("t1".to_owned()),
+            ready: true,
+            ..ExploreView::default()
+        }
+    }
+
+    /// Spec 099 navigation (desktop): a connect or an add-network waiting on
+    /// the person is never left behind a start page with nothing on screen.
+    /// The desktop asks both in the Connection column, which a switch of
+    /// section closes; 探索 brings back the page that asked AND that column
+    /// (the core's `waiting_tab`: a consent, then a signature, then an
+    /// add-network). A signature comes back in its own column when one is
+    /// open. A signing column RJ18 brings back still wins.
+    #[test]
+    fn explore_from_the_sidebar_brings_back_a_request_waiting_with_its_column() {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        use vela_core::app::dapp_browser::{DbrConsentView, DbrSigningView, DbrView};
+        let view = landing_strip();
+        let page = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
+        let consent = |tab: &str| DbrConsentView {
+            tab: tab.to_owned(),
+            origin: "https://polymarket.com".to_owned(),
+            methods: vec!["eth_requestAccounts".to_owned()],
+            address: None,
+            chain_id: 1,
+        };
+        let sheet = |tab: &str| DbrSigningView {
+            tab: tab.to_owned(),
+            id: "7".to_owned(),
+        };
+        let asking = DbrView {
+            consent: Some(consent("t2")),
+            ..DbrView::default()
+        };
+        let adding = DbrView {
+            adding_network: Some(sheet("t2")),
+            ..DbrView::default()
+        };
+        let signing = DbrView {
+            signing: Some(sheet("t2")),
+            ..DbrView::default()
+        };
+        let land = |from, panel, dapp: &DbrView, signing_column| {
+            explore_landing_from_sidebar(&view, from, panel, None, Some(dapp), signing_column)
+        };
+        let none = panel_after_switch(Section::Explore, false);
+        for from in [Section::Wallet, Section::Explore] {
+            // A consent for t2 — from 钱包, or a re-click that closed its
+            // column: t2's page and the Connection column that asks it.
+            assert_eq!(
+                land(from, none, &asking, false),
+                (page("t2"), PanelId::Connection),
+                "{from:?}"
+            );
+            // An add-network for t2 (spec 100): the same column.
+            assert_eq!(
+                land(from, none, &adding, false),
+                (page("t2"), PanelId::Connection),
+                "{from:?}"
+            );
+            // A signature for t2 comes back in its own column…
+            assert_eq!(
+                land(from, none, &signing, true),
+                (page("t2"), PanelId::Signing),
+                "{from:?}"
+            );
+            // …and with none open, the page alone (the Connection column
+            // would not show it).
+            assert_eq!(
+                land(from, none, &signing, false),
+                (page("t2"), PanelId::None),
+                "{from:?}"
+            );
+        }
+        // The consent is asked first, whatever else waits.
+        let both = DbrView {
+            consent: Some(consent("t2")),
+            signing: Some(sheet("t1")),
+            ..DbrView::default()
+        };
+        assert_eq!(
+            land(Section::Wallet, none, &both, true),
+            (page("t2"), PanelId::Connection)
+        );
+        // Nothing waiting, or a request from a tab the strip no longer has:
+        // the start page, no column.
+        assert_eq!(
+            land(Section::Wallet, none, &DbrView::default(), true),
+            (ExploreLanding::Home, PanelId::None)
+        );
+        let gone = DbrView {
+            consent: Some(consent("gone")),
+            ..DbrView::default()
+        };
+        assert_eq!(
+            land(Section::Wallet, none, &gone, false),
+            (ExploreLanding::Home, PanelId::None)
+        );
+        // RJ18: a signing column that comes back keeps its own page and
+        // column, over a consent waiting elsewhere.
+        let back = panel_after_switch(Section::Explore, true);
+        assert_eq!(
+            explore_landing_from_sidebar(
+                &view,
+                Section::Wallet,
+                back,
+                Some("t1"),
+                Some(&asking),
+                true
+            ),
+            (page("t1"), PanelId::Signing)
+        );
     }
 
     /// Issue 466: "Report this" parks the send under Settings → Feedback.

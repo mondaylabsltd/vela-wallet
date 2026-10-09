@@ -16,7 +16,8 @@
 //
 //  Deliberately about forty lines of HTTP. A real server here would be a
 //  dependency in a test target, and the request this ever answers is
-//  `GET /` — twice.
+//  `GET /` — which it counts (`pageRequests`), so a test can tell a page
+//  that loaded behind the screen from one that never loaded.
 //
 
 import Foundation
@@ -32,6 +33,7 @@ final class LocalDappServer {
     private let listener: NWListener
     private let body: Data
     private let queue = DispatchQueue(label: "vela.testdapp")
+    private let counter = Counter()
     /// This server's own port — the shared one unless a suite that runs
     /// beside the browser's needs another (spec 071).
     let boundPort: UInt16
@@ -58,10 +60,20 @@ final class LocalDappServer {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
+    /// How many times the page itself has been asked for (`GET /`), counted
+    /// as each request arrives.
+    ///
+    /// What a test reads to know whether a tab loaded the page — or did NOT.
+    /// XCUITest sees only what is painted on screen, and a page that loads
+    /// behind the Explore home paints nothing it can see; the request still
+    /// reaches this server.
+    var pageRequests: Int { counter.value }
+
     func start() {
-        listener.newConnectionHandler = { [body] connection in
+        listener.newConnectionHandler = { [body, counter] connection in
             connection.start(queue: .global())
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { _, _, _, _ in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, _, _ in
+                if let data, Self.asksForThePage(data) { counter.add() }
                 // Built by concatenation rather than a multiline literal: CRLF
                 // framing and a literal that swallows its own last newline is a
                 // combination that fails as a browser hanging on a request,
@@ -83,6 +95,22 @@ final class LocalDappServer {
 
     func stop() {
         listener.cancel()
+    }
+
+    /// The request names the page: `GET /` or `GET /?…`, nothing else.
+    static func asksForThePage(_ request: Data) -> Bool {
+        guard let head = String(data: request.prefix(32), encoding: .utf8) else { return false }
+        return head.hasPrefix("GET / ") || head.hasPrefix("GET /?")
+    }
+
+    /// A count the server's connections add to and the test reads.
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+
+        var value: Int { lock.withLock { count } }
+
+        func add() { lock.withLock { count += 1 } }
     }
 }
 

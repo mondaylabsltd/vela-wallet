@@ -8,7 +8,6 @@
 	import { scanner, scanNotice, type ScanNoticeMessages } from '$lib/flows/core/scanner.svelte';
 	import { exploreScanUrl } from './scan';
 	import AddressBar from './ui/AddressBar.svelte';
-	import BrowserToolbar from './ui/BrowserToolbar.svelte';
 	import ConnectionPanel from './ui/ConnectionPanel.svelte';
 	import DemoPage from './ui/DemoPage.svelte';
 	import ExploreEmpty from './ui/ExploreEmpty.svelte';
@@ -19,16 +18,27 @@
 	import SiteRow from './ui/SiteRow.svelte';
 	import SiteTile from './ui/SiteTile.svelte';
 	import TabsScreen from './ui/TabsScreen.svelte';
-	import type { ExploreHomeModel, ExploreSheet, ExploreView } from './model';
+	import type {
+		ExploreHomeModel,
+		ExploreSheet,
+		ExploreView,
+		ResumeTabModel,
+		SiteModel
+	} from './model';
 	import type { ExploreMessages } from './messages';
 
 	/**
 	 * The phone Explore screen (spec 022): one surface with three views —
-	 * the start page, a page being browsed, and the tab switcher.
+	 * the home (start page), a page being browsed, and the tab switcher.
 	 *
-	 * Browsing swaps the four-tab bar for the browser toolbar rather than
-	 * stacking one on the other: two navigation bars on a 392pt screen is
-	 * where the page would have gone.
+	 * Spec 099 navigation: the app's four-tab bar stays under the page, so the
+	 * wallet is one tap away from any dApp, and the browser draws ONE bar of
+	 * its own, at the top (`AddressBar`). Still never two bars stacked at the
+	 * bottom — that rule of 022's holds; the old bottom toolbar is gone, its
+	 * controls in the top bar and its rarer ones in the site menu.
+	 *
+	 * 探索 while browsing returns to the home with the tab kept alive, and the
+	 * home's resume section brings it back in one tap.
 	 */
 	interface Props {
 		model: ExploreHomeModel;
@@ -54,9 +64,41 @@
 	let viewOverride = $state<ExploreView | undefined>();
 	let sheetOverride = $state<ExploreSheet | null | undefined>();
 	let signingUp = $state(false);
+	/** Where the switcher was opened from — Done goes back there. */
+	let tabsFrom = $state<ExploreView | undefined>();
 
 	const view = $derived(viewOverride ?? model.view);
 	const sheet = $derived(sheetOverride === undefined ? model.sheet : (sheetOverride ?? undefined));
+
+	function openTabs(): void {
+		tabsFrom = view;
+		viewOverride = 'tabs';
+	}
+
+	/**
+	 * The tab bar while Explore is up. 探索 again is the way home from a page
+	 * (the tab stays alive); every other tab is the wallet's to answer. In the
+	 * gallery the bar stays a picture, as it always was: a live bar warms the
+	 * other destinations' code, which a board has no use for.
+	 */
+	function select(id: 'wallet' | 'contacts' | 'explore' | 'settings'): void {
+		if (id === 'explore') viewOverride = 'start';
+		else onselect?.(id);
+	}
+
+	/**
+	 * A resume row as a site row: the tab's own title over its host, the host
+	 * cut from its start like the browsing bar's pill (`hostLine`).
+	 */
+	function resumeRow(tab: ResumeTabModel): SiteModel {
+		return { ...tab.site, id: tab.id, name: tab.title, host: tab.host, subtitle: tab.host };
+	}
+
+	/** What a pick in the site menu does on a board: the sheet goes either way. */
+	function pick(id: string): void {
+		sheetOverride = null;
+		if (id === 'close') viewOverride = 'start';
+	}
 
 	/** An address from the search field, or from a scanned code. */
 	function submit(): void {
@@ -167,44 +209,32 @@
 		<TabsScreen
 			tabs={model.tabs}
 			copy={model.tabsScreen}
-			ondone={() => (viewOverride = 'browsing')}
+			ondone={() => (viewOverride = tabsFrom ?? 'browsing')}
 			onopen={() => (viewOverride = 'browsing')}
 			onnew={() => (viewOverride = 'start')}
 			oncloseall={() => (viewOverride = 'start')}
 		/>
 	{:else if view === 'browsing'}
+		<!-- The board has no page history to walk, so ‹ shows where the last
+		     step back lands: the Explore home, tab kept. -->
 		<AddressBar
-			host={model.browser.host}
-			secure={model.browser.secure}
-			secureLabel={copy.secureSite}
-			closeLabel={copy.closePage}
-			menuLabel={copy.siteMenu}
-			onclose={() => (viewOverride = 'start')}
+			browser={model.browser}
+			{copy}
+			onback={() => (viewOverride = 'start')}
+			onaccount={() => (sheetOverride = model.menus.connection)}
+			ontabs={openTabs}
 			onmenu={() => (sheetOverride = model.menus.siteMenu)}
 		/>
 		<div class="page">
 			<DemoPage page={model.browser.page} onaction={() => (signingUp = signing !== undefined)} />
 		</div>
-		<BrowserToolbar
-			browser={model.browser}
-			{copy}
-			onaccount={() => (sheetOverride = model.menus.connection)}
-			ontabs={() => (viewOverride = 'tabs')}
-		/>
+		<TabBar tabs={model.navLabels} selected="explore" onselect={onselect ? select : undefined} />
 	{:else}
 		<div class="scroll">
+			<!-- No tab count up here any more: the resume section's header says
+			     how many tabs are open, in words, and opens the switcher. -->
 			<header class="top">
 				<h1>{model.title}</h1>
-				{#if model.tabCountLabel}
-					<button
-						type="button"
-						class="tab-count"
-						aria-label={copy.tabs}
-						onclick={() => (viewOverride = 'tabs')}
-					>
-						{model.tabCountLabel}
-					</button>
-				{/if}
 			</header>
 
 			<div class="search">
@@ -215,6 +245,27 @@
 					onsubmit={submit}
 				/>
 			</div>
+
+			{#if model.resume}
+				<section class="resume">
+					<SectionHeader
+						title={model.resume.title}
+						action={model.resume.action}
+						onaction={openTabs}
+					/>
+					<ul>
+						{#each model.resume.tabs as tab (tab.id)}
+							<li>
+								<SiteRow
+									site={resumeRow(tab)}
+									hostLine
+									onopen={() => (viewOverride = 'browsing')}
+								/>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
 
 			{#if model.empty}
 				<ExploreEmpty
@@ -248,7 +299,7 @@
 			{/each}
 		</div>
 
-		<TabBar tabs={model.navLabels} selected="explore" {onselect} />
+		<TabBar tabs={model.navLabels} selected="explore" onselect={onselect ? select : undefined} />
 	{/if}
 
 	{#if sheet}
@@ -274,6 +325,7 @@
 					items={sheet.items}
 					closeLabel={copy.close}
 					onclose={() => (sheetOverride = null)}
+					onpick={pick}
 				/>
 			{:else}
 				<ConnectionPanel
@@ -332,25 +384,14 @@
 		color: var(--color-fg-base);
 	}
 
-	.tab-count {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-width: var(--size-tabCount);
-		height: var(--size-tabCount);
-		padding-inline: var(--space-md);
-		border: var(--border-emphasis) solid var(--color-fg-base);
-		border-radius: var(--radius-sm);
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-base);
-		cursor: pointer;
-	}
-
 	.search {
 		padding-bottom: var(--space-2xl);
+	}
+
+	/* Open on the page like every other section (DESIGN-LANGUAGE §1); the
+	   space under it is the same section gap the favourites keep. */
+	.resume {
+		padding-bottom: var(--space-lg);
 	}
 
 	.grid {

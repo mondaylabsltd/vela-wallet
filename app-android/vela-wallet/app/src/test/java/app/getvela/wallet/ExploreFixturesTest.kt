@@ -47,6 +47,7 @@ class ExploreFixturesTest {
             m.connection.footnote,
         )
         m.empty?.let { out += listOf(it.title, it.caption, it.cta) }
+        m.resume?.let { out += listOf(it.title, it.action) }
         m.favorites?.let { out += listOf(it.title, it.action) }
         m.groups.forEach { g -> out += g.title }
         m.siteMenuSheet.items.forEach { out += it.label }
@@ -82,7 +83,54 @@ class ExploreFixturesTest {
         assertNotNull(e1.empty)
         assertNull(e1.favorites)
         assertTrue(e1.groups.isEmpty())
-        assertNull(e1.tabCountLabel)
+        // The first visit: the start page is the only tab, so there is no
+        // resume section — and no tab count anywhere on the home.
+        assertNull(e1.resume)
+        assertEquals(listOf("start"), e1.tabs.map { it.id })
+    }
+
+    /**
+     * Spec 099 navigation (board E2): the resume section under the search
+     * field — three rows, most recent first, under a header that counts all
+     * four tabs (the start page is one), its action the switcher's word.
+     */
+    @Test
+    fun e2ResumesTheTabsWithAPageUnderAHeaderThatCountsEveryTab() {
+        val zh = zhStrings()
+        val e2 = ExploreFixtures.buildState(ExploreScreenState.E2, zh)
+        val resume = e2.resume!!
+        assertEquals(zh.t("explore.openTabs", 4), resume.title)
+        assertEquals("已打开 4 个标签页", resume.title)
+        assertEquals(zh.t("explore.tabs"), resume.action)
+        assertEquals(listOf("uniswap", "polymarket", "aave"), resume.tabs.map { it.id })
+        assertTrue(resume.tabs.size <= ExploreFixtures.RESUME_SHOWN)
+        // Every row is a tab of the strip that has a page.
+        for (row in resume.tabs) assertNotNull(e2.tabs.firstOrNull { it.id == row.id && !it.startPage })
+        assertEquals(listOf("app.uniswap.org", "polymarket.com", "app.aave.com"), resume.tabs.map { it.subtitle })
+    }
+
+    /** The bar's box and the resume header say the same number: every tab in the strip. */
+    @Test
+    fun theBrowsingCountIsTheStrip() {
+        for (state in ExploreScreenState.entries) {
+            val m = ExploreFixtures.buildState(state, zhStrings())
+            assertEquals("$state", m.tabs.size, m.browser.tabCount)
+        }
+    }
+
+    /**
+     * Board E6: Forward leads the site menu (the toolbar is gone), greyed and
+     * never hidden when there is nothing ahead, and close is last.
+     */
+    @Test
+    fun theSiteMenuLeadsWithForwardGreyedWhenNothingIsAhead() {
+        val zh = zhStrings()
+        val menu = ExploreFixtures.buildState(ExploreScreenState.E6, zh).siteMenuSheet.items
+        assertEquals(listOf("forward", "refresh", "share", "copy", "favorite", "system", "disconnect", "close"), menu.map { it.id })
+        assertEquals(zh.t("explore.forward"), menu.first().label)
+        assertFalse(menu.first().enabled)
+        assertTrue(menu.drop(1).all { it.enabled })
+        assertTrue(ExploreFixtures.siteMenu(zh, canForward = true).items.first().enabled)
     }
 
     @Test

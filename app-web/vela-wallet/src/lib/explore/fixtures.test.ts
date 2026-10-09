@@ -13,6 +13,7 @@ import {
 	DESKTOP_STATES,
 	fill,
 	MOBILE_STATES,
+	RESUME_SHOWN,
 	SITES
 } from './fixtures';
 
@@ -20,11 +21,11 @@ const IDENTICON_STUB = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const messages = resolveExploreMessages('zh');
 
 /** The plural keys: no bare value, a form per category the locale has. */
-const PLURAL_KEYS = ['siteCount'];
+const PLURAL_KEYS = ['siteCount', 'openTabs'] as const;
 
 /** Every corpus key this layer names, derived from the resolver's own output. */
 const EXPLORE_KEYS = Object.keys(resolveExploreMessages('en')).filter(
-	(k) => k !== 'nav' && k !== 'closeLabel' && !PLURAL_KEYS.includes(k)
+	(k) => k !== 'nav' && k !== 'closeLabel' && !(PLURAL_KEYS as readonly string[]).includes(k)
 );
 
 describe('explore messages', () => {
@@ -35,10 +36,12 @@ describe('explore messages', () => {
 			expect(value.trim()).not.toBe('');
 		}
 		// A plural key ships every form the locale has, each counting.
-		const forms = resolveExploreMessages(locale).siteCount.forms;
-		expect(Object.keys(forms)).toContain('_other');
-		for (const [suffix, form] of Object.entries(forms)) {
-			expect(form, `explore.siteCount${suffix} in ${locale}`).toContain('{{count}}');
+		for (const key of PLURAL_KEYS) {
+			const forms = resolveExploreMessages(locale)[key].forms;
+			expect(Object.keys(forms)).toContain('_other');
+			for (const [suffix, form] of Object.entries(forms)) {
+				expect(form, `explore.${key}${suffix} in ${locale}`).toContain('{{count}}');
+			}
 		}
 	});
 
@@ -57,6 +60,24 @@ describe('explore messages', () => {
 		const row = buildMobileState('e3', resolveExploreMessages('ru'), IDENTICON_STUB).menus
 			.groupManage.rows[0];
 		expect(row.meta).toBe('8 сайтов');
+	});
+
+	// "explore.openTabs" became plural forms with {{count}} too: the resume
+	// header's most common case, one tab, read "1 tabs open".
+	it('counts open tabs in the form the count takes', () => {
+		const count = (locale: Parameters<typeof resolveExploreMessages>[0], n: number) =>
+			fill(pluralForm(resolveExploreMessages(locale).openTabs, n), { count: String(n) });
+		expect(count('en', 1)).toBe('1 tab open');
+		expect(count('en', 4)).toBe('4 tabs open');
+		expect(count('de', 1)).toBe('1 Tab geöffnet');
+		expect(count('fr', 1)).toBe('1 onglet ouvert');
+		expect(count('ru', 1)).toBe('1 вкладка открыта');
+		expect(count('ru', 3)).toBe('3 вкладки открыты');
+		expect(count('ru', 5)).toBe('5 вкладок открыто');
+		expect(count('zh', 1)).toBe('已打开 1 个标签页');
+		// The E2 board's header, in English: four tabs.
+		const resume = buildMobileState('e2', resolveExploreMessages('en'), IDENTICON_STUB).resume;
+		expect(resume?.title).toBe('4 tabs open');
 	});
 });
 
@@ -80,12 +101,13 @@ describe('state inventory (data-model.md §2)', () => {
 });
 
 describe('what each state is FOR', () => {
-	it('E1 is the empty start page — no favourites, no groups', () => {
+	it('E1 is the empty start page — no favourites, no groups, nothing to resume', () => {
 		const e1 = buildMobileState('e1', messages, IDENTICON_STUB);
 		expect(e1.empty).toBeDefined();
 		expect(e1.favorites).toBeUndefined();
 		expect(e1.groups).toHaveLength(0);
-		expect(e1.tabCountLabel).toBeUndefined();
+		expect(e1.resume).toBeUndefined();
+		expect(e1.tabs.map((t) => t.startPage)).toEqual([true]);
 	});
 
 	it('E2 carries the favourites plus the add tile, and Recent dApps — no groups of its own (issue 465)', () => {
@@ -96,6 +118,53 @@ describe('what each state is FOR', () => {
 		expect(e2.groups.map((g) => g.id)).toEqual(['recent']);
 		const desktop = buildDesktopState('de2', messages, IDENTICON_STUB);
 		expect(desktop.start.groups.map((g) => g.id)).toEqual(['recent']);
+	});
+
+	it('E2 resumes the open tabs under the search field (spec 099 navigation)', () => {
+		const e2 = buildMobileState('e2', messages, IDENTICON_STUB);
+		const resume = e2.resume;
+		expect(resume).toBeDefined();
+		// The header counts EVERY tab — the start page too — which is the
+		// number the switcher holds and the browsing bar's box shows.
+		expect(resume?.title).toBe(
+			fill(pluralForm(messages.openTabs, e2.tabs.length), { count: String(e2.tabs.length) })
+		);
+		expect(resume?.title).toBe('已打开 4 个标签页');
+		expect(resume?.action).toBe(messages.tabs);
+		// The rows: tabs with a page, most recent first, never more than three.
+		expect(resume?.tabs.map((t) => t.id)).toEqual(['uniswap', 'polymarket', 'aave']);
+		expect(resume?.tabs.length).toBeLessThanOrEqual(RESUME_SHOWN);
+		for (const row of resume?.tabs ?? []) {
+			const tab = e2.tabs.find((t) => t.id === row.id);
+			expect(tab?.startPage).toBe(false);
+			expect(row.title).toBe(tab?.title);
+			expect(row.host).toBe(tab?.site?.host);
+		}
+	});
+
+	it('the browsing bar counts the same tabs the home does', () => {
+		for (const state of ['e4', 'e6', 'e7'] as const) {
+			const model = buildMobileState(state, messages, IDENTICON_STUB);
+			expect(model.browser.tabCount).toBe(model.tabs.length);
+		}
+	});
+
+	it('the site menu leads with Forward, greyed with nothing ahead', () => {
+		const e6 = buildMobileState('e6', messages, IDENTICON_STUB);
+		const items = e6.sheet?.kind === 'site-menu' ? e6.sheet.items : [];
+		expect(items.map((i) => i.id)).toEqual([
+			'forward',
+			'refresh',
+			'share',
+			'copy',
+			'favorite',
+			'system',
+			'disconnect',
+			'close'
+		]);
+		expect(items[0]).toMatchObject({ label: messages.forward, icon: 'arrow-right' });
+		expect(items[0].disabled).toBe(!e6.browser.canForward);
+		expect(items.filter((i) => i.disabled).map((i) => i.id)).toEqual(['forward']);
 	});
 
 	it('E3/E6/E7/E8 open on a sheet; E1/E2/E4/E5 do not', () => {
@@ -131,7 +200,7 @@ describe('what each state is FOR', () => {
 	it('every state can raise the three sheets without inventing copy', () => {
 		for (const state of MOBILE_STATES) {
 			const { menus } = buildMobileState(state, messages, IDENTICON_STUB);
-			expect(menus.siteMenu.items).toHaveLength(7);
+			expect(menus.siteMenu.items).toHaveLength(8);
 			expect(menus.groupManage.rows).toHaveLength(2);
 			expect(menus.connection.connection.explainer.length).toBeGreaterThan(0);
 		}

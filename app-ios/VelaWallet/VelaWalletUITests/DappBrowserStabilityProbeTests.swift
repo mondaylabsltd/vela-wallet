@@ -46,6 +46,18 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         return app
     }
 
+    /// `VELA_URL` is a page opened from outside (DESIGN N): Explore lands ON
+    /// it, with the app's tab bar under it — so 探索 is not tapped while the
+    /// page is up (it is the way back to the Explore home). Should the app
+    /// be elsewhere, 探索 and the home's resume row bring the page back.
+    private func landOnThePage(_ app: XCUIApplication) {
+        if app.buttons["explore.bar.back"].waitForExistence(timeout: 15) { return }
+        let tab = app.buttons["探索"].firstMatch
+        if tab.exists, tab.isHittable { tab.tap() }
+        let row = app.buttons.matching(identifier: "explore.resume.row").firstMatch
+        if row.waitForExistence(timeout: 10) { row.tap() }
+    }
+
     /// A screenshot and the texts on screen, under one step name.
     private func record(_ app: XCUIApplication, _ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot())
@@ -96,8 +108,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
 
     func testProbeTheBrowserCheckpoints() throws {
         let app = launch()
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 40))
         record(app, "01-page")
 
@@ -158,7 +169,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         }
 
         // Chrome: site menu, connection panel, pickers, tabs.
-        let menu = app.buttons["站点菜单"].firstMatch
+        let menu = app.buttons["explore.bar.menu"].firstMatch
         if menu.waitForExistence(timeout: 5) {
             menu.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -166,7 +177,8 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
             Thread.sleep(forTimeInterval: 1)
         }
-        let account = app.buttons["账户"].firstMatch
+        // Named "账户, 已连接" while connected (DESIGN N): by its hook.
+        let account = app.buttons["explore.bar.account"].firstMatch
         if account.waitForExistence(timeout: 5) {
             account.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -180,7 +192,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
             Thread.sleep(forTimeInterval: 1)
         }
-        let tabs = app.buttons["标签页"].firstMatch
+        let tabs = app.buttons["explore.bar.tabs"].firstMatch
         if tabs.waitForExistence(timeout: 5) {
             tabs.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -211,8 +223,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
     /// and says "正在重试…"; never WebKit's own page, never a blank.
     func testProbeALoadThatFails() throws {
         let app = launch(url: "http://127.0.0.1:1/")
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         let retry = app.buttons["重试"].firstMatch
         _ = retry.waitForExistence(timeout: 20)
         record(app, "14-load-failed")
@@ -237,8 +248,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         // The harness page first, then the silent site typed into the bar —
         // so the clock starts at the Go, not somewhere in the launch.
         let app = launch()
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         let host = app.staticTexts["127.0.0.1:\(LocalDappServer.port)"].firstMatch
         XCTAssertTrue(host.waitForExistence(timeout: 40), "the harness page never loaded")
         host.tap()

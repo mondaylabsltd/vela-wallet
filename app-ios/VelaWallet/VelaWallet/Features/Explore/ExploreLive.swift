@@ -69,7 +69,8 @@ enum ExploreLive {
             statusLine: "",
             items: siteMenuItems(
                 bookmarked: bookmarked, connected: tab?.connectedAddress != nil,
-                loading: engine?.loading ?? false, loc: loc
+                loading: engine?.loading ?? false, canForward: engine?.canGoForward ?? false,
+                loc: loc
             )
         )
 
@@ -80,7 +81,6 @@ enum ExploreLive {
             // live screen overrides it.
             view: engine == nil ? .start : .browsing,
             title: loc.t("explore.title"),
-            tabCountLabel: explore.tabs.isEmpty ? nil : String(explore.tabs.count),
             searchPlaceholder: loc.t("explore.searchPlaceholder"),
             scanLabel: loc.t("explore.scan"),
             empty: populated ? nil : (
@@ -88,6 +88,7 @@ enum ExploreLive {
                 caption: loc.t("explore.startHint"),
                 cta: loc.t("explore.startCta")
             ),
+            resume: resume(explore: explore, history: history, loc: loc),
             // The Favorites heading stays on any page with something on it —
             // no favourites yet, or Favorites hidden: its Edit is the way to
             // Manage groups, and with both sections hidden the page was left
@@ -129,11 +130,12 @@ enum ExploreLive {
     /// The ⋯ sheet's items, saying what a tap will do NOW: the star's row
     /// removes a site that is already a favourite, Disconnect is offered only
     /// to a site that is connected, and — spec 082 RE5 — while a page loads
-    /// the refresh row is Stop.
+    /// the refresh row is Stop. Forward leads, greyed while the page has
+    /// nothing ahead (DESIGN N) — never hidden, so no row under it moves.
     static func siteMenuItems(
-        bookmarked: Bool, connected: Bool, loading: Bool = false, loc: Loc
+        bookmarked: Bool, connected: Bool, loading: Bool = false, canForward: Bool = false, loc: Loc
     ) -> [SiteMenuItem] {
-        ExploreFixtures.siteMenuItems(loc).compactMap { item in
+        ExploreFixtures.siteMenuItems(loc, canForward: canForward).compactMap { item in
             switch item.id {
             case "refresh" where loading:
                 return SiteMenuItem(id: "stop", icon: "close", label: loc.t("connect.dapp.stop"))
@@ -201,6 +203,42 @@ enum ExploreLive {
                     meta: nil, hidden: explore.recentHidden
                 ),
             ]
+        )
+    }
+
+    // MARK: - The resume section (DESIGN N)
+
+    /// The home's resume section: the core's `resumable` — the tabs that have
+    /// a page, most recently used first, at most `RESUME_SHOWN` — drawn as
+    /// site rows in exactly that order. Nothing while the mirror is not live
+    /// or no tab has a page: no header, no empty words.
+    ///
+    /// A row's mark is the one the recents draw for that site: the icon the
+    /// page named when it was visited, then the usual places, the letter
+    /// until one lands.
+    static func resume(explore: ExploreViewWire, history: BhistViewWire, loc: Loc) -> ResumeSectionModel? {
+        guard explore.ready else { return nil }
+        let rows = explore.resumable.map { tab in
+            let origin = tab.url.map { ProviderBridge.origin(of: $0) } ?? ""
+            var site = self.site(host: tab.host, name: displayTitle(tab), origin: origin)
+            site.subtitle = tab.host
+            let recorded = history.entries.first { $0.origin == origin }?.favicon
+            site.iconUrls = iconUrls(recorded: recorded, origin: origin)
+            return ResumeTabModel(id: tab.id, site: site)
+        }
+        return resumeSection(rows: rows, tabCount: explore.tabs.count, loc: loc)
+    }
+
+    /// The section around its rows: `explore.openTabs` counting EVERY tab,
+    /// start pages included — the switcher's number, and the bar's box — in
+    /// the plural form that count takes ("1 tab open"), and `explore.tabs`
+    /// for the switcher. `nil` with no rows.
+    static func resumeSection(rows: [ResumeTabModel], tabCount: Int, loc: Loc) -> ResumeSectionModel? {
+        guard !rows.isEmpty else { return nil }
+        return ResumeSectionModel(
+            title: loc.t("explore.openTabs", count: tabCount),
+            action: loc.t("explore.tabs"),
+            tabs: rows
         )
     }
 

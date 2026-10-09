@@ -746,10 +746,11 @@ struct TabBatchCloseTests {
         #expect(one.map(\.closesOthers) == [false])
         #expect(one.map(\.closesRight) == [false])
 
-        // The gallery's switcher asks the same core.
+        // The gallery's switcher asks the same core (DESIGN N's board strip:
+        // three sites and the start page).
         let gallery = ExploreFixtures.buildMobileState(.e5, loc: loc).tabs
-        #expect(gallery.map(\.closesOthers) == [true, true, true])
-        #expect(gallery.map(\.closesRight) == [true, true, false])
+        #expect(gallery.map(\.closesOthers) == [true, true, true, true])
+        #expect(gallery.map(\.closesRight) == [true, true, true, false])
     }
 
     /// The menu's words are the corpus's, never a key echoed back.
@@ -849,7 +850,9 @@ struct TabBatchCloseTests {
     /// End to end on real engines: the tabs a batch close takes lose their
     /// pages — a live one torn down, a suspended one forgotten — and the
     /// browser machine hears `tab_closed` for each, as for a single close;
-    /// the tab kept keeps its page, and its record.
+    /// the tab kept keeps its record. The selection that falls onto it is
+    /// not anybody asking to see it (DESIGN N): it wakes — said — only when
+    /// it is resumed.
     ///
     /// Each tab is a real WKWebView (see `DebugModeTests` on why the limit).
     @Test(.timeLimit(.minutes(5)))
@@ -893,11 +896,18 @@ struct TabBatchCloseTests {
         #expect(h.browser.dbr.tab(b) == nil, "the browser machine heard tab_closed for b")
         #expect(h.browser.dbr.tab(c) == nil, "the browser machine heard tab_closed for c")
 
-        // The selection fell left, onto `a`: its page loads again, said.
+        // The selection fell left, onto `a`, behind the switcher the batch
+        // close came from: nobody asked to see it, so it stays dormant.
         #expect(h.browser.explore.selectedTab == a)
-        await Wait.until { h.browser.engineForTesting(a) != nil }
+        #expect(h.browser.engineForTesting(a) == nil, "the batch close woke the tab it selected")
+        #expect(h.browser.current == nil)
+        #expect(h.browser.dbr.tab(a) != nil, "the tab kept keeps its record")
+
+        // Resumed, its page loads again, said.
+        h.browser.selectTab(a)
+        #expect(h.browser.engineForTesting(a) != nil)
         #expect(h.browser.reloadedTab == a)
         #expect(h.browser.current === h.browser.engineForTesting(a))
-        #expect(h.browser.dbr.tab(a) != nil, "the tab kept keeps its record")
+        #expect(h.browser.dbr.tab(a) != nil)
     }
 }

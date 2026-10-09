@@ -633,8 +633,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.recipientPickAria` keeps its path but now names the contact pick
 //   alone: scanning has its own door on every shell (#468). 1789 leaves,
 //   99 branches.
-if (PATHS.length !== 1888) fail(`expected 1888 paths (1789 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1789) fail(`expected 1789 leaf paths, got ${leafSet.size}`);
+// 1891 (dApp-browser navigation, 2026-10-09): `explore.openTabs` — the
+//   header of the home's resume rows, counting every open tab — becomes
+//   `openTabs_{one,few,many,other}` with `{{count}}`, each locale its own
+//   CLDR categories, as `siteCount` did: the most common case, one tab,
+//   read "1 tabs open". Shells pass the count. 1789 − 1 + 4 = 1792 leaves,
+//   99 branches.
+if (PATHS.length !== 1891) fail(`expected 1891 paths (1792 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1792) fail(`expected 1792 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

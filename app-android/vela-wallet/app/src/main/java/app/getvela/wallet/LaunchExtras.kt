@@ -23,6 +23,7 @@ object LaunchExtras {
         "vela.startDestination",
         "vela.flowState",
         "vela.signingState",
+        "vela.exploreState",
         "vela.settingsState",
         "vela.settingsDark",
         "vela.gallery",

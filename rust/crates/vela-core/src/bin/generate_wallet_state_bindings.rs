@@ -25,6 +25,9 @@ use vela_core::app::batch_import::{
 use vela_core::app::browser_history::{
     BhistOperation, BhistShellResult, BhistView, Event as BhistEvent,
 };
+use vela_core::app::browser_tabs::{
+    ExploreEntry, ExploreLanding, ExploreOpenKind, ExploreOpenTarget,
+};
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigningView, Event as ClearSigningEvent,
 };
@@ -217,6 +220,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     ConfirmState::export_all(&config)?; // signConfirmState (spec 099 R7)
     LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
     MarkView::export_all(&config)?; // tokenMark, chainMark (DESIGN L, 2026-10-08)
+    ExploreEntry::export_all(&config)?; // exploreLanding's question
+    ExploreLanding::export_all(&config)?; // exploreLanding
+    ExploreOpenKind::export_all(&config)?; // browserOpenTarget's question
+    ExploreOpenTarget::export_all(&config)?; // browserOpenTarget
 
     println!("wallet-state bindings written to {}", out_dir.display());
     Ok(())

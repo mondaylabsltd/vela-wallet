@@ -60,12 +60,17 @@ final class BrowserAcceptanceTests: XCTestCase {
         return app
     }
 
-    /// A launch with `VELA_URL` opens straight into Explore (spec 070), where
-    /// the full-screen browser hides the tab bar; tap the tab only when it is
-    /// there to tap.
+    /// A launch with `VELA_URL` is a page opened from outside (spec 070,
+    /// DESIGN N): Explore lands ON it, with the app's tab bar still under the
+    /// page. So 探索 is not tapped while the page is up — that is now the way
+    /// back to the Explore home. Should the app be elsewhere, 探索 and the
+    /// home's resume row bring the page back.
     private func openExplore(_ app: XCUIApplication) {
+        if app.buttons["explore.bar.back"].waitForExistence(timeout: 15) { return }
         let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 3), tab.isHittable { tab.tap() }
+        if tab.exists, tab.isHittable { tab.tap() }
+        let row = app.buttons.matching(identifier: "explore.resume.row").firstMatch
+        if row.waitForExistence(timeout: 10) { row.tap() }
     }
 
     private func attach(_ screenshot: XCUIScreenshot, named name: String) {
@@ -227,13 +232,25 @@ final class BrowserAcceptanceTests: XCTestCase {
         openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
-        // The star in the browser toolbar, by its corpus label.
+        // The star is a row of the site menu since DESIGN N (the bottom
+        // toolbar it sat in is gone), by its corpus label.
+        let menu = app.buttons["explore.bar.menu"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 15), "the site menu is missing")
+        menu.tap()
+        // A pin persists — that is the point — so a run after the first
+        // finds this site already a favourite, and the row offers to remove
+        // it: nothing to add then, and the relaunch proves the same thing.
         let star = app.buttons["添加到收藏"].firstMatch
-        XCTAssertTrue(star.waitForExistence(timeout: 15), "the bookmark control is missing")
-        star.tap()
+        let pinned = app.buttons["从收藏移除"].firstMatch
+        XCTAssertTrue(star.waitForExistence(timeout: 15) || pinned.exists, "the bookmark row is missing")
+        if star.exists { star.tap() } else { app.buttons["关闭"].firstMatch.tap() }
         attach(app.screenshot(), named: "device-browser-favourited")
 
         app.terminate()
+        // From here every request for the page is counted: the relaunch asks
+        // for none until the resume row is tapped.
+        let server = try XCTUnwrap(self.server)
+        let asked = server.pageRequests
 
         // Relaunch WITHOUT a URL. Anything that comes back came off the disk.
         let again = XCUIApplication()
@@ -246,27 +263,62 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(again.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
         again.buttons["探索"].firstMatch.tap()
 
-        // **The tab came back, with its page.** That is what a browser does,
-        // and it is the first half of the memory: the strip is in
-        // `explore_sites`' document, so the engine is rebuilt and the URL
-        // reloaded with nothing asking it to.
-        XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 30),
-                      "the open tab did not survive the relaunch")
-        attach(again.screenshot(), named: "device-browser-tab-restored")
-
-        // Leave the page for the start page. The tab stays; only the view
-        // changes.
-        again.buttons["关闭网页"].firstMatch.tap()
-
+        // 探索 after a launch is the Explore HOME (DESIGN N), never a page
+        // nobody asked for: the restored tab waits, dormant, in the resume
+        // section — and the favourite and the recent are on the same page.
         XCTAssertTrue(again.staticTexts["最近的 dApp"].waitForExistence(timeout: 20),
                       "the recents section is missing — the visit was never recorded, or it was recorded before the history store answered and was dropped")
         XCTAssertTrue(again.staticTexts["收藏"].waitForExistence(timeout: 10),
                       "the favourites section is missing — nothing was pinned")
-        // The host appears in BOTH sections; one match is enough to prove the
-        // two documents came back.
+        // The host appears in all three sections; one match is enough to
+        // prove the two documents came back.
         XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].firstMatch.waitForExistence(timeout: 10),
                       "neither the favourite nor the recent survived the relaunch")
+        // A page behind the home is not on screen, so XCUITest cannot see
+        // it — the page server can: a tab that woke by itself asks for the
+        // page. Long enough for one that woke at launch to have asked.
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertEqual(server.pageRequests, asked, "a restored tab loaded itself behind the home")
         attach(again.screenshot(), named: "device-browser-remembered")
+
+        // **The tab came back, with its page** — one tap on its resume row.
+        // That is the first half of the memory: the strip is in
+        // `explore_sites`' document, so the engine is rebuilt and the URL
+        // reloaded when the person asks for it.
+        let row = again.buttons.matching(identifier: "explore.resume.row").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the open tab did not survive the relaunch")
+        row.tap()
+        XCTAssertTrue(again.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30),
+                      "the restored tab did not load its page")
+        XCTAssertEqual(server.pageRequests, asked + 1, "the resume row did not load the page exactly once")
+        attach(again.screenshot(), named: "device-browser-tab-restored")
+    }
+
+    /// A page opened from outside — here the launch URL, which the app opens
+    /// before its saved tabs have loaded, as a `velawallet://open` link at a
+    /// cold start does — lands in a tab of its own, and it is the ONLY page
+    /// that loads. The tab a launch restores in front stays dormant: it used
+    /// to wake with the open and load the dApp it held behind the new tab.
+    func testAnOutsideOpenLoadsOnlyItsOwnPage() throws {
+        let server = try XCTUnwrap(self.server)
+        // A first launch leaves this page's tab in front of the strip.
+        let first = launchBrowsing()
+        XCTAssertTrue(first.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        openExplore(first)
+        XCTAssertTrue(first.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        first.terminate()
+        let asked = server.pageRequests
+
+        // The same page from outside again, over the restored strip.
+        let again = launchBrowsing()
+        XCTAssertTrue(again.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        XCTAssertTrue(again.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 40),
+                      "the page opened from outside did not land")
+        // Long enough for a restored tab woken with it to have asked too.
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertEqual(server.pageRequests, asked + 1,
+                       "a restored tab loaded behind the page opened from outside")
+        attach(again.screenshot(), named: "device-browser-outside-open")
     }
 
     // MARK: - US3: a dApp connects
@@ -291,7 +343,10 @@ final class BrowserAcceptanceTests: XCTestCase {
         // Unless this origin is ALREADY granted — a grant persists, and then
         // the answer comes from the mirror with no sheet at all (FR-007).
         // Both are correct; the test says which happened.
-        let approve = app.buttons["批准"].firstMatch
+        // 连接 since the consent's 079 redraw; 批准 before it (as `connect`).
+        let approve = app.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "连接", "批准")
+        ).firstMatch
         if approve.waitForExistence(timeout: 15) {
             XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].exists,
                           "the consent surface did not name the origin")

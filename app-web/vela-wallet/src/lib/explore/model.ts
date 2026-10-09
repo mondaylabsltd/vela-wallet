@@ -84,10 +84,16 @@ export interface BrowserModel {
 	host: string;
 	secure: boolean;
 	connected: boolean;
+	/**
+	 * The page has somewhere to go back to. Back is never disabled on the
+	 * phone: without page history it returns to the Explore home.
+	 */
 	canBack: boolean;
+	/** Forward lives in the site menu, greyed when this is false. */
 	canForward: boolean;
 	bookmarked: boolean;
 	account: { name: string; identiconSvg: string };
+	/** Every open tab, start pages included — the number the switcher holds. */
 	tabCount: number;
 	page: DemoPageModel;
 }
@@ -98,6 +104,12 @@ export interface MenuItemModel {
 	icon: string;
 	label: string;
 	danger?: boolean;
+	/**
+	 * Shown but greyed: a row that cannot act right now (Forward with no
+	 * forward history). It keeps its place, so the rows under a thumb do not
+	 * move from one page to the next.
+	 */
+	disabled?: boolean;
 }
 
 /** One of the start page's two sections, in the sheet that hides and shows them. */
@@ -145,14 +157,46 @@ export type ExploreSheet = GroupManageSheet | SiteMenuSheet | ConnectionSheet;
 /** Which surface the phone screen is showing (SPEC 动效 · 探索 手机). */
 export type ExploreView = 'start' | 'browsing' | 'tabs';
 
+/**
+ * One row of the home's resume section: a tab that has a page, as the core's
+ * `ExploreView.resumable` hands it over (`ExploreTab` — id, title, host).
+ * Drawn as a site row, its title over its host; a host too long for the row
+ * is cut from its START, as the browsing bar's pill cuts it (the end of a
+ * host is the registrable domain): `…uniswap.org.evil.xyz`, never
+ * `app.uniswap.or…` — iOS `.truncationMode(.head)`, Android
+ * `TextOverflow.StartEllipsis`.
+ */
+export interface ResumeTabModel {
+	/** The tab's id: a tap selects it and shows its page as it was left. */
+	id: string;
+	title: string;
+	host: string;
+	/** The favicon's fallback — the site's letter on a wash of its colour. */
+	site: SiteModel;
+}
+
+/**
+ * The home's resume section (spec 099 navigation): drawn only while a tab has
+ * a page. The header counts EVERY open tab (what the switcher holds); the rows
+ * are the most recently used tabs with a page, three at most.
+ */
+export interface ResumeSectionModel {
+	/** `explore.openTabs_*`, the form for the number of open tabs, filled with it. */
+	title: string;
+	/** `explore.tabs` — opens the switcher. */
+	action: string;
+	tabs: ResumeTabModel[];
+}
+
 export interface ExploreHomeModel {
 	state: ExploreStateId;
 	view: ExploreView;
 	title: string;
-	tabCountLabel?: string;
 	searchPlaceholder: string;
 	scanLabel: string;
 	empty?: { title: string; caption: string; cta: string };
+	/** Under the search field; absent while no tab has a page. */
+	resume?: ResumeSectionModel;
 	favorites?: { title: string; action: string; tiles: TileModel[] };
 	groups: GroupModel[];
 	browser: BrowserModel;

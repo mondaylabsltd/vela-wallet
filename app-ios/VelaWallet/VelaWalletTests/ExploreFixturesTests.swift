@@ -33,6 +33,7 @@ struct ExploreFixturesTests {
         ]
         if let empty = m.empty { out += [empty.title, empty.caption, empty.cta] }
         if let favorites = m.favorites { out += [favorites.title, favorites.action] }
+        if let resume = m.resume { out += [resume.title, resume.action] }
         out += m.groups.map(\.title)
         // The site menu's status line is empty by ruling (spec 079: the lock
         // alone says https), so only its items are words to check.
@@ -63,12 +64,69 @@ struct ExploreFixturesTests {
         }
     }
 
+    /// E1 is a first visit: the start page is the only tab, so the home has
+    /// no resume section — and, since DESIGN N, no tab count anywhere on it.
     @Test func e1IsTheEmptyStartPage() {
         let e1 = ExploreFixtures.buildMobileState(.e1, loc: loc)
         #expect(e1.empty != nil)
         #expect(e1.favorites == nil)
         #expect(e1.groups.isEmpty)
-        #expect(e1.tabCountLabel == nil)
+        #expect(e1.resume == nil, "no tab has a page: no section, no header, no empty words")
+        #expect(e1.tabs.map(\.id) == ["start"])
+        #expect(e1.browser.tabCount == 1)
+    }
+
+    /// DESIGN N, board E2: under the search field, the tabs left open — three
+    /// rows (the core's RESUME_SHOWN), most recent first, start pages never
+    /// among them — under a header that counts EVERY tab, the switcher's
+    /// number, and an action that opens the switcher.
+    @Test func e2ResumesTheOpenTabs() throws {
+        let e2 = ExploreFixtures.buildMobileState(.e2, loc: loc)
+        let resume = try #require(e2.resume, "E2 has open tabs with pages: the section shows")
+        #expect(e2.tabs.count == 4)
+        #expect(resume.title == loc.t("explore.openTabs", count: 4))
+        #expect(resume.title == "已打开 4 个标签页")
+        #expect(resume.action == loc.t("explore.tabs"))
+        #expect(resume.tabs.map(\.id) == ["uniswap", "polymarket", "aave"])
+        #expect(resume.tabs.count <= ExploreFixtures.resumeShown)
+        #expect(resume.tabs.map(\.site.host) == ["app.uniswap.org", "polymarket.com", "app.aave.com"])
+        // Every row is a tab of the strip that has a page.
+        let pages = Set(e2.tabs.filter { !$0.startPage }.map(\.id))
+        #expect(resume.tabs.allSatisfy { pages.contains($0.id) })
+        // The rows read as the recents do: the title over the host.
+        let first = SiteRowView.lines(resume.tabs[0].site)
+        #expect(first.name == "Uniswap")
+        #expect(first.second == "app.uniswap.org")
+    }
+
+    /// The bar's box counts the strip, start pages included: the number the
+    /// header says in words and the switcher holds.
+    @Test func theBrowsingCountIsTheWholeStrip() {
+        for state: ExploreStateId in [.e4, .e6, .e7] {
+            let model = ExploreFixtures.buildMobileState(state, loc: loc)
+            #expect(model.browser.tabCount == model.tabs.count)
+        }
+    }
+
+    /// DESIGN N, board E6: Forward leads the site menu (it moved there from
+    /// the old toolbar), greyed while there is nothing ahead — never hidden,
+    /// so no row under the thumb moves — and close page ends it.
+    @Test func theSiteMenuLeadsWithForward() {
+        guard case .siteMenu(_, _, let items) = ExploreFixtures.buildMobileState(.e6, loc: loc).sheet
+        else { Issue.record("E6 has no site menu"); return }
+        #expect(items.map(\.id) == ["forward", "refresh", "share", "copy", "favorite", "system", "disconnect", "close"])
+        #expect(items.first?.label == loc.t("explore.forward"))
+        #expect(items.first?.icon == "arrowRight")
+        #expect(items.first?.disabled == true, "E4's page has nothing ahead")
+        #expect(items.dropFirst().allSatisfy { !$0.disabled })
+        #expect(ExploreFixtures.siteMenuItems(loc, canForward: true).first?.disabled == false)
+        // The live menu says the same, with the page's own forward.
+        let live = ExploreLive.siteMenuItems(bookmarked: false, connected: true, canForward: true, loc: loc)
+        #expect(live.first?.id == "forward")
+        #expect(live.first?.disabled == false)
+        #expect(ExploreLive.siteMenuItems(bookmarked: false, connected: false, loc: loc).first?.disabled == true)
+        // Every icon the menu names is one the corpus draws.
+        for item in items { #expect(LucideGlyph(rawValue: item.icon) != nil, "\(item.icon)") }
     }
 
     /// Issue #465: no custom groups — under Favorites there is Recent alone.

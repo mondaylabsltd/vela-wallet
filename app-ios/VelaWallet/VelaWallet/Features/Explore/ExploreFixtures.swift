@@ -66,26 +66,56 @@ enum ExploreFixtures {
         ]
     }
 
-    private static func tabs(_ loc: Loc, selected: String) -> [TabModel] {
-        let models = [
-            TabModel(id: "uniswap", title: uniswap.name, site: uniswap,
-                     selected: selected == "uniswap", startPage: false),
-            TabModel(id: "polymarket", title: polymarket.name, site: polymarket,
-                     selected: selected == "polymarket", startPage: false),
-            TabModel(id: "start", title: loc.t("explore.startPage"), site: nil,
-                     selected: selected == "start", startPage: true),
-        ]
-        // Spec 099: the long-press menu asks the core, as the live one does.
-        let strip = models.map { tab in
-            ExploreTabWire(id: tab.id, url: tab.site.map { "https://\($0.host)" },
-                           title: tab.title, host: tab.site?.host ?? "")
+    /// The sites open in tabs, in strip order — the web board's phone strip
+    /// (DESIGN N): one more than the desktop's, so the home shows its resume
+    /// section full, three rows under a header that counts four tabs (the
+    /// start page is one of them). The order is also the recency the fixture
+    /// assumes: Uniswap was left last.
+    static let tabSites: [SiteModel] = [uniswap, polymarket, aave]
+
+    /// The strip: one tab per site, then the start page's own tab.
+    private static func strip(_ loc: Loc, sites: [SiteModel]) -> [ExploreTabWire] {
+        sites.map { site in
+            ExploreTabWire(id: site.id, url: "https://\(site.host)", title: site.name, host: site.host)
+        } + [ExploreTabWire(id: "start", url: nil, title: loc.t("explore.startPage"), host: "")]
+    }
+
+    private static func tabs(_ loc: Loc, strip: [ExploreTabWire], selected: String) -> [TabModel] {
+        let sites = Dictionary(uniqueKeysWithValues: tabSites.map { ($0.id, $0) })
+        let models = strip.map { tab in
+            TabModel(id: tab.id, title: tab.title, site: sites[tab.id],
+                     selected: selected == tab.id, startPage: tab.url == nil)
         }
+        // Spec 099: the long-press menu asks the core, as the live one does.
         return ExploreLive.offeringCloses(models, strip: strip)
     }
 
-    /// E6's site menu, in mock order.
-    static func siteMenuItems(_ loc: Loc) -> [SiteMenuItem] {
+    /// The home's resume section, the shape the core hands the live one:
+    /// the tabs with a page, most recent first (the strip's order is the
+    /// fixture's recency), at most three, under a header counting every tab.
+    /// The canon's own marks — the letters — so the gallery asks nobody for
+    /// an icon.
+    private static func resume(_ loc: Loc, strip: [ExploreTabWire]) -> ResumeSectionModel? {
+        let sites = Dictionary(uniqueKeysWithValues: tabSites.map { ($0.id, $0) })
+        let rows = strip.filter { $0.url != nil }.prefix(resumeShown).compactMap { tab -> ResumeTabModel? in
+            guard var site = sites[tab.id] else { return nil }
+            site.subtitle = site.host
+            return ResumeTabModel(id: tab.id, site: site)
+        }
+        return ExploreLive.resumeSection(rows: Array(rows), tabCount: strip.count, loc: loc)
+    }
+
+    /// The most rows the resume section draws — the core's
+    /// `explore_sites::RESUME_SHOWN`, which decides it for the live screen;
+    /// mirrored here only so the fixture is the shape the core hands over.
+    static let resumeShown = 3
+
+    /// E6's site menu, in mock order. Forward leads (DESIGN N: it moved here
+    /// from the old bottom toolbar), greyed while there is nothing ahead.
+    static func siteMenuItems(_ loc: Loc, canForward: Bool = false) -> [SiteMenuItem] {
         [
+            SiteMenuItem(id: "forward", icon: "arrowRight", label: loc.t("explore.forward"),
+                         disabled: !canForward),
             SiteMenuItem(id: "refresh", icon: "refreshCw", label: loc.t("explore.refresh")),
             SiteMenuItem(id: "share", icon: "share2", label: loc.t("explore.share")),
             SiteMenuItem(id: "copy", icon: "copy", label: loc.t("explore.copyLink")),
@@ -138,9 +168,12 @@ enum ExploreFixtures {
         let view: ExploreView = browsing ? .browsing : (state == .e5 ? .tabs : .start)
 
         let tiles: [TileModel] = favorites.map { .site($0) } + [.add(loc.t("explore.add"))]
+        let canForward = false
         // Spec 079 (owner): no "安全站点" — the lock alone.
         let siteMenu = ExploreSheet.siteMenu(site: uniswap, statusLine: "",
-                                             items: siteMenuItems(loc))
+                                             items: siteMenuItems(loc, canForward: canForward))
+        // E1 is the first visit: the start page is the only tab there is.
+        let openTabs = strip(loc, sites: populated ? tabSites : [])
         let connectionModel = connection(loc)
 
         let sheet: ExploreSheet? = switch state {
@@ -154,25 +187,25 @@ enum ExploreFixtures {
             state: state,
             view: view,
             title: loc.t("explore.title"),
-            tabCountLabel: populated ? "2" : nil,
             searchPlaceholder: loc.t("explore.searchPlaceholder"),
             scanLabel: loc.t("explore.scan"),
             empty: populated ? nil : (title: loc.t("explore.startTitle"),
                                       caption: loc.t("explore.startHint"),
                                       cta: loc.t("explore.startCta")),
+            resume: resume(loc, strip: openTabs),
             favorites: populated ? (title: loc.t("explore.favorites"),
                                     action: loc.t("explore.edit"), tiles: tiles) : nil,
             groups: populated ? groups(loc) : [],
             browser: BrowserModel(
-                url: uniswap.host, host: uniswap.host, secure: true, connected: true,
-                canBack: true, canForward: false, bookmarked: false,
+                url: "https://\(uniswap.host)/swap", host: uniswap.host, secure: true, connected: true,
+                canBack: true, canForward: canForward, bookmarked: false,
                 account: (name: WalletFixtures.identity.name,
                           seed: WalletFixtures.identity.addressFull),
-                tabCount: 2, page: demoPage
+                tabCount: openTabs.count, page: demoPage
             ),
             // E5 opens the switcher FROM a page, so the page's tab is the
             // selected one — the mock's accent border is on Uniswap.
-            tabs: tabs(loc, selected: browsing || state == .e5 ? "uniswap" : "start"),
+            tabs: tabs(loc, strip: openTabs, selected: browsing || state == .e5 ? "uniswap" : "start"),
             tabsScreen: TabsScreenCopy(
                 title: loc.t("explore.tabs"), done: loc.t("explore.done"),
                 newTab: loc.t("explore.newTab"), closeAll: loc.t("explore.closeAllTabs"),

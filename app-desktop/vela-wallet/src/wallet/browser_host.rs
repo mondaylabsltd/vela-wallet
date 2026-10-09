@@ -674,26 +674,6 @@ pub fn went(go: &Go, shown_tab: Option<&str>) -> Went {
     Went::Go
 }
 
-/// The tab the strip lights (spec 082 RD6): the one whose page is in the
-/// webview while a page shows; over the start page, the selected tab only
-/// when it IS a start-page tab. A restored tab waits unlit — the start page
-/// drawn under a lit site tab was G2's "this tab" over nothing.
-#[must_use]
-pub fn lit_tab(
-    view: &vela_core::app::explore_sites::ExploreView,
-    shown: Option<&str>,
-    browsing: bool,
-) -> Option<String> {
-    if browsing {
-        return shown.map(str::to_owned);
-    }
-    let selected = view.selected_tab.as_deref()?;
-    view.tabs
-        .iter()
-        .find(|tab| tab.id == selected && tab.url.is_none())
-        .map(|tab| tab.id.clone())
-}
-
 /// What closing a strip tab does to what is on screen (RD6). The closed
 /// tab's own page goes with its webview, and the core hears `TabClosed`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -706,8 +686,42 @@ pub enum TabClose {
     StartPage,
 }
 
-/// The rule: closing the tab on screen shows `next`, the tab the explore
-/// machine selected once the closed one went, with its address.
+/// What a close of `ids` takes from the column, read BEFORE the core hears
+/// it (spec 082 RD6, spec 099 navigation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Closing {
+    /// The tab on screen is among them — the one the strip lights (the
+    /// core's `lit_tab`): the page showing, or over the start page only a
+    /// selected start-page tab. What the core selects next comes to the
+    /// front ([`tab_close`]). A dApp waiting unlit behind the start page —
+    /// left for the wallet, restored at launch — is NOT on screen: closing
+    /// it keeps the start page.
+    pub on_screen: bool,
+    /// The tab whose view the column holds is among them — over the start
+    /// page, possibly that unlit dApp. Its view and load watch go with it.
+    pub shown: bool,
+}
+
+/// [`Closing`] for `ids`, with `shown` the tab whose view the column holds
+/// and `browsing` whether its page is on screen (not the start page).
+#[must_use]
+pub fn closing(
+    view: &vela_core::app::explore_sites::ExploreView,
+    shown: Option<&str>,
+    browsing: bool,
+    ids: &[String],
+) -> Closing {
+    let lit = vela_core::app::browser_tabs::lit_tab(view, shown, browsing);
+    let among = |id: Option<&str>| id.is_some_and(|id| ids.iter().any(|closed| closed == id));
+    Closing {
+        on_screen: among(lit.as_deref()),
+        shown: among(shown),
+    }
+}
+
+/// The rule: closing the tab on screen ([`Closing::on_screen`]) shows
+/// `next`, the tab the explore machine selected once the closed one went,
+/// with its address.
 #[must_use]
 pub fn tab_close(was_shown: bool, next: Option<(String, Option<String>)>) -> TabClose {
     if !was_shown {
@@ -717,21 +731,6 @@ pub fn tab_close(was_shown: bool, next: Option<(String, Option<String>)>) -> Tab
         Some((id, Some(url))) => TabClose::Neighbour { id, url },
         _ => TabClose::StartPage,
     }
-}
-
-/// Which tab an address typed or picked opens in (RD6): the page on screen;
-/// over the start page, the selected start-page tab; otherwise `None` — a new
-/// tab, so a restored tab waiting unlit is left intact.
-#[must_use]
-pub fn open_target(
-    view: &vela_core::app::explore_sites::ExploreView,
-    shown: Option<&str>,
-    browsing: bool,
-) -> Option<String> {
-    if browsing && let Some(shown) = shown {
-        return Some(shown.to_owned());
-    }
-    lit_tab(view, None, false)
 }
 
 /// Where a page's own report — its title, its address — is filed (RD6).
@@ -1702,37 +1701,102 @@ mod tests {
             favorites_full: false,
             tabs_full: false,
             recent_tabs: Vec::new(),
+            resumable: Vec::new(),
             ready: true,
         }
     }
 
-    /// G2 (RD6): launched with a restored Uniswap tab, the start page shows,
-    /// the tab waits unlit, and every nav button is off. Enter over the start
-    /// page opens a NEW tab and leaves the restored one intact.
+    /// Spec 099 navigation: 探索 entered again shows the start page with the
+    /// dApp's tab kept — its view held, unlit in the strip. Closing that tab
+    /// there takes its view and watch, and keeps the start page: it was not
+    /// on screen. The start page's own lit tab (a selected start-page tab)
+    /// and a page being browsed are on screen, and the neighbour comes up.
     #[test]
-    fn a_restored_tab_waits_unlit_and_enter_opens_a_new_one() {
-        let view = explore(&[("t1", Some("https://app.uniswap.org/"))], Some("t1"));
-        assert_eq!(
-            lit_tab(&view, None, false),
-            None,
-            "nothing lit over the start page"
+    fn closing_a_tab_waiting_unlit_keeps_the_start_page() {
+        let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+        let dapp = explore(
+            &[
+                ("t1", Some("https://app.uniswap.org/")),
+                ("t2", Some("https://polymarket.com/")),
+            ],
+            Some("t1"),
         );
+        // Over the start page, t1 kept behind it (shown, unlit).
+        let closed = closing(&dapp, Some("t1"), false, &ids(&["t1"]));
+        assert_eq!(
+            closed,
+            Closing {
+                on_screen: false,
+                shown: true
+            }
+        );
+        let next = Some(("t2".to_owned(), Some("https://polymarket.com/".to_owned())));
+        assert_eq!(
+            tab_close(closed.on_screen, next.clone()),
+            TabClose::Background,
+            "the start page stays; t2's page does not come up"
+        );
+        // The same with no view held (restored at launch), or another tab.
+        assert_eq!(
+            closing(&dapp, None, false, &ids(&["t1"])),
+            Closing {
+                on_screen: false,
+                shown: false
+            }
+        );
+        assert_eq!(
+            closing(&dapp, Some("t1"), false, &ids(&["t2"])),
+            Closing {
+                on_screen: false,
+                shown: false
+            }
+        );
+        // A batch close over the start page: the same rule.
+        assert_eq!(
+            closing(&dapp, Some("t1"), false, &ids(&["t1", "t2"])),
+            Closing {
+                on_screen: false,
+                shown: true
+            }
+        );
+
+        // Browsing t1: closing it is closing the page on screen.
+        let closed = closing(&dapp, Some("t1"), true, &ids(&["t1"]));
+        assert!(closed.on_screen && closed.shown);
+        assert_eq!(
+            tab_close(closed.on_screen, next),
+            TabClose::Neighbour {
+                id: "t2".to_owned(),
+                url: "https://polymarket.com/".to_owned()
+            }
+        );
+        // A selected start-page tab is the start page's own, lit: on screen,
+        // whichever view is held behind it.
+        let start = explore(
+            &[("t1", Some("https://app.uniswap.org/")), ("t2", None)],
+            Some("t2"),
+        );
+        assert_eq!(
+            closing(&start, Some("t1"), false, &ids(&["t2"])),
+            Closing {
+                on_screen: true,
+                shown: false
+            }
+        );
+    }
+
+    /// G2 (RD6): over the start page — a restored tab waiting unlit at
+    /// launch, or a dApp left for the wallet — every nav button is off; a
+    /// page on screen has what its engine says. Which tab is lit and where
+    /// Enter goes are the core's (`browser_tabs`, which holds this test's
+    /// first half since spec 099's navigation).
+    #[test]
+    fn the_start_page_turns_every_nav_button_off() {
         assert_eq!(
             nav_enabled(false, true, true, Some(3), Some(0), false),
             [false; 3],
             "all nav off"
         );
-        assert_eq!(open_target(&view, None, false), None, "a new tab");
-        // A start-page tab selected: lit, and it is where Enter goes.
-        let view = explore(
-            &[("t1", Some("https://app.uniswap.org/")), ("t2", None)],
-            Some("t2"),
-        );
-        assert_eq!(lit_tab(&view, None, false).as_deref(), Some("t2"));
-        assert_eq!(open_target(&view, None, false).as_deref(), Some("t2"));
-        // A page on screen: its tab, lit, and where Enter goes.
-        assert_eq!(lit_tab(&view, Some("t1"), true).as_deref(), Some("t1"));
-        assert_eq!(open_target(&view, Some("t1"), true).as_deref(), Some("t1"));
         assert_eq!(
             nav_enabled(true, false, true, Some(0), Some(0), false),
             [false, true, true]
