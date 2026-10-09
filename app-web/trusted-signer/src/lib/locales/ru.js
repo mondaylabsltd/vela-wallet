@@ -183,7 +183,8 @@ window.VelaCS.i18n.register('ru', {
   'ui.copyAddress': 'Скопировать полный адрес',
   'ui.copied': 'Скопировано',
   'ui.simClaimed': 'симуляция предоставлена отправителем запроса — эта страница её не запускала',
-  'tag.claimed': 'заявлено',
+  'tag.feeByApp': 'по данным приложения',
+  'tag.nameByApp': 'название от приложения',
 
   'intent.create': 'Добавить passkey',
   'intent.signIn': 'Вход',
@@ -198,7 +199,7 @@ window.VelaCS.i18n.register('ru', {
   'tag.stepTwo': '2 из 2',
   'value.viaApp': 'приложение Vela на этом устройстве',
   'value.viaUnknown': 'отправитель, которого эта страница не может определить',
-  'value.answerToThisWallet': 'ответ уйдёт в кошелёк Vela на этом устройстве',
+  'value.answerOnlyToIt': 'ответ получит только он',
   'value.answerToNobody': 'никуда — в запросе не указан адрес для ответа',
   'value.randomChallenge': '32 случайных байта, созданных на этой странице',
   'value.anyKey': 'любой passkey этого сайта — на ваш выбор',

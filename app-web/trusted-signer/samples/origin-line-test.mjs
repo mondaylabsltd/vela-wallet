@@ -151,4 +151,36 @@ const warned = (view, sheet) =>
     JSON.stringify(lines(elsewhere.sheet)));
 }
 
+// 9. The ceremony's subtitle says who asked and that the answer goes back
+//    only to it — naming the wallet once (owner, 2026-10-09: 「Vela 钱包 ·
+//    答复交回本机的 Vela 钱包」 said it twice).
+for (const [locale, name] of [['zh', 'Vela 钱包'], ['en', 'Vela wallet']]) {
+  ns.i18n.setLocale(locale);
+  const view = ns.resolve({ method: 'vela_createPasskey', params: [{ name: 'Savings' }] },
+    { rpId: 'getvela.app', walletName: 'Savings', channel: 'url', callback: 'velawallet://sign-result' });
+  const line = lines(ns.render(view, {})).join(' · ');
+  check(`${locale}: the ceremony subtitle names the wallet once`,
+    line.split(name).length === 2 && line === name + ' · ' + ns.i18n.t('value.answerOnlyToIt'), line);
+}
+ns.i18n.setLocale('zh');
+
+// 10. Whose word each tag is. The network row marks a NAME the app gave for a
+//     chain this page does not know (the id is in the digest); a chain nobody
+//     named is called by its id, in the page's own words, unmarked.
+{
+  const named = signing('', undefined, { chainId: 167000, chainName: 'Taiko' });
+  const tag = named.sheet.find('.network-claimed').map((n) => n.textContent).join();
+  check('an unknown chain the app names: 「App 提供」 beside the name',
+    named.view.chain === 'Taiko' && named.view.chainClaimed === true && tag === 'App 提供', tag);
+  const bare = signing('', undefined, { chainId: 167000 });
+  check('an unknown chain nobody names: its id, unmarked',
+    bare.view.chain === 'chain 167000' && bare.view.chainClaimed === false &&
+    bare.sheet.find('.network-claimed').length === 0, bare.view.chain);
+  const known = signing('', undefined, { chainId: 8453, chainName: 'Not Base' });
+  check('a known chain: the page\'s own name, unmarked',
+    known.view.chain === 'Base' && known.view.chainClaimed === false, known.view.chain);
+  check('the fee and the network say different things, so they are two words',
+    ns.i18n.t('tag.feeByApp') === 'App 标注' && ns.i18n.t('tag.nameByApp') === 'App 提供');
+}
+
 process.exit(check.summary() ? 0 : 1);

@@ -354,7 +354,7 @@ window.VelaCS = window.VelaCS || {};
   // Read-only by construction, and READ rather than quoted — see lib/fee.js.
   // Vela pays in band, so the usual case is a payment leg inside the calldata:
   // its amount and recipient are decoded facts, while "this leg is the fee" is
-  // the requester's label and is shown as one.
+  // the app's label (`feeLegIndex`) and is shown as one.
   function feeRow(view) {
     var wrap = el('div', 'fee-wrap');
     // Nothing goes on chain: the app's quiet reassurance (PositiveNote) in
@@ -377,12 +377,12 @@ window.VelaCS = window.VelaCS || {};
     // Spec 079: the explanation folds under the row — the row itself is the
     // summary a person taps. What must stay in sight stays on the row: the
     // amount read from the calldata and, for a leg, that "this is the fee" is
-    // the requester's word — said in muted text beside the label (自述), the
-    // same word the network row uses for a chain the page does not know.
+    // the app's word — said in muted text beside the label (「App 标注」 /
+    // "per the app"). Not the network row's tag: there the app gives a NAME.
     wrap = el('details', 'fee-wrap');
     row = el('summary', 'fee');
     row.appendChild(el('span', 'fee-label', t('ui.fee')));
-    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.claimed')));
+    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.feeByApp')));
     var headline = view.fee.leg
       ? t('ui.feeLegAmount', { amount: view.fee.leg.amount, symbol: view.fee.leg.symbol })
       : t('ui.feeCeiling', { amount: view.fee.gas.max, symbol: view.fee.gas.symbol });
@@ -505,8 +505,9 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
-   * 网络 · Base. A chain this page does not know is named by the requester,
-   * and the row says so (自述) — quietly, in the row's own muted type.
+   * 网络 · Base. A chain this page does not know is named by the app — the
+   * chain id is in the digest, the name is not — and the row says so
+   * (「App 提供」 / "named by the app"), quietly, in the row's own muted type.
    */
   function networkRow(view) {
     if (!view.chain) return null;
@@ -514,7 +515,7 @@ window.VelaCS = window.VelaCS || {};
     row.appendChild(el('span', 'row-label', t('field.network')));
     var value = el('span', 'row-value');
     value.appendChild(el('span', 'network-name', view.chain));
-    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.claimed')));
+    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
     row.appendChild(value);
     return row;
   }

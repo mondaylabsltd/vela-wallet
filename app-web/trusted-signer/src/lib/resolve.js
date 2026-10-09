@@ -216,10 +216,12 @@ window.VelaCS = window.VelaCS || {};
         // "Wallet" line that says nothing a person can check.
         own: !host && !(known && known.name),
       },
-      // Named from the chain id we are actually signing for. A requester's own
-      // label is only used for a chain this page does not know, and is marked.
+      // Named from the chain id we are actually signing for (it is in the
+      // digest's domain). The app's own label is only used for a chain this
+      // page does not know, and is marked as the app's. A chain neither knows
+      // is named by its id — the page's own words, so not marked.
       chain: reg.chainName(ctx.chainId) || ctx.chainName || ('chain ' + (ctx.chainId || '?')),
-      chainClaimed: !reg.chainName(ctx.chainId),
+      chainClaimed: !reg.chainName(ctx.chainId) && !!ctx.chainName,
       chainLogos: ns.logos.chain(ctx, ctx.chainId),
       // The account whose key signs. For a transaction this is also inside
       // the digest (SafeOp.safe), so it is not merely a claim.
@@ -1165,7 +1167,7 @@ window.VelaCS = window.VelaCS || {};
       // checked (owner, 2026-09-24: the page answers a `velawallet://` and
       // nothing else, so 「某个钱包」 and its logo were both inappropriate).
       return ns.resolve.answersToWallet(ctx)
-        ? { originKey: 'value.answerToThisWallet', verified: true }
+        ? { originKey: 'value.answerOnlyToIt', verified: true }
         : { origin: schemeOf(ctx.callback) || null, originKey: schemeOf(ctx.callback) ? null : 'value.answerToNobody', verified: false, elsewhere: true };
     }
     var byChannel = { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[ctx.channel];

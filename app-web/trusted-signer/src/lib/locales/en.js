@@ -184,7 +184,13 @@ window.VelaCS.i18n.register('en', {
   'ui.copyAddress': 'Copy full address',
   'ui.copied': 'Copied',
   'ui.simClaimed': 'simulation supplied by the requester — not run by this page',
-  'tag.claimed': 'claimed',
+  // Two tags, because the app vouches for two different things. Beside the
+  // fee: the amount and recipient are decoded from the signed calldata, and
+  // only "this payment is the network fee" is the app's word. Beside the
+  // network: the chain id is inside the digest, and only its NAME is the
+  // app's, for a chain this page's own table does not know.
+  'tag.feeByApp': 'per the app',
+  'tag.nameByApp': 'named by the app',
   // --- key ceremonies (spec 075): the page as a passkey route --------------
   'intent.create': 'Add a passkey',
   'intent.signIn': 'Sign in',
@@ -199,10 +205,12 @@ window.VelaCS.i18n.register('en', {
   'tag.stepTwo': '2 of 2',
   'value.viaApp': 'the Vela app on this device',
   'value.viaUnknown': 'a requester this page cannot identify',
-  // Where the answer goes. Not who asked — this page cannot know that —
-  // but what it will DO, which is the one thing about the other end it can
-  // state and a person can hold it to.
-  'value.answerToThisWallet': 'the answer goes to the Vela wallet on this device',
+  // Where the answer goes, after the name of who asked ("Vela wallet · …"),
+  // so it says "it" rather than naming the wallet twice (owner, 2026-10-09).
+  // What the page will DO is the one thing about the other end it can state
+  // and a person can hold it to: it answers `velawallet://sign-result` and
+  // nothing else.
+  'value.answerOnlyToIt': 'the answer goes back only to it',
   'value.answerToNobody': 'nowhere — this request named no address for the answer',
   'value.randomChallenge': '32 random bytes made on this page',
   'value.anyKey': 'any passkey of this site — you pick',

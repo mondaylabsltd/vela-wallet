@@ -183,7 +183,8 @@ window.VelaCS.i18n.register('de', {
   'ui.copyAddress': 'Vollständige Adresse kopieren',
   'ui.copied': 'Kopiert',
   'ui.simClaimed': 'Simulation vom Anfragenden geliefert — nicht von dieser Seite ausgeführt',
-  'tag.claimed': 'angegeben',
+  'tag.feeByApp': 'laut App',
+  'tag.nameByApp': 'Name laut App',
 
   'intent.create': 'Passkey hinzufügen',
   'intent.signIn': 'Anmelden',
@@ -198,7 +199,7 @@ window.VelaCS.i18n.register('de', {
   'tag.stepTwo': '2 von 2',
   'value.viaApp': 'die Vela-App auf diesem Gerät',
   'value.viaUnknown': 'ein Anfragender, den diese Seite nicht identifizieren kann',
-  'value.answerToThisWallet': 'die Antwort geht an die Vela-Wallet auf diesem Gerät',
+  'value.answerOnlyToIt': 'die Antwort geht nur an sie',
   'value.answerToNobody': 'nirgendwohin — diese Anfrage nennt keine Adresse für die Antwort',
   'value.randomChallenge': '32 Zufallsbytes, auf dieser Seite erzeugt',
   'value.anyKey': 'jeder Passkey dieser Website — du wählst aus',

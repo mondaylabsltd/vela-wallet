@@ -183,7 +183,8 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.copyAddress': '複製完整地址',
   'ui.copied': '已複製',
   'ui.simClaimed': '模擬結果由請求方提供——並非由這一頁執行',
-  'tag.claimed': '自稱',
+  'tag.feeByApp': 'App 標註',
+  'tag.nameByApp': 'App 提供',
 
   'intent.create': '加通行密鑰',
   'intent.signIn': '登入',
@@ -198,7 +199,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'tag.stepTwo': '第 2 步／共 2 步',
   'value.viaApp': '這部裝置上的 Vela App',
   'value.viaUnknown': '這一頁無法確認身份的請求方',
-  'value.answerToThisWallet': '回覆會交給這部裝置上的 Vela 錢包',
+  'value.answerOnlyToIt': '回覆只會交給它',
   'value.answerToNobody': '不會送到任何地方——這個請求沒有指定回覆地址',
   'value.randomChallenge': '這一頁產生的 32 個隨機位元組',
   'value.anyKey': '這個網站的任何一個通行密鑰——由你選擇',

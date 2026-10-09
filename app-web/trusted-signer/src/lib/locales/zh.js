@@ -190,7 +190,11 @@ window.VelaCS.i18n.register('zh', {
   'ui.copyAddress': '复制完整地址',
   'ui.copied': '已复制',
   'ui.simClaimed': '模拟由请求方提供 —— 不是这一页跑出来的',
-  'tag.claimed': '自述',
+  // 两个标签，因为 App 担保的是两件不同的事。网络费旁：金额与收款方从被签的
+  // calldata 读出，只有「这一笔是网络费」是 App 的说法。网络旁：chainId 在
+  // 签名摘要里，只有本页自己的表里没有的链，它的「名字」是 App 给的。
+  'tag.feeByApp': 'App 标注',
+  'tag.nameByApp': 'App 提供',
   // --- 钥匙仪式（spec 075）：可信签名器作为一条 passkey 通道 --------------
   'intent.create': '添加通行密钥',
   'intent.signIn': '登录',
@@ -205,9 +209,10 @@ window.VelaCS.i18n.register('zh', {
   'tag.stepTwo': '第 2 步 / 共 2 步',
   'value.viaApp': '这台设备上的 Vela App',
   'value.viaUnknown': '无法确认身份的请求方',
-  // 答复去哪里。不是「谁在请求」——本页无从知道——而是本页将要做的事，
-  // 这一点可以说，也可以被人核对。
-  'value.answerToThisWallet': '答复交回本机的 Vela 钱包',
+  // 答复去哪里，跟在请求方的名字后面（「Vela 钱包 · …」），所以说「它」，
+  // 不把钱包的名字说两遍（创始人，2026-10-09）。本页将要做的事是关于另一端
+  // 唯一能说、也能被人核对的一点：只答复 `velawallet://sign-result`。
+  'value.answerOnlyToIt': '答复只交回给它',
   'value.answerToNobody': '没有指定答复地址',
   'value.randomChallenge': '本页生成的 32 个随机字节',
   'value.anyKey': '这个站点的任意通行密钥 —— 由你挑选',

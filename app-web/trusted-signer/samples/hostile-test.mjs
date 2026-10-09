@@ -182,8 +182,8 @@ try {
   check('the fee leg amount is read out of the calldata', text.includes('0.42'));
   // Spec 079 folds the fee's explanation under its row; the attribution stays
   // on the row itself, in sight, and the full sentence is one tap away.
-  check('the fee is attributed to the requester, not asserted',
-    (await ev("(document.querySelector('summary.fee .tag') || {}).innerText || ''")) === '自述' &&
+  check('the fee is attributed to the app, not asserted',
+    (await ev("(document.querySelector('summary.fee .tag') || {}).innerText || ''")) === 'App 标注' &&
     /请求方的说法/.test(await ev("(document.querySelector('.fee-note') || {}).textContent || ''")));
   check('the chain is named from its id', text.includes('Ethereum'));
   check('the signing account is shown as an address', text.includes('0x88cC'));
