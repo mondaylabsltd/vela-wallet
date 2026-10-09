@@ -16,6 +16,23 @@ body {
 	line-height: var(--leading-normal);
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
+	/*
+	 * Plus Jakarta Sans has one contextual alternate (`calt`): after a digit,
+	 * `x` becomes `×` and `-` becomes `−` — so every address set in it read
+	 * "0×14fB…", and a date's hyphens were minus signs (iPhone pass
+	 * 2026-10-09; the four shells bundle the same font). Off, everywhere: the
+	 * face has no other contextual rule to lose.
+	 */
+	font-variant-ligatures: no-contextual;
+}
+
+/* Form controls do not inherit the body's font settings: an address typed or
+   pasted into a field is the text this matters most for. */
+input,
+textarea,
+select,
+button {
+	font-variant-ligatures: no-contextual;
 }
 
 a {

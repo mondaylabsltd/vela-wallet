@@ -226,3 +226,26 @@ describe('every token a component names exists (spec 082 RB12, G16)', () => {
 		expect(undefinedRefs).toEqual([]);
 	});
 });
+
+/**
+ * Plus Jakarta Sans turns an `x` after a digit into `×` (its one `calt` rule),
+ * so "0x14fB…" read "0×14fB…" wherever an address was set in it (iPhone pass
+ * 2026-10-09). The app turns contextual alternates off on the body — which
+ * every element inherits — and on the form controls, which do not inherit
+ * font settings.
+ */
+describe('the face draws an address as written', () => {
+	const css = readFileSync(join(APP_ROOT, 'src/app.css'), 'utf8');
+	const rule = (selector: RegExp) =>
+		css.match(new RegExp(`${selector.source}\\s*\\{([^}]*)\\}`))?.at(-1) ?? '';
+
+	it('contextual alternates are off on the body', () => {
+		expect(rule(/(^|\n)body/)).toMatch(/font-variant-ligatures:\s*no-contextual/);
+	});
+
+	it('and on the form controls, which do not inherit them', () => {
+		expect(rule(/input,\s*textarea,\s*select,\s*button/)).toMatch(
+			/font-variant-ligatures:\s*no-contextual/
+		);
+	});
+});
