@@ -1,0 +1,74 @@
+# 102 — Where you review and sign: in Vela, or on a page you trust
+
+**Status:** draft · 2026-10-09 · owner decisions recorded below
+**Supersedes:** the "fourth key method" shape of the Trusted Signer (075 ruling, 2026-09-22)
+**Research:** [research.md](research.md) (end-to-end trace, RP IDs, integrity, UX, risks — file:line cited)
+
+## Why
+
+People who tap 可信签名器 see "this device / scan a code / USB security key" again and can't tell what is trusted about it (user feedback, 2026-10-09). The owner's diagnosis: the Trusted Signer is **parallel to in-app signing**, not a fourth place a key lives — the same three key places exist on the page too. The real choice is **where the signing content is previewed and signed**:
+
+- **In Vela** — the app's own sheet, which sits on many third-party dependencies; a library could change how the intent is shown.
+- **On a page you trust** — a zero-dependency, self-deployable page that decodes the operation itself (what you see is what you sign), whose published build can be checked against a content hash.
+
+The code already says this (`trusted_signer.rs:4-6` "where the person checks what they sign"); the UI and the data model still say otherwise.
+
+## Owner decisions (2026-10-09)
+
+| # | Question | Decision |
+|---|---|---|
+| D1 | How is the venue chosen? | **Per account** (on this device). Changeable at any time without touching keys. Not per transaction. |
+| D2 | Key isolation? | **Shared domain first.** Keys stay on `getvela.app`; any such key can sign in either venue. The page assures *what you see is what you sign*; it does not cryptographically stop a fully compromised app (a later "vault mode" may add page-only keys). |
+| D3 | Self-hosted signing pages | **Customisable, several can be saved, one is active.** Each account **remembers the signing domain (RP ID) its keys live under**, because a passkey created under the person's own domain cannot be reached from Vela's official page (and vice versa). The experience must make that obvious and never let someone pick a page that can't reach their keys. |
+| D4 | What the in-app sheet shows when the venue is the page | **A minimal hand-off card**: "Review and sign on your trusted page" + the key you'll confirm with + one integrity line (version · matches the published build list · checked …) + Open. The app does not repeat the transaction preview; the page is the authority. |
+| D5 | Old clients | Alpha, no real users: optimise for the new model, but existing accounts migrate automatically and older builds keep working (see [[vela-alpha-no-backcompat]] in memory). |
+
+## The model
+
+Two independent axes:
+
+1. **Key place** (unchanged list of three): this device (platform passkey) · phone or tablet (scan a code) · USB security key.
+2. **Signing venue**, per account: **In Vela** | **Trusted page** (a specific saved page).
+
+And one property of every account:
+
+3. **Signing domain** — the RP ID its keys live under: `getvela.app` for every account created in the apps or on the official page; the person's own domain for an account created on a self-hosted page.
+
+Rules (owned by vela-core; shells draw):
+
+- R1. A venue is **reachable** for an account only if it can use the account's keys: In Vela ⇔ signing domain = `getvela.app`; a trusted page ⇔ the page's RP ID = the account's signing domain. Unreachable choices are shown disabled with the reason ("This page's domain can't reach this account's keys").
+- R2. An account on a custom signing domain is **locked to a page on that domain** (the apps can't use those keys natively). If several saved pages share that domain, the person picks which one is active for the account.
+- R3. Key ceremonies (create, add key, sign-in, member proof) run in the app for `getvela.app` accounts — the challenge is random/derived, there is nothing to preview. For a custom-domain account they run on its page (only that page can mint/use those keys).
+- R4. The venue applies to transactions and messages (user operations, personal_sign, typed data).
+- R5. The page is told **which key to use** (credential id + transports + hints), so the browser goes straight to it — no generic "where is your passkey" chooser.
+- R6. The integrity check is **enforced** before the word "trusted" is used anywhere: the URL that is opened is the version that was checked (one core rule for both), every platform checks it (phones included), a failed check refuses to open, and the result is shown on the hand-off card. Wording: "matches Vela's published build list · checked <time>", never "certified untampered".
+- R7. The page only answers signatures to `velawallet://` (closes the open-signing hole; see Phase 0) and cannot be framed.
+
+## User-facing surfaces
+
+- **Create / sign-in chooser:** three key places only. An "Advanced: use my own signing page" entry creates or signs into a custom-domain wallet (asks for / picks a saved page, shows its domain and integrity line).
+- **Settings → Signing pages:** the list of saved pages (official always first; custom ones added by URL, each showing its domain and integrity status); add / remove / rename; no free-text "trusted signer URL" field any more.
+- **Account settings → Where you review and sign:** In Vela | Trusted page (with the active page). Shows the account's signing domain. Disabled options carry the reason (R1).
+- **Signing sheet, venue = page:** the hand-off card (D4). Waiting / closed / refused / mismatch / timeout states as today, reworded.
+- **Keys list:** keys are captioned by where they live (this device / phone / USB), never "Trusted Signer"; a custom-domain account shows its domain.
+- **The page:** shows the intent first; uses the key route so the browser asks for the right key only; 15 languages.
+
+## Phases
+
+- **Phase 0 (urgent, separate PR):** the page refuses signature answers to anything but `velawallet://` (a test-only exception for the desktop loopback harness), `frame-ancestors 'none'`; rebuild → new hash at the front of `BUILD_ALLOWED`; the official page must be deployed before an app that launches the new hash ships.
+- **Phase 1 — core:** venue + signing domain + saved pages in the account/settings model; migration of today's records; reachability rule (R1/R2); key route in the request (R5); one launch-URL-and-check rule + enforcement (R6); retire `KeyMethod::TrustedSigner` for new records (reader kept); i18n (new venue/hand-off/integrity strings; stale strings fixed).
+- **Phase 2 — shells (web, desktop, Android, iOS):** choosers, Settings → Signing pages, account venue setting, hand-off card, phone integrity checks, keys-list captions.
+- **Phase 3 — the page:** key route + hints, intent-first layout, 15 languages, rebuild + hash + deploy.
+- **Phase 4 — verification:** every platform on devices (Xiaomi, iPhone), including a self-hosted page on a test domain.
+
+## Migration
+
+- `signer_origin` empty or the official origin → signing domain `getvela.app`, venue = trusted page (official), key route from the key's stored transports.
+- `signer_origin` = a custom origin → signing domain = that host, venue locked to that page; the page is added to the saved list.
+- `signer_origin` keeps being written so older builds still route to the page. New fields default safely when an older build reads them. Nothing changes in the registry or on-chain.
+
+## Open items
+
+- Name: keep 可信签名器, or name the venue by what it is ("在可信页面签名")? Proposed: the setting is "在哪里预览并签名"; the page is "可信签名页".
+- iOS subdomain RP-ID behaviour for a future vault mode (device check needed) — out of scope here.
+- Public monitor that fetches every `/b/*` and compares to `dist/` — nice to have, not blocking.
