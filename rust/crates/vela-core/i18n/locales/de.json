@@ -62,23 +62,29 @@
     "signing": {
       "title": "Signaturseiten",
       "subtitle": "Seiten, denen du vertraust, um Anfragen anzuzeigen und zu signieren.",
-      "pageOfficial": "Offiziell",
+      "pageOfficial": "Velas offizielle Signaturseite",
       "pageInvalid": "Das ist keine Webadresse.",
       "pageInsecure": "Verwenden Sie eine https-Seite oder eine Seite auf dem Loopback dieses Geräts — anderswo signiert ein Browser nicht.",
       "pageSave": "Speichern",
-      "pageAdd": "Seite hinzufügen",
+      "pageAdd": "Selbst gehostete Signaturseite hinzufügen",
       "pageDuplicate": "Diese Seite ist bereits gespeichert.",
-      "keysOn": "Schlüssel auf {{domain}}"
+      "keysOn": "Schlüssel auf {{domain}}",
+      "pageSelfHosted": "Selbst gehostet · {{domain}}",
+      "pageTrust": "Dieser Version vertrauen",
+      "pageRename": "Umbenennen",
+      "pageRemove": "Entfernen",
+      "pageName": "Name"
     },
     "venue": {
       "title": "Wo du prüfst und signierst",
       "subtitle": "Für die Transaktionen und Nachrichten dieses Kontos. Deine Schlüssel bleiben gleich.",
-      "inVela": "In Vela",
+      "inVela": "In Vela prüfen und signieren",
       "inVelaBody": "Velas eigene Signaturansicht",
-      "page": "Auf einer vertrauenswürdigen Seite",
+      "page": "Auf einer vertrauenswürdigen Signaturseite prüfen und signieren",
       "pageBody": "Eine Seite ohne Abhängigkeiten zeigt genau, was du signierst",
       "blockedApp": "Vela kann Schlüssel auf {{domain}} nicht verwenden.",
-      "blockedPage": "Diese Seite liegt auf {{pageDomain}}, die Schlüssel dieses Kontos auf {{domain}}."
+      "blockedPage": "Diese Seite liegt auf {{pageDomain}}, die Schlüssel dieses Kontos auf {{domain}}.",
+      "blockedWeb": "Signaturseiten öffnen sich nur in den Vela-Apps, nicht im Web."
     },
     "advanced": {
       "networksTitle": "Netzwerke",

@@ -62,23 +62,29 @@
     "signing": {
       "title": "簽名頁",
       "subtitle": "你信任、用嚟顯示同簽署請求嘅頁面。",
-      "pageOfficial": "官方",
+      "pageOfficial": "Vela 官方簽名頁",
       "pageInvalid": "呢個唔係網址。",
       "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",
       "pageSave": "儲存",
-      "pageAdd": "加入頁面",
+      "pageAdd": "加入自己部署嘅簽名頁",
       "pageDuplicate": "呢個頁面已經儲存咗。",
-      "keysOn": "鎖匙喺 {{domain}}"
+      "keysOn": "鎖匙喺 {{domain}}",
+      "pageSelfHosted": "自己部署嘅簽名頁 · {{domain}}",
+      "pageTrust": "信任呢個版本",
+      "pageRename": "改名",
+      "pageRemove": "移除",
+      "pageName": "名稱"
     },
     "venue": {
       "title": "喺邊度預覽同簽名",
       "subtitle": "用於呢個帳戶嘅交易同訊息。你嘅鎖匙唔會改變。",
-      "inVela": "喺 Vela 入面",
+      "inVela": "喺 Vela 入面預覽同簽名",
       "inVelaBody": "Vela 自己嘅簽名介面",
-      "page": "喺可信簽名頁",
+      "page": "喺可信簽名頁預覽同簽名",
       "pageBody": "零依賴嘅頁面，所見即所簽",
       "blockedApp": "Vela 用唔到 {{domain}} 上面嘅鎖匙。",
-      "blockedPage": "呢個頁面喺 {{pageDomain}}，呢個帳戶嘅鎖匙喺 {{domain}}。"
+      "blockedPage": "呢個頁面喺 {{pageDomain}}，呢個帳戶嘅鎖匙喺 {{domain}}。",
+      "blockedWeb": "簽名頁只可以喺 Vela App 打開，網頁版唔支援。"
     },
     "advanced": {
       "networksTitle": "網絡",

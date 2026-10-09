@@ -663,8 +663,30 @@ for (let i = 1; i < PATHS.length; i++) {
 //   verifyStuckHint}` — the ja + en room the new lines need under SC-005,
 //   instead of a budget move. 1792 − 13 + 25 = 1804 leaves, 99 + 2 = 101
 //   branches.
-if (PATHS.length !== 1905) fail(`expected 1905 paths (1804 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1804) fail(`expected 1804 leaf paths, got ${leafSet.size}`);
+// 1914 (spec 102 core round, 2026-10-09): the owner's naming (D6) and the
+//   gaps the shells hit in Phase 2. + `settings.venue.blockedWeb` (the web
+//   opens no signing page: its page rows are drawn disabled with this
+//   reason, and a custom-domain account's refusal there says it), +
+//   `settings.signing.{pageSelfHosted,pageTrust,pageRename,pageRemove,
+//   pageName}` ("Self-hosted · <domain>", "Trust this version" — the answer
+//   to the integrity line's ask-to-trust question — and the signing-pages
+//   list's own rename / remove / name words, which the phones borrowed from
+//   other screens), + `componentsUi.signing.{ceremonyCreate,ceremonySignIn,
+//   ceremonyConfirm}` (a key ceremony on a self-hosted page has its own
+//   title, not the hand-off card's "Review and sign"). Renamed:
+//   `onboarding.create.{ownPageTitle,ownPageBody}` → `{signingPageTitle,
+//   signingPageBody}` — the entry is "Use a trusted signing page" now and
+//   lists Vela's official page too, so "own page" named it wrongly. Reworded
+//   (D6): `settings.venue.{inVela,page}` ("Review and sign in Vela" / "… on a
+//   trusted signing page"), `settings.signing.{pageOfficial,pageAdd}` ("Vela's
+//   official signing page", "Add a self-hosted signing page") and
+//   `componentsUi.signing.handoffTitle`. Minus `home.rescanNativeNote`, the
+//   longest of the `home.rescan*` lines spec 004's research found with zero
+//   call sites (still none in any shell: git grep, every 102 worktree) — the
+//   ja + en room the new lines need under SC-005 instead of a budget move.
+//   1804 − 2 + 2 + 1 + 5 + 3 − 1 = 1812 leaves, 101 branches.
+if (PATHS.length !== 1913) fail(`expected 1913 paths (1812 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1812) fail(`expected 1812 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
