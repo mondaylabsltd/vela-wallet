@@ -459,8 +459,12 @@ pub enum TrustedSignerCeremonyOutcome {
 
 /// The page request for a machine operation (`RegisterPasskey`,
 /// `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire JSON)
-/// with `method = trusted_signer`; `None` for anything else. `registry` is the
-/// registry service the page fetches a member challenge from.
+/// whose `page` is set — a wallet on a custom domain, whose keys only its page
+/// can mint or use (spec 102 R3); `None` for any other operation. The
+/// operation's `method` is the key's PLACE (`platform`, `hybrid`,
+/// `security_key`), passed to the page as `place` and `hints` (R5). `registry`
+/// is the registry service named in a member proof's request; `deployment`
+/// the registry deployment the page computes the member challenge from.
 #[uniffi::export]
 pub fn trusted_signer_ceremony_request(
     operation_json: String,
@@ -484,6 +488,19 @@ pub fn trusted_signer_ceremony_request(
         )
         .to_string(),
     )
+}
+
+/// The corpus key of the title a shell draws while a ceremony waits on its
+/// page (spec 102) — `componentsUi.signing.ceremonyCreate` (a key is being
+/// made), `.ceremonySignIn` (sign-in and its recovery proofs) or
+/// `.ceremonyConfirm` (a new key's proof, a member proof) — instead of the
+/// hand-off card's "Review and sign" title: a ceremony has nothing to review.
+/// `None` for an operation that is not a ceremony.
+#[uniffi::export]
+#[must_use]
+pub fn trusted_signer_ceremony_title_key(operation_json: String) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(&operation_json)
+        .map(|ceremony| ceremony.title_key().to_owned())
 }
 
 /// The registry deployment a member proof is bound to — the chain and the
@@ -981,28 +998,208 @@ impl SignerPageAdmission {
     }
 
     /// The checked page, told to answer over [`trusted_signer_callback_url`]:
-    /// the request deflated into the URL's FRAGMENT, which no server sees.
-    /// Refused when the page was not admitted, or the check is too old
-    /// (check again, then open).
+    /// the request deflated into the URL's FRAGMENT, which no server sees,
+    /// and `lang` — the language the app shows (`zh-HK`), so the page speaks
+    /// it — in the query (empty: the page follows the browser). Refused when
+    /// the page was not admitted, or the check is too old (check again, then
+    /// open).
     pub fn url_launch(
         &self,
         request_json: String,
         token: String,
+        lang: String,
         now_ms: u64,
     ) -> Result<String, CoreError> {
         let page = self.page().ok_or_else(not_admitted)?;
         let request = serde_json::from_str(&request_json)
             .map_err(|e| CoreError::Internal(format!("request_json: {e}")))?;
-        page.url_launch(&request, trusted_signer::CALLBACK_URL, &token, now_ms)
+        page.url_launch(
+            &request,
+            trusted_signer::CALLBACK_URL,
+            &token,
+            &lang,
+            now_ms,
+        )
+        .map_err(|e| CoreError::Internal(e.to_string()))
+    }
+
+    /// The checked page, told to connect to this app's loopback WebSocket, in
+    /// the app's language as for [`Self::url_launch`].
+    pub fn ws_launch(
+        &self,
+        port: u16,
+        token: String,
+        lang: String,
+        now_ms: u64,
+    ) -> Result<String, CoreError> {
+        let page = self.page().ok_or_else(not_admitted)?;
+        page.ws_launch(port, &token, &lang, now_ms)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
-    /// The checked page, told to connect to this app's loopback WebSocket.
-    pub fn ws_launch(&self, port: u16, token: String, now_ms: u64) -> Result<String, CoreError> {
-        let page = self.page().ok_or_else(not_admitted)?;
-        page.ws_launch(port, &token, now_ms)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+    /// Does this check admit the page AND still vouch for it at `now_ms`? A
+    /// launch at `now_ms` succeeds exactly when this is `true`; when it is
+    /// `false` on an admitted page, check again first (and draw
+    /// [`signer_integrity_line_while_checking`] meanwhile).
+    pub fn is_fresh(&self, now_ms: u64) -> bool {
+        self.inner
+            .as_ref()
+            .is_ok_and(|admission| admission.is_fresh(now_ms))
     }
+
+    /// When the check that admitted the page ran (the shell's clock); `None`
+    /// for a refusal.
+    pub fn checked_at_ms(&self) -> Option<u64> {
+        self.page().map(launch::CheckedPage::checked_at_ms)
+    }
+
+    /// Is a background refresh of this page due ([`signer_page_refresh_due`])?
+    /// `last_attempt_ms`: when a check of it last started, completed or not.
+    pub fn refresh_due(&self, last_attempt_ms: Option<u64>, now_ms: u64) -> bool {
+        match &self.inner {
+            Ok(admission) => admission.refresh_due(last_attempt_ms, now_ms),
+            Err(_) => launch::refresh_due(None, last_attempt_ms, now_ms),
+        }
+    }
+
+    /// The full version (sha256 hex) to store when the person answers "Trust
+    /// this version" — `SigningPagesEvent::version_trusted { url, version }`.
+    /// `Some` only when the check asked ([`SignerIntegrityState::AskToTrust`]),
+    /// which only a self-hosted page can; never for the official page.
+    pub fn version_to_trust(&self) -> Option<String> {
+        self.inner
+            .as_ref()
+            .ok()
+            .and_then(launch::Admission::version_to_trust)
+            .map(str::to_owned)
+    }
+}
+
+/// Spec 102: which check to keep after a background refresh of a page —
+/// `next`, unless it could not complete (no network) while `previous` still
+/// vouches for the page at `now_ms`; then `previous`. A refresh that
+/// completed always wins, a mismatch included. Returns one of the two.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_keep_or_replace(
+    previous: Option<Arc<SignerPageAdmission>>,
+    next: Arc<SignerPageAdmission>,
+    now_ms: u64,
+) -> Arc<SignerPageAdmission> {
+    let keep = match (&previous, &next.inner) {
+        (Some(previous), Ok(next)) => {
+            launch::keeps_previous(previous.inner.as_ref().ok(), next, now_ms)
+        }
+        _ => false,
+    };
+    match previous {
+        Some(previous) if keep => previous,
+        _ => next,
+    }
+}
+
+/// Spec 102: the line to draw while a check of a page runs — `previous`'s
+/// verdict while it still vouches for the page (a background refresh does not
+/// make a good line flicker), else "checking" (a stale check re-running at
+/// Open; Open stays disabled until it completes).
+#[uniffi::export]
+#[must_use]
+pub fn signer_integrity_line_while_checking(
+    previous: Option<Arc<SignerPageAdmission>>,
+    now_ms: u64,
+) -> SignerIntegrityLine {
+    let previous = previous.as_ref().and_then(|p| p.inner.as_ref().ok());
+    launch::line_while_checking(previous, now_ms).into()
+}
+
+/// Spec 102: is a background check of a page due at `now_ms`? `checked_at_ms`
+/// is when its last admitting check ran (`None`: none), `last_attempt_ms` when
+/// a check last started, completed or not. Ask on start, on every return to
+/// the foreground, and every [`SignerRefreshSchedule::poll_ms`] while the app
+/// runs, for every page in use (each account's page venue and every saved
+/// page); check those it answers `true` for.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_refresh_due(
+    checked_at_ms: Option<u64>,
+    last_attempt_ms: Option<u64>,
+    now_ms: u64,
+) -> bool {
+    launch::refresh_due(checked_at_ms, last_attempt_ms, now_ms)
+}
+
+/// The background refresh's numbers (spec 102), so no shell keeps its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct SignerRefreshSchedule {
+    /// How long a check vouches for a page (24 h).
+    pub max_age_ms: u64,
+    /// A check older than this is refreshed in the background (12 h).
+    pub refresh_after_ms: u64,
+    /// How often a running app asks [`signer_page_refresh_due`] (1 h).
+    pub poll_ms: u64,
+    /// The rest after an attempt that could not complete (10 min).
+    pub retry_after_ms: u64,
+}
+
+/// The background refresh's numbers.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_refresh_schedule() -> SignerRefreshSchedule {
+    SignerRefreshSchedule {
+        max_age_ms: launch::MAX_CHECK_AGE_MS,
+        refresh_after_ms: launch::REFRESH_AFTER_MS,
+        poll_ms: launch::REFRESH_POLL_MS,
+        retry_after_ms: launch::RETRY_AFTER_MS,
+    }
+}
+
+/// One request header.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SignerHttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+/// The headers a check's fetch of `SignerPageTarget::url()` sends — a
+/// browser's navigation `Accept` — so the host answers the check with the
+/// bytes it answers the launch with (a host may rewrite HTML for a navigation
+/// only). Send exactly these; follow no redirect the launch would not.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_check_headers() -> Vec<SignerHttpHeader> {
+    launch::CHECK_HEADERS
+        .iter()
+        .map(|(name, value)| SignerHttpHeader {
+            name: (*name).to_owned(),
+            value: (*value).to_owned(),
+        })
+        .collect()
+}
+
+/// `{{time}}` in the integrity line's "… · checked {{time}}" (spec 102): the
+/// clock time in the person's format when the check ran today ("14:32",
+/// "2:32 PM"), else the date and the time. `utc_offset_minutes` is the
+/// device's offset now; `date_format` / `time_format` the person's presets as
+/// stored (`ymd_slash`… / `h24`, `h12`), `auto` already resolved; `language`
+/// the app's (it names a 12-hour clock's day period).
+#[uniffi::export]
+#[must_use]
+pub fn signer_integrity_time(
+    checked_at_ms: u64,
+    now_ms: u64,
+    utc_offset_minutes: i32,
+    date_format: String,
+    time_format: String,
+    language: String,
+) -> String {
+    launch::checked_time(
+        checked_at_ms,
+        now_ms,
+        utc_offset_minutes,
+        &date_format,
+        &time_format,
+        &language,
+    )
 }
 
 impl SignerPageAdmission {
@@ -1046,15 +1243,22 @@ mod tests {
         assert_eq!(line.state, SignerIntegrityState::Matches);
         assert_eq!(line.checked_at_ms, Some(1_000));
         let launch = admitted
-            .url_launch("{}".to_owned(), "t".to_owned(), 2_000)
+            .url_launch("{}".to_owned(), "t".to_owned(), "zh-HK".to_owned(), 2_000)
             .expect("admitted");
-        assert!(launch.starts_with(&format!("{url}?ch=url#")), "{launch}");
+        assert!(
+            launch.starts_with(&format!("{url}?ch=url&lang=zh-HK#")),
+            "{launch}"
+        );
+        assert!(admitted.is_fresh(2_000));
+        assert_eq!(admitted.checked_at_ms(), Some(1_000));
+        assert!(!admitted.is_fresh(1_000 + launch::MAX_CHECK_AGE_MS + 1));
         assert!(launch.contains("&z=1"), "{launch}");
         // Too old: check again first.
         assert!(admitted
             .url_launch(
                 "{}".to_owned(),
                 "t".to_owned(),
+                String::new(),
                 1_000 + launch::MAX_CHECK_AGE_MS + 1
             )
             .is_err());
@@ -1076,8 +1280,10 @@ mod tests {
         assert!(!failed.opens());
         assert_eq!(failed.line(1).state, SignerIntegrityState::CouldNotCheck);
         assert!(failed
-            .url_launch("{}".to_owned(), "t".to_owned(), 1)
+            .url_launch("{}".to_owned(), "t".to_owned(), String::new(), 1)
             .is_err());
+        assert!(!failed.is_fresh(1));
+        assert_eq!(failed.version_to_trust(), None);
 
         let other = integrity::BUILD_ALLOWED
             .iter()
@@ -1123,6 +1329,112 @@ mod tests {
             1,
         );
         assert_eq!(admitted.line(1).state, SignerIntegrityState::AllBlocked);
+    }
+
+    /// Spec 102 core round across the boundary: a background refresh that
+    /// could not complete keeps the good check (the same object comes back),
+    /// the line while a check runs, and the numbers every shell schedules by.
+    #[test]
+    fn freshness_and_the_background_refresh() {
+        let target = SignerPageTarget::choose(OFFICIAL.to_owned(), None, vec![], vec![]);
+        let version = target.version();
+        let good = signer_page_admit(
+            target.clone(),
+            version,
+            SignerCheckFailure::NotChecked,
+            vec![],
+            vec![],
+            false,
+            0,
+        );
+        let offline = signer_page_admit(
+            target,
+            None,
+            SignerCheckFailure::Unreachable,
+            vec![],
+            vec![],
+            false,
+            1_000,
+        );
+        let kept = signer_page_keep_or_replace(Some(good.clone()), offline.clone(), 1_000);
+        assert!(Arc::ptr_eq(&kept, &good));
+        let late = launch::MAX_CHECK_AGE_MS + 1;
+        let replaced = signer_page_keep_or_replace(Some(good.clone()), offline.clone(), late);
+        assert!(Arc::ptr_eq(&replaced, &offline));
+        assert_eq!(
+            signer_integrity_line_while_checking(Some(good.clone()), 1_000).state,
+            SignerIntegrityState::Matches
+        );
+        assert_eq!(
+            signer_integrity_line_while_checking(Some(good.clone()), late).state,
+            SignerIntegrityState::Checking
+        );
+        assert_eq!(
+            signer_integrity_line_while_checking(None, 1).state,
+            SignerIntegrityState::Checking
+        );
+        assert!(!good.refresh_due(None, launch::REFRESH_AFTER_MS));
+        assert!(good.refresh_due(None, launch::REFRESH_AFTER_MS + 1));
+        assert!(offline.refresh_due(None, 2_000));
+        assert!(!offline.refresh_due(Some(1_500), 2_000), "just tried");
+        let schedule = signer_page_refresh_schedule();
+        assert_eq!(schedule.max_age_ms, 24 * 60 * 60 * 1000);
+        assert_eq!(schedule.refresh_after_ms, schedule.max_age_ms / 2);
+        assert!(signer_page_refresh_due(None, None, 1));
+        assert_eq!(
+            signer_page_check_headers()
+                .first()
+                .map(|header| header.name.as_str()),
+            Some("Accept")
+        );
+    }
+
+    /// Spec 102: a self-hosted build is asked about, and the full version to
+    /// store comes across; the time and the ceremony titles do too.
+    #[test]
+    fn trust_time_and_titles_across_the_boundary() {
+        let own = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455";
+        let target = SignerPageTarget::choose(
+            "https://sign.example.com".to_owned(),
+            Some(vec![own.to_owned()]),
+            vec![],
+            vec![],
+        );
+        assert!(target.proposed_by_index());
+        let asked = signer_page_admit(
+            target,
+            Some(own.to_owned()),
+            SignerCheckFailure::NotChecked,
+            vec![],
+            vec![],
+            false,
+            1,
+        );
+        assert_eq!(asked.line(1).state, SignerIntegrityState::AskToTrust);
+        assert_eq!(asked.version_to_trust().as_deref(), Some(own));
+        assert_eq!(asked.checked_at_ms(), None);
+
+        // 2026-10-09 14:32 UTC, read two minutes later in UTC+8.
+        let at = 1_791_556_320_000;
+        assert_eq!(
+            signer_integrity_time(
+                at,
+                at + 120_000,
+                480,
+                "iso".to_owned(),
+                "h24".to_owned(),
+                "zh".to_owned()
+            ),
+            "22:32"
+        );
+        assert_eq!(
+            trusted_signer_ceremony_title_key(
+                r#"{"type":"authenticate_passkey","page":"https://sign.example.com/"}"#.to_owned()
+            )
+            .as_deref(),
+            Some("componentsUi.signing.ceremonySignIn")
+        );
+        assert_eq!(trusted_signer_ceremony_title_key("{}".to_owned()), None);
     }
 
     /// R5 across the boundary: the plan's key route, passed through as JSON.

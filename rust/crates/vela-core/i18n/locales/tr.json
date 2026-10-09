@@ -62,23 +62,29 @@
     "signing": {
       "title": "İmza sayfaları",
       "subtitle": "İstekleri gösterip imzalamak için güvendiğiniz sayfalar.",
-      "pageOfficial": "Resmi",
+      "pageOfficial": "Vela'nın resmi imza sayfası",
       "pageInvalid": "Bu bir web adresi değil.",
       "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
       "pageSave": "Kaydet",
-      "pageAdd": "Sayfa ekle",
+      "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
       "pageDuplicate": "Bu sayfa zaten kayıtlı.",
-      "keysOn": "Anahtarlar: {{domain}}"
+      "keysOn": "Anahtarlar: {{domain}}",
+      "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
+      "pageTrust": "Bu sürüme güven",
+      "pageRename": "Yeniden adlandır",
+      "pageRemove": "Kaldır",
+      "pageName": "İsim"
     },
     "venue": {
       "title": "İnceleyip imzaladığınız yer",
       "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
-      "inVela": "Vela'da",
+      "inVela": "Vela'da inceleyin ve imzalayın",
       "inVelaBody": "Vela'nın kendi imza ekranı",
-      "page": "Güvenilen bir sayfada",
+      "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
       "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
       "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
-      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde."
+      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
+      "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
     },
     "advanced": {
       "networksTitle": "Ağlar",

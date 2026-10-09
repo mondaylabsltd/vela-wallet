@@ -4990,10 +4990,10 @@ fn n4_a_refusal_after_submitted_stays_on_the_sheet_and_the_close_answers_it_once
     assert_eq!(view.request.as_ref().map(|r| r.id.as_str()), Some("rid-n4"));
     assert_eq!(
         view.error,
-        Some(vela_core::app::sign_request::SignErrorNotice {
-            kind: SignErrorKind::SubmitFailed,
-            detail: Some(REFUSED_DAPP_DETAIL.to_owned()),
-        }),
+        Some(vela_core::app::sign_request::SignErrorNotice::new(
+            SignErrorKind::SubmitFailed,
+            Some(REFUSED_DAPP_DETAIL.to_owned()),
+        )),
         "the refusal, in its own words"
     );
     assert!(view.failure_refused);
@@ -5203,6 +5203,41 @@ fn an_unavailable_passkey_is_named_and_not_retried() {
             .find_map(err_detail)
             .map(|(code, kind, _)| (code, kind)),
         Some((CODE_INTERNAL, SignErrorKind::SignerUnavailable))
+    );
+}
+
+/// Spec 102: the account cannot sign here (its keys answer only on its page,
+/// and this is the web; or no page for its domain is known here). The sheet
+/// says why with the block's own words, Try again is not offered, and the
+/// page hears -32603 in a calm sentence.
+#[test]
+fn a_blocked_venue_is_said_and_not_retried() {
+    use vela_core::signing_venue::VenueBlock;
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-102", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::VenueBlocked {
+            block: VenueBlock::NotOnWeb,
+        },
+        now_ms: 11_000.0,
+    });
+    assert_eq!(response_count(&ops), 0, "held while the failure shows");
+    let view = sut.view();
+    let error = view.error.clone().expect("a failure on the sheet");
+    assert_eq!(error.kind, SignErrorKind::VenueBlocked);
+    assert_eq!(error.venue_block, Some(VenueBlock::NotOnWeb));
+    assert_eq!(
+        error.venue_block.as_ref().map(VenueBlock::key),
+        Some("settings.venue.blockedWeb")
+    );
+    assert!(!view.failure_retryable);
+    let ops = sut.dispatch(Event::RejectTapped);
+    assert_eq!(
+        ops.iter()
+            .find_map(err_detail)
+            .map(|(code, kind, _)| (code, kind)),
+        Some((CODE_INTERNAL, SignErrorKind::VenueBlocked))
     );
 }
 

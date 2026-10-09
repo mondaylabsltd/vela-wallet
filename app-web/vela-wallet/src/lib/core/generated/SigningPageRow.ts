@@ -17,4 +17,10 @@ domain: string,
 /**
  * The official page: always first, never removed or renamed.
  */
-official: boolean, };
+official: boolean, 
+/**
+ * Versions of this page the person trusted on this device — what the
+ * shell passes as `trusted` when it checks this page. Always empty for
+ * the official page.
+ */
+trusted: Array<string>, };

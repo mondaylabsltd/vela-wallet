@@ -53,7 +53,6 @@
     "rescanFailed": "Impossible de joindre {{names}}. Corrigez son RPC depuis la bannière d'accueil, ou consultez un explorateur de blocs.",
     "rescanAgain": "Scanner à nouveau",
     "rescanClose": "Terminé",
-    "rescanNativeNote": "Les pièces natives (ETH, BNB, MATIC…) reçues sur certains réseaux peuvent ne pas apparaître ici. Votre solde reste correct — ouvrez un explorateur de blocs pour le détail complet.",
     "rescanExplorerTitle": "Vérifier directement sur un explorateur de blocs",
     "connClear": "Effacer",
     "connClearTitle": "Effacer l'activité de la connexion ?",

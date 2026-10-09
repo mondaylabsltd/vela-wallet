@@ -62,23 +62,29 @@
     "signing": {
       "title": "Signing pages",
       "subtitle": "Pages you trust to show and sign requests.",
-      "pageOfficial": "Official",
+      "pageOfficial": "Vela's official signing page",
       "pageInvalid": "That is not a web address.",
       "pageInsecure": "Use an https page, or one on this device's own loopback — a browser will not sign anywhere else.",
       "pageSave": "Save",
-      "pageAdd": "Add a page",
+      "pageAdd": "Add a self-hosted signing page",
       "pageDuplicate": "That page is already saved.",
-      "keysOn": "Keys on {{domain}}"
+      "keysOn": "Keys on {{domain}}",
+      "pageSelfHosted": "Self-hosted · {{domain}}",
+      "pageTrust": "Trust this version",
+      "pageRename": "Rename",
+      "pageRemove": "Remove",
+      "pageName": "Name"
     },
     "venue": {
       "title": "Where you review and sign",
       "subtitle": "For this account's transactions and messages. Your keys don't change.",
-      "inVela": "In Vela",
+      "inVela": "Review and sign in Vela",
       "inVelaBody": "Vela's own signing sheet",
-      "page": "On a trusted page",
+      "page": "Review and sign on a trusted signing page",
       "pageBody": "A zero-dependency page shows exactly what you sign",
       "blockedApp": "Vela can't reach keys on {{domain}}.",
-      "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}."
+      "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}.",
+      "blockedWeb": "Signing pages open from the Vela apps, not the web."
     },
     "advanced": {
       "networksTitle": "Networks",

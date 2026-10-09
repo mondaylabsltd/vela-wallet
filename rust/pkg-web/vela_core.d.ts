@@ -917,6 +917,14 @@ export function gasSignalsCacheable(eth_gas_price: string | null | undefined, bl
  */
 export function groupPublicKeyFromSeed(seed_hex: string): string;
 
+/**
+ * The hand-off card's compact fee + speed row (spec 102, D4) as a
+ * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
+ * draws no hand-off card; exported for the gallery's boards, which draw the
+ * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ */
+export function handoffFeeRow(fee_json?: string | null, speed_json?: string | null): string | undefined;
+
 export function hashTypedData(typed_data_json: string): Uint8Array;
 
 /**
@@ -1224,6 +1232,34 @@ export function signNotConfirmedDetail(user_op_hash: string): string;
 export function signRequestTtlMs(): number;
 
 /**
+ * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
+ * (spec 102: a day)?
+ */
+export function signerCheckFresh(checked_at_ms: number, now_ms: number): boolean;
+
+/**
+ * Is a background check of a page due (spec 102)? `checked_at_ms`: its last
+ * admitting check (`undefined`: none); `last_attempt_ms`: when a check last
+ * started. See `vela_core::trusted_signer::launch::refresh_due`.
+ */
+export function signerCheckRefreshDue(checked_at_ms: number | null | undefined, last_attempt_ms: number | null | undefined, now_ms: number): boolean;
+
+/**
+ * `{{time}}` in the integrity line's "… · checked {{time}}" (spec 102) — the
+ * one rule every shell draws: the clock time in the person's format when the
+ * check ran today, else the date and the time. `utc_offset_minutes` is
+ * `-new Date().getTimezoneOffset()`; `date_format` / `time_format` the
+ * person's presets as stored, `auto` resolved; `language` the page's.
+ */
+export function signerIntegrityTime(checked_at_ms: number, now_ms: number, utc_offset_minutes: number, date_format: string, time_format: string, language: string): string;
+
+/**
+ * The headers a signing page's check sends (spec 102), as a JSON
+ * `[[name, value], …]` — a browser's navigation `Accept`.
+ */
+export function signerPageCheckHeaders(): string;
+
+/**
  * The domain whose keys a page at `url` can use (spec 102): its host, or
  * `getvela.app` for every `*.getvela.app` page. Empty for something that is
  * not an address.
@@ -1232,13 +1268,21 @@ export function signingPageDomain(url: string): string;
 
 /**
  * How an account signs on this device (spec 102), as JSON — a
- * `SigningPlan`: `{domain, venue, blocked?, key?}`. `key` is the key route
- * (`{credential_id, method, transports, hints}`), absent for a record written
- * before the account named its sign-in key, which signs as it always did.
- * `null` for a record this build cannot read. `account_json` is the stored
- * account record. See `vela_core::app::Account::signing_plan`.
+ * `SigningPlan`: `{domain, venue, blocked?, key?, key_label}`. `key` is the
+ * key route (`{credential_id, method, transports, hints}`), absent for a
+ * record written before the account named its sign-in key, which signs as it
+ * always did; `key_label` the name of that key as the person reads it
+ * (`{name?, place_key}`). `null` for a record this build cannot read.
+ * `account_json` is the stored account record.
+ *
+ * With `surface = "web"` the plan is the web's
+ * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
+ * signs in Vela, and a custom-domain account is `blocked` with
+ * `{"type":"not_on_web"}` — refuse to sign, and report
+ * `venue_blocked { block }` to the send/sign core so the sheet says why. See
+ * `vela_core::app::Account::signing_plan`.
  */
-export function signingPlan(account_json: string): string | undefined;
+export function signingPlan(account_json: string, surface?: string | null): string | undefined;
 
 /**
  * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
@@ -1252,9 +1296,11 @@ export function signingVenueBlock(domain: string, venue_json: string): string | 
  * Vela's sheet, the official page, then the saved pages, each reachable or
  * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
  * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
- * when either does not read.
+ * when either does not read. With `surface = "web"`, every page row R1 does
+ * not already block is blocked `{"type":"not_on_web"}`
+ * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
  */
-export function signingVenueChoices(domain: string, active_json: string, saved_json: string): string | undefined;
+export function signingVenueChoices(domain: string, active_json: string, saved_json: string, surface?: string | null): string | undefined;
 
 /**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
@@ -1433,10 +1479,10 @@ export function userOpWriteAheadWaitMs(): number;
 export function validateClientData(kind: string, client_data_json: Uint8Array, authenticator_data: Uint8Array): void;
 
 /**
- * A venue row's words as JSON (`{title_key, line_key, line_name}`) — `"in_vela"`,
- * `"page"`, or `"own_page"` (the choosers' "Use my own signing page") — or
- * `null` for a name the core does not know. See
- * `vela_core::app::method_words::venue_words`.
+ * A venue row's words as JSON (`{title_key, line_key, line_name}`) —
+ * `"in_vela"`, `"page"`, or `"signing_page"` (the choosers' "Use a trusted
+ * signing page", D6; `"own_page"` still reads) — or `null` for a name the
+ * core does not know. See `vela_core::app::method_words::venue_words`.
  */
 export function venueWords(row: string): string | undefined;
 
@@ -1617,6 +1663,7 @@ export interface InitOutput {
     readonly functionSelector: (a: number, b: number) => [number, number, number, number];
     readonly gasSignalsCacheable: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly groupPublicKeyFromSeed: (a: number, b: number) => [number, number, number, number];
+    readonly handoffFeeRow: (a: number, b: number, c: number, d: number) => [number, number];
     readonly hashTypedData: (a: number, b: number) => [number, number, number, number];
     readonly i18nInterpolate: (a: number, b: number, c: number) => [number, number, number, number];
     readonly i18nPluralSuffix: (a: number, b: number, c: number) => [number, number];
@@ -1710,10 +1757,14 @@ export interface InitOutput {
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
     readonly signRequestTtlMs: () => number;
+    readonly signerCheckFresh: (a: number, b: number) => number;
+    readonly signerCheckRefreshDue: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly signerIntegrityTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly signerPageCheckHeaders: () => [number, number];
     readonly signingPageDomain: (a: number, b: number) => [number, number];
-    readonly signingPlan: (a: number, b: number) => [number, number];
+    readonly signingPlan: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signingVenueBlock: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signingpagescore_new: () => number;
     readonly signingpagescore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

@@ -237,3 +237,89 @@ pub fn confirm_state_json(
     };
     serde_json::to_string(&confirm_state(&input)).ok()
 }
+
+// ---------------------------------------------------------------------------
+// Spec 102 D4 — the hand-off card's fee row
+// ---------------------------------------------------------------------------
+
+/// The hand-off card's compact fee + speed row (spec 102, D4; core round 5).
+///
+/// When an account reviews and signs on a trusted page, the app's sheet gives
+/// way to the hand-off card — and the fee is still the app's: it is chosen on
+/// the sheet (coin, speed) BEFORE the page opens, because the page signs the
+/// operation the app assembled, fee leg included. So the card keeps one quiet
+/// row of what was chosen, read from the two views the sheet already drives:
+///
+/// - the fee is [`FeeView::fee`] of the session in force, drawn exactly as the
+///   sheet's folded fee row draws it (the same formatter, the same coin);
+/// - the speed is [`super::fee_speed::FeeSpeedView::tier`], named by
+///   `send.gasTier.<tier>`.
+///
+/// No control is drawn on it: once the page is open the operation is fixed,
+/// and a different fee is a different operation (close the page, change it on
+/// the sheet, open again). And the card's Open IS the sheet's confirm: enabled
+/// only when [`confirm_state`] is AND the page's integrity line opens.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct HandoffFee {
+    /// The quote in force, settled for [`Self::tier`].
+    pub fee: super::fee_policy::FeeEstimateView,
+    /// The speed it was priced at and will be submitted at — `None` where
+    /// there is nothing to restate: no speed control, or a network with one
+    /// speed (`FeeSpeedView::single`).
+    pub tier: Option<FeeTier>,
+    /// `send.gasTier.<tier>`, when `tier` is set.
+    pub tier_key: Option<String>,
+}
+
+/// The hand-off card's fee row, from the fee session in force and the speed
+/// control (`None` for a surface without one) — or `None`, and the card draws
+/// no row: a message has no fee, and a fee that is not settled for the speed
+/// in force (measuring, failed, another speed's figure, a coin that is short)
+/// is not one the person chose; the confirm gate keeps Open shut until it is.
+#[must_use]
+pub fn handoff_fee(
+    fee: Option<&FeeView>,
+    speed: Option<&super::fee_speed::FeeSpeedView>,
+) -> Option<HandoffFee> {
+    let fee = fee?;
+    let speed_tier = speed.map(|speed| speed.tier);
+    if fee.busy
+        || fee.failed.is_some()
+        || !fee.confirm_fee_ready
+        || fee_of_another_tier(fee, speed_tier)
+    {
+        return None;
+    }
+    let estimate = fee.fee.clone()?;
+    let tier = speed
+        .filter(|speed| !speed.single)
+        .map(|speed| super::fee_speed::offered(speed.tier));
+    Some(HandoffFee {
+        fee: estimate,
+        tier_key: tier.map(|tier| format!("send.gasTier.{}", tier_name(tier))),
+        tier,
+    })
+}
+
+const fn tier_name(tier: FeeTier) -> &'static str {
+    match tier {
+        FeeTier::Slow => "slow",
+        FeeTier::Standard => "standard",
+        FeeTier::Rapid => "rapid",
+        FeeTier::Fast => "fast",
+    }
+}
+
+/// [`handoff_fee`] over the views as the shell last received them, in JSON
+/// (UniFFI, wasm): a `HandoffFee` JSON, or `None` — no row (or a view that
+/// does not read).
+#[must_use]
+pub fn handoff_fee_json(fee_json: Option<&str>, speed_json: Option<&str>) -> Option<String> {
+    let fee: FeeView = serde_json::from_str(fee_json?).ok()?;
+    let speed: Option<super::fee_speed::FeeSpeedView> = match speed_json {
+        Some(json) => Some(serde_json::from_str(json).ok()?),
+        None => None,
+    };
+    serde_json::to_string(&handoff_fee(Some(&fee), speed.as_ref())?).ok()
+}

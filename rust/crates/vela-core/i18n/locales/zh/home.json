@@ -30,7 +30,6 @@
     "rescanFailed": "无法连接 {{names}}。请在首页横幅修复其 RPC，或到区块链浏览器查看。",
     "rescanAgain": "再次扫描",
     "rescanClose": "完成",
-    "rescanNativeNote": "部分网络上收到的原生币（ETH、BNB、MATIC 等）无法在此检测到，但你的余额始终准确——可在区块链浏览器查看完整记录。",
     "rescanExplorerTitle": "直接在区块链浏览器查看",
     "tabActivity": "活动",
     "tabAssets": "资产",
