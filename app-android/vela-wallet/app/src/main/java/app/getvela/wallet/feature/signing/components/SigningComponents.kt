@@ -941,6 +941,8 @@ fun TrustedSignerWaiting(
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
         Text(model.title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.base)
+        // Spec 102: a key ceremony names its key, as the page does.
+        model.key?.let { key -> KeyRow(key) }
         if (model.hint.isNotBlank()) {
             Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
         }
@@ -952,9 +954,10 @@ fun TrustedSignerWaiting(
 /**
  * Spec 102 D4: the hand-off card. The account reviews and signs on a page, so
  * this card says only what Vela knows and the page cannot: where it goes (the
- * page's address), which key the person will confirm with, what this
- * operation was priced at (its fee and speed — one quiet row, no control: the
- * fee was chosen before the hand-off), and what is trusted about the page —
+ * page's address), which key the person will confirm with (the "Confirm with
+ * | …" row), what this operation was priced at only when the screen shows no
+ * fee of its own (one quiet row, no control: the fee was chosen before the
+ * hand-off; a fee is on screen once), and what is trusted about the page —
  * its integrity line, or why it will not open, with "Trust this version"
  * under a self-hosted page's question. Open is the consent that goes there,
  * enabled only when [enabled] (the line opens and the request may be
@@ -994,9 +997,7 @@ fun HandoffCard(
                 Text(model.page, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
             }
         }
-        if (model.keyLine.isNotBlank()) {
-            Text(model.keyLine, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
-        }
+        model.key?.let { key -> KeyRow(key) }
         model.fee?.let { fee -> HandoffFeeRow(fee) }
         Column {
             app.getvela.wallet.feature.settings.components.IntegrityLine(model.integrity)
@@ -1019,9 +1020,40 @@ fun HandoffCard(
 }
 
 /**
+ * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
+ * device" — drawn as the sheet's [SignerRow] ("Signing account | name") is:
+ * the label muted, the value in the body colour at its end, the same size.
+ * A long value wraps at the end rather than pushing the label away.
+ */
+@Composable
+fun KeyRow(model: app.getvela.wallet.feature.signing.KeyRowModel, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(
+            text = model.label,
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+        )
+        Text(
+            text = model.value,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
  * The card's fee + speed row: the label, and what this operation was priced
  * at with its speed's name — the sheet's fee row, folded to one line with no
- * control on it.
+ * control on it, set like the key row above it (label | value).
  */
 @Composable
 private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeModel) {
@@ -1031,7 +1063,7 @@ private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeMo
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        Text(model.label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        Text(model.label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
         Text(
             text = androidx.compose.ui.text.buildAnnotatedString {
                 append(model.value)
@@ -1041,7 +1073,7 @@ private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeMo
             },
             color = colors.fgBase,
             fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.sm,
+            fontSize = VelaTextSize.base,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
             modifier = Modifier.weight(1f),
         )

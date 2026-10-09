@@ -958,6 +958,11 @@ object SendLive {
      * send screen's own fee line (the same formatter, the same coin, the same
      * price). `null`: no row — the core says the fee is not settled for the
      * speed in force.
+     *
+     * The card draws it only on a screen that shows no fee of its own (102
+     * integration: a fee is on screen once): the confirm draws the card in
+     * its button's place under its own fee row and passes none; the
+     * standalone sheet — a hand-off that finds no confirm on screen — does.
      */
     internal fun handoffFee(
         feeJson: String?,
@@ -1235,8 +1240,9 @@ object SendLive {
         return when (view.tx_error) {
             SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
             SendTxErrorKey.Generic -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
-            // Spec 102: why this account cannot sign here — the core's block, translated.
-            SendTxErrorKey.VenueBlocked -> view.tx_venue_block?.words { key, vars -> s.t(key, vars) }
+            // Spec 102: why this account cannot sign here — the core's line
+            // for the block (`venueBlockLine`), translated.
+            SendTxErrorKey.VenueBlocked -> view.tx_venue_block?.words { key, vars -> s.t(key, vars) }?.ifBlank { null }
                 ?: s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }

@@ -247,6 +247,9 @@ class TrustedSignerChannelTest {
             }
             val waiting = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } } as TrustedSignerChannel.State.Waiting
             assertEquals("componentsUi.signing.ceremonyCreate", waiting.title)
+            // Its key row is the core's: a key being made — "New key on | This device".
+            assertEquals("componentsUi.signing.newKeyOnLabel", waiting.key?.labelKey)
+            assertEquals("onboarding.create.methodPlatformTitle", waiting.key?.placeKey)
             val url = withTimeout(5_000) { kotlinx.coroutines.withContext(Dispatchers.IO) { urls.take() } }
             assertTrue(url, url.substringBefore('#').contains("lang=zh-HK"))
             ch.cancel()
@@ -255,6 +258,7 @@ class TrustedSignerChannelTest {
             scope.launch { runCatching { ch.sign(request, digest, keys, official) } }
             val signing = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } } as TrustedSignerChannel.State.Waiting
             assertEquals("a signature has no ceremony title", null, signing.title)
+            assertEquals("a signature's key row was the hand-off card's", null, signing.key)
             ch.cancel()
             withTimeout(5_000) { ch.state.first { it == TrustedSignerChannel.State.Idle } }
             scope.cancel()
@@ -387,15 +391,20 @@ class TrustedSignerChannelTest {
      * where, and with which key — and the page opens only on its Open. A
      * Cancel there opens nothing.
      */
+    /** The card's key row: "Confirm with | Savings". */
+    private val savings = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel(
+        name = "Savings", placeKey = "onboarding.create.methodPlatformTitle", labelKey = "componentsUi.signing.confirmWithLabel",
+    )
+
     @Test
     fun `the hand-off card waits for Open, and a Cancel there opens nothing`() {
         var opened = 0
         val cancelled = channel { opened += 1 }
         runBlocking {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val signing = scope.launch { runCatching { cancelled.sign(request, digest, keys, official, key = "Savings", askFirst = true) } }
+            val signing = scope.launch { runCatching { cancelled.sign(request, digest, keys, official, key = savings, askFirst = true) } }
             val card = withTimeout(5_000) { cancelled.state.first { it is TrustedSignerChannel.State.Handoff } }
-            assertEquals(TrustedSignerChannel.State.Handoff(official, "Savings"), card)
+            assertEquals(TrustedSignerChannel.State.Handoff(official, savings), card)
             cancelled.cancel()
             withTimeout(5_000) { signing.join() }
             scope.cancel()
@@ -406,7 +415,7 @@ class TrustedSignerChannelTest {
         val opening = channel { visit -> visit.answer(answer(signer)) }
         val assertion = runBlocking {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val signed = scope.async { opening.sign(request, digest, keys, official, key = "Savings", askFirst = true) }
+            val signed = scope.async { opening.sign(request, digest, keys, official, key = savings, askFirst = true) }
             withTimeout(5_000) { opening.state.first { it is TrustedSignerChannel.State.Handoff } }
             opening.open()
             withTimeout(20_000) { signed.await() }.also { scope.cancel() }

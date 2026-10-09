@@ -169,10 +169,23 @@ class SignInKeySigningTest {
     }
 
     /** What a fake page was asked: the request, the keys it may use, the page, the card's key and whether it asked first. */
-    private data class PageAsk(val request: JSONObject, val keys: List<String>, val page: String, val key: String, val askFirst: Boolean)
+    private data class PageAsk(
+        val request: JSONObject,
+        val keys: List<String>,
+        val page: String,
+        val key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
+        val askFirst: Boolean,
+    )
 
     private fun pageRecording(asked: MutableList<PageAsk>) = object : TrustedSigner {
-        override suspend fun sign(requestJson: String, digest: ByteArray, keys: List<WalletKeyRecord>, page: String, key: String, askFirst: Boolean): Assertion {
+        override suspend fun sign(
+            requestJson: String,
+            digest: ByteArray,
+            keys: List<WalletKeyRecord>,
+            page: String,
+            key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
+            askFirst: Boolean,
+        ): Assertion {
             asked += PageAsk(JSONObject(requestJson), keys.map { it.credentialId }, page, key, askFirst)
             val signed = fixtureAssert(digest, keys.map { it.credentialId }, 0u)
             return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "")
@@ -238,12 +251,13 @@ class SignInKeySigningTest {
         assertEquals("https://sign.getvela.app/", ask.page)
         assertEquals(listOf(first), ask.keys)
         assertFalse(ask.askFirst)
-        // The card's key is the plan's `key_label` (D-17): the key's own name
-        // when it is not the wallet's, else its place's title — never read
-        // off the record by the shell.
+        // The card's key row is the plan's `key_label` (D-17): "Confirm with |"
+        // the key's own name when it is not the wallet's, else its place's
+        // title — never read off the record by the shell.
         val expected = keyset[0].name.trim().takeIf { it.isNotEmpty() && !it.equals("Parallel space", ignoreCase = true) }
             ?: "onboarding.create.methodPlatformTitle"
-        assertEquals(expected, ask.key)
+        assertEquals(expected, ask.key!!.value { it })
+        assertEquals("componentsUi.signing.confirmWithLabel", ask.key!!.label { it })
     }
 
     /** R1: a custom-domain account whose page this device does not know signs nothing, and says why. */
@@ -258,7 +272,8 @@ class SignInKeySigningTest {
         // sheet and the send say why in the person's language (P2b-A10).
         val failure = refused.failure as UserOpSpine.Failure.VenueBlocked
         assertEquals(app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("example.com"), failure.block)
-        assertEquals("settings.venue.blockedApp", failure.block.key())
+        // Its words are the core's (`venueBlockLine`): the key and its values.
+        assertEquals("settings.venue.blockedApp{domain=example.com}", failure.block.words { key, vars -> key + vars })
         assertTrue("nothing was signed: $ceremonies", ceremonies.isEmpty())
     }
 

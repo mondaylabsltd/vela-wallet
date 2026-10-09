@@ -95,22 +95,29 @@ class TrustedSignerChannel(
         data object Idle : State
 
         /**
-         * Spec 102 D4: the hand-off card — review and sign on [page], confirming
-         * with [key] (the key's name, or its place's title). The integrity line
-         * is [checks]'s for [page]; Open goes on only when it opens. Raised for
-         * a signature no signing sheet is showing (a send the person started);
-         * the dApp sheet draws this card itself.
+         * Spec 102 D4: the hand-off card — review and sign on [page], with the
+         * key row [key] ("Confirm with | the key's name, or its place"). The
+         * integrity line is [checks]'s for [page]; Open goes on only when it
+         * opens. Raised for a signature no signing sheet is showing (a send
+         * the person started); the dApp sheet draws this card itself.
          */
-        data class Handoff(val page: String, val key: String) : State
+        data class Handoff(val page: String, val key: SigningPlan.KeyLabel?) : State
 
         /**
          * The page is open (or being opened) at [url] and the answer is awaited.
          * [unreachable]: the person came back without one and the page's address
          * does not answer (spec 079) — the card says so and offers a retry.
          * [title]: a key ceremony's own title (the corpus key the core names —
-         * create, sign in, confirm; spec 102), `null` for a signature.
+         * create, sign in, confirm; spec 102), `null` for a signature. [key]: that
+         * ceremony's key row (the core's `Ceremony::key_label` — "New key on |
+         * Phone or tablet", "Confirm with | This device"), `null` for a signature.
          */
-        data class Waiting(val url: String, val unreachable: Boolean = false, val title: String? = null) : State
+        data class Waiting(
+            val url: String,
+            val unreachable: Boolean = false,
+            val title: String? = null,
+            val key: SigningPlan.KeyLabel? = null,
+        ) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -148,6 +155,10 @@ class TrustedSignerChannel(
      */
     @Volatile
     private var ceremonyTitle: String? = null
+
+    /** The request in flight's key row, when it is a key ceremony (`trustedSignerCeremonyKeyLabel`). */
+    @Volatile
+    private var ceremonyKey: SigningPlan.KeyLabel? = null
 
     override fun describe(chainId: Int, account: String): TrustedSignerLabels = labels(chainId, account)
 
@@ -207,7 +218,7 @@ class TrustedSignerChannel(
 
     /**
      * Sign [digest] with one of [keys], on [page] — the account's venue (spec
-     * 102 R4). [key] is what the hand-off card says the person confirms with;
+     * 102 R4). [key] is the hand-off card's key row ("Confirm with | …");
      * [askFirst] raises that card ([State.Handoff]) and waits for its Open —
      * `false` when the caller's own sheet was the card.
      *
@@ -218,7 +229,7 @@ class TrustedSignerChannel(
         digest: ByteArray,
         keys: List<WalletKeyRecord>,
         page: String,
-        key: String,
+        key: SigningPlan.KeyLabel?,
         askFirst: Boolean,
     ): Assertion {
         // A signature asked for on its own opens and closes its own flow; one
@@ -301,6 +312,7 @@ class TrustedSignerChannel(
             unopenable = null
             ceremonyTitle = (ask as? TrustedSignerAsk.Ceremony)
                 ?.let { runCatching { trustedSignerCeremonyTitleKey(it.operationJson) }.getOrNull() }
+            ceremonyKey = (ask as? TrustedSignerAsk.Ceremony)?.let { SigningPlan.KeyLabel.ofCeremony(it.operationJson) }
             if (handoff != null && !handedOff(handoff)) {
                 _state.value = State.Idle
                 return@withLock Put(TrustedSignerAnswer.Cancelled, wire == null)
@@ -367,7 +379,7 @@ class TrustedSignerChannel(
                 openPage = openPage,
                 timeoutMs = timeoutMs,
                 random = random,
-                onOpened = { url -> _state.value = State.Waiting(url, title = ceremonyTitle) },
+                onOpened = { url -> _state.value = State.Waiting(url, title = ceremonyTitle, key = ceremonyKey) },
                 lang = lang,
             )
         }.getOrElse { error ->

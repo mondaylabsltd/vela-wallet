@@ -223,10 +223,10 @@ object SigningFixtures {
     /**
      * The key the boards' account confirms with — the core's `key_label` over
      * a record whose sign-in key carries the wallet's own name, on a phone:
-     * D-17 names it by its place ("Phone or tablet"), since the card's
-     * "Signing account" row already says the wallet's name.
+     * D-17 names it by its place ("Confirm with | Phone or tablet"), since the
+     * card's "Signing account" row already says the wallet's name.
      */
-    private fun VelaStrings.boardKey(): String {
+    private fun boardKey(): app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel? {
         val record = org.json.JSONObject()
             .put("id", "a1b2c3d4")
             .put("name", WalletFixtures.NAME)
@@ -244,7 +244,7 @@ object SigningFixtures {
             .put("signing_domain", "getvela.app")
             .put("signing_venue", org.json.JSONObject().put("type", "page").put("url", app.getvela.wallet.feature.settings.SettingsFixtures.OFFICIAL_PAGE))
             .toString()
-        return app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(record)?.keyLabel?.text(::t).orEmpty()
+        return app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(record)?.keyLabel
     }
 
     /**
@@ -291,12 +291,14 @@ object SigningFixtures {
     }
 
     /**
-     * CS40/CS41: the card on its own, as a send on a page venue raises it —
-     * the fee + speed row is the core's `handoffFeeRow` over a settled fee
-     * session and the speed control (Standard), drawn with the send screen's
-     * own fee line. CS41: the page's check is a day old and runs again —
-     * the core's line while it does is "checking", and Open waits for it.
-     * `null` for every other board.
+     * CS40/CS41: the card on its own — the sheet a send's hand-off raises when
+     * no send confirm is on screen (the confirm draws the card in its
+     * button's place, under its own fee row). With no fee on screen, the card
+     * restates it: the core's `handoffFeeRow` over a settled fee session and
+     * the speed control (Standard), drawn with the send screen's own fee
+     * line. CS41: the page's check is a day old and runs again — the core's
+     * line while it does is "checking", and Open waits for it. `null` for
+     * every other board.
      */
     fun standaloneHandoff(state: SigningScreenState, strings: VelaStrings): HandoffModel? {
         if (state != SigningScreenState.CS40 && state != SigningScreenState.CS41) return null
@@ -307,10 +309,29 @@ object SigningFixtures {
         } else {
             settings.pageLine(page)
         }
-        return SigningLive.handoffModel(
-            SigningLive.Handoff(page, strings.boardKey(), line),
-            strings,
-            fee = boardFee(strings),
+        return SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), strings, fee = boardFee(strings))
+    }
+
+    /**
+     * CS43/CS44: a key ceremony waiting on a self-hosted page — the core's
+     * own title (`trustedSignerCeremonyTitleKey`) and key row
+     * (`trustedSignerCeremonyKeyLabel`) over the operation as the machines
+     * write it: a key made on a phone (CS43), a sign-in with this device's
+     * key (CS44). `null` for every other board.
+     */
+    fun standaloneCeremony(state: SigningScreenState, strings: VelaStrings): TrustedSignerWaitModel? {
+        val op = when (state) {
+            SigningScreenState.CS43 -> """{"type":"register_passkey","name":"${WalletFixtures.NAME}","method":"hybrid"}"""
+            SigningScreenState.CS44 -> """{"type":"authenticate_passkey","method":"platform"}"""
+            else -> return null
+        }
+        return SigningLive.trustedSignerWait(
+            SigningLive.Context(
+                strings = strings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
+                nativeSymbol = "", walletName = "", walletAddress = "", trustedSignerWaiting = true,
+                trustedSignerTitle = runCatching { uniffi.vela_core_uniffi.trustedSignerCeremonyTitleKey(op) }.getOrNull(),
+                trustedSignerKey = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel.ofCeremony(op),
+            ),
         )
     }
 
@@ -1106,7 +1127,8 @@ object SigningFixtures {
             SigningScreenState.CS36 -> ownBackup()
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
-            SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42 -> handoff(state)
+            SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,
+            SigningScreenState.CS43, SigningScreenState.CS44 -> handoff(state)
 
             SigningScreenState.CS32 -> model(
                 state, unknownDapp, Dapp.unknownTint,

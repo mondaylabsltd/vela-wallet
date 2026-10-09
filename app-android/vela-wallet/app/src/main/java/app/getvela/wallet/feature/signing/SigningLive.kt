@@ -76,6 +76,8 @@ object SigningLive {
         val trustedSignerUnreachable: Boolean = false,
         /** Spec 102: a key ceremony's own title (a corpus key), `null` for a signature. */
         val trustedSignerTitle: String? = null,
+        /** Spec 102: a key ceremony's key row (the core's `KeyLabel`), `null` for a signature. */
+        val trustedSignerKey: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel? = null,
         /** Spec 071: why the last Trusted Signer attempt did not sign. */
         val trustedSignerNotice: String? = null,
         /** Spec 079: the chain's explorer base, for the landed receipt's link. */
@@ -96,20 +98,42 @@ object SigningLive {
         val nowMs: () -> Double = { System.currentTimeMillis().toDouble() },
     )
 
-    /** Spec 102 D4: the page an account signs on, the key it confirms with, and that page's line now. */
-    data class Handoff(val page: String, val key: String, val line: uniffi.vela_core_uniffi.SignerIntegrityLine)
+    /**
+     * Spec 102 D4: the page an account signs on, the key it confirms with (the
+     * plan's `KeyLabel`; `null` when it names none), and that page's line now.
+     */
+    data class Handoff(
+        val page: String,
+        val key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
+        val line: uniffi.vela_core_uniffi.SignerIntegrityLine,
+    )
+
+    /**
+     * A key row in the person's words — the core's `KeyLabel`: the label its
+     * `label_key` names ("Confirm with", "New key on"), the value the key's
+     * name or its place. `null` when there is no value to draw.
+     */
+    fun keyRow(
+        key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
+        strings: VelaStrings,
+    ): KeyRowModel? {
+        key ?: return null
+        val value = key.value(strings::t)
+        return if (value.isBlank()) null else KeyRowModel(label = key.label(strings::t), value = value)
+    }
 
     /**
      * The hand-off card's words (D4) — shared by the dApp sheet and a send's
-     * own card. [fee] is the card's fee + speed row (`handoffFeeRow`), `null`
-     * where there is none to draw. A self-hosted page whose check asks to be
-     * trusted carries the answer (`settings.signing.pageTrust`) under its line.
+     * own card. [fee] is the card's fee + speed row (`handoffFeeRow`), passed
+     * only by a screen that shows no fee of its own; `null` — no row. A
+     * self-hosted page whose check asks to be trusted carries the answer
+     * (`settings.signing.pageTrust`) under its line.
      */
     fun handoffModel(handoff: Handoff, strings: VelaStrings, fee: HandoffFeeModel? = null): HandoffModel {
         val integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings)
         return HandoffModel(
             title = strings.s("handoffTitle"),
-            keyLine = if (handoff.key.isBlank()) "" else strings.s("handoffKey", mapOf("key" to handoff.key)),
+            key = keyRow(handoff.key, strings),
             page = handoff.page.substringAfter("://").trimEnd('/'),
             integrity = integrity,
             open = strings.s("openSigner"),
@@ -149,9 +173,14 @@ object SigningLive {
             // Spec 102: a ceremony says what it is doing there — create, sign
             // in, confirm (`trustedSignerCeremonyTitleKey`); a signature waits.
             title = ctx.trustedSignerTitle?.let(s::t) ?: s.s("trustedSignerWaiting"),
-            hint = s.s("trustedSignerWaitingHint"),
+            // "Check the request on the page and sign it there" is a
+            // signature's: a ceremony has no request to check — its title and
+            // key row say what happens there.
+            hint = if (ctx.trustedSignerTitle != null) "" else s.s("trustedSignerWaitingHint"),
             reopen = s.s("trustedSignerReopen"),
             cancel = s.t("common.cancel"),
+            // A ceremony names the key it makes or uses, as the page does.
+            key = keyRow(ctx.trustedSignerKey, s),
         )
     }
 
@@ -915,9 +944,10 @@ object SigningLive {
         sign.error?.kind == SignErrorKind.SignerUnavailable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_UNAVAILABLE)
         sign.error?.kind == SignErrorKind.SignerNotDiscoverable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_NOT_DISCOVERABLE)
         sign.error?.kind == SignErrorKind.SignerFailed -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_FAILED)
-        // Spec 102: why this account cannot sign here, in the person's language.
+        // Spec 102: why this account cannot sign here — the core's line
+        // (`venueBlockLine`), in the person's language.
         sign.error?.kind == SignErrorKind.VenueBlocked ->
-            sign.error.venue_block?.words { key, vars -> s.t(key, vars) } ?: s.t("send.txErrorGeneric")
+            sign.error.venue_block?.words { key, vars -> s.t(key, vars) }?.ifBlank { null } ?: s.t("send.txErrorGeneric")
         else -> s.t("send.txErrorGeneric")
     }
 

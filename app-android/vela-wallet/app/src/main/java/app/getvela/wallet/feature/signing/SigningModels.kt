@@ -37,14 +37,24 @@ enum class SigningScreenState {
     CS37, CS38, CS39,
 
     /**
-     * Spec 102 core round, the card on its own — what a send on a page venue
-     * raises: its fee + speed row (`handoffFeeRow`), the key named by its
+     * Spec 102 core round, the card on its own — what a send's hand-off
+     * raises when no send confirm is on screen: its fee + speed row
+     * (`handoffFeeRow`), the key named by its
      * place (D-17), the page matching (CS40); the same card while a check
      * older than a day runs again, Open off (CS41); and a dApp request on a
      * self-hosted page whose build is new to Vela — the line asks, "Trust
      * this version" answers, Open off until it is trusted (CS42).
      */
     CS40, CS41, CS42,
+
+    /**
+     * Spec 102 integration: a key ceremony waiting on a self-hosted page — its
+     * own title and its key row, as the page draws its own: a key being made
+     * there ("New key on | Phone or tablet", CS43) and a sign-in ("Confirm
+     * with | This device", CS44). The card a create or a sign-in raises on
+     * its own (`TrustedSignerWaitingSheet`).
+     */
+    CS43, CS44,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -274,25 +284,32 @@ sealed interface FeeModel {
 /**
  * Spec 102 D4: the hand-off card — the account reviews and signs on a page,
  * so the sheet does not repeat the preview. Where (the title), with which key
- * ("Confirm with {{key}}"), what is trusted about the page (its integrity
+ * (the "Confirm with | …" row), what is trusted about the page (its integrity
  * line, or why it will not open), and Open — enabled only when the line says
  * the page opens and the request may be confirmed.
  */
 @Immutable
 data class HandoffModel(
     val title: String,
-    /** "Confirm with Savings" / "Confirm with This device"; empty when nothing names the key. */
-    val keyLine: String,
+    /**
+     * The key row, drawn like the sheet's "Signing account | name" row:
+     * "Confirm with | Savings" / "Confirm with | This device" (the core's
+     * `KeyLabel`); `null` when nothing names the key.
+     */
+    val key: KeyRowModel?,
     /** The page's address, without its scheme. */
     val page: String,
     val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
     val open: String,
     /**
      * The fee this operation was priced at, and its speed — one quiet row
-     * under the key line (core round 5, `handoffFeeRow`), no control: the fee
-     * was chosen before the hand-off. `null`: no row (a message, a fee not
-     * settled for the speed in force, or a surface whose own fee row sits
-     * right above the card).
+     * under the key row (core round 5, `handoffFeeRow`), no control: the fee
+     * was chosen before the hand-off. Drawn only on a screen that shows no
+     * fee of its own, so a fee is on screen once — the sheet a send's
+     * hand-off raises when no send confirm is on screen. `null`: no row — a
+     * message, a fee not settled for the speed in force, or a surface whose
+     * own fee row sits right above the card (the dApp sheet's, the send
+     * confirm's: each draws the card in its confirm's place).
      */
     val fee: HandoffFeeModel? = null,
     /**
@@ -307,8 +324,19 @@ data class HandoffModel(
 data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
 
 /**
+ * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
+ * device" — the core's `KeyLabel` in the person's words: [label] from its
+ * `label_key`, [value] its name or its place's title.
+ */
+@Immutable
+data class KeyRowModel(val label: String, val value: String)
+
+/**
  * The signing page is open (spec 071): the sheet says so instead of
- * offering the confirm, with a way back to the page and a way out.
+ * offering the confirm, with a way back to the page and a way out. A key
+ * ceremony (spec 102) names its key: [key] is "New key on | …" while a key is
+ * made, "Confirm with | …" when one signs in or proves; `null` for a
+ * signature, whose hand-off card already named it.
  */
 @Immutable
 data class TrustedSignerWaitModel(
@@ -316,6 +344,7 @@ data class TrustedSignerWaitModel(
     val hint: String,
     val reopen: String,
     val cancel: String,
+    val key: KeyRowModel? = null,
 )
 
 @Immutable

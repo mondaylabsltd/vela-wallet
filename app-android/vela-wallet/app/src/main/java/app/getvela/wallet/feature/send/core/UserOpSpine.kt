@@ -93,7 +93,7 @@ class UserOpSpine(
         val page: String? = null,
         val signInKey: Boolean = false,
         val keyRouteJson: String? = null,
-        /** What "Confirm with {{key}}" names: the plan's `key_label` (D-17); `null` for a record without one. */
+        /** The hand-off card's key row: the plan's `key_label` (D-17); `null` for a record without one. */
         val keyLabel: SigningPlan.KeyLabel? = null,
         val blocked: JSONObject? = null,
     )
@@ -136,14 +136,15 @@ class UserOpSpine(
         val first = runCatching { accounts.keysOf(account) }.getOrNull()?.firstOrNull() ?: return null
         val route = runCatching { routeFor(account, first) }.getOrNull() ?: return null
         val page = route.page?.takeIf { route.blocked == null } ?: return null
-        return Handoff(page, keyLabel(route))
+        return Handoff(page, route.keyLabel)
     }
 
-    /** The hand-off card's two facts: where the person signs, and with which key. */
-    data class Handoff(val page: String, val key: String)
-
-    private fun keyLabel(route: Route): String =
-        route.keyLabel?.text { key -> words(key, emptyMap()) }.orEmpty()
+    /**
+     * The hand-off card's two facts: where the person signs, and with which
+     * key — the core's `KeyLabel`, translated where it is drawn; `null` when
+     * the plan names none.
+     */
+    data class Handoff(val page: String, val key: SigningPlan.KeyLabel?)
 
     /**
      * The one signature of an attempt: the person's passkey over the account's
@@ -183,7 +184,7 @@ class UserOpSpine(
                 if (error is Refused) throw error
                 other(error.message ?: words(SIGNER_REFUSED, emptyMap()))
             }
-            channel.sign(requestJson, challenge, allowed, page, keyLabel(picked), askFirst = !handoffShown)
+            channel.sign(requestJson, challenge, allowed, page, picked.keyLabel, askFirst = !handoffShown)
         } else {
             signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
         }

@@ -64,16 +64,17 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
 interface TrustedSigner {
     /**
      * Sign on [page] — the account's venue (`signing_plan`'s, R4), always
-     * named: there is no page "from Settings" any more. [key] is what the
-     * hand-off card says the person confirms with; [askFirst] raises that card
-     * and waits for its Open (`false` when the caller's own sheet drew it).
+     * named: there is no page "from Settings" any more. [key] is the
+     * hand-off card's key row (the plan's `KeyLabel`, "Confirm with | …");
+     * [askFirst] raises that card and waits for its Open (`false` when the
+     * caller's own sheet drew it).
      */
     suspend fun sign(
         requestJson: String,
         digest: ByteArray,
         keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>,
         page: String,
-        key: String = "",
+        key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel? = null,
         askFirst: Boolean = false,
     ): Assertion
 

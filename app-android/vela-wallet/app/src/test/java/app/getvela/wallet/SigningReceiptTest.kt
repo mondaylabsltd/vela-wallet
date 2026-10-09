@@ -68,11 +68,15 @@ class SigningReceiptTest {
             uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "0ba8ee8c", 1_760_000_000_000uL,
             "componentsUi.signing.integrity.matches", true,
         )
-        val handoff = SigningLive.Handoff("https://sign.getvela.app/", "Savings", opens)
+        val key = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel(
+            name = "Savings", placeKey = "onboarding.create.methodPlatformTitle", labelKey = "componentsUi.signing.confirmWithLabel",
+        )
+        val handoff = SigningLive.Handoff("https://sign.getvela.app/", key, opens)
         val card = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff))
         val model = card.handoff!!
-        assertEquals("Review and sign on your trusted signing page", model.title)
-        assertEquals("Confirm with Savings", model.keyLine)
+        assertEquals("Review and sign on a trusted signing page", model.title)
+        // A label | value row, like "Signing account | Savings".
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Savings"), model.key)
         assertEquals("sign.getvela.app", model.page)
         assertTrue(model.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
         assertEquals(strings.t("componentsUi.signing.openSigner"), model.open)
@@ -127,13 +131,29 @@ class SigningReceiptTest {
         assertEquals("""{"type":"venue_blocked","block":{"type":"app_cannot_reach","domain":"sign.example.com"}}""", outcome)
     }
 
-    /** P2b-A8: a key ceremony on a page waits under its own title, not a signature's. */
+    /**
+     * P2b-A8: a key ceremony on a page waits under its own title, not a
+     * signature's — and names its key in a row, as the page does ("New key on
+     * | Phone or tablet"). A signature's card already named its key.
+     */
     @Test
-    fun `a ceremony waits under its own title`() {
-        val create = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true, trustedSignerTitle = "componentsUi.signing.ceremonyCreate"))
+    fun `a ceremony waits under its own title, with its key row`() {
+        val op = """{"type":"register_passkey","name":"Savings","method":"hybrid"}"""
+        val create = SigningLive.trustedSignerWait(
+            ctx.copy(
+                trustedSignerWaiting = true,
+                trustedSignerTitle = uniffi.vela_core_uniffi.trustedSignerCeremonyTitleKey(op),
+                trustedSignerKey = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel.ofCeremony(op),
+            ),
+        )
         assertEquals("Create your key on your signing page", create?.title)
+        assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create?.key)
+        // No "check the request" line: a ceremony has no request to check.
+        assertEquals("", create?.hint)
         val signature = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true))
         assertEquals("Waiting for the signing page…", signature?.title)
+        assertNull(signature?.key)
+        assertEquals(strings.t("componentsUi.signing.trustedSignerWaitingHint"), signature?.hint)
     }
 
     @Test

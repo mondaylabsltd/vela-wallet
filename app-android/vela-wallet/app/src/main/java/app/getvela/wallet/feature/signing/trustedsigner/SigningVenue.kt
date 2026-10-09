@@ -6,6 +6,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.signingPlan
+import uniffi.vela_core_uniffi.trustedSignerCeremonyKeyLabel
+import uniffi.vela_core_uniffi.venueBlockLine
 
 /**
  * Spec 102: how an account signs on this device — the core's `SigningPlan`
@@ -31,15 +33,48 @@ data class SigningPlan(
     /** Where the key lives; `null` when the plan names no key (or a place this build does not know). */
     val method: KeyMethod?,
     /**
-     * What "Confirm with {{key}}" names (the core's `KeyLabel`, D-17): the
-     * key's own label when the person gave it one that is not the wallet's
-     * name, else its place's title — never read off the record here.
+     * The key row of the hand-off card (the core's `KeyLabel`, D-17): "Confirm
+     * with | <the key>" — the key's own label when the person gave it one that
+     * is not the wallet's name, else its place's title. Never read off the
+     * record here.
      */
     val keyLabel: KeyLabel? = null,
 ) {
-    /** The core's `KeyLabel`: [name] drawn as it is, else the translation of [placeKey]. */
-    data class KeyLabel(val name: String?, val placeKey: String) {
-        fun text(t: (String) -> String): String = name?.takeIf { it.isNotBlank() } ?: placeKey.takeIf { it.isNotBlank() }?.let(t).orEmpty()
+    /**
+     * The core's `KeyLabel` — one label | value row, drawn like the signing
+     * sheet's other rows: the label is the translation of [labelKey]
+     * ("Confirm with", or "New key on" while a ceremony makes the key), the
+     * value [name] as it is, else the translation of [placeKey].
+     */
+    data class KeyLabel(val name: String?, val placeKey: String, val labelKey: String) {
+        /** The row's label, in the person's words. */
+        fun label(t: (String) -> String): String = labelKey.takeIf { it.isNotBlank() }?.let(t).orEmpty()
+
+        /** The row's value: the key's own name, else its place. */
+        fun value(t: (String) -> String): String = name?.takeIf { it.isNotBlank() } ?: placeKey.takeIf { it.isNotBlank() }?.let(t).orEmpty()
+
+        companion object {
+            /** A `KeyLabel` as the core wrote it (`{name?, place_key, label_key}`); `null` when it does not read. */
+            fun of(json: JSONObject?): KeyLabel? {
+                json ?: return null
+                return KeyLabel(
+                    name = json.optString("name").takeIf { json.has("name") && !json.isNull("name") && it.isNotBlank() },
+                    placeKey = json.optString("place_key"),
+                    labelKey = json.optString("label_key"),
+                )
+            }
+
+            /**
+             * A key ceremony's row while it waits on its page — the core's
+             * `Ceremony::key_label`: "New key on | Phone or tablet" while a key
+             * is made, "Confirm with | This device" when one signs in or
+             * proves. `null` for an operation that is not a ceremony.
+             */
+            fun ofCeremony(operationJson: String): KeyLabel? =
+                runCatching { trustedSignerCeremonyKeyLabel(operationJson) }.getOrNull()
+                    ?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?.let(::of)
+        }
     }
 
     companion object {
@@ -57,12 +92,7 @@ data class SigningPlan(
                 credentialId = key?.optString("credential_id")?.ifEmpty { null },
                 transports = key?.optString("transports").orEmpty(),
                 method = key?.optString("method")?.let { wire -> KeyMethod.entries.firstOrNull { it.wire == wire } },
-                keyLabel = plan.optJSONObject("key_label")?.let { label ->
-                    KeyLabel(
-                        name = label.optString("name").takeIf { label.has("name") && !label.isNull("name") && it.isNotBlank() },
-                        placeKey = label.optString("place_key"),
-                    )
-                },
+                keyLabel = KeyLabel.of(plan.optJSONObject("key_label")),
             )
         }
     }
@@ -72,8 +102,9 @@ data class SigningPlan(
  * Why a venue cannot be used for an account — the core's `VenueBlock`
  * (`signing_venue.rs`), carried typed on the sign and send wires
  * (`SignSubmitOutcome.VenueBlocked`, `SendSubmitFailure.VenueBlocked`,
- * `SignErrorNotice.venue_block`, `SendView.tx_venue_block`). The sentence is
- * [key] with [vars]; nothing here decides which.
+ * `SignErrorNotice.venue_block`, `SendView.tx_venue_block`). Read here only to
+ * carry it; its sentence is the core's (`venueBlockLine`: the corpus key and
+ * the values it takes) — nothing here decides which words a block gets.
  */
 @Serializable
 sealed class VenueBlock {
@@ -92,22 +123,11 @@ sealed class VenueBlock {
     @SerialName("not_on_web")
     data object NotOnWeb : VenueBlock()
 
-    /** The core's `VenueBlock::key()`. */
-    fun key(): String = when (this) {
-        is AppCannotReach -> "settings.venue.blockedApp"
-        is PageOnOtherDomain -> "settings.venue.blockedPage"
-        NotOnWeb -> "settings.venue.blockedWeb"
-    }
+    /** The block as the core writes it, for the core to read back. */
+    fun json(): String = Wire.json.encodeToString(serializer(), this)
 
-    /** The facts [key]'s sentence names. */
-    fun vars(): Map<String, String> = when (this) {
-        is AppCannotReach -> mapOf("domain" to domain)
-        is PageOnOtherDomain -> mapOf("pageDomain" to page_domain, "domain" to domain)
-        NotOnWeb -> emptyMap()
-    }
-
-    /** The reason in the person's words. */
-    fun words(t: (String, Map<String, String>) -> String): String = t(key(), vars())
+    /** The reason in the person's words: the core's line (`venueBlockLine`), translated. */
+    fun words(t: (String, Map<String, String>) -> String): String = VenueWords.line(json(), t)
 
     companion object {
         /** A block as the core wrote it (`signing_plan`'s `blocked`); `null` when it does not read. */
@@ -119,12 +139,13 @@ sealed class VenueBlock {
 /** The words of a venue: an unreachable venue's reason. */
 object VenueWords {
     /**
-     * A venue's refusal in the person's words: the core's `VenueBlock::key()`
-     * — `settings.venue.blockedApp` (`{{domain}}`), `settings.venue.blockedPage`
-     * (`{{pageDomain}}`, `{{domain}}`) or `settings.venue.blockedWeb` (no
-     * facts; never an R1 answer on a phone, handled so a block from anywhere
-     * reads). This only fills the facts in.
+     * A venue's refusal in the person's words — the core's `venue_block_line`
+     * (`VenueBlock::key()` with `VenueBlock::vars()`), translated. Empty only
+     * when the core cannot read [block]; a caller that disables a choice for
+     * it still does, by the block's presence.
      */
-    fun block(block: JSONObject, t: (String, Map<String, String>) -> String): String =
-        (VenueBlock.of(block) ?: VenueBlock.AppCannotReach(block.optString("domain"))).words(t)
+    fun block(block: JSONObject, t: (String, Map<String, String>) -> String): String = line(block.toString(), t)
+
+    internal fun line(blockJson: String, t: (String, Map<String, String>) -> String): String =
+        runCatching { venueBlockLine(blockJson) }.getOrNull()?.let { t(it.key, it.vars) }.orEmpty()
 }

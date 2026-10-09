@@ -385,6 +385,9 @@ fun VelaNavHost(
     // address opens it (see IdenticonImage.tappable), so twelve screens do not
     // each carry a sheet of their own.
     var identiconViewer by remember { mutableStateOf<String?>(null) }
+    // Spec 102 D4: the send confirm is on screen — a send's hand-off card is
+    // drawn there, in its button's place, and not as a sheet over it.
+    var sendConfirmUp by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
         NavHost(
             navController = navController,
@@ -1140,8 +1143,39 @@ fun VelaNavHost(
                         drawn.copy(base = base, sheet = sheet)
                     }
                     val activity = context
+                    // Spec 102 D4: a send on a page venue hands off in the confirm
+                    // itself — the card where its button was, under the page's own
+                    // fee row (a fee is on screen once). While the confirm is up the
+                    // standalone sheet stays down; it is only for a hand-off that
+                    // finds no confirm on screen.
+                    val onConfirmPage = flowModel.base is FlowBase.SendConfirm
+                    DisposableEffect(onConfirmPage) {
+                        sendConfirmUp = onConfirmPage
+                        onDispose { sendConfirmUp = false }
+                    }
+                    val sendHandoffChecks by application.container.signerPages.checks.collectAsStateWithLifecycle()
+                    val sendHandoff = (trustedSignerState as? TrustedSignerChannel.State.Handoff)
+                        ?.takeIf { onConfirmPage }
+                        ?.let { card ->
+                            sendHandoffChecks.size // read: a landed check redraws the line
+                            app.getvela.wallet.feature.flows.SendHandoff(
+                                card = app.getvela.wallet.feature.signing.SigningLive.handoffModel(
+                                    app.getvela.wallet.feature.signing.SigningLive.Handoff(
+                                        page = card.page,
+                                        key = card.key,
+                                        line = application.container.signerPages.line(card.page),
+                                    ),
+                                    strings,
+                                ),
+                                cancel = strings.t("common.cancel"),
+                                onOpen = trustedSigner::open,
+                                onCancel = trustedSigner::cancel,
+                                onTrust = { returnScope.launch { runCatching { application.container.signerPages.trust(card.page) } } },
+                            )
+                        }
                     FlowHost(
                         model = flowModel,
+                        sendHandoff = sendHandoff,
                         onBack = {
                             if (sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt) {
                                 flows.close()
@@ -2235,7 +2269,9 @@ fun VelaNavHost(
                     m = SettingsLive.withSigningPages(m, signingPages, pageLine, strings) { url ->
                         application.container.signerPages.versionToTrust(url)
                     }
-                    m = SettingsLive.withVenue(m, sessionView.activeRow, signingPages.saved, pageLine, strings)
+                    m = SettingsLive.withVenue(m, sessionView.activeRow, signingPages.saved, pageLine, strings) { url ->
+                        application.container.signerPages.versionToTrust(url)
+                    }
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
@@ -2596,15 +2632,17 @@ fun VelaNavHost(
         val csStrings = LocalVelaStrings.current
         // Spec 102 D4: a send on a page venue raises the hand-off card first —
         // where, with which key, what is trusted about the page — and the
-        // page opens on its Open.
+        // page opens on its Open. The send confirm draws it in place (above);
+        // this sheet is for a hand-off that finds no confirm on screen.
         val handing = trustedSignerSheet as? TrustedSignerChannel.State.Handoff
-        if (handing != null && signingUp == null) {
+        if (handing != null && signingUp == null && !sendConfirmUp) {
             val handoffChecks by application.container.signerPages.checks.collectAsStateWithLifecycle()
             handoffChecks.size // read: a landed check redraws the line
-            // Core round 5: the card restates what the send was priced at —
-            // its fee session and speed control, through `handoffFeeRow` —
-            // drawn with the send screen's own fee line. Only a send raises
-            // this card (the dApp sheet draws its own, under its fee row).
+            // No send screen under this sheet shows the fee, so the card
+            // restates what the send was priced at — its fee session and speed
+            // control, through `handoffFeeRow` — drawn with the send screen's
+            // own fee line: one quiet row, no control (D-18). A fee is on
+            // screen once.
             val handoffSend = application.container.send
             val sendFeeJson by handoffSend.feeJson.collectAsStateWithLifecycle()
             val sendSpeedJson by handoffSend.speedJson.collectAsStateWithLifecycle()
@@ -2649,6 +2687,8 @@ fun VelaNavHost(
                     nativeSymbol = "", walletName = "", walletAddress = "", trustedSignerWaiting = true,
                     trustedSignerUnreachable = (trustedSignerSheet as? TrustedSignerChannel.State.Waiting)?.unreachable == true,
                     trustedSignerTitle = (trustedSignerSheet as? TrustedSignerChannel.State.Waiting)?.title,
+                    // Spec 102: a ceremony's key row ("New key on | …", "Confirm with | …").
+                    trustedSignerKey = (trustedSignerSheet as? TrustedSignerChannel.State.Waiting)?.key,
                 ),
             )?.let { waitModel ->
                 app.getvela.wallet.feature.signing.TrustedSignerWaitingSheet(

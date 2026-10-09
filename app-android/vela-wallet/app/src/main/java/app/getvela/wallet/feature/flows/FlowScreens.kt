@@ -43,6 +43,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -1809,6 +1814,12 @@ fun SendConfirmBody(
     onNoticeSecondary: () -> Unit = {},
     /** Issue #466: the stop's "Report this". */
     onReport: () -> Unit = {},
+    /**
+     * Spec 102 D4: the send signs on a page — the hand-off card stands where
+     * the confirm was, under this page's own fee row (so the card has none:
+     * a fee is on screen once). `null`: the confirm.
+     */
+    handoff: SendHandoff? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1946,7 +1957,10 @@ fun SendConfirmBody(
                 }
             }
         }
-        model.notice?.let { notice ->
+        // The card is the whole action while it is up: the signing notice
+        // ("waiting for biometric confirmation") and its Cancel are a passkey
+        // ceremony's, and this one happens on the page.
+        model.notice?.takeIf { handoff == null }?.let { notice ->
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             Column(
                 modifier = Modifier
@@ -1990,13 +2004,57 @@ fun SendConfirmBody(
             }
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl4))
-        FlowCta(
-            label = model.cta,
-            onClick = onConfirm,
-            accent = true,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = model.ctaEnabled,
+        if (handoff != null) {
+            SendHandoffCard(handoff)
+        } else {
+            FlowCta(
+                label = model.cta,
+                onClick = onConfirm,
+                accent = true,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = model.ctaEnabled,
+            )
+        }
+    }
+}
+
+/**
+ * Spec 102 D4: the hand-off card in the send confirm's button's place, and
+ * its Cancel. Brought into view once, when it first appears — the confirm
+ * was tapped at the bottom of a page that may scroll, and Open and Cancel
+ * must not be left below the fold or under the navigation bar (the page's
+ * own bottom room is brought in with them).
+ */
+@Composable
+private fun SendHandoffCard(handoff: SendHandoff) {
+    val intoView = remember { BringIntoViewRequester() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val below = WindowInsets.navigationBars.getBottom(density) +
+        with(density) { VelaSpacing.xl3.toPx() }
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var revealed by remember { mutableStateOf(false) }
+    LaunchedEffect(revealed) {
+        if (revealed) {
+            intoView.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, size.width.toFloat(), size.height + below))
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(intoView)
+            .onGloballyPositioned {
+                size = it.size
+                if (!revealed) revealed = true
+            },
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        app.getvela.wallet.feature.signing.components.HandoffCard(
+            handoff.card,
+            enabled = handoff.card.integrity.opens,
+            onOpen = handoff.onOpen,
+            onTrust = handoff.onTrust,
         )
+        VelaSecondaryButton(handoff.cancel, handoff.onCancel, Modifier.fillMaxWidth())
     }
 }
 

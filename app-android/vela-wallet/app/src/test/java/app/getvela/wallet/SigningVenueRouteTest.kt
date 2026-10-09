@@ -114,8 +114,11 @@ class SigningVenueRouteTest {
         assertEquals(credential, route.credentialId)
         assertTrue("R5: the key route rides to the page", route.keyRouteJson!!.contains("\"credential_id\":\"aabbcc\""))
 
-        val handoff = runBlocking { spine(portWith(withPage)).handoffFor(address) }
-        assertEquals(UserOpSpine.Handoff("https://sign.getvela.app/", "Key 1"), handoff)
+        val handoff = runBlocking { spine(portWith(withPage)).handoffFor(address) }!!
+        assertEquals("https://sign.getvela.app/", handoff.page)
+        // The key row, untranslated until drawn: "Confirm with | Key 1".
+        assertEquals("Key 1", handoff.key!!.name)
+        assertEquals("componentsUi.signing.confirmWithLabel", handoff.key!!.labelKey)
 
         // The same account in Vela: no card.
         val inVela = record(null, venue = """{"type":"in_vela"}""", signInKey = true)

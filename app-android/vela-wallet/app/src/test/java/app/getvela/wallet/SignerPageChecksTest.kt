@@ -410,7 +410,8 @@ class SignerPageChecksTest {
     private fun en(key: String, vars: Map<String, String>) = strings.t(key, vars)
 
     /**
-     * D-17: "Confirm with {{key}}" is the plan's `key_label` — the key's own
+     * D-17: the hand-off card's key row is the plan's `key_label` — its label
+     * the corpus key the core names ("Confirm with"), its value the key's own
      * name when the person gave it one that is not the wallet's, else its
      * place's title (the card's "Signing account" row already names the wallet).
      */
@@ -418,16 +419,37 @@ class SignerPageChecksTest {
     fun `the hand-off card names the key by the plan's key label`() {
         val named = JSONObject(record("""{"type":"page","url":"https://sign.getvela.app/"}""", domain = "getvela.app"))
         named.getJSONArray("keys").getJSONObject(0).put("name", "YubiKey 5C")
-        assertEquals("YubiKey 5C", SigningPlan.of(named.toString())!!.keyLabel!!.text(strings::t))
+        val label = SigningPlan.of(named.toString())!!.keyLabel!!
+        assertEquals("Confirm with", label.label(strings::t))
+        assertEquals("YubiKey 5C", label.value(strings::t))
         // The founding key carries the wallet's name ("Savings"): named by its place.
         val founding = SigningPlan.of(record("""{"type":"page","url":"https://sign.getvela.app/"}""", domain = "getvela.app"))!!
         assertNull(founding.keyLabel!!.name)
-        assertEquals("This device", founding.keyLabel!!.text(strings::t))
+        assertEquals("This device", founding.keyLabel!!.value(strings::t))
         val zh = app.getvela.wallet.core.i18n.I18nRuntime { lang -> java.io.File(System.getProperty("vela.repo.root"), "assets/i18n/$lang.json").readBytes() }
             .apply { initialize("zh") }
-        assertEquals("用 YubiKey 5C 确认", zh.t("componentsUi.signing.handoffKey", mapOf("key" to SigningPlan.of(named.toString())!!.keyLabel!!.text(zh::t))))
+        // A label | value row, not a sentence: 「确认方式 | YubiKey 5C」.
+        assertEquals("确认方式" to "YubiKey 5C", label.label(zh::t) to label.value(zh::t))
+        assertEquals("确认方式" to "这台设备", founding.keyLabel!!.label(zh::t) to founding.keyLabel!!.value(zh::t))
     }
 
+    /**
+     * Spec 102 integration: a key ceremony's row is the core's
+     * (`trustedSignerCeremonyKeyLabel`) — "New key on | <place>" while a key
+     * is made, "Confirm with | <place>" when one signs in or proves; never a
+     * name, and nothing for an operation that is not a ceremony.
+     */
+    @Test
+    fun `a ceremony's key row is the core's`() {
+        val create = SigningPlan.KeyLabel.ofCeremony("""{"type":"register_passkey","name":"Savings","method":"hybrid"}""")!!
+        assertNull(create.name)
+        assertEquals("New key on" to "Phone or tablet", create.label(strings::t) to create.value(strings::t))
+        val signIn = SigningPlan.KeyLabel.ofCeremony("""{"type":"authenticate_passkey","method":"security_key"}""")!!
+        assertEquals("Confirm with" to "USB security key", signIn.label(strings::t) to signIn.value(strings::t))
+        assertNull(SigningPlan.KeyLabel.ofCeremony("""{"type":"sign_user_op"}"""))
+    }
+
+    /** The refusal's words are the core's (`venueBlockLine`): its key and the values it takes — no table here. */
     @Test
     fun `a venue refusal reads in the person's language, the web's included`() {
         val t = { key: String, vars: Map<String, String> -> strings.t(key, vars) }
