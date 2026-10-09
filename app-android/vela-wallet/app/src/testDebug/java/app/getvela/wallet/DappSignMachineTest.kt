@@ -694,10 +694,10 @@ class DappSignMachineTest {
         seedAccount(); scriptRelay()
         val c = controller()
         c.open(transfer())
-        // The stored default first — `fast` for everybody who never chose.
+        // The stored default first — `standard` for everybody who never chose.
         val first = withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        assertEquals(FeeTier.Fast, first.fee!!.tier)
-        assertEquals(FeeTier.Fast, c.speed.value.tier)
+        assertEquals(FeeTier.Standard, first.fee!!.tier)
+        assertEquals(FeeTier.Standard, c.speed.value.tier)
         c.toggleSpeed()
         c.pickSpeed(FeeTier.Slow)
         assertTrue("a pick is one-shot, and says so", withTimeout(10_000) { c.speed.first { it.picked } }.tier == FeeTier.Slow)
@@ -709,7 +709,7 @@ class DappSignMachineTest {
         c.approve()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertTrue("the wire names the speed picked: $events", "relay.tier:slow" in events)
-        assertFalse("never the speed walked away from: $events", "relay.tier:fast" in events)
+        assertFalse("never the speed walked away from: $events", "relay.tier:standard" in events)
         withTimeout(10_000) { c.closed.first { it } }
     }
 

@@ -152,7 +152,14 @@ class SpeedControl(
         fun start(): FeeSession {
             host.start()
             // Every commit, not every distinct view: see `CoreHost.commits`.
-            watch = scope.launch { host.commits.collect { reportQuotes() } }
+            // The whole reconcile, not just the report: a session that settled
+            // at another tier than the one in force — asked before the speed
+            // core applied the stored speed, say — is re-priced now that it
+            // is no longer measuring. Run only on a speed change, that pass
+            // could miss the moment for good: the speed core's view need not
+            // change when the session settles, and the sheet then waited on
+            // "working out the fee" under a speed it was never priced at.
+            watch = scope.launch { host.commits.collect { speedPass() } }
             return this
         }
 

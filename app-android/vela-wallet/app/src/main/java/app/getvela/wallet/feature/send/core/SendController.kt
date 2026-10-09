@@ -60,7 +60,7 @@ class SendController(
     /** Spec 046 US3: a scanned chain the wallet lacks goes to the settings machine. */
     addNetwork: suspend (Long) -> SendAddNetworkOutcome = { SendAddNetworkOutcome.NotFound },
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
-    private val preferredTier: () -> FeeTier = { FeeTier.Fast },
+    private val preferredTier: () -> FeeTier = { FeeTier.Standard },
     private val numberPreset: () -> String = { "comma_dot" },
     /** Spec 071: the Trusted Signer, for an account that signed in through it. */
     trustedSigner: () -> TrustedSigner? = { null },

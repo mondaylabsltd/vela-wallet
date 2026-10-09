@@ -15,10 +15,10 @@ import kotlinx.serialization.Serializable
  * [FeeTierPrefEvent.UserChose].
  */
 
-/** `FeeTierPrefView`. `tier` is always a real tier — the factory `fast` when nothing was chosen. */
+/** `FeeTierPrefView`. `tier` is always a real tier — the factory `standard` when nothing was chosen. */
 @Serializable
 data class FeeTierPrefView(
-    val tier: FeeTier = FeeTier.Fast,
+    val tier: FeeTier = FeeTier.Standard,
     /** `false` ⇒ the factory default is showing, not a choice. */
     val committed: Boolean = false,
     /** The tiers Settings may offer, fastest first — never the dead `rapid`. */

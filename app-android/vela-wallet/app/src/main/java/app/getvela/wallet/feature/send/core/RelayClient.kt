@@ -263,6 +263,9 @@ class RelayClient(
                 max_priority_fee_per_gas = decimalOfHex(row.opt("maxPriorityFeePerGas")),
                 network_fee_per_gas = decimalOfHex(row.opt("networkFeePerGas")),
                 relayer_fee_per_gas = decimalOfHex(row.opt("relayerFeePerGas")),
+                // The relay's published in-band price for the tier; the core
+                // pays it on the operation's settlement gas.
+                in_band_fee_per_gas = decimalOfHex(row.opt("inBandFeePerGas")),
             )
         }
         return rows
@@ -368,6 +371,12 @@ class RelayClient(
             val verificationGasLimit: String,
             val callGasLimit: String,
             val preVerificationGas: String,
+            /**
+             * `settlementGas`: the gas the relay bills the operation against.
+             * `null` from a relay that does not publish it — never "0" as a
+             * stand-in. The core reads it for the fee and for the limits signed.
+             */
+            val settlementGas: String? = null,
         ) : EstimateAnswer()
 
         /** The relay answered and refused; `message` is its sentence, for the log. */
@@ -388,6 +397,7 @@ class RelayClient(
             verificationGasLimit = decimalOfHex(result.opt("verificationGasLimit")) ?: return EstimateAnswer.Refused("verificationGasLimit missing"),
             callGasLimit = decimalOfHex(result.opt("callGasLimit")) ?: return EstimateAnswer.Refused("callGasLimit missing"),
             preVerificationGas = decimalOfHex(result.opt("preVerificationGas")) ?: return EstimateAnswer.Refused("preVerificationGas missing"),
+            settlementGas = decimalOfHex(result.opt("settlementGas"))?.takeIf { it != "0" },
         )
     }
 

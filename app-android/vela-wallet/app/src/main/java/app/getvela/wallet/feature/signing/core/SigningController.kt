@@ -85,7 +85,7 @@ class SigningController(
      * is `fast` for everybody who never chose, until the sheet's own speed
      * control picks another. The number preset writes each speed's gas bid.
      */
-    private val preferredTier: () -> FeeTier = { FeeTier.Fast },
+    private val preferredTier: () -> FeeTier = { FeeTier.Standard },
     private val numberPreset: () -> String = { "comma_dot" },
     /** `null`: the core's answer window (`dappReceiptWaitMs`, spec 082 RA12); tests pin a number. */
     receiptWaitMs: Long? = null,

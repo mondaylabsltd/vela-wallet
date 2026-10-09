@@ -113,6 +113,12 @@ data class FeeBundlerQuote(
     val max_priority_fee_per_gas: String? = null,
     val network_fee_per_gas: String? = null,
     val relayer_fee_per_gas: String? = null,
+    /**
+     * The relay's published in-band price for this tier, per unit of the
+     * operation's settlement gas. `null` from a relay that publishes none —
+     * the core then prices the fee the older way.
+     */
+    val in_band_fee_per_gas: String? = null,
 )
 
 /**
@@ -153,6 +159,8 @@ sealed class FeeGasOutcome {
         val verification_gas_limit: String,
         val call_gas_limit: String,
         val pre_verification_gas: String,
+        /** The relay's `settlementGas`; `null` when it published none. */
+        val settlement_gas: String? = null,
     ) : FeeGasOutcome()
 
     @Serializable

@@ -825,8 +825,8 @@ object SendLive {
      */
     class SpeedInputs(val view: FeeSpeedView, val feeViewOf: (FeeTier) -> FeeView?)
 
-    /** A tier as one this build offers: the dead `rapid` reads as the factory `fast`. */
-    internal fun offered(tier: FeeTier): FeeTier = if (tier == FeeTier.Rapid) FeeTier.Fast else tier
+    /** A tier as one this build offers: the dead `rapid` reads as the factory default, `standard`. */
+    internal fun offered(tier: FeeTier): FeeTier = if (tier == FeeTier.Rapid) FeeTier.Standard else tier
 
     private fun tierName(tier: FeeTier, s: VelaStrings): String = s.t(
         when (offered(tier)) {
