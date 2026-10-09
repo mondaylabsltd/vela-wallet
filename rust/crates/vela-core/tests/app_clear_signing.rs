@@ -2866,7 +2866,7 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     let view = sut.view();
     assert!(view.resolved);
     let result = view.result.expect("a first-party result");
-    assert_eq!(result.intent, "Back up public keys");
+    assert_eq!(result.intent, "Copy this wallet's record");
     assert_eq!(
         result.contract_name.as_deref(),
         Some("Vela passkey registry")
@@ -2876,19 +2876,26 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert!(!result.best_effort && !result.partial);
     assert_eq!(result.risk, ClearRisk::Safe);
     // The wallet's own sheet draws no header chip, so the rows say the
-    // network first; no name row — the footer's signing account names the
-    // wallet.
+    // network first. The wallet's name has a row: it goes public with the
+    // record, and the sheet says what goes public.
     let rows: Vec<(&str, &str)> = result
         .fields
         .iter()
         .map(|f| (f.label.as_str(), f.value.as_str()))
         .collect();
+    let name = vela_core::registry_backup::describe_register_call(
+        &vela_core::primitives::from_hex(&registry_backup_calldata()).unwrap(),
+    )
+    .unwrap()
+    .wallet_name;
+    assert!(!name.is_empty());
     assert_eq!(
         rows,
         vec![
             ("Network", "Ethereum"),
             ("Address", "0x88cCA0…266894"),
-            ("Public keys", "3"),
+            ("Wallet name", name.as_str()),
+            ("Keys included", "3"),
         ]
     );
     assert_eq!(
@@ -2904,6 +2911,7 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
         vec![
             Some(ClearTerm::LabelNetwork),
             Some(ClearTerm::LabelAddress),
+            Some(ClearTerm::LabelWalletName),
             Some(ClearTerm::LabelPublicKeys),
         ]
     );
@@ -2914,12 +2922,18 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert_eq!(ClearTerm::LabelNetwork.leaf(), "labelNetwork");
     assert_eq!(ClearTerm::LabelAddress.leaf(), "labelAddress");
     assert_eq!(ClearTerm::LabelPublicKeys.leaf(), "labelPublicKeys");
-    // The confirm reads the intent — "Back up public keys", not a bare
-    // "Confirm".
+    assert_eq!(ClearTerm::LabelWalletName.leaf(), "labelWalletName");
+    // A receipt written before the rename still reads as the same intent.
+    assert_eq!(
+        ClearTerm::of("Back up public keys"),
+        Some(ClearTerm::IntentBackUpPublicKeys)
+    );
+    // The confirm reads the intent — "Copy this wallet's record", not a
+    // bare "Confirm".
     assert_eq!(
         view.confirm,
         ClearConfirm::ConfirmIntent {
-            intent: "Back up public keys".to_owned(),
+            intent: "Copy this wallet's record".to_owned(),
             intent_term: Some(ClearTerm::IntentBackUpPublicKeys),
         }
     );
@@ -2957,7 +2971,7 @@ fn the_registry_backup_names_the_network_it_goes_to() {
             .iter()
             .map(|(label, _)| label.as_str())
             .collect::<Vec<_>>(),
-        vec!["Address", "Public keys"],
+        vec!["Address", "Wallet name", "Keys included"],
         "no Network row on a chain the wallet does not ship"
     );
 }

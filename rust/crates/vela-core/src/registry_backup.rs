@@ -93,8 +93,91 @@ pub enum BackupState {
     /// It does not; `call` is the one transaction that would put it there.
     NotBackedUp,
     /// Somebody did not answer, or answered something this build cannot trust.
-    /// Never drawn as either verdict.
+    /// Never drawn as either verdict. Asking again may answer it.
     CouldNotCheck,
+    /// Gnosis answered, and what it holds can never be copied: a unit
+    /// registered before registry V13 stored no payload (empty bytes), or the
+    /// stored bytes are not this unit's `register(...)`. Asking again gets
+    /// the same answer, so it is a calm end state with nothing to tap — not
+    /// a "could not check" that retries forever.
+    NotCopyable,
+}
+
+/// The tone of the backup row's second line. Never a caution: a copy is
+/// optional and costs a fee, so "not copied yet" is a state, not a defect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupTone {
+    Neutral,
+    Positive,
+}
+
+/// What tapping the backup row does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupAction {
+    /// Nothing — the row is a statement.
+    None,
+    /// Open the signing sheet with [`BackupStep::Done::call`].
+    Copy,
+    /// Run the walk again from the start.
+    Retry,
+}
+
+/// The Keys block's backup row, as every shell draws it: one rule for the
+/// words, the tone and the tap, where each shell used to map the state
+/// itself (and iOS drew "could not check" with no retry).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackupRow {
+    /// [`TITLE_KEY`].
+    pub title_key: String,
+    pub subtitle_key: String,
+    pub tone: BackupTone,
+    pub action: BackupAction,
+}
+
+/// The row's title: "Copy this wallet's record to Ethereum".
+pub const TITLE_KEY: &str = "settingsModals.backup.title";
+/// The explanation under the Keys block.
+pub const EXPLAIN_KEY: &str = "settingsModals.backup.explain";
+/// The second line while the walk runs (before any [`BackupStep::Done`]).
+pub const CHECKING_KEY: &str = "componentsUi.funding.checking";
+
+impl BackupState {
+    /// The row for this state; `None` when nothing is drawn (no registry on
+    /// the target chain, or no record to copy).
+    #[must_use]
+    pub fn row(self) -> Option<BackupRow> {
+        let (subtitle, tone, action) = match self {
+            Self::Unavailable | Self::NotRegistered => return None,
+            Self::BackedUp => (
+                "settingsModals.backup.backedUp",
+                BackupTone::Positive,
+                BackupAction::None,
+            ),
+            Self::NotBackedUp => (
+                "settingsModals.backup.notBackedUp",
+                BackupTone::Neutral,
+                BackupAction::Copy,
+            ),
+            Self::CouldNotCheck => (
+                "settingsModals.backup.couldNotCheck",
+                BackupTone::Neutral,
+                BackupAction::Retry,
+            ),
+            Self::NotCopyable => (
+                "settingsModals.backup.cannotCopy",
+                BackupTone::Neutral,
+                BackupAction::None,
+            ),
+        };
+        Some(BackupRow {
+            title_key: TITLE_KEY.to_owned(),
+            subtitle_key: subtitle.to_owned(),
+            tone,
+            action,
+        })
+    }
 }
 
 /// The one call that performs the backup, on [`TARGET_CHAIN`].
@@ -121,14 +204,22 @@ pub enum BackupStep {
         call: Option<BackupCall>,
         /// The group's unit id on Gnosis, once known — for a receipt line.
         unit_id: Option<u64>,
+        /// [`BackupState::row`] — what the Keys block draws for `state`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row: Option<BackupRow>,
     },
 }
 
 fn done(state: BackupState) -> BackupStep {
+    done_with(state, None, None)
+}
+
+fn done_with(state: BackupState, call: Option<BackupCall>, unit_id: Option<u64>) -> BackupStep {
     BackupStep::Done {
         state,
-        call: None,
-        unit_id: None,
+        call,
+        unit_id,
+        row: state.row(),
     }
 }
 
@@ -372,11 +463,7 @@ pub fn step_to(
         return could_not();
     };
     if exists {
-        return BackupStep::Done {
-            state: BackupState::BackedUp,
-            call: None,
-            unit_id: Some(unit_id),
-        };
+        return done_with(BackupState::BackedUp, None, Some(unit_id));
     }
 
     // 5. The bytes that would put it there.
@@ -387,22 +474,26 @@ pub fn step_to(
     let Some(payload) = returned(payload)
         .and_then(|bytes| decode("(bytes)", &bytes))
         .and_then(|values| values.first()?.as_bytes().map(<[u8]>::to_vec))
-        .filter(|payload| payload_is_this_unit(payload, &unit))
     else {
-        // Includes a unit migrated from before V13 stored payloads (empty
-        // bytes): there is nothing safe to offer.
+        // Nobody answered, or not in the shape of `bytes`: ask again.
         return could_not();
     };
-    BackupStep::Done {
-        state: BackupState::NotBackedUp,
-        call: Some(BackupCall {
+    if !payload_is_this_unit(&payload, &unit) {
+        // Gnosis answered, and the answer will not change: a unit migrated
+        // from before V13 stored payloads (empty bytes), or bytes about
+        // something else. There is nothing safe to offer, now or later.
+        return done_with(BackupState::NotCopyable, None, Some(unit_id));
+    }
+    done_with(
+        BackupState::NotBackedUp,
+        Some(BackupCall {
             chain_id: target_chain,
             to: REGISTRY.to_owned(),
             value: "0".to_owned(),
             data: primitives::to_hex(&payload, true),
         }),
-        unit_id: Some(unit_id),
-    }
+        Some(unit_id),
+    )
 }
 
 /// [`step`] over JSON, for the bindings: `answers_json` is a `LookupAnswer[]`,
@@ -619,6 +710,7 @@ mod tests {
                     data: primitives::to_hex(&bytes, true),
                 }),
                 unit_id: Some(10),
+                row: BackupState::NotBackedUp.row(),
             }
         );
     }
@@ -640,6 +732,7 @@ mod tests {
                 state: BackupState::BackedUp,
                 call: None,
                 unit_id: Some(10),
+                row: BackupState::BackedUp.row(),
             }
         );
     }
@@ -673,11 +766,90 @@ mod tests {
         ] {
             let mut transcript = head.clone();
             transcript.push(payload(wrong));
+            let got = step(SAFE, &founding_key(), &transcript);
             assert_eq!(
-                step(SAFE, &founding_key(), &transcript),
-                done(BackupState::CouldNotCheck)
+                got,
+                done_with(BackupState::NotCopyable, None, Some(10)),
+                "an answer that will never change is an end, not a retry"
             );
+            let BackupStep::Done { call, row, .. } = got else {
+                unreachable!()
+            };
+            assert_eq!(call, None, "nothing is offered");
+            assert_eq!(row.map(|r| r.action), Some(BackupAction::None));
         }
+    }
+
+    /// The row every shell draws, by state: never a caution, a retry only
+    /// where asking again can change the answer, nothing for a wallet with
+    /// no record or no registry to copy to.
+    #[test]
+    fn each_state_has_one_row() {
+        let row = |state: BackupState| state.row().map(|r| (r.subtitle_key, r.tone, r.action));
+        assert_eq!(row(BackupState::Unavailable), None);
+        assert_eq!(row(BackupState::NotRegistered), None);
+        assert_eq!(
+            row(BackupState::BackedUp),
+            Some((
+                "settingsModals.backup.backedUp".to_owned(),
+                BackupTone::Positive,
+                BackupAction::None
+            ))
+        );
+        assert_eq!(
+            row(BackupState::NotBackedUp),
+            Some((
+                "settingsModals.backup.notBackedUp".to_owned(),
+                BackupTone::Neutral,
+                BackupAction::Copy
+            ))
+        );
+        assert_eq!(
+            row(BackupState::CouldNotCheck),
+            Some((
+                "settingsModals.backup.couldNotCheck".to_owned(),
+                BackupTone::Neutral,
+                BackupAction::Retry
+            ))
+        );
+        assert_eq!(
+            row(BackupState::NotCopyable),
+            Some((
+                "settingsModals.backup.cannotCopy".to_owned(),
+                BackupTone::Neutral,
+                BackupAction::None
+            ))
+        );
+        for state in [
+            BackupState::BackedUp,
+            BackupState::NotBackedUp,
+            BackupState::CouldNotCheck,
+            BackupState::NotCopyable,
+        ] {
+            assert_eq!(state.row().map(|r| r.title_key), Some(TITLE_KEY.to_owned()));
+        }
+    }
+
+    #[test]
+    fn the_row_rides_on_the_wire_and_old_json_still_reads() {
+        let json = serde_json::to_value(done(BackupState::NotCopyable))
+            .unwrap_or_else(|e| unreachable!("serialize: {e}"));
+        assert_eq!(json["state"], "not_copyable");
+        assert_eq!(
+            json["row"]["subtitle_key"],
+            "settingsModals.backup.cannotCopy"
+        );
+        assert_eq!(json["row"]["tone"], "neutral");
+        assert_eq!(json["row"]["action"], "none");
+        let old: BackupStep = serde_json::from_str(
+            r#"{"type":"done","state":"could_not_check","call":null,"unit_id":null}"#,
+        )
+        .unwrap_or_else(|e| unreachable!("old json: {e}"));
+        assert!(matches!(old, BackupStep::Done { row: None, .. }));
+        // Unavailable draws nothing, so carries nothing.
+        let dark = serde_json::to_value(done(BackupState::Unavailable))
+            .unwrap_or_else(|e| unreachable!("serialize: {e}"));
+        assert!(dark.get("row").is_none());
     }
 
     #[test]

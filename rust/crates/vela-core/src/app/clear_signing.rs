@@ -820,7 +820,8 @@ pub enum ClearTerm {
     IntentApproveAllNfts,
     IntentAuthorizeSpending,
     /// The wallet's own registry backup (spec 062): copying its founding
-    /// record's PUBLIC keys to another chain.
+    /// record — its name, its keys' names and public keys — to another
+    /// chain. The id predates the wording ("Copy this wallet's record").
     IntentBackUpPublicKeys,
     IntentBorrow,
     IntentBridge,
@@ -867,6 +868,7 @@ pub enum ClearTerm {
     LabelOwner,
     LabelPay,
     LabelPrice,
+    /// How many keys a registry record carries ("Keys included").
     LabelPublicKeys,
     LabelQuantities,
     LabelQuantity,
@@ -879,6 +881,8 @@ pub enum ClearTerm {
     LabelTokenId,
     LabelTokenIds,
     LabelValidUntil,
+    /// The name a registry record publishes for the wallet.
+    LabelWalletName,
     LabelYouPay,
     LabelYouPayMax,
     LabelYouReceive,
@@ -919,6 +923,9 @@ impl ClearTerm {
             "authorize spending of tokens",
             Self::IntentAuthorizeSpending,
         ),
+        ("copy this wallet's record", Self::IntentBackUpPublicKeys),
+        // The same intent's words before they were made honest (records and
+        // receipts written then still say them).
         ("back up public keys", Self::IntentBackUpPublicKeys),
         ("borrow", Self::IntentBorrow),
         ("bridge", Self::IntentBridge),
@@ -962,6 +969,7 @@ impl ClearTerm {
         ("owner", Self::LabelOwner),
         ("pay", Self::LabelPay),
         ("price", Self::LabelPrice),
+        ("keys included", Self::LabelPublicKeys),
         ("public keys", Self::LabelPublicKeys),
         ("quantities", Self::LabelQuantities),
         ("quantity", Self::LabelQuantity),
@@ -974,6 +982,7 @@ impl ClearTerm {
         ("token id", Self::LabelTokenId),
         ("token ids", Self::LabelTokenIds),
         ("valid until", Self::LabelValidUntil),
+        ("wallet name", Self::LabelWalletName),
         ("you pay", Self::LabelYouPay),
         ("you pay (max)", Self::LabelYouPayMax),
         ("you receive", Self::LabelYouReceive),
@@ -1003,10 +1012,13 @@ impl ClearTerm {
     ];
 
     /// Every term, once — for a shell that resolves the words up front.
+    /// (Some terms are read from more than one text; each is listed once.)
     pub fn all() -> impl Iterator<Item = Self> {
         Self::WORDS
             .iter()
-            .map(|(_, term)| *term)
+            .enumerate()
+            .filter(|(at, (_, term))| Self::WORDS[..*at].iter().all(|(_, seen)| seen != term))
+            .map(|(_, (_, term))| *term)
             .chain([Self::ValueUnlimited, Self::ValueAll])
             .chain(Self::HEADLINES)
     }
@@ -3927,6 +3939,11 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
     // chain this build does not ship gets no row rather than a number.
     let network = super::network_admin::builtin_display_name(chain_id)
         .map(|name| field("Network", name.to_owned(), "raw", None));
+    // What the copy makes public on one more chain, as the sheet can say it
+    // in a row: the address, the wallet's NAME (it goes public with the
+    // record — the footer naming the signing account is not the same as
+    // saying so) and how many keys. The explanation under the Keys block
+    // says the rest (the keys' names, credential ids, the authenticator).
     let fields = network
         .into_iter()
         .chain([
@@ -3940,13 +3957,15 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
                 "addressName",
                 Some(address),
             ),
-            field("Public keys", call.key_count.to_string(), "raw", None),
+            field("Wallet name", call.wallet_name.clone(), "raw", None),
+            field("Keys included", call.key_count.to_string(), "raw", None),
         ])
         .collect();
     Some(ClearSignResult {
-        // PUBLIC keys: "back up wallet keys" read as handing over the keys
-        // themselves (founder, 2026-09-19).
-        intent: "Back up public keys".to_owned(),
+        // A COPY of the record, not a backup of keys: "back up public keys"
+        // promised a recovery it does not give, and "back up wallet keys"
+        // read as handing over the keys themselves (founder, 2026-09-19).
+        intent: "Copy this wallet's record".to_owned(),
         contract_name: Some("Vela passkey registry".to_owned()),
         owner: Some("Vela".to_owned()),
         fields,
@@ -7693,7 +7712,14 @@ mod clear_term_tests {
         // The registry backup's own builder (spec 062) writes its words in
         // code, not descriptor JSON.
         words.extend(
-            ["Back up public keys", "Network", "Address", "Public keys"].map(str::to_owned),
+            [
+                "Copy this wallet's record",
+                "Network",
+                "Address",
+                "Wallet name",
+                "Keys included",
+            ]
+            .map(str::to_owned),
         );
         words.sort();
         words.dedup();
