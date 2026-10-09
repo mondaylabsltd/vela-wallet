@@ -9,7 +9,7 @@ import { loadPageLibs, makeChecks } from './test-kit.mjs';
 const ns = loadPageLibs([
   'src/lib/i18n.js', 'src/lib/locales/en.js', 'src/lib/keccak.js', 'src/lib/identicon-features.js',
   'src/lib/identicon.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/fee.js', 'src/lib/logos.js',
-  'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/safeop.js', 'src/lib/digest.js',
+  'src/lib/catalog.js', 'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/safeop.js', 'src/lib/digest.js',
 ]);
 const check = makeChecks();
 const ACCOUNT = '0x88cca0eedbf2c4426110bbfc998f048689266894';

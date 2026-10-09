@@ -270,7 +270,7 @@ try {
     // What belongs HERE is the case the page must still refuse by itself: a
     // request that gives it nothing to compute from. That the page computes the
     // right bytes for the facts it IS given is `ceremony-test`'s, and that a
-    // wrong deployment yields different bytes is `slider-test`'s — both of
+    // wrong deployment yields different bytes is `confirm-test`'s — both of
     // which have a page and an authenticator to finish a ceremony with.
     const inputs = {
       credentialId, publicKey: '04' + '11'.repeat(64), groupPublicKey: '04' + '22'.repeat(64),
@@ -335,7 +335,7 @@ try {
     // proves one is asking" would be asking for proof that cannot exist.
     check('create over a URL fragment with no wallet callback: refused, whatever its context claims',
       /answer would not reach one/.test(await viaUrl.text()) &&
-      (await viaUrl.ev("document.querySelector('.slide').classList.contains('slide-off')")),
+      (await viaUrl.ev("document.querySelector('.confirm').disabled")),
       String(await viaUrl.text()).replace(/\n/g, ' / ').slice(0, 220));
     await viaUrl.close();
   }

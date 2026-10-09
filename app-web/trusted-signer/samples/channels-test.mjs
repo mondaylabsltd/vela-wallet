@@ -267,7 +267,7 @@ try {
       '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-3');
     await page.addAuthenticator();
     await sleep(1200);
-    const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
+    const refused = await page.ev("document.querySelector('.confirm').disabled");
     const why = await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')");
     check('refusal: a transaction is not signed with a guessed digest',
       refused && /will not sign a guessed digest/.test(why) && !/sends a signature only to the Vela wallet/.test(why),
@@ -353,7 +353,7 @@ try {
       b64url(JSON.stringify({ intent, context })) + '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-tamper');
     await sleep(1400);
 
-    const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
+    const refused = await page.ev("document.querySelector('.confirm').disabled");
     const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
     check('tamper: a swapped recipient inside the operation is caught', refused && /altered during assembly/.test(warnings));
     check('tamper: the sheet shows the operation\'s OWN recipient, not the requested one',
@@ -399,7 +399,7 @@ try {
     const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
       b64url(JSON.stringify({ intent, context })) + '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-tamper');
     await sleep(1400);
-    const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
+    const refused = await page.ev("document.querySelector('.confirm').disabled");
     const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
     check('tamper: caught in a two-leg operation (the call and the fee) too', refused && /altered during assembly/.test(warnings),
       warnings.slice(0, 80));

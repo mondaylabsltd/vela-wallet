@@ -131,19 +131,11 @@ body {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 20px;
-  padding: 14px 18px 18px;
+  padding: 20px 18px 18px;
   overflow: hidden;
   /* clip, not hidden, where supported: hidden makes the sheet a scroll
-     container and the sticky slide would stick to it, not to the screen. */
+     container and the sticky button would stick to it, not to the screen. */
   overflow: clip;
-}
-
-.grabber {
-  width: 36px;
-  height: 4px;
-  margin: 0 auto 14px;
-  border-radius: 99px;
-  background: var(--hairline);
 }
 
 .sheet-head {
@@ -191,15 +183,41 @@ body {
   background: #627eea;
 }
 
-.intent-label {
+/* The title row: the intent is the first thing read (spec 102). */
+.sheet-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 18px 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
+  gap: 12px;
 }
+
+.intent-label {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--fg);
+}
+
+.intent-label .tag { margin-left: 0; font-weight: 500; letter-spacing: 0; }
+
+/* Who asks: one quiet line under the title, or none for the wallet's own. */
+.requester {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.requester .avatar { width: 28px; height: 28px; font-size: 12px; }
+.requester .dapp-name { font-weight: 500; font-size: 14px; }
+.dapp-claimed { color: var(--muted); font-size: 12px; }
 
 .tone-danger, .tone-hard-danger { color: var(--danger); }
 .tone-caution { color: var(--caution); }
@@ -207,7 +225,7 @@ body {
 
 /* hero */
 
-.hero-amount { margin-bottom: 6px; }
+.hero-amount { margin: 16px 0 6px; }
 
 .amount-line {
   display: flex;
@@ -246,17 +264,17 @@ body {
   font-weight: 700;
 }
 
-.hero-call { margin-bottom: 4px; }
+.hero-call { margin: 16px 0 4px; }
 .call-name { font: 600 17px var(--mono); }
 .call-contract { color: var(--muted); font-size: 13px; }
 
-.hero-siwe { margin-bottom: 4px; }
+.hero-siwe { margin: 16px 0 4px; }
 .siwe-domain { font-size: 22px; font-weight: 600; }
 .siwe-domain.bad { color: var(--danger); }
 .siwe-statement { color: var(--muted); font-size: 13px; margin-top: 2px; }
 
 .block {
-  margin: 6px 0 0;
+  margin: 16px 0 0;
   padding: 12px 14px;
   background: var(--card);
   border-radius: 12px;
@@ -345,6 +363,14 @@ body {
 }
 
 .warning-danger { background: var(--danger-bg); color: var(--danger); }
+.warning.warning-note {
+  display: block;
+  margin: 2px 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .warning-caution { background: var(--caution-bg); color: var(--caution); }
 .warning-mark { flex: none; }
 
@@ -397,7 +423,7 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* fee, signer, slider */
+/* fee, signer, the button */
 
 .fee, .fee-wrap { margin-top: 14px; }
 
@@ -463,54 +489,115 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .fee-option-check { color: var(--accent); }
 
 .signer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 14px;
-  font-size: 13px;
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
 }
 
+.signer-row { align-items: center; }
 .signer-label { color: var(--muted); }
-.signer-who { display: inline-flex; align-items: center; gap: 7px; }
 
-.slide {
-  /* Spec 079: the one control stays in reach on a phone, however long the
-     card — it used to sit below the fold. Sticky is still positioned, so the
-     knob's own layout is unchanged. */
-  position: sticky;
-  bottom: 12px;
-  z-index: 2;
-  display: flex;
+/* Where the person confirms: the key's place (spec 102 R5). */
+.key-place {
+  display: inline-flex;
   align-items: center;
-  margin-top: 14px;
-  height: 56px;
-  padding: 6px;
-  border-radius: 999px;
-  background: var(--card);
-  box-shadow: 0 0 0 6px var(--surface);
+  gap: 7px;
+  font-weight: 500;
 }
 
-.slide-knob {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+.key-icon { display: inline-flex; color: var(--muted); }
+.key-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The one control: a tap (spec 102). Spec 079: it stays in reach on a
+   phone, however long the card. */
+.confirm-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 16px -18px 0;
+  padding: 12px 18px 14px;
+  background: var(--surface);
+}
+
+/* Content scrolling under the held button fades out rather than being cut. */
+.confirm-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -16px;
+  height: 16px;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+  pointer-events: none;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 14px;
   background: var(--accent);
   color: #fff;
-  font-size: 17px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 80ms ease, filter 120ms ease;
 }
 
-.slide-label {
-  flex: 1;
-  text-align: center;
-  margin-right: 44px;
+.confirm:hover { filter: brightness(1.04); }
+.confirm:active { transform: scale(0.985); }
+.confirm:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Waiting for the passkey: the same colour (busy is not disabled), a turning
+   ring, and no second tap. */
+.confirm.busy { cursor: progress; }
+.confirm.busy::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: confirm-turn 0.8s linear infinite;
+}
+
+@keyframes confirm-turn { to { transform: rotate(360deg); } }
+
+.confirm:disabled { cursor: default; transform: none; filter: none; }
+.confirm-off {
+  background: var(--card);
   color: var(--muted);
-  font-size: 14px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.confirm-done {
+  background: var(--card);
+  color: var(--safe);
 }
 
-.slide-off .slide-knob { opacity: 0.45; }
-.slide-off .slide-label { opacity: 0.6; }
+.confirm-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
 
 /* the self-check strip */
 
@@ -531,18 +618,31 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .signing-body { background: var(--bg); }
 
 .stage {
-  max-width: 460px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 28px 18px 40px;
+  padding: 24px 16px 32px;
 }
 
 .stage-status {
-  margin: 16px 4px 0;
+  margin: 14px 4px 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
   text-align: center;
 }
+
+.stage-status:empty { display: none; }
+
+/* What this page is, in one calm line (spec 102): its version and how it is
+   built. A label, not a seal — see sign.js. */
+.trust {
+  margin: 20px 8px 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+.trust-part { white-space: nowrap; }
 
 .pairing-code {
   display: flex;
@@ -568,7 +668,7 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 14px 0 4px;
+  margin: 16px 0 4px;
   padding: 14px;
   background: var(--card);
   border-radius: 14px;
@@ -598,7 +698,7 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .tech-note { margin-top: 4px; color: var(--muted); font-size: 12px; }
 
 .sheet-waiting .waiting-title {
-  margin-top: 18px;
+  margin-top: 16px;
   font-size: 18px;
   font-weight: 600;
 }
@@ -606,10 +706,6 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .sheet-waiting .waiting-note { color: var(--muted); }
 .sheet-waiting.sheet-ended .waiting-title { color: var(--muted); }
 
-.slide-knob { touch-action: none; cursor: grab; }
-.slide-knob:active { cursor: grabbing; }
-.slide:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.slide-label { transition: opacity 120ms linear; }
 
 .identicon { display: inline-block; flex: none; vertical-align: middle; }
 .identicon svg { width: 100%; height: 100%; display: block; border-radius: 50%; }
@@ -675,9 +771,6 @@ details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .token-chip img, .chain-dot img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
 .chain-dot { overflow: hidden; }
 
-.signer { align-items: flex-start; }
-.signer .identity-wrap { flex: 1; }
-.signer-label { padding-top: 6px; }
 
 .address-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
 

@@ -29,6 +29,7 @@ const ns = loadPageLibs([
   'src/lib/encode.js',
   'src/lib/fee.js',
   'src/lib/logos.js',
+  'src/lib/catalog.js',
   'src/lib/registry.js',
   'src/lib/resolve.js',
   'src/lib/render.js',
@@ -119,11 +120,14 @@ const warned = (view, sheet) =>
   check('verified: no self-reported-site warning', !view.warnings.some((w) => w.key === 'warn.claimedOrigin'));
 }
 
-// 7. The wallet asking itself (no origin): no host line, as before.
+// 7. The wallet asking itself (no origin): no host line — and since spec 102
+//    no requester line at all (the apps' first_party), rather than a generic
+//    "Wallet" that says nothing a person can check.
 {
   const view = ns.resolve({ method: 'personal_sign', params: ['0x68656c6c6f', ACCOUNT] }, { account: ACCOUNT, chainId: 1 });
   const sheet = ns.render(view, {});
-  check('no origin: no host line', head(sheet).find('.dapp-origin').length === 0 && view.dapp.originShown === false);
+  check('no origin: no host line', sheet.find('.dapp-origin').length === 0 && view.dapp.originShown === false);
+  check('no origin: no requester line at all', view.dapp.own === true && sheet.find('.requester').length === 0);
 }
 
 // 8. The ceremony head keeps its line: the verified requester's host, the
