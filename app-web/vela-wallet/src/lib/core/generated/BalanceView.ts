@@ -72,6 +72,19 @@ unreachable_networks: Array<UnreachableNetwork>,
  */
 unreachable_key: string | null, 
 /**
+ * The failed chains whose read never left the app (PR 2 note 11) — not
+ * in `unreachable_networks`: nothing there is the network's doing.
+ */
+internal_chain_ids: Array<number>, 
+/**
+ * The home line when the last read failed inside Vela itself
+ * (`fee_policy::REASON_INTERNAL_KEY`, the fee's own sentence for the same
+ * fault): drawn where the unreachable line goes, and in place of any
+ * "can't reach" a chain-down would say — an internal fault never reads
+ * "Can't reach Ethereum" (issue 483). `None` otherwise.
+ */
+internal_key: string | null, 
+/**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */
 holdings_loading: boolean, 

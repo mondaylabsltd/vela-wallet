@@ -4804,6 +4804,30 @@ export function safeProxyRuntimeCode() {
 }
 
 /**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON; anything unreadable reads as the general sentence.
+ * @param {string} failure
+ * @returns {string}
+ */
+export function sendEstimateFailureBodyKey(failure) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.sendEstimateFailureBodyKey(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */

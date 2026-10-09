@@ -166,6 +166,7 @@ export * from './FeeCall';
 export * from './FeeEstimateView';
 export * from './FeeEvent';
 export * from './FeeFailure';
+export * from './FeeFailureView';
 export * from './FeeGasOutcome';
 export * from './FeeOperation';
 export * from './FeeOptionView';

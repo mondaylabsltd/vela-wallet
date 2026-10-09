@@ -63,7 +63,22 @@ failure_refused: boolean,
  * reached the relay — a verdict after the submit (spec 097 N4) has only
  * the close.
  */
-failure_retryable: boolean, notice: SignNotice | null, global_chain_id: number, 
+failure_retryable: boolean, 
+/**
+ * The sentence that says why the relay did not take the operation on
+ * the sheet (PR 2 note 9), drawn under the failure — the one field for
+ * both ways a refusal arrives:
+ * - at submit, the relay's answer: another operation of the account
+ *   holds the nonce → `componentsUi.signing.confirmBlock.previousPending`
+ *   (retryable, as on Send); any other refusal →
+ *   `componentsUi.signing.refused`;
+ * - after it, the tracker's verdict ([`Event::OpTracked`]'s `refusal`):
+ *   its reason's sentence (`tx_tracker::refusal_key` — the fee sentence
+ *   only for `fee_below_market`, "went first" for `nonce_used`).
+ *
+ * `None` for a failure that was no refusal. `#[serde(default)]`.
+ */
+failure_refusal_key: string | null, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

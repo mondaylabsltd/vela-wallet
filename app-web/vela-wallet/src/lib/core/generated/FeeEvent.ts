@@ -33,7 +33,7 @@ number: NumberPreset,
  * Read the account's deployment here, first
  * ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
  * — the read's failure is then the fee's, with the fee's words and
- * retry (issue #483). Absent (or `false`): the shell reads the
+ * retry (issue 483). Absent (or `false`): the shell reads the
  * deployment itself and passes `deployed`, as before.
  */
 read_deployment?: boolean, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" } | { "type": "balance_changes_measured", changes: Array<FeeBalanceChange>, };
