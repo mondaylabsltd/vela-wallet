@@ -13,8 +13,9 @@ export type BalanceView = { address: string | null,
  */
 display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
 /**
- * Nothing could be read and nothing is known: the first fetch failed
- * with no cache to fall back on. A skeleton and a reason, never a zero.
+ * Nothing could be read and nothing is known: the first fetch failed —
+ * or settled with every chain it asked failed — with no cache to fall
+ * back on. A skeleton and a reason, never a zero.
  */
 unreachable: boolean, 
 /**
