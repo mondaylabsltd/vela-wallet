@@ -2795,8 +2795,9 @@ describe('a fee that would fail, and the tap that says so (PR 2 polish)', () => 
 			inputs({ selected_token: ETH, recipient: alice, amount: '1' }, fee)
 		).fee;
 		// The figure says the tap; the tap opens the list, behind its chevron.
-		expect(row).toMatchObject({ value: ANOTHER_COIN, tap: 'open' });
-		expect(row.reason).toBeUndefined();
+		// The form has no held confirm: the failure's sentence is the row's
+		// own line (as on Android).
+		expect(row).toMatchObject({ value: ANOTHER_COIN, tap: 'open', reason: WOULD_FAIL });
 
 		const confirm = liveSendConfirm(
 			confirmModel(),
@@ -2804,6 +2805,8 @@ describe('a fee that would fail, and the tap that says so (PR 2 polish)', () => 
 		);
 		const line = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
 		expect(line?.value).toBe(ANOTHER_COIN);
+		// Said once there: under the confirm, not again under its fee line.
+		expect(line?.note).toBeUndefined();
 		expect(line?.tap).toEqual({
 			does: 'choose_coin',
 			label: m['send.feeTokenLabel'],
@@ -2821,7 +2824,7 @@ describe('a fee that would fail, and the tap that says so (PR 2 polish)', () => 
 			formModel(),
 			inputs({ selected_token: ETH, recipient: alice, amount: '1' }, fee)
 		).fee;
-		expect(row).toMatchObject({ value: '—', tap: 'none' });
+		expect(row).toMatchObject({ value: '—', tap: 'none', reason: WOULD_FAIL });
 		const confirm = liveSendConfirm(
 			confirmModel(),
 			inputs({ stage: 'confirm', selected_token: ETH, recipient: alice, confirm_amount: '1' }, fee)

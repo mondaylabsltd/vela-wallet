@@ -336,6 +336,16 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const failure = sendFeeFailure(inputs);
 	if (failure) {
 		const words = feeFailureWords(failure, formChainOf(send), m);
+		// PR 2 polish: the relay answered that it would fail. That is no
+		// network's doing, so the core gives it no reason line; the form has no
+		// held confirm to carry the failure's own sentence (`footer_key`, "This
+		// would fail if sent as it is."), so it is said here, in the row's
+		// line — as Android's form says it. The confirm and the sheet keep it
+		// under their confirm.
+		const wouldFail =
+			failure.failure === 'would_fail' && failure.reason_key === null
+				? (m as Readonly<Record<string, string | undefined>>)[failure.footer_key]
+				: undefined;
 		return {
 			label: m['componentsUi.gas.networkFee'],
 			mark: feeRowMark(send.fee_coin, template),
@@ -347,7 +357,7 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			// or a tap's — beside the reason it keeps.
 			refreshing: fee.busy || failure.retrying,
 			// In the line the row keeps for its note, so nothing below moves.
-			reason: words.reason,
+			reason: words.reason ?? wouldFail,
 			// PR 2 polish: the tap does exactly what the figure says — asks
 			// again at once (`requote`), opens the fee coins (after the relay
 			// answered that it would fail), or nothing at all.
