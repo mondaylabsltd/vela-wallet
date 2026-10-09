@@ -7702,17 +7702,39 @@ public func FfiConverterTypeCtapRegistration_lower(_ value: CtapRegistration) ->
 
 
 /**
- * The gas floors a path starts from (decimal strings).
+ * The gas a path's draft asks the estimator about (decimal strings), and
+ * which rule turns the answer into the signed limits — what
+ * [`user_op_floors`] hands out and every other call takes back as it is.
  */
 public struct GasFloorsRecord: Equatable, Hashable {
     public var verification: String
     public var call: String
+    /**
+     * Tempo's rule (×1.5 held to these floors) rather than the in-band one
+     * (`vela_core::user_op::in_band_gas_limits`).
+     */
+    public var tempo: Bool
+    /**
+     * Whether the Safe is deployed — the in-band rule holds an undeployed
+     * one's limits to their floors.
+     */
+    public var deployed: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(verification: String, call: String) {
+    public init(verification: String, call: String, 
+        /**
+         * Tempo's rule (×1.5 held to these floors) rather than the in-band one
+         * (`vela_core::user_op::in_band_gas_limits`).
+         */tempo: Bool, 
+        /**
+         * Whether the Safe is deployed — the in-band rule holds an undeployed
+         * one's limits to their floors.
+         */deployed: Bool) {
         self.verification = verification
         self.call = call
+        self.tempo = tempo
+        self.deployed = deployed
     }
 
     
@@ -7732,13 +7754,17 @@ public struct FfiConverterTypeGasFloorsRecord: FfiConverterRustBuffer {
         return
             try GasFloorsRecord(
                 verification: FfiConverterString.read(from: &buf), 
-                call: FfiConverterString.read(from: &buf)
+                call: FfiConverterString.read(from: &buf), 
+                tempo: FfiConverterBool.read(from: &buf), 
+                deployed: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: GasFloorsRecord, into buf: inout [UInt8]) {
         FfiConverterString.write(value.verification, into: &buf)
         FfiConverterString.write(value.call, into: &buf)
+        FfiConverterBool.write(value.tempo, into: &buf)
+        FfiConverterBool.write(value.deployed, into: &buf)
     }
 }
 
@@ -14647,10 +14673,15 @@ public func typedDataDocument(method: String, paramsJson: String) -> String?  {
 })
 }
 /**
- * The relay's raw estimate onto the draft: ×1.5 on the two limits, each held
- * to its floor, +10,000 on preVerificationGas.
+ * The relay's raw estimate onto the draft, as the limits the operation is
+ * signed with — the one rule every shell shares
+ * (`vela_core::user_op::in_band_gas_limits`; Tempo keeps its own padding).
+ * `settlement_gas` is the relay's `settlementGas` as it answered it, `None`
+ * from a relay that does not publish it: it decides whether an undeployed
+ * Safe's verification limit keeps its 2M floor. The inner calls' measured
+ * floor is raised after this, by [`user_op_raise_call_gas`].
  */
-public func userOpApplyEstimate(draft: UserOpDraft, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, floors: GasFloorsRecord)throws  -> UserOpDraft  {
+public func userOpApplyEstimate(draft: UserOpDraft, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, settlementGas: String?, floors: GasFloorsRecord)throws  -> UserOpDraft  {
     return try  FfiConverterTypeUserOpDraft_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_user_op_apply_estimate(
@@ -14658,6 +14689,7 @@ public func userOpApplyEstimate(draft: UserOpDraft, verificationGasLimit: String
         FfiConverterString.lower(verificationGasLimit),
         FfiConverterString.lower(callGasLimit),
         FfiConverterString.lower(preVerificationGas),
+        FfiConverterOptionString.lower(settlementGas),
         FfiConverterTypeGasFloorsRecord_lower(floors),uniffiCallStatus
     )
 })
@@ -16028,7 +16060,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_user_op_apply_estimate() != 50114) {
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_apply_estimate() != 25220) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_calls_to_measure() != 59686) {
