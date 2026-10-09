@@ -503,6 +503,18 @@ pub fn trusted_signer_ceremony_title_key(operation_json: String) -> Option<Strin
         .map(|ceremony| ceremony.title_key().to_owned())
 }
 
+/// The key row of a ceremony's card while it waits on its page (spec 102), as
+/// JSON `KeyLabel` — `{place_key, label_key}`: draw the translation of
+/// `label_key` ("New key on" while a key is made, "Confirm with" when one
+/// signs in or proves) beside the translation of `place_key`, as the page
+/// draws its own row. `None` for an operation that is not a ceremony.
+#[uniffi::export]
+#[must_use]
+pub fn trusted_signer_ceremony_key_label(operation_json: String) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(&operation_json)
+        .and_then(|ceremony| serde_json::to_string(&ceremony.key_label()).ok())
+}
+
 /// The registry deployment a member proof is bound to — the chain and the
 /// `domainRegistry` contract, as `/api/health` names them.
 ///
@@ -1435,6 +1447,19 @@ mod tests {
             Some("componentsUi.signing.ceremonySignIn")
         );
         assert_eq!(trusted_signer_ceremony_title_key("{}".to_owned()), None);
+        let label: serde_json::Value = trusted_signer_ceremony_key_label(
+            r#"{"type":"register_passkey","name":"Mine","method":"hybrid"}"#.to_owned(),
+        )
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default();
+        assert_eq!(
+            label,
+            serde_json::json!({
+                "place_key": "onboarding.create.methodHybridTitle",
+                "label_key": "componentsUi.signing.newKeyOnLabel"
+            })
+        );
+        assert_eq!(trusted_signer_ceremony_key_label("{}".to_owned()), None);
     }
 
     /// R5 across the boundary: the plan's key route, passed through as JSON.

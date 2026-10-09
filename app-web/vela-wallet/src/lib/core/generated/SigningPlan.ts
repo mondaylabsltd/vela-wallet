@@ -30,8 +30,8 @@ blocked?: VenueBlock | null,
  */
 key?: KeyRoute | null, 
 /**
- * "Confirm with {key}" — the key's name as the person reads it
- * ([`KeyLabel`]): its own label when that is not the wallet's name, else
+ * The key row — "Confirm with | {key}" — the key's name as the person
+ * reads it ([`KeyLabel`]): its own label when that is not the wallet's name, else
  * its place. Always set: a record with no sign-in key names the place of
  * its first key.
  */

@@ -42,3 +42,25 @@ pub fn trusted_signer_unit_rp_id(
     trusted_signer::registry_unit_rp_id(&origins, wallet_rp_id)
         .map_err(|found| JsValue::from_str(&found.join(", ")))
 }
+
+/// The corpus key of the title a key ceremony on a self-hosted page is drawn
+/// under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
+/// `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
+/// not a ceremony. The web runs none; its gallery draws the apps' card.
+#[wasm_bindgen(js_name = trustedSignerCeremonyTitleKey)]
+#[must_use]
+pub fn trusted_signer_ceremony_title_key(operation_json: &str) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(operation_json)
+        .map(|ceremony| ceremony.title_key().to_owned())
+}
+
+/// The key row of a ceremony's card, as JSON `KeyLabel`
+/// (`{place_key, label_key}`): "New key on | This device" while a key is made,
+/// "Confirm with | USB security key" when one signs in or proves — the page's
+/// own row. `null` for an operation that is not a ceremony.
+#[wasm_bindgen(js_name = trustedSignerCeremonyKeyLabel)]
+#[must_use]
+pub fn trusted_signer_ceremony_key_label(operation_json: &str) -> Option<String> {
+    trusted_signer::ceremony::Ceremony::from_json(operation_json)
+        .and_then(|ceremony| serde_json::to_string(&ceremony.key_label()).ok())
+}

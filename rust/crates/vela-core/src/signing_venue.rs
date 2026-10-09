@@ -180,6 +180,25 @@ impl VenueBlock {
             Self::NotOnWeb => "settings.venue.blockedWeb",
         }
     }
+
+    /// The values [`Self::key`]'s line takes, by the corpus's variable names:
+    /// `domain` and, for a page on another domain, `pageDomain`. With
+    /// [`Self::key`] this is the whole sentence, so no shell restates which
+    /// fact fills which placeholder.
+    #[must_use]
+    pub fn vars(&self) -> Vec<(&'static str, String)> {
+        match self {
+            Self::AppCannotReach { domain } => vec![("domain", domain.clone())],
+            Self::PageOnOtherDomain {
+                page_domain,
+                domain,
+            } => vec![
+                ("pageDomain", page_domain.clone()),
+                ("domain", domain.clone()),
+            ],
+            Self::NotOnWeb => Vec::new(),
+        }
+    }
 }
 
 /// R1: can `venue` use the keys of an account whose signing domain is
@@ -473,18 +492,20 @@ pub fn place_title_key(method: &str) -> &'static str {
     }
 }
 
-/// The name of the key a person confirms with — "Confirm with {key}" on the
-/// hand-off card, and wherever else a signature names its key (spec 102).
+/// The name of the key a person confirms with — the hand-off card's
+/// 「确认方式 | 这台设备」 / "Confirm with | This device" row, and wherever else
+/// a signature names its key (spec 102). A row, as the signing page draws
+/// it, not a sentence: no locale has to inflect a place's title inside one.
 ///
 /// The key's own label when the person gave it one that is not the wallet's
 /// name; otherwise the place it lives. A founding key is labelled with the
 /// wallet's name, and the card already has a "Signing account" row that says
-/// it — "Confirm with Savings" under "Signing account · Savings" names nothing
-/// new, where "Confirm with Phone or tablet" tells the person which device to
+/// it — "Confirm with | Savings" under "Signing account | Savings" names nothing
+/// new, where "Confirm with | Phone or tablet" tells the person which device to
 /// reach for.
 ///
-/// The shell draws `name` when it is set, else the translation of
-/// `place_key`.
+/// The shell draws the row's label from `label_key` and its value from
+/// `name` when it is set, else the translation of `place_key`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct KeyLabel {
@@ -495,6 +516,21 @@ pub struct KeyLabel {
     /// The corpus key of the key's place — always set, so a shell has a
     /// caption (and an icon) even when it draws `name`.
     pub place_key: String,
+    /// The corpus key of the row's label: [`CONFIRM_WITH_LABEL`] ("Confirm
+    /// with") for a key that confirms a signature, a sign-in or a proof;
+    /// [`NEW_KEY_ON_LABEL`] ("New key on") for a key a ceremony is making.
+    /// The signing page's own `field.confirmWith` / `field.keyOn`.
+    #[serde(default = "confirm_with_label")]
+    pub label_key: String,
+}
+
+/// "Confirm with" — the key row's label for a key that confirms something.
+pub const CONFIRM_WITH_LABEL: &str = "componentsUi.signing.confirmWithLabel";
+/// "New key on" — the key row's label while a ceremony makes the key.
+pub const NEW_KEY_ON_LABEL: &str = "componentsUi.signing.newKeyOnLabel";
+
+fn confirm_with_label() -> String {
+    CONFIRM_WITH_LABEL.to_owned()
 }
 
 impl Default for KeyLabel {
@@ -516,6 +552,25 @@ impl KeyLabel {
         Self {
             name,
             place_key: place_title_key(method).to_owned(),
+            label_key: confirm_with_label(),
+        }
+    }
+
+    /// The label of a key a ceremony makes or uses on `method` (spec 102
+    /// integration): its place — a ceremony knows no key name worth drawing
+    /// (a new key carries the wallet's) — under "New key on" while it is
+    /// being made (`making`), "Confirm with" otherwise.
+    #[must_use]
+    pub fn of_ceremony(method: &str, making: bool) -> Self {
+        Self {
+            name: None,
+            place_key: place_title_key(method).to_owned(),
+            label_key: if making {
+                NEW_KEY_ON_LABEL
+            } else {
+                CONFIRM_WITH_LABEL
+            }
+            .to_owned(),
         }
     }
 
@@ -548,8 +603,8 @@ pub struct SigningPlan {
     /// written before the sign-in key was kept, which signs as it always did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<KeyRoute>,
-    /// "Confirm with {key}" — the key's name as the person reads it
-    /// ([`KeyLabel`]): its own label when that is not the wallet's name, else
+    /// The key row — "Confirm with | {key}" — the key's name as the person
+    /// reads it ([`KeyLabel`]): its own label when that is not the wallet's name, else
     /// its place. Always set: a record with no sign-in key names the place of
     /// its first key.
     #[serde(default)]

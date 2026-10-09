@@ -318,7 +318,7 @@ impl Account {
         }
     }
 
-    /// "Confirm with {key}" — the key this device signs with, as the person
+    /// "Confirm with | {key}" — the key this device signs with, as the person
     /// reads it ([`crate::signing_venue::KeyLabel`]): its own label when that
     /// is not the wallet's name, else the place it lives (the place the
     /// sign-in reached it on). A record with no sign-in key names its first

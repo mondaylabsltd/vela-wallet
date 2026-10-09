@@ -217,3 +217,34 @@ pub fn fee_requote_timeout_ms() -> u32 {
 pub fn fee_failure_reason_key(failure: &str) -> Option<String> {
     vela_core::app::fee_policy::failure_reason_key(fee_failure_of(failure)?).map(str::to_owned)
 }
+
+/// The words of a venue refusal (spec 102), as JSON `{key, vars}`: the corpus
+/// key `VenueBlock::key()` names and the values its line takes by name
+/// (`domain`, `pageDomain`) — translate `key` with `vars` and the sentence is
+/// the core's whole. `null` for something that is not a `VenueBlock`.
+#[wasm_bindgen(js_name = venueBlockLine)]
+#[must_use]
+pub fn venue_block_line(block_json: &str) -> Option<String> {
+    let block: vela_core::signing_venue::VenueBlock = serde_json::from_str(block_json).ok()?;
+    let vars: serde_json::Map<String, serde_json::Value> = block
+        .vars()
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), serde_json::Value::String(value)))
+        .collect();
+    Some(serde_json::json!({ "key": block.key(), "vars": vars }).to_string())
+}
+
+/// The message a dApp reads when signing ended in the error the core named
+/// `kind` (a `SignErrorKind`'s wire name), with the notice's `detail` — the
+/// core's `dapp_rpc::sign_error_words`. `null` for a kind it does not know.
+/// For the developer, not the person: EIP-1193 messages are not UI.
+#[wasm_bindgen(js_name = signErrorWords)]
+#[must_use]
+pub fn sign_error_words(kind: &str, detail: Option<String>) -> Option<String> {
+    let kind: vela_core::app::sign_request::SignErrorKind =
+        serde_json::from_value(serde_json::Value::String(kind.to_owned())).ok()?;
+    Some(vela_core::app::dapp_rpc::sign_error_words(
+        kind,
+        detail.as_deref(),
+    ))
+}

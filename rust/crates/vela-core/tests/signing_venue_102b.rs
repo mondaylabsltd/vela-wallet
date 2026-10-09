@@ -352,8 +352,24 @@ fn the_plan_on_the_wire_names_the_key() {
         .unwrap_or_default();
     assert_eq!(
         plan["key_label"],
-        json!({"name": "YubiKey", "place_key": "onboarding.create.methodSecurityKeyTitle"})
+        json!({"name": "YubiKey", "place_key": "onboarding.create.methodSecurityKeyTitle",
+               "label_key": "componentsUi.signing.confirmWithLabel"})
     );
+}
+
+/// The key is a row — "Confirm with | YubiKey" — not a sentence a locale has
+/// to inflect a place's title into (integration polish b). A label written
+/// before the row existed reads as "Confirm with".
+#[test]
+fn the_key_is_a_row_with_its_own_label() {
+    assert_eq!(
+        KeyLabel::of(Some("YubiKey"), "Savings", "security_key").label_key,
+        "componentsUi.signing.confirmWithLabel"
+    );
+    let old: KeyLabel =
+        serde_json::from_value(json!({"place_key": "onboarding.create.methodPlatformTitle"}))
+            .unwrap_or_default();
+    assert_eq!(old.label_key, "componentsUi.signing.confirmWithLabel");
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +686,67 @@ fn a_ceremony_on_its_page_has_its_own_title() {
     assert_eq!(title(json!({"type": "read_stored"})), None);
 }
 
+/// A ceremony card names its key as the page does (integration polish c):
+/// "New key on | Phone or tablet" while a key is made, "Confirm with | USB
+/// security key" when one signs in or proves — by place, never by a name.
+#[test]
+fn a_ceremony_names_its_key_as_the_page_does() {
+    use vela_core::trusted_signer::ceremony::Ceremony;
+    let label = |op: Value| {
+        Ceremony::from_json(&op.to_string())
+            .map(|ceremony| ceremony.key_label())
+            .unwrap_or_else(|| unreachable!("a ceremony"))
+    };
+    let made = label(
+        json!({"type": "register_passkey", "name": "Mine", "page": OWN,
+                            "method": "hybrid"}),
+    );
+    assert_eq!(made.name, None, "a new key carries the wallet's name");
+    assert_eq!(made.place_key, "onboarding.create.methodHybridTitle");
+    assert_eq!(made.label_key, "componentsUi.signing.newKeyOnLabel");
+    for op in [
+        json!({"type": "authenticate_passkey", "page": OWN, "method": "security_key"}),
+        json!({"type": "sign_proof", "credential_id": "ab", "purpose": "verify",
+               "method": "security_key"}),
+        json!({"type": "sign_member_proof", "credential_id": "ab", "public_key_hex": "04",
+               "group_public_key_hex": "04", "method": "security_key"}),
+    ] {
+        let used = label(op);
+        assert_eq!(used.place_key, "onboarding.create.methodSecurityKeyTitle");
+        assert_eq!(used.label_key, "componentsUi.signing.confirmWithLabel");
+    }
+    // An operation from before the place was carried reads as this device.
+    assert_eq!(
+        label(json!({"type": "authenticate_passkey"})).place_key,
+        "onboarding.create.methodPlatformTitle"
+    );
+}
+
+/// A refusal's sentence is the key and its values, both from the core
+/// (integration polish g): no shell decides which fact fills which name.
+#[test]
+fn a_venue_refusal_carries_its_values() {
+    let page = VenueBlock::PageOnOtherDomain {
+        page_domain: "sign.example.com".to_owned(),
+        domain: APP_DOMAIN.to_owned(),
+    };
+    assert_eq!(
+        page.vars(),
+        vec![
+            ("pageDomain", "sign.example.com".to_owned()),
+            ("domain", APP_DOMAIN.to_owned())
+        ]
+    );
+    assert_eq!(
+        VenueBlock::AppCannotReach {
+            domain: "x.example".to_owned()
+        }
+        .vars(),
+        vec![("domain", "x.example".to_owned())]
+    );
+    assert!(VenueBlock::NotOnWeb.vars().is_empty());
+}
+
 // ---------------------------------------------------------------------------
 // 14 · The check asks as a browser asks
 // ---------------------------------------------------------------------------
@@ -773,6 +850,8 @@ fn every_new_line_is_in_fifteen_languages() {
         "settings.signing.pageRemove",
         "settings.signing.pageName",
         "componentsUi.signing.handoffTitle",
+        "componentsUi.signing.confirmWithLabel",
+        "componentsUi.signing.newKeyOnLabel",
         "componentsUi.signing.ceremonyCreate",
         "componentsUi.signing.ceremonySignIn",
         "componentsUi.signing.ceremonyConfirm",
@@ -812,6 +891,13 @@ fn every_new_line_is_in_fifteen_languages() {
             // D6: "my own" names only a page the person deployed.
             if key == "onboarding.create.signingPageTitle" {
                 assert!(!line.to_lowercase().contains(" my own"), "{line}");
+            }
+            // D6: the hand-off card opens Vela's page as often as a
+            // self-hosted one, so its title owns neither.
+            if key == "componentsUi.signing.handoffTitle" {
+                for possessive in [" your ", "你的", "你嘅"] {
+                    assert!(!line.to_lowercase().contains(possessive), "{line}");
+                }
             }
         }
         // The pre-D6 names are gone.

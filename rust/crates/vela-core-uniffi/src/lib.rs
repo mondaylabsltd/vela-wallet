@@ -744,15 +744,41 @@ pub fn venue_words(row: String) -> Option<KeyMethodWords> {
 /// `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
 /// set only when nothing on this device can; `key` is the key route
 /// (`{credential_id, method, transports, hints}`), absent for a record
-/// written before the sign-in key was kept; `key_label` is "Confirm with
-/// {key}"'s name — `{name?, place_key}`: draw `name` when set, else the
-/// translation of `place_key` (the key's own label when it is not the
-/// wallet's name, else its place). `None` for a record this build cannot
+/// written before the sign-in key was kept; `key_label` is the "Confirm with
+/// | {key}" row — `{name?, place_key, label_key}`: the translation of
+/// `label_key` beside `name` when set, else the translation of `place_key`
+/// (the key's own label when it is not the wallet's name, else its place). `None` for a record this build cannot
 /// read. See `vela_core::app::Account::signing_plan`.
 #[uniffi::export]
 #[must_use]
 pub fn signing_plan(account_json: String) -> Option<String> {
     vela_core::app::signing_plan_json(&account_json)
+}
+
+/// The words of a venue refusal (spec 102): the corpus key `VenueBlock::key()`
+/// names and the values its line takes, by the corpus's names (`domain`,
+/// `pageDomain`). Translate `key` with `vars` and the sentence is the core's
+/// whole — no shell decides which fact fills which placeholder.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct VenueBlockLine {
+    pub key: String,
+    pub vars: std::collections::HashMap<String, String>,
+}
+
+/// A `VenueBlock` (JSON — a plan's `blocked`, a choice's `blocked`, a
+/// notice's `venue_block`) in words; `None` for anything else.
+#[uniffi::export]
+#[must_use]
+pub fn venue_block_line(block_json: String) -> Option<VenueBlockLine> {
+    let block: vela_core::signing_venue::VenueBlock = serde_json::from_str(&block_json).ok()?;
+    Some(VenueBlockLine {
+        key: block.key().to_owned(),
+        vars: block
+            .vars()
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    })
 }
 
 /// Every venue an account on `domain` could pick, as a JSON `VenueChoice[]`
@@ -3568,11 +3594,31 @@ mod tests_102_core_round {
             serde_json::from_str(&signing_plan(record.to_string()).unwrap()).unwrap();
         assert_eq!(
             plan["key_label"],
-            serde_json::json!({"place_key": "onboarding.create.methodSecurityKeyTitle"})
+            serde_json::json!({"place_key": "onboarding.create.methodSecurityKeyTitle",
+                               "label_key": "componentsUi.signing.confirmWithLabel"})
         );
         assert_eq!(
             venue_words("own_page".to_owned()).map(|w| w.title_key),
             Some("onboarding.create.signingPageTitle".to_owned())
         );
+        let line = venue_block_line(
+            r#"{"type":"page_on_other_domain","page_domain":"sign.example.com","domain":"getvela.app"}"#
+                .to_owned(),
+        )
+        .unwrap();
+        assert_eq!(line.key, "settings.venue.blockedPage");
+        assert_eq!(
+            line.vars.get("pageDomain").map(String::as_str),
+            Some("sign.example.com")
+        );
+        assert_eq!(
+            line.vars.get("domain").map(String::as_str),
+            Some("getvela.app")
+        );
+        assert!(venue_block_line(r#"{"type":"not_on_web"}"#.to_owned())
+            .unwrap()
+            .vars
+            .is_empty());
+        assert!(venue_block_line("{}".to_owned()).is_none());
     }
 }

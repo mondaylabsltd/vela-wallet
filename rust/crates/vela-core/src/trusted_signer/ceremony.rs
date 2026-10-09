@@ -160,6 +160,19 @@ impl Ceremony {
         }
     }
 
+    /// The key row a shell draws while this ceremony waits on the page
+    /// (spec 102 integration), as the page draws its own: "New key on | This
+    /// device" while a key is made, "Confirm with | Phone or tablet" when one
+    /// signs in or proves.
+    #[must_use]
+    pub fn key_label(&self) -> crate::signing_venue::KeyLabel {
+        let place = self.place().unwrap_or_default();
+        crate::signing_venue::KeyLabel::of_ceremony(
+            place.name(),
+            matches!(self, Self::RegisterPasskey { .. }),
+        )
+    }
+
     /// Where the key this ceremony makes or uses lives.
     #[must_use]
     pub fn place(&self) -> Option<KeyMethod> {
