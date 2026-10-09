@@ -204,7 +204,6 @@ window.VelaCS.i18n.register('en', {
   // state and a person can hold it to.
   'value.answerToThisWallet': 'the answer goes to the Vela wallet on this device',
   'value.answerToNobody': 'nowhere — this request named no address for the answer',
-  'value.yourWallet': 'Your Vela wallet',
   'value.randomChallenge': '32 random bytes made on this page',
   'value.anyKey': 'any passkey of this site — you pick',
   'field.wallet': 'Wallet',
@@ -276,6 +275,7 @@ window.VelaCS.i18n.register('en', {
   'ui.closeRefuses': 'Not what you expected? Close this page — nothing gets signed.',
   // Where the key is: the places the person chose from in the wallet.
   'field.confirmWith': 'Confirm with',
+  'field.network': 'Network',
   'field.keyOn': 'New key on',
   'place.platform': 'This device',
   'place.hybrid': 'Phone or tablet',

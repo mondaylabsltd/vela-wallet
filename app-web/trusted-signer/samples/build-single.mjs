@@ -127,6 +127,9 @@ export function build() {
 		`style-src ${cspHash(styleText)}`,
 		// Identicons and small logos the wallet passes in arrive as data: URIs.
 		'img-src data:',
+		// The app's face, carried in the page itself (src/fonts.css): a data:
+		// URI is bytes already inside the hashed file, so this opens no way out.
+		'font-src data:',
 		"base-uri 'none'",
 		"form-action 'none'"
 	].join('; ');

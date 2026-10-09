@@ -1,0 +1,150 @@
+// The app's face, inside the page: src/fonts.css (owner, 2026-10-09 — the
+// signing page should feel like the app's own signing sheet).
+//
+//   node samples/gen-fonts.mjs           → rewrites src/fonts.css
+//   node samples/gen-fonts.mjs --check   → fails if src/fonts.css is not what
+//                                          these fonts and this subset make
+//
+// The apps draw every word in Plus Jakarta Sans (the web via @fontsource, iOS
+// and the desktop from `assets/fonts/`). The page cannot fetch a font — its
+// CSP is `default-src 'none'` inside the hashed bytes (076) — so the face is
+// carried IN the page, as `data:` URIs, from the same TTFs the native apps
+// bundle (`assets/fonts/PlusJakartaSans_*.ttf`, SIL OFL 1.1; the licence
+// travels in each subset's name table, `--name-IDs='*'`).
+//
+// What is carried, and why that much and no more:
+//
+//   · three weights — 400 (text), 600 (values, the button), 700 (the title,
+//     the amount). The app's 500 appears on one warning line; the browser
+//     draws it in 400, which is how the face's own matching rules resolve it.
+//   · Latin, Latin Extended-A and the Vietnamese letters: every Latin-script
+//     language the page speaks (en, fr, de, es-MX, pt-BR, it, id, tr, vi)
+//     reads in the app's face, ğ and ơ included. Cyrillic and CJK are not in
+//     the app's Jakarta either; they fall to the system face, as in the apps.
+//   · `tnum` kept: the app sets amounts and fees in tabular figures.
+//   · `calt` dropped. The face's only contextual rule draws an `x` between
+//     figures as a multiplication sign (1920×1080) — and so "0x3fc9…" read
+//     "0×3fc9…" in the page's sentences (measured). On a signing page an
+//     address must read as the characters it is.
+//   · no hinting: the outlines are what the apps draw; hinting would add a
+//     third to the size for renderers that mostly ignore it.
+//
+// About 47 KB of woff2 (~63 KB as base64) on a ~600 KB page. Measured, not
+// guessed: `bun samples/build-single.mjs` prints the page's size.
+//
+// fontTools does the subsetting (`pip install fonttools brotli`). It is an
+// AUTHORING tool, run when the subset changes — the build never runs it: the
+// build concatenates the committed src/fonts.css like any other source, so
+// the page stays zero-dependency and reproducible from the repository alone.
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, '..');
+const REPO = resolve(ROOT, '..', '..');
+const FONTS = join(REPO, 'assets', 'fonts');
+const OUT = join(ROOT, 'src', 'fonts.css');
+
+/** What the subset keeps, and the `unicode-range` the page declares for it. */
+const UNICODES = [
+	'U+0000-00FF', // Basic Latin + Latin-1
+	'U+0100-017F', // Latin Extended-A (tr: ğ ş İ; ı; ő ű …)
+	'U+0192',
+	'U+01A0-01A1', // vi: Ơ ơ
+	'U+01AF-01B0', // vi: Ư ư
+	'U+0218-021B', // ro-style comma-below, harmless
+	'U+02BB-02BC',
+	'U+02C6',
+	'U+02DA',
+	'U+02DC',
+	'U+0300-0304', // combining marks the Vietnamese tones may use
+	'U+0306',
+	'U+0308-030A',
+	'U+030C',
+	'U+0323',
+	'U+0326-0328',
+	'U+1E9E',
+	'U+1EA0-1EF9', // vi: precomposed tone letters
+	'U+2000-206F', // punctuation: … · – — ‘ ’ “ ” • ‹ ›
+	'U+20AB', // ₫
+	'U+20AC', // €
+	'U+20BA', // ₺
+	'U+2122',
+	'U+2190-2193', // ← ↑ → ↓
+	'U+2212', // −
+	'U+2215',
+	'U+2248', // ≈
+	'U+FEFF',
+	'U+FFFD'
+];
+
+const WEIGHTS = [
+	{ weight: 400, file: 'PlusJakartaSans_400Regular.ttf' },
+	{ weight: 600, file: 'PlusJakartaSans_600SemiBold.ttf' },
+	{ weight: 700, file: 'PlusJakartaSans_700Bold.ttf' }
+];
+
+function subset(file) {
+	const dir = mkdtempSync(join(tmpdir(), 'vela-font-'));
+	const out = join(dir, 'face.woff2');
+	try {
+		execFileSync(
+			'pyftsubset',
+			[
+				join(FONTS, file),
+				`--unicodes=${UNICODES.join(',')}`,
+				'--flavor=woff2',
+				'--layout-features+=tnum,case',
+				'--layout-features-=calt',
+				'--no-hinting',
+				"--name-IDs=*",
+				`--output-file=${out}`
+			],
+			{ stdio: ['ignore', 'ignore', 'inherit'] }
+		);
+		return readFileSync(out);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+function css() {
+	const faces = WEIGHTS.map(({ weight, file }) => {
+		const bytes = subset(file);
+		return {
+			weight,
+			bytes: bytes.length,
+			rule:
+				`@font-face {\n` +
+				`  font-family: 'Plus Jakarta Sans';\n` +
+				`  font-style: normal;\n` +
+				`  font-weight: ${weight};\n` +
+				`  src: url(data:font/woff2;base64,${bytes.toString('base64')}) format('woff2');\n` +
+				`  unicode-range: ${UNICODES.join(', ')};\n` +
+				`}\n`
+		};
+	});
+	const total = faces.reduce((sum, face) => sum + face.bytes, 0);
+	const head =
+		`/* GENERATED by samples/gen-fonts.mjs — do not edit.\n` +
+		`   Plus Jakarta Sans (SIL Open Font License 1.1, Tokotype), subset from\n` +
+		`   assets/fonts/: weights ${faces.map((f) => f.weight).join(' / ')}, ` +
+		`${total} bytes of woff2. The licence is in each face's name table. */\n`;
+	return { text: head + faces.map((f) => f.rule).join('\n'), total };
+}
+
+const { text, total } = css();
+if (process.argv.includes('--check')) {
+	const onDisk = readFileSync(OUT, 'utf8');
+	if (onDisk !== text) {
+		console.error('gen-fonts --check: src/fonts.css is not what these fonts make — run node samples/gen-fonts.mjs');
+		process.exit(1);
+	}
+	console.log(`gen-fonts --check: src/fonts.css is current (${total} bytes of woff2)`);
+} else {
+	writeFileSync(OUT, text);
+	console.log(`gen-fonts: wrote src/fonts.css — ${WEIGHTS.length} faces, ${total} bytes of woff2, ${text.length} bytes of CSS`);
+}

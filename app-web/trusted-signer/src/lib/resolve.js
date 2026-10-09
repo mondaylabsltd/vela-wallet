@@ -1256,7 +1256,7 @@ window.VelaCS = window.VelaCS || {};
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;
 
-    view.hero = { kind: 'ceremony', ceremony: kind, title: wallet, titleKey: wallet ? null : 'value.yourWallet' };
+    // No hero: the wallet is this row, as the apps' own sheets list it.
     if (wallet) view.fields.push({ label: 'field.wallet', value: wallet });
 
     var params = [];

@@ -209,7 +209,6 @@ window.VelaCS.i18n.register('zh', {
   // 这一点可以说，也可以被人核对。
   'value.answerToThisWallet': '答复交回本机的 Vela 钱包',
   'value.answerToNobody': '没有指定答复地址',
-  'value.yourWallet': '你的 Vela 钱包',
   'value.randomChallenge': '本页生成的 32 个随机字节',
   'value.anyKey': '这个站点的任意 passkey —— 由你挑选',
   'field.wallet': '钱包',
@@ -278,6 +277,7 @@ window.VelaCS.i18n.register('zh', {
   'ui.closeRefuses': '和你预想的不一样？关掉这一页，什么都不会签。',
   // 钥匙在哪里：就是你在钱包里选过的那几处。
   'field.confirmWith': '确认方式',
+  'field.network': '网络',
   'field.keyOn': '新钥匙存在',
   'place.platform': '这台设备',
   'place.hybrid': '手机或平板',
