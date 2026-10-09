@@ -677,9 +677,7 @@ mod tests {
         let view = run(&settled(vec![1], vec![1]));
         assert!(view.internal_key.is_some());
         assert!(view.unreachable_networks.is_empty());
-        let line = balance(&view, &s, "en", &money)
-            .status
-            .map(|(_, line)| line);
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line, Some(s.balance_internal.clone()));
         assert!(!s.balance_internal.contains("Ethereum"));
 
@@ -687,9 +685,7 @@ mod tests {
         let view = run(&settled(vec![1], Vec::new()));
         assert_eq!(view.internal_key, None);
         assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
-        let line = balance(&view, &s, "en", &money)
-            .status
-            .map(|(_, line)| line);
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line.as_deref(), Some(ethereum.as_str()));
 
         // Both at once: the app's fault is the line; the chain that is down
@@ -702,13 +698,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![56]
         );
-        let line = balance(&view, &s, "en", &money)
-            .status
-            .map(|(_, line)| line);
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line, Some(s.balance_internal.clone()));
 
         // The gallery's DSR7 is the same state through the same core.
-        let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", &money);
+        let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", money);
         assert_eq!(
             gallery.status.map(|(_, line)| line),
             Some(s.balance_internal.clone())
@@ -721,9 +715,7 @@ mod tests {
             pull,
             internal: true,
         });
-        let line = balance(&view, &s, "en", &money)
-            .status
-            .map(|(_, line)| line);
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
         assert_eq!(line, Some(s.balance_internal.clone()));
     }
 

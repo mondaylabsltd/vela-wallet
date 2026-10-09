@@ -539,6 +539,11 @@ pub struct FeeRow {
     /// The quote's 30 s TTL elapsed (`FeeView.stale`) — calm wording, never
     /// a fault. `None` keeps the line's room empty so nothing jumps.
     pub stale_note: Option<SharedString>,
+    /// Why there is no fee, in the core's words (`FeeView.failure`, PR 2
+    /// note 1): "Can't reach Ethereum to price this…", "Something went wrong
+    /// inside Vela…". Drawn in the stale line's own room, in its place —
+    /// kept through the re-ask, so nothing jumps while it retries.
+    pub reason: Option<SharedString>,
 }
 
 /// One option of the speed control (spec 068).
@@ -1370,6 +1375,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         refresh: Some(s.fee_refresh.clone()),
         refreshing: false,
         stale_note: None,
+        reason: None,
     };
     // Folded, as every send starts: the word and the tier in force.
     let speed = FeeSpeedModel {

@@ -35,7 +35,7 @@ use vela_core::app::approval_guard::{
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigning, ClearSigningView, Event as ClearEvent,
 };
-use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeFailure, FeeTier, FeeView};
+use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::sign_request::{
@@ -54,167 +54,19 @@ use crate::resident::{Answer, Machine, Sink};
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
 
+/// The fee in force needs nothing of this host when it moves: a failure that
+/// can pass is asked again by the fee core itself (PR 2 note 1) — its
+/// `StartTtl`, answered by the session's own pump like every other wait —
+/// so no scheduler of the shell's may ask beside it.
 impl SpeedHost for SigningHost {
     fn speed_control(&mut self) -> &mut SpeedControl {
         &mut self.speed
     }
 
-    /// Spec 079: a quote that failed for a reason that can pass is asked
-    /// again on the core's schedule.
-    fn in_force_changed(&mut self, cx: &mut Context<Self>) {
-        self.schedule_requote(cx);
-    }
-}
-
-/// When the fee in force is asked again by itself (spec 079 FR-008, 082
-/// RJ12, G47) — pure, on the host's clock, so the cadence is provable.
-///
-/// The waits are the core's (`fee_policy::requote_delay_ms`: 3 s, 6 s, then
-/// every 8 s) and each is counted from the START of the re-quote before it,
-/// never from its end: an ask is bounded by `REQUOTE_TIMEOUT_MS` (6 s), which
-/// is shorter than every wait after the first, so an ask that hangs — a
-/// black-holed relay holds its connection long after the relay is back — is
-/// superseded by the next one, and the fee is back within 8 + 6 = 14 s of
-/// the relay returning (SC-003). The device pass measured 15.8–19 s with the
-/// waits counted from each failure and a hung ask waited out.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Requoter {
-    /// Automatic re-quotes fired since the last good quote.
-    fired: u32,
-    /// When the next one is due (epoch ms).
-    due_ms: Option<f64>,
-    /// When the one out now began.
-    out_since_ms: Option<f64>,
-    /// Why the fee last failed — the schedule's step and the log's cause.
-    last_failure: Option<FeeFailure>,
-    /// The re-quote whose failure was last logged — one line each.
-    reported: u32,
-}
-
-/// What the host does next about the fee in force.
-#[derive(Clone, Debug, PartialEq)]
-pub enum RequoteStep {
-    /// Set the one timer for `due_ms`.
-    Schedule { due_ms: f64 },
-    /// Log it: `fee: quote failed chain=… cause=… re-quote #n in N ms`.
-    Failed {
-        cause: String,
-        attempt: u32,
-        in_ms: f64,
-    },
-    /// Ask again now — over a measurement still out, when `supersede` (the
-    /// last re-quote ran past its bound).
-    Fire { attempt: u32, supersede: bool },
-    /// Log it: `fee: quote back chain=… after n re-quotes`.
-    Back { after: u32 },
-}
-
-impl Requoter {
-    /// The fee in force moved: a failure (`failure`), a measurement out, a
-    /// good quote — or the sheet stopped taking a fee (`on_form` false).
-    #[must_use]
-    pub fn observe(
-        &mut self,
-        failure: Option<FeeFailure>,
-        measuring: bool,
-        on_form: bool,
-        now_ms: f64,
-    ) -> Vec<RequoteStep> {
-        if !on_form {
-            // Nothing re-prices under a confirm that has gone.
-            *self = Self::default();
-            return Vec::new();
-        }
-        if measuring {
-            return Vec::new();
-        }
-        let Some(failure) = failure else {
-            let after = self.fired;
-            *self = Self::default();
-            return if after > 0 {
-                vec![RequoteStep::Back { after }]
-            } else {
-                Vec::new()
-            };
-        };
-        self.last_failure = Some(failure);
-        let attempt = self.fired + 1;
-        let mut steps = Vec::new();
-        let due = match self.due_ms {
-            Some(due) => due,
-            None => {
-                let Some(wait) = vela_core::app::fee_policy::requote_delay_ms(failure, attempt)
-                else {
-                    // No retry fixes it (no public key, a calculation that
-                    // cannot come out): the row keeps its dash.
-                    return Vec::new();
-                };
-                let due = (self.out_since_ms.unwrap_or(now_ms) + f64::from(wait)).max(now_ms);
-                self.due_ms = Some(due);
-                steps.push(RequoteStep::Schedule { due_ms: due });
-                due
-            }
-        };
-        if self.reported != attempt {
-            self.reported = attempt;
-            steps.push(RequoteStep::Failed {
-                cause: format!("{failure:?}"),
-                attempt,
-                in_ms: (due - now_ms).max(0.0),
-            });
-        }
-        steps
-    }
-
-    /// The timer set by the last `Schedule` fired at `now_ms`.
-    #[must_use]
-    pub fn due(
-        &mut self,
-        failure: Option<FeeFailure>,
-        measuring: bool,
-        on_form: bool,
-        now_ms: f64,
-    ) -> Vec<RequoteStep> {
-        match self.due_ms {
-            // Cancelled or moved: a stale timer.
-            Some(due) if now_ms + 1.0 >= due => self.due_ms = None,
-            _ => return Vec::new(),
-        }
-        if !on_form || (!measuring && failure.is_none()) {
-            return self.observe(failure, measuring, on_form, now_ms);
-        }
-        let mut steps = Vec::new();
-        let supersede = measuring;
-        if measuring {
-            if self.out_since_ms.is_none() {
-                // A measurement the person started, not one of these: its
-                // own answer reschedules.
-                return Vec::new();
-            }
-            // The last re-quote is still out past its bound (RJ12).
-            let cause = "timeout".to_owned();
-            steps.push(RequoteStep::Failed {
-                cause,
-                attempt: self.fired,
-                in_ms: 0.0,
-            });
-        }
-        self.fired += 1;
-        self.out_since_ms = Some(now_ms);
-        steps.push(RequoteStep::Fire {
-            attempt: self.fired,
-            supersede,
-        });
-        // The next one, counted from this start: an answer cancels it.
-        let failure = failure
-            .or(self.last_failure)
-            .unwrap_or(FeeFailure::QuoteUnavailable);
-        if let Some(wait) = vela_core::app::fee_policy::requote_delay_ms(failure, self.fired + 1) {
-            let due = now_ms + f64::from(wait);
-            self.due_ms = Some(due);
-            steps.push(RequoteStep::Schedule { due_ms: due });
-        }
-        steps
+    /// A request answered or closed prices nothing more: its fee sessions'
+    /// timers go unanswered, and they stop.
+    fn fee_wanted(&self) -> bool {
+        !self.closed && !self.responded
     }
 }
 
@@ -441,12 +293,6 @@ pub struct SigningHost {
     /// The person approved this request (the confirm, or the button that opens
     /// the Trusted Signer's page). A close after this refuses nothing.
     pub approved: bool,
-    /// Spec 079: automatic re-quotes since the last good quote, and the
-    /// number of the one scheduled — a newer schedule, an approval or a good
-    /// quote makes an older timer a no-op.
-    requoter: Requoter,
-    /// The timer the requoter's last `Schedule` set; an older one is a no-op.
-    requote_seq: u64,
     /// Submits running on a worker (the `Streaming` arm): counted from the
     /// dispatch until the core has their result. A request whose page left
     /// keeps its machines only while one runs (spec 082 RB2).
@@ -563,8 +409,6 @@ impl SigningHost {
             ending: None,
             seen_submitted_ms: None,
             approved: false,
-            requoter: Requoter::default(),
-            requote_seq: 0,
             streaming: 0,
         };
         // The stored default speed (spec 069), read now and followed while
@@ -829,9 +673,6 @@ impl SigningHost {
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
-        // Nothing re-prices under a confirm that has gone.
-        self.requoter = Requoter::default();
-        self.requote_seq += 1;
         let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
         // 083 F1: the lines the sheet drew under "Balance changes" — none when
         // the simulation reverted or could not run (its notice stood there).
@@ -1089,91 +930,6 @@ impl SigningHost {
             && !self.approved
             && !self.responded
             && !self.closed
-    }
-
-    /// Spec 079 FR-008, 082 RJ12: a quote that failed for a reason that can
-    /// pass is asked again by itself while the sheet is open and unapproved,
-    /// on the requoter's clock. The device pass had the row read "点击重试"
-    /// with the relay down and stay that way after it came back, and then
-    /// (082) come back 15.8–19 s after the relay did, with no log line.
-    fn schedule_requote(&mut self, cx: &mut Context<Self>) {
-        // Why the fee in force needs asking again, if it does — the core's
-        // failure, the account read's included (issue #483).
-        let failure = self.speed.fee_view().failed;
-        let steps =
-            self.requoter
-                .observe(failure, self.speed.measuring(), self.on_form(), now_ms());
-        self.run_requote(steps, cx);
-    }
-
-    /// The requoter's timer fired.
-    fn requote_due(&mut self, seq: u64, cx: &mut Context<Self>) {
-        if seq != self.requote_seq {
-            return;
-        }
-        // Why the fee in force needs asking again, if it does — the core's
-        // failure, the account read's included (issue #483).
-        let failure = self.speed.fee_view().failed;
-        let steps = self
-            .requoter
-            .due(failure, self.speed.measuring(), self.on_form(), now_ms());
-        self.run_requote(steps, cx);
-    }
-
-    /// Carry out what the requoter decided, and say it in the log (FR-018:
-    /// the chain, the cause, which re-quote and when — never an address).
-    fn run_requote(&mut self, steps: Vec<RequoteStep>, cx: &mut Context<Self>) {
-        let chain = self.chain_id;
-        for step in steps {
-            match step {
-                RequoteStep::Schedule { due_ms } => {
-                    self.requote_seq += 1;
-                    let seq = self.requote_seq;
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        clippy::cast_sign_loss,
-                        reason = "a wait of seconds"
-                    )]
-                    let wait = (due_ms - now_ms()).max(0.0) as u64;
-                    cx.spawn(async move |host, cx| {
-                        cx.background_executor()
-                            .timer(std::time::Duration::from_millis(wait))
-                            .await;
-                        host.update(cx, |host, cx| host.requote_due(seq, cx)).ok();
-                    })
-                    .detach();
-                }
-                RequoteStep::Failed {
-                    cause,
-                    attempt,
-                    in_ms,
-                } => vlog!(
-                    "fee",
-                    "quote failed chain={chain} cause={cause} re-quote #{attempt} in {in_ms:.0} ms"
-                ),
-                RequoteStep::Fire { attempt, supersede } => {
-                    vlog!(
-                        "fee",
-                        "re-quote #{attempt} chain={chain}{}",
-                        if supersede {
-                            " (the last one ran past its bound)"
-                        } else {
-                            ""
-                        }
-                    );
-                    if supersede {
-                        speed_control::reask(self, cx);
-                    } else {
-                        speed_control::refresh(self, cx);
-                    }
-                }
-                RequoteStep::Back { after } => vlog!(
-                    "fee",
-                    "quote back chain={chain} after {after} re-quote{}",
-                    if after == 1 { "" } else { "s" }
-                ),
-            }
-        }
     }
 
     // -- the speed control (spec 069) ----------------------------------------
@@ -1973,7 +1729,7 @@ fn typed_data_of(method: &str, params_json: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_core::app::fee_policy::FeePolicy;
+    use vela_core::app::fee_policy::{FeeFailure, FeePolicy};
 
     /// Spec 079 FR-002 and 082 RB2: which requests keep their machines,
     /// unseen, once their column goes. One closed after the approval keeps
@@ -2043,213 +1799,6 @@ mod tests {
                 "{transport}: the sheet reads what the shell said"
             );
         }
-    }
-
-    /// The requoter against a relay that is down until `up_at` and then
-    /// answers `answer_ms` after each ask; while down, an ask either fails
-    /// at once (refused) or hangs for good (black-holed — a connection made
-    /// while the relay was down is not revived by its return). Answers when
-    /// the fee is back, on a fake clock.
-    fn fee_back_at(up_at: f64, answer_ms: f64, hangs: bool) -> f64 {
-        let mut requoter = Requoter::default();
-        let mut timer: Option<f64> = None;
-        // The quote out now: (asked at, answers at — `None` hangs, ok?).
-        let mut out: Option<(f64, Option<f64>, bool)> = None;
-        let mut failed_at: Option<f64> = Some(0.0);
-        let failure = Some(FeeFailure::QuoteUnavailable);
-        let apply = |steps: Vec<RequoteStep>,
-                     now: f64,
-                     timer: &mut Option<f64>,
-                     out: &mut Option<(f64, Option<f64>, bool)>| {
-            for step in steps {
-                match step {
-                    RequoteStep::Schedule { due_ms } => *timer = Some(due_ms),
-                    RequoteStep::Fire { .. } => {
-                        *out = Some(if now >= up_at {
-                            (now, Some(now + answer_ms), true)
-                        } else if hangs {
-                            (now, None, false)
-                        } else {
-                            (now, Some(now + 300.0), false)
-                        });
-                    }
-                    RequoteStep::Failed { .. } | RequoteStep::Back { .. } => {}
-                }
-            }
-        };
-        for _ in 0..200 {
-            let answer_at = out.and_then(|(_, at, _)| at);
-            let next = [failed_at, timer, answer_at]
-                .into_iter()
-                .flatten()
-                .fold(f64::INFINITY, f64::min);
-            assert!(
-                next.is_finite(),
-                "nothing left to happen: the fee never came back"
-            );
-            if failed_at == Some(next) {
-                failed_at = None;
-                let steps = requoter.observe(failure, false, true, next);
-                apply(steps, next, &mut timer, &mut out);
-            } else if answer_at == Some(next) {
-                let (_, _, ok) = out.take().unwrap_or((0.0, None, false));
-                if ok {
-                    let steps = requoter.observe(None, false, true, next);
-                    assert!(
-                        matches!(steps.as_slice(), [RequoteStep::Back { .. }]),
-                        "{steps:?}"
-                    );
-                    return next;
-                }
-                let steps = requoter.observe(failure, false, true, next);
-                apply(steps, next, &mut timer, &mut out);
-            } else {
-                timer = None;
-                let measuring = out.is_some();
-                let steps = requoter.due(failure, measuring, true, next);
-                apply(steps, next, &mut timer, &mut out);
-            }
-        }
-        unreachable!("the fee never came back")
-    }
-
-    /// Spec 082 RJ12 (G47, SC-003): the fee is back within 14 s of the relay
-    /// returning — whenever it returns, however long its answer takes up to
-    /// the 6 s bound, and even when the ask out at that moment hangs. The
-    /// device pass measured 15.8–19 s (the 12 s and 15 s steps, counted from
-    /// each failure, and a hung ask waited out).
-    #[test]
-    fn the_fee_is_back_within_fourteen_seconds_of_the_relay() {
-        for hangs in [false, true] {
-            for answer_ms in [200.0, 2_000.0, 5_000.0, 6_000.0] {
-                let mut up_at = 0.0;
-                while up_at < 60_000.0 {
-                    let back = fee_back_at(up_at, answer_ms, hangs);
-                    assert!(
-                        back - up_at <= 14_000.0,
-                        "relay back at {up_at} ms, fee at {back} ms \
-                         (answer {answer_ms} ms, hangs {hangs})"
-                    );
-                    up_at += 250.0;
-                }
-            }
-        }
-    }
-
-    /// The core's waits (3 s, 6 s, then 8 s), each from the start of the
-    /// re-quote before it; one line per failure; the fee's return logged
-    /// with the count.
-    #[test]
-    fn a_failed_quote_is_asked_again_on_the_cores_schedule() {
-        let failure = Some(FeeFailure::QuoteUnavailable);
-        let mut requoter = Requoter::default();
-        let steps = requoter.observe(failure, false, true, 1_000.0);
-        assert_eq!(
-            steps,
-            vec![
-                RequoteStep::Schedule { due_ms: 4_000.0 },
-                RequoteStep::Failed {
-                    cause: "QuoteUnavailable".to_owned(),
-                    attempt: 1,
-                    in_ms: 3_000.0,
-                },
-            ]
-        );
-        assert!(
-            requoter.observe(failure, false, true, 1_500.0).is_empty(),
-            "one line per failure"
-        );
-        assert_eq!(
-            requoter.due(failure, false, true, 4_000.0),
-            vec![
-                RequoteStep::Fire {
-                    attempt: 1,
-                    supersede: false,
-                },
-                RequoteStep::Schedule { due_ms: 10_000.0 },
-            ]
-        );
-        // Re-quote #1 fails half a second in: #2 is still 6 s from its start.
-        assert_eq!(
-            requoter.observe(failure, false, true, 4_500.0),
-            vec![RequoteStep::Failed {
-                cause: "QuoteUnavailable".to_owned(),
-                attempt: 2,
-                in_ms: 5_500.0,
-            }]
-        );
-        let _ = requoter.due(failure, false, true, 10_000.0);
-        // #2 hangs past its bound: #3 supersedes it 8 s after it began.
-        let steps = requoter.due(failure, true, true, 18_000.0);
-        assert_eq!(
-            steps,
-            vec![
-                RequoteStep::Failed {
-                    cause: "timeout".to_owned(),
-                    attempt: 2,
-                    in_ms: 0.0,
-                },
-                RequoteStep::Fire {
-                    attempt: 3,
-                    supersede: true,
-                },
-                RequoteStep::Schedule { due_ms: 26_000.0 },
-            ]
-        );
-        assert_eq!(
-            requoter.observe(None, false, true, 19_000.0),
-            vec![RequoteStep::Back { after: 3 }]
-        );
-        assert_eq!(requoter, Requoter::default(), "the count starts over");
-        // The timer set for #4 finds nothing to do.
-        assert!(requoter.due(None, false, true, 26_000.0).is_empty());
-    }
-
-    /// Never under a confirm that has gone, never over a measurement the
-    /// person started, never for a failure no retry fixes, and nothing to do
-    /// when the quote is good.
-    #[test]
-    fn the_requote_stops_where_it_must() {
-        let unreachable = Some(FeeFailure::QuoteUnavailable);
-        let mut requoter = Requoter::default();
-        assert!(
-            requoter.observe(unreachable, false, false, 0.0).is_empty(),
-            "approved"
-        );
-        assert!(
-            requoter.observe(unreachable, true, true, 0.0).is_empty(),
-            "measuring"
-        );
-        for unfixable in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
-            assert!(
-                Requoter::default()
-                    .observe(Some(unfixable), false, true, 0.0)
-                    .is_empty(),
-                "{unfixable:?}"
-            );
-        }
-        assert!(
-            Requoter::default()
-                .observe(None, false, true, 0.0)
-                .is_empty()
-        );
-
-        // Scheduled, then the confirm goes: the timer finds nothing to do.
-        let mut requoter = Requoter::default();
-        let _ = requoter.observe(unreachable, false, true, 0.0);
-        assert!(requoter.due(unreachable, false, false, 3_000.0).is_empty());
-        assert!(requoter.due(unreachable, false, true, 3_000.0).is_empty());
-
-        // A refresh the person tapped is out when the timer fires: it is
-        // theirs to finish; its own answer schedules the next.
-        let mut requoter = Requoter::default();
-        let _ = requoter.observe(unreachable, false, true, 0.0);
-        assert!(requoter.due(unreachable, true, true, 3_000.0).is_empty());
-        assert!(
-            !requoter
-                .observe(unreachable, false, true, 3_500.0)
-                .is_empty()
-        );
     }
 
     /// Spec 083 fee: the simulation's deltas reach the fee machine as what the
@@ -2322,15 +1871,18 @@ mod tests {
         assert_eq!(approved_changes(&[], false), None);
     }
 
-    /// Issue #483 (spec 082 RJ13, G48): the account read is the fee
-    /// machine's own. A read the chain's nodes did not answer, or one that
-    /// never left the app, is `FeeView.failed` — the cause the row, the
-    /// footer and the retry all read — and it is asked again by itself, as
-    /// a real new read (`fresh`), never the answer that just failed.
+    /// Issue #483 + PR 2 note 1: the account read is the fee machine's own,
+    /// and so is its retry. A read the chain's nodes did not answer, or one
+    /// that never left the app, is `FeeView.failed` — and `FeeView.failure`
+    /// says it once for the row and the footer: retrying by itself, so never
+    /// "Tap to retry". The machine asks for its own timer (`StartTtl`, 3 s);
+    /// the desktop answers it as it answers every wait (`executor::fee`),
+    /// with no scheduler of its own beside it; and the re-ask is a real new
+    /// read (`fresh`) with the reason kept on screen while it runs.
     #[test]
-    fn a_failed_account_read_is_the_fee_s_own_failure() {
+    fn a_failed_account_read_is_retried_by_the_core_itself() {
         use vela_core::app::fee_policy::{
-            DeploymentRead, Event as FeeEvent, FeeOperation, FeeShellResult, failure_reason_key,
+            DeploymentRead, Event as FeeEvent, FEE_RETRYING_KEY, FeeOperation, failure_reason_key,
         };
         let failed_with = |read: DeploymentRead| {
             let mut host = crate::core_host::CoreHost::<FeePolicy>::new();
@@ -2351,18 +1903,51 @@ mod tests {
                 .find(|effect| matches!(effect.operation, FeeOperation::ReadDeployment { .. }))
                 .unwrap_or_else(|| unreachable!("the account read comes first"));
             let id = asked.id;
-            let _ = host.resolve(id, FeeShellResult::Deployment { read });
+            let after = host.resolve(
+                id,
+                vela_core::app::fee_policy::FeeShellResult::Deployment { read },
+            );
             let view = host.view();
             assert!(!view.busy);
-            // The retry reads the account again, past anything held.
-            let again = host.dispatch(FeeEvent::Requote);
+            let failure = view
+                .failure
+                .clone()
+                .unwrap_or_else(|| unreachable!("said once, for the row and the footer"));
+            assert!(failure.auto_retry && !failure.retrying);
+            assert_eq!(failure.figure_key, None, "never \"Tap to retry\" here");
+            assert_eq!(failure.footer_key, FEE_RETRYING_KEY);
+            // The machine's own re-ask: its timer, answered by the desktop's
+            // executor like any other wait.
+            let timer = after
+                .iter()
+                .find(|effect| matches!(effect.operation, FeeOperation::StartTtl { .. }))
+                .unwrap_or_else(|| unreachable!("the core asks for its own timer"));
+            assert_eq!(timer.operation, FeeOperation::StartTtl { ms: 3_000 });
+            let elapsed = match <FeePolicy as Machine>::perform(&timer.operation) {
+                Answer::After(delay, result) => {
+                    assert_eq!(delay, std::time::Duration::from_millis(3_000));
+                    result
+                }
+                _ => unreachable!("the wait is a timer"),
+            };
+            let again = host.resolve(timer.id, elapsed);
             assert!(
                 again.iter().any(|effect| matches!(
                     effect.operation,
                     FeeOperation::ReadDeployment { fresh: true, .. }
                 )),
-                "a retry is a real new read"
+                "the retry is a real new read"
             );
+            // The reason stays on screen while the re-ask runs, the
+            // measuring sign beside it — nothing flips to "Estimating…".
+            let retrying = host.view();
+            assert!(retrying.busy && retrying.failed.is_none());
+            let kept = retrying
+                .failure
+                .unwrap_or_else(|| unreachable!("the reason is kept through the re-ask"));
+            assert!(kept.retrying);
+            assert_eq!(kept.reason_key, failure.reason_key);
+            assert_eq!(kept.footer_key, FEE_RETRYING_KEY);
             view.failed
         };
         let down = failed_with(DeploymentRead::Unreachable {
@@ -2386,14 +1971,6 @@ mod tests {
             internal.and_then(failure_reason_key),
             Some("componentsUi.gas.reasonInternal")
         );
-        for failure in [down, internal] {
-            assert!(
-                !Requoter::default()
-                    .observe(failure, false, true, 0.0)
-                    .is_empty(),
-                "{failure:?} is asked again by itself"
-            );
-        }
     }
 
     /// Spec 082 RJ1 (the review's key): the write-ahead hands the op over

@@ -226,7 +226,7 @@ pub const DESKTOP_STATES: [&str; 10] = [
     dead_code,
     reason = "cross-platform scenario inventory (data-model.md §3)"
 )]
-pub const ALL_STATES: [&str; 41] = [
+pub const ALL_STATES: [&str; 43] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
@@ -243,6 +243,10 @@ pub const ALL_STATES: [&str; 41] = [
     // holding the confirm, and a fee coin switched (provisional, then
     // measured).
     "cs37", "cs38", "cs39", "cs40", "cs41",
+    // PR 2 note 1: the fee's failure in one truth on the row and the footer —
+    // the core's re-ask out after the chain-down (the reason kept, the
+    // measuring sign turning), and a failure only a tap retries.
+    "cs42", "cs43",
 ];
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
@@ -1770,6 +1774,8 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
         "cs39" => correctness_state("cs39", s),
         "cs40" => correctness_state("cs40", s),
         "cs41" => correctness_state("cs41", s),
+        "cs42" => correctness_state("cs42", s),
+        "cs43" => correctness_state("cs43", s),
 
         other => panic!("unknown signing state `{other}`"),
     };
@@ -1783,35 +1789,29 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
 }
 
 /// The correctness batch's sheet states, on cs1's transfer: its fee row
-/// drawn by the live `fee_model` from a fee view the core produced or would
-/// produce, and its confirm held with the core's line for the block the gate
-/// gives (`sign_confirm`).
+/// drawn by the live `fee_model` from a fee view the core produced, and its
+/// confirm held with the core's line for it — a failed fee's footer is the
+/// fee view's own (`FeeFailureView.footer_key`, the key `sign_confirm` hands
+/// the sheet), so the row and the footer say one thing.
 fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
-    use vela_core::app::fee_policy::{FeeFailure, FeeView};
     let mut model = build("cs1", s);
     model.id = state;
-    let pristine =
-        || crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
-    let failed = |failure| FeeView {
-        failed: Some(failure),
-        ..pristine()
-    };
+    let failures = fee_failures();
     let [_, provisional, settled] = fee_coin_switch();
     let (fee, note) = match state {
-        "cs37" => (
-            Some(failed(FeeFailure::ChainRead {
-                rate_limited: false,
-            })),
-            Some(s.note_fee_failed.clone()),
-        ),
-        "cs38" => (
-            Some(failed(FeeFailure::Internal)),
-            Some(s.note_fee_failed.clone()),
-        ),
+        // The chain out of reach, and a fault inside Vela: the core asks
+        // again by itself — "Retrying…", never a tap.
+        "cs37" => (Some(failures.down), None),
+        "cs38" => (Some(failures.internal), None),
         // The fee is settled; the account's previous transaction on this
         // network holds the confirm — one line, nothing else in its place.
         "cs39" => (None, Some(s.note_previous_pending.clone())),
         "cs40" => (Some(provisional), Some(s.note_fee_measuring.clone())),
+        // The re-ask out after the chain-down: the reason kept, the
+        // measuring sign turning beside it.
+        "cs42" => (Some(failures.retrying), None),
+        // Only a tap retries it: "Tap to retry", "Tap it to retry".
+        "cs43" => (Some(failures.tap), None),
         _ => (Some(settled), None),
     };
     if let Some(fee) = fee {
@@ -1829,10 +1829,89 @@ fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
         );
         crate::signing::live::fee_row_state(&mut row, fee.busy || fee.provisional);
         model.fee = row;
+        // The footer of a failed fee: the fee view's own line.
+        if let Some(failure) = fee.failure.as_ref() {
+            model.confirm_enabled = false;
+            model.confirm_note = Some(s.fee_failure.row(failure, "Ethereum").footer);
+            return model;
+        }
     }
     model.confirm_enabled = note.is_none();
     model.confirm_note = note;
     model
+}
+
+/// PR 2 note 1's fee failures, each through the real `fee_policy` core on
+/// cs1's transfer (Ethereum), the account read answered as the executor
+/// would answer it.
+pub struct FeeFailures {
+    /// The chain's nodes did not answer: the core asks again by itself.
+    pub down: vela_core::app::fee_policy::FeeView,
+    /// The read never left the app (issue 483): asked again by itself too.
+    pub internal: vela_core::app::fee_policy::FeeView,
+    /// The core's own re-ask after `down`, out now (`retrying`).
+    pub retrying: vela_core::app::fee_policy::FeeView,
+    /// An account not yet deployed with no public key: only a tap retries.
+    pub tap: vela_core::app::fee_policy::FeeView,
+}
+
+#[must_use]
+pub fn fee_failures() -> FeeFailures {
+    use crate::core_host::CoreHost;
+    use vela_core::app::fee_policy::{
+        DeploymentRead, Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult,
+        FeeTier,
+    };
+    let run = |read: DeploymentRead, public_key: bool, retry: bool| {
+        let mut host = CoreHost::<FeePolicy>::new();
+        let pending = host.dispatch(FeeEvent::QuoteRequested {
+            chain_id: 1,
+            account: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+            deployed: false,
+            public_key_available: public_key,
+            tier: FeeTier::Standard,
+            calls: vec![FeeCall {
+                to: "0x2222222222222222222222222222222222222222".to_owned(),
+                value: "1000".to_owned(),
+                data: "0x".to_owned(),
+            }],
+            fee_token: None,
+            auto_fee_token: false,
+            number: Default::default(),
+            read_deployment: Some(true),
+        });
+        let Some(asked) = pending
+            .iter()
+            .find(|effect| matches!(effect.operation, FeeOperation::ReadDeployment { .. }))
+        else {
+            return host.view();
+        };
+        let after = host.resolve(asked.id, FeeShellResult::Deployment { read });
+        if retry
+            && let Some(timer) = after
+                .iter()
+                .find(|effect| matches!(effect.operation, FeeOperation::StartTtl { .. }))
+        {
+            // The core's own timer came due: its re-ask is out.
+            let _ = host.resolve(timer.id, FeeShellResult::TtlElapsed);
+        }
+        host.view()
+    };
+    let down = || DeploymentRead::Unreachable {
+        rate_limited: false,
+    };
+    FeeFailures {
+        down: run(down(), true, false),
+        internal: run(
+            DeploymentRead::Internal {
+                kind: "rpc: pool_unavailable".to_owned(),
+            },
+            true,
+            false,
+        ),
+        retrying: run(down(), true, true),
+        tap: run(DeploymentRead::Read { deployed: false }, false, false),
+    }
 }
 
 /// A fee coin switched, through the real `fee_policy` core with canned
@@ -1951,10 +2030,16 @@ mod tests {
     /// The correctness batch's states draw what they are named for: the
     /// fee row says why it failed (the chain by name, or Vela's own fault),
     /// the confirm is held with the core's line, and a switched coin's
-    /// figure turns until it is measured.
+    /// figure turns until it is measured. PR 2 note 1: the row and the
+    /// footer say one thing — "Retrying…" with the dash while the core asks
+    /// again by itself (the reason kept and the sign turning through the
+    /// re-ask), "Tap to retry" and "Tap it to retry" only when a tap is the
+    /// one way.
     #[test]
     fn the_correctness_states_draw_their_cause() {
-        let s = SigningStrings::resolve(&Loc::from_env());
+        use vela_core::app::fee_policy::{ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY};
+        let loc = Loc::from_env();
+        let s = SigningStrings::resolve(&loc);
         let row = |state| match build(state, &s).fee {
             FeeModel::OnChain {
                 value,
@@ -1964,16 +2049,28 @@ mod tests {
             } => (value, warning, refreshing),
             _ => unreachable!("a transfer has a fee row"),
         };
-        let (_, down, _) = row("cs37");
+        let (down_figure, down, down_turning) = row("cs37");
         let (_, internal, _) = row("cs38");
         assert!(down.as_ref().is_some_and(|line| line.contains("Ethereum")));
         assert!(internal.is_some() && internal != down);
+        assert_eq!(down_figure.as_ref(), "—", "never \"Tap to retry\" here");
+        assert!(!down_turning);
+        let (figure, kept, turning) = row("cs42");
+        assert_eq!(kept, down, "the reason is kept through the re-ask");
+        assert_eq!(figure.as_ref(), "—");
+        assert!(turning, "the measuring sign turns while it retries");
+        let (tap_figure, _, _) = row("cs43");
+        assert_eq!(tap_figure, loc.t(ESTIMATE_FAILED_KEY));
+        let retrying = loc.t(FEE_RETRYING_KEY);
+        let tap = loc.t(FEE_FAILED_KEY);
         for (state, note) in [
-            ("cs37", Some(&s.note_fee_failed)),
-            ("cs38", Some(&s.note_fee_failed)),
+            ("cs37", Some(&retrying)),
+            ("cs38", Some(&retrying)),
             ("cs39", Some(&s.note_previous_pending)),
             ("cs40", Some(&s.note_fee_measuring)),
             ("cs41", None),
+            ("cs42", Some(&retrying)),
+            ("cs43", Some(&tap)),
         ] {
             let model = build(state, &s);
             assert_eq!(model.confirm_note.as_ref(), note, "{state}");

@@ -517,6 +517,9 @@ pub struct FlowStrings {
     // be able to name it.
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
+    /// The fee's failure in the core's words (PR 2 note 1): the row's reason
+    /// and figure, and the line under the held confirm.
+    pub fee_failure: FeeFailureWords,
     pub fee_speed_label: SharedString,
     pub fee_speed_once: SharedString,
     pub fee_speed_free: SharedString,
@@ -637,6 +640,124 @@ pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
         .into_iter()
         .map(|key| (key, loc.t(key)))
         .collect()
+}
+
+/// Every way a fee can fail, so the words for whichever the core names are
+/// resolved once — the core picks the key, a surface only reads it.
+pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
+    use vela_core::app::fee_policy::FeeFailure as F;
+    [
+        F::MissingPublicKey,
+        F::FeeTokenUnavailable,
+        F::QuoteUnavailable,
+        F::CalculationFailed,
+        F::EstimateFailed,
+        F::GasQuoteTooHigh,
+        F::WouldFail,
+        F::ChainRead { rate_limited: true },
+        F::ChainRead {
+            rate_limited: false,
+        },
+        // Issue 483: a fault inside the app — never "can't reach the chain".
+        F::Internal,
+    ]
+};
+
+/// The fee's failure as a fee row and the confirm under it say it (PR 2
+/// note 1) — Send's form, its confirm, and the signing sheet alike, so the
+/// three can never word one failure three ways. Every key the core's
+/// `FeeFailureView` can name, resolved once.
+#[derive(Clone, Debug, Default)]
+pub struct FeeFailureWords(Vec<(&'static str, SharedString)>);
+
+/// [`FeeFailureWords::row`]: one failure, drawn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FeeFailureLines {
+    /// The row's figure: "Tap to retry" only when a tap is the one way,
+    /// else the dash.
+    pub figure: SharedString,
+    /// The line under the row (`{{chain}}` filled), or none.
+    pub reason: Option<SharedString>,
+    /// The line under the held confirm: "Retrying…" while the core asks
+    /// again by itself (and through the re-ask), else "Tap it to retry".
+    pub footer: SharedString,
+    /// A re-ask is out now: the row's measuring sign turns beside the
+    /// reason it keeps.
+    pub retrying: bool,
+    /// The core asks again by itself — nothing may ask for a tap.
+    pub auto_retry: bool,
+}
+
+impl FeeFailureWords {
+    #[must_use]
+    pub fn resolve(loc: &Loc) -> Self {
+        use vela_core::app::fee_policy::{
+            ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY, failure_reason_key,
+        };
+        let mut keys: Vec<&'static str> = FEE_FAILURES
+            .iter()
+            .filter_map(|failure| failure_reason_key(*failure))
+            .collect();
+        keys.extend([ESTIMATE_FAILED_KEY, FEE_RETRYING_KEY, FEE_FAILED_KEY]);
+        let mut words: Vec<(&'static str, SharedString)> = Vec::new();
+        for key in keys {
+            if !words.iter().any(|(known, _)| *known == key) {
+                words.push((key, loc.t(key)));
+            }
+        }
+        Self(words)
+    }
+
+    /// The words for `key`, `{{chain}}` filled — `None` for a key this build
+    /// does not know.
+    #[must_use]
+    pub fn text(&self, key: &str, chain: &str) -> Option<SharedString> {
+        self.0
+            .iter()
+            .find(|(known, _)| *known == key)
+            .map(|(_, text)| SharedString::from(crate::wallet::fill(text, "chain", chain)))
+    }
+
+    /// The core's failure view, drawn: the figure, the reason under the row
+    /// and the footer line. `chain` is the name of the chain the fee is for.
+    #[must_use]
+    pub fn row(
+        &self,
+        failure: &vela_core::app::fee_policy::FeeFailureView,
+        chain: &str,
+    ) -> FeeFailureLines {
+        let footer = self
+            .text(&failure.footer_key, chain)
+            .or_else(|| self.text(vela_core::app::fee_policy::FEE_FAILED_KEY, chain))
+            .unwrap_or_default();
+        FeeFailureLines {
+            figure: failure
+                .figure_key
+                .as_deref()
+                .and_then(|key| self.text(key, chain))
+                .unwrap_or_else(|| SharedString::from("—")),
+            reason: failure
+                .reason_key
+                .as_deref()
+                .and_then(|key| self.text(key, chain)),
+            footer,
+            retrying: failure.retrying,
+            auto_retry: failure.auto_retry,
+        }
+    }
+}
+
+/// The fee's failure as the core says it once for the row and the footer
+/// (`FeeView.failure`) — or, from a core that predates it, built from
+/// `failed` the way the core builds it.
+#[must_use]
+pub fn fee_failure_of(
+    fee: &vela_core::app::fee_policy::FeeView,
+) -> Option<vela_core::app::fee_policy::FeeFailureView> {
+    fee.failure.clone().or_else(|| {
+        fee.failed
+            .map(|failed| vela_core::app::fee_policy::FeeFailureView::of(failed, false))
+    })
 }
 
 /// The sentence for the refusal key the core chose, from `sentences`
@@ -919,6 +1040,7 @@ impl FlowStrings {
 
             fee_refresh: s("send.feeRefresh"),
             fee_stale: s("send.feeStale"),
+            fee_failure: FeeFailureWords::resolve(loc),
             fee_speed_label: s("send.feeSpeedLabel"),
             fee_speed_once: s("send.feeSpeedOnce"),
             fee_speed_free: s("send.feeSpeedFree"),

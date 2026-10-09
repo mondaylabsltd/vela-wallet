@@ -109,6 +109,12 @@ enum Fixture {
 /// (correctness batch item 3). The receipt is the live builder's
 /// (`flows::live::send_receipt`) over a refused send. Same env-pin family as
 /// `VELA_HANDOFF`.
+///
+/// `fee-down|fee-internal|fee-retrying|fee-tap` (PR 2 note 1) — with the
+/// send's mock form or confirm (`VELA_FLOW=DSD2` / `DSD3`): the fee failed,
+/// through the real fee core (`signing::fixtures::fee_failures`) and Send's
+/// live builders — the form's row (its figure, its reason, its measuring
+/// sign) and the confirm's fee line and the one line under its confirm.
 pub fn send_state_pin(
     body: crate::flows::fixtures::FlowBody,
     s: &crate::flows::FlowStrings,
@@ -119,6 +125,52 @@ pub fn send_state_pin(
     let Some(want) = crate::dev_env::var!("VELA_SEND_STATE") else {
         return body;
     };
+    let failures = || crate::signing::fixtures::fee_failures();
+    let failed_fee = match want.trim() {
+        "fee-down" => Some(failures().down),
+        "fee-internal" => Some(failures().internal),
+        "fee-retrying" => Some(failures().retrying),
+        "fee-tap" => Some(failures().tap),
+        _ => None,
+    };
+    if let Some(fee) = failed_fee {
+        let send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+        let inputs = crate::flows::live::SendInputs {
+            send: &send,
+            fee: &fee,
+            s,
+            wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: crate::wallet::fixtures::WALLET_NAME,
+            identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+            speed: None,
+            relay_sent_at_ms: None,
+        };
+        return match body {
+            FlowBody::SendForm(mut form) => {
+                // The live row's words and sign over the mock's coin mark
+                // and refresh control.
+                let row = crate::flows::live::send_fee_row(&inputs);
+                form.fee.value = row.value;
+                form.fee.refreshing = row.refreshing;
+                form.fee.stale_note = row.stale_note;
+                form.fee.reason = row.reason;
+                FlowBody::SendForm(form)
+            }
+            FlowBody::SendConfirm(mut confirm) => {
+                for fact in &mut confirm.facts {
+                    if fact.label == s.est_fee {
+                        *fact = crate::flows::live::confirm_fee_fact(&inputs);
+                    }
+                }
+                confirm.held = crate::flows::live::confirm_held_line(&inputs);
+                confirm.cta_state = CtaState::Disabled;
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
     let reason = match want.trim() {
         "held" => {
             return match body {
@@ -167,6 +219,24 @@ pub fn send_state_pin(
             relay_sent_at_ms: None,
         },
     ))
+}
+
+/// `VELA_SEND_STATE=alert-down|alert-internal|alert-other` — with
+/// `VELA_PAGE=gallery`: Continue's alert when its estimate failed, worded by
+/// its cause (PR 2 note 13) — the chain out of reach (the mock's Ethereum by
+/// name), a fault inside Vela, or any other failure's general sentence.
+pub fn send_alert_pin() -> Option<vela_core::app::send::SendAlertKind> {
+    use vela_core::app::send::SendEstimateFailure;
+    let want = crate::dev_env::var!("VELA_SEND_STATE")?;
+    let kind = match want.trim() {
+        "alert-down" => SendEstimateFailure::ChainRead {
+            rate_limited: false,
+        },
+        "alert-internal" => SendEstimateFailure::Internal,
+        "alert-other" => SendEstimateFailure::EstimateFailed,
+        _ => return None,
+    };
+    Some(vela_core::app::send::SendAlertKind::EstimateFailed { kind })
 }
 
 /// `VELA_HANDOFF=checking|matches|asks|refused|named` — with `VELA_PAGE=gallery`

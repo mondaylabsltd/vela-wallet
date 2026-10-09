@@ -2546,7 +2546,7 @@ fn send_form_parts(
         ));
     }
     let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee_line);
-    if model.fee.refresh.is_some() {
+    if model.fee.refresh.is_some() || model.fee.reason.is_some() {
         fee_block = fee_block.child(fee_stale_line(theme, &model.fee));
     }
     if let Some(speed) = &model.speed {

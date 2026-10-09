@@ -1621,7 +1621,22 @@ fn fee_mark(send: &SendView) -> TokenMark {
     }
 }
 
-fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
+/// The fee's failure on Send, drawn (PR 2 note 1): the core's one state for
+/// the row and the line under the confirm, on the chain the fee is for.
+fn send_fee_failure(i: &SendInputs<'_>) -> Option<crate::flows::FeeFailureLines> {
+    let failure = crate::flows::fee_failure_of(i.fee)?;
+    let chain_id = i
+        .send
+        .selected_token
+        .as_ref()
+        .map(|token| token.chain_id)
+        .or(i.send.fee_coin.as_ref().map(|coin| coin.chain_id))
+        .unwrap_or(1);
+    Some(i.s.fee_failure.row(&failure, &chain_name(chain_id)))
+}
+
+pub(crate) fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
+    let failure = send_fee_failure(i);
     let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
     // path where a pick re-measures, the estimate in hand still belongs to the
@@ -1647,7 +1662,13 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
             i.s.network_fee.clone()
         },
         mark: fee_mark(i.send),
-        value: if (measuring && !provisional) || of_another_tier {
+        // PR 2 note 1: a failed fee shows the core's figure for it — the dash
+        // while the core asks again by itself, "Tap to retry" only when a tap
+        // is the one way — and keeps it through the re-ask (the measuring
+        // sign turns beside it), never "…" and back every few seconds.
+        value: if let Some(failure) = failure.as_ref() {
+            failure.figure.clone()
+        } else if (measuring && !provisional) || of_another_tier {
             i.s.fee_pending.clone()
         } else {
             SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale, i.money))
@@ -1660,8 +1681,13 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         // and nothing said so. Not while a fresh measurement is out ("old" is
         // about to stop being true), and not over a row with no figure of its
         // own on it — "from a while ago" is a fact about a number.
-        stale_note: (i.fee.stale && !measuring && !of_another_tier && quote.is_some())
-            .then(|| i.s.fee_stale.clone()),
+        stale_note: (i.fee.stale
+            && !measuring
+            && !of_another_tier
+            && quote.is_some()
+            && failure.is_none())
+        .then(|| i.s.fee_stale.clone()),
+        reason: failure.and_then(|failure| failure.reason),
     }
 }
 
@@ -3612,6 +3638,85 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     })
 }
 
+/// The confirm's fee fact: the figure — or, when the fee failed, the core's
+/// figure for that with its reason under it (PR 2 note 1), kept through the
+/// re-ask so the line does not flip to "…" and back.
+pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
+    let (send, s) = (i.send, i.s);
+    let failure = send_fee_failure(i);
+    FactRow {
+        label: s.est_fee.clone(),
+        value: if let Some(failure) = failure.as_ref() {
+            failure.figure.clone()
+        } else if send.fee_busy || i.fee.busy {
+            s.fee_pending.clone()
+        } else {
+            fee_line(
+                send.fee.as_ref().or(i.fee.fee.as_ref()),
+                Some(send),
+                i.fee,
+                i.locale,
+                i.money,
+            )
+            .into()
+        },
+        lead: FactLead::None,
+        mono: false,
+        copy: None,
+        note: failure.and_then(|failure| failure.reason),
+        danger: false,
+        detail: None,
+    }
+}
+
+/// The ONE line under the held confirm: the account's previous transaction
+/// on this network still going through (correctness batch item 3) — whatever
+/// `fee_busy` says — else the fee's failure in the same words the signing
+/// sheet's footer says it (`FeeView.failure.footer_key`, PR 2 note 1:
+/// "Retrying…" while the core asks again by itself, "Tap it to retry" only
+/// when a tap is the one way), else nothing.
+pub(crate) fn confirm_held_line(i: &SendInputs<'_>) -> Option<SharedString> {
+    if i.send.previous_pending.is_some() {
+        return Some(i.s.previous_pending.clone());
+    }
+    send_fee_failure(i).map(|failure| failure.footer)
+}
+
+/// The core's alert kind, in the corpus's words. Semantic keys only — the
+/// core never hands over a sentence. Continue's estimate is worded by its
+/// cause (PR 2 note 13, `SendEstimateFailure::body_key`): the chain out of
+/// reach by `chain`'s name, a fault inside the app as that, and the general
+/// sentence for the rest.
+#[must_use]
+pub fn send_alert_words(
+    loc: &crate::loc::Loc,
+    kind: &vela_core::app::send::SendAlertKind,
+    chain: &str,
+) -> (SharedString, Option<SharedString>) {
+    use vela_core::app::send::SendAlertKind;
+    let t = |key: &str| loc.t(key);
+    match kind {
+        SendAlertKind::InvalidAddress => (
+            t("send.alertInvalidAddressTitle"),
+            Some(t("send.alertInvalidAddressBody")),
+        ),
+        SendAlertKind::InvalidAmount => (
+            t("send.alertInvalidAmountTitle"),
+            Some(t("send.alertInvalidAmountBody")),
+        ),
+        SendAlertKind::InsufficientBalance { .. } | SendAlertKind::SplitOverBalance => (
+            t("send.alertInsufficientBalanceTitle"),
+            Some(t("send.alertInsufficientBalanceBody")),
+        ),
+        SendAlertKind::LoadTokensFailed => (t("send.alertLoadTokensError"), None),
+        SendAlertKind::EstimateFailed { kind } => (
+            t(vela_core::app::send::ESTIMATE_FAILED_TITLE_KEY),
+            Some(loc.t_text(kind.body_key(), "chain", chain)),
+        ),
+        SendAlertKind::AccountUnavailable => (t("send.alertAccountUnavailableBody"), None),
+    }
+}
+
 /// DSD3L — what is about to be signed.
 #[must_use]
 pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
@@ -3643,27 +3748,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             danger: false,
             detail: None,
         },
-        FactRow {
-            label: s.est_fee.clone(),
-            value: if send.fee_busy || i.fee.busy {
-                s.fee_pending.clone()
-            } else {
-                fee_line(
-                    send.fee.as_ref().or(i.fee.fee.as_ref()),
-                    Some(send),
-                    i.fee,
-                    i.locale,
-                    i.money,
-                )
-                .into()
-            },
-            lead: FactLead::None,
-            mono: false,
-            copy: None,
-            note: None,
-            danger: false,
-            detail: None,
-        },
+        confirm_fee_fact(i),
     ];
     // Who is paid (spec 097 F, S2): the payee the core names, with the short
     // address under any name — never a name alone, and never the stale
@@ -3696,19 +3781,13 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     let sweep = send
         .multi_select_mode
         .then(|| sweep_breakdown(send, i.locale, i.money));
-    // The confirm held for the account's previous transaction (correctness
-    // batch item 3): one line under it, the core's key — whatever `fee_busy`
-    // says, and nothing else in its place.
-    let held = send
-        .previous_pending
-        .as_ref()
-        .map(|_| s.previous_pending.clone());
+    let held = confirm_held_line(i);
     // The relay refused the last attempt for the same reason: said once —
     // by the held line while the first is still in flight, else here.
     let refused_for_previous =
         send.tx_error == Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
     let notice = send_notice(i, true).or_else(|| {
-        if refused_for_previous && held.is_some() {
+        if refused_for_previous && send.previous_pending.is_some() {
             return None;
         }
         tx_error_text(send, s).map(|body| SendNotice {
@@ -5285,6 +5364,135 @@ mod tests {
             Some(s.previous_pending.clone())
         );
         assert!(confirm.held.is_none(), "nothing in flight here");
+    }
+
+    /// PR 2 note 1, on Send: a failed fee says one truth on the form's row,
+    /// the confirm's fee line and the one line under its confirm — the same
+    /// words the signing sheet says, from the core's `FeeView.failure`
+    /// through the real fee core. While the core asks again by itself: the
+    /// dash, the reason, "Retrying…", never a tap; through the re-ask the
+    /// reason stays and the sign turns; only when a tap is the one way:
+    /// "Tap to retry" and "Tap it to retry". The previous transaction's
+    /// held line still comes first.
+    #[test]
+    fn a_failed_fee_says_one_truth_on_the_row_and_under_the_confirm() {
+        use vela_core::app::fee_policy::{ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY};
+        use vela_core::app::send::{Send, SendPreviousPending, SendStage};
+        let loc = crate::loc::Loc::from_env();
+        let s = strings();
+        let wallet = wallet_strings();
+        let failures = crate::signing::fixtures::fee_failures();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        let draw = |send: &SendView, fee: &vela_core::app::fee_policy::FeeView| {
+            let i = SendInputs {
+                send,
+                fee,
+                s: &s,
+                wallet: &wallet,
+                locale: "en",
+                money: crate::wallet::live::Money::usd(),
+                identity_name: "Golden",
+                identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                speed: None,
+                relay_sent_at_ms: None,
+            };
+            (
+                send_fee_row(&i),
+                confirm_fee_fact(&i),
+                confirm_held_line(&i),
+            )
+        };
+        let retrying = loc.t(FEE_RETRYING_KEY);
+
+        let (row, fact, held) = draw(&send, &failures.down);
+        assert_eq!(row.value.as_ref(), "—", "never \"Tap to retry\" here");
+        let reason = row
+            .reason
+            .clone()
+            .unwrap_or_else(|| unreachable!("the row says why"));
+        assert!(reason.contains("Ethereum"), "{reason}");
+        assert!(!row.refreshing && row.stale_note.is_none());
+        assert_eq!(fact.value.as_ref(), "—");
+        assert_eq!(fact.note.as_ref(), Some(&reason));
+        assert_eq!(held.as_ref(), Some(&retrying));
+        // The signing sheet's footer for the same view says the same.
+        let sheet = crate::signing::SigningStrings::resolve(&loc);
+        let lines = sheet.fee_failure.row(
+            failures
+                .down
+                .failure
+                .as_ref()
+                .unwrap_or_else(|| unreachable!("failed")),
+            "Ethereum",
+        );
+        assert_eq!(Some(lines.footer), held);
+
+        let (row, _, held) = draw(&send, &failures.internal);
+        let internal = row.reason.unwrap_or_default();
+        assert_ne!(internal, reason, "Vela's fault is not the chain's");
+        assert!(!internal.contains("Ethereum"), "{internal}");
+        assert_eq!(held.as_ref(), Some(&retrying));
+
+        let (row, fact, held) = draw(&send, &failures.retrying);
+        assert_eq!(row.value.as_ref(), "—", "not \"…\" and back");
+        assert_eq!(row.reason.as_ref(), Some(&reason), "the reason is kept");
+        assert!(row.refreshing, "the measuring sign turns");
+        assert_eq!(fact.note.as_ref(), Some(&reason));
+        assert_eq!(held.as_ref(), Some(&retrying));
+
+        let (row, fact, held) = draw(&send, &failures.tap);
+        assert_eq!(row.value, loc.t(ESTIMATE_FAILED_KEY));
+        assert_eq!(fact.value, loc.t(ESTIMATE_FAILED_KEY));
+        assert_eq!(held, Some(loc.t(FEE_FAILED_KEY)));
+
+        send.previous_pending = Some(SendPreviousPending {
+            chain_id: 1,
+            user_op_hash: "0xfirst".to_owned(),
+            key: vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY.to_owned(),
+        });
+        let (_, _, held) = draw(&send, &failures.down);
+        assert_eq!(
+            held,
+            Some(s.previous_pending.clone()),
+            "one line: the hold's"
+        );
+    }
+
+    /// PR 2 note 13: Continue's alert is worded by its cause — the chain out
+    /// of reach by the selected token's chain name, a fault inside Vela as
+    /// that (never "can't reach"), anything else the general sentence — in
+    /// both languages that carry the alert's words.
+    #[test]
+    fn continues_alert_is_worded_by_its_cause() {
+        use vela_core::app::send::{SendAlertKind, SendEstimateFailure};
+        let alert = |loc: &crate::loc::Loc, kind| {
+            send_alert_words(loc, &SendAlertKind::EstimateFailed { kind }, "Gnosis")
+        };
+        for tag in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            let (title, down) = alert(
+                &loc,
+                SendEstimateFailure::ChainRead {
+                    rate_limited: false,
+                },
+            );
+            assert_eq!(title, loc.t("send.alertEstimateFailedTitle"));
+            let down = down.unwrap_or_default();
+            assert!(
+                down.contains("Gnosis") && !down.contains("{{"),
+                "{tag}: {down}"
+            );
+            let (_, internal) = alert(&loc, SendEstimateFailure::Internal);
+            assert_eq!(
+                internal,
+                Some(loc.t(vela_core::app::fee_policy::REASON_INTERNAL_KEY)),
+                "{tag}"
+            );
+            let (_, other) = alert(&loc, SendEstimateFailure::QuoteUnavailable);
+            assert_eq!(other, Some(loc.t("send.alertEstimateFailedBody")), "{tag}");
+            assert_ne!(Some(down), other, "{tag}");
+        }
     }
 
     /// The confirm held for the account's previous transaction on this

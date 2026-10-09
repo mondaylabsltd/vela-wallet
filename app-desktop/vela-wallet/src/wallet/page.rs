@@ -115,7 +115,7 @@ use vela_core::app::network_admin::{Event as NetEvent, NetOverrideField, Network
 use vela_core::app::payment_request::PaymentRequest;
 use vela_core::app::receive_watch::ReceiveWatch;
 use vela_core::app::send::{
-    Event as SendEvent, SendAlertKind, SendDisplayContext, SendOpenParams, SendRecipientDraft,
+    Event as SendEvent, SendDisplayContext, SendOpenParams, SendRecipientDraft,
 };
 use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
@@ -6554,8 +6554,31 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
+        // `VELA_SEND_STATE=alert-down|alert-internal`: Continue's alert over
+        // the gallery's send mock, worded by its cause (PR 2 note 13) — there
+        // is no send machine on that route to raise it.
+        if self.gallery
+            && self.send_host.is_none()
+            && let Some(kind) = crate::gallery::send_alert_pin()
+        {
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(1));
+            let card = self.send_alert_card(theme, title, body, |_, _, _| {});
+            return Some(
+                div()
+                    .id("send-alert-scrim")
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(theme.backdrop)
+                    .child(card)
+                    .into_any_element(),
+            );
+        }
         let host = self.send_host.clone()?;
-        let (touch, qr, pin, pick, alert) = {
+        let (touch, qr, pin, pick, alert, chain_id) = {
             let read = host.read(cx);
             (
                 read.touch_waiting(),
@@ -6565,6 +6588,10 @@ impl WalletPage {
                     .map(|pin| (pin.request.clone(), pin.value.clone(), pin.focus.clone())),
                 read.pick.clone(),
                 read.alert.clone(),
+                read.view
+                    .selected_token
+                    .as_ref()
+                    .map_or(1, |token| token.chain_id),
             )
         };
         let scrim = |id: &'static str| {
@@ -6654,82 +6681,71 @@ impl WalletPage {
             return Some(scrim("send-touch-scrim").child(card).into_any_element());
         }
         if let Some(kind) = alert {
-            let (title, body) = self.send_alert_words(&kind);
-            let mut card = div()
-                .w(px(400.))
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .p(px(24.))
-                .rounded(px(20.))
-                .bg(theme.bg_raised)
-                .border_1()
-                .border_color(theme.border_card)
-                .child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
-            if let Some(body) = body {
-                card = card.child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(body),
-                );
-            }
+            // Worded by its cause (PR 2 note 13), the selected token's chain
+            // named where the chain is the cause.
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(chain_id));
             let dismiss = {
                 let host = host.clone();
                 move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                     host.update(cx, |host, cx| host.acknowledge_alert(cx));
                 }
             };
-            card = card.child(
-                div()
-                    .id("send-alert-ok")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.got_it.clone())
-                    .on_click(dismiss),
-            );
+            let card = self.send_alert_card(theme, title, body, dismiss);
             return Some(scrim("send-alert-scrim").child(card).into_any_element());
         }
         None
     }
 
-    /// The core's alert kind, in the corpus's words. Semantic keys only —
-    /// the core never hands over a sentence.
-    fn send_alert_words(&self, kind: &SendAlertKind) -> (SharedString, Option<SharedString>) {
-        let t = |key: &str| self.loc.t(key);
-        match kind {
-            SendAlertKind::InvalidAddress => (
-                t("send.alertInvalidAddressTitle"),
-                Some(t("send.alertInvalidAddressBody")),
-            ),
-            SendAlertKind::InvalidAmount => (
-                t("send.alertInvalidAmountTitle"),
-                Some(t("send.alertInvalidAmountBody")),
-            ),
-            SendAlertKind::InsufficientBalance { .. } | SendAlertKind::SplitOverBalance => (
-                t("send.alertInsufficientBalanceTitle"),
-                Some(t("send.alertInsufficientBalanceBody")),
-            ),
-            SendAlertKind::LoadTokensFailed => (t("send.alertLoadTokensError"), None),
-            SendAlertKind::EstimateFailed { .. } => (
-                t("send.alertEstimateFailedTitle"),
-                Some(t("send.alertEstimateFailedBody")),
-            ),
-            SendAlertKind::AccountUnavailable => (t("send.alertAccountUnavailableBody"), None),
+    /// The core's alert over the send flow: its title, its body and one
+    /// "Got it".
+    fn send_alert_card(
+        &self,
+        theme: &Theme,
+        title: SharedString,
+        body: Option<SharedString>,
+        dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> Div {
+        let mut card = div()
+            .w(px(400.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .p(px(24.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(title),
+            );
+        if let Some(body) = body {
+            card = card.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(body),
+            );
         }
+        card.child(
+            div()
+                .id("send-alert-ok")
+                .h(px(CONTACTS_BUTTON_H))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .bg(theme.accent)
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_inverse)
+                .child(self.flow_strings.got_it.clone())
+                .on_click(dismiss),
+        )
     }
 
     /// DSD2cL's total line, which reads what the importer's own view does not
@@ -7616,12 +7632,26 @@ impl WalletPage {
                         actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
                     }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
-                    actions.open_fee_token = Some(Box::new(cx.listener(
-                        |this, _: &gpui::ClickEvent, _, cx| {
-                            this.send_fee_picker = true;
-                            cx.notify();
-                        },
-                    )));
+                    actions.open_fee_token = Some(Box::new(cx.listener({
+                        let host = host.clone();
+                        move |this, _: &gpui::ClickEvent, _, cx| {
+                            // A failed fee with no other coin to choose is
+                            // asked again at once (PR 2 note 1) — a real new
+                            // read, as the signing sheet's row does — never
+                            // a sheet with nothing in it to pick.
+                            // While the re-ask is out, the tap waits for it.
+                            use crate::signing::live::{FeeTap, fee_tap};
+                            let fee = host.read(cx).fee_view();
+                            match fee_tap(fee) {
+                                FeeTap::Requote => host.update(cx, SendHost::refresh_fee),
+                                FeeTap::Nothing if fee.failure.is_some() => {}
+                                FeeTap::Coins | FeeTap::Nothing => {
+                                    this.send_fee_picker = true;
+                                    cx.notify();
+                                }
+                            }
+                        }
+                    })));
                     // Spec 069: measure again, and the speed control — every
                     // decision behind it is the `fee_speed` core's.
                     let on_host =
@@ -17722,9 +17752,8 @@ impl WalletPage {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
-                    let measuring = fee.busy
-                        || host.fee_measuring()
-                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    let measuring =
+                        signing_live::holds_lines(fee, host.fee_measuring(), speed_tier);
                     signing_live::hold_fee_warning(
                         &mut confirm.fee,
                         held,

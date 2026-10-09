@@ -49,9 +49,7 @@ use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView, Event as 
 use vela_core::app::batch_import::{
     BatchImport, BatchOperation, BatchShellResult, BatchToken, BatchView, Event as BatchEvent,
 };
-use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeEstimateView, FeeFailure, FeeTier, FeeView,
-};
+use vela_core::app::fee_policy::{Event as FeeEvent, FeeCall, FeeEstimateView, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::send::{
@@ -1000,7 +998,7 @@ impl SendHost {
             }
         } else if let Some(failure) = fee_view.failed {
             SendFeeOutcome::Failed {
-                kind: map_failure(failure),
+                kind: SendEstimateFailure::from(failure),
             }
         } else {
             // The session moved on under the question — the web's "abandoned".
@@ -1325,28 +1323,6 @@ fn estimate_failed() -> SendShellResult {
         outcome: SendFeeOutcome::Failed {
             kind: SendEstimateFailure::EstimateFailed,
         },
-    }
-}
-
-/// The fee vocabulary IS the send vocabulary, one name at a time.
-fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
-    match failure {
-        FeeFailure::MissingPublicKey => SendEstimateFailure::MissingPublicKey,
-        FeeFailure::FeeTokenUnavailable => SendEstimateFailure::FeeTokenUnavailable,
-        FeeFailure::QuoteUnavailable => SendEstimateFailure::QuoteUnavailable,
-        FeeFailure::CalculationFailed => SendEstimateFailure::CalculationFailed,
-        FeeFailure::EstimateFailed => SendEstimateFailure::EstimateFailed,
-        FeeFailure::GasQuoteTooHigh => SendEstimateFailure::GasQuoteTooHigh,
-        // A chain read the quote needed got no answer (spec 082 RJ13), or the
-        // read never left the app (issue #483): to the send machine, a quote
-        // that could not be had. The fee row says which, in the core's words.
-        FeeFailure::ChainRead { .. } | FeeFailure::Internal => {
-            SendEstimateFailure::QuoteUnavailable
-        }
-        // Spec 083 fee: the relay answered that the operation fails. The send
-        // screen has no sentence of its own for it and says what it said for
-        // this refusal before the fee machine could tell it apart.
-        FeeFailure::WouldFail => SendEstimateFailure::EstimateFailed,
     }
 }
 
@@ -1731,7 +1707,7 @@ mod tests {
                                 estimate: estimate.clone(),
                             },
                             (None, Some(failure)) => SendFeeOutcome::Failed {
-                                kind: map_failure(failure),
+                                kind: SendEstimateFailure::from(failure),
                             },
                             (None, None) => {
                                 unreachable!("a settled session has a fee or a failure")
@@ -2535,21 +2511,31 @@ mod tests {
         assert!(total.over.is_some());
     }
 
+    /// PR 2 note 13: Continue's estimate passes the fee machine's failure
+    /// through as it is (the core's `From<FeeFailure>`, the same wire shape),
+    /// so its alert is worded by the cause — the chain out of reach by name,
+    /// a fault inside the app as that — never mapped to a general one here.
     #[test]
-    fn the_fee_vocabulary_maps_one_to_one() {
+    fn the_fee_failure_passes_through_as_it_is() {
+        use vela_core::app::fee_policy::FeeFailure;
+        for failure in crate::flows::FEE_FAILURES {
+            let kind = SendEstimateFailure::from(failure);
+            assert_eq!(
+                serde_json::to_value(kind).ok(),
+                serde_json::to_value(failure).ok(),
+                "{failure:?} keeps its name"
+            );
+        }
         assert_eq!(
-            map_failure(FeeFailure::GasQuoteTooHigh),
-            SendEstimateFailure::GasQuoteTooHigh
+            SendEstimateFailure::from(FeeFailure::ChainRead {
+                rate_limited: false
+            })
+            .body_key(),
+            "send.alertEstimateChainDownBody"
         );
         assert_eq!(
-            map_failure(FeeFailure::MissingPublicKey),
-            SendEstimateFailure::MissingPublicKey
-        );
-        // Spec 083 fee: the relay's "this operation fails" reads on the send
-        // screen as that refusal always did.
-        assert_eq!(
-            map_failure(FeeFailure::WouldFail),
-            SendEstimateFailure::EstimateFailed
+            SendEstimateFailure::from(FeeFailure::Internal).body_key(),
+            vela_core::app::fee_policy::REASON_INTERNAL_KEY
         );
         assert!(matches!(
             estimate_failed(),

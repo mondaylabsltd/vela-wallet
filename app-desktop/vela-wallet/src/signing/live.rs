@@ -223,6 +223,17 @@ impl HeldLines {
     }
 }
 
+/// Whether the fee row's lines are held — the last settled words kept
+/// invisibly — because a figure is being measured (`measuring`: one is out on
+/// the speed control). Never while the core's re-ask after a failure is out
+/// (PR 2 note 1): its reason is the row's line, and it is said, so nothing
+/// flips while the core retries.
+#[must_use]
+pub fn holds_lines(fee: &FeeView, measuring: bool, speed_tier: Option<FeeTier>) -> bool {
+    let retrying = fee.failure.as_ref().is_some_and(|failure| failure.retrying);
+    !retrying && (fee.busy || measuring || fee_of_another_tier(fee, speed_tier))
+}
+
 /// [`HeldLines::warning`] on the fee row, where it has one.
 pub fn hold_fee_warning(
     model: &mut FeeModel,
@@ -1890,15 +1901,17 @@ pub fn fee_model(
     // the fee in hand is the previous speed's: "estimating", never its money.
     // Only the figure gives way — the coin list and its warning stay.
     let another_tier = fee_of_another_tier(fee, speed_tier);
-    // Spec 079 / 082 RJ13: a quote that failed for a reason that can pass is
-    // asked again by itself, and the row says why in the core's words
-    // (`fee_policy::failure_reason_key`) instead of a bare "—". One the core
-    // names no reason for (no public key, a calculation that cannot be done)
-    // keeps the dash.
-    let reason = fee
-        .failed
-        .and_then(|failure| s.fee_reason(failure, &crate::flows::live::chain_name(chain_id)));
-    let unreachable = reason.is_some();
+    // PR 2 note 1: the failure as the core says it once for the row and the
+    // footer (`FeeView.failure`) — through the re-ask that follows it too, so
+    // the row keeps its reason (and turns its measuring sign) instead of
+    // flipping to "Estimating…" and back every few seconds. The figure is
+    // "Tap to retry" only when a tap is the one way; while the core asks
+    // again by itself it is the dash.
+    let failure = crate::flows::fee_failure_of(fee).map(|failure| {
+        s.fee_failure
+            .row(&failure, &crate::flows::live::chain_name(chain_id))
+    });
+    let reason = failure.as_ref().and_then(|lines| lines.reason.clone());
     // Spec 083 fee: the relay ANSWERED that the operation fails with the coin
     // in force. Said in words too, and never as the network's doing.
     let refused = refused_fee_warning(fee, s);
@@ -1912,11 +1925,13 @@ pub fn fee_model(
         // What the handler already knows (`signing_host::fee_tapped`): a
         // failed quote can be asked again, more than one coin can be chosen
         // between — and one coin with a quote in hand is neither.
-        tappable: fee.failed.is_some() || fee.options.len() > 1,
-        value: if another_tier || (fee.busy && fee.fee.is_none()) {
+        // Through the re-ask too: a chevron that came and went every few
+        // seconds would be a row that flickers.
+        tappable: failure.is_some() || fee.options.len() > 1,
+        value: if let Some(lines) = failure.as_ref() {
+            lines.figure.clone()
+        } else if another_tier || (fee.busy && fee.fee.is_none()) {
             s.fee_estimating.clone()
-        } else if unreachable || refused.is_some() {
-            SharedString::default()
         } else {
             SharedString::from(crate::flows::live::fee_line(
                 fee.fee.as_ref(),
@@ -4480,13 +4495,19 @@ mod fee_tests {
             "the core's words for a relay failure"
         );
         assert!(warning.is_some());
-        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        // PR 2 note 1: the core asks again by itself — the row's figure is
+        // the dash, never "Tap to retry", with the sentence under it.
+        assert_eq!(value.as_ref(), "—");
 
         let mut unfixable = unreachable.clone();
         unfixable.failed = Some(FeeFailure::MissingPublicKey);
         let (value, warning, ..) = parts(row(&unfixable));
         assert!(warning.is_none(), "no promise to retry what cannot heal");
-        assert_eq!(value.as_ref(), "—");
+        assert_eq!(
+            value,
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::ESTIMATE_FAILED_KEY),
+            "only a tap asks again: the row says so"
+        );
 
         let mut stale_fee = quoted(vec![option("ETH", None, false, true)], true);
         stale_fee.stale = true;
@@ -4502,6 +4523,60 @@ mod fee_tests {
         fee_row_state(&mut model, true);
         let (_, _, _, refreshing, _) = parts(model);
         assert!(refreshing);
+    }
+
+    /// PR 2 note 1: through the core's re-ask the row keeps saying why — its
+    /// reason is said, not held invisibly as a measured figure's lines are —
+    /// and the sign turns beside it.
+    #[test]
+    fn the_reason_is_said_through_the_re_ask() {
+        let s = strings();
+        let failures = crate::signing::fixtures::fee_failures();
+        assert!(!holds_lines(&failures.retrying, true, None));
+        assert!(!holds_lines(&failures.down, false, None));
+        let mut measured = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        measured.busy = true;
+        assert!(
+            holds_lines(&measured, false, None),
+            "a figure being measured"
+        );
+
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let mut held = HeldLines::default();
+        for fee in [&failures.down, &failures.retrying] {
+            let mut model = fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            );
+            fee_row_state(&mut model, fee.busy);
+            hold_fee_warning(
+                &mut model,
+                &mut held,
+                holds_lines(fee, fee.busy, None),
+                None,
+            );
+            let FeeModel::OnChain {
+                warning,
+                warning_held,
+                refreshing,
+                value,
+                ..
+            } = model
+            else {
+                unreachable!("a transaction has a fee row")
+            };
+            assert!(warning.is_some_and(|line| line.contains("Ethereum")));
+            assert!(!warning_held, "said, not held");
+            assert_eq!(value.as_ref(), "—");
+            assert_eq!(refreshing, fee.busy, "the sign turns while it retries");
+        }
     }
 
     /// Spec 082 RJ13 (G48, DX-G14): with no fault set, Ethereum's public
@@ -4538,7 +4613,7 @@ mod fee_tests {
                     tappable,
                     ..
                 } => {
-                    assert!(value.is_empty());
+                    assert_eq!(value.as_ref(), "—", "the core retries: the dash");
                     assert!(tappable, "a failed fee can be asked again");
                     warning
                 }
@@ -5128,7 +5203,10 @@ mod fee_tests {
             Some(warning.clone()),
             s.fee_reason(vela_core::app::fee_policy::FeeFailure::EstimateFailed, "")
         );
-        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        // PR 2 note 1: the figure is the core's for a failure no wait heals
+        // (`FeeFailureView.figure_key`), the sentence under it.
+        let tap = crate::loc::Loc::from_env().t(vela_core::app::fee_policy::ESTIMATE_FAILED_KEY);
+        assert_eq!(value, tap);
         assert!(tappable, "another coin can be chosen");
         assert_eq!(
             refused_fee_warning(&drained, &s),
@@ -5148,7 +5226,7 @@ mod fee_tests {
             Some(s.warn_will_fail.clone()),
             "nothing is charged for an operation the relay refused"
         );
-        assert!(value.is_empty());
+        assert_eq!(value, tap);
 
         // The network sentence is still the network's.
         let mut unreachable = refused(Vec::new());

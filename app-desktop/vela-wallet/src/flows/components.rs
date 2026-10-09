@@ -1105,8 +1105,10 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
         ))
 }
 
-/// The refresh control's face: the icon, dimmed while a measurement is out
-/// — whoever started it — so a second tap is never ambiguous.
+/// The refresh control's face: the icon, or — while a measurement is out,
+/// whoever started it, a re-ask after a failure too — the measuring sign
+/// turning in its place, as the signing sheet's own row draws it, so a
+/// second tap is never ambiguous and a retry is seen to be one.
 pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
     div()
         .flex()
@@ -1116,28 +1118,35 @@ pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> D
         .mr(px(4.))
         .rounded_full()
         .hover(|el| el.bg(theme.bg_sunken))
-        .child(icon_img(
-            icons,
-            Icon::RefreshCw,
-            false,
-            if fee.refreshing {
-                theme.fg_subtle
-            } else {
-                theme.fg_muted
-            },
-            14.,
-        ))
+        .child(if fee.refreshing {
+            crate::ui::spinner(theme.fg_muted, px(14.), px(1.5))
+        } else {
+            gpui::IntoElement::into_any_element(icon_img(
+                icons,
+                Icon::RefreshCw,
+                false,
+                theme.fg_muted,
+                14.,
+            ))
+        })
 }
 
 /// The stale line under the fee row: calm, muted, and always drawn at its
-/// full height so Continue never moves under a pointer when it appears.
+/// full height so Continue never moves under a pointer when it appears. A
+/// failed fee says why in the same room (PR 2 note 1), in the warning tone —
+/// the line the row already keeps, so nothing jumps when it fails or while
+/// the core asks again.
 pub fn fee_stale_line(theme: &Theme, fee: &FeeRow) -> Div {
-    div()
+    let line = div()
         .min_h(px(16.))
         .px(px(12.))
-        .text_size(theme::text_label())
-        .text_color(theme.fg_subtle)
-        .child(fee.stale_note.clone().unwrap_or_default())
+        .text_size(theme::text_label());
+    match fee.reason.clone() {
+        Some(reason) => line.text_color(theme.warning).child(reason),
+        None => line
+            .text_color(theme.fg_subtle)
+            .child(fee.stale_note.clone().unwrap_or_default()),
+    }
 }
 
 /// The speed control's folded summary: the word, the tier in force, and the
