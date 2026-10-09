@@ -88,8 +88,19 @@
 	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--font-serif-latin: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
 	--font-serif: var(--font-serif-latin);
-	--font-mono:
-		ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+
+	/* Reading pages — docs, blog, notes (spec 101, after bun.sh/guides): the
+	   reader's own system face for running text, Archivo (condensed in the
+	   headings) for display, Martian Mono for code. Loaded by ReadingFonts on
+	   those pages only; every stack falls back to the system. */
+	--font-system:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		'Helvetica Neue', Arial, sans-serif;
+	--font-display: 'Archivo', var(--font-system);
+	--font-code: 'Martian Mono', var(--font-mono);
+	/* Running text a shade off full ink: the contrast a long read rests on. */
+	--ink-read: color-mix(in srgb, var(--text) 88%, var(--bg));
 
 	/* ── Type floors ──
 	   A phone is read at arm's length, not across a desk: text sized for a
@@ -124,6 +135,19 @@
    the root layout on client-side navigation). */
 :root:is([lang^='zh'], [lang='ja'], [lang='ko']) {
 	--font-serif: var(--font-sans);
+	--font-display: var(--font-system);
+}
+
+/* Reading pages (docs, blog, notes): the system face for text, condensed
+   Archivo for the page's big headings. Weights and sizes stay with each page. */
+.reading {
+	font-family: var(--font-system);
+}
+.reading :is(h1, h2) {
+	font-family: var(--font-display);
+	font-stretch: 75%;
+	letter-spacing: -0.01em;
+	word-spacing: 0.04em;
 }
 
 /* Explicit user choice pins one side of every light-dark() token. */

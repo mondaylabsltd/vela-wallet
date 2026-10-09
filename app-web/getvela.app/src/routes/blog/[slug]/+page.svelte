@@ -3,6 +3,7 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import Prose from '$lib/components/Prose.svelte';
+	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 	import { getPost, getAdjacentPosts } from '$lib/content/blog';
 	import { seoConfig } from '$lib/seo';
@@ -47,9 +48,10 @@
 	{jsonLd}
 />
 
+<ReadingFonts />
 <SiteHeader />
 
-<main class="article-wrap">
+<main class="article-wrap reading">
 	<a class="back" href={resolve('/blog')}>← All posts</a>
 
 	<article>
@@ -65,7 +67,7 @@
 			<p class="lede">{data.meta.description}</p>
 		</header>
 
-		<Prose serif>
+		<Prose>
 			<Content />
 		</Prose>
 	</article>
@@ -120,9 +122,9 @@
 	}
 	.post-header h1 {
 		margin: 14px 0 12px;
-		font-size: 2.4rem;
-		line-height: 1.15;
-		font-weight: 600;
+		font-size: 2.65rem;
+		line-height: 1.06;
+		font-weight: 800;
 		letter-spacing: -0.02em;
 	}
 	.lede {
