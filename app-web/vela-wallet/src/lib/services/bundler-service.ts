@@ -682,6 +682,14 @@ export interface InBandGasQuote {
 	usdBalance: string;
 	/** Null when this network has no native-coin price source. Native gas still works. */
 	usdPrice: string | null;
+	/**
+	 * The relay's own minimum fee for this row, in base units (`minimumAmount`,
+	 * relay contract §3), exactly as the relay wrote it — a hex quantity (a
+	 * decimal string reads too). The core floors at it (`FeeAssetQuote.
+	 * minimum_amount`). Null from an older relay, or a value that is not a
+	 * quantity: today's rule then stands.
+	 */
+	minimumAmount: string | null;
 }
 
 /** Short-lived cache for the complete in-band fee-asset list. In addition to
@@ -809,6 +817,12 @@ async function fetchInBandGasQuotesDetailed(
 			// cannot safely convert the native gas cost into that asset.
 			const usdBalance = parseDecimalString(r.usdBalance) ?? '0';
 			const usdPrice = parseDecimalString(r.usdPrice);
+			// Passed through verbatim — the core reads the relay's spelling; only
+			// something that is not a quantity at all is dropped.
+			const minimumAmount =
+				typeof r.minimumAmount === 'string' && /^(0x[0-9a-fA-F]+|\d+)$/.test(r.minimumAmount)
+					? r.minimumAmount
+					: null;
 			if (
 				!recipient ||
 				!asset ||
@@ -828,7 +842,8 @@ async function fetchInBandGasQuotesDetailed(
 					decimals,
 					symbol,
 					usdBalance,
-					usdPrice
+					usdPrice,
+					minimumAmount
 				}
 			];
 		});
