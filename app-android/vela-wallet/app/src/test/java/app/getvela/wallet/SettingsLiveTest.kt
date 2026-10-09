@@ -814,6 +814,8 @@ class SettingsLiveTest {
         // the person deployed is "self-hosted", and a label they gave wins.
         assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted · signer.example.org"), rows.map { it.title })
         assertEquals(listOf("", "My page", ""), rows.map { it.label })
+        // A row named by its domain does not say its address a second time.
+        assertEquals(listOf(true, true, false), rows.map { it.showAddress })
         // The question's answer carries the check's own version, and only where the line asks.
         assertEquals(listOf(null, version, null), rows.map { it.trustVersion })
         assertEquals(listOf("sign.getvela.app", "sign.example.com", "signer.example.org"), rows.map { it.address })

@@ -113,14 +113,19 @@ object SettingsLive {
         val address = url.substringAfter("://").trimEnd('/')
         val integrity = integrityModel(line, s)
         val label = if (official) "" else name.trim()
+        val selfHostedDomain = domain.ifBlank { address.substringBefore('/') }
+        val namedByDomain = !official && label.isEmpty()
         return SigningPageItemModel(
             url = url,
             title = when {
                 official -> s.t("settings.signing.pageOfficial")
                 label.isNotEmpty() -> label
-                else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { address.substringBefore('/') }))
+                else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to selfHostedDomain))
             },
             address = address,
+            // "Self-hosted · sign.example.com" already says the address; the
+            // row does not say it a second time (a page at a path still does).
+            showAddress = !(namedByDomain && address == selfHostedDomain),
             domain = if (domain.isBlank()) "" else s.t("settings.signing.keysOn", mapOf("domain" to domain)),
             integrity = integrity,
             official = official,

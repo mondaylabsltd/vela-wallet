@@ -139,6 +139,8 @@ data class SigningPageItemModel(
     val trustVersion: String? = null,
     /** The person's own label for the page; empty when they gave none (the rename field's start). */
     val label: String = "",
+    /** Draw [address] under the name — not when the name already is it ("Self-hosted · <domain>"). */
+    val showAddress: Boolean = true,
 )
 
 /**
@@ -198,8 +200,11 @@ fun SigningPageItem(
             }
             Text(
                 text = buildAnnotatedString {
-                    withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(model.address) }
-                    if (model.domain.isNotBlank()) append("  ·  ").also { append(model.domain) }
+                    if (model.showAddress) withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(model.address) }
+                    if (model.domain.isNotBlank()) {
+                        if (model.showAddress) append("  ·  ")
+                        append(model.domain)
+                    }
                 },
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
