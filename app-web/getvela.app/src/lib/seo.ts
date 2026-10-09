@@ -9,5 +9,7 @@ export const seoConfig = {
 	// these three values and every edit link follows.
 	github: 'https://github.com/mondaylabsltd/vela-wallet',
 	repoBranch: 'main',
-	repoAppDir: 'getvela.app'
+	// Moved under app-web/ with the other web apps; the old path made every
+	// "Edit this page on GitHub" link a 404 (found 2026-10-09, spec 101).
+	repoAppDir: 'app-web/getvela.app'
 };

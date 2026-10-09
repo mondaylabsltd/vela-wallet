@@ -9,8 +9,10 @@ description: "Everything Vela runs for you, what each piece does, and how to rep
 
 # Self-hosting guide
 
-Your money is in a Safe contract on-chain, controlled by your keys. Nothing Vela
-runs can move it. What Vela does run is the machinery that makes the wallet
+Your money is in a Safe contract on-chain, controlled by your keys. Vela holds no
+key and no role on your Safe, so nothing it runs can move or freeze your money by
+itself; it does write and serve the software that asks your keys to sign. What
+Vela runs is the machinery that makes the wallet
 convenient: a relay that submits your transactions, an index that helps a new
 device find your wallet, a directory of chain data, an exchange-rate feed, and
 the apps themselves.

@@ -62,7 +62,7 @@ source: b2ba824a16c8
 
 校验值只能告诉你两个文件一模一样，却不能告诉你这个文件是谁做的——
 何况那份校验值清单，就挂在下载链接的同一个页面上。所以我们发布的每个安装包还带一份**构建证明**：
-编译它的那次工作流会签署一份声明，写明文件、提交和这次运行，由 GitHub 保存。
+发布工作流会签署一份声明，写明文件、提交和这次运行，由 GitHub 保存。
 用 [GitHub CLI](https://cli.github.com) 一条命令就能核对（先用 `gh auth login` 登录一次；核对本身免费）：
 
 ```bash
@@ -70,9 +70,12 @@ gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wall
 ```
 
 它会告诉你这个文件由谁、从哪个提交构建，核不上就报错。
-这个答案不需要你的电脑先信任我们：签名是 GitHub 在构建时做的，别人把文件重新传到某个地方，是签不出来的。
+这个答案不需要你的电脑先信任我们：签名是 GitHub 在发布时做的，别人把文件重新传到某个地方，是签不出来的。
 
-Mac 的镜像用我们的 Developer ID 签名并经 Apple 公证，你打开时 macOS 会替你检查。想自己问一遍：
+Mac 的镜像是例外：它由人工构建、用我们的 Developer ID 签名并经 Apple 公证，并非工作流构建；之后由另一个工作流
+按发布出来的原始字节补做构建证明（核对时加上
+`--signer-workflow mondaylabsltd/vela-wallet/.github/workflows/macos-attest.yml`）。Apple 的公证是它的第一份证明，
+你打开时 macOS 会替你检查。想自己问一遍：
 
 ```bash
 xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg

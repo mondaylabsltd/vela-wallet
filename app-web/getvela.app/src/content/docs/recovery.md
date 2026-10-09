@@ -74,7 +74,8 @@ What makes that unlikely is having more than one way in:
 ## What Vela can and cannot do
 
 - **Can:** keep the index running, so your wallet is found quickly on a new device.
-- **Cannot:** move your funds, freeze your wallet, add or remove keys, or recover
-  a key you have lost. Vela never holds your keys.
+- **Cannot:** move your funds or freeze your wallet by itself, add or remove keys,
+  or recover a key you have lost. Vela holds no key and no role on your Safe; it
+  does write and serve the software that asks your keys to sign.
 
 Next: [clear signing](/docs/clear-signing).

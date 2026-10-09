@@ -181,8 +181,7 @@ Vela reads balances and simulates transactions through a **pool of RPC
 endpoints** per network — the built-in ones, public fallbacks, and any provider
 keys or endpoints you add — and moves to the next one when an endpoint is slow
 or down. You can set your own endpoint per network under **Settings →
-Networks**. (The Android app currently uses one endpoint per network, without
-failover, and the iPhone app doesn't let you change it yet.)
+Networks**, in every app.
 
 The relay is sent the RPC address the wallet uses for a network — including any
 API key in it — with every request, so it can reach the network you use. The
