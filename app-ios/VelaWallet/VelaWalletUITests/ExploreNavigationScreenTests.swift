@@ -210,6 +210,67 @@ final class ExploreNavigationScreenTests: XCTestCase {
         app.terminate()
     }
 
+    /// Closing a card in the switcher is tidying the strip, not leaving it:
+    /// the switcher stays, one card fewer (as on Android) — it used to hand
+    /// the screen to whatever page the strip had left. Done then goes back
+    /// to the page it was opened from, which is the tab in front now: the
+    /// core's selection, or the home when that has no page.
+    func testClosingACardKeepsTheSwitcher() throws {
+        let server = try LocalDappServer(html: try LocalDappServer.page())
+        server.start()
+        defer { server.stop() }
+
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "light"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SIGNER"] = "0"
+        app.launchEnvironment["VELA_URL"] = LocalDappServer.url
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 40),
+                      "the space must be open")
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 40),
+                      "the launch URL did not land on its page")
+
+        // The switcher, from the page.
+        let box = app.buttons["explore.bar.tabs"]
+        let count = try XCTUnwrap(Int(box.value as? String ?? ""), "the count box says no number")
+        box.tap()
+        let done = app.buttons["完成"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the switcher did not open")
+        attach(app.screenshot(), named: "close-01-switcher")
+
+        // The last card is the page's own — a launch URL's new tab goes at the
+        // end of the strip. The grid is lazy, so it is scrolled to first.
+        let closeAll = app.buttons["关闭全部标签页"]
+        for _ in 0..<12 where !(closeAll.exists && closeAll.isHittable) { app.swipeUp() }
+        let closes = app.buttons.matching(NSPredicate(format: "label == %@", "关闭标签页"))
+        XCTAssertGreaterThan(closes.count, 0, "no card to close")
+        closes.element(boundBy: closes.count - 1).tap()
+
+        // The switcher stays.
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(done.exists, "closing a card left the switcher")
+        XCTAssertFalse(app.buttons["explore.bar.back"].exists, "closing a card opened a page")
+        XCTAssertFalse(openTabsHeader(app).exists, "closing a card went to the home")
+        attach(app.screenshot(), named: "close-02-switcher-kept")
+
+        // Done: the tab in front now — the core's selection, as it was left —
+        // or the home when that tab has no page.
+        done.tap()
+        let page = app.buttons["explore.bar.back"]
+        let home = app.descendants(matching: .any)["explore.searchField"]
+        XCTAssertTrue(page.waitForExistence(timeout: 10) || home.exists,
+                      "Done went neither to a page nor to the home")
+        if page.exists {
+            XCTAssertEqual(box.value as? String, String(count - 1), "the strip is not one tab shorter")
+        }
+        attach(app.screenshot(), named: "close-03-done")
+        app.terminate()
+    }
+
     /// The resume section's header, "已打开 {{n}} 个标签页", whatever n is.
     private func openTabsHeader(_ app: XCUIApplication) -> XCUIElement {
         app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@",

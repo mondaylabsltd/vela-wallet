@@ -728,11 +728,22 @@ struct ExploreScreen: View {
         case .tabs:
             ExploreTabsScreen(
                 tabs: switcherTabs, copy: model.tabsScreen,
-                // Back to where it was opened from: the home, or the page —
-                // if that page is still there to go back to.
+                // Back to where it was opened from: the home, or the page.
+                // From a page that is the tab in front NOW — the person may
+                // have closed the one they came from, and the core's
+                // selection is what they return to, asked for (as Android
+                // does); a start page in front is the home.
                 onDone: {
-                    let page = controller == nil || engine != nil
-                    viewOverride = tabsFrom == .browsing && page ? .browsing : .start
+                    guard let controller else {
+                        viewOverride = tabsFrom
+                        return
+                    }
+                    guard tabsFrom == .browsing, let id = controller.explore.selectedTab else {
+                        goHome()
+                        return
+                    }
+                    controller.selectTab(id)
+                    if engine != nil { viewOverride = .browsing } else { goHome() }
                 },
                 onOpen: { id in
                     controller?.selectTab(id)
@@ -740,10 +751,16 @@ struct ExploreScreen: View {
                     let startPage = model.tabs.first { $0.id == id }?.startPage ?? false
                     viewOverride = startPage ? .start : .browsing
                 },
+                // The person is tidying the strip, not leaving it: the
+                // switcher stays, with the cards that are left (Android
+                // does the same). Nothing behind it wakes — the neighbour
+                // a close selects is not a tab anybody asked to see.
                 onClose: { id in
-                    controller?.closeTab(id)
-                    // With a live browser the strip decides what is left.
-                    if controller == nil { goHome() } else { followTheTabs() }
+                    guard let controller else {
+                        goHome()
+                        return
+                    }
+                    controller.closeTab(id)
                 },
                 onNew: {
                     controller?.newTab()
