@@ -494,13 +494,18 @@
 		for (const entry of balance.view.switcher.balances) {
 			balances.set(entry.address.toLowerCase(), entry.usd);
 		}
-		if (balance.view.display_total_usd !== null && view.address !== '') {
+		// The live total stands in for the active row only while it is shown:
+		// hidden, the core withholds every switcher figure (`app::privacy`) and
+		// the rows and the total draw the mask.
+		const hidden = balance.view.switcher.hidden;
+		if (!hidden && balance.view.display_total_usd !== null && view.address !== '') {
 			balances.set(view.address.toLowerCase(), balance.view.display_total_usd);
 		}
 		return {
 			rows: view.accounts,
 			activeIndex: view.active_index,
 			balances,
+			hidden,
 			currency: currency.view,
 			identicon: identiconSvgForClient
 		};

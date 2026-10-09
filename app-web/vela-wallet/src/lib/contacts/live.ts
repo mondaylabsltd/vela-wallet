@@ -219,7 +219,13 @@ export function liveContactDetail(
 			words === undefined
 				? []
 				: shown.map((item) =>
-						liveActivityRow(item, words, extras.hidden ?? false, extras.now ?? Date.now())
+						liveActivityRow(
+							item,
+							words,
+							// The feed's own flag first (`FeedView.hidden`).
+							extras.feed?.hidden ?? extras.hidden ?? false,
+							extras.now ?? Date.now()
+						)
 					),
 		emptyActivity: items.length === 0 ? m.noActivity : undefined,
 		editLabel: m.edit,

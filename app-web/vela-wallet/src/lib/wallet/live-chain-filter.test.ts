@@ -52,7 +52,7 @@ function view(tokens: BalanceToken[]): BalanceView {
 		unreachable_key: null,
 		holdings_loading: false,
 		cached_total_usd: 300,
-		switcher: { open: false, loading: false, balances: [] }
+		switcher: { open: false, loading: false, balances: [], hidden: false }
 	};
 }
 
@@ -76,7 +76,8 @@ function item(id: string, chain_id: number): FeedItem {
 		status: 'confirmed',
 		site: null,
 		counterparty_role: 'recipient',
-		subtitle: [{ type: 'from', address: '0x' + 'b1'.repeat(20), name: null }]
+		subtitle: [{ type: 'from', address: '0x' + 'b1'.repeat(20), name: null }],
+		figure_maskable: true
 	};
 }
 
@@ -88,6 +89,7 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	hidden: false,
 	contact_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },

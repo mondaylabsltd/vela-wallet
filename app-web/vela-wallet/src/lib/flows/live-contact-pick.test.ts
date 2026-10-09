@@ -87,7 +87,7 @@ describe('the live picker before the book is read', () => {
 		unreachable_key: null,
 		holdings_loading: false,
 		cached_total_usd: null,
-		switcher: { open: false, loading: false, balances: [] }
+		switcher: { open: false, loading: false, balances: [], hidden: false }
 	} satisfies BalanceView;
 	/** A live page with a send open and no book: `contactPick` absent. */
 	const unread: FlowsLiveInputs = {

@@ -232,6 +232,7 @@ import { chainName } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedViewThroughCore } from '$lib/wallet/core/feed-through-core';
 import { dappTitle } from '$lib/wallet/live';
+import { withFigureMaskable } from '$lib/wallet/testing/figure-maskable';
 import {
 	groupPickModel,
 	importReport,
@@ -249,7 +250,7 @@ const rowMessages = { activity: wm.activity };
 /** A contact row as the core hands it: its second line the network and the day. */
 function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 	const day_start_ms = partial.day_start_ms ?? TODAY;
-	return {
+	return withFigureMaskable({
 		direction: 'out',
 		counterparty: ALICE.address,
 		alias: null,
@@ -272,7 +273,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 			{ type: 'day', day_start_ms }
 		],
 		...partial
-	};
+	});
 }
 
 /** Alice's page is open: the core's `contact_rows` are hers, newest first. */
@@ -283,6 +284,7 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	hidden: false,
 	contact_rows: [
 		item({ id: 't1' }),
 		item({ id: 't2', direction: 'in', value: '20', symbol: 'USDC' }),
@@ -326,9 +328,13 @@ describe('liveContactDetail with a feed', () => {
 		// Older days read in the person's date preset, as the headers do.
 		expect(rows[3].subtitle).toMatch(new RegExp(`^${chainName(100)} · \\S`));
 		expect(rows[3].subtitle).not.toContain(wm.activity.yesterday);
-		// Privacy masks a contact's figures as it masks Activity's.
+		// Privacy masks a contact's figures as it masks Activity's — on the
+		// feed's own flag (`FeedView.hidden`, correctness batch item 2).
 		expect(
-			liveContactDetail(ALICE, VIEW, m, identicon, { ...extras, hidden: true }).rows[0]
+			liveContactDetail(ALICE, VIEW, m, identicon, {
+				...extras,
+				feed: { ...FEED, hidden: true }
+			}).rows[0]
 		).toMatchObject({ amount: '••••', masked: true });
 	});
 
