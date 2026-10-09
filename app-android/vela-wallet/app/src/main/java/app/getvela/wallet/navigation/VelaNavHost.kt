@@ -1438,6 +1438,7 @@ fun VelaNavHost(
                         val context = LocalContext.current
                         LaunchedEffect(Unit) { browser.start() }
                         val engine by browser.current.collectAsStateWithLifecycle()
+                        val pageComing by browser.pageComing.collectAsStateWithLifecycle()
                         val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
                         val exploreView by browser.explore.collectAsStateWithLifecycle()
                         val historyView by browser.history.collectAsStateWithLifecycle()
@@ -1542,6 +1543,8 @@ fun VelaNavHost(
                             onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },
                             signingOpen = signingController != null,
                             inspector = inspectorModel,
+                            // An open or a resume on its way: the home or the switcher stays until its page is in front.
+                            pageComing = pageComing,
                             live = app.getvela.wallet.feature.explore.ExploreCallbacks(
                                 // A favourite or a recent dApp is a SITE: a tab already
                                 // on it is resumed rather than opened twice.

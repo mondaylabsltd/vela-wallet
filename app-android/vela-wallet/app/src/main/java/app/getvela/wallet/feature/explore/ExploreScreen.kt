@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -172,6 +173,12 @@ fun ExploreScreen(
     signingOpen: Boolean = false,
     /** Spec 099 FR-014: the shown tab's status panel, from the core's record while it is open. */
     inspector: BrowserInspectorModel? = null,
+    /**
+     * Spec 099 navigation: an open or a resume is on its way and its page is
+     * not in front yet (the controller's `pageComing`). The screen stays
+     * where it was asked from — the home, the switcher — until the page is.
+     */
+    pageComing: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -193,7 +200,15 @@ fun ExploreScreen(
     // page — a fixture on a live route (device-found).
     // …except a tab whose renderer died: it has no page, and shows the reload
     // panel where the page was (spec 070).
-    val view = (viewOverride ?: landing ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null && !model.browser.crashed) ExploreView.Start else it }
+    // …and while the page asked for is still coming (spec 099 navigation), the
+    // view it was asked from stays: never the page left there before it.
+    val rest = remember { RestView() }
+    val view = (viewOverride ?: landing ?: model.view).let {
+        if (live != null && it == ExploreView.Browsing && page == null && !model.browser.crashed) {
+            if (pageComing) rest.view else ExploreView.Start
+        } else it
+    }
+    SideEffect { if (view != ExploreView.Browsing) rest.view = view }
     val openTabs = {
         tabsFrom = view
         viewOverride = ExploreView.Tabs
@@ -689,4 +704,9 @@ private fun StartPage(
 
         Box(Modifier.padding(bottom = VelaSpacing.xl3))
     }
+}
+
+/** The last view [ExploreScreen] showed that was not a page — where a page still coming leaves the person meanwhile. */
+private class RestView {
+    var view: ExploreView = ExploreView.Start
 }

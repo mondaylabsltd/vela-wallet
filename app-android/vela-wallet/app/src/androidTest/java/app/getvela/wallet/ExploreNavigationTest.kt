@@ -154,6 +154,69 @@ class ExploreNavigationTest {
         compose.onNodeWithText(openTabs).assertExists()
     }
 
+    /**
+     * A resume (a row, a switcher card) whose page the controller has not put
+     * in front yet (`pageComing`): the view it was asked from stays — never
+     * the page left there before, never the home over the switcher — and the
+     * page shows once it is there.
+     */
+    @Test
+    fun aPageStillComingKeepsTheHomeOrTheSwitcherItWasAskedFrom() {
+        val model = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+        var hasPage by mutableStateOf(false)
+        var coming by mutableStateOf(false)
+        val asking = ExploreCallbacks(
+            onOpenSite = {},
+            // As the controller does: the page there goes out of front, and one is coming.
+            onTabOpen = { id ->
+                opened += id
+                hasPage = false
+                coming = true
+            },
+            onTabClose = {},
+            onTabNew = {},
+            onTabsCloseAll = {},
+            onGroupToggle = { _, _ -> },
+            onSiteMenuPick = {},
+            onBookmark = {},
+            onRecentClear = {},
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    ExploreScreen(
+                        model = model,
+                        live = asking,
+                        landing = ExploreView.Start,
+                        page = if (hasPage) ({ Box(Modifier.fillMaxSize().background(Color.White)) }) else null,
+                        pageComing = coming,
+                        onPageBack = { false },
+                    )
+                }
+            }
+        }
+        val back = strings.t("explore.back")
+        // A resume row: the home stays while the tab's page is coming.
+        compose.onNodeWithText("polymarket.com").performClick()
+        assertEquals(listOf("polymarket"), opened)
+        compose.onNodeWithText(openTabs).assertExists()
+        compose.onNodeWithContentDescription(back).assertDoesNotExist()
+        hasPage = true
+        coming = false
+        compose.onNodeWithContentDescription(back).assertExists()
+
+        // ‹ to the home, then the switcher: a card's page still coming keeps the switcher.
+        compose.onNodeWithContentDescription(back).performClick()
+        compose.onNodeWithText(strings.t("explore.tabs")).performClick()
+        compose.onNodeWithText("app.aave.com").performClick()
+        assertEquals(listOf("polymarket", "aave"), opened)
+        compose.onNodeWithText(strings.t("explore.done")).assertExists()
+        compose.onNodeWithText(openTabs).assertDoesNotExist()
+        hasPage = true
+        coming = false
+        compose.onNodeWithContentDescription(back).assertExists()
+    }
+
     @Test
     fun forwardIsInTheMenuGreyedWithNothingAhead() {
         show(ExploreScreenState.E4, ExploreView.Browsing)
