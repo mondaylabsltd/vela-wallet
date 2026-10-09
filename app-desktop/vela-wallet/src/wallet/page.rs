@@ -13082,7 +13082,9 @@ impl WalletPage {
     /// spec 099 navigation): the shown tab's page; over the start page, a
     /// picked site's own tab already on it — resumed as it was left — else
     /// the selected start-page tab; otherwise — a dApp or a restored tab
-    /// waiting unlit — a NEW tab, leaving the waiting one intact.
+    /// waiting unlit — a NEW tab, leaving the waiting one intact. A full
+    /// strip has no room for one: the core names a tab it can spare (never
+    /// the dApp just left), which is selected here before it loads.
     fn open_here(
         &mut self,
         url: String,
@@ -13111,6 +13113,18 @@ impl WalletPage {
         );
         match target {
             ExploreOpenTarget::Load { id } => {
+                // A full strip's spare tab is not the selected one: the core
+                // hears it chosen, as for a click on it. Its new page is a
+                // load, not a page reloaded to save memory.
+                if explore.selected_tab.as_deref() != Some(id.as_str()) {
+                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
+                            cx,
+                        );
+                    });
+                }
+                self.suspended.remove(&id);
                 self.show_tab(Some(id), cx);
                 self.navigate_to(url);
             }
