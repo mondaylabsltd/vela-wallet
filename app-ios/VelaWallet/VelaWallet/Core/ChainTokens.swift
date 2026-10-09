@@ -77,9 +77,14 @@ final class ChainTokens {
     private static let ttlMs: Double = 30 * 60 * 1000
 
     /// The registry's base URL — the person's `ethereumDataURL`, else the default.
-    private let base: () async -> String
+    ///
+    /// Both seams say `@MainActor` because this class, which is the main
+    /// actor's, is what calls them: an `async` function type with no isolation
+    /// of its own needs runtime metadata iOS 17 does not have (a call to NULL
+    /// there — `check-ios17-function-metadata.mjs`).
+    private let base: @MainActor () async -> String
     /// One GET, classified (`CoreHTTP.getREST`): the seam a test answers.
-    private let fetch: (String) async -> CoreHTTP.RestAnswer
+    private let fetch: @MainActor (String) async -> CoreHTTP.RestAnswer
     private let now: () -> Double
     /// Only `doc` and `absent` live here; `unread` is never kept.
     private var cache: [Int: (document: Document, atMs: Double)] = [:]
@@ -96,8 +101,8 @@ final class ChainTokens {
     }
 
     init(
-        base: @escaping () async -> String,
-        fetch: @escaping (String) async -> CoreHTTP.RestAnswer,
+        base: @escaping @MainActor () async -> String,
+        fetch: @escaping @MainActor (String) async -> CoreHTTP.RestAnswer,
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
     ) {
         self.base = base
