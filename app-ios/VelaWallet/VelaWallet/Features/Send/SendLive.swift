@@ -40,6 +40,16 @@ extension FeeFailureViewWire {
         return loc.t(key)
     }
 
+    /// `would_fail`'s own sentence — the failure's `footer_key`, "This would
+    /// fail if sent as it is." — for a surface with no held confirm to say it
+    /// under (the Send form's row). `nil` for every other failure.
+    func wouldFailLine(_ loc: Loc) -> String? {
+        guard failure == "would_fail", reasonKey == nil,
+              footerKey == I18nKeys.CoreRound.feeWouldFail
+        else { return nil }
+        return loc.t(footerKey)
+    }
+
     /// What a tap on the row does — exactly the core's `tap` (PR 2 polish).
     var rowTap: FeeRowTap {
         switch tap {
@@ -785,7 +795,15 @@ enum SendLive {
             // Why there is no fee, in the core's words (`failure.reason_key`):
             // the chain by name for a chain read, Vela's own fault for an
             // internal one (issue #483) — never a blank "—" with nothing said.
-            failNote: failure?.reason(loc, chain: chainName),
+            //
+            // A fee that would fail has no reason of the network's — and the
+            // form has no held confirm to carry the failure's line — so the
+            // row's own line says it: "This would fail if sent as it is."
+            // (`footer_key`, PR 2 polish; the confirm and the sheet say it
+            // under their held button).
+            failNote: failure.flatMap { failure in
+                failure.reason(loc, chain: chainName) ?? failure.wouldFailLine(loc)
+            },
             // A tap on a failed row does what its figure says (the core's
             // `failure.tap`): asks again at once (`requote`), opens the coins
             // after `would_fail`, or — no coin left — nothing.

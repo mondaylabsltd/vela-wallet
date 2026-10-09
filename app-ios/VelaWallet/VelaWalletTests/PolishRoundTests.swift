@@ -262,6 +262,32 @@ struct PolishRoundTests {
         #expect(try form(view, fee: nil).tap == .open, "no failure: the row opens the coins")
     }
 
+    /// The Send form has no held confirm to carry the failure's line, so a
+    /// fee that would fail says it on the row's own line — "This would fail
+    /// if sent as it is." — with or without a coin left; the confirm and the
+    /// sheet keep saying it under their held button, never twice.
+    @Test func aFeeThatWouldFailSaysSoOnTheSendForm() throws {
+        let line = loc.t("componentsUi.signing.confirmBlock.feeWouldFail")
+        #expect(line == "This would fail if sent as it is.")
+        let form = try sendView(stage: "enter_details")
+        for anotherCoin in [true, false] {
+            let fee = try feeView(try #require(FeeCoreScene.wouldFail(anotherCoin: anotherCoin)))
+            #expect(try self.form(form, fee: fee).failNote == line, "anotherCoin: \(anotherCoin)")
+            // The confirm: its held line says it; the fee row's note does not.
+            let page = try confirm(try sendView(stage: "confirm"), fee: fee)
+            #expect(page.heldNote == line)
+            #expect(page.facts.allSatisfy { $0.note != line }, "said twice on the confirm")
+        }
+        // Every other failure keeps its own reason (or none) — never this line.
+        let down = try feeView(try #require(FeeCoreScene.chainDown.views(chainId: 8453)).failed)
+        #expect(try self.form(form, fee: down).failNote
+                == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Base"]))
+        let tap = try feeView(try #require(FeeCoreScene.missingKey.views(chainId: 8453)).failed)
+        #expect(try self.form(form, fee: tap).failNote == nil)
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        #expect(zh.t("componentsUi.signing.confirmBlock.feeWouldFail") == "按现在的方式发送会失败。")
+    }
+
     /// The confirm: the fee line does what it says, and the footer agrees —
     /// "Tap it to retry" only over a line a tap retries.
     @Test func theConfirmsFeeLineDoesWhatItsFooterSays() throws {
