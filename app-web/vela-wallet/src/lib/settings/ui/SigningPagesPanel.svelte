@@ -56,11 +56,17 @@
 						</span>
 					{/if}
 				</div>
-				<span class="where"
-					><span class="host">{row.host}</span><span class="sep" aria-hidden="true">·</span><span
-						>{row.keysOn}</span
-					></span
-				>
+				<!-- Named once: no host the name already says, and whose keys only
+				     where that is not the page's own host. -->
+				{#if row.host !== undefined || row.keysOn !== undefined}
+					<span class="where"
+						>{#if row.host !== undefined}<span class="host">{row.host}</span
+							>{/if}{#if row.host !== undefined && row.keysOn !== undefined}<span
+								class="sep"
+								aria-hidden="true">·</span
+							>{/if}{#if row.keysOn !== undefined}<span>{row.keysOn}</span>{/if}</span
+					>
+				{/if}
 				{#if row.integrity !== undefined}
 					<IntegrityLine line={row.integrity} />
 				{/if}

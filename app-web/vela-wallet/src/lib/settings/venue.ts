@@ -68,7 +68,7 @@ export function keysOnText(domain: string, m: Words): string {
 const INTEGRITY_TONE: Record<keyof SettingsMessages['integrity'], IntegrityLineModel['tone']> = {
 	matches: 'ok',
 	trusted: 'ok',
-	checking: 'warn',
+	checking: 'checking',
 	unchecked: 'warn',
 	askTrust: 'warn',
 	mismatch: 'error',
@@ -115,11 +115,36 @@ function pageName(official: boolean, name: string, domain: string, m: Words): st
 }
 
 /**
- * Whether the host is drawn beside the name: the official page's name and a
- * person's label do not say it; "Self-hosted · {{domain}}" already does.
+ * The host to draw with a page's name — `undefined` when the name already
+ * says it ("Self-hosted · sign.example.com"), so a row never names the same
+ * address twice.
  */
-function hostBesideName(official: boolean, name: string): boolean {
-	return official || name.trim() !== '';
+function hostLine(name: string, host: string): string | undefined {
+	return name.includes(host) ? undefined : host;
+}
+
+/**
+ * "Keys on {{domain}}" for a page — only when its keys live on a domain its
+ * address does not already say: Vela's official page (sign.getvela.app, keys
+ * on getvela.app) says it; a self-hosted page whose keys are its own host's
+ * would only repeat the address.
+ */
+function pageKeysOn(url: string, domain: string, m: Words): string | undefined {
+	let hostname = url;
+	try {
+		hostname = new URL(url).hostname;
+	} catch {
+		// Not an address: say whose keys, as for any other page.
+	}
+	return hostname === domain ? undefined : keysOnText(domain, m);
+}
+
+/** A page row's name and host, for "Where you review and sign"; `undefined` for Vela's own sheet. */
+function pageOf(choice: VenueChoice, m: Words): VenueRowModel['page'] {
+	if (choice.venue.type !== 'page') return undefined;
+	const name = pageName(choice.official, choice.name, choice.domain, m);
+	const host = hostOf(choice.venue.url);
+	return { name, host, official: choice.official, hostShown: hostLine(name, host) !== undefined };
 }
 
 /** Two venues the core named alike (it normalises a page's address). */
@@ -149,15 +174,7 @@ export interface VenueInput {
 export function venueModel(input: VenueInput, m: Words): VenueModel {
 	const web = input.web;
 	const rows = input.choices.map((choice): VenueRowModel => {
-		const page =
-			choice.venue.type === 'page'
-				? {
-						name: pageName(choice.official, choice.name, choice.domain, m),
-						host: hostOf(choice.venue.url),
-						official: choice.official,
-						hostShown: hostBesideName(choice.official, choice.name)
-					}
-				: undefined;
+		const page = pageOf(choice, m);
 		return {
 			id: choice.venue.type === 'page' ? choice.venue.url : 'in_vela',
 			venue: choice.venue,
@@ -245,20 +262,25 @@ export function signingPagesModel(input: SigningPagesInput, m: Words): SigningPa
 	return {
 		title: m.signing.title,
 		subtitle: m.signing.subtitle,
-		rows: input.pages.map((row): SigningPageRowModel => ({
-			url: row.url,
-			name: pageName(row.official, row.name, row.domain, m),
-			host: hostOf(row.url),
-			keysOn: keysOnText(row.domain, m),
-			official: row.official,
-			integrity: input.integrity?.[row.url],
-			// The core's question (`integrity.askTrust`) gets its own answer:
-			// "Trust this version" sends `version_trusted {url, version}` (D-15).
-			trust:
-				input.askTrust?.[row.url] !== undefined && !row.official
-					? { label: m.signing.pageTrust, version: input.askTrust[row.url] as string }
-					: undefined
-		})),
+		rows: input.pages.map((row): SigningPageRowModel => {
+			const name = pageName(row.official, row.name, row.domain, m);
+			return {
+				url: row.url,
+				name,
+				// Named once (polish 3): no host the name already says, and whose
+				// keys only where that is not the page's own host.
+				host: hostLine(name, hostOf(row.url)),
+				keysOn: pageKeysOn(row.url, row.domain, m),
+				official: row.official,
+				integrity: input.integrity?.[row.url],
+				// The core's question (`integrity.askTrust`) gets its own answer:
+				// "Trust this version" sends `version_trusted {url, version}` (D-15).
+				trust:
+					input.askTrust?.[row.url] !== undefined && !row.official
+						? { label: m.signing.pageTrust, version: input.askTrust[row.url] as string }
+						: undefined
+			};
+		}),
 		add: {
 			id: 'signing-page-add',
 			label: m.signing.pageAdd,

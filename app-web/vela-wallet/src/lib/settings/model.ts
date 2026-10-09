@@ -758,12 +758,15 @@ export interface IndexDownModel {
  * is only how loud the line is drawn.
  *
  * `ok` — it matches the published list, or the person trusts it here;
- * `warn` — not settled (checking, checking off, asking to trust);
+ * `checking` — the check is running: no verdict yet, so neither a warning
+ * nor a pass (a clock, quietly);
+ * `warn` — a caution, never a refusal: checking is off, or a self-hosted
+ * build asks to be trusted (a question, with its answer beside it);
  * `error` — refused: it will not open.
  */
 export interface IntegrityLineModel {
 	text: string;
-	tone: 'ok' | 'warn' | 'error';
+	tone: 'ok' | 'checking' | 'warn' | 'error';
 }
 
 /** One choice of "Where you review and sign" (spec 102 R1, R2). */
@@ -780,7 +783,8 @@ export interface VenueRowModel {
 	/**
 	 * A page's name ("Vela's official signing page", the person's label for
 	 * it, else "Self-hosted · {{domain}}") and host — drawn beside the name
-	 * only where the name does not already say it (`hostShown`).
+	 * only where the name does not already say it (`hostShown`): a row never
+	 * names the same address twice.
 	 */
 	page?: { name: string; host: string; official: boolean; hostShown: boolean };
 	/** "Keys on getvela.app" — whose keys this choice can use (R1), drawn on every row. */
@@ -823,9 +827,14 @@ export interface SigningPageRowModel {
 	url: string;
 	/** "Vela's official signing page", the person's label for it, or "Self-hosted · {{domain}}". */
 	name: string;
-	host: string;
-	/** "Keys on {{domain}}" — which accounts it can sign for, seen before choosing it (R1). */
-	keysOn: string;
+	/** Its host — absent when the name already says it ("Self-hosted · sign.example.com"). */
+	host?: string;
+	/**
+	 * "Keys on {{domain}}" — which accounts it can sign for, seen before
+	 * choosing it (R1). Absent when that domain is the page's own host: the
+	 * address already says it.
+	 */
+	keysOn?: string;
 	official: boolean;
 	integrity?: IntegrityLineModel;
 	/**

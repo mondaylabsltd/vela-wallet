@@ -11,7 +11,13 @@
 	 *
 	 * The version is set in the mono face so it reads as the hash it is, and a
 	 * refusal leads with a warning glyph: a line that is red only by colour is a
-	 * line some people cannot see is red.
+	 * line some people cannot see is red. A check still running is a clock, not
+	 * a warning; a self-hosted build asking to be trusted is a caution (amber
+	 * glyph, quiet words), never drawn as the refusal it is not.
+	 *
+	 * The line keeps two lines' room — what a verdict takes — so a check
+	 * landing ("Checking the page…" → "Version … · checked 14:32") never moves
+	 * what is under it (the hand-off card's Open).
 	 */
 	import type { IntegrityLineModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -34,7 +40,11 @@
 <p class="integrity" data-tone={line.tone}>
 	<span class="glyph" aria-hidden="true">
 		<Icon
-			icon={line.tone === 'ok' ? UTILITY_ICONS['shield-check'] : UTILITY_ICONS['triangle-alert']}
+			icon={line.tone === 'ok'
+				? UTILITY_ICONS['shield-check']
+				: line.tone === 'checking'
+					? UTILITY_ICONS.clock
+					: UTILITY_ICONS['triangle-alert']}
 			size="sm"
 		/>
 	</span>
@@ -66,6 +76,10 @@
 		color: var(--color-success-base);
 	}
 
+	.integrity[data-tone='checking'] .glyph {
+		color: var(--color-fg-subtle);
+	}
+
 	.integrity[data-tone='warn'] .glyph {
 		color: var(--color-warning-base);
 	}
@@ -77,6 +91,8 @@
 
 	.text {
 		min-width: 0;
+		/* Two lines of its own size, held whatever the line says. */
+		min-block-size: 2lh;
 		overflow-wrap: anywhere;
 	}
 

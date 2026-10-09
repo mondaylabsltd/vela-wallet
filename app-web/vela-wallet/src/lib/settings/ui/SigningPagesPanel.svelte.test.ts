@@ -34,7 +34,6 @@ const PANEL: SigningPagesModel = {
 			url: 'https://sign.example.com/',
 			name: 'Home server',
 			host: 'sign.example.com',
-			keysOn: 'Keys on sign.example.com',
 			official: false,
 			integrity: {
 				text: "Version 7d41e0b9 isn't on Vela's published build list. Not opened.",
@@ -44,8 +43,6 @@ const PANEL: SigningPagesModel = {
 		{
 			url: 'https://sign.example.org/',
 			name: 'Self-hosted · sign.example.org',
-			host: 'sign.example.org',
-			keysOn: 'Keys on sign.example.org',
 			official: false,
 			integrity: {
 				text: 'Version 9be01d44 is new to this device. Trust it?',
@@ -86,13 +83,29 @@ function drawn() {
 }
 
 describe('Settings → Signing pages', () => {
-	it('every row says where it lives and which keys it can reach', () => {
+	it('every row says where it lives and which keys it can reach — once', () => {
 		const view = drawn();
+		// The official page's keys are not its host's; a self-hosted page's are,
+		// and a name that says the host leaves nothing to add.
 		expect(view.rows().map((row) => row.querySelector('.where')?.textContent)).toEqual([
 			'sign.getvela.app·Keys on getvela.app',
-			'sign.example.com·Keys on sign.example.com',
-			'sign.example.org·Keys on sign.example.org'
+			'sign.example.com',
+			undefined
 		]);
+		expect(view.rows()[2].textContent?.match(/sign\.example\.org/g)).toHaveLength(1);
+	});
+
+	it('a page asking to be trusted is a caution, not a refusal', () => {
+		const view = drawn();
+		const [ok, refused, asking] = view
+			.rows()
+			.map((row) => row.querySelector<HTMLElement>('.integrity')!);
+		expect(asking.dataset.tone).toBe('warn');
+		// Quiet words, as a line that passed — never the refusal's red.
+		expect(getComputedStyle(asking).color).toBe(getComputedStyle(ok).color);
+		expect(getComputedStyle(asking).color).not.toBe(getComputedStyle(refused).color);
+		const glyph = (line: HTMLElement) => getComputedStyle(line.querySelector('.glyph')!).color;
+		expect(glyph(asking)).not.toBe(glyph(refused));
 	});
 
 	it('a page asking to trust an unknown version is answered in place, with that version', () => {

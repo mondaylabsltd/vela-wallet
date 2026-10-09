@@ -284,10 +284,13 @@ describe('Settings → Signing pages', () => {
 			{ pages: SIGNING_PAGE_ROWS, addError: 'duplicate', draft: OWN_PAGE },
 			en
 		);
+		// Each page is named once: no host the name already says, and "Keys on"
+		// only where the keys are not the page's own host's (the official page
+		// on sign.getvela.app signs with getvela.app's keys).
 		expect(model.rows.map((row) => [row.name, row.host, row.keysOn])).toEqual([
 			["Vela's official signing page", 'sign.getvela.app', 'Keys on getvela.app'],
-			['Home server', 'sign.example.com', 'Keys on sign.example.com'],
-			['Self-hosted · sign.example.org', 'sign.example.org', 'Keys on sign.example.org']
+			['Home server', 'sign.example.com', undefined],
+			['Self-hosted · sign.example.org', undefined, undefined]
 		]);
 		// The signing pages' own words (D6): no borrowed "Rename" / "Remove".
 		expect([model.renameLabel, model.removeLabel]).toEqual([
@@ -305,7 +308,7 @@ describe('Settings → Signing pages', () => {
 
 	it('the integrity line is the core’s key in words — and never says "certified"', () => {
 		const states = [
-			['checking', 'warn'],
+			['checking', 'checking'],
 			['matches', 'ok'],
 			['trusted', 'ok'],
 			['unchecked', 'warn'],
