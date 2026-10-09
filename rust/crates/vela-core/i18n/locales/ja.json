@@ -62,23 +62,29 @@
     "signing": {
       "title": "署名ページ",
       "subtitle": "リクエストを表示して署名する、信頼するページ。",
-      "pageOfficial": "公式",
+      "pageOfficial": "Vela 公式の署名ページ",
       "pageInvalid": "Web アドレスではありません。",
       "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
       "pageSave": "保存",
-      "pageAdd": "ページを追加",
+      "pageAdd": "セルフホストの署名ページを追加",
       "pageDuplicate": "このページは保存済みです。",
-      "keysOn": "キーは {{domain}}"
+      "keysOn": "キーは {{domain}}",
+      "pageSelfHosted": "セルフホスト · {{domain}}",
+      "pageTrust": "このバージョンを信頼",
+      "pageRename": "名前を変更",
+      "pageRemove": "削除",
+      "pageName": "名前"
     },
     "venue": {
       "title": "確認と署名の場所",
       "subtitle": "このアカウントの取引とメッセージに適用。キーは変わりません。",
-      "inVela": "Vela で",
+      "inVela": "Vela で確認して署名",
       "inVelaBody": "Vela の署名画面",
-      "page": "信頼するページで",
+      "page": "信頼できる署名ページで確認して署名",
       "pageBody": "依存ゼロのページで、見たものに署名",
       "blockedApp": "Vela は {{domain}} のキーを使えません。",
-      "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。"
+      "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。",
+      "blockedWeb": "署名ページは Vela アプリでのみ開けます。"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

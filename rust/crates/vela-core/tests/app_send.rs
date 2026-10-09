@@ -4610,6 +4610,49 @@ fn raw_submit_errors_become_the_calm_semantic_key() {
     assert_eq!(sut.view().tx_status, SendTxStatus::Idle);
 }
 
+/// Spec 102: a venue that cannot be used here is not a failure of the
+/// network — the screen says why, with the account's domain, in the person's
+/// language; the reason clears with the error.
+#[test]
+fn a_blocked_venue_is_said_with_its_reason() {
+    use vela_core::signing_venue::VenueBlock;
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let block = VenueBlock::AppCannotReach {
+        domain: "sign.example.com".to_owned(),
+    };
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::VenueBlocked {
+            block: block.clone(),
+        },
+    });
+    assert_eq!(
+        ops,
+        vec![Op::Haptic {
+            kind: SendHapticKind::Error
+        }]
+    );
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Error);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::VenueBlocked));
+    assert_eq!(view.tx_venue_block, Some(block));
+    assert!(!view.sending);
+    sut.dispatch(Event::RetryAfterError);
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(view.tx_venue_block, None, "the reason goes with its error");
+    // On the wire, as the web reports it.
+    let wire = serde_json::to_value(SendSubmitFailure::VenueBlocked {
+        block: VenueBlock::NotOnWeb,
+    })
+    .unwrap_or_default();
+    assert_eq!(
+        wire,
+        serde_json::json!({"type": "venue_blocked", "block": {"type": "not_on_web"}})
+    );
+}
+
 #[test]
 fn passkey_cancel_is_never_an_error_state() {
     let mut sut = boot(vec![eth("2")]);

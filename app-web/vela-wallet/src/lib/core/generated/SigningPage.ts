@@ -12,4 +12,13 @@ url: string,
 /**
  * The person's label; empty ⇒ the shell names it by its host.
  */
-name: string, };
+name: string, 
+/**
+ * Versions of THIS page the person trusted on this device ("Trust this
+ * version?", spec 076 FR-009): lowercase sha256 hex. What a shell passes
+ * as `trusted` when it checks this page — and only this page: trusting a
+ * self-hoster's build vouches for that deployment, not for every page
+ * that might serve the same bytes. Never set for the official page (the
+ * official page is never stored, and nothing is ever asked about it).
+ */
+trusted?: Array<string>, };

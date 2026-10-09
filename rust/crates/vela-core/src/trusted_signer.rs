@@ -97,11 +97,41 @@ pub enum SignerUrlError {
 }
 
 /// A signer page address the person typed, normalised (trimmed, a scheme
-/// added to a bare host, a trailing `/` on a bare origin) — or why it cannot
-/// be used. https anywhere; http only on this device's own loopback.
+/// added to a bare host, a trailing `/` on a bare origin, the host lowercased,
+/// a default port dropped) — or why it cannot be used. https anywhere; http
+/// only on this device's own loopback.
+///
+/// What a keyboard typed is read as what the person meant, and nothing else
+/// is let through (spec 102: `http：／／localhost：8140` from a Chinese
+/// keyboard was stored as `https://http：／／localhost：8140/`):
+///
+/// - **width is folded first** — the full-width forms a CJK keyboard types
+///   for URL punctuation and letters (U+FF01–U+FF5E → ASCII, the ideographic
+///   space, and the ideographic full stops `。` `｡` UTS-46 reads as dots).
+///   That is the part of NFKC an address can contain; the rest of NFKC maps
+///   characters no address has, so the core carries no normalisation tables
+///   for it;
+/// - **the scheme is a real one** — `https`, or `http` on a loopback host;
+/// - **the host is an ASCII host** — letters, digits and hyphens in labels of
+///   1–63 (an internationalised domain in its `xn--` form, as a browser
+///   writes it), an IPv4 address, or a bracketed IPv6 one. A host in another
+///   script is refused rather than converted here: the passkey's relying
+///   party is the host the BROWSER computes, and a second, home-made IDNA
+///   conversion is how the two would come to disagree;
+/// - **the port is a port** — digits, 1–65535;
+/// - no user info (`user@host`), no whitespace or control character anywhere,
+///   and a path's non-ASCII characters percent-encoded as a browser would.
+///
+/// # Errors
+///
+/// [`SignerUrlError::Invalid`] for anything that is not such an address —
+/// the person reads `settings.signing.pageInvalid` — and
+/// [`SignerUrlError::Insecure`] for http off the loopback
+/// (`settings.signing.pageInsecure`).
 pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
-    let text = input.trim();
-    if text.is_empty() || text.chars().any(char::is_whitespace) {
+    let folded = fold_width(input);
+    let text = folded.trim();
+    if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err(SignerUrlError::Invalid);
     }
     let text = if text.contains("://") {
@@ -110,25 +140,121 @@ pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
         format!("https://{text}")
     };
     let (scheme, rest) = text.split_once("://").ok_or(SignerUrlError::Invalid)?;
+    let scheme = scheme.to_ascii_lowercase();
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    let host = host_of(authority);
-    if host.is_empty() || authority.contains('@') {
+    if authority.contains('@') {
         return Err(SignerUrlError::Invalid);
     }
-    match scheme.to_ascii_lowercase().as_str() {
+    let (host, port) = host_and_port(authority).ok_or(SignerUrlError::Invalid)?;
+    match scheme.as_str() {
         "https" => {}
         "http" if is_loopback(&host) => {}
         "http" => return Err(SignerUrlError::Insecure),
         _ => return Err(SignerUrlError::Invalid),
     }
+    let default_port = if scheme == "https" { 443 } else { 80 };
+    let port = port
+        .filter(|port| *port != default_port)
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
     let path = &rest[authority.len()..];
-    let path = if path.is_empty() { "/" } else { path };
-    Ok(format!(
-        "{}://{}{}",
-        scheme.to_ascii_lowercase(),
-        authority.to_ascii_lowercase(),
-        path
-    ))
+    let path = if path.is_empty() {
+        "/".to_owned()
+    } else {
+        percent_non_ascii(path)
+    };
+    Ok(format!("{scheme}://{host}{port}{path}"))
+}
+
+/// The full-width forms a CJK keyboard produces for what an address is made
+/// of, read as the ASCII they stand for: U+FF01–U+FF5E (`：` `／` `．` `ｈ`…),
+/// the ideographic space, and the ideographic full stops UTS-46 maps to `.`.
+fn fold_width(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| match c {
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(u32::from(c) - 0xFEE0).unwrap_or(c),
+            '\u{3000}' => ' ',
+            '\u{3002}' | '\u{FF61}' => '.',
+            other => other,
+        })
+        .collect()
+}
+
+/// An authority's host (lowercased) and port, or `None` when either is not
+/// one: see [`signer_url`] for what a host may be.
+fn host_and_port(authority: &str) -> Option<(String, Option<u16>)> {
+    let (host, port) = if let Some(v6) = authority.strip_prefix('[') {
+        let (inner, after) = v6.split_once(']')?;
+        let valid = !inner.is_empty()
+            && inner.contains(':')
+            && inner
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.');
+        if !valid {
+            return None;
+        }
+        let port = match after {
+            "" => None,
+            rest => Some(rest.strip_prefix(':')?),
+        };
+        (format!("[{}]", inner.to_ascii_lowercase()), port)
+    } else {
+        let (host, port) = match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        };
+        let host = host.to_ascii_lowercase();
+        if !is_ascii_host(&host) {
+            return None;
+        }
+        (host, port)
+    };
+    let port = match port {
+        None => None,
+        Some(digits) => {
+            if digits.is_empty() || digits.len() > 5 || !digits.bytes().all(|b| b.is_ascii_digit())
+            {
+                return None;
+            }
+            Some(digits.parse::<u16>().ok().filter(|port| *port > 0)?)
+        }
+    };
+    Some((host, port))
+}
+
+/// Labels of letters, digits and hyphens, 1–63 each, no hyphen at either end,
+/// 253 in all — the host a browser would put in an origin (an IPv4 address is
+/// such a host too).
+fn is_ascii_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+/// A path as a browser sends it: every non-ASCII character as its UTF-8
+/// bytes, percent-encoded; ASCII as typed.
+fn percent_non_ascii(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        if c.is_ascii() {
+            out.push(c);
+        } else {
+            let mut buf = [0_u8; 4];
+            for byte in c.encode_utf8(&mut buf).bytes() {
+                out.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    out
 }
 
 /// The relying party a key behind `signer_origin` belongs to — the rpId the
@@ -582,14 +708,40 @@ pub fn verify(
 /// (`z=1`) and base64url'd into the fragment, which never reaches a server
 /// and which the page wipes from history at once. `page` is a checked page's
 /// own URL — only [`launch::CheckedPage`] calls this.
-pub(crate) fn fragment_launch(page: &str, request: &Value, callback: &str, token: &str) -> String {
+pub(crate) fn fragment_launch(
+    page: &str,
+    request: &Value,
+    callback: &str,
+    token: &str,
+    lang: &str,
+) -> String {
     let deflated = miniz_oxide::deflate::compress_to_vec(request.to_string().as_bytes(), 9);
     format!(
-        "{page}?ch=url#i={}&cb={}&t={}&z=1",
+        "{page}?ch=url{}#i={}&cb={}&t={}&z=1",
+        lang_param(lang),
         URL_SAFE_NO_PAD.encode(deflated),
         URL_SAFE_NO_PAD.encode(callback.as_bytes()),
         percent(token),
     )
+}
+
+/// `&lang=<tag>` for a launch's query — the app's language, which the page
+/// resolves by the apps' rule (spec 102) — or nothing for an empty or
+/// malformed tag. A BCP 47 tag is letters, digits and hyphens; anything else
+/// is not one, and is never put in a URL.
+fn lang_param(lang: &str) -> String {
+    let lang = lang.trim();
+    let tag = !lang.is_empty()
+        && lang.len() <= 35
+        && lang
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && lang.bytes().next().is_some_and(|b| b.is_ascii_alphabetic());
+    if tag {
+        format!("&lang={lang}")
+    } else {
+        String::new()
+    }
 }
 
 /// The path the loopback callback is served on — a launch's `callback`
@@ -682,8 +834,12 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, TrustedSignerEr
 /// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
 /// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
 /// this.
-pub(crate) fn socket_launch(page: &str, port: u16, token: &str) -> String {
-    format!("{page}?ch=ws#p={port}&t={}", percent(token))
+pub(crate) fn socket_launch(page: &str, port: u16, token: &str, lang: &str) -> String {
+    format!(
+        "{page}?ch=ws{}#p={port}&t={}",
+        lang_param(lang),
+        percent(token)
+    )
 }
 
 /// `user_rejected` (the person) vs everything else (the page's rules).
@@ -756,6 +912,7 @@ mod tests {
             &request,
             CALLBACK_URL,
             "tok-1",
+            "",
         );
         // The callback rides in the FRAGMENT, base64url, never in a query: a
         // query is sent to the server and logged there, and the whole point is

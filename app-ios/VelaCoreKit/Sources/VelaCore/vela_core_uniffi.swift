@@ -5797,6 +5797,20 @@ public func FfiConverterTypeSignRequestCore_lower(_ value: SignRequestCore) -> U
 public protocol SignerPageAdmissionProtocol: AnyObject, Sendable {
     
     /**
+     * When the check that admitted the page ran (the shell's clock); `None`
+     * for a refusal.
+     */
+    func checkedAtMs()  -> UInt64?
+    
+    /**
+     * Does this check admit the page AND still vouch for it at `now_ms`? A
+     * launch at `now_ms` succeeds exactly when this is `true`; when it is
+     * `false` on an admitted page, check again first (and draw
+     * [`signer_integrity_line_while_checking`] meanwhile).
+     */
+    func isFresh(nowMs: UInt64)  -> Bool
+    
+    /**
      * The line to draw at `now_ms` — "checking" once the check is too old.
      */
     func line(nowMs: UInt64)  -> SignerIntegrityLine
@@ -5807,12 +5821,20 @@ public protocol SignerPageAdmissionProtocol: AnyObject, Sendable {
     func opens()  -> Bool
     
     /**
-     * The checked page, told to answer over [`trusted_signer_callback_url`]:
-     * the request deflated into the URL's FRAGMENT, which no server sees.
-     * Refused when the page was not admitted, or the check is too old
-     * (check again, then open).
+     * Is a background refresh of this page due ([`signer_page_refresh_due`])?
+     * `last_attempt_ms`: when a check of it last started, completed or not.
      */
-    func urlLaunch(requestJson: String, token: String, nowMs: UInt64) throws  -> String
+    func refreshDue(lastAttemptMs: UInt64?, nowMs: UInt64)  -> Bool
+    
+    /**
+     * The checked page, told to answer over [`trusted_signer_callback_url`]:
+     * the request deflated into the URL's FRAGMENT, which no server sees,
+     * and `lang` — the language the app shows (`zh-HK`), so the page speaks
+     * it — in the query (empty: the page follows the browser). Refused when
+     * the page was not admitted, or the check is too old (check again, then
+     * open).
+     */
+    func urlLaunch(requestJson: String, token: String, lang: String, nowMs: UInt64) throws  -> String
     
     /**
      * The decision underneath, for the details a refusal opens onto (both
@@ -5821,9 +5843,18 @@ public protocol SignerPageAdmissionProtocol: AnyObject, Sendable {
     func verdict()  -> SignerPageVerdict?
     
     /**
-     * The checked page, told to connect to this app's loopback WebSocket.
+     * The full version (sha256 hex) to store when the person answers "Trust
+     * this version" — `SigningPagesEvent::version_trusted { url, version }`.
+     * `Some` only when the check asked ([`SignerIntegrityState::AskToTrust`]),
+     * which only a self-hosted page can; never for the official page.
      */
-    func wsLaunch(port: UInt16, token: String, nowMs: UInt64) throws  -> String
+    func versionToTrust()  -> String?
+    
+    /**
+     * The checked page, told to connect to this app's loopback WebSocket, in
+     * the app's language as for [`Self::url_launch`].
+     */
+    func wsLaunch(port: UInt16, token: String, lang: String, nowMs: UInt64) throws  -> String
     
 }
 /**
@@ -5884,6 +5915,35 @@ open class SignerPageAdmission: SignerPageAdmissionProtocol, @unchecked Sendable
 
     
     /**
+     * When the check that admitted the page ran (the shell's clock); `None`
+     * for a refusal.
+     */
+open func checkedAtMs() -> UInt64?  {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signerpageadmission_checked_at_ms(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Does this check admit the page AND still vouch for it at `now_ms`? A
+     * launch at `now_ms` succeeds exactly when this is `true`; when it is
+     * `false` on an admitted page, check again first (and draw
+     * [`signer_integrity_line_while_checking`] meanwhile).
+     */
+open func isFresh(nowMs: UInt64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signerpageadmission_is_fresh(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The line to draw at `now_ms` — "checking" once the check is too old.
      */
 open func line(nowMs: UInt64) -> SignerIntegrityLine  {
@@ -5909,18 +5969,36 @@ open func opens() -> Bool  {
 }
     
     /**
-     * The checked page, told to answer over [`trusted_signer_callback_url`]:
-     * the request deflated into the URL's FRAGMENT, which no server sees.
-     * Refused when the page was not admitted, or the check is too old
-     * (check again, then open).
+     * Is a background refresh of this page due ([`signer_page_refresh_due`])?
+     * `last_attempt_ms`: when a check of it last started, completed or not.
      */
-open func urlLaunch(requestJson: String, token: String, nowMs: UInt64)throws  -> String  {
+open func refreshDue(lastAttemptMs: UInt64?, nowMs: UInt64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signerpageadmission_refresh_due(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionUInt64.lower(lastAttemptMs),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The checked page, told to answer over [`trusted_signer_callback_url`]:
+     * the request deflated into the URL's FRAGMENT, which no server sees,
+     * and `lang` — the language the app shows (`zh-HK`), so the page speaks
+     * it — in the query (empty: the page follows the browser). Refused when
+     * the page was not admitted, or the check is too old (check again, then
+     * open).
+     */
+open func urlLaunch(requestJson: String, token: String, lang: String, nowMs: UInt64)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_signerpageadmission_url_launch(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(requestJson),
         FfiConverterString.lower(token),
+        FfiConverterString.lower(lang),
         FfiConverterUInt64.lower(nowMs),uniffiCallStatus
     )
 })
@@ -5940,15 +6018,32 @@ open func verdict() -> SignerPageVerdict?  {
 }
     
     /**
-     * The checked page, told to connect to this app's loopback WebSocket.
+     * The full version (sha256 hex) to store when the person answers "Trust
+     * this version" — `SigningPagesEvent::version_trusted { url, version }`.
+     * `Some` only when the check asked ([`SignerIntegrityState::AskToTrust`]),
+     * which only a self-hosted page can; never for the official page.
      */
-open func wsLaunch(port: UInt16, token: String, nowMs: UInt64)throws  -> String  {
+open func versionToTrust() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signerpageadmission_version_to_trust(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The checked page, told to connect to this app's loopback WebSocket, in
+     * the app's language as for [`Self::url_launch`].
+     */
+open func wsLaunch(port: UInt16, token: String, lang: String, nowMs: UInt64)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_signerpageadmission_ws_launch(
             self.uniffiCloneHandle(),
         FfiConverterUInt16.lower(port),
         FfiConverterString.lower(token),
+        FfiConverterString.lower(lang),
         FfiConverterUInt64.lower(nowMs),uniffiCallStatus
     )
 })
@@ -9469,6 +9564,63 @@ public func FfiConverterTypeSafeAddressInfo_lower(_ value: SafeAddressInfo) -> R
 
 
 /**
+ * One request header.
+ */
+public struct SignerHttpHeader: Equatable, Hashable {
+    public var name: String
+    public var value: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SignerHttpHeader: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignerHttpHeader: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignerHttpHeader {
+        return
+            try SignerHttpHeader(
+                name: FfiConverterString.read(from: &buf), 
+                value: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignerHttpHeader, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerHttpHeader_lift(_ buf: RustBuffer) throws -> SignerHttpHeader {
+    return try FfiConverterTypeSignerHttpHeader.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerHttpHeader_lower(_ value: SignerHttpHeader) -> RustBuffer {
+    return FfiConverterTypeSignerHttpHeader.lower(value)
+}
+
+
+/**
  * "Version 0ba8ee8c · matches Vela's published build list · checked …", or
  * why the page will not open: `key` is the corpus key, with `{{version}}`
  * (the first eight hex characters) and `{{time}}` (from `checked_at_ms`).
@@ -9652,6 +9804,95 @@ public func FfiConverterTypeSignerPageCheck_lift(_ buf: RustBuffer) throws -> Si
 #endif
 public func FfiConverterTypeSignerPageCheck_lower(_ value: SignerPageCheck) -> RustBuffer {
     return FfiConverterTypeSignerPageCheck.lower(value)
+}
+
+
+/**
+ * The background refresh's numbers (spec 102), so no shell keeps its own.
+ */
+public struct SignerRefreshSchedule: Equatable, Hashable {
+    /**
+     * How long a check vouches for a page (24 h).
+     */
+    public var maxAgeMs: UInt64
+    /**
+     * A check older than this is refreshed in the background (12 h).
+     */
+    public var refreshAfterMs: UInt64
+    /**
+     * How often a running app asks [`signer_page_refresh_due`] (1 h).
+     */
+    public var pollMs: UInt64
+    /**
+     * The rest after an attempt that could not complete (10 min).
+     */
+    public var retryAfterMs: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * How long a check vouches for a page (24 h).
+         */maxAgeMs: UInt64, 
+        /**
+         * A check older than this is refreshed in the background (12 h).
+         */refreshAfterMs: UInt64, 
+        /**
+         * How often a running app asks [`signer_page_refresh_due`] (1 h).
+         */pollMs: UInt64, 
+        /**
+         * The rest after an attempt that could not complete (10 min).
+         */retryAfterMs: UInt64) {
+        self.maxAgeMs = maxAgeMs
+        self.refreshAfterMs = refreshAfterMs
+        self.pollMs = pollMs
+        self.retryAfterMs = retryAfterMs
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SignerRefreshSchedule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignerRefreshSchedule: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignerRefreshSchedule {
+        return
+            try SignerRefreshSchedule(
+                maxAgeMs: FfiConverterUInt64.read(from: &buf), 
+                refreshAfterMs: FfiConverterUInt64.read(from: &buf), 
+                pollMs: FfiConverterUInt64.read(from: &buf), 
+                retryAfterMs: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignerRefreshSchedule, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.maxAgeMs, into: &buf)
+        FfiConverterUInt64.write(value.refreshAfterMs, into: &buf)
+        FfiConverterUInt64.write(value.pollMs, into: &buf)
+        FfiConverterUInt64.write(value.retryAfterMs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerRefreshSchedule_lift(_ buf: RustBuffer) throws -> SignerRefreshSchedule {
+    return try FfiConverterTypeSignerRefreshSchedule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerRefreshSchedule_lower(_ value: SignerRefreshSchedule) -> RustBuffer {
+    return FfiConverterTypeSignerRefreshSchedule.lower(value)
 }
 
 
@@ -13029,6 +13270,30 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSignerPageAdmission: FfiConverterRustBuffer {
+    typealias SwiftType = SignerPageAdmission?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSignerPageAdmission.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSignerPageAdmission.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeBrowserLoadFailure: FfiConverterRustBuffer {
     typealias SwiftType = BrowserLoadFailure?
 
@@ -13753,6 +14018,31 @@ fileprivate struct FfiConverterSequenceTypeQrScanSize: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeQrScanSize.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSignerHttpHeader: FfiConverterRustBuffer {
+    typealias SwiftType = [SignerHttpHeader]
+
+    public static func write(_ value: [SignerHttpHeader], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSignerHttpHeader.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SignerHttpHeader] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SignerHttpHeader]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSignerHttpHeader.read(from: &buf))
         }
         return seq
     }
@@ -14779,6 +15069,25 @@ public func gasSignalsCacheable(ethGasPrice: String?, blockAnswered: Bool, wantT
     )
 })
 }
+/**
+ * The hand-off card's compact fee + speed row (spec 102, D4): the fee view of
+ * the session in force and the speed control's view (`None` without one), as
+ * last rendered (JSON) — a `HandoffFee` JSON (`{fee, tier?, tier_key?}`;
+ * draw `fee` exactly as the sheet's folded fee row draws `FeeView.fee`, and
+ * `tier_key` beside it), or `None`: no row (a message, or a fee not settled
+ * for the speed in force). The card's Open is the sheet's confirm: enabled
+ * only when `sign_confirm_state` is AND the integrity line opens. See
+ * `vela_core::app::sign_confirm::handoff_fee`.
+ */
+public func handoffFeeRow(feeJson: String?, speedJson: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_handoff_fee_row(
+        FfiConverterOptionString.lower(feeJson),
+        FfiConverterOptionString.lower(speedJson),uniffiCallStatus
+    )
+})
+}
 public func hashTypedData(typedDataJson: String)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -15589,14 +15898,33 @@ public func signingPageDomain(url: String) -> String  {
 })
 }
 /**
+ * The versions the person trusted for the page at `url` on this device
+ * (spec 102) — what to pass as `trusted` to `SignerPageTarget::choose` and
+ * `signer_page_admit` when checking that page. `saved_json` is the
+ * `SigningPage[]` `SigningPagesCore` keeps (`saved`). Empty for the official
+ * page, a page that is not saved, and a list that does not read.
+ */
+public func signingPageTrusted(savedJson: String, url: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signing_page_trusted(
+        FfiConverterString.lower(savedJson),
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
  * How an account signs on this device (spec 102), as JSON — a `SigningPlan`:
- * `{domain, venue, blocked?, key?}`. `venue` is where its transactions and
- * messages are reviewed and signed (`{"type":"in_vela"}` or
+ * `{domain, venue, blocked?, key?, key_label}`. `venue` is where its
+ * transactions and messages are reviewed and signed (`{"type":"in_vela"}` or
  * `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
  * set only when nothing on this device can; `key` is the key route
  * (`{credential_id, method, transports, hints}`), absent for a record
- * written before the sign-in key was kept. `None` for a record this build
- * cannot read. See `vela_core::app::Account::signing_plan`.
+ * written before the sign-in key was kept; `key_label` is "Confirm with
+ * {key}"'s name — `{name?, place_key}`: draw `name` when set, else the
+ * translation of `place_key` (the key's own label when it is not the
+ * wallet's name, else its place). `None` for a record this build cannot
+ * read. See `vela_core::app::Account::signing_plan`.
  */
 public func signingPlan(accountJson: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
@@ -15985,9 +16313,10 @@ public func validateClientData(kind: ClientDataKind, clientDataJson: Data, authe
 }
 }
 /**
- * A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"own_page"` —
- * the choosers' "Use my own signing page". `None` for a name the core does
- * not know. See `vela_core::app::method_words::venue_words`.
+ * A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"signing_page"`
+ * — the choosers' "Use a trusted signing page" (D6; `"own_page"`, its name
+ * before, still reads). `None` for a name the core does not know. See
+ * `vela_core::app::method_words::venue_words`.
  */
 public func venueWords(row: String) -> KeyMethodWords?  {
     return try!  FfiConverterOptionTypeKeyMethodWords.lift(try! rustCall() {
@@ -16479,6 +16808,42 @@ public func storageRecordsIn(value: String) -> UInt32?  {
 })
 }
 /**
+ * Spec 102: the line to draw while a check of a page runs — `previous`'s
+ * verdict while it still vouches for the page (a background refresh does not
+ * make a good line flicker), else "checking" (a stale check re-running at
+ * Open; Open stays disabled until it completes).
+ */
+public func signerIntegrityLineWhileChecking(previous: SignerPageAdmission?, nowMs: UInt64) -> SignerIntegrityLine  {
+    return try!  FfiConverterTypeSignerIntegrityLine_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_integrity_line_while_checking(
+        FfiConverterOptionTypeSignerPageAdmission.lower(previous),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * `{{time}}` in the integrity line's "… · checked {{time}}" (spec 102): the
+ * clock time in the person's format when the check ran today ("14:32",
+ * "2:32 PM"), else the date and the time. `utc_offset_minutes` is the
+ * device's offset now; `date_format` / `time_format` the person's presets as
+ * stored (`ymd_slash`… / `h24`, `h12`), `auto` already resolved; `language`
+ * the app's (it names a 12-hour clock's day period).
+ */
+public func signerIntegrityTime(checkedAtMs: UInt64, nowMs: UInt64, utcOffsetMinutes: Int32, dateFormat: String, timeFormat: String, language: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_integrity_time(
+        FfiConverterUInt64.lower(checkedAtMs),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterInt32.lower(utcOffsetMinutes),
+        FfiConverterString.lower(dateFormat),
+        FfiConverterString.lower(timeFormat),
+        FfiConverterString.lower(language),uniffiCallStatus
+    )
+})
+}
+/**
  * Rule on the bytes `target`'s URL served: `observed_hash` is
  * [`signer_page_hash`] of exactly those bytes, `None` when the fetch failed
  * (`failure` says how). `checked_at_ms` is the shell's clock when they
@@ -16506,6 +16871,19 @@ public func signerPageAllowed() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_signer_page_allowed(uniffiCallStatus
+    )
+})
+}
+/**
+ * The headers a check's fetch of `SignerPageTarget::url()` sends — a
+ * browser's navigation `Accept` — so the host answers the check with the
+ * bytes it answers the launch with (a host may rewrite HTML for a navigation
+ * only). Send exactly these; follow no redirect the launch would not.
+ */
+public func signerPageCheckHeaders() -> [SignerHttpHeader]  {
+    return try!  FfiConverterSequenceTypeSignerHttpHeader.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_check_headers(uniffiCallStatus
     )
 })
 }
@@ -16566,6 +16944,50 @@ public func signerPageHash(bytes: Data) -> String  {
 })
 }
 /**
+ * Spec 102: which check to keep after a background refresh of a page —
+ * `next`, unless it could not complete (no network) while `previous` still
+ * vouches for the page at `now_ms`; then `previous`. A refresh that
+ * completed always wins, a mismatch included. Returns one of the two.
+ */
+public func signerPageKeepOrReplace(previous: SignerPageAdmission?, next: SignerPageAdmission, nowMs: UInt64) -> SignerPageAdmission  {
+    return try!  FfiConverterTypeSignerPageAdmission_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_keep_or_replace(
+        FfiConverterOptionTypeSignerPageAdmission.lower(previous),
+        FfiConverterTypeSignerPageAdmission_lower(next),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * Spec 102: is a background check of a page due at `now_ms`? `checked_at_ms`
+ * is when its last admitting check ran (`None`: none), `last_attempt_ms` when
+ * a check last started, completed or not. Ask on start, on every return to
+ * the foreground, and every [`SignerRefreshSchedule::poll_ms`] while the app
+ * runs, for every page in use (each account's page venue and every saved
+ * page); check those it answers `true` for.
+ */
+public func signerPageRefreshDue(checkedAtMs: UInt64?, lastAttemptMs: UInt64?, nowMs: UInt64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_refresh_due(
+        FfiConverterOptionUInt64.lower(checkedAtMs),
+        FfiConverterOptionUInt64.lower(lastAttemptMs),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * The background refresh's numbers.
+ */
+public func signerPageRefreshSchedule() -> SignerRefreshSchedule  {
+    return try!  FfiConverterTypeSignerRefreshSchedule_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_refresh_schedule(uniffiCallStatus
+    )
+})
+}
+/**
  * Where a known version lives, for any deployment of `dist/`.
  */
 public func signerPageUrl(base: String, hash: String) -> String?  {
@@ -16605,8 +17027,12 @@ public func trustedSignerCallbackUrl() -> String  {
 /**
  * The page request for a machine operation (`RegisterPasskey`,
  * `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire JSON)
- * with `method = trusted_signer`; `None` for anything else. `registry` is the
- * registry service the page fetches a member challenge from.
+ * whose `page` is set — a wallet on a custom domain, whose keys only its page
+ * can mint or use (spec 102 R3); `None` for any other operation. The
+ * operation's `method` is the key's PLACE (`platform`, `hybrid`,
+ * `security_key`), passed to the page as `place` and `hints` (R5). `registry`
+ * is the registry service named in a member proof's request; `deployment`
+ * the registry deployment the page computes the member challenge from.
  */
 public func trustedSignerCeremonyRequest(operationJson: String, id: String, walletName: String, registry: String, deployment: SignerRegistryDeployment?) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
@@ -16617,6 +17043,22 @@ public func trustedSignerCeremonyRequest(operationJson: String, id: String, wall
         FfiConverterString.lower(walletName),
         FfiConverterString.lower(registry),
         FfiConverterOptionTypeSignerRegistryDeployment.lower(deployment),uniffiCallStatus
+    )
+})
+}
+/**
+ * The corpus key of the title a shell draws while a ceremony waits on its
+ * page (spec 102) — `componentsUi.signing.ceremonyCreate` (a key is being
+ * made), `.ceremonySignIn` (sign-in and its recovery proofs) or
+ * `.ceremonyConfirm` (a new key's proof, a member proof) — instead of the
+ * hand-off card's "Review and sign" title: a ceremony has nothing to review.
+ * `None` for an operation that is not a ceremony.
+ */
+public func trustedSignerCeremonyTitleKey(operationJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_ceremony_title_key(
+        FfiConverterString.lower(operationJson),uniffiCallStatus
     )
 })
 }
@@ -16927,6 +17369,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_gas_signals_cacheable() != 13841) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_handoff_fee_row() != 49545) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17110,7 +17555,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_signing_page_domain() != 58784) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_signing_plan() != 54600) {
+    if (uniffi_vela_core_uniffi_checksum_func_signing_page_trusted() != 57487) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signing_plan() != 56092) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signing_venue_choices() != 64039) {
@@ -17194,7 +17642,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_venue_words() != 50498) {
+    if (uniffi_vela_core_uniffi_checksum_func_venue_words() != 23081) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_verified_name_step() != 265) {
@@ -17299,10 +17747,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_storage_records_in() != 32407) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_integrity_line_while_checking() != 50930) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_integrity_time() != 25618) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_admit() != 52) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_allowed() != 44692) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_check_headers() != 29174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_choose_version() != 8465) {
@@ -17317,6 +17774,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_hash() != 3719) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_keep_or_replace() != 61559) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_refresh_due() != 7557) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_refresh_schedule() != 27891) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_url() != 47674) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17326,7 +17792,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_callback_url() != 46246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_request() != 31008) {
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_request() != 25152) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_title_key() != 13238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_default_url() != 36551) {
@@ -17674,19 +18143,31 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_view() != 58264) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_checked_at_ms() != 29325) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_is_fresh() != 35582) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_line() != 15174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_opens() != 668) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_url_launch() != 3017) {
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_refresh_due() != 64881) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_url_launch() != 57086) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_verdict() != 2130) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_ws_launch() != 63730) {
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_version_to_trust() != 63726) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_ws_launch() != 26279) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signerpagetarget_line() != 8837) {
