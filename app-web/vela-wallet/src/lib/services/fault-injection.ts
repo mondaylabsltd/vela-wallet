@@ -24,6 +24,7 @@ type FaultState = {
 	emptyTreasuryChains: Set<number>;
 	rejectSubmitChains: Set<number>;
 	silentReceiptChains: Set<number>;
+	faultPoolChains: Set<number>;
 };
 
 const state: FaultState = {
@@ -36,7 +37,8 @@ const state: FaultState = {
 	failRelayChains: new Set(),
 	emptyTreasuryChains: new Set(),
 	rejectSubmitChains: new Set(),
-	silentReceiptChains: new Set()
+	silentReceiptChains: new Set(),
+	faultPoolChains: new Set()
 };
 
 export function rpcShouldFail(chainId: number): boolean {
@@ -89,6 +91,17 @@ export function receiptShouldStaySilent(chainId: number): boolean {
 	return state.silentReceiptChains.has(chainId);
 }
 
+/**
+ * The request pool fails INSIDE the app for this chain — its core faulted, or
+ * it never booted — so a read never leaves the device (issue 483). The fee
+ * says that as Vela's own fault (`FeeFailure::Internal`), never "can't reach
+ * the chain"; without this switch that state is reachable only by breaking
+ * the app itself.
+ */
+export function poolShouldFault(chainId: number): boolean {
+	return state.faultPoolChains.has(chainId);
+}
+
 /** Every verb, in one object: the console publishes it, the seam below plants into it. */
 const api = {
 	failRpc: (chainId: number) => state.failRpcChains.add(chainId),
@@ -101,6 +114,7 @@ const api = {
 	emptyTreasury: (chainId: number) => state.emptyTreasuryChains.add(chainId),
 	rejectSubmit: (chainId: number) => state.rejectSubmitChains.add(chainId),
 	silentReceipt: (chainId: number) => state.silentReceiptChains.add(chainId),
+	faultPool: (chainId: number) => state.faultPoolChains.add(chainId),
 	clearFaults: () => {
 		state.failRpcChains.clear();
 		state.rateLimitRpcChains.clear();
@@ -111,6 +125,7 @@ const api = {
 		state.emptyTreasuryChains.clear();
 		state.rejectSubmitChains.clear();
 		state.silentReceiptChains.clear();
+		state.faultPoolChains.clear();
 		state.rpcLatencyMs = 0;
 	},
 	faults: () => ({
@@ -123,6 +138,7 @@ const api = {
 		emptyTreasury: [...state.emptyTreasuryChains],
 		rejectSubmit: [...state.rejectSubmitChains],
 		silentReceipt: [...state.silentReceiptChains],
+		faultPool: [...state.faultPoolChains],
 		slowRpc: state.rpcLatencyMs
 	})
 };

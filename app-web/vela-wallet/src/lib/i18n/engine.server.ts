@@ -971,11 +971,30 @@ export const FEE_REASON_KEYS = [
 	'componentsUi.gas.reasonSimulation',
 	'componentsUi.gas.reasonQuoteHigh',
 	'home.balanceDetailStatusRetrying',
-	'explore.chainDown'
+	// Issue 483: the fee's own sentences — a chain out of reach ("Can't reach
+	// {{chain}} to price this"), and a fault inside Vela. The browser's
+	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
+	'componentsUi.gas.reasonChainDown',
+	'componentsUi.gas.reasonInternal'
+] as const;
+
+/**
+ * Every sentence a refusal is told by (`tx_tracker::RefusalReason::key`,
+ * correctness batch item 3): the fee words only for a fee refusal, "another
+ * transaction from this account went first" for a spent nonce, else the
+ * plain refusal.
+ */
+export const REFUSAL_KEYS = [
+	'send.txRejectedFees',
+	'componentsUi.signing.wentFirst',
+	'componentsUi.signing.refused'
 ] as const;
 
 /** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
 export const CONFIRM_BLOCK_KEYS = [
+	// The account's previous transaction on this network still holds the nonce
+	// (correctness batch item 3): one plain line while the confirm is held.
+	'componentsUi.signing.confirmBlock.previousPending',
 	'componentsUi.signing.confirmBlock.accountSwitching',
 	'componentsUi.signing.confirmBlock.answered',
 	'componentsUi.signing.confirmBlock.answeredRetry',
@@ -1186,7 +1205,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			// Spec 082: "提交至网络…" while it may have been sent (G56), and the
 			// relay's refusal, said without "try again" (RJ3).
 			submitting: k('send.txSubmitting'),
-			refused: k('componentsUi.signing.refused')
+			refused: k('componentsUi.signing.refused'),
+			// Correctness batch item 3: every key a refusal can be told by
+			// (`tx_tracker::RefusalReason::key`).
+			refusals: Object.fromEntries(REFUSAL_KEYS.map((key) => [key, k(key)]))
 		},
 		// Spec 079: after the approval — the send receipt's words, as
 		// Android's signing receipt uses them.

@@ -275,6 +275,7 @@ describe('S3 — the success screen lists every coin the operation sent', () => 
 	const receipt = (over: Partial<SendReceiptView>): SendReceiptView => ({
 		status: 'confirmed',
 		hold_reason: null,
+		refusal_key: null,
 		kind: null,
 		transfers: [],
 		coins: [],

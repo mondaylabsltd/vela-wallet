@@ -83,8 +83,7 @@ vi.mock('$lib/signing/fee-requote', () => ({
 		observe() {}
 		stop() {}
 	},
-	heldFeeFailure: () => null,
-	withLostContext: (view: unknown) => view
+	heldFeeFailure: () => null
 }));
 vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 	SpeedControl: class {
@@ -107,7 +106,7 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 			return { busy: false, failed: false, options: [] };
 		}
 		get feeQuote() {
-			return { contextLost: false };
+			return {};
 		}
 		feeOptions() {
 			return [];

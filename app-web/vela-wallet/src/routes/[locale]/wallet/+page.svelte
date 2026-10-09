@@ -123,7 +123,11 @@
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
-	import { startTxTracker, trackSubmitted } from '$lib/wallet/core/tracker-resident';
+	import {
+		startTxTracker,
+		subscribeInFlightOps,
+		trackSubmitted
+	} from '$lib/wallet/core/tracker-resident';
 	import { track } from '$lib/analytics';
 	import { watchSendOutcome } from '$lib/analytics/send-outcome';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
@@ -223,7 +227,9 @@
 					m: data.flowMessages,
 					wm: data.walletMessages,
 					currency: currency.view,
-					hidden: balance.view.hidden,
+					// The feed's own flag: a transfer's and a dApp row's detail mask
+					// on it (`FeedView.hidden`, `app::privacy`).
+					hidden: feed.view.hidden,
 					identicon: identiconSvgForClient,
 					// Spec 093: a dApp record's stored request, read from the store's
 					// rows by id when its "Technical details" open — never before.
@@ -630,6 +636,9 @@
 	/** What Send last heard of the holdings, so an unchanged list is not re-sent. */
 	let sentHoldingsKey: string | null = null;
 
+	/** Stops telling the send machine what is in flight; set while a send is open. */
+	let stopInFlightOps: (() => void) | null = null;
+
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
 		await loadCore();
@@ -651,7 +660,11 @@
 						outcome
 					}),
 				handoff.maybeSent,
-				handoff.submitBlock
+				handoff.submitBlock,
+				false,
+				// Who signed it: the tracker holds this account's next confirm
+				// on this network until it lands (correctness batch item 3).
+				handoff.sender
 			);
 			// Usage statistics: the op is with the relay; the tracker says how it ends.
 			track('send_submitted', { chain: handoff.chainId });
@@ -700,9 +713,9 @@
 					const outcome = await feeQuote.requestQuote({ ...request, tier: sendSpeedTier });
 					if (outcome.kind === 'ok') return { type: 'ok', estimate: outcome.estimate };
 					if (outcome.kind === 'failed') return { type: 'failed', kind: outcome.failure };
-					// The shell could not obtain an input the question requires, or
-					// the surface moved on. Neither is a verdict about a fee — the
-					// core hears the same "not estimated" either way.
+					// The surface moved on under the question. Not a verdict about a
+					// fee — the core hears "not estimated". (An account the chain
+					// could not be read for is the fee's own `failed` now, issue 483.)
 					return { type: 'failed', kind: 'estimate_failed' };
 				}
 			}
@@ -725,6 +738,14 @@
 			},
 			display: { code: currency.view.code, rate: currency.view.rate, fiat_decimals: 2 }
 		});
+		// The account's operations still holding their nonce, on every tracker
+		// render (correctness batch item 3): while one is in flight on the
+		// form's network, the core holds this send's confirm with one line —
+		// a second operation signed now would take the same nonce.
+		stopInFlightOps?.();
+		stopInFlightOps = subscribeInFlightOps((ops) =>
+			sendSession?.dispatch({ type: 'in_flight_ops', ops })
+		);
 		track('send_opened');
 	}
 
@@ -750,6 +771,8 @@
 
 	function closeSend(): void {
 		closeBatch();
+		stopInFlightOps?.();
+		stopInFlightOps = null;
 		sendSession?.dispose();
 		sendSession = null;
 		sendView = null;
@@ -996,7 +1019,16 @@
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
-					confirmDisabled: !sendView.can_confirm
+					confirmDisabled: !sendView.can_confirm,
+					confirmBusy:
+						sendView.sending ||
+						sendView.tx_status === 'preparing' ||
+						sendView.tx_status === 'signing' ||
+						sendView.tx_status === 'submitting',
+					// The failed submit's Try again: the core goes back to a confirm
+					// it can open — or holds it, with its one line, while the
+					// previous transaction is still in flight.
+					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' })
 				}
 	);
 

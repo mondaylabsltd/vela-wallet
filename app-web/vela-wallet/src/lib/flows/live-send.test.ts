@@ -106,6 +106,7 @@ const EMPTY_SEND: SendView = {
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
+	previous_pending: null,
 	sending: false,
 	tx_status: 'idle',
 	tx_error: null,
@@ -131,7 +132,8 @@ const IDLE_FEE: FeeView = {
 	options: [],
 	confirm_fee_ready: false,
 	no_coin_pays: false,
-	nothing_to_pay_from: false
+	nothing_to_pay_from: false,
+	provisional: false
 };
 
 const QUOTE = {
@@ -653,6 +655,7 @@ describe('one figure for one balance (spec 078)', () => {
 				receipt: {
 					status: 'confirmed',
 					hold_reason: null,
+					refusal_key: null,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -1051,6 +1054,7 @@ describe('the receipt', () => {
 	const receipt = (status: 'submitted' | 'confirmed' | 'failed' | 'maybe_sent' | 'not_sent') => ({
 		status,
 		hold_reason: null,
+		refusal_key: null,
 		kind: null,
 		transfers: [],
 		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
@@ -2422,5 +2426,154 @@ describe('the folded speed control (spec 068)', () => {
 			expect(model.speed?.singleNote).toBeUndefined();
 			expect(model.speed?.options).toHaveLength(3);
 		});
+	});
+});
+
+/**
+ * Correctness batch item 3 — the confirm waits for the account's previous
+ * transaction on this network, and a submit that did not go says why.
+ */
+describe('the held confirm and the failed submit', () => {
+	const HELD = {
+		chain_id: 1,
+		user_op_hash: '0x' + 'ab'.repeat(32),
+		key: 'componentsUi.signing.confirmBlock.previousPending'
+	};
+
+	it('a held confirm draws its one line — the core’s key, in the corpus’s words', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD })
+		);
+		expect(model.held).toBe(m['componentsUi.signing.confirmBlock.previousPending']);
+		expect(model.held).toContain('Waiting for your last transaction');
+		expect(model.error).toBeUndefined();
+		// Released: no line, nothing in its place.
+		const open = liveSendConfirm(confirmModel(), inputs({ stage: 'confirm', selected_token: ETH }));
+		expect(open.held).toBeUndefined();
+	});
+
+	it('the line stays the same whatever the fee is doing — it does not move with `fee_busy`', () => {
+		const busy = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD, fee_busy: true })
+		);
+		const settled = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD })
+		);
+		expect(busy.held).toBe(settled.held);
+	});
+
+	it('a submit refused because the previous one holds the nonce says so, with Try again', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				stage: 'confirm',
+				selected_token: ETH,
+				tx_status: 'error',
+				tx_error: 'previous_pending',
+				previous_pending: HELD
+			})
+		);
+		expect(model.error).toEqual({
+			text: m['componentsUi.signing.confirmBlock.previousPending'],
+			retry: m['send.txRetryBtn']
+		});
+		// Said once: the held line does not repeat it underneath.
+		expect(model.held).toBeUndefined();
+	});
+
+	it('every other failed submit says its own words; a venue block offers no retry', () => {
+		const said = (tx_error: SendView['tx_error']) =>
+			liveSendConfirm(
+				confirmModel(),
+				inputs({ stage: 'confirm', selected_token: ETH, tx_status: 'error', tx_error })
+			).error;
+		expect(said('generic')).toEqual({
+			text: m['send.txErrorGeneric'],
+			retry: m['send.txRetryBtn']
+		});
+		expect(said('bundler_fund')).toEqual({
+			text: m['send.txErrorBundlerFund'],
+			retry: m['send.txRetryBtn']
+		});
+		expect(said('venue_blocked')?.retry).toBeUndefined();
+	});
+});
+
+describe('a refusal told by its reason (correctness batch item 3)', () => {
+	const refused = (refusal_key: string | null) =>
+		liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				selected_token: ETH,
+				user_op_hash: '0xop',
+				receipt: {
+					status: 'failed',
+					hold_reason: null,
+					refusal_key,
+					kind: null,
+					transfers: [],
+					coins: [],
+					amount: '0.5',
+					usd_value: 1500,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+
+	it('the fee sentence only for a fee refusal; "went first" for a spent nonce; else the plain one', () => {
+		expect(refused('send.txRejectedFees').captions).toEqual([m['send.txRejectedFees']]);
+		expect(refused('componentsUi.signing.wentFirst').captions).toEqual([
+			m['componentsUi.signing.wentFirst']
+		]);
+		expect(refused('componentsUi.signing.refused').captions).toEqual([
+			m['componentsUi.signing.refused']
+		]);
+		for (const key of [
+			'send.txRejectedFees',
+			'componentsUi.signing.wentFirst',
+			'componentsUi.signing.refused'
+		]) {
+			const model = refused(key);
+			expect(model.stage).toBe('failed');
+			expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
+			// Nothing was sent: never "please try again" over a refusal.
+			expect(model.captions.join(' ')).not.toContain(m['send.txErrorGeneric']);
+		}
+	});
+
+	it('a failure that was no refusal keeps its own words', () => {
+		expect(refused(null).title).toBe(m['send.txErrorGeneric']);
+	});
+});
+
+/**
+ * Correctness batch item 2, the visible side of the shared fixture: Send is
+ * where a person picks an amount, so its picker keeps the figures while the
+ * balance is hidden (`MoneySurface::VISIBLE`). Its builder takes no privacy
+ * flag at all — the hidden fixture's holdings reach it as they are.
+ */
+describe('hidden balance: Send keeps its figures', () => {
+	it('the picker shows every holding of the hidden fixture', async () => {
+		const { readFileSync } = await import('node:fs');
+		const { toApiToken } = await import('$lib/wallet/core/balance-executor');
+		const { toSendToken } = await import('./core/send-types');
+		const fixture = JSON.parse(
+			readFileSync('../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json', 'utf8')
+		) as {
+			visible_surfaces: string[];
+			hidden: { balance: { hidden: boolean; tokens: Parameters<typeof toApiToken>[0][] } };
+		};
+		expect(fixture.visible_surfaces).toContain('send');
+		expect(fixture.hidden.balance.hidden).toBe(true);
+		const tokens = fixture.hidden.balance.tokens.map((token) => toSendToken(toApiToken(token)));
+		const text = JSON.stringify(liveSendPick(pickModel(), inputs({ tokens })));
+		// The picker trims to its own budget (376.54321 → 376.5432); the digits stay.
+		for (const figure of ['418.25', '376.543']) expect(text).toContain(figure);
+		expect(text).not.toContain('••••');
 	});
 });

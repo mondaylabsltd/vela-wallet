@@ -45,7 +45,12 @@ const seams = vi.hoisted(() => {
 			const session = {
 				onView: options.onView,
 				start: vi.fn(() => session.onView({ ...IDLE, busy: true })),
-				dispatch: vi.fn(),
+				// As the real core does: a new question publishes its run as busy
+				// from inside the dispatch (the account read is its first step,
+				// issue 483) — never an answer of the question before it.
+				dispatch: vi.fn((event: { type: string }) => {
+					if (event.type === 'quote_requested') session.onView({ ...IDLE, busy: true });
+				}),
 				dispose: vi.fn()
 			};
 			seams.sessions.push(session);
@@ -357,7 +362,7 @@ describe('picking a speed (issue 681)', () => {
 		flushSync();
 		await tick();
 		// It says so: the ⟳ turns from the moment the measurement is decided
-		// on, not from the dispatch an `eth_getCode` later.
+		// on, and stays turning while the core measures (its account read first).
 		await vi.waitFor(() =>
 			expect(feeScreen.container.querySelector('button.refresh')?.getAttribute('aria-busy')).toBe(
 				'true'

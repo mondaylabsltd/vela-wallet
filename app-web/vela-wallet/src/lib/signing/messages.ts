@@ -318,6 +318,13 @@ export interface SigningMessages {
 		 * nothing was sent; no Retry words.
 		 */
 		refused: string;
+		/**
+		 * A refusal told by its reason (correctness batch item 3): the tracker
+		 * entry's `refusal_key` → its sentence — the fee words only for a fee
+		 * refusal, "another transaction from this account went first" for a
+		 * spent nonce, else the plain refusal.
+		 */
+		refusals: Readonly<Record<string, string>>;
 	};
 	/**
 	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what

@@ -47,6 +47,7 @@ import { getAllNetworksSync } from '$lib/services/networks';
 import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
 import {
 	dispatchTxTracker,
+	subscribeInFlightOps,
 	subscribeTxTracker,
 	txTrackerView
 } from '$lib/wallet/core/tracker-resident';
@@ -121,6 +122,8 @@ class SignRequest {
 	#lastHandoffKey = '';
 	#lastWithdrawKey = '';
 	#forward: TrackForward | null = null;
+	/** Stops telling the machine which operations hold their nonce. */
+	#stopInFlightOps: (() => void) | null = null;
 	/** The last failure the sheet showed, so a view repeated is not counted again (G61). */
 	#lastFailure = '';
 	/** request id → the transport that delivered it (for the claim port). */
@@ -262,6 +265,15 @@ class SignRequest {
 				dispatch: (event) => this.#loop?.dispatch(event)
 			});
 			this.#forward.watch(this.view.tracker_handoff?.user_op_hash ?? null);
+			// The operations holding their account's nonce, on every tracker
+			// render (correctness batch item 3): while the signer has one in
+			// flight on the request's network, the core holds the confirm
+			// (`ConfirmBlock::PreviousPending`) — a second operation signed now
+			// would take the same nonce. Signatures never wait.
+			this.#stopInFlightOps?.();
+			this.#stopInFlightOps = subscribeInFlightOps((ops) =>
+				this.#loop?.dispatch({ type: 'in_flight_ops', ops })
+			);
 			// The session's rows are the machine's signers (§12.1.6): mirrored on
 			// boot and on every change — a sign-in, a switch, a sign-out. Expo's
 			// resident had `setSignAccounts` called from the wallet provider on
@@ -378,7 +390,10 @@ class SignRequest {
 			chain_id: handoff.chain_id,
 			maybe_sent: handoff.maybe_sent,
 			submit_block: handoff.submit_block,
-			admitted: handoff.admitted
+			admitted: handoff.admitted,
+			// Who signed it: the tracker holds the account's next confirm on
+			// this network until it lands (correctness batch item 3).
+			...(handoff.sender ? { sender: handoff.sender } : {})
 		});
 	}
 

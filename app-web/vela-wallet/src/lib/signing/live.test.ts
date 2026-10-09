@@ -95,7 +95,8 @@ const QUOTED_FEE: FeeView = {
 	options: [],
 	confirm_fee_ready: true,
 	no_coin_pays: false,
-	nothing_to_pay_from: false
+	nothing_to_pay_from: false,
+	provisional: false
 };
 
 function field(over: Partial<ClearSignField> = {}): ClearSignField {
@@ -466,6 +467,25 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		expect(words).toContain('Ethereum');
 		expect(words).not.toContain('{{chain}}');
 		expect(words).not.toBe(NET);
+		// The fee's own sentence, never the browser's "page data may be incomplete".
+		expect(words).toBe(
+			m.feeReasons['componentsUi.gas.reasonChainDown'].replace('{{chain}}', 'Ethereum')
+		);
+	});
+
+	it('a fault inside Vela is said as that — never "can’t reach the chain" (issue 483)', () => {
+		const inside = buildSigningModel(inputs({ fee: failedWith('internal') }))?.fee;
+		expect(inside).toMatchObject({
+			value: m.feeRetry,
+			tappable: true,
+			warning: m.feeReasons['componentsUi.gas.reasonInternal']
+		});
+		const words = inside && 'warning' in inside ? (inside.warning ?? '') : '';
+		expect(words).not.toContain('Ethereum');
+		// The footer names the same cause: the core's gate says the fee failed.
+		const confirm = buildSigningModel(inputs({ fee: failedWith('internal') }))?.confirm;
+		expect(confirm?.enabled).toBe(false);
+		expect(confirm?.note).toBe(m.confirmBlock['componentsUi.signing.confirmBlock.feeFailed']);
 	});
 
 	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {
@@ -966,6 +986,43 @@ describe('the confirm gate is an AND', () => {
 		expect(
 			buildSigningModel(inputs({ sign: { ...OPEN_SIGN, is_signing: true } }))!.confirm.enabled
 		).toBe(false);
+	});
+
+	it('held while the account’s previous transaction on this network is in flight (item 3)', () => {
+		const held = buildSigningModel(
+			inputs({
+				sign: { ...OPEN_SIGN, confirm_gate_open: false, confirm_block: 'previous_pending' }
+			})
+		)!;
+		expect(held.confirm.enabled).toBe(false);
+		// One plain line under the held confirm — the core's key, in the corpus's
+		// words — whatever the fee is doing.
+		expect(held.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.previousPending']
+		);
+		expect(held.confirm.note).toContain('Waiting for your last transaction');
+		const remeasuring = buildSigningModel(
+			inputs({
+				sign: { ...OPEN_SIGN, confirm_gate_open: false, confirm_block: 'previous_pending' },
+				fee: { ...QUOTED_FEE, busy: true, confirm_fee_ready: false }
+			})
+		)!;
+		expect(remeasuring.confirm.note).toBe(held.confirm.note);
+	});
+
+	it('a figure switched to another coin is drawn with the measuring sign, and holds (item 4)', () => {
+		const provisional = buildSigningModel(
+			inputs({ fee: { ...QUOTED_FEE, busy: true, provisional: true, confirm_fee_ready: false } })
+		)!;
+		expect(provisional.fee).toMatchObject({ kind: 'onchain', refreshing: true });
+		// The figure stays on the row while it is measured again — nothing blanks.
+		expect(provisional.fee && 'value' in provisional.fee ? provisional.fee.value : '').not.toBe(
+			m.feeEstimating
+		);
+		expect(provisional.confirm.enabled).toBe(false);
+		expect(provisional.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.feeMeasuring']
+		);
 	});
 
 	it('an off-chain signature needs no fee to arm', () => {

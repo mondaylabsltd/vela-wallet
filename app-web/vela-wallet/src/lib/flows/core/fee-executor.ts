@@ -2,7 +2,7 @@
 /**
  * The only place the `fee_policy` core touches the outside world.
  *
- * Seven operations, seven existing service calls. No branching on business
+ * Eight operations, eight existing service calls. No branching on business
  * meaning: every rule that used to live in `GasFeeCard`, `useSendController`
  * and `estimateTransactionFee` — the bundler-quote acceptance, the gas-price
  * fallback, the ×1.5 padding, the 1 KiB calldata cliff, the in-band pricing,
@@ -23,15 +23,18 @@
 
 import { fetchBundlerAccountInfo, fetchInBandGasQuotes } from '$lib/services/bundler-service';
 import {
+	accountIsDeployed,
 	fetchRawBundlerQuote,
 	fetchRawGasSignals,
 	keySetOf,
 	measureCallGasForQuote,
 	simulateUserOpGas
 } from '$lib/services/safe-transaction';
+import { DeploymentInternalError, DeploymentReadError } from '$lib/services/deployment-read';
 import { findAccountByAddress } from '$lib/services/accounts';
 import { getCachedNativePriceUsd } from '$lib/services/wallet-api';
 
+import type { DeploymentRead } from '$lib/core/generated/DeploymentRead';
 import type { FeeAssetQuote } from '$lib/core/generated/FeeAssetQuote';
 import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
 import type { FeeEffect, FeeSessionOptions } from './fee-types';
@@ -76,6 +79,7 @@ function toWireQuote(
 		symbol: string;
 		usdBalance: string;
 		usdPrice: string | null;
+		minimumAmount: string | null;
 	},
 	nativeFloorPriceUsd: number | null
 ): FeeAssetQuote {
@@ -88,6 +92,10 @@ function toWireQuote(
 		symbol: quote.symbol,
 		usd_balance: quote.usdBalance,
 		usd_price: quote.usdPrice,
+		// The relay's own floor for this row, verbatim (relay contract §3): the
+		// native fee floors at it, never above today's rule. Absent from an
+		// older relay — then today's rule stands.
+		minimum_amount: quote.minimumAmount,
 		// Issue 682. The relay publishes no price for a coin its feed does not
 		// know — every network the user ADDED, in practice — and the core's
 		// "$0.01 worth of the coin" minimum then fell back to a blind flat
@@ -134,13 +142,35 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 		const operation = effect.operation;
 		switch (operation.type) {
 			case 'fetch_gas_price': {
-				const signals = await fetchRawGasSignals(operation.chain_id, operation.want_tip);
+				// `fresh`: a retry after a failure reads past the 15 s fee-signal
+				// cache (issue 483) — a retry is a real new read.
+				const signals = await fetchRawGasSignals(
+					operation.chain_id,
+					operation.want_tip,
+					operation.fresh
+				);
 				return {
 					type: 'gas_price',
 					eth_gas_price: signals.ethGasPrice,
 					base_fee: signals.baseFee,
 					priority_fee: signals.priorityFee
 				};
+			}
+
+			case 'read_deployment': {
+				// Issue 483: the account read is the fee's own. Its failure is the
+				// fee's failure — said on the row, the footer and the retry the
+				// same way on every shell — so it is answered, never thrown: the
+				// chain did not answer (`unreachable`), or the read never left the
+				// app (`internal`, never "can't reach the chain").
+				try {
+					const deployed = await accountIsDeployed(operation.account, operation.chain_id, {
+						fresh: operation.fresh
+					});
+					return { type: 'deployment', read: { type: 'read', deployed } };
+				} catch (error) {
+					return { type: 'deployment', read: deploymentReadOf(error) };
+				}
 			}
 
 			case 'fetch_bundler_quote': {
@@ -319,6 +349,10 @@ export function feeOperationFailure(effect: FeeEffect): FeeShellResult {
 	switch (operation.type) {
 		case 'fetch_gas_price':
 			return { type: 'gas_price', eth_gas_price: null, base_fee: null, priority_fee: null };
+		case 'read_deployment':
+			// The executor answers every read it makes; reaching here means this
+			// shell threw on its way to asking — its own fault, not the chain's.
+			return { type: 'deployment', read: { type: 'internal', kind: 'shell: executor threw' } };
 		case 'fetch_bundler_quote':
 			return { type: 'bundler_quote', quote: null };
 		case 'fetch_in_band_quotes':
@@ -338,4 +372,20 @@ export function feeOperationFailure(effect: FeeEffect): FeeShellResult {
 		case 'start_deadline':
 			return { type: 'deadline_elapsed' };
 	}
+}
+
+/**
+ * A failed account read as the core's `DeploymentRead` (issue 483): the
+ * chain's nodes did not answer, or answered only with rate limits — the
+ * chain is out of reach — or the read never left the app, which is never
+ * told as "can't reach the chain". Anything this shell did not classify is
+ * its own fault too.
+ */
+export function deploymentReadOf(error: unknown): DeploymentRead {
+	if (error instanceof DeploymentReadError) {
+		return { type: 'unreachable', rate_limited: error.rateLimited };
+	}
+	if (error instanceof DeploymentInternalError) return { type: 'internal', kind: error.kind };
+	const message = error instanceof Error ? error.message : String(error);
+	return { type: 'internal', kind: `shell: ${message.slice(0, 80)}` };
 }

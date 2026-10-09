@@ -50,9 +50,11 @@ import { balance } from '$lib/wallet/core/balance.svelte';
 import { feed } from '$lib/wallet/core/feed.svelte';
 import { notifyReceiptLogsConfirmed } from './token-trust-resident';
 import { loadCore } from '$lib/core/client';
+import { inFlightOps } from '$lib/core/kernels';
 import { createTxTrackerSession } from './tracker-session';
 import { trackerLogLines } from './tracker-executor';
 
+import type { InFlightOp } from '$lib/core/generated/InFlightOp';
 import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import type { TrackEvent } from '$lib/core/generated/TrackEvent';
@@ -73,6 +75,26 @@ let session: ReturnType<typeof createTxTrackerSession> | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
 
 const listeners = new Set<(view: TrackView) => void>();
+
+/**
+ * The operations holding their account's nonce, as the core reads them from
+ * the tracker's own view (`inFlightOps`, correctness batch item 3). Every
+ * machine that can sign a second operation — Send and the signing sheet —
+ * is told this list on every tracker render, so its confirm waits for the
+ * first instead of taking the same nonce.
+ */
+let currentOps: InFlightOp[] = [];
+const opsListeners = new Set<(ops: InFlightOp[]) => void>();
+
+/** The core's list for this view; a fault keeps the last one (a hold is never dropped by a bug). */
+function opsOf(view: TrackView): InFlightOp[] {
+	try {
+		return inFlightOps(view);
+	} catch (error) {
+		console.error('[tx_tracker] in_flight_ops failed:', error);
+		return currentOps;
+	}
+}
 
 /** A surface waiting on one hash — the send screen's receipt, today's only one. */
 interface OutcomeWatcher {
@@ -111,8 +133,12 @@ export function outcomeOf(entry: TrackEntryView): SendReceiptOutcome | null {
 			// A definitive `success === false` receipt — dropped or reverted.
 			return { type: 'failed', rejected: false, not_sent: false };
 		case 'rejected':
-			// The relay refused it before any block; nothing was sent.
-			return { type: 'failed', rejected: true, not_sent: false };
+			// The relay refused it before any block; nothing was sent. Why is
+			// the core's reading of the relay (`refusal`): the receipt says it
+			// by that reason, never every refusal as the fee sentence.
+			return entry.refusal != null
+				? { type: 'failed', rejected: true, not_sent: false, refusal: entry.refusal }
+				: { type: 'failed', rejected: true, not_sent: false };
 		case 'not_sent':
 			// A may-have-been-sent op the relay never had (spec 082 RA4): not
 			// sent — never the fee-rejected words.
@@ -203,6 +229,10 @@ export function ensureTxTracker(): Promise<void> {
 				deliver(view);
 				syncTicker(view);
 				listeners.forEach((listener) => listener(view));
+				// Read from THIS view, as the resident received it: the core's
+				// own JSON, `sender` and `stalled` included.
+				currentOps = opsOf(view);
+				opsListeners.forEach((listener) => listener(currentOps));
 			},
 			onError: (error) => console.error('[tx_tracker] core fault:', error),
 			ports: {
@@ -275,7 +305,13 @@ export function trackSubmitted(
 	 * The relay took the op a write-ahead hand-off announced (spec 082 RJ1): it
 	 * is never "may have been sent" again. Its watcher, if any, is kept.
 	 */
-	admitted = false
+	admitted = false,
+	/**
+	 * The account that signed it (the send machine's `TrackSubmitted.sender`):
+	 * how the tracker knows this account now has an operation in flight on
+	 * this chain, and holds its next confirm (correctness batch item 3).
+	 */
+	sender: string | null = null
 ): void {
 	if (!userOpHash) return;
 	const key = normalize(userOpHash);
@@ -287,7 +323,8 @@ export function trackSubmitted(
 		chain_id: chainId,
 		maybe_sent: maybeSent,
 		submit_block: submitBlock,
-		admitted
+		admitted,
+		...(sender ? { sender } : {})
 	});
 }
 
@@ -318,5 +355,28 @@ export function subscribeTxTracker(listener: (view: TrackView) => void): () => v
 	listeners.add(listener);
 	return () => {
 		listeners.delete(listener);
+	};
+}
+
+/**
+ * Hear the operations holding their account's nonce — now, and after every
+ * tracker render (correctness batch item 3). Boots the tracker, whose sweep of
+ * the stored pending records is what lets a reload still know an operation is
+ * in flight. An unchanged list is not repeated to the same listener (the
+ * machines dedupe it too), so a hold never flickers. Returns the unsubscribe.
+ */
+export function subscribeInFlightOps(listener: (ops: InFlightOp[]) => void): () => void {
+	let told: string | null = null;
+	const tell = (ops: InFlightOp[]) => {
+		const key = JSON.stringify(ops);
+		if (key === told) return;
+		told = key;
+		listener(ops);
+	};
+	opsListeners.add(tell);
+	tell(currentOps);
+	void ensureTxTracker();
+	return () => {
+		opsListeners.delete(tell);
 	};
 }

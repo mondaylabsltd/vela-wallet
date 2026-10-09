@@ -16,7 +16,6 @@
  * and the stopping rules are tested without a browser or a relay.
  */
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { FeeView } from '$lib/core/generated/FeeView';
 import { countPanelFailure } from '$lib/services/bug-report';
 
 export interface FeeRequoteDeps {
@@ -227,28 +226,4 @@ export function heldFeeFailure(
 	if (fee === null) return null;
 	if (fee.failed !== null) return fee.failed;
 	return fee.busy ? previous : null;
-}
-
-/**
- * The fee as the signing sheet reads it: a quote that never reached the core
- * because the chain could not be read (`FeeQuote.contextLost` — the account's
- * deployment is unknown, so nothing could be priced) is the recoverable
- * failure it is — a chain node that did not answer — rather than an idle row.
- *
- * Idle, the row drew nothing and the confirm stood OPEN on a transaction whose
- * cost nobody had been told, with nothing asking again (the extension with the
- * network down). As `ChainRead` (spec 082 RJ13 — never `quote_unavailable`,
- * which named Vela's relay for a public node's rate limit, G48) the row says
- * why in the core's words, the refresh and the timer ask again (the retry
- * re-runs the whole request, context read included), and the confirm stays shut
- * until a quote lands. Only while nothing is being measured and nothing else
- * is in hand. `rateLimited`: the node refused for load, not for being away.
- */
-export function withLostContext(view: FeeView, contextLost: boolean, rateLimited = false): FeeView {
-	if (!contextLost || view.busy || view.failed !== null || view.fee !== null) return view;
-	return {
-		...view,
-		failed: { chain_read: { rate_limited: rateLimited } },
-		confirm_fee_ready: false
-	};
 }

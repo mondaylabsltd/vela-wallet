@@ -35,8 +35,9 @@ import {
 	submitSigned,
 	UserOpNotSentError,
 	waitForReceipt,
-	_cachedNonceForTest,
-	_seedNonceForTest
+	accountIsDeployed,
+	DeploymentInternalError,
+	DeploymentReadError
 } from './safe-transaction';
 import { estimateRevertsFor } from './estimate-verdict';
 import type { GasTier, TransactionFeeEstimate, UserOperation } from './safe-transaction';
@@ -529,8 +530,9 @@ describe('keySetOf', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Spec 082 T082: the submit loop is the core's (`submit_step`, RA1), and the
-// local nonce moves on only when the relay has the op (RA5).
+// Spec 082 T082: the submit loop is the core's (`submit_step`, RA1). No local
+// nonce is held or moved any more (correctness batch item 3): a second op of
+// the account waits for the first in the core, and signs the chain's nonce.
 // ---------------------------------------------------------------------------
 
 describe('submitting a signed op (spec 082 RA1, RA5)', () => {
@@ -566,8 +568,7 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		};
 	}
 
-	test('mute (the reply is lost after the POST) → may have been sent, local hash, nonce unchanged', async () => {
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
+	test('mute (the reply is lost after the POST) → may have been sent, local hash', async () => {
 		relay(() => {
 			throw new PoolFailedError('All bundler endpoints failed for chain 100', {
 				maybeDelivered: true,
@@ -578,15 +579,13 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		expect(result.maybeSent).toBe(true);
 		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
 		expect(result.submitBlock).toBe(16);
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
 	// 083 S3b: another operation of the account holds the nonce. Its hash is
 	// never this request's (Uniswap called a swap done when only its approval
-	// had happened): not sent, the core's sentence, and the nonce stays.
-	test('[existingHash:] of another op → not sent, held behind it, the nonce stays', async () => {
+	// had happened): not sent, and the core's sentence.
+	test('[existingHash:] of another op → not sent, held behind it', async () => {
 		const existing = '0x' + 'ee'.repeat(32);
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
 		relay(() => ({
 			jsonrpc: '2.0',
 			id: 1,
@@ -598,11 +597,9 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 			nonce_held: { user_op_hash: existing }
 		});
 		expect((error as Error).message).toBe(userOpPreviousPendingDetail());
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
 	test('nothing left the device (offline before the call) → not sent, with the fixed detail', async () => {
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
 		relay(() => {
 			throw new PoolFailedError('All bundler endpoints failed for chain 100', {
 				maybeDelivered: false,
@@ -614,11 +611,9 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		expect((error as UserOpNotSentError).rejection).toBeNull();
 		expect((error as Error).message).toBe(userOpNotSentDetail());
 		expect((error as Error).message).not.toMatch(/endpoints failed/);
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
-	test('a relay refusal → not sent, in the relay’s words; the nonce stays', async () => {
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
+	test('a relay refusal → not sent, in the relay’s words', async () => {
 		relay(() => ({
 			jsonrpc: '2.0',
 			id: 1,
@@ -627,16 +622,13 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		const error = await submitSigned(op(), CHAIN, SAFE).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(UserOpNotSentError);
 		expect((error as UserOpNotSentError).rejection).not.toBeNull();
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
-	test('a clean hash → accepted; the nonce moves on', async () => {
+	test('a clean hash → accepted', async () => {
 		const hash = '0x' + 'ab'.repeat(32);
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
 		relay(() => ({ jsonrpc: '2.0', id: 1, result: hash }));
 		const result = await submitSigned(op(), CHAIN, SAFE);
 		expect(result).toMatchObject({ userOpHash: hash, maybeSent: false, submitBlock: 16 });
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
 	});
 
 	/*
@@ -651,13 +643,11 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		['no result and no error', { jsonrpc: '2.0', id: 1 }],
 		['an empty result', { jsonrpc: '2.0', id: 1, result: '' }],
 		['a non-string result', { jsonrpc: '2.0', id: 1, result: { hash: 'x' } }]
-	])('%s is may-have-been-sent, never not sent; the nonce stays', async (_label, body) => {
-		_seedNonceForTest(SAFE, CHAIN, '0x5');
+	])('%s is may-have-been-sent, never not sent', async (_label, body) => {
 		relay(() => body);
 		const result = await submitSigned(op(), CHAIN, SAFE);
 		expect(result.maybeSent).toBe(true);
 		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
 	/*
@@ -731,8 +721,7 @@ describe('the gate before the first POST (spec 082 RJ1)', () => {
 		expect(order).toEqual(['eth_blockNumber', 'gate', 'eth_sendUserOperation']);
 	});
 
-	test('a gate that refuses: zero POSTs, and the nonce stays', async () => {
-		_seedNonceForTest(SAFE, CHAIN, '0x6');
+	test('a gate that refuses: zero POSTs', async () => {
 		const posted: string[] = [];
 		rpcMock.impl = async (method: string) => {
 			if (method === 'eth_sendUserOperation') posted.push(method);
@@ -743,7 +732,6 @@ describe('the gate before the first POST (spec 082 RJ1)', () => {
 		}).catch((e: unknown) => e);
 		expect((error as Error).message).toBe('no clearance');
 		expect(posted).toEqual([]);
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
 	});
 });
 
@@ -849,5 +837,86 @@ describe('a relay estimate that reverts reaches the sheet (spec 082 RJ19)', () =
 			publicKeyHex: KEY
 		});
 		expect(estimateRevertsFor(100, ACCOUNT)).toBeNull();
+	});
+});
+
+/**
+ * Issue 483: the account read's failure is the fee's own, and says its real
+ * cause. The chain's nodes did not answer (or only with rate limits) — the
+ * chain is out of reach; the read never left the app — Vela's own fault,
+ * never "can't reach the chain". A retry (`fresh`) is a real new read.
+ */
+describe('why an account read got no answer (issue 483)', () => {
+	const SAFE = '0x' + '5a'.repeat(20);
+	const failWith = async (error: unknown) => {
+		rpcMock.impl = async () => {
+			throw error;
+		};
+		try {
+			return await accountIsDeployed(SAFE, 100, { fresh: true }).catch((e: unknown) => e);
+		} finally {
+			rpcMock.impl = null;
+		}
+	};
+
+	test('nobody answered, or only with rate limits: the chain is out of reach', async () => {
+		const away = await failWith(
+			new PoolFailedError('All RPC endpoints failed for chain 100', {
+				maybeDelivered: false,
+				rateLimited: false
+			})
+		);
+		expect(away).toBeInstanceOf(DeploymentReadError);
+		expect((away as DeploymentReadError).rateLimited).toBe(false);
+		const limited = await failWith(
+			new PoolFailedError('All RPC endpoints failed for chain 100', {
+				maybeDelivered: false,
+				rateLimited: true
+			})
+		);
+		expect((limited as DeploymentReadError).rateLimited).toBe(true);
+	});
+
+	test('the pool itself failed, or never booted: inside Vela, never the chain', async () => {
+		const fault = await failWith(
+			new PoolFailedError('RPC pool fault for chain 100: boom', {
+				maybeDelivered: true,
+				rateLimited: false,
+				internal: true
+			})
+		);
+		expect(fault).toBeInstanceOf(DeploymentInternalError);
+		const boot = await failWith(new Error('wasm module failed to instantiate'));
+		expect(boot).toBeInstanceOf(DeploymentInternalError);
+		expect((boot as DeploymentInternalError).kind).toContain('rpc:');
+	});
+
+	test('a node that answered with an error is the chain’s side', async () => {
+		rpcMock.impl = async () => ({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'x' } });
+		try {
+			const error = await accountIsDeployed(SAFE, 100, { fresh: true }).catch((e: unknown) => e);
+			expect(error).toBeInstanceOf(DeploymentReadError);
+		} finally {
+			rpcMock.impl = null;
+		}
+	});
+
+	test('a retry is a real new read — past the held answer', async () => {
+		let reads = 0;
+		rpcMock.impl = async () => {
+			reads += 1;
+			return { jsonrpc: '2.0', id: 1, result: '0x6080' };
+		};
+		try {
+			const ADDR = '0x' + '6b'.repeat(20);
+			expect(await accountIsDeployed(ADDR, 100)).toBe(true);
+			// Held: a deployed account stays deployed.
+			expect(await accountIsDeployed(ADDR, 100)).toBe(true);
+			expect(reads).toBe(1);
+			expect(await accountIsDeployed(ADDR, 100, { fresh: true })).toBe(true);
+			expect(reads).toBe(2);
+		} finally {
+			rpcMock.impl = null;
+		}
 	});
 });
