@@ -50,7 +50,7 @@
 							<button type="button" class="action" onclick={() => onrename?.(row.url)}
 								>{panel.renameLabel}</button
 							>
-							<button type="button" class="action danger" onclick={() => onremove?.(row.url)}
+							<button type="button" class="action" onclick={() => onremove?.(row.url)}
 								>{panel.removeLabel}</button
 							>
 						</span>
@@ -158,19 +158,21 @@
 		gap: var(--space-lg);
 	}
 
-	/* Links, not CTAs: accent is reserved for actions that move value. */
+	/* Quiet text actions in the muted ink, as Settings' other secondary
+	   actions: one accent on the screen (D7), and Remove is not red while
+	   nothing it does asks first. */
 	.action {
 		padding: 0;
 		border: none;
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		color: var(--color-fg-muted);
 		cursor: pointer;
 	}
 
-	.action.danger {
-		color: var(--color-error-base);
+	.action:hover {
+		color: var(--color-fg-base);
 	}
 
 	.trust {
