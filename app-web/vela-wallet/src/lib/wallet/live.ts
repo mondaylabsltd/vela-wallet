@@ -442,7 +442,10 @@ export function liveBalance(
 	// last-known cached total paints first, live replaces it (max(live,cached)
 	// is the core's rule — this only chooses what to show meanwhile).
 	const total = view.display_total_usd ?? view.cached_total_usd;
-	if (total === null) {
+	// Nothing known (`unreachable`): the first read failed — or settled with
+	// every chain it asked failed (PR 2 integration) — and nothing is cached.
+	// The core may still carry that round's 0 as its total; it is no figure.
+	if (total === null || view.unreachable) {
 		return {
 			...base,
 			currency: currency.rate !== null ? currency.code : 'USD',
@@ -537,8 +540,10 @@ export function liveAssetRow(
 function assetsMode(view: BalanceView): SectionModel['mode'] {
 	if (view.tokens.length > 0) return 'rows';
 	// Nothing held yet — a skeleton while the first fetch is out, an empty
-	// state once the core has actually looked.
-	return view.holdings_loading || view.balance_unknown ? 'loading' : 'empty';
+	// state once the core has actually looked. A look that reached nothing
+	// (`unreachable`) is no look: never "Deposit your first asset" under a
+	// line saying nothing could be read.
+	return view.holdings_loading || view.balance_unknown || view.unreachable ? 'loading' : 'empty';
 }
 
 // ---------------------------------------------------------------------------

@@ -119,7 +119,7 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey, FeeTokenWord } from '$lib/flows/core/send-estimates';
+	import { feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
@@ -787,7 +787,7 @@
 		// The mirror below memoizes what it last told the send machine. A new
 		// session has heard nothing.
 		lastFeeStamp = null;
-		lastFeeBusy = false;
+		feeStateWord.forget();
 		feeTokenWord.forget();
 		resyncedFee = null;
 		nav.close();
@@ -1079,7 +1079,8 @@
 	 * core schedules afterwards only refines what is already on screen.
 	 */
 	let lastFeeStamp: string | null = null;
-	let lastFeeBusy = false;
+	/** What this send journey was last told of the card's busy and failed (`FeeStateWord`). */
+	const feeStateWord = new FeeStateWord();
 	/**
 	 * What this send journey was last told of the fee card's coin, and on
 	 * which chain. The coin names the form's fee row while no estimate is in
@@ -1095,16 +1096,10 @@
 		// Read so a late answer landing in the send machine re-runs this.
 		const held = sendView?.fee ?? null;
 		if (!sendSession || !view) return;
-		// Not settled: a measurement is out — or the fee failed (PR 2 note 1),
-		// which the fee machine is asking again by itself or a tap must. Either
-		// way there is no figure the fee machine stands by, so the confirm
-		// holds (the send machine's own gate reads this mirror) instead of
-		// opening between re-asks on the last figure the send machine kept.
-		const unsettled = view.busy || view.failure !== null;
-		if (unsettled !== lastFeeBusy) {
-			lastFeeBusy = unsettled;
-			sendSession.dispatch({ type: 'fee_busy_changed', busy: unsettled });
-		}
+		// A measurement out, and the card's failure (PR 2 integration:
+		// `fee_failed_changed`) — the send machine holds its confirm on either,
+		// and drops the figure it kept on the confirm page when the card fails.
+		for (const event of feeStateWord.news(view)) sendSession.dispatch(event);
 		// The form's chain: the selected token's, else the sweep's (the core's
 		// `form_chain`).
 		const formChain = sendView?.selected_token?.chain_id ?? sendView?.multi_chain_id ?? null;

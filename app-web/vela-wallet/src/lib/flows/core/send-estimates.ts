@@ -4,6 +4,7 @@
 // prices the confirm screen wrong, so these are fund-safety codecs.
 import type { FeeAssetView } from '$lib/core/generated/FeeAssetView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
+import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import type { TransactionFeeEstimate } from '$lib/services/safe-transaction';
 import { fromWireAmount } from '$lib/services/amount-codec';
@@ -144,6 +145,48 @@ export class FeeTokenWord {
 	/** A new journey: nothing told yet. */
 	forget(): void {
 		this.#told = null;
+	}
+}
+
+/**
+ * The fee card's state, as news for the send machine — the bridge's half of
+ * `send::Event::FeeBusyChanged` and `FeeFailedChanged` (PR 2 integration).
+ *
+ * `busy`: a measurement is out. `failed`: the card's `FeeView.failure` is set
+ * — a failure, or the core's own re-ask after one — so the fee machine holds
+ * no figure. The send machine holds its confirm while either is true, and on
+ * the confirm page drops the figure it kept from Continue when the card
+ * fails: between two of the core's re-asks the confirm used to open on a
+ * figure the fee machine had discarded, and shut again with the next re-ask.
+ *
+ * Each word is said when it changes. The send machine starts not busy, so a
+ * journey's first "not busy" is not said; its first word of the failure is
+ * always said ({@link forget} starts a journey told nothing).
+ */
+export class FeeStateWord {
+	#busy = false;
+	/** What this journey was last told of the failure; `null` = nothing yet. */
+	#failed: boolean | null = null;
+
+	/** The events to dispatch for the card's view, in order — empty when nothing changed. */
+	news(view: Pick<FeeView, 'busy' | 'failure'>): SendEvent[] {
+		const out: SendEvent[] = [];
+		if (view.busy !== this.#busy) {
+			this.#busy = view.busy;
+			out.push({ type: 'fee_busy_changed', busy: view.busy });
+		}
+		const failed = view.failure !== null;
+		if (failed !== this.#failed) {
+			this.#failed = failed;
+			out.push({ type: 'fee_failed_changed', failed });
+		}
+		return out;
+	}
+
+	/** A new journey: nothing told yet. */
+	forget(): void {
+		this.#busy = false;
+		this.#failed = null;
 	}
 }
 

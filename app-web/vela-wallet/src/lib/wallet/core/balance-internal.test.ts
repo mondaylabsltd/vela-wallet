@@ -14,7 +14,8 @@ import { BalanceDashboardCore } from '$lib/core/client';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
-import { liveBalance } from '$lib/wallet/live';
+import { liveBalance, withLiveWallet } from '$lib/wallet/live';
+import { buildMobileState } from '$lib/wallet/fixtures';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
 const USD = { code: 'USD', rate: 1, committed: true };
@@ -93,6 +94,38 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 		const view = homeAfter(() => settled([1], []));
 		expect(view.internal_key).toBeNull();
 		expect(liveBalance(view, USD, m).status?.text).toBe("Can't reach Ethereum right now");
+	});
+
+	it('every chain failing inside the app, nothing known: no settled $0.00 — the skeleton and the reason', () => {
+		// The integration's follow-up: every chain asked failed and nothing is
+		// cached — "nothing known", as a fetch that threw, never "$0.00" and
+		// "Deposit your first asset" under Vela's own error.
+		const view = homeAfter(() => ({ ...settled([1, 100], [1, 100]), tokens: [] }));
+		expect(view.unreachable).toBe(true);
+		expect(view.internal_key).toBe('componentsUi.gas.reasonInternal');
+		const model = liveBalance(view, USD, m);
+		expect(model.state).toBe('loading');
+		expect(model.integer).toBeUndefined();
+		expect(model.status?.text).toBe(m.assets.internal['componentsUi.gas.reasonInternal']);
+		// Never "Deposit your first asset" under it: a look that reached
+		// nothing is no look.
+		const home = withLiveWallet(
+			buildMobileState('h1', m, () => ''),
+			{
+				balance: view,
+				currency: USD,
+				m
+			} as Parameters<typeof withLiveWallet>[1]
+		);
+		expect(home.assetsSection.mode).toBe('loading');
+		// …and the same with every chain simply down: the network's sentence.
+		const down = homeAfter(() => ({ ...settled([1, 100], []), tokens: [] }));
+		expect(down.unreachable).toBe(true);
+		expect(down.internal_key).toBeNull();
+		expect(liveBalance(down, USD, m)).toMatchObject({
+			state: 'loading',
+			status: { text: m.balance.unreachable }
+		});
 	});
 
 	it('a whole fetch that threw inside the app, with nothing known, says so over the skeleton', () => {
