@@ -721,6 +721,9 @@ object SendLive {
             addressNote = if (issue?.address == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS) else null,
             duplicateNote = repeat?.let { s.t(I18nKeys.Flows.RECIPIENT_DUPLICATE, mapOf("n" to it.first_ordinal.toString())) },
             amountNote = if (issue?.amount == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BAD_AMOUNT) else null,
+            // Issue #471: every row has the single field's two doors.
+            pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+            scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
         )
     }
 

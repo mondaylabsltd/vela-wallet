@@ -1262,6 +1262,7 @@ fun VelaNavHost(
                                 }
                             },
                             onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
+                            onRecipientScan = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowScanner(it) } },
                             scan = ScanCallbacks(
                                 onDecoded = { text -> send.scanned(text) },
                                 onClose = {

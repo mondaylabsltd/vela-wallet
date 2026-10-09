@@ -674,6 +674,8 @@ object FlowFixtures {
                         ALICE_FULL,
                         "50",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "2")),
@@ -681,6 +683,8 @@ object FlowFixtures {
                         A_HAO_FULL,
                         "30",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "3")),
@@ -688,6 +692,8 @@ object FlowFixtures {
                         HOLD_ON_FULL,
                         "40",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                 ),
                 recipientActions = listOf(
@@ -731,7 +737,6 @@ object FlowFixtures {
         title = s.t(I18nKeys.Flows.PICK_CONTACT_TITLE),
         closeLabel = s.t(I18nKeys.Flows.CLOSE),
         searchPlaceholder = s.t(I18nKeys.Flows.PICK_CONTACT_SEARCH),
-        scanRow = s.t(I18nKeys.Flows.SCAN_TO_FILL),
         groupsTitle = s.t(I18nKeys.Flows.CONTACTS_GROUPS),
         groups = listOf(
             ContactGroupModel(

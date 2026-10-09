@@ -688,7 +688,6 @@ object I18nKeys {
         // Send · contact picker.
         const val PICK_CONTACT_TITLE = "send.pickContactTitle"
         const val PICK_CONTACT_SEARCH = "send.pickContactSearch"
-        const val SCAN_TO_FILL = "send.scanToFill"
         const val CONTACTS_GROUPS = "contacts.sectionGroups"
         const val CONTACTS_TITLE = "contacts.title"
         const val GROUP_MEMBERS = "contacts.groupMembers"

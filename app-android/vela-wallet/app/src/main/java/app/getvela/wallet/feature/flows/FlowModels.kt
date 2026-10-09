@@ -498,6 +498,10 @@ data class RecipientCardModel(
     val duplicateNote: String? = null,
     /** The core says the typed amount cannot be sent. */
     val amountNote: String? = null,
+    /** The row's 通讯录 door's accessible name (`send.recipientPickAria`). */
+    val pickLabel: String = "",
+    /** Issue #471: the row's scan door's accessible name (`send.scanAria`). */
+    val scanLabel: String = "",
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -692,7 +696,6 @@ data class ContactPickModel(
     val title: String,
     val closeLabel: String,
     val searchPlaceholder: String,
-    val scanRow: String,
     val groupsTitle: String,
     val groups: List<ContactGroupModel>,
     val contactsTitle: String,

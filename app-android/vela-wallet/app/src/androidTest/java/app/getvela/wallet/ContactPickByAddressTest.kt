@@ -40,7 +40,6 @@ class ContactPickByAddressTest {
                         title = "Choose a contact",
                         closeLabel = "Close",
                         searchPlaceholder = "Search",
-                        scanRow = "Scan to fill",
                         groupsTitle = "Groups",
                         groups = emptyList(),
                         contactsTitle = "Contacts",

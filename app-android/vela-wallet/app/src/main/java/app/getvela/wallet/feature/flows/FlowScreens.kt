@@ -1156,6 +1156,8 @@ fun SendFormBody(
     onRecipientAmount: ((Int, String) -> Unit)? = null,
     onRecipientAddress: ((Int, String) -> Unit)? = null,
     onRecipientPick: ((Int) -> Unit)? = null,
+    /** Issue #471: a split row's own scan. */
+    onRecipientScan: ((Int) -> Unit)? = null,
     onFillEmpty: ((String) -> Unit)? = null,
     /** Spec 069: measure the fee again; fold or unfold the speed control; a one-shot pick. */
     onRefreshFee: (() -> Unit)? = null,
@@ -1282,6 +1284,7 @@ fun SendFormBody(
                 onAmountChange = onRecipientAmount?.let { edit -> { text -> edit(index, text) } },
                 onAddressChange = onRecipientAddress?.let { edit -> { text -> edit(index, text) } },
                 onPick = onRecipientPick?.let { pick -> { pick(index) } },
+                onScan = onRecipientScan?.let { scan -> { scan(index) } },
             )
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
         }
@@ -1353,18 +1356,14 @@ fun SendFormBody(
 }
 
 /**
- * SD2e — choosing who gets the money.
- *
- * Scan sits at the top, above the saved people. Most sends go to someone
- * already in the book, but the ones that don't are the ones where a person is
- * holding a phone in one hand and an address in the other — so the escape hatch
- * is the first thing, not the last.
+ * SD2e — choosing who gets the money: the saved people and groups, nothing
+ * else. Scanning a code is the recipient row's own door, beside 通讯录 (issue
+ * #471) — it was a row here, two taps away and easy to miss.
  */
 @Composable
 fun ContactPickBody(
     model: ContactPickModel,
     modifier: Modifier = Modifier,
-    onScan: () -> Unit = {},
     onGroup: (Int) -> Unit = {},
     /** Issue #467: the picked person's ADDRESS — never a position in a list the core re-sorts. */
     onSelect: (String) -> Unit = {},
@@ -1387,37 +1386,6 @@ fun ContactPickBody(
             value = query,
             onValueChange = { query = it },
         )
-        Spacer(modifier = Modifier.height(VelaSpacing.md))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
-                .clickable(onClick = onScan)
-                .padding(VelaSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = VelaIcons.QrCode,
-                contentDescription = null,
-                tint = colors.fgSubtle,
-                modifier = Modifier.size(VelaIconSize.md),
-            )
-            Spacer(modifier = Modifier.width(VelaSpacing.md))
-            Text(
-                text = model.scanRow,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.medium,
-                fontSize = VelaTextSize.base,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = VelaIcons.ChevronRight,
-                contentDescription = null,
-                tint = colors.fgSubtle,
-                modifier = Modifier.size(VelaIconSize.sm),
-            )
-        }
         if (model.groups.isNotEmpty() && query.isBlank()) {
             SectionCaption(model.groupsTitle)
             model.groups.forEachIndexed { index, group ->

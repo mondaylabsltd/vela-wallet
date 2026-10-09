@@ -11,18 +11,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -345,9 +348,12 @@ fun StatusChip(chip: StatusChipModel, modifier: Modifier = Modifier) {
  * SD2b's split row (component 13): one of N people, what they get, and the way
  * to drop them.
  *
- * The ordinal ("Recipient 2") is a label above the name rather than a number
- * beside it, because in a split the ROW is the person and the number is only
- * there to keep three otherwise-similar cards apart.
+ * The ordinal ("Recipient 2") is the card's top line rather than a number
+ * beside the name, because in a split the ROW is the person and the number is
+ * only there to keep three otherwise-similar cards apart. The row's two doors
+ * — 通讯录 and scan (issue #471), the single field's pair, same discs — sit at
+ * the end of that line: on the line below, beside the address, the amount and
+ * the ✕, they would leave the address a few characters.
  */
 @Composable
 fun RecipientCard(
@@ -358,161 +364,171 @@ fun RecipientCard(
     onAddressChange: ((String) -> Unit)? = null,
     /** Spec 048: this row's own 通讯录 pick (the web's `pickContactFor(i)`). */
     onPick: (() -> Unit)? = null,
+    /** Issue #471: this row's own scan — the code's address lands in THIS row. */
+    onScan: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
             .padding(VelaSpacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
-        Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        if (onPick != null) {
-            Icon(
-                imageVector = VelaIcons.NavContactsOutline,
-                contentDescription = "pick-contact-" + recipient.ordinal,
-                tint = colors.fgSubtle,
-                modifier = Modifier
-                    .size(VelaIconSize.md)
-                    .clickable(onClick = onPick),
-            )
-            Spacer(modifier = Modifier.width(VelaSpacing.md))
-        }
-        Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = recipient.ordinal,
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.xs,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
-            if (onAddressChange != null) {
-                // A live row: the address is typed (or picked) in place. Local
-                // echo as the amount hero does — the machine's view lags fast typing.
-                val addressStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base)
-                var typedAddress by remember(recipient.id) { mutableStateOf(recipient.address) }
-                val sentAddress = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.address) } }
-                LaunchedEffect(recipient.address) { if (recipient.address !in sentAddress) typedAddress = recipient.address }
-                BasicTextField(
-                    value = typedAddress,
-                    onValueChange = { next ->
-                        typedAddress = next
-                        sentAddress.addLast(next)
-                        if (sentAddress.size > 256) sentAddress.removeFirst()
-                        onAddressChange(next)
-                    },
-                    singleLine = true,
-                    textStyle = addressStyle,
-                    cursorBrush = SolidColor(colors.accentBase),
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "recipient-address-${recipient.ordinal}" },
-                    decorationBox = { inner ->
-                        if (typedAddress.isEmpty()) {
-                            Text(text = recipient.addressPlaceholder, style = addressStyle.copy(color = colors.fgSubtle), maxLines = 1)
-                        }
-                        inner()
-                    },
-                )
-                if (recipient.name.isNotEmpty() && recipient.name != recipient.address) {
-                    Text(text = recipient.name, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs, maxLines = 1)
-                }
-                // The core's word on this row: a wrong address outranks a
-                // repeat (a repeat is of a VALID address), then the amount.
-                (recipient.addressNote ?: recipient.duplicateNote)?.let { note ->
-                    Text(
-                        text = note,
-                        color = if (recipient.addressNote != null) colors.errorBase else colors.warningBase,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.xs,
-                    )
-                }
-                recipient.amountNote?.let { note ->
-                    Text(text = note, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs)
-                }
-            } else {
-                Text(
-                    text = recipient.name,
-                    color = colors.fgBase,
-                    fontFamily = VelaMonoFontFamily,
-                    fontSize = VelaTextSize.base,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            // Issue #270's doors, as the single field draws them: a filled disc
+            // with an edge, so they read as buttons and not as decoration.
+            val door = Modifier
+                .clip(CircleShape)
+                .background(colors.bgBase, CircleShape)
+                .border(1.dp, colors.borderBase, CircleShape)
+            if (onPick != null) {
+                FlowIconButton(icon = VelaIcons.UserRound, label = recipient.pickLabel, modifier = door, tint = colors.fgBase, onClick = onPick)
+            }
+            if (onScan != null) {
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                FlowIconButton(icon = VelaIcons.QrCode, label = recipient.scanLabel, modifier = door, tint = colors.fgBase, onClick = onScan)
             }
         }
-        Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        val amountStyle = TextStyle(
-            color = colors.fgBase,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.semibold,
-            fontSize = VelaTextSize.lg,
-            textAlign = TextAlign.End,
-        )
-        if (onAmountChange != null && recipient.amountValue != null) {
-            var typed by remember(recipient.id) { mutableStateOf(amountFieldOf(recipient.amountValue)) }
-            val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
-            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = amountFieldOf(recipient.amountValue) }
-            // Issue #331: the field is a WELL (the web's `.amount-well`), a full
-            // control's height, and the whole box is the target. It was the
-            // bare figure: a line ~20dp tall whose "0" sat 8dp from the ✕, and
-            // the ✕'s 48dp touch target took every tap just above, below or
-            // right of the figure — the recipient vanished instead of the
-            // keyboard opening. The well is seen while it is wanted (empty, or
-            // in hand), as on the web, so a filled row at rest reads as drawn.
-            var focused by remember(recipient.id) { mutableStateOf(false) }
-            val well = typed.text.isEmpty() || focused
-            BasicTextField(
-                value = typed,
-                onValueChange = { next ->
-                    // Spec 073: the core's amount rule, as the send figure —
-                    // its caret too (issue #421: "." is "0.", "08" is "8").
-                    val edit = cleanAmountFieldEdit(next, typed)
-                    if (edit != null) {
-                        val changed = edit.text != typed.text
-                        typed = edit
-                        if (changed) {
-                            sent.addLast(edit.text)
-                            if (sent.size > 256) sent.removeFirst()
-                            onAmountChange(edit.text)
-                        }
+        Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
+            Spacer(modifier = Modifier.width(VelaSpacing.lg))
+            Column(modifier = Modifier.weight(1f)) {
+                if (onAddressChange != null) {
+                    // A live row: the address is typed (or picked) in place. Local
+                    // echo as the amount hero does — the machine's view lags fast typing.
+                    val addressStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base)
+                    var typedAddress by remember(recipient.id) { mutableStateOf(recipient.address) }
+                    val sentAddress = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.address) } }
+                    LaunchedEffect(recipient.address) { if (recipient.address !in sentAddress) typedAddress = recipient.address }
+                    BasicTextField(
+                        value = typedAddress,
+                        onValueChange = { next ->
+                            typedAddress = next
+                            sentAddress.addLast(next)
+                            if (sentAddress.size > 256) sentAddress.removeFirst()
+                            onAddressChange(next)
+                        },
+                        singleLine = true,
+                        textStyle = addressStyle,
+                        cursorBrush = SolidColor(colors.accentBase),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "recipient-address-${recipient.ordinal}" },
+                        decorationBox = { inner ->
+                            if (typedAddress.isEmpty()) {
+                                Text(text = recipient.addressPlaceholder, style = addressStyle.copy(color = colors.fgSubtle), maxLines = 1)
+                            }
+                            inner()
+                        },
+                    )
+                    if (recipient.name.isNotEmpty() && recipient.name != recipient.address) {
+                        Text(text = recipient.name, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs, maxLines = 1)
                     }
-                },
-                singleLine = true,
-                textStyle = amountStyle,
-                cursorBrush = SolidColor(colors.accentBase),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier
-                    .width(96.dp)
-                    .heightIn(min = VelaSizing.hitTarget)
-                    .onFocusChanged { focused = it.isFocused }
-                    .semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
-                decorationBox = { inner ->
-                    Box(
-                        modifier = Modifier
-                            .background(if (well) colors.bgBase else Color.Transparent, RoundedCornerShape(VelaRadius.md))
-                            .padding(horizontal = VelaSpacing.md),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        if (typed.text.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
-                        inner()
+                    // The core's word on this row: a wrong address outranks a
+                    // repeat (a repeat is of a VALID address), then the amount.
+                    (recipient.addressNote ?: recipient.duplicateNote)?.let { note ->
+                        Text(
+                            text = note,
+                            color = if (recipient.addressNote != null) colors.errorBase else colors.warningBase,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.xs,
+                        )
                     }
-                },
+                    recipient.amountNote?.let { note ->
+                        Text(text = note, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs)
+                    }
+                } else {
+                    Text(
+                        text = recipient.name,
+                        color = colors.fgBase,
+                        fontFamily = VelaMonoFontFamily,
+                        fontSize = VelaTextSize.base,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(VelaSpacing.lg))
+            val amountStyle = TextStyle(
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+                textAlign = TextAlign.End,
             )
-        } else {
-            Text(text = recipient.amount, style = amountStyle, maxLines = 1)
+            if (onAmountChange != null && recipient.amountValue != null) {
+                var typed by remember(recipient.id) { mutableStateOf(amountFieldOf(recipient.amountValue)) }
+                val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
+                LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = amountFieldOf(recipient.amountValue) }
+                // Issue #331: the field is a WELL (the web's `.amount-well`), a full
+                // control's height, and the whole box is the target. It was the
+                // bare figure: a line ~20dp tall whose "0" sat 8dp from the ✕, and
+                // the ✕'s 48dp touch target took every tap just above, below or
+                // right of the figure — the recipient vanished instead of the
+                // keyboard opening. The well is seen while it is wanted (empty, or
+                // in hand), as on the web, so a filled row at rest reads as drawn.
+                var focused by remember(recipient.id) { mutableStateOf(false) }
+                val well = typed.text.isEmpty() || focused
+                BasicTextField(
+                    value = typed,
+                    onValueChange = { next ->
+                        // Spec 073: the core's amount rule, as the send figure —
+                        // its caret too (issue #421: "." is "0.", "08" is "8").
+                        val edit = cleanAmountFieldEdit(next, typed)
+                        if (edit != null) {
+                            val changed = edit.text != typed.text
+                            typed = edit
+                            if (changed) {
+                                sent.addLast(edit.text)
+                                if (sent.size > 256) sent.removeFirst()
+                                onAmountChange(edit.text)
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    textStyle = amountStyle,
+                    cursorBrush = SolidColor(colors.accentBase),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier
+                        .width(96.dp)
+                        .heightIn(min = VelaSizing.hitTarget)
+                        .onFocusChanged { focused = it.isFocused }
+                        .semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
+                    decorationBox = { inner ->
+                        Box(
+                            modifier = Modifier
+                                .background(if (well) colors.bgBase else Color.Transparent, RoundedCornerShape(VelaRadius.md))
+                                .padding(horizontal = VelaSpacing.md),
+                            contentAlignment = Alignment.CenterEnd,
+                        ) {
+                            if (typed.text.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
+                            inner()
+                        }
+                    },
+                )
+            } else {
+                Text(text = recipient.amount, style = amountStyle, maxLines = 1)
+            }
+            // The way to drop the row is the flows' icon button, a gap away from
+            // the amount: its touch target (48dp once Compose grows the 36dp box)
+            // ends short of the field's, so no tap meant for the amount removes
+            // the recipient (issue #331).
+            Spacer(modifier = Modifier.width(VelaSpacing.lg))
+            FlowIconButton(
+                icon = VelaIcons.Close,
+                label = recipient.removeLabel,
+                tint = colors.fgSubtle,
+                onClick = onRemove,
+            )
         }
-        // The way to drop the row is the flows' icon button, a gap away from
-        // the amount: its touch target (48dp once Compose grows the 36dp box)
-        // ends short of the field's, so no tap meant for the amount removes
-        // the recipient (issue #331).
-        Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        FlowIconButton(
-            icon = VelaIcons.Close,
-            label = recipient.removeLabel,
-            tint = colors.fgSubtle,
-            onClick = onRemove,
-        )
     }
 }
 
