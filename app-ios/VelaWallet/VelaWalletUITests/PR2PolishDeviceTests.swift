@@ -324,6 +324,27 @@ final class PR2PolishDeviceTests: XCTestCase {
         restoreHidden(app, keptHidden)
     }
 
+    /// Hiding the balance moves nothing under the hero: Receive / Send /
+    /// Scan sit where they sat (they moved 9 pt at every toggle).
+    func testHeroHoldsItsLine() throws {
+        let app = launchInSpace(page: false)
+        tapTab(["钱包", "Wallet"], in: app)
+        settle(6)
+        let keptHidden = ProcessInfo.processInfo.environment["KEPT_HIDDEN"] == "1"
+        if isHidden(app) { toggleHero(app); settle(2) }
+        let receive = app.buttons["收款"].firstMatch
+        XCTAssertTrue(receive.waitForExistence(timeout: 5), "no Receive")
+        let shownY = receive.frame.minY
+        shoot(app, "hero-1-shown")
+        toggleHero(app)
+        settle(2)
+        let hiddenY = receive.frame.minY
+        shoot(app, "hero-2-hidden")
+        note("hero-y", "shown \(shownY) hidden \(hiddenY)")
+        XCTAssertEqual(shownY, hiddenY, "Receive moved when the balance was hidden")
+        restoreHidden(app, keptHidden)
+    }
+
     /// Hide balance put back to the person's own setting, and nothing else.
     func testRestoreHidden() throws {
         let app = launchInSpace(page: false)
