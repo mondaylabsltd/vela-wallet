@@ -790,7 +790,11 @@ class SigningLiveTest {
         fun warning(failure: app.getvela.wallet.feature.send.core.FeeFailure) =
             (SigningLive.feeModel(ClearSigningView(), FeeView(failed = failure), ctx) as FeeModel.OnChain).warning
         assertEquals(strings.t("home.balanceDetailStatusRetrying"), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = true)))
-        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        // Issue #483: the fee's own sentence for a chain out of reach, and its
+        // own for a fault inside the app — never the browser's "page data".
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_INTERNAL), warning(app.getvela.wallet.feature.send.core.FeeFailure.Internal))
+        assertTrue("an internal fault never names the chain", !warning(app.getvela.wallet.feature.send.core.FeeFailure.Internal)!!.contains("Gnosis"))
         assertTrue("the chain is named", warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false))!!.contains("Gnosis"))
         // Each relay failure says which it was — never "check your connection"
         // over a simulation the relay did not answer (Arbitrum, 2026-10-03).

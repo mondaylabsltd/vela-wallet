@@ -115,6 +115,11 @@ data class TrackPendingRecord(
     val maybe_sent: Boolean = false,
     /** The head read before the first submit POST (`u64` → `Long`); where the landing check starts. `null` = unknown. */
     val submit_block: Long? = null,
+    /**
+     * The account that signed it — the stored row's `from`, so a restart
+     * still knows which account's nonce it holds (`in_flight_ops`).
+     */
+    val sender: String? = null,
 )
 
 /**
@@ -153,8 +158,61 @@ data class TrackEntryView(
      * countdown starts here, never at acceptance.
      */
     val relay_sent_at_ms: Double? = null,
+    /** The account that signed it, lower-cased; `null` when the hand-off named none. */
+    val sender: String? = null,
+    /** `rejected` only: why the relay refused it — carried back into `sendReceiptOutcomeOf` whole. */
+    val refusal: RefusalReason? = null,
+    /**
+     * `rejected` only: the corpus key of the sentence that says why — the fee
+     * sentence for [RefusalReason.FeeBelowMarket] alone, `wentFirst` for a
+     * used nonce, else the plain "refused, nothing was sent". Every surface
+     * that tells a refusal draws THIS.
+     */
+    val refusal_key: String? = null,
+    /**
+     * Not final, and the relay has said nothing new of it for ten minutes: it
+     * no longer holds its account's nonce (`in_flight_ops` leaves it out).
+     * Off the wire while false.
+     */
+    val stalled: Boolean = false,
 )
 
+/**
+ * Why the relay refused an operation (`rejection_reason`, relay contract §2),
+ * as the core names it — `unknown` for anything the relay says that the core
+ * has no word for. Read by the core; the shells draw `refusal_key`.
+ */
+@Serializable
+enum class RefusalReason {
+    @SerialName("fee_below_market") FeeBelowMarket,
+
+    @SerialName("fee_below_minimum") FeeBelowMinimum,
+
+    @SerialName("fee_payment_invalid") FeePaymentInvalid,
+
+    @SerialName("nonce_used") NonceUsed,
+
+    @SerialName("simulation_failed") SimulationFailed,
+
+    @SerialName("invalid_operation") InvalidOperation,
+
+    @SerialName("unsupported_fee_token") UnsupportedFeeToken,
+
+    @SerialName("relay_gave_up") RelayGaveUp,
+
+    @SerialName("reverted_onchain") RevertedOnchain,
+
+    @SerialName("bundle_failed") BundleFailed,
+
+    @SerialName("unknown") Unknown,
+}
+
+/**
+ * The tracker's whole view, decoded — what the screens draw. NOT what
+ * `inFlightOps` reads: that takes the view JSON as the core wrote it
+ * (`CoreHost.viewJson`), so no field this mirror might drop can ever turn a
+ * held nonce into a free one.
+ */
 @Serializable
 data class TrackView(val entries: List<TrackEntryView> = emptyList())
 
@@ -323,6 +381,12 @@ sealed class TrackShellResult {
         val now_ms: Double,
         /** The relay's bundle tx, when it names one. */
         val tx_hash: String? = null,
+        /**
+         * Why the relay refused or failed it, verbatim (`rejection_reason`,
+         * relay `fix/held-nonce-and-floor`); `null` from an older relay — the
+         * core then reads the stage.
+         */
+        val rejection_reason: String? = null,
     ) : TrackShellResult()
 
     @Serializable
@@ -392,6 +456,8 @@ data class TrackHandoff(
     val submitBlock: Long? = null,
     /** Spec 082 RJ1: the relay accepted the op a write-ahead hand-off announced. */
     val admitted: Boolean = false,
+    /** The account that signed it — what makes it an op this account must wait for (`in_flight_ops`). */
+    val sender: String? = null,
 ) {
     fun event(): TrackEvent.Submitted = TrackEvent.Submitted(
         user_op_hash = userOpHash,
@@ -400,6 +466,7 @@ data class TrackHandoff(
         maybe_sent = maybeSent,
         submit_block = submitBlock,
         admitted = admitted,
+        sender = sender,
     )
 }
 
@@ -422,6 +489,8 @@ sealed class TrackEvent {
          * `not_found` no longer counts against it.
          */
         val admitted: Boolean = false,
+        /** The account that signed it (`in_flight_ops`); off the wire when unknown. */
+        val sender: String? = null,
     ) : TrackEvent()
 
     /**

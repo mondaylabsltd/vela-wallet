@@ -587,7 +587,7 @@ object SigningLive {
                     title = s.t(I18nKeys.Flows.STATUS_FAILED),
                     // Spec 082 RJ3: a relay refusal is "refused, nothing was
                     // sent" — never "try again": it would be refused again.
-                    captions = listOfNotNull(summary, failureWords(sign, s)),
+                    captions = listOfNotNull(summary, failureWords(sign, s, ctx.track)),
                     cta = s.t(I18nKeys.Flows.DONE),
                     // Spec 096 F8: the core holds the page's answer until this
                     // closes; a failure that sent nothing may be tried again.
@@ -793,11 +793,14 @@ object SigningLive {
             )
             // Spec 082 RJ3: the relay refused it — nothing was sent, and the
             // same request would be refused again: no Retry words.
+            // A refusal is told by its reason: the tracker entry's
+            // `refusal_key` (the fee words only for a fee refusal, "another
+            // went first" for a used nonce), else the plain "refused".
             SignEndingState.Refused -> SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Failed,
                 title = s.t(I18nKeys.Flows.STATUS_FAILED),
-                captions = listOfNotNull(summary, s.t(I18nKeys.Flows.SIGN_REFUSED)),
+                captions = listOfNotNull(summary, refusedWords(ctx.track, s)),
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )
@@ -932,12 +935,19 @@ object SigningLive {
     }
 
     /**
+     * A refusal's sentence, by its reason: the tracker entry's `refusal_key`
+     * when it has one, else the plain `componentsUi.signing.refused`.
+     */
+    private fun refusedWords(track: app.getvela.wallet.feature.send.core.TrackEntryView?, s: VelaStrings): String =
+        track?.refusal_key?.takeIf { it.isNotBlank() }?.let { s.t(it) } ?: s.t(I18nKeys.Flows.SIGN_REFUSED)
+
+    /**
      * The failure's sentence: the core's `failure_refused` (spec 082 RJ3) is
      * `componentsUi.signing.refused` — nothing was sent, and no Retry words;
      * anything else is the plain "not submitted, try again".
      */
-    private fun failureWords(sign: SignView, s: VelaStrings): String = when {
-        sign.failure_refused -> s.t(I18nKeys.Flows.SIGN_REFUSED)
+    private fun failureWords(sign: SignView, s: VelaStrings, track: app.getvela.wallet.feature.send.core.TrackEntryView? = null): String = when {
+        sign.failure_refused -> refusedWords(track?.takeIf { it.user_op_hash.equals(sign.pending_op_hash, ignoreCase = true) }, s)
         // Spec 099 R8: the passkey failed — the signer is named, and how
         // (the core's kind, from the app's own passkey classifier).
         sign.error?.kind == SignErrorKind.SignerUnavailable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_UNAVAILABLE)
@@ -1273,9 +1283,12 @@ object SigningLive {
                 else -> fee.failed?.let { failed -> feeReason(failed, ctx) }
             },
             refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
-            refreshing = fee.busy,
+            // A coin switched and being measured again with its own fee leg
+            // (`provisional`): the switched figure stays, with the measuring
+            // sign, and the confirm waits (the core's gate) until it lands.
+            refreshing = fee.busy || fee.provisional,
             // The core's FeeMeasuring, as the gate reads it.
-            measuring = fee.busy || ofAnotherTier(fee, speed),
+            measuring = fee.busy || fee.provisional || ofAnotherTier(fee, speed),
             // The core knows the first figure will land as "no coin can pay":
             // its line's room is held from now (iPhone pass 2026-10-09).
             reserve = ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS).takeIf { fee.nothing_to_pay_from },

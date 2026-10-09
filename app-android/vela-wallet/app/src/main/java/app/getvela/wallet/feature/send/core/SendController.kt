@@ -427,6 +427,9 @@ class SendController(
         // Spec 083 fee: the relay's "this operation fails", as the send
         // screen has always said that refusal.
         FeeFailure.WouldFail -> SendEstimateFailure.EstimateFailed
+        // Issue #483: the account read never left the app — a fault of this
+        // app's, never "the quote is unavailable" (the relay's word).
+        FeeFailure.Internal -> SendEstimateFailure.Other
     }
 
     // -- intents ---------------------------------------------------------------------
@@ -462,7 +465,27 @@ class SendController(
                 SendEvent.Open(account = account, params = params, display = display),
                 SendEvent.serializer(),
             )
+            // The core forgets what is in flight on Open: told again at once,
+            // so a second send is held from its first frame — not only after
+            // the tracker next renders.
+            dispatch(SendEvent.InFlightOps(inFlight))
         }
+    }
+
+    /** What the tracker last said is in flight — re-told after every [open]. */
+    @Volatile
+    private var inFlight: List<InFlightOp> = emptyList()
+
+    /**
+     * Every operation in flight on this device (`inFlightOps` of the
+     * tracker's own view JSON), on every tracker render: while this account
+     * has one on the form's chain, the confirm is held with the one line
+     * `previous_pending` names, and opens once it is final or has stalled.
+     * The machine dedupes an identical list, so nothing flickers.
+     */
+    fun inFlightOps(ops: List<InFlightOp>) = synchronized(feeTokenWord) {
+        inFlight = ops
+        dispatch(SendEvent.InFlightOps(ops))
     }
 
     // -- the speed control (spec 069) -----------------------------------------------

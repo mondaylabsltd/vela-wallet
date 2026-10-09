@@ -494,7 +494,7 @@ object SendLive {
             } else {
                 recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT))
             },
-            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
+            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy || fee.provisional, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, s.t(I18nKeys.Flows.CONTINUE)),
             // The core's gate, the whole of it (issue #424): while a relay
@@ -571,7 +571,7 @@ object SendLive {
                 emptyList()
             },
             summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
-            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
+            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy || fee.provisional, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
             cta = formCta(view, ctx, fallback.cta),
             // The core's gate, the whole of it (issue #424): while a relay
@@ -1182,6 +1182,14 @@ object SendLive {
             // signature under way and a refused submit are all in it, and the
             // slide refuses on the same predicate.
             ctaEnabled = view.can_confirm,
+            // One in flight per account and network: while this account's
+            // previous op on the chain is in flight the confirm is held, with
+            // this one line under it — whatever `fee_busy` says, no timer, no
+            // countdown — until the tracker says it is final or has stalled.
+            // The relay's own refusal of the same kind is the notice instead.
+            ctaHold = view.previous_pending?.key
+                ?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }
+                ?.let { s.t(it) },
             notice = confirmNotice(view, ctx),
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
@@ -1244,6 +1252,9 @@ object SendLive {
             // for the block (`venueBlockLine`), translated.
             SendTxErrorKey.VenueBlocked -> view.tx_venue_block?.words { key, vars -> s.t(key, vars) }?.ifBlank { null }
                 ?: s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            // The relay refused it: the account's previous transaction on this
+            // network still holds the nonce. Its words, with Try again.
+            SendTxErrorKey.PreviousPending -> s.t(I18nKeys.Flows.PREVIOUS_PENDING)
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }
     }
@@ -1437,9 +1448,13 @@ object SendLive {
                 stage = ReceiptStage.Failed,
                 title = s.t(I18nKeys.Flows.STATUS_FAILED),
                 captions = listOf(
-                    // Only the fee refusal says "the fee rose": a fee hold
-                    // survives into a later failure that is not that.
-                    when (receipt.hold_reason) {
+                    // A refusal is told by its reason (the core's
+                    // `refusal_key`): the fee sentence only for a fee
+                    // refusal, "another went first" for a used nonce, else the
+                    // plain "refused, nothing was sent" — never every refusal
+                    // as "fees stayed above". A failure that is no refusal (it
+                    // landed and reverted) keeps the failed hint.
+                    receipt.refusal_key?.let { s.t(it) } ?: when (receipt.hold_reason) {
                         SendHoldReason.FeeRejected -> s.t(I18nKeys.Flows.TX_REJECTED_FEES)
                         else -> s.t(I18nKeys.Flows.TX_FAILED_HINT)
                     },

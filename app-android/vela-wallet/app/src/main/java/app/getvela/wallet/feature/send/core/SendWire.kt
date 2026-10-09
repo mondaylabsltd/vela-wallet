@@ -251,6 +251,17 @@ sealed class SendSubmitFailure {
     @Serializable
     @SerialName("venue_blocked")
     data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SendSubmitFailure()
+
+    /**
+     * Another operation of this account still holds the nonce on this chain
+     * (the relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
+     * marker — the core's `RelayRejection::NonceHeld`). Nothing of this one
+     * went out; the confirm screen says "waiting for your last transaction"
+     * with Try again.
+     */
+    @Serializable
+    @SerialName("previous_pending")
+    data object PreviousPending : SendSubmitFailure()
 }
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
@@ -311,6 +322,13 @@ enum class SendTxErrorKey {
 
     /** Spec 102: this account cannot sign here; [SendView.tx_venue_block] says why. */
     @SerialName("venue_blocked") VenueBlocked,
+
+    /**
+     * The relay refused it because the account's previous transaction on this
+     * network still holds the nonce: `componentsUi.signing.confirmBlock.previousPending`,
+     * with Try again.
+     */
+    @SerialName("previous_pending") PreviousPending,
 }
 
 @Serializable
@@ -577,6 +595,12 @@ data class SendReceiptCoin(
 data class SendReceiptView(
     val status: SendReceiptStatus,
     val hold_reason: SendHoldReason? = null,
+    /**
+     * A refusal's sentence, as the core keys it — the fee words only for a fee
+     * refusal, `wentFirst` for a used nonce, else the plain "refused". Drawn
+     * for every refusal; `null` otherwise.
+     */
+    val refusal_key: String? = null,
     val kind: SendReceiptKind? = null,
     val transfers: List<SendReceiptTransfer> = emptyList(),
     /** Spec 097 F (S3): every coin the operation sent, in signing order — a split's one total, a sweep's each. */
@@ -600,6 +624,8 @@ sealed class SendReceiptOutcome {
         val rejected: Boolean,
         /** Spec 082: the tracker's `NotSent` — "not sent", never the fee-rejected words. */
         val not_sent: Boolean = false,
+        /** `rejected` only: the relay's reason, carried to the send machine whole (it keys the words). */
+        val refusal: RefusalReason? = null,
     ) : SendReceiptOutcome()
 
     @Serializable
@@ -715,6 +741,13 @@ data class SendView(
     /** Spec 098 §2: the relay cannot serve this chain; the send stops here. */
     val relay_unreachable: SendRelayUnreachable? = null,
     /**
+     * The account's previous transaction on this network is still in flight
+     * (`in_flight_ops`): `can_confirm` is false, and the one line [SendPreviousPending.key]
+     * sits under the held confirm — whatever `fee_busy` says. It opens by
+     * itself once that one is final or has stalled for ten minutes.
+     */
+    val previous_pending: SendPreviousPending? = null,
+    /**
      * Issue #466: what the stop's "Report this" files — set exactly while a
      * relay stop is up on a network Vela ships. Snapshot it at the tap: the
      * stop may close (funded) while the report is being read.
@@ -820,6 +853,8 @@ sealed class SendOperation {
         val submit_block: Long? = null,
         /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
         val admitted: Boolean = false,
+        /** The account that signed it — forwarded to the tracker's `submitted` (`in_flight_ops`). */
+        val sender: String? = null,
     ) : SendOperation()
 
     /**
@@ -1186,6 +1221,16 @@ sealed class SendEvent {
     @SerialName("retry_after_error")
     data object RetryAfterError : SendEvent()
 
+    /**
+     * Every operation in flight on this device, as the tracker last said —
+     * `inFlightOps` of the tracker's own view JSON, forwarded on every tracker
+     * render and after every open (the machine forgets it on open, and
+     * dedupes an identical list).
+     */
+    @Serializable
+    @SerialName("in_flight_ops")
+    data class InFlightOps(val ops: List<InFlightOp> = emptyList()) : SendEvent()
+
     @Serializable
     @SerialName("receipt_update")
     data class ReceiptUpdate(val user_op_hash: String, val outcome: SendReceiptOutcome) : SendEvent()
@@ -1194,3 +1239,26 @@ sealed class SendEvent {
     @SerialName("done")
     data object Done : SendEvent()
 }
+
+/** [SendView.previous_pending]: the transaction this send waits for, and the line under the held confirm. */
+@Serializable
+data class SendPreviousPending(
+    val chain_id: Int,
+    val user_op_hash: String,
+    /** `componentsUi.signing.confirmBlock.previousPending`. */
+    val key: String,
+)
+
+/**
+ * An operation that holds its account's nonce on a chain (`tx_tracker::InFlightOp`):
+ * accepted by the relay, not final, still followed, not stalled. Read from
+ * the tracker by the core (`inFlightOps`), forwarded to the send and signing
+ * machines as it came.
+ */
+@Serializable
+data class InFlightOp(
+    /** The account, lower-cased. */
+    val sender: String,
+    val chain_id: Int,
+    val user_op_hash: String,
+)

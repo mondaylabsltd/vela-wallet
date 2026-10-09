@@ -10,6 +10,7 @@ import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletScreenState
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -102,6 +103,29 @@ class WalletFixturesTest {
         // Received rows keep the success color while masked (data-model).
         assertTrue(rows.first { it.unit == "USDT" }.positive)
         assertTrue(model.assetRows.all { it.fiat == AssetFiatModel.Masked && it.balance == "••••" })
+    }
+
+    /**
+     * H10: the balance hidden, through the LIVE builder (the core's privacy
+     * fixture): every money figure is the mask, the hero the wider one; an
+     * unlimited allowance and a signature with no figure keep what they draw.
+     */
+    @Test
+    fun h10IsTheLiveBuildersHiddenHome() {
+        val s = zhStrings()
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H10, s)
+        assertEquals(WalletScreenState.H10, model.state)
+        assertEquals(BalanceStateKind.Hidden, model.balance.state)
+        assertEquals("••••••", model.balance.integer)
+        assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
+        val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
+        for (id in listOf("received", "sent", "swap", "permit")) assertEquals(id, "••••", rows.getValue(id).amount)
+        assertEquals("•••• xDAI", rows.getValue("swap").received)
+        assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), rows.getValue("permit-unlimited").amount)
+        assertFalse(rows.getValue("signature").masked)
+        val figures = (rows.values.flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
+            listOfNotNull(model.balance.integer, model.balance.decimals)).joinToString(" ")
+        for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
     }
 
     @Test

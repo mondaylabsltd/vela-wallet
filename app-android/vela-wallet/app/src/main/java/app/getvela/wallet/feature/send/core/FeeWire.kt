@@ -149,6 +149,14 @@ data class FeeAssetQuote(
      * answer is the one Android gave before.
      */
     val native_usd_floor_price: String? = null,
+    /**
+     * The relay's own minimum for this row (`minimumAmount` on
+     * `vela_getInBandGasQuote`), passed through exactly as the relay wrote it
+     * — a hex quantity in the row's base units. The core floors the fee at
+     * THIS when present; an older relay publishes none, and today's rule
+     * stands.
+     */
+    val minimum_amount: String? = null,
 )
 
 @Serializable
@@ -223,6 +231,13 @@ sealed class FeeFailure {
     data class ChainRead(val rate_limited: Boolean) : FeeFailure() { override val name = CHAIN_READ }
 
     /**
+     * Issue #483: the account read never left the app — the shell could not
+     * ask (a fault of its own, never the chain's). Worded "internal", never
+     * "can't reach the chain", and asked again on the same schedule.
+     */
+    data object Internal : FeeFailure() { override val name = "internal" }
+
+    /**
      * What the core's `feeRequoteDelayMs` and `feeFailureReasonKey` take: the
      * wire name, or the whole `ChainRead` JSON.
      */
@@ -269,7 +284,7 @@ sealed class FeeFailure {
         /** Every word that crosses as a plain string — what the drift test holds against the mirror. */
         val PLAIN: List<FeeFailure> = listOf(
             MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
-            WouldFail,
+            WouldFail, Internal,
         )
     }
 }
@@ -331,15 +346,33 @@ data class FeeView(
      * sheet's confirm dropped 26 pt when its first figure landed).
      */
     val nothing_to_pay_from: Boolean = false,
+    /**
+     * The figure on screen was switched to another coin and is being measured
+     * again with that coin's fee leg: drawn as it is, with the measuring
+     * sign, and never confirmable until the new figure lands (`busy` holds
+     * meanwhile too; the gate is the core's).
+     */
+    val provisional: Boolean = false,
 )
 
 // -- what the machine asks for -----------------------------------------------
 
 @Serializable
 sealed class FeeOperation {
+    /** `fresh`: a run after a failure — read the chain again, past the held 15 s reading. */
     @Serializable
     @SerialName("fetch_gas_price")
-    data class FetchGasPrice(val chain_id: Int, val want_tip: Boolean) : FeeOperation()
+    data class FetchGasPrice(val chain_id: Int, val want_tip: Boolean, val fresh: Boolean = false) : FeeOperation()
+
+    /**
+     * Issue #483: the account's deployment, read as the fee's own first step
+     * (`QuoteRequested.read_deployment`) — `eth_getCode` through the pool.
+     * Answered [FeeShellResult.Deployment]; its failure is the fee's, with the
+     * fee's words and retry. `fresh`: past any held reading.
+     */
+    @Serializable
+    @SerialName("read_deployment")
+    data class ReadDeployment(val chain_id: Int, val account: String, val fresh: Boolean = false) : FeeOperation()
 
     @Serializable
     @SerialName("fetch_bundler_quote")
@@ -427,6 +460,29 @@ sealed class FeeShellResult {
     @Serializable
     @SerialName("deadline_elapsed")
     data object DeadlineElapsed : FeeShellResult()
+
+    /** The answer to [FeeOperation.ReadDeployment]. */
+    @Serializable
+    @SerialName("deployment")
+    data class Deployment(val read: DeploymentRead) : FeeShellResult()
+}
+
+/** What the account read came back with ([FeeOperation.ReadDeployment]). */
+@Serializable
+sealed class DeploymentRead {
+    @Serializable
+    @SerialName("read")
+    data class Read(val deployed: Boolean) : DeploymentRead()
+
+    /** The chain's nodes did not answer — [rate_limited] when they only rate-limited. */
+    @Serializable
+    @SerialName("unreachable")
+    data class Unreachable(val rate_limited: Boolean) : DeploymentRead()
+
+    /** The read never left the app (a fault of the shell's own); [kind] is diagnostics only. */
+    @Serializable
+    @SerialName("internal")
+    data class Internal(val kind: String) : DeploymentRead()
 }
 
 // -- what the shell tells it -------------------------------------------------
@@ -457,6 +513,12 @@ sealed class FeeEvent {
          * amounts it states in — a coin's shortfall (issue #408).
          */
         val number: String = "comma_dot",
+        /**
+         * Issue #483: the core reads the account's deployment itself, first
+         * ([FeeOperation.ReadDeployment]), instead of trusting [deployed] —
+         * the read's failure is then the fee's row, footer and retry.
+         */
+        val read_deployment: Boolean? = null,
     ) : FeeEvent()
 
     @Serializable

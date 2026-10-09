@@ -12,8 +12,13 @@ import androidx.compose.ui.graphics.Color
  * replaces the fixture layer that builds them and nothing else.
  */
 
-/** H9 (spec 092): the hero's line over networks the wallet cannot reach. */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9 }
+/**
+ * H9 (spec 092): the hero's line over networks the wallet cannot reach.
+ * H10 (the correctness batch): the balance hidden, drawn by the LIVE builder
+ * (`WalletLive.home`) from the core's own privacy fixture — what ships, not a
+ * drawing of it.
+ */
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10 }
 
 @Immutable
 data class WalletHeaderModel(

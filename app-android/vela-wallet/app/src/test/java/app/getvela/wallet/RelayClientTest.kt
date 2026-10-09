@@ -112,6 +112,31 @@ class RelayClientTest {
         assertEquals(2, port.calls.count { it.endsWith("vela_getInBandGasQuote") })
     }
 
+    /**
+     * The relay's own floor per row (`minimumAmount`, relay PR #23) reaches
+     * the core verbatim — hex, as the relay writes it; the core floors the
+     * fee at it. An older relay publishes none: absent, and today's rule.
+     */
+    @Test
+    fun `each row's published minimum reaches the core as the relay wrote it`() = runBlocking {
+        val native = JSONObject().put("recipient", "0x2222222222222222222222222222222222222222")
+            .put("asset", "native").put("balance", "0x3e8").put("decimals", 18).put("symbol", "ETH")
+            .put("usdBalance", "1000").put("usdPrice", "2500").put("minimumAmount", "0x3c5f8d2e5800")
+        val usdc = JSONObject().put("recipient", "0x2222222222222222222222222222222222222222")
+            .put("asset", "erc20").put("feeToken", "0x3333333333333333333333333333333333333333")
+            .put("balance", "0x1").put("decimals", 6).put("symbol", "USDC").put("usdBalance", "1").put("usdPrice", "1")
+            .put("minimumAmount", "0x2710")
+        port.answer("vela_getInBandGasQuote", body(JSONArray().put(native).put(usdc)))
+        val rows = relay.inBandQuotes(8453, "0xabc")!!
+        assertEquals(listOf("0x3c5f8d2e5800", "0x2710"), rows.map { it.minimum_amount })
+        // On the wire to the core as `minimum_amount`, untouched.
+        val wire = app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.send.core.FeeAssetQuote.serializer(), rows[1])
+        assertTrue(wire, wire.contains("\"minimum_amount\":\"0x2710\""))
+        relay.clearCaches()
+        port.answer("vela_getInBandGasQuote", body(JSONArray().put(native.apply { remove("minimumAmount") })))
+        assertEquals(null, relay.inBandQuotes(8453, "0xabc")!!.single().minimum_amount)
+    }
+
     @Test
     fun `without a native price only the native row survives`() = runBlocking {
         val native = JSONObject().put("recipient", "0x2222222222222222222222222222222222222222")

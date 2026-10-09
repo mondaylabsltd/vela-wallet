@@ -362,7 +362,8 @@ class CoreWireDriftTest {
         assertFieldsExist<BalanceView>("BalanceView")
         assertFieldsExist<BalanceToken>("BalanceToken")
         assertFieldsExist<BalanceCacheEntry>("BalanceCacheEntry")
-        assertFieldsExist<BalanceSwitcherView>("BalanceSwitcherView")
+        // Every field: `hidden` is what masks the switcher's rows and total.
+        assertFieldsExhaustive<BalanceSwitcherView>("BalanceSwitcherView")
     }
 
     @Test
@@ -410,6 +411,9 @@ class CoreWireDriftTest {
     @Test
     fun feedViewsMatchTheGeneratedMirrors() {
         assertFieldsExist<FeedView>("FeedView")
+        // Balance privacy: the feed's own flag, and each row's own word on its figure.
+        assertTrue("hidden" in serializer<FeedView>().descriptor.elementNames)
+        assertTrue("figure_maskable" in serializer<FeedItem>().descriptor.elementNames)
         assertFieldsExist<FeedItem>("FeedItem")
         assertFieldsExist<FeedTxRecord>("FeedTxRecord")
         assertFieldsExist<FeedBatch>("FeedBatch")
@@ -768,6 +772,10 @@ class CoreWireDriftTest {
         assertFieldsExist<SendRecipientDraft>("SendRecipientDraft")
         assertFieldsExist<SendMultiSpecView>("SendMultiSpecView")
         assertFieldsExist<SendReceiptView>("SendReceiptView")
+        // A refusal told by its reason, and the hold's one line.
+        assertTrue("refusal_key" in serializer<SendReceiptView>().descriptor.elementNames)
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendPreviousPending>("SendPreviousPending")
+        assertTrue("previous_pending" in serializer<app.getvela.wallet.feature.send.core.SendView>().descriptor.elementNames)
         assertFieldsExist<SendReceiptTransfer>("SendReceiptTransfer")
         assertFieldsExist<SendAccountRef>("SendAccountRef")
         assertFieldsExist<SendOpenParams>("SendOpenParams")
@@ -859,6 +867,11 @@ class CoreWireDriftTest {
         assertFieldsExist<FeeCall>("FeeCall")
         // Issue #411: the sheet's simulation, told to the fee machine.
         assertFieldsExist<app.getvela.wallet.feature.send.core.FeeBalanceChange>("FeeBalanceChange")
+        // The correctness batch: `provisional` (a switched coin re-measured)
+        // and the relay's `minimum_amount` — every field, so the gate the
+        // core reads back (`signConfirmState`) is never handed less.
+        assertFieldsExhaustive<FeeView>("FeeView")
+        assertTrue("minimum_amount" in serializer<FeeAssetQuote>().descriptor.elementNames)
     }
 
     @Test
@@ -867,6 +880,8 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<FeeShellResult>("FeeShellResult")
         assertVariantsExhaustive<FeeGasOutcome>("FeeGasOutcome")
         assertVariantsExhaustive<FeeAssetView>("FeeAssetView")
+        // Issue #483: the account read is the fee's own — every answer it can take.
+        assertVariantsExhaustive<app.getvela.wallet.feature.send.core.DeploymentRead>("DeploymentRead")
         assertVariantsExist<FeeEvent>("FeeEvent")
         assertStringUnion<FeeTier>("FeeTier")
         assertFeeFailureMatchesTheMirror()
@@ -901,8 +916,13 @@ class CoreWireDriftTest {
     @Test
     fun trackerViewsOperationsAndResultsMatch() {
         assertFieldsExist<TrackView>("TrackView")
-        assertFieldsExist<TrackEntryView>("TrackEntryView")
-        assertFieldsExist<TrackPendingRecord>("TrackPendingRecord")
+        // Every field: an entry is re-encoded into `sendReceiptOutcomeOf`, and
+        // a dropped `refusal` would tell every refusal as the plain one.
+        assertFieldsExhaustive<TrackEntryView>("TrackEntryView")
+        assertFieldsExhaustive<TrackPendingRecord>("TrackPendingRecord")
+        // One in flight per account and network, and a refusal told by its reason.
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.InFlightOp>("InFlightOp")
+        assertStringUnion<app.getvela.wallet.feature.send.core.RefusalReason>("RefusalReason")
         assertFieldsExist<TrackRecordPatch>("TrackRecordPatch")
         assertVariantsExhaustive<TrackOperation>("TrackOperation")
         assertVariantsExhaustive<TrackShellResult>("TrackShellResult")

@@ -56,6 +56,19 @@ enum class SigningScreenState {
      * its own (`TrustedSignerWaitingSheet`).
      */
     CS43, CS44,
+
+    /**
+     * The correctness batch — boards drawn through the LIVE builders
+     * (`SigningLive.feeModel`, the core's confirm-block keys, `aftercareReceipt`):
+     * the confirm held while the account's previous transaction on this
+     * network is in flight (CS45); a fee coin the machine switched, measured
+     * again with its own fee leg (CS46, provisional) and settled (CS47); a fee
+     * whose account read failed — the chain's nodes out of reach (CS48) vs a
+     * fault inside the app (CS49), the row and the footer naming the same
+     * cause; and a relay refusal told by its reason, another transaction of
+     * the account having gone first (CS50).
+     */
+    CS45, CS46, CS47, CS48, CS49, CS50,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */

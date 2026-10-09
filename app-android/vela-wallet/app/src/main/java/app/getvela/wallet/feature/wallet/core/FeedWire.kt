@@ -274,6 +274,14 @@ data class FeedItem(
     /** Spec 093: the second line, in order — worded part by part, joined " · ". */
     @Serializable(with = FeedLineList::class)
     val subtitle: List<FeedLine> = emptyList(),
+    /**
+     * The row's own figure is money, so it draws as the mask while the
+     * balance is hidden (`app::privacy::figure_maskable`): an amount, a
+     * batch's count, a capped allowance. `false` for an unlimited allowance (a
+     * risk to see) and for a row with no figure. A dApp row's `received`
+     * masks whenever hidden, whatever this says.
+     */
+    val figure_maskable: Boolean = false,
 )
 
 /** One part of a row's second line (spec 093). */
@@ -644,6 +652,14 @@ data class FeedView(
      */
     @Serializable(with = FeedItemList::class)
     val contact_rows: List<FeedItem> = emptyList(),
+    /**
+     * Balance privacy is on — the feed's own flag, so every surface drawn from
+     * this view (home Activity, History, a contact's page, a transfer's and a
+     * dApp row's detail) masks on the feed's word: each row's figure by
+     * [FeedItem.figure_maskable], a dApp row's "received" and every detail
+     * figure always.
+     */
+    val hidden: Boolean = false,
 )
 
 object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

@@ -30,6 +30,15 @@ enum class FlowState {
     SD1, SD1B, SD2, SD2B, SD2C, SD2D, SD2E, SD2F,
     SD3, SD3B, SD3C,
     SD4A, SD4B, SD4C,
+
+    /**
+     * The correctness batch's boards, drawn through the live builders and
+     * never on the live flow stack: the confirm held while the account's
+     * previous transaction on this network is in flight, with its one line
+     * (SD3D); and a refused send told by its reason — another of the
+     * account's transactions went first (SD4D).
+     */
+    SD3D, SD4D,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -770,6 +779,12 @@ data class SendConfirmModel(
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,
+    /**
+     * The one line under a confirm held while the account's previous
+     * transaction on this network is in flight (`SendView.previous_pending`):
+     * "Waiting for your last transaction on this network…". `null` otherwise.
+     */
+    val ctaHold: String? = null,
     /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
     val notice: String? = null,
     /** Spec 098 §4: the treasury stop's address, drawn under [notice]. */

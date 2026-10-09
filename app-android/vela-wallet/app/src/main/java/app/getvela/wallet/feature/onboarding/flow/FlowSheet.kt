@@ -142,5 +142,7 @@ private fun badgeFor(type: String): app.getvela.wallet.core.designsystem.compone
     when (type) {
         "recover_offer" -> app.getvela.wallet.core.designsystem.components.BadgeVariant.Info
         "not_discoverable" -> app.getvela.wallet.core.designsystem.components.BadgeVariant.Warning
+        // Not an offer, and not a failure of the person's: a lookup that could not be made.
+        "registry_unreachable" -> app.getvela.wallet.core.designsystem.components.BadgeVariant.Warning
         else -> app.getvela.wallet.core.designsystem.components.BadgeVariant.Error
     }

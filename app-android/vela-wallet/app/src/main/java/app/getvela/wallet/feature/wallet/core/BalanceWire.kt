@@ -58,7 +58,10 @@ data class BalanceCacheEntry(val address: String, val usd: Double)
 data class BalanceSwitcherView(
     val open: Boolean = false,
     val loading: Boolean = false,
+    /** Empty while [hidden]: the core withholds every switcher figure. */
     val balances: List<BalanceCacheEntry> = emptyList(),
+    /** Balance privacy is on: every row and the total draw the mask (`app::privacy`). */
+    val hidden: Boolean = false,
 )
 
 /** One network the last read could not reach, and what was last read there (spec 092). */

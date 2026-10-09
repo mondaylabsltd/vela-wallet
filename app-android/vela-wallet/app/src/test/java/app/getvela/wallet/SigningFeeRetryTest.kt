@@ -1,6 +1,7 @@
 package app.getvela.wallet
 
 import androidx.compose.ui.graphics.Color
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.AccountStore
@@ -81,7 +82,9 @@ class SigningFeeRetryTest {
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
 
-    private fun controller(): SigningController = SigningController(
+    private fun controller(
+        inFlight: kotlinx.coroutines.flow.StateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>>? = null,
+    ): SigningController = SigningController(
         scope = scope,
         relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
         feed = FeedExecutor(store = store, ownAccounts = { emptyList() }),
@@ -102,6 +105,7 @@ class SigningFeeRetryTest {
             override suspend fun switchAccount(address: String) = true
             override fun nativeSymbol(chainId: Int) = "XDAI"
             override fun trackSubmitted(handoff: app.getvela.wallet.feature.send.core.TrackHandoff) = Unit
+            override fun inFlightOps() = inFlight
             override fun dataBase() = ""
             override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> = null to false
         },
@@ -137,7 +141,8 @@ class SigningFeeRetryTest {
         val failed = withTimeout(20_000) { c.fee.first { it.failed != null } }
         assertEquals(FeeFailure.ChainRead(rate_limited = false), failed.failed)
         val row = SigningLive.feeModel(ClearSigningView(), failed, ctx) as FeeModel.OnChain
-        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), row.warning)
+        // Issue #483: the fee's own sentence, never the browser's "page data may be incomplete".
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis")), row.warning)
 
         // The node comes back; the core's schedule asks again (the first after 3 s).
         down.set(false)
@@ -146,6 +151,94 @@ class SigningFeeRetryTest {
         val took = System.currentTimeMillis() - started
         assertEquals(null, back.failed)
         assertTrue("back on the schedule's first step (3 s), not a later one: $took ms", took < 3_000 + uniffi.vela_core_uniffi.feeRequoteTimeoutMs().toLong())
+    }
+
+    /**
+     * Issue #483: the account read is the fee machine's own. A read that never
+     * left the app (the shell's own fault — here, the pool throwing) is the
+     * fee's `internal`, worded so — never "can't reach Gnosis", which would
+     * send the person to blame a chain that is fine.
+     */
+    @Test
+    fun `an account read that never left the app is internal, never the chain`() = runBlocking<Unit> {
+        scriptRelay()
+        port.always("eth_getCode") { throw IllegalStateException("the pool's own fault") }
+        val c = controller()
+        c.open(transfer())
+        val failed = withTimeout(20_000) { c.fee.first { it.failed != null } }
+        assertEquals(FeeFailure.Internal, failed.failed)
+        assertTrue("nothing was priced", failed.fee == null && !failed.confirm_fee_ready)
+        val row = SigningLive.feeModel(ClearSigningView(), failed, ctx) as FeeModel.OnChain
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_INTERNAL), row.warning)
+        assertTrue("never the chain's sentence: ${row.warning}", !row.warning.orEmpty().contains("Gnosis"))
+        assertTrue("the row is a retry", row.tappable)
+    }
+
+    /**
+     * Issue #483: the row and the footer name the same cause — the confirm
+     * gate reads the very view the row is drawn from (the failure is in it,
+     * no shell overlay), so it says the fee failed, never "working out the
+     * network fee" under a row that says it could not reach the chain. And a
+     * tap on the row reads the account again: a real read, not the answer
+     * that just failed.
+     */
+    @Test
+    fun `the row and the footer name the same cause, and a tap reads the chain again`() = runBlocking<Unit> {
+        scriptRelay()
+        port.always("eth_getCode") { RpcResult.Failed(rateLimited = false) }
+        val c = controller()
+        c.open(transfer())
+        withTimeout(20_000) { c.fee.first { it.failed != null } }
+        val feeJson = withTimeout(5_000) { c.feeJson.first { it != null && it.contains("chain_read") } }
+        val signJson = withTimeout(5_000) { c.signJson.first { it != null } }
+        val clearJson = withTimeout(5_000) { c.clearJson.first { it != null } }
+        val guardJson = withTimeout(5_000) { c.guardJson.first { it != null } }
+        val gate = SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, null)
+        assertTrue("the confirm is shut", !gate.enabled)
+        assertEquals(app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed, gate.block)
+
+        val reads = port.calls.count { it.endsWith("eth_getCode") }
+        c.feeTapped()
+        withTimeout(10_000) { while (port.calls.count { it.endsWith("eth_getCode") } <= reads) kotlinx.coroutines.delay(20) }
+    }
+
+    /**
+     * One transaction in flight per account and network: while this account's
+     * previous op on the request's chain is in flight (the tracker's word, as
+     * the app forwards it), the sheet's confirm is held with the one line —
+     * ahead of every fee block, so a settled fee does not open it — and it
+     * opens once that op is no longer in flight.
+     */
+    @Test
+    fun `a transaction waits for the account's last one on its chain`() = runBlocking<Unit> {
+        scriptRelay()
+        val inFlight = kotlinx.coroutines.flow.MutableStateFlow(
+            listOf(app.getvela.wallet.feature.send.core.InFlightOp(sender = safe.lowercase(), chain_id = 100, user_op_hash = "0x" + "f1".repeat(32))),
+        )
+        val c = controller(inFlight)
+        c.open(transfer())
+        withTimeout(20_000) { c.fee.first { it.confirm_fee_ready && it.fee != null } }
+        suspend fun gate() = SigningLive.confirmState(
+            withTimeout(5_000) { c.signJson.first { it != null } },
+            withTimeout(5_000) { c.guardJson.first { it != null } },
+            withTimeout(5_000) { c.clearJson.first { it != null } },
+            c.feeJson.value,
+            null,
+        )
+        val held = withTimeout(10_000) {
+            var state = gate()
+            while (state.block != app.getvela.wallet.feature.signing.core.ConfirmBlock.PreviousPending) { kotlinx.coroutines.delay(50); state = gate() }
+            state
+        }
+        assertTrue(!held.enabled)
+        assertEquals(I18nKeys.Flows.PREVIOUS_PENDING, held.key)
+        // The first one is final (or stalled): the tracker leaves it out, and the hold lets go.
+        inFlight.value = emptyList()
+        withTimeout(10_000) { while (gate().block == app.getvela.wallet.feature.signing.core.ConfirmBlock.PreviousPending) kotlinx.coroutines.delay(50) }
+        // Another account's op, or one on another chain, holds nothing here.
+        inFlight.value = listOf(app.getvela.wallet.feature.send.core.InFlightOp(sender = safe.lowercase(), chain_id = 1, user_op_hash = "0x" + "f2".repeat(32)))
+        kotlinx.coroutines.delay(300)
+        assertTrue(gate().block != app.getvela.wallet.feature.signing.core.ConfirmBlock.PreviousPending)
     }
 
     @Test
