@@ -33,4 +33,17 @@ confirm_fee_ready: boolean,
  * Never set while busy, failed or unpriced. `#[serde(default)]`: a reader
  * that predates it reads `false`.
  */
-no_coin_pays: boolean, };
+no_coin_pays: boolean, 
+/**
+ * While the FIRST figure is measured: not one coin on offer has anything
+ * left to pay a fee from (every row's balance, less what the operation
+ * itself spends from it, is zero), so whatever the figure, the sheet
+ * will say [`no_coin_pays`](Self::no_coin_pays) when it lands. A shell
+ * holds that line's room — unsaid — from now, so the landing does not
+ * move what is under it: the backup sheet's confirm dropped 26 pt when
+ * its first quote landed on an account with nothing on Ethereum (iPhone
+ * pass 2026-10-09). After a figure has landed, the shells' held line
+ * does the same. `#[serde(default)]`: a reader that predates it reads
+ * `false`.
+ */
+nothing_to_pay_from: boolean, };
