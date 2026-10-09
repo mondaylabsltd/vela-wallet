@@ -200,9 +200,11 @@ struct ExploreScreen: View {
     }
 
     /// The Explore home, with every tab kept as it was — ‹ with no history,
-    /// a closed page, the gallery's 探索.
+    /// a closed page, the gallery's 探索. Nothing is shown, so no tab is
+    /// asked for: none wakes behind the home (`BrowserController.wanted`).
     private func goHome() {
         viewOverride = .start
+        controller?.landedHome()
     }
 
     /// The tab bar inside Explore. 探索 again is the way home from a page;
@@ -641,6 +643,7 @@ struct ExploreScreen: View {
         .onChange(of: visit) { _, _ in
             viewOverride = nil
             followTabs = false
+            if landing == .home { controller?.landedHome() }
         }
         // The landing names a tab that is not in front (a request waiting in
         // another tab): bring it forward, so the page is the one that asks.

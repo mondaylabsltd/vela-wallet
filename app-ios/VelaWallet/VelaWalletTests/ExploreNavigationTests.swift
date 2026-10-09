@@ -262,6 +262,110 @@ struct ExploreNavigationTests {
         #expect(h.browser.explore.tabs.first { $0.id == "t3" }?.url == "https://site3.example/")
     }
 
+    // MARK: - Which tabs get a page
+
+    /// A page a tab was asked to load.
+    private struct Page: Hashable {
+        let tab: String
+        let url: String
+    }
+
+    /// Every engine the controller makes and every page it asks one to load,
+    /// in order — its loader stood in for, so nothing loads at all.
+    private final class Loads {
+        var made: [String] = []
+        var pages: [Page] = []
+    }
+
+    private func recordLoads(_ browser: BrowserController) -> Loads {
+        let loads = Loads()
+        browser.engineMadeForTesting = { engine in
+            let tab = engine.id
+            loads.made.append(tab)
+            engine.loader = { request in
+                loads.pages.append(Page(tab: tab, url: request.url?.absoluteString ?? ""))
+            }
+        }
+        return loads
+    }
+
+    private func seededTabs(_ tabs: [(id: String, url: String)], selected: String) -> BrowserHarness {
+        BrowserHarness(seed: { store in
+            store.writeObject(ExploreExecutor.key, [
+                "tabs": tabs.map { tab in
+                    ["id": tab.id, "url": tab.url, "title": tab.id, "host": URL(string: tab.url)?.host ?? ""]
+                },
+                "selected_tab": selected,
+            ])
+        })
+    }
+
+    /// A page opened from outside — a `velawallet://open` link, the launch
+    /// URL — that arrives before the saved tabs have loaded opens ITS page,
+    /// and only that one. The tab restored in front stays dormant: under one
+    /// flag for the run, the open woke it, and yesterday's dApp loaded behind
+    /// the new tab, scripts and all.
+    @Test(.timeLimit(.minutes(5)))
+    func anOutsideOpenLoadsOnlyItsOwnPage() async throws {
+        let h = seededTabs([("r1", "https://yesterday.example/"), ("r2", "https://older.example/")], selected: "r1")
+        let loads = recordLoads(h.browser)
+
+        h.browser.open("http://127.0.0.1:9/outside")
+        h.browser.start()
+        await Wait.until { h.browser.explore.tabs.count == 3 }
+        let opened = try #require(h.browser.explore.selectedTab)
+
+        #expect(!["r1", "r2"].contains(opened), "the open made a tab of its own")
+        #expect(loads.made == [opened], "only the opened tab has an engine")
+        #expect(h.browser.engineForTesting("r1") == nil, "the restored tab woke behind the new one")
+        #expect(Set(loads.pages) == [Page(tab: opened, url: "http://127.0.0.1:9/outside")])
+        #expect(h.browser.current === h.browser.engineForTesting(opened))
+
+        // The restored tab is still there, and an ask still wakes it.
+        h.browser.selectTab("r1")
+        #expect(loads.made == [opened, "r1"])
+        #expect(h.browser.current === h.browser.engineForTesting("r1"))
+    }
+
+    /// Closing the tab in front — from the switcher over the home, or ⋯ →
+    /// close page — selects a neighbour, and nobody asked to see that one:
+    /// it stays dormant behind the home until it is resumed.
+    @Test(.timeLimit(.minutes(5)))
+    func closingThePageInFrontWakesNoNeighbour() async throws {
+        let h = seededTabs(
+            [("a", "http://127.0.0.1:9/a"), ("b", "http://127.0.0.1:9/b"), ("c", "http://127.0.0.1:9/c")],
+            selected: "b"
+        )
+        let loads = recordLoads(h.browser)
+        h.browser.start()
+        await Wait.until { h.browser.explore.ready }
+        #expect(loads.made.isEmpty, "a launch wakes no tab")
+
+        // b is resumed; Explore goes home; b is closed from the switcher.
+        h.browser.selectTab("b")
+        #expect(loads.made == ["b"])
+        h.browser.landedHome()
+        h.browser.closeTab("b")
+        await Wait.until { h.browser.explore.tabs.count == 2 }
+        let neighbour = try #require(h.browser.explore.selectedTab)
+        #expect(h.browser.engineForTesting(neighbour) == nil, "closing a page woke its neighbour behind the home")
+        #expect(h.browser.current == nil)
+
+        // The neighbour is resumed, then closed from its own ⋯.
+        h.browser.selectTab(neighbour)
+        #expect(loads.made == ["b", neighbour])
+        h.browser.closeTab(neighbour)
+        await Wait.until { h.browser.explore.tabs.count == 1 }
+        let last = try #require(h.browser.explore.selectedTab)
+        #expect(h.browser.engineForTesting(last) == nil, "⋯ → close page woke the tab left")
+        #expect(h.browser.current == nil)
+
+        // Resumed, it loads.
+        h.browser.selectTab(last)
+        #expect(loads.made == ["b", neighbour, last])
+        #expect(h.browser.current === h.browser.engineForTesting(last))
+    }
+
     // MARK: - The home's resume section
 
     /// The rows are the core's `resumable`, in its order; the header counts

@@ -93,21 +93,36 @@ final class BrowserController {
     /// For DRAWING only: nothing on the page channel ever falls back to it.
     private(set) var current: BrowserEngine?
 
-    /// Whether the person has ASKED for a page this run (2026-09-23).
+    /// The tab whose page the person ASKED to see (DESIGN N — Android's
+    /// `wanted`, the same latch per tab).
     ///
     /// Tabs survive a launch, and restoring one is right — landing inside it
     /// is not. The owner opened 探索 on an iPhone and a page from a previous
     /// session loaded itself: a tab kept from two days earlier, at a
     /// `127.0.0.1` address that is nothing on this device now, so the browser
-    /// opened onto an error nobody asked for. Android lands on the start page
-    /// with the same tab waiting in the strip, which is what a person means by
-    /// a browser they have not opened yet.
+    /// opened onto an error nobody asked for (2026-09-23).
     ///
-    /// So `reconcile` will not MINT an engine until one of the three ways a
-    /// person asks for a page has happened: an address, a tab, a site. It
-    /// still keeps and tears down the engines that already exist, because that
-    /// half is about tabs that closed.
-    private var pageWanted = false
+    /// The first fix was one flag for the run — "a page has been asked for" —
+    /// and it woke tabs nobody had asked for once it was set: a page opened
+    /// from outside (a `velawallet://open` link, a launch URL, the
+    /// external-page sheet) set it before the saved tabs had loaded, so the
+    /// restored tab in front loaded yesterday's dApp behind the new one —
+    /// scripts running, a consent it could raise; and closing a page woke the
+    /// neighbour the core selected, behind the home.
+    ///
+    /// So `reconcile` MINTS an engine — and runs a page's scripts — only for
+    /// this tab, while it is the one selected: the tab a resume row, the
+    /// switcher or a waiting request brought forward, the tab an open went
+    /// to, a tab an open made. A restored tab, one left behind the home, the
+    /// neighbour a close selects: dormant until somebody resumes it. The ask
+    /// lapses when the selection moves off its tab without one, and when
+    /// Explore lands on its home (`landedHome`). Engines that exist are kept
+    /// either way — this gates making one, never keeping one.
+    private var wanted: String?
+    /// An open went to a NEW tab the core has yet to make: the tabs there
+    /// before it. The selected tab that is not one of them is the one asked
+    /// for (`reconcile` reads it once).
+    private var wantOpened: Set<String>?
     /// Bumped whenever an engine's navigation state changes, so SwiftUI
     /// redraws chrome that reads a non-observable engine property.
     private(set) var engineTick = 0
@@ -135,6 +150,11 @@ final class BrowserController {
     /// The tab whose status panel is open, as the browser machine was told.
     private(set) var inspectedTab: String?
     @ObservationIgnored private var memoryObserver: NSObjectProtocol?
+    #if DEBUG
+    /// Each engine as it is made, before its first load: a test stands in
+    /// for its loader and sees exactly which page each tab was asked to load.
+    @ObservationIgnored var engineMadeForTesting: ((BrowserEngine) -> Void)?
+    #endif
 
     /// Visits recorded before the history store answered.
     private var queuedVisits: [[String: Any]] = []
@@ -349,9 +369,12 @@ final class BrowserController {
     /// (24 tabs) has no room for a new one, and the core then names a tab it
     /// can spare — a start page, else the one used longest ago, never the
     /// dApp just left — which is selected before it loads.
+    ///
+    /// Only the tab the open goes to is asked for (`wanted`), and only once
+    /// the open runs — after the saved tabs have loaded: the tab that was in
+    /// front when they loaded stays as dormant as it came.
     func open(_ text: String, kind: ExploreOpenKind = .address, onPage: Bool = false) {
         guard let url = dappBrowserInput(text: text) else { return }
-        pageWanted = true
         whenReady { [weak self] in
             guard let self else { return }
             let shown = onPage ? explore.selectedTab : nil
@@ -360,24 +383,35 @@ final class BrowserController {
             let target = Self.openTarget(view: explore, shown: shown, onPage: onPage, url: url, kind: kind)
             switch target {
             case .load(let id):
-                if explore.selectedTab != id {
-                    exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
-                }
-                exploreCore.dispatch(CoreJSON.string([
-                    "type": "tab_navigated", "id": id, "url": url, "title": NSNull(),
-                ]))
-                // An engine already showing a page is told directly; a start
-                // page gets its engine from `reconcile`, which loads the URL.
-                engines[id]?.load(url)
+                load(url, into: id)
             case .resume(let id):
                 VelaLog.notice(.browser, "open resumes tab=\(id)")
                 selectTab(id)
             case .newTab:
+                // The tab this makes is the one asked for: `reconcile` finds
+                // it as the selected tab that was not here before — inside
+                // this dispatch, which commits the view before it returns.
+                wantOpened = Set(explore.tabs.map(\.id))
                 exploreCore.dispatch(CoreJSON.string([
                     "type": "tab_opened", "url": url, "title": NSNull(), "now_ms": now(),
                 ]))
+                wantOpened = nil
             }
         }
+    }
+
+    /// The core's `load`: `id` takes `url`, and is the tab asked for.
+    private func load(_ url: String, into id: String) {
+        wanted = id
+        if explore.selectedTab != id {
+            exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
+        }
+        exploreCore.dispatch(CoreJSON.string([
+            "type": "tab_navigated", "id": id, "url": url, "title": NSNull(),
+        ]))
+        // An engine already showing a page is told directly; a start
+        // page gets its engine from `reconcile`, which loads the URL.
+        engines[id]?.load(url)
     }
 
     /// Open a site the person tapped, by the id the tile or row carries.
@@ -468,15 +502,25 @@ final class BrowserController {
         }
     }
 
+    /// A tab the person asked to see — a resume row, the switcher, an open
+    /// that resumes, a request waiting in it: it gets its page, live as it
+    /// was left, or loaded again when it had none.
     func selectTab(_ id: String) {
-        // Asked for, even when it is the tab already selected: tapping a tab in
-        // the strip is how a person reaches the page a launch left dormant.
-        pageWanted = true
+        // Asked for, even when it is the tab already selected: a resume row
+        // is how a person reaches the page a launch left dormant.
+        wanted = id
         guard explore.selectedTab != id else {
             reconcile(explore)
             return
         }
         exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
+    }
+
+    /// Explore landed on its home: nothing is shown, so no tab is asked for.
+    /// The tab left in front keeps the engine it has; none is woken behind
+    /// the home until a resume (Android's `landedHome`).
+    func landedHome() {
+        wanted = nil
     }
 
     func closeTab(_ id: String) {
@@ -870,6 +914,15 @@ final class BrowserController {
         statusSeen = statusSeen.filter { live.contains($0.key) }
         // The reloaded line lasts until the person leaves that tab.
         if let reloadedTab, reloadedTab != view.selectedTab { self.reloadedTab = nil }
+        // The new tab an open made is the page that was asked for.
+        if let before = wantOpened, let id = view.selectedTab, !before.contains(id) {
+            wanted = id
+            wantOpened = nil
+        }
+        // An ask is for its tab while that tab is in front. The selection
+        // moving with no ask — a close that selects a neighbour, a start page
+        // opened — asks for nothing.
+        if let wanted, wanted != view.selectedTab { self.wanted = nil }
 
         defer { syncOnScreen() }
         guard let selected = view.selected, let url = selected.url, !url.isEmpty else {
@@ -882,10 +935,11 @@ final class BrowserController {
             current = engine
             return
         }
-        guard pageWanted else {
-            // A restored tab, and nobody has asked for a page yet: leave it
-            // dormant and let Explore show its start page. Selecting the tab
-            // is what wakes it — see `pageWanted`.
+        guard selected.id == wanted else {
+            // Nobody asked for this tab's page — restored at launch, left
+            // behind the home, the neighbour of a closed tab: it stays
+            // dormant, and Explore shows its home. A resume wakes it — see
+            // `wanted`.
             current = nil
             return
         }
@@ -945,6 +999,9 @@ final class BrowserController {
         }
         engine.onStateChanged = { [weak self] in self?.engineTick &+= 1 }
         engines[id] = engine
+        #if DEBUG
+        engineMadeForTesting?(engine)
+        #endif
         return engine
     }
 
