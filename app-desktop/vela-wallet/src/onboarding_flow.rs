@@ -1024,25 +1024,25 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         .flex_col()
         .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
     if let Some(chosen) = host.own_page {
-        let clear = emit(&host.sink, FlowEvent::ClearOwnPage);
+        // Only before the first key may the page change; after it, the
+        // banner stays as the fact it is, without its ×.
+        let clear: Option<crate::signing::trusted_signer::Click> =
+            host.view.can_choose_page.then(|| {
+                let clear = emit(&host.sink, FlowEvent::ClearOwnPage);
+                Box::new(
+                    move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut App| {
+                        clear(window, cx);
+                    },
+                ) as crate::signing::trusted_signer::Click
+            });
         let banner = crate::signing::pages::chosen_page_banner(
             theme,
             &mut host.icons.borrow_mut(),
             chosen,
-            move |_, window, cx| clear(window, cx),
+            loc.t("common.tryAgain"),
+            clear,
         );
-        // Only before the first key may the page change; after it, the
-        // banner stays as the fact it is, without its ×.
-        list = list.child(div().pt(px(FLOW_GAP_SM)).pb(px(FLOW_GAP_SM)).child(
-            if host.view.can_choose_page {
-                banner
-            } else {
-                crate::signing::pages::page_row_body(theme, &mut host.icons.borrow_mut(), chosen)
-                    .p(px(14.))
-                    .rounded(px(RADIUS_FIELD))
-                    .bg(theme.info_soft)
-            },
-        ));
+        list = list.child(div().pt(px(FLOW_GAP_SM)).pb(px(FLOW_GAP_SM)).child(banner));
     }
     for method in crate::hardware::CREATE_ROUTES {
         list = list.child(entry(method));

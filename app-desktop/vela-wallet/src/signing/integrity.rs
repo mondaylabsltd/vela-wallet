@@ -12,6 +12,7 @@
 //! <time>", never "certified untampered" — the check catches a build replaced
 //! for everyone, not a server that serves one person other bytes.
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     App, AppContext as _, Div, Entity, Global, ParentElement as _, SharedString, Styled as _, div,
     px,
@@ -171,21 +172,49 @@ pub fn ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
 }
 
 /// The sentence's ink (D7: the sheet's palette, one accent, nothing coloured
-/// for its own sake): good news and a check under way read in the quiet
-/// secondary ink — the tick beside them says which — a question for the
-/// person in the body ink, and only a page that will not open in the danger
-/// ink, because that one must read as a refusal.
+/// for its own sake): every line reads in the quiet secondary ink — the mark
+/// beside it says which kind it is: a tick, a clock, or the caution triangle
+/// of a question for the person ("Trust it on this device?", with its answer
+/// beside it) — and only a page that will not open in the danger ink,
+/// because that one must read as a refusal.
 #[must_use]
 pub fn words_ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
     match tone {
-        Tone::Success | Tone::Neutral => theme.fg_muted,
-        Tone::Accent | Tone::Caution => theme.fg_base,
+        Tone::Success | Tone::Neutral | Tone::Accent | Tone::Caution => theme.fg_muted,
         Tone::Danger => theme.error_base,
     }
 }
 
-/// The line as a row: its mark and its sentence, wrapping under itself.
-pub fn row(theme: &Theme, icons: &mut IconCache, said: SharedString, tone: Tone) -> Div {
+/// The line's leading, as a multiple of its type size.
+pub const LINE_HEIGHT: f32 = 1.4;
+
+/// The line's words, in two lines' room (`reserve`) — what a verdict takes
+/// — so the check landing ("Checking the page…" → "Version … · checked
+/// 14:32") never moves what is under it (the card's Open, the next row). A
+/// line with its own answer under it ("Trust this version", "Try again") is
+/// not padded: the answer is what follows the words, and a blank line
+/// between a question and its answer would part them.
+#[must_use]
+pub fn words(theme: &Theme, said: SharedString, tone: Tone, reserve: bool) -> Div {
+    div()
+        .when(reserve, |words| {
+            words.min_h(theme::text_row_sub() * (2. * LINE_HEIGHT))
+        })
+        .text_size(theme::text_row_sub())
+        .line_height(gpui::relative(LINE_HEIGHT))
+        .text_color(words_ink(theme, tone))
+        .child(said)
+}
+
+/// The line as a row: its mark and its sentence, wrapping under itself, in
+/// two lines' room unless an answer follows it ([`words`]).
+pub fn row(
+    theme: &Theme,
+    icons: &mut IconCache,
+    said: SharedString,
+    tone: Tone,
+    reserve: bool,
+) -> Div {
     let colour = ink(theme, tone);
     div()
         .flex()
@@ -203,15 +232,7 @@ pub fn row(theme: &Theme, icons: &mut IconCache, said: SharedString, tone: Tone)
                     14.,
                 )),
         )
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(0.))
-                .text_size(theme::text_row_sub())
-                .line_height(gpui::relative(1.4))
-                .text_color(words_ink(theme, tone))
-                .child(said),
-        )
+        .child(words(theme, said, tone, reserve).flex_1().min_w(px(0.)))
 }
 
 #[cfg(test)]

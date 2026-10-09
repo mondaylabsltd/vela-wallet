@@ -44,10 +44,14 @@ pub struct PageRow {
     pub name: SharedString,
     /// The page's address as a person recognises it (`sign.getvela.app`,
     /// `localhost:8140/clearsigning`), drawn under the name — `None` when the
-    /// name already says exactly that.
+    /// name already says it ("Self-hosted · sign.example.com"): a page is
+    /// named once.
     pub host: Option<SharedString>,
-    /// "Keys on getvela.app".
-    pub keys_on: SharedString,
+    /// "Keys on getvela.app" — only where the keys' domain is not the page's
+    /// own host (the official page, sign.getvela.app, reaches getvela.app's
+    /// keys); a self-hosted page whose keys are its own host's says nothing
+    /// the address has not.
+    pub keys_on: Option<SharedString>,
     /// The official page — never renamed, never removed.
     pub official: bool,
     /// The integrity line and its tone.
@@ -81,19 +85,37 @@ pub fn page_row(
     } else {
         loc.t_texts("settings.signing.pageSelfHosted", &[("domain", domain)])
     };
-    // The address under the name, unless the name already is it — a
-    // self-hosted page served at its domain's root says its domain once.
-    let host = (official || named || host != domain).then(|| SharedString::from(host));
+    // The address under the name, unless the name already says it — an
+    // unnamed self-hosted page ("Self-hosted · sign.example.com") names its
+    // address once.
+    let host = (!title.contains(host.as_str())).then(|| SharedString::from(host));
+    // Whose keys it reaches, only when that is not the page's own host.
+    let keys_on = (!hostname(url).eq_ignore_ascii_case(domain.trim()))
+        .then(|| loc.t_texts("settings.signing.keysOn", &[("domain", domain)]));
     let asks = line.state == IntegrityState::AskToTrust;
     PageRow {
         url: url.to_owned(),
         name: title,
         host,
-        keys_on: loc.t_texts("settings.signing.keysOn", &[("domain", domain)]),
+        keys_on,
         official,
         integrity: (integrity::text(loc, line), integrity::tone(line)),
         refused: !line.opens && line.state != IntegrityState::Checking && !asks,
         trust: asks.then(|| loc.t("settings.signing.pageTrust")),
+    }
+}
+
+/// A page address's host name alone — no scheme, port, path or user — as
+/// the keys' domain is written (`sign.example.com`, `localhost`, `[::1]`).
+fn hostname(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    match authority.find(']') {
+        Some(end) if authority.starts_with('[') => &authority[..=end],
+        _ => authority.split(':').next().unwrap_or_default(),
     }
 }
 
@@ -126,8 +148,8 @@ pub fn page_row_body(theme: &Theme, icons: &mut IconCache, row: &PageRow) -> Div
                 .child(host.clone()),
         );
     }
-    lines = lines
-        .child(
+    if let Some(keys_on) = &row.keys_on {
+        lines = lines.child(
             div()
                 .flex()
                 .items_center()
@@ -135,14 +157,17 @@ pub fn page_row_body(theme: &Theme, icons: &mut IconCache, row: &PageRow) -> Div
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
                 .child(icon_img(icons, Icon::Lock, false, theme.fg_subtle, 12.))
-                .child(row.keys_on.clone()),
-        )
-        .child(integrity::row(
-            theme,
-            icons,
-            row.integrity.0.clone(),
-            row.integrity.1,
-        ));
+                .child(keys_on.clone()),
+        );
+    }
+    // Two lines' room, unless the line's own answer follows it.
+    lines = lines.child(integrity::row(
+        theme,
+        icons,
+        row.integrity.0.clone(),
+        row.integrity.1,
+        row.trust.is_none() && !row.refused,
+    ));
     div()
         .flex()
         .items_start()
@@ -313,15 +338,33 @@ pub fn own_page_sheet(
 }
 
 /// The chosen page, as the choosers draw it above their three places: the
-/// page, whose keys the new wallet's will be, and its integrity line — with a
-/// way back to Vela's own keys. On the sheet's sunken panel (D7), not a
-/// tinted one.
+/// page, whose keys the new wallet's will be, and its integrity line — with
+/// the line's own answers ("Trust this version" while a re-check asks about
+/// a new build, "Try again" under a refusal: a page chosen while it passed
+/// can be re-checked into either) and, while the page may still change, a
+/// way back to Vela's own keys (`on_clear`). On the sheet's sunken panel
+/// (D7), not a tinted one.
 pub fn chosen_page_banner(
     theme: &Theme,
     icons: &mut IconCache,
     row: &PageRow,
-    on_clear: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    try_again: SharedString,
+    on_clear: Option<Click>,
 ) -> Div {
+    let (trust_url, again_url) = (row.url.clone(), row.url.clone());
+    let actions = line_actions(
+        theme,
+        icons,
+        "own-page-chosen-line",
+        row,
+        try_again,
+        Some(Box::new(move |_, _, cx| {
+            integrity::trust(&trust_url, cx);
+        })),
+        Some(Box::new(move |_, _, cx| {
+            integrity::recheck(&again_url, cx);
+        })),
+    );
     div()
         .w_full()
         .flex()
@@ -336,9 +379,10 @@ pub fn chosen_page_banner(
             div()
                 .flex_1()
                 .min_w(px(0.))
-                .child(page_row_body(theme, icons, row)),
+                .child(page_row_body(theme, icons, row))
+                .children(actions),
         )
-        .child(
+        .children(on_clear.map(|on_clear| {
             div()
                 .id("own-page-clear")
                 .flex_none()
@@ -347,8 +391,8 @@ pub fn chosen_page_banner(
                 .cursor_pointer()
                 .hover(|style| style.bg(theme.bg_raised))
                 .child(icon_img(icons, Icon::X, false, theme.fg_muted, 14.))
-                .on_click(on_clear),
-        )
+                .on_click(on_clear)
+        }))
 }
 
 #[cfg(test)]
@@ -372,7 +416,13 @@ mod tests {
         // D-19: the official page is NAMED, its address under the name.
         assert_eq!(official.name, loc.t("settings.signing.pageOfficial"));
         assert_eq!(official.host.as_deref(), Some("sign.getvela.app"));
-        assert!(official.keys_on.contains("getvela.app"));
+        // Its keys are getvela.app's, not its host's: said.
+        assert!(
+            official
+                .keys_on
+                .as_ref()
+                .is_some_and(|said| said.contains("getvela.app"))
+        );
         assert!(official.official);
         assert!(!official.refused, "checking is not refused");
         assert_eq!(official.trust, None);
@@ -389,6 +439,8 @@ mod tests {
         );
         assert_eq!(own.name.as_ref(), "Desk");
         assert_eq!(own.host.as_deref(), Some("localhost:8140/clearsigning"));
+        // Its keys are its own host's (`localhost`): the address says so.
+        assert_eq!(own.keys_on, None);
         assert!(own.refused);
         assert_eq!(own.integrity.1, Tone::Danger);
     }
@@ -409,7 +461,10 @@ mod tests {
             );
             assert!(row.name.contains("sign.example.com"), "{tag}: {}", row.name);
             assert!(!row.name.contains("{{"), "{tag}: {}", row.name);
+            // Named once: no address under a name that says it, and no
+            // "Keys on" its own host.
             assert_eq!(row.host, None, "{tag}");
+            assert_eq!(row.keys_on, None, "{tag}");
         }
         let zh = Loc::for_tag("zh");
         let row = page_row(
@@ -430,6 +485,54 @@ mod tests {
             &IntegrityLine::checking(),
         );
         assert_eq!(official.name.as_ref(), "Vela 官方签名页");
+    }
+
+    /// A page is named once (polish 3): its address goes under its name only
+    /// when the name does not already say it, and "Keys on …" only when the
+    /// keys' domain is not the page's own host.
+    #[test]
+    fn a_page_is_named_once() {
+        let loc = Loc::for_tag("en");
+        let line = IntegrityLine::checking();
+        // Under a path, the address says more than the name.
+        let pathed = page_row(
+            &loc,
+            "https://sign.example.com/vela/",
+            "",
+            "sign.example.com",
+            false,
+            &line,
+        );
+        assert_eq!(pathed.host.as_deref(), Some("sign.example.com/vela"));
+        assert_eq!(pathed.keys_on, None);
+        // A page whose keys live on its parent domain says whose they are.
+        let parent = page_row(
+            &loc,
+            "https://sign.example.com/",
+            "Home",
+            "example.com",
+            false,
+            &line,
+        );
+        assert_eq!(parent.host.as_deref(), Some("sign.example.com"));
+        assert!(
+            parent
+                .keys_on
+                .is_some_and(|said| said.contains("example.com"))
+        );
+        // The person's own name that IS the address is not given it again.
+        let named = page_row(
+            &loc,
+            "https://sign.example.com:8443/",
+            "sign.example.com:8443",
+            "sign.example.com",
+            false,
+            &line,
+        );
+        assert_eq!(named.host, None);
+        assert_eq!(named.keys_on, None);
+        assert_eq!(hostname("http://user@[::1]:8140/x"), "[::1]");
+        assert_eq!(hostname("https://Sign.Example.com"), "Sign.Example.com");
     }
 
     /// A self-hosted build nobody decided about asks — "Trust this version"

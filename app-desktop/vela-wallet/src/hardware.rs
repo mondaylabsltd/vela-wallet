@@ -418,11 +418,12 @@ pub fn signin_method_card(
                 .unwrap_or_else(|| unreachable!("a chosen page has its icons"))
                 .borrow_mut(),
             chosen,
-            move |_, window, cx| {
+            loc.t("common.tryAgain"),
+            Some(Box::new(move |_, window, cx| {
                 if let Some(clear) = clear.as_ref() {
                     clear(window, cx);
                 }
-            },
+            })),
         ));
     }
     let mut rows = div().w_full().flex().flex_col();
