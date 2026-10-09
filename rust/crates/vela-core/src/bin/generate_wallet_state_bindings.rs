@@ -130,6 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // `signingVenueChoices`, `signingVenueReachable`) and the integrity line
     // the hand-off card draws.
     vela_core::signing_venue::SigningPlan::export_all(&config)?;
+    vela_core::signing_venue::KeyLabel::export_all(&config)?;
     vela_core::signing_venue::VenueChoice::export_all(&config)?;
     vela_core::trusted_signer::launch::IntegrityLine::export_all(&config)?;
     GuardEvent::export_all(&config)?;
@@ -224,6 +225,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     TokenRef::export_all(&config)?;
     ReadSlot::export_all(&config)?; // balanceReadPlan
     ConfirmState::export_all(&config)?; // signConfirmState (spec 099 R7)
+                                        // handoffFeeRow (spec 102 D4: the hand-off card's fee + speed row)
+    vela_core::app::sign_confirm::HandoffFee::export_all(&config)?;
     LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
     MarkView::export_all(&config)?; // tokenMark, chainMark (DESIGN L, 2026-10-08)
     ExploreEntry::export_all(&config)?; // exploreLanding's question

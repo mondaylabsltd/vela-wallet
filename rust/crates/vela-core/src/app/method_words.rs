@@ -4,8 +4,9 @@
 //!
 //! Three rows and no fourth (spec 102): the Trusted Signer is where a person
 //! reviews and signs, not a place a key lives, so its words moved to the venue
-//! rows ([`venue_words`]) — "In Vela", "On a trusted page", and the choosers'
-//! "Use my own signing page".
+//! rows ([`venue_words`]) — "Review and sign in Vela", "Review and sign on a
+//! trusted signing page", and the choosers' "Use a trusted signing page" (D6:
+//! Vela's official page, or one the person deployed).
 //!
 //! Two lines depend on where the row is drawn (083 W16, which fixed them on the
 //! desktop alone):
@@ -170,8 +171,9 @@ pub fn method_words_json(method: &str, chooser: &str, unlock: &str) -> Option<St
 }
 
 /// A venue row: the two venues of "Where you review and sign", and the
-/// choosers' advanced entry that creates or signs into a wallet on the
-/// person's own signing page (spec 102).
+/// choosers' advanced entry that creates or signs into a wallet on a trusted
+/// signing page — Vela's official one, or one the person deployed (spec 102,
+/// D6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -180,9 +182,11 @@ pub enum VenueRow {
     InVela,
     /// A trusted signing page.
     Page,
-    /// The create / sign-in choosers' "Use my own signing page" — a wallet
-    /// whose keys live on that page's domain.
-    OwnPage,
+    /// The create / sign-in choosers' "Use a trusted signing page" — its list
+    /// is Vela's official signing page and the self-hosted ones; a wallet made
+    /// on a self-hosted page keeps its keys on that page's domain.
+    /// [`venue_words`] also reads it as `own_page`, its name before D6.
+    SigningPage,
 }
 
 /// A venue row's two lines, as corpus keys.
@@ -191,9 +195,9 @@ pub const fn venue_row_words(row: VenueRow) -> MethodWords {
     let (title_key, line) = match row {
         VenueRow::InVela => ("settings.venue.inVela", "settings.venue.inVelaBody"),
         VenueRow::Page => ("settings.venue.page", "settings.venue.pageBody"),
-        VenueRow::OwnPage => (
-            "onboarding.create.ownPageTitle",
-            "onboarding.create.ownPageBody",
+        VenueRow::SigningPage => (
+            "onboarding.create.signingPageTitle",
+            "onboarding.create.signingPageBody",
         ),
     };
     MethodWords {
@@ -203,9 +207,17 @@ pub const fn venue_row_words(row: VenueRow) -> MethodWords {
 }
 
 /// [`venue_row_words`] over a wire name (`"in_vela"`, `"page"`,
-/// `"own_page"`); `None` for one this core does not know.
+/// `"signing_page"`, or `"own_page"` as before D6); `None` for one this core
+/// does not know.
 #[must_use]
 pub fn venue_words(row: &str) -> Option<MethodWords> {
+    // D6 renamed the chooser's entry; a shell built before still asks for it
+    // by its old name.
+    let row = if row == "own_page" {
+        "signing_page"
+    } else {
+        row
+    };
     let row: VenueRow = serde_json::from_value(serde_json::Value::String(row.to_owned())).ok()?;
     Some(venue_row_words(row))
 }
@@ -302,7 +314,7 @@ mod tests {
                 }
             }
         }
-        for row in [VenueRow::InVela, VenueRow::Page, VenueRow::OwnPage] {
+        for row in [VenueRow::InVela, VenueRow::Page, VenueRow::SigningPage] {
             let words = venue_row_words(row);
             keys.push(words.title_key);
             if let MethodLine::Key(key) = words.line {
@@ -359,6 +371,20 @@ mod tests {
         assert_eq!(KeyMethod::ALL.len(), 3);
     }
 
+    /// The key label's place (`signing_venue::place_title_key`, which needs no
+    /// `crux`) names each place exactly as the choosers' rows do.
+    #[test]
+    fn a_key_label_names_its_place_as_the_chooser_does() {
+        for method in ALL {
+            assert_eq!(
+                crate::signing_venue::place_title_key(method.name()),
+                method
+                    .words(KeyChooser::Create, DeviceUnlock::Other)
+                    .title_key
+            );
+        }
+    }
+
     #[test]
     fn the_venue_rows_have_their_own_words() {
         assert_eq!(
@@ -370,11 +396,14 @@ mod tests {
             Some(MethodLine::Key("settings.venue.pageBody"))
         );
         assert_eq!(
-            venue_words_json("own_page").as_deref(),
+            venue_words_json("signing_page").as_deref(),
             Some(
-                r#"{"line_key":"onboarding.create.ownPageBody","line_name":null,"title_key":"onboarding.create.ownPageTitle"}"#
+                r#"{"line_key":"onboarding.create.signingPageBody","line_name":null,"title_key":"onboarding.create.signingPageTitle"}"#
             )
         );
+        // D6 renamed the row; a shell still asking by its old name gets the
+        // same words.
+        assert_eq!(venue_words("own_page"), venue_words("signing_page"));
         assert_eq!(venue_words("trusted_signer"), None);
     }
 

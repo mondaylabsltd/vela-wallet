@@ -902,6 +902,10 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::SignerUnavailable => "No passkey can be used on this device",
         SignErrorKind::SignerNotDiscoverable => "The passkey is not available for signing",
         SignErrorKind::SignerFailed => "The passkey prompt failed",
+        // Spec 102: the account's keys answer only where this device cannot
+        // reach them (a custom-domain account on the web, or with no page
+        // known here). The person reads the reason in their language.
+        SignErrorKind::VenueBlocked => "This account cannot sign here",
     }
 }
 
@@ -1207,6 +1211,7 @@ mod tests {
             SignErrorKind::FundingCancelled,
             SignErrorKind::SubmitFailed,
             SignErrorKind::StaleFeeQuote,
+            SignErrorKind::VenueBlocked,
         ] {
             let name = sign_error_kind_name(kind);
             assert_eq!(

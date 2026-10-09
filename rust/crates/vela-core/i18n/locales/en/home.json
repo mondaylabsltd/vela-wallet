@@ -30,7 +30,6 @@
     "rescanFailed": "Couldn't reach {{names}}. Fix its RPC from the home banner, or check a block explorer.",
     "rescanAgain": "Scan again",
     "rescanClose": "Done",
-    "rescanNativeNote": "Native coins (ETH, BNB, MATIC…) received on some networks can’t be detected here. Your balance is still correct — open a block explorer for the full record.",
     "rescanExplorerTitle": "Check directly on a block explorer",
     "tabActivity": "Activity",
     "tabAssets": "Assets",

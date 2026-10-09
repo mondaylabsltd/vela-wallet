@@ -398,6 +398,11 @@ pub enum SignErrorKind {
     /// -32603 — the passkey prompt failed for another reason
     /// (`FailureKind::Other`). Nothing was signed.
     SignerFailed,
+    /// -32603 — this account cannot sign HERE (spec 102): nothing on this
+    /// device can reach its keys, or this is the web and the account signs
+    /// only on its page. Nothing was signed, and trying again would not help:
+    /// the sheet draws [`SignErrorNotice::venue_block`]'s reason.
+    VenueBlocked,
 }
 
 /// What goes back to the dApp. `Ok { result: None }` serialises the `null`
@@ -764,6 +769,14 @@ pub enum SignSubmitOutcome {
     /// nothing was sent, nobody is left to answer, nothing is recorded, and
     /// the sheet clears if it still shows this request.
     AskerGone,
+    /// The shell refused to sign because the account's venue cannot be used
+    /// here (spec 102): `signing_plan`'s `blocked`, or the web's
+    /// (`signingPlan(…, "web")`). Nothing was signed or sent. The sheet says
+    /// why in the person's language ([`SignErrorKind::VenueBlocked`]), and the
+    /// page is answered -32603.
+    VenueBlocked {
+        block: crate::signing_venue::VenueBlock,
+    },
 }
 
 /// What the shell observed. Every clock-bearing variant carries `now_ms`.
@@ -1638,6 +1651,24 @@ pub enum SignSwipeAction {
 pub struct SignErrorNotice {
     pub kind: SignErrorKind,
     pub detail: Option<String>,
+    /// Spec 102: for [`SignErrorKind::VenueBlocked`], why this account cannot
+    /// sign here — the sheet draws `VenueBlock::key()` with its domains, in
+    /// the person's language, instead of the shell's English.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub venue_block: Option<crate::signing_venue::VenueBlock>,
+}
+
+impl SignErrorNotice {
+    /// A notice with no venue reason.
+    #[must_use]
+    pub fn new(kind: SignErrorKind, detail: Option<String>) -> Self {
+        Self {
+            kind,
+            detail,
+            venue_block: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2355,10 +2386,10 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         // exactly like every other request that waits for a decision.
         model.blocked = Some(blocked_view(&block));
         model.sign_error_refused = false;
-        model.sign_error = Some(SignErrorNotice {
-            kind: SignErrorKind::SelfCallBlocked,
-            detail: Some(block.function.as_str().to_owned()),
-        });
+        model.sign_error = Some(SignErrorNotice::new(
+            SignErrorKind::SelfCallBlocked,
+            Some(block.function.as_str().to_owned()),
+        ));
         model.pending = Some(Pending {
             id: arrival.id,
             method: arrival.method,
@@ -2637,10 +2668,7 @@ fn approve_with(
             };
             if stale {
                 model.sign_error_refused = false;
-                model.sign_error = Some(SignErrorNotice {
-                    kind: SignErrorKind::StaleFeeQuote,
-                    detail: None,
-                });
+                model.sign_error = Some(SignErrorNotice::new(SignErrorKind::StaleFeeQuote, None));
                 return render();
             }
         }
@@ -2857,7 +2885,7 @@ fn fail_pending(
         &p.id.clone(),
         err_payload(code, kind, detail.clone()),
     );
-    model.sign_error = Some(SignErrorNotice { kind, detail });
+    model.sign_error = Some(SignErrorNotice::new(kind, detail));
     model.sign_error_refused = false;
     ops_and_render(model, vec![op])
 }
@@ -2890,7 +2918,7 @@ fn fail_inflight(
         // the failure before a word of it was read.
         Some(p) => {
             p.held = Some(payload);
-            model.sign_error = Some(SignErrorNotice { kind, detail });
+            model.sign_error = Some(SignErrorNotice::new(kind, detail));
             model.sign_error_refused = false;
         }
         // Nobody is looking (dismissed while it ran, or superseded): the
@@ -3375,10 +3403,7 @@ fn on_op_tracked(
         // settled `Submitted`, so the sheet offers no "Try again" (⑧).
         Some(refused) if shows_it => {
             if let SignResponsePayload::Err { kind, message, .. } = &payload {
-                model.sign_error = Some(SignErrorNotice {
-                    kind: *kind,
-                    detail: message.clone(),
-                });
+                model.sign_error = Some(SignErrorNotice::new(*kind, message.clone()));
             }
             model.sign_error_refused = refused;
             model.pending_op_hash = None;
@@ -3889,6 +3914,16 @@ fn on_submit_outcome(
             };
             let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
             model.sign_error_refused = refused && model.sign_error.is_some();
+            command
+        }
+        // Spec 102: the venue cannot be used here. The page hears a calm
+        // English sentence (`dapp_rpc::sign_error_words`); the sheet draws the
+        // reason in the person's language, from the block itself.
+        SignSubmitOutcome::VenueBlocked { block } => {
+            let command = fail_inflight(model, CODE_INTERNAL, SignErrorKind::VenueBlocked, None);
+            if let Some(notice) = model.sign_error.as_mut() {
+                notice.venue_block = Some(block);
+            }
             command
         }
     }

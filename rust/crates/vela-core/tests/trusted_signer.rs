@@ -293,7 +293,7 @@ fn a_message_request_names_no_operation() {
 fn the_url_channel_round_trips() {
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
     let url = checked_official()
-        .url_launch(&built, "http://127.0.0.1:51234/vela", "tok en", 2_000)
+        .url_launch(&built, "http://127.0.0.1:51234/vela", "tok en", "", 2_000)
         .unwrap();
     // The official host opens the version that was checked, content-addressed.
     let pinned = format!("https://sign.getvela.app/b/{LAUNCH}/sign?ch=url#i=");
@@ -329,7 +329,9 @@ fn the_url_channel_round_trips() {
 #[test]
 fn the_websocket_channel_speaks_the_protocol() {
     assert_eq!(
-        checked_official().ws_launch(51_234, "abc", 2_000).unwrap(),
+        checked_official()
+            .ws_launch(51_234, "abc", "", 2_000)
+            .unwrap(),
         format!("https://sign.getvela.app/b/{LAUNCH}/sign?ch=ws#p=51234&t=abc")
     );
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
@@ -720,7 +722,7 @@ fn the_launch_pin_is_allowed_and_opened_where_it_was_checked() {
     let page = checked_official();
     let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
     let url = page
-        .url_launch(&built, "velawallet://sign-result", "t", 2_000)
+        .url_launch(&built, "velawallet://sign-result", "t", "", 2_000)
         .unwrap();
     assert!(
         url.starts_with(&format!("{}?ch=url#", page.target().url())),

@@ -4,4 +4,4 @@
  * Why a venue cannot be used for an account (R1). Carries the two facts the
  * sentence needs; the words are the shells' ([`VenueBlock::key`]).
  */
-export type VenueBlock = { "type": "app_cannot_reach", domain: string, } | { "type": "page_on_other_domain", page_domain: string, domain: string, };
+export type VenueBlock = { "type": "app_cannot_reach", domain: string, } | { "type": "page_on_other_domain", page_domain: string, domain: string, } | { "type": "not_on_web" };
