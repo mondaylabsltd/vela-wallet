@@ -7,7 +7,9 @@
 //
 //  - `FeeCoreScene` — the `fee_policy` machine to a failure, and to its own
 //    re-ask after it (note 1): the row's figure and reason, whether it is
-//    retrying, and the line under the held confirm;
+//    retrying, and the line under the held confirm; and (PR 2 polish) to a
+//    relay that answered the operation would fail — what a tap on the row
+//    does then (`wouldFail`);
 //  - `BalanceCoreScene` — the `balance_dashboard` machine over a round whose
 //    Ethereum read never left the app (note 11): the home's line.
 //
@@ -84,6 +86,88 @@ enum FeeCoreScene: String, CaseIterable {
               ))
         else { return Views(failed: Self.view(failed), retrying: nil) }
         return Views(failed: Self.view(failed), retrying: Self.view(retrying))
+    }
+
+    /// PR 2 polish: the relay answered that this operation fails with the
+    /// coin in force (`would_fail`) — the person chose USDC on `chainId` and
+    /// the simulation of a swap was refused. With the chain's own coin also
+    /// on offer (`anotherCoin`) a tap opens the coins, "Pay with another
+    /// coin" (`tap` `choose_coin`); with nothing in it to pay from there is
+    /// nothing left to try (`nothing`, the dash). Every read the run asks is answered as
+    /// a healthy chain and relay would; the view is the core's own.
+    @MainActor
+    static func wouldFail(anotherCoin: Bool, chainId: Int = 8453) -> String? {
+        let core = FeePolicyCore()
+        let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+        let request: [String: Any] = [
+            "type": "quote_requested",
+            "chain_id": chainId,
+            "account": account,
+            "deployed": true,
+            "public_key_available": true,
+            "tier": "standard",
+            // A contract call — a swap through a router: the relay's
+            // simulation of it is what answers "this would fail" (a plain
+            // transfer the relay refuses is priced on fallback limits).
+            "calls": [[
+                "to": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+                "value": "0", "data": "0x3593564c" + String(repeating: "ab", count: 1_200),
+            ]],
+            "fee_token": usdc,
+            "auto_fee_token": false,
+            "number": "comma_dot",
+        ]
+        // With no other coin on offer the chain's own coin is still listed —
+        // the relay always quotes it — but holds nothing to pay from.
+        let native: [String: Any] = [
+            "recipient": "0x00000000000000000000000000000000000000aa", "asset": "native",
+            "fee_token": NSNull(), "balance": anotherCoin ? "1000000000000000000" : "0", "decimals": 18,
+            "symbol": "ETH", "usd_balance": anotherCoin ? "1868.70" : "0", "usd_price": "1868.70000000",
+        ]
+        let usdcRow: [String: Any] = [
+            "recipient": "0x00000000000000000000000000000000000000bb", "asset": "erc20",
+            "fee_token": usdc, "balance": "5000000", "decimals": 6, "symbol": "USDC",
+            "usd_balance": "5.00", "usd_price": "1",
+        ]
+        func answer(_ operation: [String: Any]) -> [String: Any]? {
+            switch operation["type"] as? String {
+            case "fetch_gas_price":
+                return ["type": "gas_price", "eth_gas_price": "1000000000", "base_fee": "0", "priority_fee": "0"]
+            case "fetch_bundler_quote":
+                return ["type": "bundler_quote", "quote": [
+                    "max_fee_per_gas": "2000000000", "max_priority_fee_per_gas": NSNull(),
+                    "network_fee_per_gas": "1000000000", "relayer_fee_per_gas": "1000000000",
+                    "in_band_fee_per_gas": NSNull(),
+                ] as [String: Any]]
+            case "fetch_in_band_quotes":
+                return ["type": "in_band_quotes", "quotes": [native, usdcRow]]
+            case "read_deployment":
+                return ["type": "deployment", "read": ["type": "read", "deployed": true]]
+            case "estimate_user_op_gas":
+                // The relay answered: this exact operation fails.
+                return ["type": "user_op_gas", "outcome": ["type": "refused"]]
+            default:
+                // Timers and the inner-call measure: never answered here.
+                return nil
+            }
+        }
+        guard var step = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(request))) else {
+            return nil
+        }
+        var queue = step["effects"] as? [[String: Any]] ?? []
+        var steps = 0
+        while !queue.isEmpty, steps < 24 {
+            steps += 1
+            let effect = queue.removeFirst()
+            guard let operation = effect["operation"] as? [String: Any],
+                  let reply = answer(operation),
+                  let id = (effect["id"] as? NSNumber)?.uint64Value,
+                  let next = try? CoreJSON.object(core.resolveEffect(effectId: id, resultJson: CoreJSON.string(reply)))
+            else { continue }
+            if next["view"] is [String: Any] { step = next }
+            queue += next["effects"] as? [[String: Any]] ?? []
+        }
+        return view(step)
     }
 
     fileprivate static func view(_ step: [String: Any]) -> String {

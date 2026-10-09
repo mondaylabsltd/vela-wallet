@@ -850,8 +850,14 @@ struct RootView: View {
                 // drops the figure it kept, so the confirm never opens between
                 // the core's re-asks on a figure the fee machine discarded.
                 // Said again to every new journey.
+                // Only a failure of the form's own question counts (PR 2
+                // polish): right after a token switch the old chain's failure
+                // is no reason to hold this chain's confirm.
                 .modifier(FeeFailedBridge(
-                    said: FeeFailedBridge.Said(failed: fees.view?.failure != nil, journey: send.journey),
+                    said: FeeFailedBridge.Said(
+                        failed: SendLive.formFailure(fees.view, view: send.view) != nil,
+                        journey: send.journey
+                    ),
                     tell: { failed in send.feeFailedChanged(failed) }
                 ))
                 // …and the card's coin in force, which names the fee row's coin
@@ -2213,6 +2219,12 @@ struct RootView: View {
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
         var model = WalletFlowFixtures.build(state, loc: loc)
+        // The fee coins opened from the confirm — a fee that would fail,
+        // "Pay with another coin" (PR 2 polish) — sit over the confirm the
+        // person is on, never over the form they already left.
+        if state == .sd2f, let view = send.view, view.stage == .confirm {
+            model.base = WalletFlowFixtures.build(SendLive.flowState(view, feeSheetOpen: false), loc: loc).base
+        }
         let address = session.view.address
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is

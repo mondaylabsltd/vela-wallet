@@ -501,7 +501,7 @@ struct StatusHeroView: View {
                         spinning = true
                     }
                 }
-        case .submitted, .confirmed, .failed:
+        case .submitted, .confirmed, .failed, .notSent:
             if let glyph = Self.markGlyph(stage) {
                 LucideIcon(glyph, size: LucideIconSize.flowStatus).foregroundStyle(markTint)
             }
@@ -515,12 +515,14 @@ struct StatusHeroView: View {
         case .submitted: .clock
         case .confirmed: .check
         case .failed: .exclamation
+        // A wait, not a fault: the clock, still — no ring, no breath.
+        case .notSent: .clock
         }
     }
 
     private var markTint: Color {
         switch stage {
-        case .submitting, .submitted: theme.fgMuted
+        case .submitting, .submitted, .notSent: theme.fgMuted
         case .confirmed: theme.successBase
         case .failed: theme.errorBase
         }
@@ -528,7 +530,7 @@ struct StatusHeroView: View {
 
     private var discFill: Color {
         switch stage {
-        case .submitting, .submitted: theme.bgSunken
+        case .submitting, .submitted, .notSent: theme.bgSunken
         case .confirmed: theme.successSoft
         case .failed: theme.errorSoft
         }
@@ -655,14 +657,33 @@ struct NoticeBannerView: View {
 
     let text: String
     var mark: TokenMarkModel?
+    /// A title over the sentence (PR 2 polish: "Not sent yet"), in the body
+    /// colour — never the failure's.
+    var title: String? = nil
+    /// A calm glyph leading it (the clock of a wait), muted.
+    var glyph: LucideGlyph? = nil
 
     var body: some View {
-        HStack(spacing: Tokens.Space.s8) {
+        HStack(alignment: title == nil ? .center : .top, spacing: Tokens.Space.s8) {
             if let mark { InlineTokenMark(mark: mark) }
-            Text(verbatim: text)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgMuted)
-                .fixedSize(horizontal: false, vertical: true)
+            if let glyph {
+                LucideIcon(glyph, size: LucideIconSize.rowGlyph)
+                    .foregroundStyle(theme.fgMuted)
+                    .padding(.top, title == nil ? Tokens.Space.s0 : Tokens.Space.s2)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                if let title {
+                    Text(verbatim: title)
+                        .typeRole(Typography.rowTitle.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(verbatim: text)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer(minLength: Tokens.Space.s0)
         }
         .padding(.horizontal, Tokens.Space.s12)
@@ -900,35 +921,24 @@ struct FeeRowView: View {
             // draw it. Round 2's full-height block beside the card grew into a
             // slab at the largest text size.
             HStack(alignment: .center, spacing: Tokens.Space.s8) {
-                // A failed fee is asked again by a tap on its row (PR 2 note
-                // 1) — the refresh's own action; there is no coin to pick.
-                Button(action: fee.tapRetries ? (onRefresh ?? onOpen) : onOpen) {
-                    // Label and value side by side while both fit whole; the
-                    // label on its own line and the value under it otherwise.
-                    // It used to break the label inside a word
-                    // ("Netzwerkg / ebühr") and cut the value to "0.00421…".
-                    TitleAndValue {
-                        Text(verbatim: fee.label)
-                            .typeRole(Typography.body.scaled(textScale))
-                            .foregroundStyle(theme.fgMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(alignment: .center, spacing: Tokens.Space.s8) {
-                            InlineTokenMark(mark: fee.mark)
-                            Text(verbatim: fee.value)
-                                .typeRole(Typography.body.scaled(textScale))
-                                .foregroundStyle(theme.fgBase)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if !fee.tapRetries {
-                                LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                                    .foregroundStyle(theme.fgMuted)
-                            }
-                        }
-                    }
-                    .padding(.vertical, Tokens.Space.s12)
-                    .contentShape(Rectangle())
+                // The row does exactly what its words say (PR 2 polish): a
+                // failed fee is asked again by a tap — the refresh's own
+                // action, no coin to pick (note 1); a fee that would fail
+                // opens the coins ("Pay with another coin"); with no coin
+                // left the row is no control at all.
+                switch fee.tap {
+                case .nothing:
+                    rowFace
+                        .accessibilityElement(children: .combine)
+                case .retry:
+                    Button(action: onRefresh ?? {}) { rowFace }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(fee.refreshLabel ?? fee.openLabel)
+                case .open, .chooseCoin:
+                    Button(action: onOpen) { rowFace }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(fee.openLabel)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(fee.tapRetries ? (fee.refreshLabel ?? fee.openLabel) : fee.openLabel)
                 if let refreshLabel = fee.refreshLabel {
                     FeeRefreshButton(label: refreshLabel, refreshing: fee.refreshing, onRefresh: onRefresh)
                 }
@@ -946,6 +956,33 @@ struct FeeRowView: View {
                     .padding(.horizontal, Tokens.Space.s12)
             }
         }
+    }
+
+    /// The row's face: label and value side by side while both fit whole;
+    /// the label on its own line and the value under it otherwise. It used
+    /// to break the label inside a word ("Netzwerkg / ebühr") and cut the
+    /// value to "0.00421…". The chevron promises the coin list, so it stands
+    /// only where a tap opens it.
+    private var rowFace: some View {
+        TitleAndValue {
+            Text(verbatim: fee.label)
+                .typeRole(Typography.body.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: Tokens.Space.s8) {
+                InlineTokenMark(mark: fee.mark)
+                Text(verbatim: fee.value)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                if fee.tap == .open || fee.tap == .chooseCoin {
+                    LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                        .foregroundStyle(theme.fgMuted)
+                }
+            }
+        }
+        .padding(.vertical, Tokens.Space.s12)
+        .contentShape(Rectangle())
     }
 }
 

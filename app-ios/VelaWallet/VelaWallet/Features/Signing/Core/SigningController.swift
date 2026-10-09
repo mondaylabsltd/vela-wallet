@@ -131,17 +131,30 @@ final class SigningController {
     /// ETH was quoted in ETH with no way to choose the coin it has).
     private(set) var feeOpen = false
 
-    /// A tap on the fee row: a failed quote is asked again at once (the
-    /// core's `requote` — it drops its own timer for the next re-ask); with
-    /// more than one coin, the list opens or closes.
+    /// A tap on the fee row — exactly what its words say (PR 2 polish). A
+    /// failed quote's `tap`: `retry` asks again at once (the core's `requote`
+    /// — it drops its own timer for the next re-ask; while a re-ask is out
+    /// the core asks nothing more), `choose_coin` opens the coin list ("Pay
+    /// with another coin" after `would_fail`), `nothing` does nothing. With
+    /// no failure and more than one coin, the list opens or closes.
     func feeTapped() {
         guard let fee else { return }
-        if fee.failure != nil {
+        switch Self.feeTap(fee) {
+        case .retry:
             // Measured again for real — the held readings dropped first.
             fees.refresh()
-        } else if fee.options.count > 1 {
+        case .open, .chooseCoin:
             feeOpen.toggle()
+        case .nothing:
+            break
         }
+    }
+
+    /// What a tap on the sheet's fee row does over `fee`: its failure's
+    /// `tap`, else the coin list when there is more than one coin to choose.
+    static func feeTap(_ fee: FeeViewWire) -> FeeRowTap {
+        if let failure = fee.failure { return failure.rowTap }
+        return fee.options.count > 1 ? .open : .nothing
     }
 
     /// A coin from the list, by its row id (`SigningLive.nativeFeeId` = the

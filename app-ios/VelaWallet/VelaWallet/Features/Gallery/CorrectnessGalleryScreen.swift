@@ -43,6 +43,17 @@
 //    inside Vela with nothing cached: the skeleton and Vela's own reason,
 //    never a settled $0.00 or "Deposit your first asset".
 //
+//  The polish round (PR 2 polish):
+//
+//  - `notsent-sheet` / `notsent-send` — a submit the relay turned back on the
+//    previous transaction's nonce: "Not sent yet", calmly (the sheet's
+//    `failure_not_sent`, Send's `tx_error` `previous_pending`), Try again;
+//  - `wouldfail-coin-*` / `wouldfail-none-*` — the relay answered that the
+//    fee's operation would fail (the real `fee_policy` core's view): the row
+//    says what a tap does — "Pay with another coin" (it opens the coins) or,
+//    with no coin left, the dash and no control — on the sheet, the Send
+//    form and the confirm; `*-open` is that tap, the coins open.
+//
 //  Fixture data only: nothing here is quoted, signed or sent.
 //
 
@@ -65,13 +76,18 @@ struct CorrectnessGalleryScreen: View {
             // Continue is the core's `can_continue`, which no fee holds: the
             // estimate behind it is what says the cause (`alert-*`).
             FlowHost(model: sendFormModel, onRefreshFee: {})
-        case "send-confirm-retrying", "send-confirm-tap":
+        case "send-confirm-retrying", "send-confirm-tap",
+             "wouldfail-coin-confirm", "wouldfail-none-confirm", "wouldfail-coin-confirm-open":
             FlowHost(model: sendConfirmModel, sendCtaDisabled: true, onRefreshFee: {})
+        case "wouldfail-coin-send":
+            FlowHost(model: sendFormModel, onRefreshFee: {})
+        case "notsent-send":
+            FlowHost(model: notSentSendModel, sendCtaDisabled: true)
         case "alert-chain-down", "alert-internal":
             FlowHost(model: sendFormModel, alert: estimateAlert, onRefreshFee: {})
         case "home-internal", "home-chain-down", "home-internal-all":
             WalletScreen(model: homeModel, loc: loc)
-        case "refused-held", "refused-fee":
+        case "refused-held", "refused-fee", "notsent-sheet":
             // The ending's own buttons: Done, and Try again where the core
             // says a retry can help (the held nonce).
             SigningSheet(model: signingModel, onClose: {}, onRefreshFee: {}, onRetry: {})
@@ -96,9 +112,20 @@ struct CorrectnessGalleryScreen: View {
 
     /// The fee view the core wrote for this board's scene.
     private var sceneJson: String? {
+        if let anotherCoin = wouldFail { return FeeCoreScene.wouldFail(anotherCoin: anotherCoin) }
         guard let (scene, retrying) = feeScene, let views = scene.views() else { return nil }
         return retrying ? (views.retrying ?? views.failed) : views.failed
     }
+
+    /// A `would_fail` board (PR 2 polish): whether another coin is on offer —
+    /// `nil` for a board that is not about it.
+    private var wouldFail: Bool? {
+        guard state.hasPrefix("wouldfail-") else { return nil }
+        return state.hasPrefix("wouldfail-coin")
+    }
+
+    /// The tap on a `would_fail` row, taken: the coins open.
+    private var coinsOpen: Bool { state.hasSuffix("-open") }
 
     private static let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private static let recipient = "0x76875e38fc6bc2dedcaed807ce00782db5c0d141"
@@ -185,7 +212,7 @@ struct CorrectnessGalleryScreen: View {
         let refused = state == "refused-sheet"
         // PR 2 note 9: the relay did not take it, and the sheet says why —
         // the core's `failure_refusal_key`, as `sign_request` sets it.
-        let refusedWhy = state == "refused-held" || state == "refused-fee"
+        let refusedWhy = state == "refused-held" || state == "refused-fee" || state == "notsent-sheet"
         var sign = SignViewWire(
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
             pendingOpHash: refused ? Self.op : nil,
@@ -195,12 +222,14 @@ struct CorrectnessGalleryScreen: View {
             notice: nil, globalChainId: 8453, blocked: nil
         )
         switch state {
-        case "refused-held":
+        case "refused-held", "notsent-sheet":
             // At submit: the account's previous operation holds the nonce —
-            // nothing was sent, and Try again stays (it is retryable).
-            sign.failureRefused = true
+            // nothing was sent and nothing went wrong: "Not sent yet", calmly,
+            // and Try again stays (it is retryable). As `sign_request` sets
+            // it since the polish round: no refusal, the not-sent sentence.
+            sign.failureNotSent = true
             sign.failureRetryable = true
-            sign.failureRefusalKey = "componentsUi.signing.confirmBlock.previousPending"
+            sign.failureRefusalKey = I18nKeys.CoreRound.notSentBody
         case "refused-fee":
             // After it: the tracker's verdict, `fee_below_market`.
             sign.failureRefused = true
@@ -212,6 +241,9 @@ struct CorrectnessGalleryScreen: View {
             loc: loc, chainName: "Base", chainDot: SettingsLive.chainColor(8453), nativeSymbol: "ETH",
             walletName: "Everyday wallet", walletAddress: Self.address
         )
+        context.chainId = 8453
+        // "Pay with another coin", tapped: the sheet's coin list open.
+        context.feeOpen = coinsOpen
         if refused {
             // The tracker's verdict: the relay refused it, and why.
             var entry = TrackEntryWire(
@@ -267,10 +299,38 @@ struct CorrectnessGalleryScreen: View {
         return model
     }
 
-    /// The confirm's fee row and the one line under its held button.
+    /// The confirm's fee row and the one line under its held button — and,
+    /// for `*-open`, the fee coins its "Pay with another coin" opened, over
+    /// it (the router's `.sd2f` over a confirm).
     private var sendConfirmModel: FlowScreenModel {
         var model = WalletFlowFixtures.build(.sd3, loc: loc)
         if case .sendConfirm(let drawn) = model.base, let view = baseSendView(stage: "confirm") {
+            model.base = .sendConfirm(SendLive.confirm(
+                view, from: (Self.address, "Everyday wallet"), display: .usd, on: drawn, loc: loc,
+                fee: fee, speed: HandoffFeeFixtures.speedView
+            ))
+            if coinsOpen, let fee,
+               case .feeToken(let sheet)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet {
+                model = FlowScreenModel(
+                    state: .sd2f, base: model.base,
+                    sheet: .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc, chainId: 8453))
+                )
+            }
+        }
+        return model
+    }
+
+    /// The confirm after the relay turned the submit back on the previous
+    /// transaction's nonce (`tx_error` `previous_pending`): "Not sent yet"
+    /// over its sentence, calm, with Try again.
+    private var notSentSendModel: FlowScreenModel {
+        var model = WalletFlowFixtures.build(.sd3, loc: loc)
+        if case .sendConfirm(let drawn) = model.base,
+           let view = sendView([
+               "stage": "confirm", "selected_token": Self.usdcOnBase, "recipient": Self.recipient,
+               "amount": "25", "token_amount": "25", "confirm_amount": "25",
+               "tx_status": "error", "tx_error": "previous_pending",
+           ]) {
             model.base = .sendConfirm(SendLive.confirm(
                 view, from: (Self.address, "Everyday wallet"), display: .usd, on: drawn, loc: loc,
                 fee: fee, speed: HandoffFeeFixtures.speedView

@@ -1418,6 +1418,9 @@ struct SendConfirmBody: View {
     var onNoticeReport: () -> Void = {}
     /// A failed fee's row, tapped: asked again at once (PR 2 note 1).
     var onRefreshFee: (() -> Void)?
+    /// A fee that would fail, its row tapped: the fee coins open ("Pay with
+    /// another coin", PR 2 polish) — the list the form's row opens.
+    var onOpenFee: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -1454,11 +1457,16 @@ struct SendConfirmBody: View {
             VStack(spacing: Tokens.Space.s0) {
                 ForEach(Array(model.facts.enumerated()), id: \.element.id) { index, fact in
                     if index > 0 { FlowDivider() }
-                    if fact.tapRetries, let onRefreshFee {
-                        Button(action: onRefreshFee) {
+                    // The fee row does exactly what its words say (PR 2
+                    // polish): "Tap to retry" asks again, "Pay with another
+                    // coin" opens the coins, the dash with nothing left to
+                    // try is no control.
+                    if let action = feeAction(fact.feeTap) {
+                        Button(action: action) {
                             FactRowView(fact: fact).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("send.confirm.fee")
                     } else {
                         FactRowView(fact: fact)
                     }
@@ -1482,7 +1490,11 @@ struct SendConfirmBody: View {
 
             if let notice = model.notice {
                 VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                    NoticeBannerView(text: notice)
+                    // "Not sent yet" is a wait, not a fault (PR 2 polish): its
+                    // title over the sentence, the calm clock, no red.
+                    NoticeBannerView(text: notice, title: model.noticeTitle,
+                                     glyph: model.noticeTitle == nil ? nil : .clock)
+                        .accessibilityIdentifier("send.confirm.notice")
                     if let fund = model.noticeFund { FundAddressView(model: fund) }
                     if let report = model.noticeReport {
                         RelayReportButton(title: report, action: onNoticeReport)
@@ -1561,6 +1573,17 @@ struct SendConfirmBody: View {
                 .padding(.horizontal, Tokens.Space.s12)
                 .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
             }
+        }
+    }
+
+    /// What a tap on the confirm's fee row does — `nil`: the row is no
+    /// control (every other row, a settled fee, `would_fail` with no coin
+    /// left).
+    private func feeAction(_ tap: FeeRowTap?) -> (() -> Void)? {
+        switch tap {
+        case .retry: onRefreshFee
+        case .chooseCoin: onOpenFee
+        case .open, .nothing, nil: nil
         }
     }
 }

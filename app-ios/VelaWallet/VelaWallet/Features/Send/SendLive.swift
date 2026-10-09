@@ -27,9 +27,27 @@ import VelaCore
 /// The fee's failure in words (PR 2 note 1) — what every fee row draws: the
 /// Send form's, the confirm's and the signing sheet's.
 extension FeeFailureViewWire {
-    /// The row's figure: the core's key ("Tap to retry" only when a tap is
-    /// the one way), else the dash.
-    func figure(_ loc: Loc) -> String { self.figureKey.map { loc.t($0) } ?? "—" }
+    /// The figures this build draws: "Tap to retry" (only when a tap is the
+    /// one way) and "Pay with another coin" (a tap opens the coins, PR 2
+    /// polish). Any other key is the dash — never a dotted key path.
+    static let figureKeys: Set<String> = [
+        I18nKeys.CoreRound.estimateFailed, I18nKeys.CoreRound.payWithAnotherCoin,
+    ]
+
+    /// The row's figure: the core's key, saying what a tap does, else the dash.
+    func figure(_ loc: Loc) -> String {
+        guard let key = figureKey, Self.figureKeys.contains(key) else { return "—" }
+        return loc.t(key)
+    }
+
+    /// What a tap on the row does — exactly the core's `tap` (PR 2 polish).
+    var rowTap: FeeRowTap {
+        switch tap {
+        case .retry: .retry
+        case .chooseCoin: .chooseCoin
+        case .nothing: .nothing
+        }
+    }
 
     /// The row's reason line, `{{chain}}` filled with the chain's name; `nil`
     /// when the core gives none (not the network's doing).
@@ -738,7 +756,12 @@ enum SendLive {
         // place, so the row does not flip every few seconds. A failure means
         // no figure stands (the machine's own `fee` is gone), so it wins
         // over the send machine's last estimate.
-        let failure = ofAnotherTier ? nil : fee?.failure
+        //
+        // Only this form's own question (PR 2 polish): right after a token
+        // switch the form names another chain before the fee machine has
+        // been asked about it, and the old chain's failure is not drawn —
+        // no figure, no reason, no footer — as another chain's estimate is not.
+        let failure = ofAnotherTier ? nil : formFailure(fee, view: view)
         let chainName = view.selectedToken.flatMap { networks.meta($0.chainId)?.displayName } ?? ""
         return FeeRowModel(
             label: fallback.label,
@@ -763,9 +786,27 @@ enum SendLive {
             // the chain by name for a chain read, Vela's own fault for an
             // internal one (issue #483) — never a blank "—" with nothing said.
             failNote: failure?.reason(loc, chain: chainName),
-            // A tap on a failed row asks again at once (the core's `requote`).
-            tapRetries: failure != nil
+            // A tap on a failed row does what its figure says (the core's
+            // `failure.tap`): asks again at once (`requote`), opens the coins
+            // after `would_fail`, or — no coin left — nothing.
+            tap: failure?.rowTap ?? .open
         )
+    }
+
+    /// The chain the form is on: the selected token's, else the sweep's —
+    /// the core's `form_chain`.
+    static func formChain(_ view: SendViewWire?) -> Int? {
+        view?.selectedToken?.chainId ?? view?.multiChainId
+    }
+
+    /// The fee's failure as the Send form and its confirm may draw it — and
+    /// as the bridge tells the send machine (`fee_failed_changed`): `nil`
+    /// when the failure answered another chain's question (PR 2 polish,
+    /// `FeeFailureView::is_for_chain`), as another chain's estimate is
+    /// withheld.
+    static func formFailure(_ fee: FeeViewWire?, view: SendViewWire?) -> FeeFailureViewWire? {
+        guard let failure = fee?.failure, failure.isFor(chain: formChain(view)) else { return nil }
+        return failure
     }
 
     /// A tier as one this build offers: the dead `rapid` reads as the factory
@@ -992,8 +1033,9 @@ enum SendLive {
         // else the token's. Never 0.
         let networkChainId = (view.multiSelectMode ? view.multiChainId : nil) ?? token?.chainId
         // The fee machine's failure (PR 2 note 1): the row's figure and
-        // reason, the same one state the form's row and the footer read.
-        let failure = fee?.failure
+        // reason, the same one state the form's row and the footer read —
+        // only when it answered this send's chain (PR 2 polish).
+        let failure = formFailure(fee, view: view)
         let failureChain = networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain
 
         var facts = [
@@ -1037,7 +1079,11 @@ enum SendLive {
                 // The coin's figure and its price in the person's currency:
                 // a second line between the two, never a figure cut short.
                 wraps: true,
-                tapRetries: failure != nil
+                // A failed fee's row does what its figure says (PR 2
+                // polish): "Tap to retry" asks again, "Pay with another
+                // coin" opens the coins, the dash with none left is no
+                // control. A settled fee's row is a fact here.
+                feeTap: failure?.rowTap
             ),
         ]
         // The speed, but only when it was CHOSEN for this send, or taken
@@ -1121,6 +1167,7 @@ enum SendLive {
             facts: facts,
             breakdown: breakdown,
             notice: confirmNotice(view, loc: loc),
+            noticeTitle: confirmNoticeTitle(view, loc: loc),
             noticeFund: fundAddress(view, loc: loc),
             // The treasury pause has TWO exits (spec 054 US4): the core's
             // retry, and 暂不 — which keeps the facts on screen rather than
@@ -1167,9 +1214,14 @@ enum SendLive {
     /// signing sheet draws for it (PR 2 note 1, `failure.footer_key`):
     /// "Retrying…" while the core asks again by itself, "Tap it to retry"
     /// only when a tap is the one way. Else nothing.
+    ///
+    /// Said once: while the relay's own refusal of the same kind is the
+    /// notice ("Not sent yet", `tx_error` `previous_pending`), the previous
+    /// transaction's line is not said again under the button. A failure of
+    /// another chain's question says nothing here (PR 2 polish).
     static func heldNote(_ view: SendViewWire, fee: FeeViewWire?, loc: Loc) -> String? {
-        if let held = view.previousPending { return loc.t(held.key) }
-        return fee?.failure.map { loc.t($0.footerKey) }
+        if let held = view.previousPending, view.txError != "previous_pending" { return loc.t(held.key) }
+        return formFailure(fee, view: view).map { loc.t($0.footerKey) }
     }
 
     /// A split's payees, one row each: the amount from the core's drafts, who
@@ -1242,10 +1294,20 @@ enum SendLive {
         // here, and the core says why.
         case "venue_blocked": return view.txVenueBlock?.text(loc) ?? loc.t("send.txErrorGeneric")
         // PR 2 §3: the relay holds this account's nonce for an earlier op —
-        // nothing was sent; Try again sends once it has landed.
-        case "previous_pending": return loc.t("componentsUi.signing.confirmBlock.previousPending")
+        // nothing was sent and nothing went wrong; Try again sends once it
+        // has landed. Said calmly, under "Not sent yet" (PR 2 polish).
+        case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentBody)
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
+    }
+
+    /// The notice's title, when it has one: "Not sent yet" over a submit the
+    /// relay turned back because the previous transaction on this network
+    /// still holds the nonce (PR 2 polish) — no failure word, no red. `nil`
+    /// for every other notice, which is one line.
+    static func confirmNoticeTitle(_ view: SendViewWire, loc: Loc) -> String? {
+        guard stopNotice(view, loc: loc) == nil, view.txError == "previous_pending" else { return nil }
+        return loc.t(I18nKeys.CoreRound.notSentTitle)
     }
 
     /// The form's button gate: the core's `can_continue`, the whole of it.
@@ -1512,6 +1574,11 @@ enum SendLive {
             // sweep's one recipient stays named: its parts are its coins.
             let to = parts.people ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
             captions = ["\(to) · \(chain)"]
+        case .notSent:
+            // A submit the relay turned back for the previous transaction's
+            // nonce: nothing was sent, nothing went wrong (PR 2 polish).
+            title = loc.t(I18nKeys.CoreRound.notSentTitle)
+            captions = [loc.t(I18nKeys.CoreRound.notSentBody)]
         case .failed where view.receipt?.status == "not_sent":
             // The relay never had it (RA4): nothing moved, nothing was spent,
             // and "try again" is true — so the generic sentence, never the
@@ -1579,7 +1646,7 @@ enum SendLive {
             // wrong explorer is the misleading link 051 refused to port.
             viewOnExplorer: view.txHash?.isEmpty == false ? model.viewOnExplorer : nil,
             cta: {
-                if stage == .confirmed || stage == .failed {
+                if stage == .confirmed || stage == .failed || stage == .notSent {
                     return loc.t("componentsTx.receipt.done")
                 }
                 // The ceremony's only honest button.
@@ -1587,7 +1654,7 @@ enum SendLive {
                     ? loc.t("componentsUi.funding.cancel")
                     : loc.t("send.txCloseBackground")
             }(),
-            ctaAccent: stage == .confirmed || stage == .failed,
+            ctaAccent: stage == .confirmed || stage == .failed || stage == .notSent,
             ctaCancels: stage == .submitting && view.txStatus == "signing",
             eta: eta,
             breakdownTitle: parts.title,

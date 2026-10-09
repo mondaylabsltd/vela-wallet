@@ -214,11 +214,23 @@ enum I18nKeys {
         /// (`BalanceView.unreachable`, no `internal_key`) — Android's and the
         /// web's own words for it.
         static let balanceUnreachable = "onboarding.common.networkBody"
+        /// PR 2 polish: a submit the relay turned back on the previous
+        /// transaction's nonce — "Not sent yet" over its sentence, on the
+        /// signing sheet (`SignView.failure_not_sent`) and Send's confirm
+        /// (`tx_error` `previous_pending`), calmly.
+        static let notSentTitle = "componentsUi.signing.notSentTitle"
+        static let notSentBody = "componentsUi.signing.notSentBody"
+        /// A fee that would fail: the row's figure when a tap opens the coins
+        /// (`FeeFailureView.tap` `choose_coin`), and the line under the held
+        /// confirm, a fact asking for no tap.
+        static let payWithAnotherCoin = "componentsUi.gas.payWithAnotherCoin"
+        static let feeWouldFail = "componentsUi.signing.confirmBlock.feeWouldFail"
 
         static let all = [
             feeRetrying, feeFailed, estimateFailed, reasonChainDown, reasonInternal,
             alertEstimateFailedTitle, alertEstimateFailedBody, alertEstimateChainDownBody,
             previousPending, refused, wentFirst, rejectedFees, balanceUnreachable,
+            notSentTitle, notSentBody, payWithAnotherCoin, feeWouldFail,
         ]
     }
 

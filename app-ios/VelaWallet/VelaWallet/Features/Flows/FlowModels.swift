@@ -153,9 +153,30 @@ struct FactRowModel: Identifiable {
     /// (`FactRowView.unbreakable`). The confirm's fee: cut to one line it
     /// read "~0.000173…B · ≈¥0.85" (iPhone pass 2026-10-09).
     var wraps = false
-    /// The confirm's fee failed (PR 2 note 1): a tap on the row asks again at
-    /// once — the form's refresh, the core's `requote`.
-    var tapRetries = false
+    /// The confirm's fee row: what a tap on it does (PR 2 polish) — asks a
+    /// failed fee again at once (the core's `requote`), opens the fee coins
+    /// ("Pay with another coin"), or nothing. `nil` on every other row.
+    var feeTap: FeeRowTap? = nil
+
+    /// A tap on the row asks the fee again (PR 2 note 1).
+    var tapRetries: Bool { feeTap == .retry }
+}
+
+/// What a tap on a fee row does — the core's `FeeFailureView.tap` once the
+/// fee has failed (PR 2 polish: a control does exactly what its words say,
+/// on the send form, its confirm and the signing sheet alike).
+enum FeeRowTap: Equatable {
+    /// No failure: the row opens the fee coins, under its chevron.
+    case open
+    /// The fee failed and a tap asks again at once — the refresh's own
+    /// action ("Tap to retry", or the dash while the core retries).
+    case retry
+    /// It would fail with the coin in force, and another is on offer: a tap
+    /// opens the fee coins ("Pay with another coin").
+    case chooseCoin
+    /// It would fail and no other coin is left: the row is no control — no
+    /// tap target, no chevron — and its figure is the dash.
+    case nothing
 }
 
 enum StatusTone {
@@ -551,10 +572,14 @@ struct FeeRowModel {
     /// same line `staleNote` keeps, so nothing jumps when it appears. Kept
     /// while the core asks again by itself (PR 2 note 1).
     var failNote: String? = nil
-    /// The fee failed (`FeeView.failure`): a tap on the row asks again at
-    /// once — the refresh's own action — instead of opening the coin sheet,
-    /// and the row draws no chevron.
-    var tapRetries = false
+    /// What a tap on the row does: opens the coin sheet (`open`, and
+    /// `chooseCoin` after `would_fail`, both under a chevron), asks a failed
+    /// fee again at once — the refresh's own action, no chevron — or, when
+    /// it would fail and no coin is left, nothing at all (PR 2 polish).
+    var tap: FeeRowTap = .open
+
+    /// A tap on the row asks the fee again (PR 2 note 1).
+    var tapRetries: Bool { tap == .retry }
 }
 
 /// One option of the speed control (spec 068).
@@ -870,6 +895,10 @@ struct SendConfirmModel {
     /// Without this the page was silent about all three — the CTA simply
     /// stopped working and nothing said why.
     var notice: String?
+    /// The notice's title, over it: "Not sent yet" for a submit the relay
+    /// turned back on the previous transaction's nonce (PR 2 polish) — calm,
+    /// with a clock, never the failure's colour. `nil`: a one-line notice.
+    var noticeTitle: String? = nil
     /// Spec 098 §4: the treasury stop's address, under [notice].
     var noticeFund: FundAddressModel? = nil
     /// The notice's own buttons. The primary retries what the notice is about;
@@ -901,6 +930,11 @@ struct SendConfirmModel {
 
 enum ReceiptStage {
     case submitting, submitted, confirmed, failed
+    /// "Not sent yet" (PR 2 polish): the relay turned the operation back at
+    /// submit because the account's previous one on this network still holds
+    /// the nonce. Nothing was sent and nothing went wrong — drawn calm, as a
+    /// wait: never the failure's mark, tint or haptic.
+    case notSent
 }
 
 struct ReceiptHashModel {

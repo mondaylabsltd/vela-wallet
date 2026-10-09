@@ -368,8 +368,14 @@ enum SigningLive {
         }
         if !refused {
             model.feeRefresh = feeRefresh(clear: clear, fee: fee, loc: loc)
-            // A failed fee's tap asks again (`feeTapped`): no list to open.
-            model.feeChevron = fee?.failure == nil && (fee?.options.count ?? 0) > 1
+            // The chevron promises the coin list (`feeTapped`): a settled
+            // fee's with more than one coin, or a fee that would fail with
+            // another coin to pay in ("Pay with another coin", PR 2 polish).
+            // A failure a tap asks again, or one with no coin left, has none.
+            model.feeChevron = fee.map {
+                let tap = SigningController.feeTap($0)
+                return tap == .open || tap == .chooseCoin
+            } ?? false
             model.feeReserve = feeReserve(fee, loc: loc)
         }
         return model
@@ -458,7 +464,14 @@ enum SigningLive {
             // fee — else the plain refusal.
             default: refusalReason(sign, loc: loc) ?? loc.t("send.txErrorGeneric")
             }
-            if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
+            if sign.notSent {
+                // "Not sent yet" (PR 2 polish): the previous transaction on
+                // this network still holds the nonce — nothing was sent and
+                // nothing went wrong. A calm sentence, never the danger card.
+                if !text.isEmpty { blocks.append(.sentence(text: text, tone: .neutral)) }
+            } else if !text.isEmpty {
+                blocks.append(.warning(tone: .danger, text: text))
+            }
         }
         if sign.pendingOpHash != nil {
             blocks.append(.positive(s(loc, "submitted")))
@@ -525,6 +538,21 @@ enum SigningLive {
                 header: header, stage: .submitting, title: words.title,
                 captions: [summary].compactMap { $0 },
                 cta: loc.t("onboarding.common.close"), ctaAccent: false
+            )
+        }
+        // "Not sent yet" (PR 2 polish): the relay turned it back at submit
+        // because the account's previous operation on this network still
+        // holds the nonce. Nothing was sent and nothing went wrong — its own
+        // calm state, never "Failed": the core's title over its sentence, the
+        // still clock, Try again where the core says a retry can help.
+        if let error = sign.error, error.kind != .userRejected, sign.notSent {
+            return SendReceiptModel(
+                header: header, stage: .notSent,
+                title: loc.t(I18nKeys.CoreRound.notSentTitle),
+                captions: [summary, refusalReason(sign, loc: loc) ?? loc.t(I18nKeys.CoreRound.notSentBody)]
+                    .compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: !sign.failureRetryable,
+                retry: sign.failureRetryable ? loc.t("send.txRetryBtn") : nil
             )
         }
         // A refusal after the approval (the submission failed): the core's
@@ -1434,8 +1462,10 @@ enum SigningLive {
             warning = reason
         }
         // The same condition `SigningController.feeTapped` acts on, decided
-        // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failure != nil || options.count > 1
+        // once here so the chevron and the handler cannot disagree: a
+        // failure's row does exactly its `tap` (PR 2 polish) — asks again,
+        // opens the coins, or, with no coin left, is no control at all.
+        let tappable = fee.map { SigningController.feeTap($0) != .nothing } ?? false
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
     }

@@ -381,6 +381,35 @@ struct SigningFollowsTrackerTests {
         #expect(run.port.posts == 1)
     }
 
+    /// PR 2 polish: the relay turned the submit back because another
+    /// operation of this account holds the nonce. Nothing was sent and
+    /// nothing went wrong — the real core says `failure_not_sent` with its
+    /// own sentence and Try again, never a refusal — and the sheet draws
+    /// "Not sent yet" calmly: the still clock, never the failure's mark.
+    @Test func aHeldNonceAtTheSubmitIsNotSentYetCalmly() async throws {
+        let other = "0x" + String(repeating: "cd", count: 32)
+        let message = "AA25 invalid account nonce [existingHash:\(other)]"
+        let run = try await approved(post: { _, _ in
+            RpcCallResult(
+                outcome: .rpcError(code: -32521, message: message),
+                maybeDelivered: false,
+                heldErrorJson: #"{"code":-32521,"message":"\#(message)"}"#
+            )
+        })
+        await Wait.until { run.controller.sign.notSent }
+        let sign = run.controller.sign
+        #expect(sign.notSent, "\(String(describing: sign.failureRefusalKey))")
+        #expect(sign.failureRetryable, "Try again stays")
+        #expect(!sign.failureRefused, "nothing was refused")
+        #expect(sign.failureRefusalKey == "componentsUi.signing.notSentBody")
+        let receipt = try #require(SigningLive.receipt(sign: sign, blocks: [], context: Self.receiptContext()))
+        #expect(receipt.stage == .notSent)
+        #expect(receipt.title == Self.loc.t("componentsUi.signing.notSentTitle"))
+        #expect(receipt.captions == [Self.loc.t("componentsUi.signing.notSentBody")])
+        #expect(receipt.retry == Self.loc.t("send.txRetryBtn"))
+        #expect(run.seen.answers.isEmpty, "held while the sheet shows it")
+    }
+
     /// The ✕ after the confirm refuses nothing (spec 079): the op written ahead
     /// is still POSTed, and the page still gets its one answer from the
     /// tracker's verdict.

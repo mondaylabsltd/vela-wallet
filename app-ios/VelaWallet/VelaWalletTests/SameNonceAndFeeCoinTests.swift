@@ -158,15 +158,16 @@ struct SameNonceAndFeeCoinTests {
     // MARK: - §3 refusals
 
     /// The relay's nonce refusal (its `nonce_in_flight`, or an older relay's
-    /// `[existingHash:…]` read as held) is its own failure: Send says the
-    /// previous transaction is pending, with Try again.
+    /// `[existingHash:…]` read as held) is its own failure: Send says it was
+    /// not sent yet — the previous transaction is still being processed —
+    /// calmly, with Try again (PR 2 polish).
     @Test func theRelaysNonceRefusalIsPreviousPendingOnSend() throws {
         var object = try CoreJSON.object(SendCore().view())
         object["stage"] = "confirm"
         object["tx_error"] = "previous_pending"
         let view = try CoreJSON.decode(SendViewWire.self, from: object)
-        #expect(SendLive.confirmNotice(view, loc: loc)
-                == loc.t("componentsUi.signing.confirmBlock.previousPending"))
+        #expect(SendLive.confirmNotice(view, loc: loc) == loc.t("componentsUi.signing.notSentBody"))
+        #expect(SendLive.confirmNoticeTitle(view, loc: loc) == loc.t("componentsUi.signing.notSentTitle"))
         object["tx_error"] = NSNull()
         object["previous_pending"] = [
             "chain_id": 100, "user_op_hash": op, "key": "componentsUi.signing.confirmBlock.previousPending",
