@@ -57,6 +57,18 @@ pub enum TimePreset {
     H12,
 }
 
+/// The clock a shell names on the wire — the stored word
+/// (`prefs::TIME_FORMATS`): `h12`, else `h24`. `auto` and anything unknown
+/// read as the default, `h24`: the shells resolve `auto` from the device
+/// before they call, as for [`date_preset_of`].
+#[must_use]
+pub fn time_preset_of(key: &str) -> TimePreset {
+    match key {
+        "h12" => TimePreset::H12,
+        _ => TimePreset::H24,
+    }
+}
+
 /// A wall-clock date and time, already shifted into the caller's zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Civil {

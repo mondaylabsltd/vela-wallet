@@ -53,7 +53,6 @@
     "rescanFailed": "{{names}}に接続できませんでした。ホームのバナーからRPCを修正するか、ブロックエクスプローラーで確認してください。",
     "rescanAgain": "もう一度スキャン",
     "rescanClose": "完了",
-    "rescanNativeNote": "一部のネットワークで受け取ったネイティブコイン（ETH、BNB、MATIC など）はここで検出されないことがあります。ただし残高は正確です。完全な記録はブロックエクスプローラーで確認してください。",
     "rescanExplorerTitle": "ブロックエクスプローラーで直接確認",
     "connClear": "消去",
     "connClearTitle": "接続のアクティビティを消去しますか？",

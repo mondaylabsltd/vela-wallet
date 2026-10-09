@@ -30,7 +30,6 @@
     "rescanFailed": "無法連線 {{names}}。請在首頁橫幅修復其 RPC，或到區塊鏈瀏覽器查看。",
     "rescanAgain": "再次掃描",
     "rescanClose": "完成",
-    "rescanNativeNote": "部分網路上收到的原生幣（ETH、BNB、MATIC 等）無法在此偵測到，但你的餘額始終準確——可在區塊鏈瀏覽器查看完整紀錄。",
     "rescanExplorerTitle": "直接在區塊鏈瀏覽器查看",
     "tabActivity": "動態",
     "tabAssets": "資產",

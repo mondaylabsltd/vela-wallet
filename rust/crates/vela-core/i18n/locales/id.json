@@ -62,23 +62,29 @@
     "signing": {
       "title": "Halaman tanda tangan",
       "subtitle": "Halaman yang Anda percayai untuk menampilkan dan menandatangani permintaan.",
-      "pageOfficial": "Resmi",
+      "pageOfficial": "Halaman tanda tangan resmi Vela",
       "pageInvalid": "Itu bukan alamat web.",
       "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
       "pageSave": "Simpan",
-      "pageAdd": "Tambah halaman",
+      "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
       "pageDuplicate": "Halaman itu sudah disimpan.",
-      "keysOn": "Kunci di {{domain}}"
+      "keysOn": "Kunci di {{domain}}",
+      "pageSelfHosted": "Di-host sendiri · {{domain}}",
+      "pageTrust": "Percayai versi ini",
+      "pageRename": "Ganti nama",
+      "pageRemove": "Hapus",
+      "pageName": "Nama"
     },
     "venue": {
       "title": "Tempat Anda meninjau dan menandatangani",
       "subtitle": "Untuk transaksi dan pesan akun ini. Kunci Anda tidak berubah.",
-      "inVela": "Di Vela",
+      "inVela": "Tinjau dan tanda tangani di Vela",
       "inVelaBody": "Lembar tanda tangan milik Vela",
-      "page": "Di halaman tepercaya",
+      "page": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
       "pageBody": "Halaman tanpa dependensi menampilkan persis apa yang Anda tanda tangani",
       "blockedApp": "Vela tidak dapat menjangkau kunci di {{domain}}.",
-      "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}."
+      "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}.",
+      "blockedWeb": "Halaman tanda tangan hanya dibuka dari aplikasi Vela, bukan web."
     },
     "advanced": {
       "networksTitle": "Jaringan",

@@ -350,6 +350,10 @@ pub fn sign_error_why(kind: SignErrorKind, detail: Option<&str>) -> Why {
         SignErrorKind::SignerUnavailable => (Signer, DbrReason::SignerUnavailable),
         SignErrorKind::SignerNotDiscoverable => (Signer, DbrReason::SignerNotDiscoverable),
         SignErrorKind::SignerFailed => (Signer, DbrReason::SignerFailed),
+        // Spec 102: no key this device can use for the account here — the
+        // record says what it says for a passkey that cannot be used; the
+        // sheet said why, with the account's domain.
+        SignErrorKind::VenueBlocked => (Signer, DbrReason::SignerUnavailable),
         SignErrorKind::SubmitFailed => {
             let detail = detail.unwrap_or_default();
             if detail == crate::user_op::REFUSED_DAPP_DETAIL {

@@ -21,6 +21,7 @@ import type { SendTreasuryStatus } from "./SendTreasuryStatus";
 import type { SendTxErrorKey } from "./SendTxErrorKey";
 import type { SendTxStatus } from "./SendTxStatus";
 import type { SendUnitIssue } from "./SendUnitIssue";
+import type { VenueBlock } from "./VenueBlock";
 
 export type SendView = { stage: SendStage, loading: boolean, locked: boolean, 
 /**
@@ -214,7 +215,13 @@ can_continue: boolean,
  * refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
  * the same predicate; a shell adds nothing to it (issue 424).
  */
-can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, 
+can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, 
+/**
+ * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
+ * account cannot sign here — drawn as `VenueBlock::key()` with its
+ * domains. `None` otherwise.
+ */
+tx_venue_block?: VenueBlock | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, 
 /**
  * Spec 098 §2: the relay cannot serve this chain; the send stops here.
  */

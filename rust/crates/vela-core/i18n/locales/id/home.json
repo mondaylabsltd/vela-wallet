@@ -53,7 +53,6 @@
     "rescanFailed": "Tidak dapat menjangkau {{names}}. Perbaiki RPC-nya dari banner beranda, atau periksa block explorer.",
     "rescanAgain": "Pindai lagi",
     "rescanClose": "Selesai",
-    "rescanNativeNote": "Koin native (ETH, BNB, MATIC…) yang diterima di sebagian jaringan mungkin tidak terdeteksi di sini. Saldo Anda tetap akurat — buka block explorer untuk catatan lengkap.",
     "rescanExplorerTitle": "Cek langsung di block explorer",
     "connClear": "Bersihkan",
     "connClearTitle": "Bersihkan aktivitas koneksi?",
