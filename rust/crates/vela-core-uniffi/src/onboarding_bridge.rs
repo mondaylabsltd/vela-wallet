@@ -295,7 +295,7 @@ bridge_object!(
 
 bridge_object!(
     /// The default transaction speed (spec 068): the stored tier every send
-    /// starts at, the factory `fast` when nothing was chosen. Spec 069 brings
+    /// starts at, the factory `standard` when nothing was chosen. Spec 069 brings
     /// it to the native Settings screens.
     FeeTierPrefCore,
     vela_core::app::fee_tier_pref::FeeTierPref

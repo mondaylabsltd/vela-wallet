@@ -12,7 +12,8 @@
 //
 //  **Nothing here spends.** The send form is opened, its speed control opened
 //  and a speed picked — and it is never confirmed. The Settings pick is put
-//  back to the factory `fast` before the test ends.
+//  back to 超快 (`fast`) before the test ends — the factory default before
+//  2026-10-09; it is `standard` now.
 //
 
 import XCTest

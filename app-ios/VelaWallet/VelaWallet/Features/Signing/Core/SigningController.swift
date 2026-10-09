@@ -528,7 +528,7 @@ final class SigningController {
 
     /// The stored default speed (spec 069): a dApp transaction is priced —
     /// and, through the quoted fee, submitted — at the speed Settings names,
-    /// which is `fast` for everybody who never chose, until the sheet's own
+    /// which is `standard` for everybody who never chose, until the sheet's own
     /// speed control picks another. The number preset writes each gas bid.
     private let preferredTier: () -> String
     private let numberPreset: () -> String

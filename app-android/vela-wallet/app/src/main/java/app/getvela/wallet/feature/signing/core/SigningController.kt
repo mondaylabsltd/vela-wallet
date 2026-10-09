@@ -82,7 +82,7 @@ class SigningController(
     /**
      * The stored default speed (spec 069): a dApp transaction is priced — and,
      * through the quoted fee, submitted — at the speed Settings names, which
-     * is `fast` for everybody who never chose, until the sheet's own speed
+     * is `standard` for everybody who never chose, until the sheet's own speed
      * control picks another. The number preset writes each speed's gas bid.
      */
     private val preferredTier: () -> FeeTier = { FeeTier.Standard },
