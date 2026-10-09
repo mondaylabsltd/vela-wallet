@@ -400,18 +400,34 @@ final class BrowserController {
         }
     }
 
-    /// The core's `load`: `id` takes `url`, and is the tab asked for.
+    /// The core's `load`: `id` takes `url`. Selected FIRST — a full strip's
+    /// spare tab is not the one in front — then its page loads, once.
+    ///
+    /// The address reaches the tab's record before the tab is asked for, so
+    /// an engine made for it starts at `url`: the selection alone wakes
+    /// nothing. Until 2026-10 it did — the spare tab's engine was made on
+    /// `tab_selected`, at the old dApp the tab held, which loaded and ran
+    /// its scripts until the new address replaced it; and a start page's
+    /// first address loaded twice, once from `reconcile` inside the
+    /// navigation's dispatch and again here. An engine that was already
+    /// there is told directly. A page let go to save memory that takes a new
+    /// address is a new page, never one "reloaded to save memory".
     private func load(_ url: String, into id: String) {
-        wanted = id
+        guard explore.tabs.contains(where: { $0.id == id }) else { return }
+        let live = engines[id]
+        if live == nil { suspended.removeValue(forKey: id) }
         if explore.selectedTab != id {
             exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
         }
         exploreCore.dispatch(CoreJSON.string([
             "type": "tab_navigated", "id": id, "url": url, "title": NSNull(),
         ]))
-        // An engine already showing a page is told directly; a start
-        // page gets its engine from `reconcile`, which loads the URL.
-        engines[id]?.load(url)
+        wanted = id
+        if let live {
+            live.load(url)
+        } else {
+            reconcile(explore)
+        }
     }
 
     /// Open a site the person tapped, by the id the tile or row carries.

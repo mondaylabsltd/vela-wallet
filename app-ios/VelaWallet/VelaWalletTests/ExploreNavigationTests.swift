@@ -191,10 +191,13 @@ struct ExploreNavigationTests {
     }
 
     /// A new (start-page) tab takes the next address from the home: no third
-    /// tab, and the dApp beside it untouched.
+    /// tab, and the dApp beside it untouched. The address loads ONCE — it
+    /// used to load twice, from the engine made inside the navigation's
+    /// dispatch and again straight after.
     @Test(.timeLimit(.minutes(5)))
     func aStartPageTakesTheNextOpen() async throws {
         let h = BrowserHarness()
+        let loads = recordLoads(h.browser)
         h.browser.start()
         await Wait.until { h.browser.explore.ready }
         h.browser.open("http://127.0.0.1:9/one")
@@ -208,6 +211,8 @@ struct ExploreNavigationTests {
         await Wait.until { h.browser.explore.tabs.first { $0.id == start }?.url == "http://localhost:9/two" }
         #expect(h.browser.explore.tabs.count == 2)
         #expect(h.browser.explore.tabs.first { $0.id == dapp }?.url == "http://127.0.0.1:9/one")
+        #expect(loads.pages.filter { $0.tab == start } == [Page(tab: start, url: "http://localhost:9/two")],
+                "the start page's first address loads once")
     }
 
     /// A full strip takes no new tab (the core drops `tab_opened` at its
@@ -243,15 +248,14 @@ struct ExploreNavigationTests {
 
     /// The same, end to end through the controller and the real explore
     /// machine: the open lands in the tab a full strip can spare, which is
-    /// selected; the dApp in front keeps its page.
+    /// selected BEFORE its page loads; the dApp in front keeps its page. The
+    /// spare tab's engine starts at the new address — never at the old dApp
+    /// it held, which used to load for a moment, scripts and all, when the
+    /// selection woke it — and the restored tab in front never wakes.
     @Test(.timeLimit(.minutes(5)))
     func aFullStripStillOpens() async throws {
-        let tabs: [[String: Any]] = (1...24).map { n in
-            ["id": "t\(n)", "url": "https://site\(n).example/", "title": "t\(n)", "host": "site\(n).example"]
-        }
-        let h = BrowserHarness(seed: { store in
-            store.writeObject(ExploreExecutor.key, ["tabs": tabs, "selected_tab": "t3"])
-        })
+        let h = seededTabs((1...24).map { ("t\($0)", "https://site\($0).example/") }, selected: "t3")
+        let loads = recordLoads(h.browser)
         h.browser.start()
         await Wait.until { h.browser.explore.ready }
         #expect(h.browser.explore.tabsFull)
@@ -261,6 +265,38 @@ struct ExploreNavigationTests {
         #expect(h.browser.explore.tabs.count == 24)
         #expect(h.browser.explore.selectedTab == "t24")
         #expect(h.browser.explore.tabs.first { $0.id == "t3" }?.url == "https://site3.example/")
+        #expect(loads.made == ["t24"], "only the spare tab has an engine")
+        #expect(loads.pages == [Page(tab: "t24", url: "http://127.0.0.1:9/full")],
+                "the spare tab loaded the dApp it held before the new address")
+        #expect(h.browser.current === h.browser.engineForTesting("t24"))
+    }
+
+    /// A spare tab whose page the plan had let go of (spec 099 FR-004) takes
+    /// the new address as a new page: made at that address, never "reloaded
+    /// to save memory" — that line is for a page coming BACK.
+    @Test(.timeLimit(.minutes(5)))
+    func aSpareTabLetGoTakesTheNewAddressAsANewPage() async throws {
+        let h = seededTabs((1...24).map { ("t\($0)", "https://site\($0).example/") }, selected: "t1")
+        let loads = recordLoads(h.browser)
+        h.browser.start()
+        await Wait.until { h.browser.explore.ready }
+
+        // Every tab visited — t24 first, t1 last — so t24 is the one used
+        // longest ago, and under pressure the plan lets its page go.
+        for n in [24] + Array(2...23) + [1] { h.browser.selectTab("t\(n)") }
+        h.browser.memoryWarning()
+        try #require(h.browser.suspendedForTesting.contains("t24"), "t24's page was not let go")
+        h.browser.landedHome()
+        #expect(BrowserController.openTarget(view: h.browser.explore, shown: nil, onPage: false,
+                                             url: "http://127.0.0.1:9/new", kind: .address) == .load("t24"))
+
+        let before = loads.pages.count
+        h.browser.open("http://127.0.0.1:9/new")
+        #expect(h.browser.explore.selectedTab == "t24")
+        #expect(Array(loads.pages.dropFirst(before)) == [Page(tab: "t24", url: "http://127.0.0.1:9/new")])
+        #expect(h.browser.reloadedTab == nil, "a new address in a spare tab is said to be a page reloaded to save memory")
+        #expect(!h.browser.suspendedForTesting.contains("t24"))
+        #expect(h.browser.current === h.browser.engineForTesting("t24"))
     }
 
     // MARK: - Which tabs get a page
