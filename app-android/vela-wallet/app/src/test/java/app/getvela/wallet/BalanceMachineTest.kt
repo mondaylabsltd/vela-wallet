@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceOperation
 import app.getvela.wallet.feature.wallet.core.BalanceShellResult
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.ChainDex
+import app.getvela.wallet.feature.wallet.core.ChainDoc
 import app.getvela.wallet.feature.wallet.core.ChainInfo
 import app.getvela.wallet.feature.wallet.core.ChainNative
 import app.getvela.wallet.feature.wallet.core.ChainStable
@@ -85,6 +86,8 @@ class BalanceMachineTest {
         chainDeadlineMs: Long? = null,
         /** Chains whose read throws inside the shell before anything is sent (PR 2 note 11). */
         faultyChains: Set<Int> = emptySet(),
+        /** Chains whose registry document could not be read — no answer, not "no such document" (PR 2 polish). */
+        unreadDocs: Set<Int> = emptySet(),
         answer: (url: String, method: String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -103,7 +106,10 @@ class BalanceMachineTest {
             store = store,
             chainInfo = { chainId ->
                 if (chainId in faultyChains) throw IllegalStateException("a fault inside the app")
-                chains[chainId]
+                when {
+                    chainId in unreadDocs -> ChainDoc.Unread
+                    else -> chains[chainId]?.let { ChainDoc.Doc(it) } ?: ChainDoc.Absent
+                }
             },
             mainnetPrices = { mainnet },
             chainDeadlineMs = chainDeadlineMs ?: uniffi.vela_core_uniffi.balanceChainReadDeadlineMs().toLong(),
@@ -159,9 +165,11 @@ class BalanceMachineTest {
     fun aChainWithNoNativeCoinIsNeverAsked() {
         // **The 4×10^57 trap.** Tempo's RPC answers the same constant for every
         // address and its native symbol is `USD`, so a stablecoin peg would
-        // price that constant at a dollar. The guard is the CORE's predicate,
-        // not a magnitude threshold invented here — and the proof is that the
-        // chain is never queried at all.
+        // price that constant at a dollar. The guard is the CORE's read plan
+        // (no native slot on a chain without a coin), not a magnitude
+        // threshold invented here. With no registry document and no tokens of
+        // its own there is nothing on it to read, so it is not queried at all
+        // (its stablecoins, when listed: `…IsReadForItsStables…` below).
         val h = harness(
             listOf(row(1, "ETH", "Ethereum"), row(4217, "USD", "Tempo")),
         ) { _, _ -> FakeRpcTransport.body("0x14d1120d7b160000") }
@@ -176,6 +184,95 @@ class BalanceMachineTest {
             "a chain with no native coin must never be asked for a native balance",
             h.transport.asked.any { it.contains("chain-4217.example") },
         )
+    }
+
+    // -- PR 2 polish: a chain with no native coin, and its registry document ----
+
+    private val pathUsd = ChainStable("pathUSD", "native", "0x20C0000000000000000000000000000000000000")
+
+    private fun tempoLike(stables: List<ChainStable>) = ChainInfo(
+        chainId = 4217,
+        native = ChainNative("USD", "USD", 18),
+        stables = stables,
+        wrappedNative = null,
+        dex = null,
+    )
+
+    /**
+     * Tempo's money is all in its registry's stablecoins (the core's plan has
+     * no native slot). With its document UNREAD there is nothing honest to
+     * read: the chain was not read — on the failed list, as a chain that did
+     * not answer — never "answered, holds nothing", a $0.00 over money nobody
+     * could see. And it is never asked for the constant `eth_getBalance`.
+     */
+    @Test
+    fun aChainWithNoNativeCoinWhoseRegistryWasUnreadIsNotRead() {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(4217, "USD", "Tempo")),
+            unreadDocs = setOf(4217),
+        ) { url, method ->
+            if (url.contains("chain-4217")) asked += method
+            FakeRpcTransport.body("0x14d1120d7b160000")
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.failed_chain_ids.contains(4217) && it.tokens.isNotEmpty() }
+        assertEquals(listOf("ETH"), view.tokens.map { it.symbol })
+        assertTrue("not read: it fails like a chain that did not answer", view.unreachable_networks.any { it.chain_id == 4217 })
+        assertTrue("not the app's fault", view.internal_chain_ids.isEmpty())
+        assertTrue("nothing was asked of it: $asked", asked.isEmpty())
+    }
+
+    /** "No such document" (a 404) is an answer: nothing listed, so the chain answered holding nothing — as before. */
+    @Test
+    fun aChainWithNoNativeCoinAndNoSuchDocumentAnswered() {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val h = harness(listOf(row(1, "ETH", "Ethereum"), row(4217, "USD", "Tempo"))) { url, method ->
+            if (url.contains("chain-4217")) asked += method
+            FakeRpcTransport.body("0x14d1120d7b160000")
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.tokens.isNotEmpty() && !it.holdings_loading && it.last_refreshed_at_ms != null }
+        assertFalse("an absent document is an answer: ${view.failed_chain_ids}", view.failed_chain_ids.contains(4217))
+        assertTrue("and nothing to ask: $asked", asked.isEmpty())
+    }
+
+    /**
+     * With its document read, Tempo's stablecoins are read in the one batch
+     * and counted at their peg — and a batch that fails is a chain that did
+     * not answer, never the native-only fallback's `eth_getBalance`.
+     */
+    @Test
+    fun aChainWithNoNativeCoinIsReadForItsStablesAndNeverForItsConstant() {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val h = harness(
+            listOf(row(4217, "USD", "Tempo")),
+            chains = mapOf(4217 to tempoLike(listOf(pathUsd))),
+        ) { url, method ->
+            if (url.contains("chain-4217")) asked += method
+            // pathUSD: balanceOf → 5_000_000, decimals → 6.
+            batched(word(java.math.BigInteger.valueOf(5_000_000)), word(java.math.BigInteger.valueOf(6)))
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.tokens.isNotEmpty() }
+        val token = view.tokens.single()
+        assertEquals("pathUSD", token.symbol)
+        assertEquals("5", token.balance)
+        assertEquals(1.0, token.price_usd!!, 1e-9)
+        assertEquals(5.0, view.display_total_usd!!, 1e-9)
+        assertFalse("never the constant: $asked", asked.contains("eth_getBalance"))
+
+        val down = harness(
+            listOf(row(4217, "USD", "Tempo")),
+            chains = mapOf(4217 to tempoLike(listOf(pathUsd))),
+        ) { url, method ->
+            if (url.contains("chain-4217")) asked += "down:$method"
+            FakeRpcTransport.body("0x")
+        }
+        down.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val failed = down.host.settle { it.failed_chain_ids.contains(4217) }
+        assertTrue(failed.tokens.isEmpty())
+        assertFalse("no native-only fallback on a chain with no coin: $asked", asked.contains("down:eth_getBalance"))
     }
 
     @Test
@@ -283,6 +380,9 @@ class BalanceMachineTest {
         assertEquals(listOf(1, 100), view.internal_chain_ids.sorted())
         assertEquals("componentsUi.gas.reasonInternal", view.internal_key)
         assertTrue(view.tokens.isEmpty())
+        // PR 2 polish (core 89ffb7d33): nothing was read, so there is no figure — null, never 0.
+        assertNull(view.display_total_usd)
+        assertNull(view.cached_total_usd)
     }
 
     /** PR 2 note 11: the whole fetch threw inside the shell — `internal`, said as the app's fault, never "can't reach". */

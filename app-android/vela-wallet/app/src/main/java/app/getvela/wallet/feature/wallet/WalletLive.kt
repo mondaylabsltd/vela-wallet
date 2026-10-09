@@ -420,11 +420,11 @@ object WalletLive {
         val total = view.display_total_usd ?: view.cached_total_usd
 
         // **Unreachable is not zero.** A first launch that could read nothing,
-        // with nothing cached: the core's figure here is 0.0 — `total` is not
-        // null — and rendering it was spec 038 finding 15, a settled-looking
-        // "$0.00" over an unreadable chain. The flag exists to keep that number
-        // off the hero. A skeleton and a reason, the same reason the web and
-        // desktop heroes give.
+        // with nothing cached: rendering a figure here was spec 038 finding 15,
+        // a settled-looking "$0.00" over an unreadable chain. The core's figure
+        // is null in this state now (PR 2 polish; it was 0.0), and the flag
+        // still decides first: a skeleton and a reason, the same reason the
+        // web and desktop heroes give.
         if (view.unreachable) {
             return fallback.copy(
                 state = BalanceStateKind.Loading,

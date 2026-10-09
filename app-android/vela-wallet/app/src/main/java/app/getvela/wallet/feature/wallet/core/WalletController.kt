@@ -123,7 +123,7 @@ class WalletController(
         pool = pool,
         networks = networks,
         store = store,
-        chainInfo = chains::forChain,
+        chainInfo = chains::read,
         mainnetPrices = ChainlinkPrices(pool)::prices,
     )
 

@@ -93,10 +93,10 @@ data class BalanceView(
     val balance_partial: Boolean = false,
     /**
      * Nothing could be read and nothing is known: the first fetch failed with
-     * no cache to fall back on (#188, spec 038 finding 15). The core's
-     * `display_total_usd` is `0.0` in this state — which is exactly the number
-     * this flag exists to keep off the hero. A skeleton and a reason, never a
-     * zero.
+     * no cache to fall back on (#188, spec 038 finding 15). A skeleton and a
+     * reason, never a zero — and since the PR 2 polish the core says so in
+     * the figure too: `display_total_usd` is `null` in this state (it was
+     * `0.0`, which every screen had to know to keep off the hero).
      */
     val unreachable: Boolean = false,
     val notice: BalanceNotice? = null,
