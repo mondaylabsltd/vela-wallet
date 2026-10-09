@@ -123,6 +123,9 @@
                   Identifier = "ScreenshotSweepTests">
                </Test>
                <Test
+                  Identifier = "SigningVenueScreenshotTests">
+               </Test>
+               <Test
                   Identifier = "ExploreNavigationScreenTests/testTheBoards()">
                </Test>
                <Test
