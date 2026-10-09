@@ -33,6 +33,20 @@
 //  card's compact fee row (core round 5, `handoffFeeRow`) is for a screen with
 //  no fee of its own.
 //
+//  The send confirm draws the card `compact`, pinned in its footer over the
+//  button that goes to the page: its figure and facts already fill a phone,
+//  so the block is a small mark beside the title, then the key and the page
+//  as the confirm's own raised rows — and the integrity line is on screen,
+//  never under the button, whatever the figures above it hold:
+//
+//      ✓ Review and sign on a trusted signing page
+//      ┌──────────────────────────────────────────────┐
+//      │ Confirm with                     This device │
+//      │──────────────────────────────────────────────│
+//      │ Vela's official signing page  sign.getvela.app│
+//      │ ✓ Version 0ba8ee8c · matches … · checked 14:32│
+//      └──────────────────────────────────────────────┘
+//
 
 import SwiftUI
 import VelaCore
@@ -282,8 +296,108 @@ struct HandoffCardView: View {
     /// "Trust this version". `nil`: the app's one checker stores it on the
     /// page and checks again (`SignerPageChecks.trustAsked`).
     var onTrust: (() -> Void)? = nil
+    /// The send confirm's form (102 integration polish): the screen already
+    /// holds the figure, its facts and a pinned button, so the block is a
+    /// section of that screen, not a page of its own — a small mark beside
+    /// the title on one line, then the key and the page as the confirm's own
+    /// quiet rows. The big mark and title cost a 6.1" phone the integrity
+    /// line, which sat half under the pinned button.
+    var compact = false
 
     var body: some View {
+        if compact { compactBody } else { fullBody }
+    }
+
+    private var compactBody: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                inlineMark
+                    .frame(width: LucideIconSize.rowGlyph, height: LucideIconSize.rowGlyph)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Tokens.Space.s4 }
+                Text(model.title)
+                    .typeRole(Typography.bodyStrong.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("handoff.title")
+            }
+            .padding(.horizontal, Tokens.Space.s4)
+
+            // The key and the page, as the confirm's facts are drawn — one
+            // raised card of label | value rows above the pinned button.
+            VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+                if let key = model.key {
+                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                        Text(verbatim: key.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgSubtle)
+                            .lineLimit(1)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: key.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .padding(.vertical, Tokens.Space.s12)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("handoff.key")
+                    FlowDivider()
+                }
+                VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                            pageName.fixedSize()
+                            pageHost.fixedSize()
+                        }
+                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                            pageName
+                            pageHost
+                        }
+                    }
+                    IntegrityLineView(line: model.line, text: model.lineText)
+                    if let trust = model.trust { trustButton(trust) }
+                }
+                .padding(.vertical, Tokens.Space.s12)
+            }
+            .padding(.horizontal, Tokens.Space.s12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("handoff.card")
+    }
+
+    /// The compact form's mark: the big mark's verdict at a row glyph's size
+    /// — a shield only for a page that passed — in a fixed box, so the check
+    /// landing swaps the glyph without moving the title.
+    @ViewBuilder private var inlineMark: some View {
+        let tone: SignerIntegrityTone = model.down ? .caution : model.line.tone
+        switch tone {
+        case .checking:
+            ProgressView().controlSize(.mini)
+        case .ok:
+            LucideIcon(.shieldCheck, size: LucideIconSize.rowGlyph)
+                .foregroundStyle(theme.successBase)
+                .accessibilityHidden(true)
+        case .caution, .refused:
+            LucideIcon(.triangleAlert, size: LucideIconSize.rowGlyph)
+                .foregroundStyle(tone == .refused ? theme.errorBase : theme.warningBase)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func trustButton(_ title: String) -> some View {
+        SigningPageTrustButton(title: title, id: "handoff.trust") {
+            if let onTrust {
+                onTrust()
+            } else {
+                let page = model.pageUrl
+                Task { @MainActor in await SignerPageChecks.shared.trustAsked(page) }
+            }
+        }
+    }
+
+    private var fullBody: some View {
         VStack(spacing: Tokens.Space.s12) {
             mark
                 .padding(.bottom, Tokens.Space.s4)
@@ -349,16 +463,7 @@ struct HandoffCardView: View {
                 }
                 IntegrityLineView(line: model.line, text: model.lineText)
                 // The answer to "Trust it on this device?", beside the question.
-                if let trust = model.trust {
-                    SigningPageTrustButton(title: trust, id: "handoff.trust") {
-                        if let onTrust {
-                            onTrust()
-                        } else {
-                            let page = model.pageUrl
-                            Task { @MainActor in await SignerPageChecks.shared.trustAsked(page) }
-                        }
-                    }
-                }
+                if let trust = model.trust { trustButton(trust) }
             }
             .padding(.horizontal, Tokens.Space.s20)
             .padding(.vertical, Tokens.Space.s16)

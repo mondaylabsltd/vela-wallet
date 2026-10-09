@@ -131,6 +131,14 @@ final class SigningVenueScreenshotTests: XCTestCase {
                 if state.hasPrefix("send") {
                     XCTAssertFalse(app.descendants(matching: .any)["handoff.fee"].exists,
                                    "\(state) \(look): the card said the fee again")
+                    // The whole block — the integrity line its last row —
+                    // stands clear of the pinned button, unscrolled: the
+                    // scroll view ends where the footer's padding begins.
+                    let open = app.buttons[look.lang == "zh" ? "去签名页确认" : "Continue to signing page"].firstMatch
+                    let card = app.descendants(matching: .any)["handoff.card"].firstMatch
+                    XCTAssertTrue(open.exists && card.exists, "\(state) \(look): no Open or no card")
+                    XCTAssertLessThanOrEqual(card.frame.maxY, open.frame.minY - 12,
+                                             "\(state) \(look): the card runs under the pinned button")
                 }
                 let board = "\(state)-\(look.lang)-\(look.theme)"
                 for open in ["signing.openSigner", "handoff.open"] {
