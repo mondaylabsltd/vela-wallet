@@ -2174,6 +2174,14 @@ fun VelaNavHost(
                     settings.startNetworks()
                 }
                 LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
+                // Spec 102: a page that joins the list (added here, or imported
+                // from 071) is checked at once, so its row says what is trusted
+                // about it; a page already checked is left to its own freshness.
+                LaunchedEffect(signingPages.pages.map { it.url }) {
+                    signingPages.pages
+                        .filter { row -> application.container.signerPages.checks.value[app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(row.url)] == null }
+                        .forEach { row -> scope.launch { runCatching { application.container.signerPages.ensure(row.url) } } }
+                }
                 // The connected sites, live from the browser core (spec 070).
                 val connectedSites by application.container.browser.dapp.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) {
@@ -2457,12 +2465,6 @@ fun VelaNavHost(
                         // The account sheet asks the balance core for every account's
                         // total, as the home's switcher does, and lets it go on close.
                         onOverlayShown = { shown ->
-                            // Spec 102: the venue sheet's pages say what is trusted about them.
-                            if (shown == SettingsOverlay.Venue) {
-                                liveModel.venue?.choices.orEmpty().mapNotNull { it.page?.url }.forEach { url ->
-                                    scope.launch { application.container.signerPages.ensure(url) }
-                                }
-                            }
                             if (shown == SettingsOverlay.Accounts) {
                                 application.container.wallet.switcherOpened(sessionView.accounts.map { it.address })
                             } else {
@@ -2475,6 +2477,10 @@ fun VelaNavHost(
                                 // comes on screen, so each row says what is trusted about it.
                                 SettingsPage.SigningPages -> settings.signingPages.value.pages.forEach { row ->
                                     scope.launch { application.container.signerPages.ensure(row.url) }
+                                }
+                                // …and the venue page's, so "trusted" is backed on every row.
+                                SettingsPage.Venue -> liveModel.venue?.choices.orEmpty().mapNotNull { it.page?.url }.forEach { url ->
+                                    scope.launch { application.container.signerPages.ensure(url) }
                                 }
                                 SettingsPage.RpcProviders -> settings.openProviders()
                                 SettingsPage.Endpoints -> settings.openEndpoints()

@@ -130,7 +130,11 @@ class SignerPageChecks(
             val check = if (url == null) {
                 Check(key, target.line(), null, "", proposed = false)
             } else {
-                val (hash, failure) = when (val fetched = fetchSafely(url)) {
+                val fetched = fetchSafely(url)
+                if (fetched is Fetched.Body && fetched.status != 200) {
+                    VelaLog.event("signer page", "not served", "host" to key.substringAfter("://").substringBefore('/'), "status" to fetched.status)
+                }
+                val (hash, failure) = when (fetched) {
                     is Fetched.Body ->
                         if (fetched.status == 200) signerPageHash(fetched.bytes) to SignerCheckFailure.NOT_CHECKED
                         else null to SignerCheckFailure.UNREACHABLE
@@ -251,14 +255,37 @@ class SignerPageChecks(
             return x.get(Calendar.YEAR) == y.get(Calendar.YEAR) && x.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR)
         }
 
+        /**
+         * What a browser says it accepts when it navigates to a page — and so
+         * what the page is fetched with here. The check is only worth anything
+         * if it sees the bytes the browser will be served, and a host can
+         * serve them differently by this header: measured on 2026-10-09,
+         * `sign.getvela.app` answers `Accept: text/html` with its published
+         * build PLUS a Cloudflare Web Analytics `<script>` injected before
+         * `</body>` (sha256 `b014f9b3…`, not `0ba8ee8c…`), and a request that
+         * accepts anything with the published bytes. A check that did not ask
+         * as a browser asks would pass while the Custom Tab loaded something
+         * else.
+         */
+        const val BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
         /** The real GET, over the app's one HTTP client (no redirects followed). */
         suspend fun httpGet(url: String): Fetched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val client = app.getvela.wallet.core.net.VelaHttp.client.newBuilder()
                 .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                // A GET of a static page is idempotent: a pooled connection the
+                // server (or a proxy) already closed is retried on a fresh one
+                // rather than read as "couldn't check" (measured: the index and
+                // the page back to back over one keep-alive connection).
+                .retryOnConnectionFailure(true)
                 .build()
+            val accept = if (url.endsWith(INDEX_PATH)) "application/json" else BROWSER_ACCEPT
             val response = runCatching {
-                client.newCall(okhttp3.Request.Builder().url(url).get().build()).execute()
-            }.getOrElse { return@withContext Fetched.Unreachable }
+                client.newCall(okhttp3.Request.Builder().url(url).header("Accept", accept).get().build()).execute()
+            }.getOrElse { error ->
+                VelaLog.event("signer page", "fetch failed", "host" to url.substringAfter("://").substringBefore('/'), "why" to error.javaClass.simpleName, "detail" to error.message)
+                return@withContext Fetched.Unreachable
+            }
             response.use { answered ->
                 val body = answered.body ?: return@withContext Fetched.Body(answered.code, ByteArray(0))
                 val length = body.contentLength()

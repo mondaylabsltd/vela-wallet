@@ -1008,6 +1008,8 @@ object SettingsFixtures {
         SettingsScreenState.ST14, SettingsScreenState.ST14B -> Shape(SettingsPage.About, SettingsOverlay.None)
         SettingsScreenState.ST15 -> Shape(SettingsPage.Home, SettingsOverlay.Feedback)
         SettingsScreenState.ST16 -> Shape(SettingsPage.Home, SettingsOverlay.EraseDevice)
+        SettingsScreenState.ST17, SettingsScreenState.ST17B -> Shape(SettingsPage.Venue, SettingsOverlay.None)
+        SettingsScreenState.ST18, SettingsScreenState.ST18B -> Shape(SettingsPage.SigningPages, SettingsOverlay.None)
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
@@ -1020,7 +1022,73 @@ object SettingsFixtures {
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
     }
 
-    fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+    // -- spec 102: where you review and sign, and the signing pages ----------
+
+    /** The official page, as the core normalises it, and a page on the person's own domain. */
+    const val OFFICIAL_PAGE = "https://sign.getvela.app/"
+    const val OWN_PAGE = "https://sign.example.com/"
+
+    /** What Settings → Signing pages keeps on the drawn device (the official page is never stored). */
+    val SAVED_PAGES = listOf(app.getvela.wallet.feature.settings.core.SigningPage(OWN_PAGE, "My page"))
+
+    /** 14:32 today — the boards' "checked" time (the web's). */
+    private val CHECKED_AT: Long = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 14)
+        set(java.util.Calendar.MINUTE, 32)
+        set(java.util.Calendar.SECOND, 0)
+    }.timeInMillis
+
+    private fun line(state: uniffi.vela_core_uniffi.SignerIntegrityState, key: String, version: String, opens: Boolean) =
+        uniffi.vela_core_uniffi.SignerIntegrityLine(state, version, CHECKED_AT.toULong(), "componentsUi.signing.integrity.$key", opens)
+
+    /**
+     * The integrity lines the boards draw: the official page matches the
+     * published build list; the person's own page is a build they trusted on
+     * this device — or, on ST18b, one that will NOT open.
+     */
+    fun pageLine(url: String, refused: Boolean = false): uniffi.vela_core_uniffi.SignerIntegrityLine = when {
+        url == OFFICIAL_PAGE -> line(uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "matches", "0ba8ee8c", true)
+        refused -> line(uniffi.vela_core_uniffi.SignerIntegrityState.MISMATCH, "mismatch", "7d41e0b9", false)
+        else -> line(uniffi.vela_core_uniffi.SignerIntegrityState.TRUSTED_HERE, "trusted", "3f9a1c22", true)
+    }
+
+    /**
+     * The account the boards draw — on `getvela.app`, reviewing on the
+     * official page — and (ST17b) one on its own domain, locked to its page.
+     * Drawn through the live builder over the core's own `signingVenueChoices`,
+     * so the board is a screen the core can produce.
+     */
+    private fun venueAccount(own: Boolean) = app.getvela.wallet.feature.onboarding.core.SessionAccountRow(
+        index = 0,
+        name = ACCOUNT_NAME,
+        address = ADDRESS_FULL,
+        signingDomain = if (own) "sign.example.com" else "getvela.app",
+        signingVenueJson = """{"type":"page","url":"${if (own) OWN_PAGE else OFFICIAL_PAGE}"}""",
+    )
+
+    private val SIGNING_PAGES_VIEW = app.getvela.wallet.feature.settings.core.SigningPagesView(
+        pages = listOf(
+            app.getvela.wallet.feature.settings.core.SigningPageRow(OFFICIAL_PAGE, "", "getvela.app", official = true),
+            app.getvela.wallet.feature.settings.core.SigningPageRow(OWN_PAGE, "My page", "sign.example.com"),
+        ),
+        saved = SAVED_PAGES,
+        loaded = true,
+    )
+
+    /** The live builders over the boards' data: what the gallery shows is what a session would. */
+    private fun withSigning(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val refused = state == SettingsScreenState.ST18B
+        val view = if (refused) SIGNING_PAGES_VIEW.copy(add_error = "duplicate") else SIGNING_PAGES_VIEW
+        val lines = { url: String -> pageLine(url, refused) }
+        val pages = SettingsLive.withSigningPages(model, view, emptyMap(), lines, s)
+        val drafted = if (refused) pages.copy(signingPages = pages.signingPages.copy(draft = OWN_PAGE)) else pages
+        return SettingsLive.withVenue(drafted, venueAccount(own = state == SettingsScreenState.ST17B), SAVED_PAGES, lines, s)
+    }
+
+    fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
+        withSigning(baseState(state, s), state, s)
+
+    private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)
         val addMode = when (state) {
             SettingsScreenState.ST10B -> "compatible"

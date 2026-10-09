@@ -69,8 +69,9 @@ class SettingsFixturesTest {
     fun `the state inventory covers ST1-ST16 and SR1-SR6`() {
         val states = SettingsScreenState.entries
         // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
-        assertEquals(30, states.size)
-        assertEquals(23, states.count { it.name.startsWith("ST") })
+        // ST17–ST18B are spec 102's: where you review and sign, and the signing pages.
+        assertEquals(34, states.size)
+        assertEquals(27, states.count { it.name.startsWith("ST") })
         assertEquals(7, states.count { it.name.startsWith("SR") })
     }
 
@@ -127,6 +128,10 @@ class SettingsFixturesTest {
             SettingsScreenState.ST13 to SettingsPage.Storage,
             SettingsScreenState.ST14 to SettingsPage.About,
             SettingsScreenState.ST14B to SettingsPage.About,
+            SettingsScreenState.ST17 to SettingsPage.Venue,
+            SettingsScreenState.ST17B to SettingsPage.Venue,
+            SettingsScreenState.ST18 to SettingsPage.SigningPages,
+            SettingsScreenState.ST18B to SettingsPage.SigningPages,
         )
         for ((state, page) in pairs) {
             assertEquals(state.name, page, SettingsFixtures.buildState(state, s).page)

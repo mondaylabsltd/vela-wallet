@@ -213,6 +213,48 @@ object SigningFixtures {
         ).copy(dappOwn = true, headline = intent)
     }
 
+    /**
+     * CS37–CS39 (spec 102 D4): a swap on Uniswap for an account whose venue is
+     * the official page. The sheet does not repeat the preview — the page is
+     * the authority — so under the requester there is only the fee (the one
+     * thing Vela decides before it hands off) and the card: where, with which
+     * key, and what is trusted about the page.
+     */
+    private fun VelaStrings.handoff(state: SigningScreenState): SigningScreenModel {
+        val official = app.getvela.wallet.feature.settings.SettingsFixtures.OFFICIAL_PAGE
+        val line = if (state == SigningScreenState.CS38) {
+            uniffi.vela_core_uniffi.SignerIntegrityLine(
+                uniffi.vela_core_uniffi.SignerIntegrityState.COULD_NOT_CHECK, "0ba8ee8c", null,
+                "componentsUi.signing.integrity.couldNotCheck", false,
+            )
+        } else {
+            app.getvela.wallet.feature.settings.SettingsFixtures.pageLine(official)
+        }
+        val card = SigningLive.handoffModel(SigningLive.Handoff(official, WalletFixtures.NAME, line), this)
+        return model(
+            state, Dapp.uniswap, Dapp.uniswapTint,
+            blocks = emptyList(),
+            confirmAction = sg("confirmSwap"),
+            tech = tech().copy(
+                summary = null, functionLabel = null, signature = null, params = emptyList(),
+                identities = emptyList(), simResult = null, rawLabel = null, rawHex = null,
+            ),
+            confirmEnabled = line.opens,
+        ).copy(
+            handoff = card,
+            trustedSignerWait = if (state == SigningScreenState.CS39) {
+                TrustedSignerWaitModel(
+                    title = sg("trustedSignerWaiting"),
+                    hint = sg("trustedSignerWaitingHint"),
+                    reopen = sg("trustedSignerReopen"),
+                    cancel = t("common.cancel"),
+                )
+            } else {
+                null
+            },
+        )
+    }
+
     // --- The catalogue --------------------------------------------------------
 
     @Suppress("CyclomaticComplexMethod", "LongMethod")
@@ -960,6 +1002,8 @@ object SigningFixtures {
             )
 
             SigningScreenState.CS36 -> ownBackup()
+
+            SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39 -> handoff(state)
 
             SigningScreenState.CS32 -> model(
                 state, unknownDapp, Dapp.unknownTint,

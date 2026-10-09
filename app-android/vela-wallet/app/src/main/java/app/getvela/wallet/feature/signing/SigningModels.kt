@@ -27,6 +27,14 @@ enum class SigningScreenState {
      * not drawn on this platform yet; the number stays the canon's.
      */
     CS36,
+
+    /**
+     * Spec 102 D4: the hand-off card — an account that reviews and signs on
+     * the official page, whose check matches the published build list (CS37);
+     * the same request when the page could not be checked, so Open stays shut
+     * (CS38); and the page open, waiting for its answer (CS39).
+     */
+    CS37, CS38, CS39,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */

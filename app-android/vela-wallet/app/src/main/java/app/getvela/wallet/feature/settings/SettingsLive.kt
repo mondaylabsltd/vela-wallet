@@ -148,8 +148,8 @@ object SettingsLive {
             subtitle = s.t("settings.signing.subtitle"),
             rows = rows,
             add = s.t("settings.signing.pageAdd"),
-            addressLabel = s.t("settings.signing.pageAdd"),
             nameLabel = s.t("contacts.nameLabel"),
+            rename = s.t("explore.rename"),
             addError = when (view.add_error) {
                 "invalid" -> s.t("settings.signing.pageInvalid")
                 "insecure" -> s.t("settings.signing.pageInsecure")
@@ -157,7 +157,7 @@ object SettingsLive {
                 else -> null
             },
             save = s.t("settings.signing.pageSave"),
-            remove = s.t("onboarding.create.removeKeyBtn"),
+            remove = s.t("settingsModals.network.removeConfirm"),
             trust = s.t("onboarding.create.confirmKeyBtn"),
             loaded = view.loaded,
         )
@@ -231,13 +231,26 @@ object SettingsLive {
         }
         val active = choices.firstOrNull { it.selected }
         val title = s.t("settings.venue.title")
+        // The row says where it signs now — "In Vela", or "On a trusted page"
+        // and which one — or, when nothing here can reach the keys, why.
+        val blocked = choices.isNotEmpty() && choices.all { it.reason != null }
+        val pageTitle = onPage?.titleKey?.let(s::t).orEmpty()
         return model.copy(
             venue = VenueModel(
                 row = SettingsRowModel(
                     id = VENUE_ROW,
                     title = title,
                     icon = SettingsIcon.Eye,
-                    value = active?.page?.title ?: active?.title,
+                    subtitle = when {
+                        blocked -> choices.first().reason
+                        active?.page != null -> active.page.address
+                        else -> null
+                    },
+                    value = when {
+                        active == null -> null
+                        active.page != null -> pageTitle
+                        else -> active.title
+                    },
                 ),
                 title = title,
                 subtitle = s.t("settings.venue.subtitle"),

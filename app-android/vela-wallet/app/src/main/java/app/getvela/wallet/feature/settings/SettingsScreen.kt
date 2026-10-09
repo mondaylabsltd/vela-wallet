@@ -359,7 +359,7 @@ fun SettingsRoute(
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
                 SettingsFixtures.SIGNING_PAGES_ROW -> page = SettingsPage.SigningPages
-                SettingsLive.VENUE_ROW -> overlay = SettingsOverlay.Venue
+                SettingsLive.VENUE_ROW -> page = SettingsPage.Venue
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -448,14 +448,13 @@ fun SettingsRoute(
             actions.onRpcFixPrimary()
             if (close) overlay = SettingsOverlay.None
         },
-        onVenuePick = { venue -> actions.onVenuePick(venue); overlay = SettingsOverlay.None },
-        onVenueManage = { overlay = SettingsOverlay.None; page = SettingsPage.SigningPages },
+        onVenuePick = actions.onVenuePick,
+        onVenueManage = { page = SettingsPage.SigningPages },
         editingPage = editingPage,
-        onSigningPageAddOpen = { overlay = SettingsOverlay.AddSigningPage },
-        onSigningPageEdit = { url -> editingPage = url; overlay = SettingsOverlay.EditSigningPage },
-        onSigningPageAdd = actions.onSigningPageAdd,
+        onSigningPageAdd = { url -> actions.onSigningPageAdd(url, "") },
+        onSigningPageRenameOpen = { url -> editingPage = url; overlay = SettingsOverlay.RenameSigningPage },
         onSigningPageRename = { name -> editingPage?.let { actions.onSigningPageRename(it, name) } },
-        onSigningPageRemove = { editingPage?.let(actions.onSigningPageRemove) },
+        onSigningPageRemove = actions.onSigningPageRemove,
         onSigningPageTrust = actions.onSigningPageTrust,
         onFeedbackOpened = actions.onFeedbackOpened,
         onVersionTap = {
@@ -589,11 +588,10 @@ fun SettingsScreen(
     onVenuePick: (String) -> Unit = {},
     onVenueManage: () -> Unit = {},
     editingPage: String? = null,
-    onSigningPageAddOpen: () -> Unit = {},
-    onSigningPageEdit: (String) -> Unit = {},
-    onSigningPageAdd: (String, String) -> Unit = { _, _ -> },
+    onSigningPageAdd: (String) -> Unit = {},
+    onSigningPageRenameOpen: (String) -> Unit = {},
     onSigningPageRename: (String) -> Unit = {},
-    onSigningPageRemove: () -> Unit = {},
+    onSigningPageRemove: (String) -> Unit = {},
     onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
     /** Spec 091: a tap on About's version — the hidden entry. */
     onVersionTap: () -> Unit = {},
@@ -695,9 +693,12 @@ fun SettingsScreen(
                             onAddNetwork = { onRow("add-network") },
                             onVersionTap = onVersionTap,
                             onDebugMode = onDebugMode,
-                            onSigningPageAddOpen = onSigningPageAddOpen,
-                            onSigningPageEdit = onSigningPageEdit,
+                            onSigningPageAdd = onSigningPageAdd,
+                            onSigningPageRenameOpen = onSigningPageRenameOpen,
+                            onSigningPageRemove = onSigningPageRemove,
                             onSigningPageTrust = onSigningPageTrust,
+                            onVenuePick = onVenuePick,
+                            onVenueManage = onVenueManage,
                         )
                     }
                 }
@@ -735,12 +736,8 @@ fun SettingsScreen(
                 onAccountSecondary = onAccountSecondary,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
-                onVenuePick = onVenuePick,
-                onVenueManage = onVenueManage,
                 editingPage = editingPage,
-                onSigningPageAdd = onSigningPageAdd,
                 onSigningPageRename = onSigningPageRename,
-                onSigningPageRemove = onSigningPageRemove,
             )
         }
     }
@@ -756,6 +753,7 @@ private fun pageHeader(model: SettingsScreenModel, page: SettingsPage): Pair<Str
         SettingsPage.Storage -> model.storage.title to model.storage.subtitle
         SettingsPage.About -> model.about.title to null
         SettingsPage.SigningPages -> model.signingPages.title to model.signingPages.subtitle
+        SettingsPage.Venue -> (model.venue?.title ?: model.title) to model.venue?.subtitle
         SettingsPage.Home -> model.title to null
     }
 
@@ -941,16 +939,21 @@ private fun SettingsPageBody(
     onAddNetwork: () -> Unit = {},
     onVersionTap: () -> Unit = {},
     onDebugMode: (Boolean) -> Unit = {},
-    onSigningPageAddOpen: () -> Unit = {},
-    onSigningPageEdit: (String) -> Unit = {},
+    onSigningPageAdd: (String) -> Unit = {},
+    onSigningPageRenameOpen: (String) -> Unit = {},
+    onSigningPageRemove: (String) -> Unit = {},
     onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
+    onVenuePick: (String) -> Unit = {},
+    onVenueManage: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
+        SettingsPage.Venue -> model.venue?.let { VenuePageBody(it, onPick = onVenuePick, onManage = onVenueManage) }
         SettingsPage.SigningPages -> SigningPagesPageBody(
             model = model.signingPages,
-            onAdd = onSigningPageAddOpen,
-            onEdit = onSigningPageEdit,
+            onAdd = onSigningPageAdd,
+            onRename = onSigningPageRenameOpen,
+            onRemove = onSigningPageRemove,
             onTrust = onSigningPageTrust,
         )
 
@@ -1472,12 +1475,8 @@ internal fun SettingsSheet(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
-    onVenuePick: (String) -> Unit = {},
-    onVenueManage: () -> Unit = {},
     editingPage: String? = null,
-    onSigningPageAdd: (String, String) -> Unit = { _, _ -> },
     onSigningPageRename: (String) -> Unit = {},
-    onSigningPageRemove: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1537,16 +1536,8 @@ internal fun SettingsSheet(
                 SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
                     onSheetSelect(SettingsOverlay.FeeSpeed, it)
                 }
-                SettingsOverlay.Venue -> model.venue?.let { VenueSheetBody(it, onPick = onVenuePick, onManage = onVenueManage) }
-                SettingsOverlay.AddSigningPage -> AddSigningPageSheetBody(model.signingPages, onSave = onSigningPageAdd, onDone = onDismiss)
-                SettingsOverlay.EditSigningPage -> editingPage?.let { url ->
-                    EditSigningPageSheetBody(
-                        model.signingPages,
-                        url = url,
-                        onRename = onSigningPageRename,
-                        onRemove = onSigningPageRemove,
-                        onDone = onDismiss,
-                    )
+                SettingsOverlay.RenameSigningPage -> editingPage?.let { url ->
+                    RenameSigningPageSheetBody(model.signingPages, url = url, onRename = onSigningPageRename, onDone = onDismiss)
                 }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)

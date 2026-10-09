@@ -845,6 +845,7 @@ class SettingsLiveTest {
         val venue = SettingsLive.withVenue(base(), account, saved, { matches }, strings).venue!!
         assertEquals(strings.t("settings.venue.title"), venue.row.title)
         assertEquals("In Vela", venue.row.value)
+        assertNull(venue.row.subtitle)
         assertEquals("Keys on getvela.app", venue.domainLine)
         assertEquals(listOf(null, "Official", "My page"), venue.choices.map { it.page?.title })
         assertEquals(listOf(true, false, false), venue.choices.map { it.selected })
@@ -854,7 +855,9 @@ class SettingsLiveTest {
         // A custom-domain account is locked to its page: Vela's sheet says why it cannot.
         val own = account.copy(signingDomain = "sign.example.com", signingVenueJson = """{"type":"page","url":"https://sign.example.com/"}""")
         val locked = SettingsLive.withVenue(base(), own, saved, { matches }, strings).venue!!
-        assertEquals("My page", locked.row.value)
+        // The row says where it signs now, and on which host.
+        assertEquals("On a trusted page", locked.row.value)
+        assertEquals("sign.example.com", locked.row.subtitle)
         assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
         assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
         // No account, no row.

@@ -25,6 +25,14 @@ import app.getvela.wallet.feature.wallet.TabsModel
 enum class SettingsScreenState {
     ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
     ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
+    /**
+     * Spec 102, the web's boards: "Where you review and sign" for an account
+     * on `getvela.app` reviewing on the official page (ST17) and for one on
+     * its own domain, locked to its page (ST17B); Settings → Signing pages
+     * (ST18), and with a page that will not open and an address refused
+     * (ST18B).
+     */
+    ST17, ST17B, ST18, ST18B,
     SR1, SR2, SR2B, SR3, SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
@@ -36,6 +44,9 @@ enum class SettingsPage {
 
     /** Spec 102: the signing pages this device keeps — official first, each with its integrity line. */
     SigningPages,
+
+    /** Spec 102: this account's "Where you review and sign". */
+    Venue,
 }
 
 /** Which sheet is over it. `None` is a real state, not an absence of one. */
@@ -58,14 +69,8 @@ enum class SettingsOverlay {
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
 
-    /** Spec 102: this account's "Where you review and sign". */
-    Venue,
-
-    /** Spec 102: "Add a page" — an address, and an optional name. */
-    AddSigningPage,
-
-    /** Spec 102: one saved page — its name, and the way to remove it. */
-    EditSigningPage,
+    /** Spec 102: a saved signing page's new name. */
+    RenameSigningPage,
 
 
     /** Spec 072: removing a custom network asks first. */
@@ -212,14 +217,17 @@ data class SigningPagesModel(
     val title: String = "",
     val subtitle: String = "",
     val rows: List<app.getvela.wallet.feature.settings.components.SigningPageItemModel> = emptyList(),
-    /** "Add a page". */
+    /** "Add a page" — the field's label. */
     val add: String = "",
-    /** The add sheet's field label and placeholder. */
-    val addressLabel: String = "",
     val addressPlaceholder: String = "https://",
+    /** The rename sheet's field label. */
     val nameLabel: String = "",
+    /** A saved row's two actions. */
+    val rename: String = "",
     /** `pageInvalid` / `pageInsecure` / `pageDuplicate` for the last address typed; nothing was stored. */
     val addError: String? = null,
+    /** What the add field starts with (a board's refused address); the person's typing owns it after. */
+    val draft: String = "",
     val save: String = "",
     val remove: String = "",
     /** The askTrust line's answer (the version is the line's). */

@@ -37,6 +37,10 @@ class SigningFixturesTest {
         File(repoRoot, "assets/i18n/$tag.json").readBytes()
     }.apply { initialize("zh") }
 
+    private fun enStrings(): I18nRuntime = I18nRuntime { tag ->
+        File(repoRoot, "assets/i18n/$tag.json").readBytes()
+    }.apply { initialize("en") }
+
     private fun stringsOf(model: SigningScreenModel): List<String> {
         val out = mutableListOf(
             model.dappName, model.dappHost, model.networkName,
@@ -96,11 +100,17 @@ class SigningFixturesTest {
 
     @Test
     fun everyScenarioBuilds() {
-        // The 33 of the canon, and CS36 — the wallet's own backup.
-        assertEquals(34, SigningScreenState.entries.size)
+        // The 33 of the canon, CS36 — the wallet's own backup — and CS37–CS39,
+        // spec 102's hand-off card.
+        assertEquals(37, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
+            // D4: a page venue's sheet repeats no preview — the card is its body.
+            if (model.handoff != null) {
+                assertTrue("$state repeats the preview", model.blocks.isEmpty() && model.tech.isEmpty)
+                continue
+            }
             assertTrue("$state has no blocks", model.blocks.isNotEmpty())
             // A site's sheet opens on its intent; the wallet's own says it as
             // the header's title, and not again below.
@@ -111,6 +121,27 @@ class SigningFixturesTest {
                 assertTrue("$state opens without an intent", model.blocks.first() is SigningBlock.Intent)
             }
         }
+    }
+
+    /**
+     * Spec 102 D4: the hand-off boards — CS37 matches the published build list
+     * and Open is on; CS38 could not be checked and Open is off; CS39 is the
+     * page open, the waiting card in the card's place.
+     */
+    @Test
+    fun theHandOffBoardsSayWhereWithWhichKeyAndWhatIsTrusted() {
+        val en = enStrings()
+        val open = SigningFixtures.build(SigningScreenState.CS37, en)
+        val card = open.handoff!!
+        assertEquals("Review and sign on your trusted page", card.title)
+        assertTrue(card.keyLine, card.keyLine.startsWith("Confirm with "))
+        assertEquals("sign.getvela.app", card.page)
+        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertTrue(open.confirmEnabled)
+        val shut = SigningFixtures.build(SigningScreenState.CS38, en)
+        assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
+        assertFalse(shut.confirmEnabled)
+        assertEquals("Waiting for the signing page…", SigningFixtures.build(SigningScreenState.CS39, en).trustedSignerWait!!.title)
     }
 
     /**
