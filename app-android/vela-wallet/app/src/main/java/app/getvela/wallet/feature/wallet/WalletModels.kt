@@ -17,8 +17,12 @@ import androidx.compose.ui.graphics.Color
  * H10 (the correctness batch): the balance hidden, drawn by the LIVE builder
  * (`WalletLive.home`) from the core's own privacy fixture — what ships, not a
  * drawing of it.
+ * H11 (PR 2 note 11): a balance read that failed inside the app — the real
+ * balance machine's view (`BalanceBoards`) through the live builder: the
+ * fault's own sentence where the unreachable line goes, never "Can't reach
+ * Ethereum".
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11 }
 
 @Immutable
 data class WalletHeaderModel(

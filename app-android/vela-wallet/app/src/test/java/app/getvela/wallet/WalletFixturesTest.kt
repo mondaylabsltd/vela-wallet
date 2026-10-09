@@ -128,6 +128,23 @@ class WalletFixturesTest {
         for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
     }
 
+    /**
+     * H11 (PR 2 note 11): a read that failed inside the app, as the real
+     * balance machine says it — the fault's own sentence where the unreachable
+     * line goes, the total of what answered, and never "Can't reach Ethereum".
+     */
+    @Test
+    fun h11SaysAFaultInsideTheAppNeverCantReach() {
+        val s = zhStrings()
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H11, s)
+        assertEquals(WalletScreenState.H11, model.state)
+        assertEquals(BalanceStatusKind.Warning, model.balance.status?.kind)
+        assertEquals(s.t("componentsUi.gas.reasonInternal"), model.balance.status?.text)
+        assertFalse(model.balance.status!!.text.contains("Ethereum"))
+        assertFalse(model.balance.status!!.text == s.t("assets.unreachableOne", mapOf("name" to "Ethereum")))
+        assertTrue("what answered is still counted: ${model.balance.integer}", model.balance.integer?.contains("794") == true)
+    }
+
     @Test
     fun h6IsRefreshingOnCachedTotals() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H6, zhStrings())

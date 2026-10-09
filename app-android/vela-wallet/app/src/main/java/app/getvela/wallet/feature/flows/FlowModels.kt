@@ -37,8 +37,16 @@ enum class FlowState {
      * previous transaction on this network is in flight, with its one line
      * (SD3D); and a refused send told by its reason — another of the
      * account's transactions went first (SD4D).
+     *
+     * The integration round (PR 2 notes 1, 10, 13), each fee view written by
+     * the real fee machine: the form's fee failed because the chain's nodes
+     * did not answer — the dash, the reason in the row's kept line, the core
+     * retrying by itself (SD2G); Continue's alert worded by that cause, the
+     * chain by its name (SD2H), and by a fault inside the app (SD2I); the
+     * core's re-ask out, the reason kept beside the turning sign (SD2J); and
+     * the confirm held by a failed fee, its one line "Retrying…" (SD3E).
      */
-    SD3D, SD4D,
+    SD3D, SD4D, SD2G, SD2H, SD2I, SD2J, SD3E,
 }
 
 /* ------------------------------------------------------------------ chrome */

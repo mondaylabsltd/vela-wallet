@@ -447,7 +447,24 @@ object WalletFixtures {
             )
 
             WalletScreenState.H10 -> liveHidden(base, strings)
+            WalletScreenState.H11 -> liveInternalFault(base, strings)
         }
+    }
+
+    /**
+     * H11 — a balance read that never left the app (PR 2 note 11, issue 483):
+     * the real balance machine's view of a round in which Gnosis answered and
+     * Ethereum's read failed inside Vela (`BalanceBoards`), through
+     * [WalletLive.home]. The hero says the fault's own sentence where the
+     * unreachable line goes — never "Can't reach Ethereum".
+     */
+    private fun liveInternalFault(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.internalFault(ADDRESS_FULL, now - 120_000.0)
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        return WalletLive.home(
+            base, view, app.getvela.wallet.feature.wallet.core.FeedView(), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
+        ).copy(state = WalletScreenState.H11)
     }
 
     /**

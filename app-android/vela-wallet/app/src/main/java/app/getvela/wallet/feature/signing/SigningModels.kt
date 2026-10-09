@@ -67,8 +67,17 @@ enum class SigningScreenState {
      * fault inside the app (CS49), the row and the footer naming the same
      * cause; and a relay refusal told by its reason, another transaction of
      * the account having gone first (CS50).
+     *
+     * The integration round (PR 2 notes 1, 9), each fee view written by the
+     * real fee machine (`FeeBoards`): CS48/CS49 retried by the core itself —
+     * the reason on the row, "Retrying…" under the confirm, nothing asking
+     * for a tap; its re-ask out, the reason kept beside the turning sign
+     * (CS51); a failure only a tap fixes — "Tap to retry" on the row, "Tap it
+     * to retry" under the confirm (CS52); and the sheet's own failure told by
+     * the relay's reason (`failure_refusal_key`): another of the account's
+     * operations holds the nonce, with Try again (CS53).
      */
-    CS45, CS46, CS47, CS48, CS49, CS50,
+    CS45, CS46, CS47, CS48, CS49, CS50, CS51, CS52, CS53,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */

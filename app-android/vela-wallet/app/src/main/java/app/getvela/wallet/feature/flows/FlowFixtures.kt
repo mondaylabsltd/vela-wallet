@@ -1059,7 +1059,78 @@ object FlowFixtures {
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
             FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
             FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
+            FlowState.SD2G, FlowState.SD2H -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)))
+            FlowState.SD2I -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal)))
+            FlowState.SD2J -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)))
+            FlowState.SD3E -> screen(FlowBase.SendConfirm(feeHeldConfirm(s)))
         }
+    }
+
+    /**
+     * The alert a board draws over its screen — Continue's estimate failed,
+     * worded by its cause (PR 2 note 13): the failure is the real fee
+     * machine's, passed through as `SendEstimateFailure` as the send
+     * controller passes it. `null` for every other state.
+     */
+    fun alert(state: FlowState): app.getvela.wallet.feature.send.core.SendAlertKind? {
+        val case = when (state) {
+            FlowState.SD2H -> app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown
+            FlowState.SD2I -> app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal
+            else -> return null
+        }
+        val failed = boardFee(case).failed ?: return null
+        return app.getvela.wallet.feature.send.core.SendAlertKind.EstimateFailed(
+            app.getvela.wallet.feature.send.core.SendEstimateFailure.Fee(failed),
+        )
+    }
+
+    /** The chain the boards' send is on, by name — what `{{chain}}` says. */
+    val BOARD_CHAIN: String get() = NETWORKS[0].name
+
+    /** A fee view the real fee machine wrote for a board's failure, on the boards' chain and account. */
+    private fun boardFee(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
+        app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
+
+    /**
+     * SD2G–SD2J: the send form over a fee the core failed to price — through
+     * the live [app.getvela.wallet.feature.send.SendLive.form], the speed
+     * control folded as it ships, so the row has its refresh and its kept
+     * line.
+     */
+    private fun failedFeeForm(s: VelaStrings, case: app.getvela.wallet.feature.send.core.FeeBoards.Case): SendFormModel {
+        val fee = boardFee(case)
+        return app.getvela.wallet.feature.send.SendLive.form(
+            sendForm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.EnterDetails,
+                amount = "120",
+                fee_busy = fee.busy,
+                fee_coin = app.getvela.wallet.feature.send.core.SendFeeCoin(symbol = "ETH", contract = null, chain_id = 1),
+                can_continue = true,
+            ),
+            fee,
+            boardContext(s),
+            app.getvela.wallet.feature.send.SendLive.SpeedInputs(app.getvela.wallet.feature.send.core.FeeSpeedView(), feeViewOf = { null }),
+        )
+    }
+
+    /**
+     * SD3E: on the confirm, the fee could not be priced again — the core is
+     * asking again by itself, so the confirm is held with the one line the
+     * signing sheet draws for it ("Retrying…"), and the fee says why.
+     */
+    private fun feeHeldConfirm(s: VelaStrings): SendConfirmModel {
+        val fee = boardFee(app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)
+        return app.getvela.wallet.feature.send.SendLive.confirm(
+            sendConfirm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+                fee_busy = fee.busy,
+                can_confirm = false,
+            ),
+            boardContext(s),
+            fee,
+        )
     }
 
     /** The send the boards drive through the live builders: 120 USDT on Ethereum to Alice. */
