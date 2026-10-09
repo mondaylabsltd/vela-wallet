@@ -4,6 +4,7 @@
 			"alpha": "Alfa",
 			"blog": "Blog",
 			"docs": "Belgeler",
+			"notes": "Notlar",
 			"about": "Hakkında",
 			"whyVela": "Neden yaptık",
 			"howItWorks": "Nasıl çalışır",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "Belgeler",
+				"notes": "Notlar",
 				"whitepaper": "Teknik doküman",
 				"audits": "Denetimler ve bilinen sorunlar",
 				"roadmap": "Yol haritası",

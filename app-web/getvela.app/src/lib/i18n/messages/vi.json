@@ -4,6 +4,7 @@
 			"alpha": "Alpha",
 			"blog": "Blog",
 			"docs": "Tài liệu",
+			"notes": "Ghi chép",
 			"about": "Giới thiệu",
 			"whyVela": "Vì sao chúng tôi làm",
 			"howItWorks": "Cách hoạt động",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "Tài liệu",
+				"notes": "Ghi chép",
 				"whitepaper": "Whitepaper",
 				"audits": "Kiểm toán & vấn đề đã biết",
 				"roadmap": "Lộ trình",

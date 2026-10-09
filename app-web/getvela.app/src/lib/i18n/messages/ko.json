@@ -4,6 +4,7 @@
 			"alpha": "알파",
 			"blog": "블로그",
 			"docs": "문서",
+			"notes": "노트",
 			"about": "소개",
 			"whyVela": "우리가 만든 이유",
 			"howItWorks": "작동 방식",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "문서",
+				"notes": "노트",
 				"whitepaper": "백서",
 				"audits": "감사와 알려진 문제",
 				"roadmap": "로드맵",

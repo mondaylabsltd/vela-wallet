@@ -32,6 +32,9 @@
 			<div class="col">
 				<h3>{m.chrome.footer.columns.resources}</h3>
 				<a href={L('/docs')}>{m.chrome.footer.links.docs}</a>
+				{#if __NOTES_PUBLISHED__ > 0}
+					<a href="/notes" hreflang="en">{m.chrome.footer.links.notes}</a>
+				{/if}
 				<a href={L('/docs/whitepaper')}>{m.chrome.footer.links.whitepaper}</a>
 				<a href={L('/docs/security-audits')}>{m.chrome.footer.links.audits}</a>
 				<a href={L('/roadmap')}>{m.chrome.footer.links.roadmap}</a>

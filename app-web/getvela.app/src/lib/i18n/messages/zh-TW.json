@@ -4,6 +4,7 @@
 			"alpha": "Alpha",
 			"blog": "部落格",
 			"docs": "文件",
+			"notes": "札記",
 			"about": "關於",
 			"whyVela": "我們為什麼做它",
 			"howItWorks": "運作方式",
@@ -25,6 +26,7 @@
 			},
 			"links": {
 				"docs": "文件",
+				"notes": "札記",
 				"whitepaper": "白皮書",
 				"audits": "稽核與已知問題",
 				"roadmap": "發展藍圖",
