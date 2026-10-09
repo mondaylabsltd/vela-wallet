@@ -545,7 +545,7 @@ struct SigningWriteAheadTests {
     private func spine(_ relay: RelayClient) -> UserOpSpine {
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
         let fixture = self.fixture
         spine.trustedSigner = ScriptedTrustedSigner { digest in

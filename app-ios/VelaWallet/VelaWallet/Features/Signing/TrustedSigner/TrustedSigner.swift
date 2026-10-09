@@ -2,14 +2,27 @@
 //  TrustedSigner.swift
 //  VelaWallet
 //
-//  The Trusted Signer on the phone: not a place a passkey is, but a separate
-//  page that decodes the request from its own bytes, derives what must be
-//  signed itself and only then runs the ceremony.
+//  The trusted signing page on the phone: a separate page that decodes the
+//  request from its own bytes, derives what must be signed itself and only
+//  then runs the ceremony.
 //
-//  Spec 071 made it a fourth way to SIGN. Spec 075 makes it a fourth **passkey
-//  route**, beside this device, a nearby device and a security key: it creates
-//  keys, signs in, proves and confirms membership, wherever the other three
-//  are offered.
+//  Spec 102 made it what the code always said it was: not a place a passkey
+//  is, but WHERE a person reviews and signs — an account's signing venue. Its
+//  key still lives in one of the three places (this device, a phone, a USB
+//  key), and the page is told which (`KeyRoute`, R5) so the browser goes
+//  straight to it. Two doors reach it:
+//
+//  - the spine's, for an account whose venue is a page (its transactions and
+//    messages — R4);
+//  - the machines', for a key ceremony an operation names a page for — only a
+//    wallet on its own domain, whose keys answer nowhere else (R3).
+//
+//  **Nothing opens unchecked** (R6). Before a page opens, this phone fetches
+//  the very version it will open, hashes it, and the core rules
+//  (`SignerPageChecks`); only that ruling builds the launch URL. The hand-off
+//  card (D4) shows the key and the ruling's line, and Open is enabled only
+//  when the core admitted the page. A refusal is said on the card and the page
+//  never opens.
 //
 //  There is ONE channel: a `TrustedSignerChannel` — the custom scheme the
 //  page answers over — and the page in an `SFSafariViewController`. The tab
@@ -19,15 +32,10 @@
 //  sheet (`TrustedSignerSheets`), which is where "open the page again" and
 //  cancel live.
 //
-//  The cross-device channels went on 2026-09-23 (the owner: "客户端支持回环 +
-//  蓝牙就够了"，then "我确定砍掉蓝牙"): only a page THIS device fetched can be
-//  checked against what it is supposed to be, which is the property the whole
-//  route exists for.
-//
-//  **One session per flow** (contract §1.5). A create is a key and then its
-//  member proof; a recovery is two proofs. The page is opened once, the
-//  requests go to it in turn, and `endFlow()` says `bye`. A second flow gets
-//  a fresh page.
+//  **One session per flow** (contract §1.5). A create on a custom domain is a
+//  key and then its member proof; a recovery is two proofs. The card is shown
+//  once, the requests go to the page in turn, and `endFlow()` says `bye`. A
+//  second flow gets a fresh card.
 //
 //  Every verdict is the core's. What an ending MEANS for the request — closed
 //  behaves like a cancelled passkey sheet, every refusal is shown, nothing is
@@ -39,31 +47,25 @@ import SwiftUI
 import UIKit
 import VelaCore
 
-/// The Trusted Signer as the SPINE reaches it — a port, so the money path can
+/// The trusted page as the SPINE reaches it — a port, so the money path can
 /// be tested without a browser.
 protocol TrustedSignerPort: AnyObject {
-    /// Opens the page for `requestJson` (`trustedSignerRequest`'s) and waits for
-    /// an answer the core verified over `digest` by one of `keys` — the keys the
-    /// page was offered, which for an account signed in there is its sign-in
-    /// key alone.
+    /// Opens `page` (the account's venue) for `requestJson`
+    /// (`trustedSignerRequest`'s) and waits for an answer the core verified
+    /// over `digest` by one of `keys` — the keys the page was offered, which
+    /// for an account with a sign-in key is that key alone.
     ///
-    /// `signerOrigin` is the page the route names: the one the account signed
-    /// in on, or the one a key lives behind (spec 075) — a key minted on
-    /// somebody's own signer page is reachable nowhere else. Empty or `nil`
-    /// opens the page from Settings.
+    /// `keyLabel` is what the hand-off card says the person will confirm with
+    /// — the signing plan's `key_label` (D-17); `nil` says no key.
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending
 }
 
-extension TrustedSignerPort {
-    func sign(requestJson: String, digest: Data, keys: [WalletKeyRecord]) async -> TrustedSignerChannel.Ending {
-        await sign(requestJson: requestJson, digest: digest, keys: keys, signerOrigin: nil)
-    }
-}
-
-/// Spec 075: the Trusted Signer as the onboarding MACHINES reach it — a passkey
-/// ceremony that runs on a page instead of in the OS sheet.
+/// The trusted page as the onboarding MACHINES reach it — a passkey ceremony
+/// that runs on a page instead of in the OS sheet, for a wallet whose keys
+/// live on the page's own domain (spec 102 R3).
 protocol TrustedSignerCeremonyPort: AnyObject {
     /// Runs `operationJson`'s ceremony (`RegisterPasskey`,
     /// `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire
@@ -74,18 +76,19 @@ protocol TrustedSignerCeremonyPort: AnyObject {
     ///   - registry: the registry service, named on the page's card.
     ///   - expectedMemberChallenge: the challenge the WALLET fetched for the
     ///     same inputs — the page must have signed exactly it.
-    ///   - page: the operation's own `signer_origin` — the page a key that
-    ///     already exists lives behind. Empty opens the one from Settings.
+    ///   - page: the operation's own `page` — the one its keys live on. The
+    ///     operation's `method` is the place the key lives, which the card
+    ///     names and the page is told as hints.
     ///   - deployment: the chain and registry contract a member proof is bound
     ///     to. The page computes the challenge from them, because the published
     ///     page reaches no network to look them up (076).
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?,
+        expectedMemberChallenge: Data?, page: String,
         deployment: SignerRegistryDeployment?
     ) async -> TrustedSignerCeremonyStep
 
-    /// The flow is over, however it ended.
+    /// The flow is over.
     func endFlow()
 }
 
@@ -96,13 +99,14 @@ enum TrustedSignerCeremonyStep: Equatable {
     /// The core's `Assertion`, as its wire JSON.
     case asserted(String)
     /// `cancelled` for a page that was closed or declined — never an error
-    /// alert — and `other` carrying the 071 sentence for everything else.
+    /// alert — and `other` carrying the sentence for everything else.
     case failed(kind: FailureKind, message: String?)
 }
 
-/// The sentence an ended ceremony leaves on the sheet (contract §5). Four,
-/// for eight refusals: a person needs to know whether they closed it, the page
-/// refused, or the answer did not match — not which byte gave it away.
+/// The sentence an ended request leaves on the sheet (contract §5, spec 102).
+/// A person needs to know whether they closed it, the page refused, the
+/// answer did not match, or the page was never opened — and why — not which
+/// byte gave it away.
 enum TrustedSignerNotice: Equatable {
     /// Declined, closed, cancelled.
     case closed
@@ -112,6 +116,10 @@ enum TrustedSignerNotice: Equatable {
     /// bad signature, no user verification, the wrong token, the wrong shape.
     case mismatch
     case timeout
+    /// The page could not be put on screen at all.
+    case unavailable
+    /// R6: the page's check did not admit it; it was never opened.
+    case notOpened(SignerIntegrityLine)
 
     init(_ refusal: TrustedSignerRefusal) {
         switch refusal {
@@ -128,26 +136,43 @@ enum TrustedSignerNotice: Equatable {
         case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted): return nil
         case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)): self.init(refusal)
         case .timedOut: self = .timeout
-        case .unavailable: self = .mismatch
+        case .unavailable: self = .unavailable
+        case .cancelled: self = .closed
+        case .notOpened(let line): self = .notOpened(line)
         }
     }
 
+    /// The corpus key of the sentence.
     var key: String {
         switch self {
         case .closed: "componentsUi.signing.trustedSignerClosed"
         case .refused: "componentsUi.signing.trustedSignerRefused"
         case .mismatch: "componentsUi.signing.trustedSignerMismatch"
         case .timeout: "componentsUi.signing.trustedSignerTimeout"
+        case .unavailable: "componentsUi.signing.signerDown"
+        case .notOpened(let line): line.key
         }
     }
+
+    /// The sentence, in the person's language.
+    func text(_ loc: Loc) -> String {
+        switch self {
+        case .notOpened(let line): line.text(loc)
+        default: loc.t(key)
+        }
+    }
+
+    /// Closed is the person's own decision, told calmly; everything else is
+    /// not.
+    var calm: Bool { self == .closed }
 }
 
 final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPort, SFSafariViewControllerDelegate {
 
     private let loc: Loc
-    /// The page Settings names (`sign_pref`); `nil` before it has said, which
-    /// is the official page.
-    private let signerUrl: () -> String?
+    /// The integrity checks — the app's one checker, so the card, the signing
+    /// sheet and Settings read the same rulings.
+    private let checks: SignerPageChecks
     /// The flow's live session, while one is open.
     private var conversation: TrustedSignerConversation?
     /// The same session, typed: it owns the tab's URL and the clock.
@@ -163,34 +188,49 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     private var busy = false
     /// The person pressed cancel while no question was pending.
     private var declined = false
+    /// The hand-off card is waiting for Open (`true`) or Cancel (`false`).
+    private var handoffAnswer: CheckedContinuation<Bool, Never>?
 
-    init(loc: Loc, signerUrl: @escaping () -> String?) {
+    init(loc: Loc, checks: SignerPageChecks) {
         self.loc = loc
-        self.signerUrl = signerUrl
+        self.checks = checks
         super.init()
     }
 
-    // MARK: - The spine's door (071)
+    // MARK: - The spine's door (071, 102 R4)
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending {
         let ask = TrustedSignerAsk.signature(request: requestJson, digest: digest, keys: keys)
-        let ending = await run(ask, page: signerOrigin)
+        // The signing sheet was the hand-off card, and its Open is what asked
+        // for this: a page that is admitted opens at once. One that is not
+        // keeps the card up, with the line that says why.
+        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel?.text(loc), waitForOpen: false)
         // A signature is a flow of one: the page is told so rather than left
         // on its waiting screen.
         endFlow()
         return ending
     }
 
-    // MARK: - The machines' door (075)
+    // MARK: - The machines' door (075, 102 R3)
 
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?,
+        expectedMemberChallenge: Data?, page: String,
         deployment: SignerRegistryDeployment? = nil
     ) async -> TrustedSignerCeremonyStep {
         let id = UUID().uuidString.lowercased()
+        let operation = try? CoreJSON.object(operationJson)
+        // The key's place (`method`): a ceremony makes or proves a key there,
+        // and a key being made is no name to confirm with yet (D-17's rule
+        // never says "Confirm with <the wallet's name>").
+        let place = (operation?["method"] as? String).flatMap(KeyMethod.init(rawValue:))
+        let keyLabel = place.map { Self.keyLabel($0, loc: loc) }
+        // Its own title (core round 12): create / sign in / confirm — a
+        // ceremony has nothing to review.
+        let title = trustedSignerCeremonyTitleKey(operationJson: operationJson).map { loc.t($0) }
         guard let request = trustedSignerCeremonyRequest(
             operationJson: operationJson, id: id, walletName: walletName, registry: registry,
             deployment: deployment
@@ -202,7 +242,9 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         let ask = TrustedSignerAsk.ceremony(
             request: request, operationJson: operationJson, memberChallenge: expectedMemberChallenge
         )
-        switch await run(ask, page: page) {
+        // Nothing in the app said "a page will open" before a ceremony: the
+        // card does, and waits for the person's Open.
+        switch await run(ask, page: page, title: title, keyLabel: keyLabel, waitForOpen: true) {
         case .ceremony(.registered(let json)):
             VelaHaptic.success.play()
             return .registered(json)
@@ -215,8 +257,14 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
             // Closed or declined is a cancelled sheet, never an alert.
             return notice == .closed
                 ? .failed(kind: .cancelled, message: nil)
-                : .failed(kind: .other, message: loc.t(notice.key))
+                : .failed(kind: .other, message: notice.text(loc))
         }
+    }
+
+    /// "Confirm with This device" — the place's title, as the choosers name
+    /// it (`keyMethodWords`).
+    static func keyLabel(_ place: KeyMethod, loc: Loc) -> String {
+        methodCopy(place, chooser: .signIn, loc: loc).title
     }
 
     func endFlow() {
@@ -224,34 +272,106 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         conversation = nil
         channel = nil
         openPage = nil
+        answerHandoff(false)
         dismiss()
     }
 
     // MARK: - One request
 
-    /// Puts `ask` to the flow's session, opening one — with the where-choice,
-    /// the tab or the pairing sheet — when there is none.
-    private func run(_ ask: TrustedSignerAsk, page: String?) async -> TrustedSignerChannel.Ending {
+    /// Puts `ask` to the flow's session, opening one — through the hand-off
+    /// card and the integrity check — when there is none.
+    private func run(
+        _ ask: TrustedSignerAsk, page: String, title: String?, keyLabel: String?, waitForOpen: Bool
+    ) async -> TrustedSignerChannel.Ending {
         if let conversation {
             model?.stage = .waiting
             let ending = await conversation.send(ask)
             hideTab()
             return ending
         }
-        guard !busy else { return .outcome(.refused(refusal: .declined)) }
+        guard !busy else { return TrustedSignerChannel.declined(for: ask) }
         busy = true
         declined = false
         defer { busy = false }
 
-        let wanted = page.flatMap { $0.isEmpty ? nil : $0 } ?? signerUrl() ?? trustedSignerDefaultUrl()
-        openPage = wanted
+        openPage = page
         let model = TrustedSignerSheetModel()
+        model.page = page
+        model.title = title
+        model.keyLabel = keyLabel
+        model.line = checks.line(for: page)
         self.model = model
         model.cancel = { [weak self] in self?.cancelled() }
         guard present(model) else { return .unavailable }
-        let ending = await onThisDevice(ask, page: wanted, model: model)
+
+        guard let admission = await admitted(page, model: model, waitForOpen: waitForOpen) else {
+            // The person left the card. A page the check refused says why on
+            // the request's sheet; one that could have opened is a cancel.
+            let line = model.line
+            dismiss()
+            return line.opens || line.state == .checking ? .cancelled : .notOpened(line)
+        }
+        let ending = await onThisDevice(ask, page: page, admission: admission, model: model)
         hideTab()
         return ending
+    }
+
+    /// The hand-off card, until the page may open — and, when `waitForOpen`,
+    /// until the person taps Open. `nil` when they left instead.
+    ///
+    /// The ruling is fetched fresh when none stands (24 hours, the core's),
+    /// and checked again at the tap if it went stale while the card was up:
+    /// the URL that opens is always one a live check admitted.
+    private func admitted(
+        _ page: String, model: TrustedSignerSheetModel, waitForOpen: Bool
+    ) async -> SignerPageAdmission? {
+        model.stage = .handoff
+        model.recheck = { [weak self, weak model] in
+            guard let self, let model else { return }
+            model.line = SignerPageChecks.checking
+            Task { @MainActor in
+                let ruling = await self.checks.check(page)
+                model.line = ruling.line(nowMs: self.checks.nowMs)
+            }
+        }
+        // "Version … is new to Vela. Trust it on this device?" — answered
+        // here, on the card that asks: stored on this page (D-15), then the
+        // page is checked again and Open follows the new ruling.
+        model.trust = { [weak self, weak model] in
+            guard let self, let model, self.checks.versionAskingTrust(page) != nil else { return }
+            model.line = SignerPageChecks.checking
+            Task { @MainActor in
+                await self.checks.trustAsked(page)
+                model.line = self.checks.line(for: page)
+            }
+        }
+        let ruling = await checks.ensure(page)
+        model.line = ruling.line(nowMs: checks.nowMs)
+        if !waitForOpen, let ready = checks.openable(page) { return ready }
+        while true {
+            let opened = await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    handoffAnswer = continuation
+                    model.open = { [weak self] in self?.answerHandoff(true) }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.answerHandoff(false) }
+            }
+            model.open = nil
+            guard opened else { return nil }
+            if let ready = checks.openable(page) { return ready }
+            // Stale since the card went up: check again, then open.
+            model.line = SignerPageChecks.checking
+            let again = await checks.check(page)
+            model.line = again.line(nowMs: checks.nowMs)
+            if let ready = checks.openable(page) { return ready }
+        }
+    }
+
+    private func answerHandoff(_ open: Bool) {
+        let waiting = handoffAnswer
+        handoffAnswer = nil
+        waiting?.resume(returning: open)
     }
 
     /// A visit ends with its answer, so the page goes and the wallet's own
@@ -267,11 +387,16 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         sheet.dismiss(animated: true)
     }
 
-    /// The custom-scheme channel and the in-app tab (071, 076).
+    /// The custom-scheme channel and the in-app tab (071, 076), launched
+    /// through the admitted page (102 R6).
     private func onThisDevice(
-        _ ask: TrustedSignerAsk, page: String, model: TrustedSignerSheetModel
+        _ ask: TrustedSignerAsk, page: String, admission: SignerPageAdmission,
+        model: TrustedSignerSheetModel
     ) async -> TrustedSignerChannel.Ending {
-        let channel = TrustedSignerChannel(signerUrl: page, first: ask)
+        let channel = TrustedSignerChannel(
+            signerUrl: page, launch: TrustedSignerChannel.launcher(admission, lang: loc.resolvedLanguage),
+            first: ask
+        )
         self.channel = channel
         // The flow's later requests are their own visits, and the channel has
         // no way to present one: opening a page is this object's business.
@@ -314,8 +439,10 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     }
 
     /// Declined — the request stays open, as after a cancelled passkey sheet.
+    /// On the hand-off card, nothing was opened: the card goes.
     func cancel() {
         declined = true
+        answerHandoff(false)
         channel?.cancel()
     }
 
@@ -351,8 +478,9 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         // would be a decline nobody meant.
         sheet.isModalInPresentation = true
         hostSheet = sheet
-        // The sheet goes up unanimated, so what a person sees is the choice —
-        // and, on this device, the page opening over it.
+        // Unanimated: an admitted page is presented over this sheet in the
+        // same moment, and UIKit drops a presentation made while another is
+        // still animating in.
         presenter.present(sheet, animated: false)
         return true
     }

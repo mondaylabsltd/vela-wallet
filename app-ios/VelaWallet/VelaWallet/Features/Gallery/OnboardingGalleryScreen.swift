@@ -150,7 +150,14 @@ private struct GalleryFlowHost: View {
                     onAddKey: { _ in },
                     onConfirmKey: { _ in },
                     onRemoveKey: { _ in },
-                    onFinish: {}
+                    onFinish: {},
+                    // The picker opens on its fixture pages; a pick goes
+                    // nowhere, as every control here does.
+                    pageChoices: SigningPagePickerModel.choices(
+                        pages: SigningPageFixtures.pages, selected: view.signingPage, loc: loc,
+                        line: SigningPageFixtures.line
+                    ),
+                    onChoosePage: { _ in }
                 )
             case .progress:
                 ProgressScreen(

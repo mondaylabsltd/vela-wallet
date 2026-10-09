@@ -5,8 +5,10 @@
 //  Founder, 2026-09-26: a person says where their passkey is when they create
 //  the wallet or sign in, and never again — every later signature reuses the
 //  key the account signed in with, over the same route. The account record
-//  names it (`signed_in_with`), the core reads it (`signInRoute`), and nothing
-//  on this side offers a choice.
+//  names it (`sign_in_key`; `signed_in_with` in a ≤ 0.9.7 record, which the
+//  core migrates), the core reads it (`signingPlan`, spec 102 — with the
+//  account's domain and venue beside it), and nothing on this side offers a
+//  choice.
 //
 //  Everything here runs the real core, the real account store and the real
 //  spine; only the passkey is a recorder, and every ceremony stops at it —
@@ -90,7 +92,7 @@ struct SignInRouteTests {
     /// always signed with. A stored default "Sign with" no longer counts.
     @Test func aRecordFromBeforeTheSignInKeySignsExactlyAsItDid() async throws {
         let legacy = record()
-        #expect(signInRoute(accountJson: try Self.json(legacy)) == nil, "the core names no route for it")
+        #expect(SigningPlanWire.of(accountJson: try Self.json(legacy))?.key == nil, "the core names no key for it")
         let store = await Self.store(legacy)
         let port = SendAccountPort(accounts: store)
         let signer = RoutingSigner()
@@ -188,11 +190,13 @@ struct SignInRouteTests {
         #expect(signer.asked == [.init(credentialIdHex: first, transports: "hybrid", method: .hybrid)])
     }
 
-    /// A Trusted Signer sign-in: every signature goes to the page the sign-in
-    /// ran on, and no passkey sheet is ever raised. With no page named, the
-    /// page from Settings (the empty origin).
+    /// A ≤ 0.9.7 Trusted Signer sign-in, migrated (spec 102): every signature
+    /// goes to the page — the one the sign-in ran on, or with none named the
+    /// official page — and no passkey sheet is ever raised.
     @Test func aTrustedSignerSignInSignsOnItsPageNeverOnAPasskeySheet() async throws {
-        let pages: [(named: String?, opened: String)] = [("https://my.signer", "https://my.signer"), (nil, "")]
+        let pages: [(named: String?, opened: String)] = [
+            ("https://my.signer", "https://my.signer"), (nil, "https://sign.getvela.app/"),
+        ]
         for (named, opened) in pages {
             var key: [String: Any] = ["credential_id": second, "method": "trusted_signer"]
             if let named { key["signer_origin"] = named }
@@ -209,13 +213,13 @@ struct SignInRouteTests {
                 #expect(refused.failure == .trustedSigner(.timeout))
             }
             #expect(signer.asked.isEmpty, "a Trusted Signer sign-in raised a passkey sheet")
-            #expect(page.asked.map { $0.page } == [opened])
+            #expect(page.asked.count == 1 && page.asked[0].page.hasPrefix(opened), "opened \(page.asked.map(\.page))")
         }
     }
 
     // MARK: - The record keeps it
 
-    /// Every door a record is written through keeps `signed_in_with`: the
+    /// Every door a record is written through keeps the sign-in key: the
     /// onboarding machines' `save_account`, the session's write-back, and a
     /// save of another account beside it.
     @Test func theSignInKeySurvivesEveryWriteOfTheRecord() async throws {
@@ -262,11 +266,15 @@ struct SignInRouteTests {
         #expect(keys.compactMap { $0["public_key_hex"] as? String } == [firstKey, secondKey],
                 "the re-save dropped a founding key — a different Safe")
         try await expectSignedInWithSecond(store)
-        #expect((saved["signed_in_with"] as? [String: Any])?["transports"] as? String == "usb,nfc,ble,hybrid",
+        #expect((saved["sign_in_key"] as? [String: Any])?["transports"] as? String == "usb,nfc,ble,hybrid",
                 "the record forgot where the sign-in found the key")
+        // Spec 102: a sign-in in the app keeps the account in Vela, on its
+        // own domain.
+        #expect(saved["signing_domain"] as? String == "getvela.app")
+        #expect((saved["signing_venue"] as? [String: Any])?["type"] as? String == "in_vela")
         #expect(mode?["type"] as? String == "set_wallet")
         let handed = try #require((mode?["accounts"] as? [[String: Any]])?.first)
-        #expect((handed["signed_in_with"] as? [String: Any])?["credential_id"] as? String == second,
+        #expect((handed["sign_in_key"] as? [String: Any])?["credential_id"] as? String == second,
                 "the session was handed the record without its sign-in key")
 
         let signer = RoutingSigner()
@@ -276,9 +284,9 @@ struct SignInRouteTests {
         ])
     }
 
-    // MARK: - The Trusted Signer
+    // MARK: - The trusted page
 
-    /// An account signed in through the Trusted Signer signs there with its
+    /// An account that reviews and signs on a page signs there with its
     /// sign-in key ALONE: the page is offered that one key, and an answer by
     /// another of the wallet's own keys is refused like any mismatch — nothing
     /// signed, the request left open. The sign-in key's answer is taken.
@@ -307,7 +315,7 @@ struct SignInRouteTests {
         }
         #expect(page.offered == [[TrustedSignerFixture.base64url(signedIn.credential)]],
                 "the page was offered more than the sign-in key")
-        #expect(page.pages == ["https://my.signer"])
+        #expect(page.pages.count == 1 && page.pages[0].hasPrefix("https://my.signer"))
 
         page.answering = signedIn
         try await signMessage(spine, account: founding.account)
@@ -322,10 +330,9 @@ struct SignInRouteTests {
         let other = TrustedSignerFixture(credential: Data([0xb2, 0xb2, 0xb2, 0xb2]))
         let accounts = ScriptedAccounts()
         accounts.keyList = founding.keys + other.keys
-        accounts.routesJson = try Self.json([
-            ["credential_id": founding.credentialHex, "transports": "internal", "signer_origin": "https://sign.example"],
-            ["credential_id": other.credentialHex, "transports": "internal"],
-        ])
+        accounts.recordJson = try Self.json(Self.record(
+            founding, other, signedInWith: nil, firstKeyOrigin: "https://sign.example"
+        ))
         let page = OfferedKeysPage(answering: other)
         let spine = UserOpSpine(
             relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
@@ -336,25 +343,30 @@ struct SignInRouteTests {
         try await signMessage(spine, account: founding.account)
 
         #expect(page.offered == [[founding.credential, other.credential].map(TrustedSignerFixture.base64url)])
-        #expect(page.pages == ["https://sign.example"])
+        #expect(page.pages.count == 1 && page.pages[0].hasPrefix("https://sign.example"))
     }
 
-    /// A sign-in THROUGH the Trusted Signer, through the real login machine:
-    /// the record names the page the sign-in ran on and the method chosen, and
-    /// the next signature goes to that page with the sign-in key alone.
-    @Test func aSignInOnTheTrustedSignerKeepsItsPageAndSignsThere() async throws {
+    /// "Use a trusted signing page" with the OFFICIAL page, through the real
+    /// login machine (spec 102 R3, D-8): the ceremony runs in the app — the
+    /// operation names no page — and the account's venue becomes that page,
+    /// so the next signature goes there with the sign-in key alone and its
+    /// route.
+    @Test func signingInOnTheOfficialPageRunsInTheAppAndMakesItTheVenue() async throws {
         let store = await Self.store(record())
-        var answer = assertion(credentialId: second)
-        answer["authenticator_attachment"] = "platform"
-        answer["signer_origin"] = "https://my.signer"
-        let (answered, _) = try await signIn(store, method: "trusted_signer", assertion: answer)
+        let official = "https://sign.getvela.app/"
+        var asked: [String: Any] = [:]
+        let (answered, _) = try await signIn(
+            store, method: "platform", page: official, assertion: assertion(credentialId: second),
+            onCeremony: { asked = $0 }
+        )
         #expect(answered.contains("save_account"), "the held record was not re-saved: \(answered)")
+        #expect(OnboardingExecutor.page(of: asked) == nil, "a getvela.app page's ceremony ran on a page")
 
         let saved = try #require(await store.loadAccounts().first)
-        let key = try #require(saved["signed_in_with"] as? [String: Any], "the record lost its sign-in key")
+        let key = try #require(saved["sign_in_key"] as? [String: Any], "the record lost its sign-in key")
         #expect(key["credential_id"] as? String == second)
-        #expect(key["method"] as? String == "trusted_signer")
-        #expect(key["signer_origin"] as? String == "https://my.signer")
+        #expect(key["method"] as? String == "platform", "the place, never a fourth method")
+        #expect((saved["signing_venue"] as? [String: Any])?["url"] as? String == official)
 
         let passkey = RoutingSigner()
         let page = ScriptedTrustedSigner { _ in .timedOut }
@@ -367,10 +379,11 @@ struct SignInRouteTests {
             #expect(refused.failure == .trustedSigner(.timeout))
         }
         #expect(passkey.asked.isEmpty)
-        let asked = try #require(page.asked.first)
-        #expect(asked.page == "https://my.signer")
-        #expect((asked.request["context"] as? [String: Any])?["allowCredentials"] as? [String]
-                == [TrustedSignerFixture.base64url(Data([0xb2, 0xb2, 0xb2, 0xb2]))])
+        let opened = try #require(page.asked.first)
+        #expect(opened.page == official)
+        let context = try #require(opened.request["context"] as? [String: Any])
+        #expect(context["allowCredentials"] as? [String] == [TrustedSignerFixture.base64url(Data([0xb2, 0xb2, 0xb2, 0xb2]))])
+        #expect((context["keyRoute"] as? [String: Any])?["place"] as? String == "platform")
     }
 
     // MARK: - The keys list
@@ -439,9 +452,8 @@ struct SignInRouteTests {
 
     private func expectSignedInWithSecond(_ store: AccountStore) async throws {
         let json = try #require(await SendAccountPort(accounts: store).accountJson(of: address))
-        let route = try #require(signInRoute(accountJson: json), "the record lost its sign-in key: \(json)")
-        let decoded = try CoreJSON.decoder.decode(SignRouteWire.self, from: Data(route.utf8))
-        #expect(decoded.credentialId == second && decoded.method == "security_key")
+        let key = try #require(SigningPlanWire.of(accountJson: json)?.key, "the record lost its sign-in key: \(json)")
+        #expect(key.credentialId == second && key.place == .securityKey)
     }
 
     private func spine(
@@ -465,7 +477,8 @@ struct SignInRouteTests {
     /// real onboarding executor over `store`. Answers the operations asked for,
     /// in order, and what the rest of the app was handed.
     private func signIn(
-        _ store: AccountStore, method: String, assertion: [String: Any]
+        _ store: AccountStore, method: String, page: String? = nil, assertion: [String: Any],
+        onCeremony: ([String: Any]) -> Void = { _ in }
     ) async throws -> (answered: [String], mode: [String: Any]?) {
         let deps = CompletionRecorder()
         let executor = OnboardingExecutor(
@@ -474,7 +487,7 @@ struct SignInRouteTests {
         )
         let login = LoginCore()
         var pending = try Self.effects(login.dispatch(eventJson: CoreJSON.string([
-            "type": "sign_in", "method": method,
+            "type": "sign_in", "method": method, "page": page ?? NSNull(),
         ])))
         var answered: [String] = []
         while !pending.isEmpty {
@@ -488,6 +501,7 @@ struct SignInRouteTests {
                 answer = CoreJSON.string(["type": "passkey_support", "supported": true])
             case "authenticate_passkey":
                 #expect(operation["method"] as? String == method)
+                onCeremony(operation)
                 answer = CoreJSON.string([
                     "type": "passkey_authenticated", "assertion": assertion,
                     "now_iso": "2026-09-26T08:00:00.000Z",
@@ -504,19 +518,25 @@ struct SignInRouteTests {
         return (answered, deps.mode)
     }
 
-    /// A two-key record for the Trusted Signer's fixtures, as the core writes it.
+    /// A two-key record for the page's fixtures, as a ≤ 0.9.7 build wrote it
+    /// (the core migrates it).
     private static func record(
-        _ first: TrustedSignerFixture, _ second: TrustedSignerFixture, signedInWith: [String: Any]
+        _ first: TrustedSignerFixture, _ second: TrustedSignerFixture, signedInWith: [String: Any]?,
+        firstKeyOrigin: String? = nil
     ) -> [String: Any] {
         let key = { (fixture: TrustedSignerFixture) -> [String: Any] in
             ["credential_id": fixture.credentialHex, "public_key_hex": fixture.keys[0].publicKeyHex,
              "name": "Mine", "transports": "internal"]
         }
-        return [
+        var keys = [key(first), key(second)]
+        if let firstKeyOrigin { keys[0]["signer_origin"] = firstKeyOrigin }
+        var record: [String: Any] = [
             "id": first.credentialHex, "name": "Mine", "address": first.account,
             "public_key_hex": first.keys[0].publicKeyHex, "created_at_iso": "2026-09-01T00:00:00.000Z",
-            "keys": [key(first), key(second)], "signed_in_with": signedInWith,
+            "keys": keys,
         ]
+        if let signedInWith { record["signed_in_with"] = signedInWith }
+        return record
     }
 
     private func expectCancelled(_ body: () async throws -> Void) async {
@@ -576,24 +596,25 @@ private final class CompletionRecorder: OnboardingExecutorDeps {
     func complete(mode: [String: Any]) async { self.mode = mode }
 }
 
-/// A Trusted Signer page that answers as `answering`, verified — as the real
+/// A trusted page that answers as `answering`, verified — as the real
 /// channel verifies — against the keys it was offered.
 final class OfferedKeysPage: TrustedSignerPort {
     var answering: TrustedSignerFixture
     /// Each request's `allowCredentials`, in order.
     private(set) var offered: [[String]] = []
-    private(set) var pages: [String?] = []
+    private(set) var pages: [String] = []
 
     init(answering: TrustedSignerFixture) {
         self.answering = answering
     }
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
         offered.append((request["context"] as? [String: Any])?["allowCredentials"] as? [String] ?? [])
-        pages.append(signerOrigin)
+        pages.append(page)
         let result = (try? JSONSerialization.data(withJSONObject: answering.result(for: digest))) ?? Data()
         return .outcome(trustedSignerVerify(
             resultJson: String(decoding: result, as: UTF8.self), digest: digest, keys: keys

@@ -56,17 +56,19 @@ struct SettingsFeedbackRowTests {
     }
 
     @Test func selectingTheRowOpensTheReportSheet() {
-        #expect(SettingsScreen.overlay(forRow: SettingsFixtures.feedbackRow, hasSignerPage: false) == .feedback)
-        #expect(SettingsScreen.overlay(forRow: SettingsFixtures.feedbackRow, hasSignerPage: true) == .feedback)
+        #expect(SettingsScreen.overlay(forRow: SettingsFixtures.feedbackRow) == .feedback)
     }
 
     /// Every row on the live home goes SOMEWHERE — a sheet, a page, or a
     /// callback — so the next row with a route and no door, or a door and no
     /// route, fails here.
     @Test func everyHomeRowIsRouted() {
-        let pages: Set<String> = ["networks", "rpc-providers", "add-network", "endpoints", "storage", "about"]
+        let pages: Set<String> = [
+            "networks", "rpc-providers", "add-network", "endpoints", "storage", "about",
+            SigningPagesPageModel.rowId,
+        ]
         for row in liveHome().sections.flatMap(\.rows) {
-            let routed = SettingsScreen.overlay(forRow: row.id, hasSignerPage: true) != nil
+            let routed = SettingsScreen.overlay(forRow: row.id) != nil
                 || SettingsScreen.externalLink(forRow: row.id) != nil
                 || pages.contains(row.id)
             #expect(routed, "row \(row.id) opens nothing")

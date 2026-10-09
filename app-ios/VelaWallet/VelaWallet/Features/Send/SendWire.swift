@@ -480,8 +480,11 @@ struct SendViewWire: Decodable, Equatable {
     let sending: Bool
     /// `idle` / `preparing` / `signing` / `submitting` / `confirmed` / `error`.
     let txStatus: String
-    /// `generic` / `bundler_fund`.
+    /// `generic` / `bundler_fund` / `venue_blocked`.
     let txError: String?
+    /// Spec 102: with `txError` = `venue_blocked`, why this account cannot
+    /// sign here (`VenueBlock::key()` with its domains). Optional on the wire.
+    var txVenueBlock: VenueBlockWire?
     let txHash: String?
     let userOpHash: String?
     let receipt: SendReceiptWire?

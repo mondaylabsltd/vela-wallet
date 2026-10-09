@@ -50,6 +50,9 @@ final class FeeStore {
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
+    /// The same view as the core wrote it, for `handoffFeeRow` (spec 102);
+    /// `nil` while `speed` is.
+    private(set) var speedJson: String?
     /// The resolved number preset `configureSpeed` was last given: every fee
     /// request carries it, and the core writes a coin's shortfall in it
     /// (issue #408).
@@ -226,7 +229,9 @@ final class FeeStore {
                 return "{}"
             },
             onView: { [weak self] view in self?.speedChanged(view) },
-            onFault: { print("[vela-wallet] fee_speed fault: \($0)") }
+            onFault: { print("[vela-wallet] fee_speed fault: \($0)") },
+            // The hand-off card's fee row reads this view whole (spec 102).
+            keepsJson: true
         )
         _ = speedCore.boot(CoreJSON.string(["type": "reset"]))
     }
@@ -535,6 +540,7 @@ final class FeeStore {
     private func speedChanged(_ view: FeeSpeedViewWire) {
         guard view != speed else { return }
         speed = view
+        speedJson = speedCore.json
         settleSpeed()
     }
 

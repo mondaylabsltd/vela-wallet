@@ -128,25 +128,36 @@ struct SigningSheet: View {
 
     @ViewBuilder
     private var form: some View {
-        // The wallet's own request: its intent is already the header's title.
-        ForEach(model.formBlocks) { block in
-            blockView(block)
-        }
+        if let handoff = model.handoff {
+            // Spec 102 D4: the page is the authority — the hand-off card in
+            // place of a second preview, and only what still stands under it.
+            HandoffCardView(model: handoff)
+                .padding(.top, Tokens.Space.s8)
+            ForEach(model.handoffBlocks) { block in
+                blockView(block)
+            }
+            Spacer(minLength: Tokens.Space.s16)
+        } else {
+            // The wallet's own request: its intent is already the header's title.
+            ForEach(model.formBlocks) { block in
+                blockView(block)
+            }
 
-        Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
+            Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
 
-        if !model.tech.isEmpty {
-            TechDetailsView(tech: model.tech, open: techOpen)
+            if !model.tech.isEmpty {
+                TechDetailsView(tech: model.tech, open: techOpen)
+            }
+            if let fee = model.fee {
+                SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
+                               speed: model.feeSpeed, onSpeed: onSpeed,
+                               refresh: onRefreshFee == nil ? nil : model.feeRefresh,
+                               onRefresh: onRefreshFee, chevron: model.feeChevron,
+                               measuring: model.feeRefresh?.refreshing ?? false)
+            }
+            SigningSignerRow(label: model.signer.label, name: model.signer.name,
+                             seed: model.signer.seed)
         }
-        if let fee = model.fee {
-            SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
-                           speed: model.feeSpeed, onSpeed: onSpeed,
-                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
-                           onRefresh: onRefreshFee, chevron: model.feeChevron,
-                           measuring: model.feeRefresh?.refreshing ?? false)
-        }
-        SigningSignerRow(label: model.signer.label, name: model.signer.name,
-                         seed: model.signer.seed)
         // Spec 081: a refused request offers no confirm control at
         // all. It is not disabled — it is absent, because the wallet
         // never offered it.

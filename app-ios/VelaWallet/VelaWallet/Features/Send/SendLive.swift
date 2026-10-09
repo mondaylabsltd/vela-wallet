@@ -1085,7 +1085,9 @@ enum SendLive {
                     loc.t("componentsUi.relayUnreachable.retryBtn")
                 } else if view.treasuryBootstrap != nil {
                     loc.t("componentsUi.treasuryBootstrap.retryBtn")
-                } else if view.txError != nil {
+                } else if view.txError != nil, view.txError != "venue_blocked" {
+                    // A venue that cannot be used here is not retried: the
+                    // same attempt would be refused the same way.
                     loc.t("send.txRetryBtn")
                 } else if view.txStatus == "signing" {
                     loc.t("componentsUi.funding.cancel")
@@ -1177,6 +1179,9 @@ enum SendLive {
         switch view.txError {
         case "bundler_fund": return loc.t("send.txErrorBundlerFund")
         case "generic": return loc.t("send.txErrorGeneric")
+        // Spec 102: not the network's failure — this account cannot sign
+        // here, and the core says why.
+        case "venue_blocked": return view.txVenueBlock?.text(loc) ?? loc.t("send.txErrorGeneric")
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
     }

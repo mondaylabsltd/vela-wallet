@@ -15,7 +15,8 @@
 //  is persisted. `VELA_PARALLEL_SIGNER=n` picks which fixture key (0-based) the
 //  space signs in with, and so which one signs every request after — entering
 //  is the space's sign-in, and its record names the key the way a real sign-in
-//  does (`signed_in_with`, founder 2026-09-26).
+//  does (`sign_in_key`, founder 2026-09-26; spec 102 — the core reads the
+//  account's signing domain and venue from it: `getvela.app`, in Vela).
 //
 //  ## The account is UPSERTED, and that is not a detail
 //
@@ -119,7 +120,7 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
                     "transports": "internal",
                 ]
             },
-            "signed_in_with": ["credential_id": signedInWith.credentialIdHex, "method": "platform"],
+            "sign_in_key": ["credential_id": signedInWith.credentialIdHex, "method": "platform"],
         ]
         await accounts.saveAccount(record)
         let list = await accounts.loadAccounts()

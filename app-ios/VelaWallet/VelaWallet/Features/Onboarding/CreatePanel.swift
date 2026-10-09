@@ -205,8 +205,36 @@ struct KeysScreen: View {
     let onConfirmKey: (Int) -> Void
     let onRemoveKey: (Int) -> Void
     let onFinish: () -> Void
+    /// Spec 102, "Use a trusted signing page": Vela's own sheet and every page
+    /// this device trusts, the chosen one marked. Empty hides the entry.
+    var pageChoices: [SigningPageChoiceModel] = []
+    /// A page was chosen (`nil`: Vela's own) — `signing_page_chosen`.
+    var onChoosePage: ((String?) -> Void)?
+    /// "Add a page" in the picker, and the core's refusal of the last one.
+    var onAddPage: ((String) -> Void)?
+    var pageAddError: String?
+    /// The picker is on screen: check the pages it lists.
+    var onPagesShown: () -> Void = {}
 
     @State private var pickerOpen = false
+    @State private var pagePickerOpen = false
+
+    /// The chosen page, as the picker draws it.
+    private var chosenPage: SigningPageChoiceModel? {
+        guard let page = view.signingPage else { return nil }
+        return pageChoices.first { $0.url.map(SignerPageChecks.key) == SignerPageChecks.key(page) }
+            ?? SigningPageChoiceModel(
+                url: page, title: SigningPageNames.host(page), subtitle: SigningPageNames.host(page),
+                domainLine: loc.t("settings.signing.keysOn", vars: ["domain": view.signingDomain]),
+                line: nil, selected: true
+            )
+    }
+
+    /// The entry is offered only before the first key, and only where there
+    /// is somewhere to send the choice.
+    private var offersSigningPage: Bool {
+        view.canChoosePage && view.signingPage == nil && onChoosePage != nil && !pageChoices.isEmpty
+    }
 
     private var full: Bool { view.keys.count >= maxKeys }
 
@@ -223,6 +251,15 @@ struct KeysScreen: View {
                     Text(loc.t(subtitleKey))
                         .typeRole(Typography.body)
                         .foregroundStyle(theme.fgMuted)
+
+                    // Spec 102: where this wallet will review and sign, when
+                    // a page was chosen — and the domain its keys belong to.
+                    if let chosen = chosenPage {
+                        ChosenSigningPageCard(
+                            loc: loc, choice: chosen,
+                            onChange: view.canChoosePage && onChoosePage != nil ? { pagePickerOpen = true } : nil
+                        )
+                    }
 
                     if view.needsSecondKey {
                         HStack(alignment: .top, spacing: Tokens.Space.s12) {
@@ -297,11 +334,17 @@ struct KeysScreen: View {
                     if (pickerOpen || view.keys.isEmpty) && view.canAddKey {
                         AddMethodPicker(
                             loc: loc,
-                            allowed: view.addMethods,
-                            blocked: view.addBlocked
+                            allowed: view.addMethods
                         ) { method in
                             pickerOpen = false
                             onAddKey(method)
+                        }
+                        // Not a fourth place: where this wallet reviews and
+                        // signs. Offered before the first key only — the
+                        // first key commits the set to one domain.
+                        if offersSigningPage {
+                            Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s8)
+                            SigningPageEntry(loc: loc) { pagePickerOpen = true }
                         }
                     }
 
@@ -325,6 +368,23 @@ struct KeysScreen: View {
             )
         }
         .padding(.bottom, Tokens.Space.s16)
+        .sheet(isPresented: $pagePickerOpen) {
+            SigningPagePicker(
+                loc: loc,
+                choices: pageChoices,
+                onPick: { url in
+                    pagePickerOpen = false
+                    onChoosePage?(url)
+                },
+                onAdd: onAddPage,
+                addError: pageAddError,
+                onClose: { pagePickerOpen = false }
+            )
+            .task { onPagesShown() }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .task(id: view.signingPage) { if view.signingPage != nil { onPagesShown() } }
     }
 
     private var subtitleKey: String {
@@ -412,21 +472,15 @@ private struct KeyRow: View {
     }
 }
 
-/// The four ways to mint a founding key.
+/// The three places a founding key can live — this device, a phone or tablet
+/// by scan, a USB security key (spec 102: three, no fourth).
 ///
 /// Unlike the browser, this client OWNS the picker, so the person's selection
 /// here is honoured at the ceremony rather than merely recorded.
-///
-/// A route the core has ruled out is rendered present-and-explained rather than
-/// hidden: an absent row would read as "this wallet cannot do that", while a
-/// dimmed row with a sentence under the list says what this wallet's keys
-/// belong to — and, when the configured Trusted Signer page is what does not fit,
-/// which page to change (spec 075).
 private struct AddMethodPicker: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let allowed: [KeyMethod]
-    let blocked: AddBlocked?
     let onPick: (KeyMethod) -> Void
 
     var body: some View {
@@ -437,10 +491,6 @@ private struct AddMethodPicker: View {
                 .padding(.vertical, Tokens.Space.s8)
 
             ForEach(KeyMethod.allCases, id: \.self) { method in
-                // All four routes are live — platform, scan (our caBLE
-                // initiator, BLE-only capable), a security key and the Clear
-                // Signer — but only those that would mint for THIS set's
-                // relying party can add to it.
                 let available = allowed.contains(method)
                 let copy = methodCopy(method, chooser: .create, loc: loc)
                 Button { onPick(method) } label: {
@@ -464,37 +514,7 @@ private struct AddMethodPicker: View {
                 .disabled(!available)
                 .opacity(available ? 1 : Tokens.Opacity.disabled)
             }
-
-            // Two paragraphs, never one joined string: what this wallet's keys
-            // belong to is always the reason; naming the configured page is
-            // only sometimes true, and it is the half a person can act on.
-            // Joining them would also put a space after a full stop that
-            // already ends a line in Chinese (device-found, 2026-09-23).
-            if let blocked {
-                reason(loc.t(
-                    I18nKeys.Create.methodBlockedHint,
-                    vars: ["party": blocked.relyingParty]
-                ))
-                if let page = blocked.page {
-                    reason(loc.t(
-                        I18nKeys.Create.methodBlockedSigner,
-                        vars: [
-                            "page": page,
-                            "pageParty": blocked.pageRelyingParty ?? "",
-                            "party": blocked.relyingParty,
-                        ]
-                    ))
-                }
-            }
         }
-    }
-
-    private func reason(_ text: String) -> some View {
-        Text(text)
-            .typeRole(Typography.flowCaption)
-            .foregroundStyle(theme.fgMuted)
-            .multilineTextAlignment(.leading)
-            .padding(.top, Tokens.Space.s8)
     }
 }
 

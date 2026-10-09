@@ -83,6 +83,15 @@ final class SessionController {
         driver.dispatch(CoreJSON.string(["type": "remove_account", "index": index]))
     }
 
+    /// Spec 102: where this account reviews and signs, on this device — by
+    /// ADDRESS (invariant ⑨). The core refuses a venue that cannot reach the
+    /// account's keys (R1) and writes nothing; otherwise it saves the record.
+    func chooseSigningVenue(address: String, venue: SigningVenueWire) {
+        driver.dispatch(CoreJSON.string([
+            "type": "signing_venue_chosen", "address": address, "venue": venue.object,
+        ]))
+    }
+
     func signOut() { driver.dispatch(Self.event("sign_out")) }
     func signOutConfirmed() { driver.dispatch(Self.event("sign_out_confirmed")) }
     func signOutDismissed() { driver.dispatch(Self.event("sign_out_dismissed")) }

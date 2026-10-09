@@ -33,6 +33,8 @@ enum SettingsStateId: String, CaseIterable, Identifiable {
 /// Which page the settings surface is showing (`home` plus the pushed pages).
 enum SettingsPage: Equatable {
     case home, networks, networkDetail, addNetwork, rpcProviders, endpoints, storage, about
+    /// Spec 102: the pages this device trusts to show and sign requests.
+    case signingPages
 }
 
 /// Which sheet is over it. `none` is a real state, not an absence of one.
@@ -48,8 +50,8 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
-    /// The Trusted Signer page (spec 071): an address, saved or refused.
-    case signerPage
+    /// Spec 102: the account's "Where you review and sign".
+    case signingVenue
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
     /// tap used to be a drawing of a bin, and the other shells removed on it.
     case removeNetwork
@@ -187,22 +189,6 @@ struct AccountsSheetModel {
     var remove: String = ""
     var removeBody: String = ""
     var removeCancel: String = ""
-}
-
-/// The Trusted Signer page's sheet (spec 071): the address in force, what the
-/// core said about the last one typed, and — whenever it is not a
-/// `getvela.app` page — that this wallet's passkeys will not sign there.
-struct SignerPageModel {
-    let title: String
-    let subtitle: String
-    let field: UrlFieldModel
-    /// `settings.signing.pageInvalid` / `pageInsecure`: nothing was stored.
-    let error: String?
-    /// `settings.signing.pageForeign`.
-    let foreign: String?
-    let save: String
-    /// "Use the official page" — only when another one is chosen.
-    let reset: String?
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.
@@ -554,6 +540,9 @@ struct WalletKeysModel {
     let backupExplain: String
     let copyLabel: String
     let copiedLabel: String
+    /// Spec 102: "Keys on {{domain}}" for an account on its own domain —
+    /// once, above the list; `nil` on `getvela.app`.
+    var domainLine: String? = nil
 }
 
 enum KeyPillTone {
@@ -682,8 +671,11 @@ struct SettingsScreenContent {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
-    /// Spec 071: the Trusted Signer page.
-    var signerPage: SignerPageModel?
+    /// Spec 102: the account's "Where you review and sign" — `nil` until the
+    /// account's plan is read (never a guessed row).
+    var venue: VenueSettingModel?
+    /// Spec 102: Settings → Signing pages.
+    var signingPages: SigningPagesPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

@@ -117,7 +117,7 @@ struct SendReceiptVerdictTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
         spine.trustedSigner = ScriptedTrustedSigner { digest in
             let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
@@ -179,7 +179,7 @@ struct SendReceiptVerdictTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
-        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        accounts.recordJson = fixture.pageRecordJson
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
         spine.trustedSigner = ScriptedTrustedSigner { digest in
             let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))

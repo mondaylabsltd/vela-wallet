@@ -681,6 +681,9 @@ final class SendExecutor {
         // core's cancelled ceremony, which keeps the confirmation on screen.
         // The words are the screen's (`trustedSignerEnded`).
         case .trustedSigner: return ["type": "passkey_cancelled"]
+        // Spec 102: this account cannot sign here — the confirm screen says
+        // why (`tx_venue_block`), in the person's language.
+        case .venueBlocked(let block): return ["type": "venue_blocked", "block": block.wire]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         // The send machine words every other refusal itself; the relay's own
@@ -763,8 +766,9 @@ final class SendExecutor {
 struct SendAccountPort: UserOpSpine.AccountPort {
     let accounts: AccountStore
 
-    /// The record as stored, `signed_in_with` and all — never a projection of
-    /// it, so the core reads the same account the sign-in wrote.
+    /// The record as stored, `sign_in_key`, `signing_domain`, `signing_venue`
+    /// and all — never a projection of it, so the core reads the same account
+    /// the sign-in wrote (spec 102's plan comes from this alone).
     func accountJson(of address: String) async -> String? {
         guard let record = await record(for: address),
               let data = try? JSONSerialization.data(withJSONObject: record)
@@ -772,25 +776,12 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         return String(decoding: data, as: UTF8.self)
     }
 
-    func keyRoutesJson(of address: String) async -> String {
-        guard let record = await record(for: address) else { return "[]" }
-        let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
-            var route = [
-                "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
-                "transports": key["transports"] as? String ?? "",
-            ]
-            // Spec 075: a key minted or found through the Trusted Signer lives
-            // behind that page, and `sign_route` will not find its way back
-            // there without this. Dropping it here would silently send the
-            // ceremony to a platform sheet that cannot see the key.
-            if let origin = key["signer_origin"] as? String ?? key["signerOrigin"] as? String,
-               !origin.isEmpty {
-                route["signer_origin"] = origin
-            }
-            return route
+    /// Every stored account's record, as `accountJson` gives one — what the
+    /// signing pages' background refresh reads each account's venue from.
+    func allAccountJsons() async -> [String] {
+        await accounts.loadAccounts().compactMap { record in
+            (try? JSONSerialization.data(withJSONObject: record)).map { String(decoding: $0, as: UTF8.self) }
         }
-        let data = (try? JSONSerialization.data(withJSONObject: routes)) ?? Data("[]".utf8)
-        return String(decoding: data, as: UTF8.self)
     }
 
     func keys(of address: String) async -> [WalletKeyRecord] {

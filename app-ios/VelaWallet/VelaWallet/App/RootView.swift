@@ -177,6 +177,10 @@ struct RootView: View {
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// Which passkeys control that wallet, and for which wallet it was asked.
     @State private var walletKeys: (address: String, result: WalletKeys.Result)?
+    /// Spec 102: how the active account signs on this device — its key,
+    /// domain and venue (`signingPlan`), for "Where you review and sign" and
+    /// the keys block's domain line.
+    @State private var signingPlan: (address: String, plan: SigningPlanWire?)?
     /// Bumped whenever a create or sign-in finishes. Signing in to the SAME
     /// account with another key changes which key it signs with (and so which
     /// row the keys list marks) without changing the address the keys walk is
@@ -359,21 +363,27 @@ struct RootView: View {
         // the moment Settings saves a new one — it used to take a relaunch.
         settingsStore.onEndpointsWritten = { endpoints in Marks.adopt(endpoints) }
         _settings = State(initialValue: settingsStore)
-        // ONE Trusted Signer for the whole app (spec 075). It is a passkey
-        // route now, not only a way to sign: onboarding's ceremonies and the
-        // money path's signatures go through the same object, which is what
-        // keeps "one page, one session, one sheet" true — two instances would
-        // be two sheets racing to present over each other.
-        let trustedSigner = TrustedSigner(
-            loc: loc,
-            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl }
-        )
+        // ONE trusted page for the whole app (specs 075, 102): an account's
+        // signatures whose venue is a page, and the ceremonies of a wallet on
+        // its own domain, go through the same object — which is what keeps
+        // "one page, one session, one sheet" true; two instances would be two
+        // sheets racing to present over each other. It opens nothing this
+        // phone did not check first (`SignerPageChecks`, R6).
+        let trustedSigner = TrustedSigner(loc: loc, checks: .shared)
+        // "Trust this version" — on Settings → Signing pages, the hand-off
+        // card or the page's own sheet — is stored on that page by the one
+        // signing pages machine (D-15), never in a list of the checker's own.
+        SignerPageChecks.shared.recordTrust = { [settingsStore] url, version in
+            await settingsStore.trustSigningPage(url: url, version: version)
+        }
         spine.trustedSigner = trustedSigner
         onboarding.trustedSigner = trustedSigner
-        // Spec 075: the founding-key picker needs the page's DOMAIN, not the
-        // page — a key minted there belongs to it, and a wallet's keys all
-        // belong to one relying party.
-        onboarding.signerPage = { [settingsStore] in settingsStore.signPref?.signerUrl }
+        onboarding.words = { [loc] key in loc.t(key) }
+        // Spec 102: the choosers' "Use a trusted signing page" lists the pages
+        // Settings keeps — read by the same machine, so the two never differ.
+        onboarding.signingPages = { [settingsStore] in settingsStore.signingPages }
+        onboarding.openSigningPages = { [settingsStore] in settingsStore.openSigningPages() }
+        onboarding.addSigningPage = { [settingsStore] url in settingsStore.addSigningPage(url: url) }
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -907,7 +917,16 @@ struct RootView: View {
         case .flowsGallery:
             FlowGalleryScreen(loc: loc)
         case .settings:
+            #if DEBUG
+            if let board = SigningSettingsFixtures.board(PageOverride.state, loc: loc) {
+                // Spec 102's signing surfaces, with their controls drawn.
+                SettingsScreen(model: board, loc: loc, signingActions: SigningSettingsActions())
+            } else {
+                SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            }
+            #else
             SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            #endif
         case .settingsGallery:
             SettingsGalleryScreen(loc: loc)
         case .explore:
@@ -924,6 +943,12 @@ struct RootView: View {
                     SigningStateId(rawValue: PageOverride.state ?? "cs1") ?? .cs1, loc: loc
                 )
             )
+        case .handoff:
+            #if DEBUG
+            HandoffGalleryScreen(loc: loc, state: PageOverride.state ?? "sheet")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -1024,7 +1049,19 @@ struct RootView: View {
                 // the next launch picks it up here.
                 tracker.boot()
             }
+            // D-14: every signing page in use is re-checked in the background
+            // when the core says it is due — on start, and hourly while the
+            // app runs (and on every return to the foreground, below) — so
+            // Open almost never waits for a check.
+            .task {
+                let poll = SignerPageChecks.pollMs
+                while !Task.isCancelled {
+                    await refreshSigningPages()
+                    try? await Task.sleep(nanoseconds: poll * 1_000_000)
+                }
+            }
             .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await refreshSigningPages() } }
                 wallet.homePoller.sceneActive(phase == .active)
                 // A failed page retries by itself only while the app is in
                 // front (spec 079).
@@ -1322,10 +1359,10 @@ struct RootView: View {
                         // …and so is the default speed (spec 069): the send
                         // form's folded control shows it from the first open.
                         settings.openFeeTier()
-                        // …and which Trusted Signer page this device opens
-                        // (spec 071): an account that signs there opens it
-                        // from Send or a page's sheet, Settings unvisited.
-                        settings.openSignPref()
+                        // …and the signing pages this device trusts (spec
+                        // 102): an account's "Where you review and sign" and
+                        // the choosers list them, Settings unvisited.
+                        settings.openSigningPages()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
                         // `network_admin` that had not been opened yet made the
@@ -2569,7 +2606,13 @@ struct RootView: View {
                 // cancelled ceremony and kept the confirmation up; this says
                 // why nothing was sent. The core's own notice goes first.
                 if live.notice == nil, let notice = send.trustedSignerNotice {
-                    live.notice = loc.t(notice.key)
+                    live.notice = notice.text(loc)
+                }
+                // Spec 102: an account whose venue is a page — the hand-off,
+                // and a CTA that says where it goes.
+                if let handoff = sendHandoff {
+                    live.handoff = handoff
+                    live.cta = loc.t("componentsUi.signing.openSigner")
                 }
                 model.base = .sendConfirm(live)
             }
@@ -3029,6 +3072,18 @@ struct RootView: View {
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
+            handoffPage: live?.venuePage,
+            handoffKeyLabel: live?.venueKeyLabel,
+            handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
+            // The card's fee row: the fee the sheet settled, for the speed in
+            // force — the core's ruling on the two views as last rendered.
+            handoffFee: live.flatMap { live in
+                live.venuePage == nil ? nil : HandoffFeeModel.of(
+                    feeJson: live.feeJson, speedJson: live.speedJson, fee: live.fee,
+                    display: WalletLive.Display.from(settings.currency), networks: walletNetworks, loc: loc
+                )
+            },
+            handoffPageName: live?.venuePage.flatMap(savedPageName),
             feeStartFailure: live?.quoteStartFailure,
             networks: walletNetworks
         )
@@ -3321,7 +3376,10 @@ struct RootView: View {
         guard let view = send.view else { return false }
         switch state {
         case .sd2, .sd2b, .sd2d: return SendLive.formCtaDisabled(view)
-        case .sd3, .sd3b, .sd3c: return SendLive.confirmCtaDisabled(view)
+        case .sd3, .sd3b, .sd3c:
+            // …and, for an account that signs on a page, the core's ruling on
+            // that page: nothing opens unchecked (spec 102 R6).
+            return SendLive.confirmCtaDisabled(view) || sendHandoff.map { !$0.opens } ?? false
         default: return false
         }
     }
@@ -3574,14 +3632,18 @@ struct RootView: View {
                 else { return }
                 openEthereumBackup(call)
             },
-            // The core validates the address and stores only what it accepts;
-            // the sheet closes on its verdict, and keeps the refusal on screen
-            // otherwise (spec 071).
-            onSaveSignerUrl: { text in
-                settings.submitSignerUrl(text)
-                return settings.signPref?.signerUrlError == nil
-            },
-            onResetSignerUrl: { settings.resetSignerUrl() },
+            signingActions: SigningSettingsActions(
+                onChooseVenue: { chooseSigningVenue($0) },
+                onAddPage: { settings.addSigningPage(url: $0) },
+                onRenamePage: { settings.renameSigningPage(url: $0, name: $1) },
+                onRemovePage: { settings.removeSigningPage(url: $0) },
+                // "Trust this version": stored on that page by the signing
+                // pages machine (D-15), then the page is checked again.
+                onTrustPage: { url, version in
+                    Task { await SignerPageChecks.shared.trust(url, version: version) }
+                },
+                onPagesShown: { primeSigningPages() }
+            ),
             onOpenLink: { openExternal($0) },
             // Settings' hidden debug mode (spec 091): the preference and the
             // browser are told in one place, so they cannot disagree.
@@ -3628,7 +3690,10 @@ struct RootView: View {
             Task { await checkEthereumBackup() }
         }
         .task(id: session.view.address) { await checkEthereumBackup() }
-        .task(id: "\(session.view.address)#\(signInEpoch)") { await readWalletKeys() }
+        .task(id: "\(session.view.address)#\(signInEpoch)") {
+            await readSigningPlan()
+            await readWalletKeys()
+        }
         .task {
             settings.open()
             // The connected sites are the browser core's to list; reading
@@ -3686,9 +3751,6 @@ struct RootView: View {
         if let view = settings.feeTier {
             model = SettingsLive.withFeeTier(view, on: model, loc: loc)
         }
-        if let view = settings.signPref {
-            model = SettingsLive.withSignPref(view, on: model, loc: loc)
-        }
         // The switcher's rows are the SESSION's, with the balance core's
         // cached totals — after the currency, because the figures it writes
         // wear that currency's glyph and rate.
@@ -3713,6 +3775,18 @@ struct RootView: View {
         if !session.view.address.isEmpty {
             model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
         }
+        // Spec 102: the account's venue (and its domain over the keys), and
+        // Settings → Signing pages — every row's line this phone's check.
+        let plan = signingPlan.flatMap {
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.plan : nil
+        }
+        model = SettingsLive.withSigning(
+            plan: session.view.address.isEmpty ? nil : plan,
+            pages: settings.signingPages,
+            line: { SignerPageChecks.shared.line(for: $0) },
+            asksTrust: { SignerPageChecks.shared.versionAskingTrust($0) },
+            on: model, loc: loc
+        )
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
@@ -3759,6 +3833,77 @@ struct RootView: View {
             )
         }
         return model
+    }
+
+    /// The active account's signing plan, read from its stored record — and
+    /// its page, when the venue is one, checked now so a send or a site's
+    /// request finds a fresh ruling.
+    private func readSigningPlan() async {
+        let address = session.view.address
+        guard !address.isEmpty else { return }
+        let plan = await sendAccountPort.accountJson(of: address).flatMap(SigningPlanWire.of(accountJson:))
+        signingPlan = (address, plan)
+        if let page = plan?.venue.pageUrl { SignerPageChecks.shared.prime(page) }
+    }
+
+    /// The send confirm's hand-off (spec 102), for the active account.
+    private var sendHandoff: HandoffCardModel? {
+        guard let entry = signingPlan,
+              entry.address.caseInsensitiveCompare(session.view.address) == .orderedSame,
+              let plan = entry.plan, let page = plan.venue.pageUrl
+        else { return nil }
+        // No fee row here: the confirm's own figures, right above the card,
+        // are the same fee session and speed control (`fees`), with the speed
+        // still changeable — a second row would say the fee twice.
+        return HandoffCardModel.build(
+            page: page,
+            keyLabel: plan.keyText(loc),
+            line: SignerPageChecks.shared.line(for: page),
+            loc: loc,
+            name: savedPageName(page)
+        )
+    }
+
+    /// The person's own label for a saved page, when they gave it one.
+    private func savedPageName(_ url: String) -> String? {
+        settings.signingPages?.pages
+            .first { SignerPageChecks.key($0.url) == SignerPageChecks.key(url) }
+            .flatMap { $0.name.isEmpty ? nil : $0.name }
+    }
+
+    /// "Where you review and sign" chose `venue` for the active account. The
+    /// session machine rules (R1) and saves the record; the row follows what
+    /// is stored, read back until it says so.
+    private func chooseSigningVenue(_ venue: SigningVenueWire) {
+        let address = session.view.address
+        guard !address.isEmpty else { return }
+        session.chooseSigningVenue(address: address, venue: venue)
+        Task {
+            for _ in 0..<40 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                await readSigningPlan()
+                if signingPlan?.plan?.venue == venue { break }
+            }
+        }
+    }
+
+    /// The background refresh (D-14): each account's page venue and every
+    /// saved page, handed to the checker, which checks those the core says
+    /// are due (`signerPageRefreshDue`).
+    private func refreshSigningPages() async {
+        let venues = await sendAccountPort.allAccountJsons()
+            .compactMap { SigningPlanWire.of(accountJson: $0)?.venue.pageUrl }
+        let saved = await settings.savedSigningPageUrls()
+        SignerPageChecks.shared.refresh(venues + saved)
+    }
+
+    /// Every page a signing surface lists, checked unless a fresh ruling
+    /// stands — the account's venue first.
+    private func primeSigningPages() {
+        let venuePage = signingPlan?.plan?.venue.pageUrl
+        for url in [venuePage].compactMap({ $0 }) + (settings.signingPages?.pages.map(\.url) ?? []) {
+            SignerPageChecks.shared.prime(url)
+        }
     }
 
     /// Which passkeys control the active wallet (spec 062), from the registry
@@ -4021,9 +4166,30 @@ struct RootView: View {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
                 .themed(scheme)
         } else if onboarding.showSignInMethods {
-            SignInMethodSheet(loc: loc, onPick: onboarding.pickSignInMethod)
+            signInMethodSheet
                 .themed(scheme)
         }
+    }
+
+    /// The sign-in chooser: three places, and — apart — "Use a trusted signing
+    /// page" over the pages Settings keeps, each checked by this phone.
+    private var signInMethodSheet: some View {
+        let pages = settings.signingPages
+        return SignInMethodSheet(
+            loc: loc,
+            onPick: onboarding.pickSignInMethod,
+            pageChoices: SigningPagePickerModel.choices(
+                pages: pages?.pages ?? [], selected: onboarding.signInPage, loc: loc,
+                line: { SignerPageChecks.shared.line(for: $0) }
+            ),
+            chosenPage: onboarding.signInPage,
+            onChoosePage: { onboarding.signInPage = $0 },
+            onAddPage: { settings.addSigningPage(url: $0) },
+            pageAddError: SigningPagesViewWire.addErrorKey(pages?.addError),
+            onPagesShown: {
+                for page in pages?.pages ?? [] { SignerPageChecks.shared.prime(page.url) }
+            }
+        )
     }
 
     private var signOutSheet: Binding<SessionSignOutView?> {
@@ -4077,6 +4243,8 @@ enum PageOverride {
     enum Page {
         case wallet, gallery, contacts, contactsLive, contactsGallery, flowsGallery
         case settings, settingsLive, settingsGallery, explore, signing
+        /// Spec 102's hand-off boards (`HandoffGalleryScreen`).
+        case handoff
     }
 
     static let page: Page? = {
@@ -4099,6 +4267,7 @@ enum PageOverride {
         case "settings-gallery": .settingsGallery
         case "explore": .explore
         case "signing": .signing
+        case "handoff": .handoff
         default: nil
         }
     }()
