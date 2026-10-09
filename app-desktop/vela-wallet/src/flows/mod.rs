@@ -635,11 +635,19 @@ pub struct FlowStrings {
 /// the plain "the network refused it" for every other reason.
 #[must_use]
 pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
+    use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
     use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
-    [REFUSED_KEY, REFUSED_FEES_KEY, REFUSED_NONCE_KEY]
-        .into_iter()
-        .map(|key| (key, loc.t(key)))
-        .collect()
+    // The held nonce at submit (`SignView.failure_refusal_key`, PR 2 note 9)
+    // is told in the confirm's own words for it.
+    [
+        REFUSED_KEY,
+        REFUSED_FEES_KEY,
+        REFUSED_NONCE_KEY,
+        PREVIOUS_PENDING_KEY,
+    ]
+    .into_iter()
+    .map(|key| (key, loc.t(key)))
+    .collect()
 }
 
 /// Every way a fee can fail, so the words for whichever the core names are

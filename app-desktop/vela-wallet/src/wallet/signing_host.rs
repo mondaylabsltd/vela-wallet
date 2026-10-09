@@ -2095,9 +2095,24 @@ mod tests {
             }
         }
         let _ = event;
-        let rejected = [entry(TrackStatus::Rejected)];
+        // The relay refused it because another operation of the account used
+        // its nonce: the tracker's reason rides the event (PR 2 note 9).
+        let mut refused = entry(TrackStatus::Rejected);
+        refused.refusal = Some(vela_core::app::tx_tracker::RefusalReason::NonceUsed);
+        refused.refusal_key = Some(vela_core::app::tx_tracker::REFUSED_NONCE_KEY.to_owned());
+        let rejected = [refused];
         let (_, verdict) = tracked_event(OP, &rejected, Some(&fed), 20_000.0)
             .unwrap_or_else(|| unreachable!("a change is told"));
+        assert!(
+            matches!(
+                &verdict,
+                SignEvent::OpTracked {
+                    refusal: Some(vela_core::app::tx_tracker::RefusalReason::NonceUsed),
+                    ..
+                }
+            ),
+            "the tracker entry's own reason is forwarded"
+        );
         let answers = |ops: Vec<Pending<SignOperation>>| -> Vec<SignResponsePayload> {
             ops.into_iter()
                 .filter_map(|op| match op.operation {
@@ -2124,10 +2139,22 @@ mod tests {
             chain_name: "Gnosis".to_owned(),
             seen_submitted_ms: None,
         };
+        // One source: the sheet's line is the core's `failure_refusal_key`,
+        // the same key the tracker entry carries — drawn with no tracker
+        // entry in hand at all.
+        assert_eq!(
+            view.failure_refusal_key.as_deref(),
+            rejected[0].refusal_key.as_deref()
+        );
         let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
             .unwrap_or_else(|| unreachable!("the refusal is drawn"));
         assert_eq!(receipt.stage, crate::flows::fixtures::ReceiptStage::Failed);
-        assert_eq!(receipt.captions, vec![s.refused.clone()]);
+        let went_first = crate::flows::refusal_of(
+            &s.refusals,
+            Some(vela_core::app::tx_tracker::REFUSED_NONCE_KEY),
+        );
+        assert_ne!(went_first, s.refused, "went first is not the plain refusal");
+        assert_eq!(receipt.captions, vec![went_first]);
         assert_eq!(receipt.cta, s.receipt_done);
         assert_eq!(receipt.retry, None, "the rid went out: never tried again");
         // The receipt wait's own late result can answer nothing.

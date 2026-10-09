@@ -17555,6 +17555,35 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
+        // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
+        // operation (PR 2 note 9), drawn from the real core's view by the
+        // live receipt builder — there is no request on this route.
+        if self.gallery
+            && self.signing_host.is_none()
+            && let Some(view) = signing_fixtures::refusal_pin()
+        {
+            let summary = crate::signing::status::summary_of(&model.blocks);
+            let header = signing_components::HeaderModel::of(&model);
+            let clock = signing_clock(100, None);
+            if let Some(receipt) = crate::signing::status::approved(
+                &view,
+                true,
+                summary.as_ref(),
+                None,
+                &clock,
+                &self.signing,
+            ) {
+                return self.signing_receipt_view(
+                    theme,
+                    window,
+                    Some(&header),
+                    &receipt,
+                    100,
+                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {}),
+                    cx,
+                );
+            }
+        }
         // Which of the three things this column is: the request, the core's
         // refusal of it (spec 081), or the gas account it cannot pay from.
         let mut kind = signing_live::ColumnKind::Request;

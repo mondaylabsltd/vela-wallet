@@ -298,18 +298,18 @@ pub fn approved(
         // again meets the same refusal, so no "try again". A message goes
         // nowhere: "the transaction couldn't be submitted" is not what failed
         // (083 H4), and nothing went on chain.
-        captions.push(if sign.failure_refused {
-            // Told by its reason, when the tracker has it (a nonce another
-            // operation used is not "the network refused it", and only a fee
-            // refusal is the fee sentence).
-            crate::flows::refusal_of(
-                &s.refusals,
-                sign.pending_op_hash
-                    .as_deref()
-                    .filter(|op| tracked(op, track))
-                    .and(track)
-                    .and_then(|entry| entry.refusal_key.as_deref()),
-            )
+        //
+        // PR 2 note 9: why the relay did not take it is the core's one
+        // sentence for both ways a refusal arrives (`failure_refusal_key`) —
+        // at submit (another operation of the account holds the nonce, which
+        // may be tried again, or a plain refusal) and after it (the tracker
+        // entry's reason, forwarded with `OpTracked`: a nonce another
+        // operation used is "went first", only a fee refusal is the fee
+        // sentence). One source, never a second reading of the tracker here.
+        captions.push(if let Some(key) = sign.failure_refusal_key.as_deref() {
+            crate::flows::refusal_of(&s.refusals, Some(key))
+        } else if sign.failure_refused {
+            crate::flows::refusal_of(&s.refusals, None)
         } else if on_chain {
             s.error_generic.clone()
         } else {

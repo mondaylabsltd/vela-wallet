@@ -1788,6 +1788,138 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
     model
 }
 
+/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees` — with `VELA_PAGE=
+/// gallery` and a signing state: the sheet after the relay did not take the
+/// operation, through the real `sign_request` core, so its failure line is
+/// the core's one sentence for it (`SignView.failure_refusal_key`, PR 2 note
+/// 9). At submit: another operation of the account holds the nonce (`held`
+/// — "Try again" stays) or a plain refusal; after it, the tracker's verdict
+/// with its reason (`went-first`: the nonce another operation used; `fees`:
+/// fees stayed above). Same env-pin family as `VELA_SIGNING_STATE`.
+#[must_use]
+pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
+    let want = crate::dev_env::var!("VELA_SIGNING_REFUSAL")?;
+    refusal_view(want.trim())
+}
+
+/// [`refusal_pin`]'s sheet for `want`, or `None` for a name it does not know.
+#[must_use]
+pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView> {
+    use crate::core_host::CoreHost;
+    use vela_core::app::sign_request::{
+        Event, SignAccountRef, SignApproveOpts, SignOperation, SignRequest, SignShellResult,
+        SignSubmitOutcome,
+    };
+    use vela_core::app::tx_tracker::{RefusalReason, TrackStatus};
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
+    const ID: &str = "rid-gallery";
+    enum Ends {
+        AtSubmit { message: String, refused: bool },
+        Tracked(RefusalReason),
+    }
+    let ends = match want {
+        "held" => Ends::AtSubmit {
+            message: vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned(),
+            refused: false,
+        },
+        "refused" => Ends::AtSubmit {
+            message: "UserOperation refused".to_owned(),
+            refused: true,
+        },
+        "went-first" => Ends::Tracked(RefusalReason::NonceUsed),
+        "fees" => Ends::Tracked(RefusalReason::FeeBelowMarket),
+        _ => return None,
+    };
+    let mut host = CoreHost::<SignRequest>::new();
+    host.dispatch(Event::NetworksChanged {
+        chain_ids: vec![100],
+    });
+    host.dispatch(Event::AccountsChanged {
+        accounts: vec![SignAccountRef {
+            address: ME.to_owned(),
+            credential_id: "cred0".to_owned(),
+        }],
+        active_index: 0,
+    });
+    host.dispatch(Event::RequestArrived {
+        id: ID.to_owned(),
+        method: "eth_sendTransaction".to_owned(),
+        params_json:
+            r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#
+                .to_owned(),
+        origin: "https://app.uniswap.org".to_owned(),
+        transport_id: "tab-gallery".to_owned(),
+        dedicated_transport: true,
+        per_request_chain: Some(100),
+        dapp: None,
+        granted_address: Some(ME.to_owned()),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: 1_000.0,
+        first_party: false,
+    });
+    let ops = host.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts::default(),
+    });
+    let precheck = ops.first()?.id;
+    let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+    let submit = ops
+        .iter()
+        .find(|op| matches!(op.operation, SignOperation::SignAndSubmit { .. }))?
+        .id;
+    let persist = |host: &mut CoreHost<SignRequest>,
+                   ops: Vec<crate::core_host::Pending<SignOperation>>| {
+        for op in ops {
+            if matches!(op.operation, SignOperation::PersistRecord { .. }) {
+                let _ = host.resolve(op.id, SignShellResult::RecordPersisted);
+            }
+        }
+    };
+    match ends {
+        Ends::AtSubmit { message, refused } => {
+            host.dispatch(Event::CeremonyStarted { id: ID.to_owned() });
+            host.dispatch(Event::CeremonyDone { id: ID.to_owned() });
+            let ops = host.dispatch(Event::OpSigned {
+                id: ID.to_owned(),
+                user_op_hash: OP.to_owned(),
+                submit_block: Some(48_487_620),
+                now_ms: 5_000.0,
+            });
+            persist(&mut host, ops);
+            let _ = host.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::Failed {
+                        message,
+                        refused,
+                        signer: None,
+                    },
+                    now_ms: 6_000.0,
+                },
+            );
+        }
+        Ends::Tracked(reason) => {
+            let ops = host.dispatch(Event::OpSubmitted {
+                id: ID.to_owned(),
+                user_op_hash: OP.to_owned(),
+                now_ms: 5_000.0,
+                maybe_sent: false,
+                submit_block: None,
+            });
+            persist(&mut host, ops);
+            let _ = host.dispatch(Event::OpTracked {
+                user_op_hash: OP.to_owned(),
+                status: TrackStatus::Rejected,
+                tx_hash: None,
+                now_ms: 20_000.0,
+                refusal: Some(reason),
+            });
+        }
+    }
+    Some(host.view())
+}
+
 /// The correctness batch's sheet states, on cs1's transfer: its fee row
 /// drawn by the live `fee_model` from a fee view the core produced, and its
 /// confirm held with the core's line for it — a failed fee's footer is the
@@ -2080,6 +2212,41 @@ mod tests {
         assert!(value.contains("USDC") && refreshing, "{value}");
         let (value, _, refreshing) = row("cs41");
         assert!(value.contains("USDC") && !refreshing, "{value}");
+    }
+
+    /// PR 2 note 9: each refusal the gallery pins reaches the sheet through
+    /// the real core with its reason — the held nonce (tried again), the
+    /// plain refusal, the nonce another operation used, the fee — and the
+    /// sheet's failure says it.
+    #[test]
+    fn the_refusal_pins_say_why() {
+        use vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY;
+        use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let clock = crate::signing::status::Clock {
+            now_ms: 20_000.0,
+            typical_s: Some(5),
+            chain_name: "Gnosis".to_owned(),
+            seen_submitted_ms: None,
+        };
+        for (want, key, retry) in [
+            ("held", PREVIOUS_PENDING_KEY, true),
+            ("refused", REFUSED_KEY, false),
+            ("went-first", REFUSED_NONCE_KEY, false),
+            ("fees", REFUSED_FEES_KEY, false),
+        ] {
+            let view = refusal_view(want).unwrap_or_else(|| unreachable!("{want}"));
+            assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{want}");
+            let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
+                .unwrap_or_else(|| unreachable!("{want}: the failure is drawn"));
+            assert_eq!(
+                receipt.captions,
+                vec![crate::flows::refusal_of(&s.refusals, Some(key))],
+                "{want}"
+            );
+            assert_eq!(receipt.retry.is_some(), retry, "{want}");
+        }
+        assert!(refusal_view("nonsense").is_none());
     }
 
     /// Every scenario builds, and none of them ships an empty confirm label —
