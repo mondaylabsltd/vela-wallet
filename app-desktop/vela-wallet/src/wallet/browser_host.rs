@@ -686,8 +686,42 @@ pub enum TabClose {
     StartPage,
 }
 
-/// The rule: closing the tab on screen shows `next`, the tab the explore
-/// machine selected once the closed one went, with its address.
+/// What a close of `ids` takes from the column, read BEFORE the core hears
+/// it (spec 082 RD6, spec 099 navigation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Closing {
+    /// The tab on screen is among them — the one the strip lights (the
+    /// core's `lit_tab`): the page showing, or over the start page only a
+    /// selected start-page tab. What the core selects next comes to the
+    /// front ([`tab_close`]). A dApp waiting unlit behind the start page —
+    /// left for the wallet, restored at launch — is NOT on screen: closing
+    /// it keeps the start page.
+    pub on_screen: bool,
+    /// The tab whose view the column holds is among them — over the start
+    /// page, possibly that unlit dApp. Its view and load watch go with it.
+    pub shown: bool,
+}
+
+/// [`Closing`] for `ids`, with `shown` the tab whose view the column holds
+/// and `browsing` whether its page is on screen (not the start page).
+#[must_use]
+pub fn closing(
+    view: &vela_core::app::explore_sites::ExploreView,
+    shown: Option<&str>,
+    browsing: bool,
+    ids: &[String],
+) -> Closing {
+    let lit = vela_core::app::browser_tabs::lit_tab(view, shown, browsing);
+    let among = |id: Option<&str>| id.is_some_and(|id| ids.iter().any(|closed| closed == id));
+    Closing {
+        on_screen: among(lit.as_deref()),
+        shown: among(shown),
+    }
+}
+
+/// The rule: closing the tab on screen ([`Closing::on_screen`]) shows
+/// `next`, the tab the explore machine selected once the closed one went,
+/// with its address.
 #[must_use]
 pub fn tab_close(was_shown: bool, next: Option<(String, Option<String>)>) -> TabClose {
     if !was_shown {
@@ -1670,6 +1704,85 @@ mod tests {
             resumable: Vec::new(),
             ready: true,
         }
+    }
+
+    /// Spec 099 navigation: 探索 entered again shows the start page with the
+    /// dApp's tab kept — its view held, unlit in the strip. Closing that tab
+    /// there takes its view and watch, and keeps the start page: it was not
+    /// on screen. The start page's own lit tab (a selected start-page tab)
+    /// and a page being browsed are on screen, and the neighbour comes up.
+    #[test]
+    fn closing_a_tab_waiting_unlit_keeps_the_start_page() {
+        let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+        let dapp = explore(
+            &[
+                ("t1", Some("https://app.uniswap.org/")),
+                ("t2", Some("https://polymarket.com/")),
+            ],
+            Some("t1"),
+        );
+        // Over the start page, t1 kept behind it (shown, unlit).
+        let closed = closing(&dapp, Some("t1"), false, &ids(&["t1"]));
+        assert_eq!(
+            closed,
+            Closing {
+                on_screen: false,
+                shown: true
+            }
+        );
+        let next = Some(("t2".to_owned(), Some("https://polymarket.com/".to_owned())));
+        assert_eq!(
+            tab_close(closed.on_screen, next.clone()),
+            TabClose::Background,
+            "the start page stays; t2's page does not come up"
+        );
+        // The same with no view held (restored at launch), or another tab.
+        assert_eq!(
+            closing(&dapp, None, false, &ids(&["t1"])),
+            Closing {
+                on_screen: false,
+                shown: false
+            }
+        );
+        assert_eq!(
+            closing(&dapp, Some("t1"), false, &ids(&["t2"])),
+            Closing {
+                on_screen: false,
+                shown: false
+            }
+        );
+        // A batch close over the start page: the same rule.
+        assert_eq!(
+            closing(&dapp, Some("t1"), false, &ids(&["t1", "t2"])),
+            Closing {
+                on_screen: false,
+                shown: true
+            }
+        );
+
+        // Browsing t1: closing it is closing the page on screen.
+        let closed = closing(&dapp, Some("t1"), true, &ids(&["t1"]));
+        assert!(closed.on_screen && closed.shown);
+        assert_eq!(
+            tab_close(closed.on_screen, next),
+            TabClose::Neighbour {
+                id: "t2".to_owned(),
+                url: "https://polymarket.com/".to_owned()
+            }
+        );
+        // A selected start-page tab is the start page's own, lit: on screen,
+        // whichever view is held behind it.
+        let start = explore(
+            &[("t1", Some("https://app.uniswap.org/")), ("t2", None)],
+            Some("t2"),
+        );
+        assert_eq!(
+            closing(&start, Some("t1"), false, &ids(&["t2"])),
+            Closing {
+                on_screen: true,
+                shown: false
+            }
+        );
     }
 
     /// G2 (RD6): over the start page — a restored tab waiting unlit at

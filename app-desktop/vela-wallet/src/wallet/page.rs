@@ -13310,7 +13310,10 @@ impl WalletPage {
     /// The neighbour rule is the machine's (right, then left); this only obeys
     /// the answer. Only the tab on screen has a document behind it: closing
     /// one in the background changes nothing on screen (it used to reload the
-    /// page in front, cancelling what it had asked — W14). Closing the tab of
+    /// page in front, cancelling what it had asked — W14). Over the start
+    /// page only its lit tab is on screen (`browser_host::closing`): a dApp
+    /// kept unlit behind it (探索 entered again) takes its view with it and
+    /// leaves the start page where it is. Closing the tab of
     /// an open request is never held: its page goes at the close, and the
     /// core answers the request 4900 and stops its column
     /// (`browser_host::tab_close`) — not at the neighbour's hello, which a
@@ -13318,8 +13321,12 @@ impl WalletPage {
     fn close_browser_tab(&mut self, id: &str, cx: &mut Context<Self>) {
         use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
-        let was_shown = self.shown_tab.as_deref() == Some(id)
-            || (!self.browsing && resident.read(cx).view().selected_tab.as_deref() == Some(id));
+        let closing = crate::wallet::browser_host::closing(
+            &resident.read(cx).view(),
+            self.shown_tab.as_deref(),
+            self.browsing,
+            &[id.to_owned()],
+        );
         resident.update(cx, |resident, cx| {
             resident.dispatch(
                 vela_core::app::explore_sites::Event::TabClosed { id: id.to_owned() },
@@ -13342,12 +13349,10 @@ impl WalletPage {
             .as_ref()
             .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
             .map(|tab| (tab.id.clone(), tab.url.clone()));
-        if was_shown {
-            // Its watch went with it.
-            self.load = crate::wallet::browser_host::LoadDriver::default();
-            self.shown_tab = None;
+        if closing.shown {
+            self.forget_shown_tab();
         }
-        match crate::wallet::browser_host::tab_close(was_shown, next) {
+        match crate::wallet::browser_host::tab_close(closing.on_screen, next) {
             TabClose::Background => {}
             // The neighbour's page comes to the front, as it was.
             TabClose::Neighbour { id, url } => self.switch_to_tab(id, url, cx),
@@ -13365,20 +13370,28 @@ impl WalletPage {
     /// "close tabs to the right", "close all tabs"). Which ones is the core's
     /// (`tabs_closed_by`); each one's page goes with its view, and the core
     /// settles what it had open, as for a single close. The selection then
-    /// follows the explore machine's rule, as it does for one.
+    /// follows the explore machine's rule, as it does for one, and what is on
+    /// screen follows a single close's rule (`browser_host::closing`): over
+    /// the start page a dApp kept unlit behind it is not on screen.
     fn close_browser_tabs(
         &mut self,
         scope: &vela_core::app::explore_sites::TabCloseScope,
         cx: &mut Context<Self>,
     ) {
+        use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
-        let ids =
-            vela_core::app::explore_sites::tabs_closed_by(&resident.read(cx).view().tabs, scope);
+        let before = resident.read(cx).view();
+        let ids = vela_core::app::explore_sites::tabs_closed_by(&before.tabs, scope);
         if ids.is_empty() {
             return;
         }
         crate::diag::vlog!("browser", "close tabs n={} ({scope:?})", ids.len());
-        let shown_closed = self.shown_tab.as_ref().is_some_and(|id| ids.contains(id));
+        let closing = crate::wallet::browser_host::closing(
+            &before,
+            self.shown_tab.as_deref(),
+            self.browsing,
+            &ids,
+        );
         for id in &ids {
             #[cfg(not(target_os = "linux"))]
             crate::webview::close(id);
@@ -13395,32 +13408,36 @@ impl WalletPage {
                 cx,
             );
         });
-        if shown_closed || !self.browsing {
-            if shown_closed {
-                self.load = crate::wallet::browser_host::LoadDriver::default();
-                self.shown_tab = None;
-            }
-            let view = resident.read(cx).view();
-            let next = view
-                .selected_tab
-                .as_ref()
-                .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
-                .map(|tab| (tab.id.clone(), tab.url.clone()));
-            match next {
-                Some((id, Some(url))) if self.browsing || shown_closed => {
-                    self.switch_to_tab(id, url, cx);
-                }
-                Some((id, _)) => {
-                    self.show_tab(Some(id), cx);
-                    self.browsing = false;
-                }
-                None => {
-                    self.show_tab(None, cx);
-                    self.browsing = false;
-                }
+        if closing.shown {
+            self.forget_shown_tab();
+        }
+        let view = resident.read(cx).view();
+        let next = view
+            .selected_tab
+            .as_ref()
+            .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
+            .map(|tab| (tab.id.clone(), tab.url.clone()));
+        match crate::wallet::browser_host::tab_close(closing.on_screen, next) {
+            TabClose::Background => {}
+            TabClose::Neighbour { id, url } => self.switch_to_tab(id, url, cx),
+            TabClose::StartPage => {
+                self.show_tab(view.selected_tab, cx);
+                self.browsing = false;
             }
         }
         cx.notify();
+    }
+
+    /// The tab whose view the column held was closed: its watch and its
+    /// committed address go with it, and the column holds no view until a
+    /// tab is shown again — never a closed tab's, which the next frame would
+    /// otherwise build again.
+    fn forget_shown_tab(&mut self) {
+        self.load = crate::wallet::browser_host::LoadDriver::default();
+        self.shown_tab = None;
+        self.bar_committed = None;
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::show(None);
     }
 
     /// Every page is closed, not merely hidden (an erase): their requests are
