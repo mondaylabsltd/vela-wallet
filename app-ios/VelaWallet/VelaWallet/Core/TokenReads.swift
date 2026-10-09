@@ -52,6 +52,10 @@ enum TokenReads {
         let tokens: [[String: Any]]
         let failed: Bool
         let rateLimited: Bool
+        /// Failed INSIDE the app: the read never left it — a pool that cannot
+        /// send, a request this build could not write (PR 2 note 11). Always
+        /// with `failed`. The core never says "can't reach" for it.
+        var internalFault = false
     }
 
     /// One chain's read, given up on at the core's per-chain deadline
@@ -187,9 +191,17 @@ enum TokenReads {
         stables: [(symbol: String, contract: String)] = [],
         wrappedNative: String? = nil
     ) async -> ChainResult {
+        // A read that cannot leave the app is not tried (PR 2 note 11): no
+        // address to ask about, or a pool that cannot send this chain's calls
+        // — Vela's own fault, said as that, never "can't reach" the network.
+        guard RelayClient.isAddress(address), pool.unsendable(chainId: chainId) == nil else {
+            return ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false, internalFault: true)
+        }
+
         var out: [[String: Any]] = []
         var failed = false
         var rateLimited = false
+        var internalFault = false
 
         let meta = ChainCatalog.meta(chainId)
         let slots = plan(chainId: chainId, stables: stables, wrappedNative: wrappedNative, custom: tokens)
@@ -221,6 +233,10 @@ enum TokenReads {
             }
         }
 
+        // A balance the chain did not answer is the chain's, whatever else
+        // failed beside it.
+        let nativeFailed = failed
+
         // 2. The token slots' balances and this chain's own price feed, in one batch.
         let feed = hasNativeCoin ? Prices.nativeFeeds[chainId] : nil
         let batch = await batch(address: address, chainId: chainId, slots: tokenSlots,
@@ -233,6 +249,7 @@ enum TokenReads {
         if batch.failed && !tokenSlots.isEmpty {
             failed = true
             rateLimited = rateLimited || batch.rateLimited
+            internalFault = batch.internalFault
         }
 
         let nativeSymbol = meta?.nativeSymbol ?? ""
@@ -274,7 +291,10 @@ enum TokenReads {
             out.append(row)
         }
 
-        return ChainResult(chainId: chainId, tokens: out, failed: failed, rateLimited: rateLimited)
+        return ChainResult(
+            chainId: chainId, tokens: out, failed: failed, rateLimited: rateLimited,
+            internalFault: internalFault && !nativeFailed
+        )
     }
 
     /// What one chain's batch came back with.
@@ -285,6 +305,8 @@ enum TokenReads {
         var localPrice: Double?
         var failed = false
         var rateLimited = false
+        /// The batch could not be written, so nothing was sent.
+        var internalFault = false
     }
 
     /// `aggregate3` of one `balanceOf` per slot — plus its `decimals()` where
@@ -307,7 +329,7 @@ enum TokenReads {
         if !slots.isEmpty {
             guard let owner = try? erc20EncodeBalanceOf(ownerHex: address),
                   let decimalsCall = Multicall.selector("decimals()")
-            else { return Batch(failed: true) }
+            else { return Batch(failed: true, internalFault: true) }
             for slot in slots {
                 guard let contract = slot.contract else { continue }
                 let balanceIndex = calls.count

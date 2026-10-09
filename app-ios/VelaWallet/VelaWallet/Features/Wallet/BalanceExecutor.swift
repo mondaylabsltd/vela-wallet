@@ -172,8 +172,10 @@ final class BalanceExecutor {
             // the answer that leaves the core able to retry rather than stalled
             // holding the home screen blank.
             VelaLog.failure(.balance, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
+            // Nothing was asked of any network: the fault is the app's own
+            // (PR 2 note 11), never "can't reach".
             return CoreJSON.string([
-                "type": "fetch_errored", "address": "", "pull": false,
+                "type": "fetch_errored", "address": "", "pull": false, "internal": true,
             ])
         }
     }
@@ -191,7 +193,11 @@ final class BalanceExecutor {
     /// of state, but the calls themselves are independent.
     private func fetch(address: String, pull: Bool) async -> String {
         guard !address.isEmpty else {
-            return CoreJSON.string(["type": "fetch_errored", "address": address, "pull": pull])
+            // No account to read: the fetch failed inside the app before
+            // anything left it (PR 2 note 11).
+            return CoreJSON.string([
+                "type": "fetch_errored", "address": address, "pull": pull, "internal": true,
+            ])
         }
 
         // Priced before the fan-out, and once: the mainnet feed batch is one
@@ -244,6 +250,12 @@ final class BalanceExecutor {
             // Which chains did not answer — never the address (FR-019).
             VelaLog.failure(.balance, kind: "chains_failed", "chains=\(failedChains.map(String.init).joined(separator: ","))")
         }
+        // The failed chains whose read never left the app (PR 2 note 11): a
+        // pool that could not send, a request this build could not write.
+        let internalChains = results.filter { $0.failed && $0.internalFault }.map(\.chainId)
+        if !internalChains.isEmpty {
+            VelaLog.failure(.balance, kind: "chains_internal", "chains=\(internalChains.map(String.init).joined(separator: ","))")
+        }
 
         return CoreJSON.string([
             "type": "fetch_settled",
@@ -257,6 +269,10 @@ final class BalanceExecutor {
             // Spec 092: every chain this round asked, so one that answered
             // holding nothing is "nothing when last read", not "not read yet".
             "read_chain_ids": results.map(\.chainId),
+            // A subset of the failed ones, as the throttled are: Vela's own
+            // fault, which the home says as that — never "Can't reach
+            // Ethereum" (issue 483, PR 2 note 11).
+            "internal_chain_ids": internalChains,
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
     }

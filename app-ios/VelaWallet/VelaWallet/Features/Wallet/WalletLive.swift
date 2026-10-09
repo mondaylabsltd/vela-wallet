@@ -200,6 +200,12 @@ enum WalletLive {
         loc: Loc?,
         networks: WalletNetworks
     ) -> BalanceStatusModel? {
+        // PR 2 note 11: a read that failed INSIDE Vela is said as that, in
+        // the line the unreachable networks would take — never "Can't reach
+        // Ethereum" for a fault that never asked Ethereum anything.
+        if let loc, let key = view.internalKey {
+            return BalanceStatusModel(kind: .warning, text: loc.t(key))
+        }
         // Spec 092: networks the wallet cannot reach come first — every one,
         // held or not, said without "RPC"; the line opens their list.
         if let loc, let line = unreachableLine(view, loc: loc, networks: networks) {

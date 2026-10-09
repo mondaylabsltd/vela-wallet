@@ -54,9 +54,15 @@ protocol RelayPort {
     func bundlerBase(chainId: Int) async -> String?
     func bestRpcUrl(chainId: Int) async -> String?
     func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer
+    /// Why a call on `chainId` cannot leave the app now (`RpcPool.unsendable`)
+    /// — a fault inside Vela, never the chain's — or `nil`.
+    func unsendable(chainId: Int) -> String?
 }
 
 extension RelayPort {
+    /// A port with no pool behind it (a scripted one) sends whatever it is asked.
+    func unsendable(chainId: Int) -> String? { nil }
+
     /// A port that knows only outcomes (a scripted one) cannot say whether a
     /// request left the device, so a give-up MAY have delivered: "not sent"
     /// is never a guess (contract §2). An answer — a value or a refusal — is
@@ -85,6 +91,8 @@ struct PoolRelayPort: RelayPort {
     func bundlerBase(chainId: Int) async -> String? { await pool.bundlerBase(chainId: chainId) }
 
     func bestRpcUrl(chainId: Int) async -> String? { await pool.bestRpcUrl(chainId: chainId) }
+
+    func unsendable(chainId: Int) -> String? { pool.unsendable(chainId: chainId) }
 
     func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer {
         // Spec 098 §5: the relay reads the chain through the RPC named here
@@ -915,6 +923,9 @@ final class RelayClient {
         // Not an address: there is nothing to ask a chain, and nothing a chain
         // did wrong (issue #483).
         guard Self.isAddress(address) else { return .internal(kind: "deployment: not_an_address") }
+        // A pool that cannot send this chain's calls: nothing would leave the
+        // app, so nothing is the chain's doing (PR 2 note 11).
+        if let kind = port.unsendable(chainId: chainId) { return .internal(kind: "deployment: \(kind)") }
         let key = "\(chainId):\(address.lowercased())"
         if !fresh, deployedAccounts.contains(key) { return .deployed(true) }
         return await deploymentFlights.run(fresh ? key + ":fresh" : key) {
