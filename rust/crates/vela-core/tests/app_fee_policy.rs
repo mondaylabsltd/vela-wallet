@@ -6839,10 +6839,7 @@ fn a_fee_that_would_fail_says_what_a_tap_does() {
             rate_limited: false,
         },
     });
-    assert_eq!(
-        sut.view().failure.expect("said").tap,
-        FeeFailureTap::Retry
-    );
+    assert_eq!(sut.view().failure.expect("said").tap, FeeFailureTap::Retry);
 }
 
 /// PR 2 polish: a failure carries the question it answered — the chain and
@@ -6860,10 +6857,15 @@ fn a_failure_is_only_ever_said_for_its_own_chain() {
     let failure = sut.view().failure.expect("said");
     assert_eq!(failure.chain_id, Some(CHAIN));
     assert!(failure.is_for_chain(Some(CHAIN)));
-    assert!(!failure.is_for_chain(Some(CHAIN + 1)), "another chain's form");
+    assert!(
+        !failure.is_for_chain(Some(CHAIN + 1)),
+        "another chain's form"
+    );
     sut.drop_matching(is_ttl);
     // The form names another chain: the old chain's failure is gone.
-    sut.dispatch(Event::ChainChanged { chain_id: CHAIN + 1 });
+    sut.dispatch(Event::ChainChanged {
+        chain_id: CHAIN + 1,
+    });
     assert_eq!(sut.view().failure, None);
 }
 
