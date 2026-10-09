@@ -109,3 +109,37 @@ describe('the reported steps, ten times over', () => {
 		view.screen.unmount();
 	});
 });
+
+/**
+ * PR 2 polish: the confirm's failed fee line ("Pay with another coin") opens
+ * the fee coins OVER the confirm — the screen under the sheet stays the
+ * confirm (the page composes SD3 with SD2f's sheet). The screen's state does
+ * not change, so a sheet closed once must still rise on the next tap.
+ */
+describe('the fee coins over the confirm, opened from its fee line', () => {
+	it('opens, closes, and opens again — the confirm under it every time', async () => {
+		const confirm = build('sd3');
+		const sheet = build('sd2f').sheet;
+		expect(sheet?.kind).toBe('fee-token');
+		let open = false;
+		const view = await drawn('sd3');
+		await view.screen.rerender({ onsheetclose: () => (open = false) });
+		for (let i = 0; i < 3; i++) {
+			open = true;
+			await view.screen.rerender({ model: { ...confirm, sheet } });
+			await pause(300);
+			expect(view.dialog(), `tap #${i} opens the coins`).not.toBeNull();
+			expect(
+				view.host.querySelector('[data-testid="send-confirm"]'),
+				'over the confirm'
+			).not.toBeNull();
+			view.host.querySelector<HTMLElement>('.scrim')!.click();
+			await vi.waitFor(() => expect(open, `close #${i}`).toBe(false));
+			await view.screen.rerender({ model: confirm });
+			await pause(300);
+			expect(view.dialog(), `close #${i} leaves the confirm`).toBeNull();
+			expect(view.host.querySelector('[data-testid="send-confirm"]')).not.toBeNull();
+		}
+		view.screen.unmount();
+	});
+});

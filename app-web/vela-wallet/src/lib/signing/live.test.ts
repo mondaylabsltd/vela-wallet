@@ -33,6 +33,8 @@ import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
 import { tokenMarkFor } from '$lib/flows/marks';
+import { feeRowTap } from '$lib/flows/fee-failure';
+import { wouldFailView } from '$lib/flows/testing/fee-core';
 import {
 	approveOptsOf,
 	buildSigningModel,
@@ -120,7 +122,12 @@ function failureOf(failed: NonNullable<FeeView['failed']>, retrying: boolean): F
 		footer_key:
 			auto || retrying
 				? 'componentsUi.signing.confirmBlock.feeRetrying'
-				: 'componentsUi.signing.confirmBlock.feeFailed'
+				: 'componentsUi.signing.confirmBlock.feeFailed',
+		// Every failure but `would_fail` (the real core's, in
+		// `flows/core/fee-retry.test.ts`): a tap asks again.
+		tap: 'retry',
+		chain_id: 1,
+		fee_token: null
 	};
 }
 
@@ -1937,17 +1944,46 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		]);
 		expect(said('componentsUi.signing.refused')?.captions).toEqual([m.receipt.refused]);
 		// At submit, the account's previous operation held the nonce: its own
-		// line — and "Try again" stays, as on Send.
-		const held = said('componentsUi.signing.confirmBlock.previousPending', false, true);
-		expect(held?.captions).toEqual([
-			m.confirmBlock['componentsUi.signing.confirmBlock.previousPending']
-		]);
+		// sentence (PR 2 polish: "not sent yet") — and "Try again" stays, as on Send.
+		const held = said('componentsUi.signing.notSentBody', false, true);
+		expect(held?.captions).toEqual([m.receipt.refusals['componentsUi.signing.notSentBody']]);
 		expect(held?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
 		// A key this build has no words for is the plain refusal, never a path.
 		expect(said('componentsUi.signing.somethingNew')?.captions).toEqual([m.receipt.refused]);
 		// No key: as before.
 		expect(said(null)?.captions).toEqual([m.receipt.refused]);
 		expect(refusalWords(null, m)).toBeUndefined();
+	});
+
+	it('a held nonce at submit is "Not sent yet", calmly — never "Failed" (PR 2 polish)', () => {
+		// The view the core gives for it (`sign_request` `on_submit_outcome`).
+		const view: SignView = {
+			...failedSign(false),
+			failure_refusal_key: 'componentsUi.signing.notSentBody',
+			failure_retryable: true,
+			failure_not_sent: true
+		};
+		const status = signingStatus(view, undefined, 'Send · −1 USDC', m);
+		expect(status).toMatchObject({
+			stage: 'not_sent',
+			title: m.status.notSentTitle,
+			closable: true,
+			actions: { close: m.receipt.done, retry: m.status.retry }
+		});
+		expect(status?.captions).toEqual([
+			'Send · −1 USDC',
+			m.receipt.refusals['componentsUi.signing.notSentBody']
+		]);
+		expect(status?.title).not.toBe(m.receipt.failed);
+		// The corpus's words, not a dotted path.
+		expect(m.status.notSentTitle).toBe('Not sent yet');
+		expect(m.receipt.refusals['componentsUi.signing.notSentBody']).toContain(
+			'still being processed'
+		);
+		// Every other failure stays a failure.
+		expect(
+			signingStatus({ ...view, failure_not_sent: false }, undefined, undefined, m)?.stage
+		).toBe('failed');
 	});
 
 	it('the fiat is the wallet’s money line — no exponent, no hard-coded $ (G60)', () => {
@@ -2719,5 +2755,65 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 		expect(JSON.stringify(cards[0])).toContain(
 			JSON.stringify({ label: m.labelInteracting, value: 'USDC' })
 		);
+	});
+});
+
+/**
+ * PR 2 polish: the sheet's failed fee row does exactly what its figure says
+ * (`FeeFailureView.tap`), and the line under the held confirm says the
+ * failure's own fact. The fee views are the REAL fee core's
+ * (`flows/testing/fee-core.ts`): the relay refused the operation.
+ */
+describe('a fee that would fail, on the sheet (PR 2 polish)', () => {
+	const WOULD_FAIL = m.confirmBlock['componentsUi.signing.confirmBlock.feeWouldFail'];
+
+	it('another coin on offer: "Pay with another coin", its chevron, and the coins under it when tapped', () => {
+		const fee = wouldFailView(1, true);
+		const model = buildSigningModel(inputs({ fee }));
+		expect(model?.fee).toMatchObject({
+			kind: 'onchain',
+			value: m.feePayWithAnotherCoin,
+			tappable: true,
+			chevron: true
+		});
+		expect(m.feePayWithAnotherCoin).toBe('Pay with another coin');
+		// What the tap does: open the list — never a re-ask, which would get
+		// the same answer.
+		expect(feeRowTap(fee, fee.options.length)).toBe('toggle_coins');
+		const open = buildSigningModel(inputs({ fee, feeOpen: true }))?.fee;
+		const selector = open && 'selector' in open ? open.selector : undefined;
+		expect(selector?.options.map((option) => [option.name, option.selected])).toEqual([
+			['ETH', false],
+			['USDC', true]
+		]);
+		// The fact under the held confirm — it asks for no tap.
+		expect(model?.confirm.enabled).toBe(false);
+		expect(model?.confirm.note).toBe(WOULD_FAIL);
+		expect(WOULD_FAIL).toBe('This would fail if sent as it is.');
+	});
+
+	it('no coin left to try: the dash, stated — no control, no chevron, no list', () => {
+		const fee = wouldFailView(1, false);
+		const model = buildSigningModel(inputs({ fee, feeOpen: true }));
+		expect(model?.fee).toMatchObject({ value: '—', tappable: false, chevron: false });
+		const row = model?.fee;
+		expect(row && 'selector' in row ? row.selector : undefined).toBeUndefined();
+		expect(feeRowTap(fee, fee.options.length)).toBe('none');
+		expect(model?.confirm.note).toBe(WOULD_FAIL);
+	});
+
+	it('every other failure: the tap asks again — and asks nothing while a re-ask is out', () => {
+		const failed: FeeView = {
+			...QUOTED_FEE,
+			fee: null,
+			failed: 'missing_public_key',
+			confirm_fee_ready: false,
+			failure: failureOf('missing_public_key', false)
+		};
+		expect(feeRowTap(failed, 2)).toBe('requote');
+		expect(feeRowTap({ ...failed, busy: true }, 2)).toBe('none');
+		// No failure: two coins open their list; one is the host's.
+		expect(feeRowTap(QUOTED_FEE, 2)).toBe('toggle_coins');
+		expect(feeRowTap(QUOTED_FEE, 1)).toBe('host');
 	});
 });

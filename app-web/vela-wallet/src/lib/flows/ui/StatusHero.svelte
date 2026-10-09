@@ -16,6 +16,11 @@
 	 * ring is drawn OUTSIDE the disc — the disc keeps its one size — and it is
 	 * the same ring that closes and turns green on confirmation, so the tick
 	 * arrives as the end of what the person was watching.
+	 *
+	 * "Not sent yet" (`not_sent`, PR 2 polish) is no failure: the relay turned
+	 * the operation back because the account's previous one still holds the
+	 * nonce. The clock, still, in the waiting colours — no ring (nothing is
+	 * on its way), no breathing, and never the failure's red.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -65,6 +70,8 @@
 			<Icon icon={UTILITY_ICONS.clock} size="xl" />
 		{:else if stage === 'confirmed'}
 			<span class="landed"><Icon icon={UTILITY_ICONS.check} size="xl" /></span>
+		{:else if stage === 'not_sent'}
+			<Icon icon={UTILITY_ICONS.clock} size="xl" />
 		{:else}
 			<Icon icon={UTILITY_ICONS.exclamation} size="xl" />
 		{/if}
@@ -114,6 +121,12 @@
 	.failed {
 		background: var(--color-error-soft);
 		color: var(--color-error-base);
+	}
+
+	/* Held back, not failed: the waiting disc's colours, standing still. */
+	.not_sent {
+		background: var(--color-bg-sunken);
+		color: var(--color-fg-muted);
 	}
 
 	/* 104 units across the 88-unit disc plus a --space-md gutter each side: the

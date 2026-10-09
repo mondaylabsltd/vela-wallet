@@ -342,3 +342,60 @@ describe('FeeRow', () => {
 		expect((stale as HTMLElement).querySelector('svg')).not.toBeNull();
 	});
 });
+
+/**
+ * PR 2 polish: a failed fee's row does exactly what its figure says — the
+ * core's `FeeFailureView.tap`, as the builder puts it (`FeeRowModel.tap`).
+ */
+describe('FeeRow — the tap does what the figure says (PR 2 polish)', () => {
+	const rowWith = async (tap: 'open' | 'retry' | 'none', value: string, refreshing = false) => {
+		const calls: string[] = [];
+		const screen = render(FeeRow, {
+			props: {
+				fee: { ...FEE, value, valueFiat: undefined, tap, refreshing },
+				onopen: () => calls.push('open'),
+				onrefresh: () => calls.push('refresh')
+			}
+		});
+		await tick();
+		return { screen, calls };
+	};
+
+	it('"Tap to retry" asks again — no chevron, no list; while a re-ask is out, nothing', async () => {
+		const { screen, calls } = await rowWith('retry', 'Tap to retry');
+		const row = screen.container.querySelector('button.open') as HTMLButtonElement;
+		expect(row.getAttribute('aria-label')).toBe('Refresh fee');
+		expect(row.querySelector('.amount > :last-child')?.tagName.toLowerCase()).not.toBe('svg');
+		row.click();
+		await tick();
+		expect(calls).toEqual(['refresh']);
+		screen.unmount();
+		const busy = await rowWith('retry', '—', true);
+		(busy.screen.container.querySelector('button.open') as HTMLButtonElement).click();
+		await tick();
+		expect(busy.calls).toEqual([]);
+	});
+
+	it('"Pay with another coin" opens the coins, behind its chevron', async () => {
+		const { screen, calls } = await rowWith('open', 'Pay with another coin');
+		const row = screen.container.querySelector('button.open') as HTMLButtonElement;
+		expect(row.getAttribute('aria-label')).toBe('Fee token');
+		// The coin's mark, and the chevron after the figure.
+		expect(row.querySelector('.amount > :last-child')?.tagName.toLowerCase()).toBe('svg');
+		row.click();
+		await tick();
+		expect(calls).toEqual(['open']);
+	});
+
+	it('the dash with nothing behind it is no control — stated, no chevron, no press', async () => {
+		const { screen, calls } = await rowWith('none', '—');
+		expect(screen.container.querySelector('button.open')).toBeNull();
+		const stated = screen.container.querySelector('[data-testid="fee-row-stated"]') as HTMLElement;
+		expect(stated).not.toBeNull();
+		expect(stated.querySelector('.amount > :last-child')?.tagName.toLowerCase()).not.toBe('svg');
+		expect(getComputedStyle(stated).cursor).toBe('default');
+		stated.click();
+		await tick();
+		expect(calls).toEqual([]);
+	});
+});

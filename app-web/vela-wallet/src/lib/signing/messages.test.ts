@@ -115,3 +115,26 @@ describe('the refusal reasons and the held confirm resolve', () => {
 		expect(m.confirmBlock[held], locale).not.toBe(held);
 	});
 });
+
+/**
+ * PR 2 polish: "not sent yet" for a held nonce at submit, the failed row's
+ * "Pay with another coin", and the would-fail line under the held confirm —
+ * every word the sheet draws for them resolves in every locale.
+ */
+describe('the not-sent and would-fail words resolve', () => {
+	it.each(SUPPORTED_LOCALES)('%s: each is a sentence, not its key', (locale) => {
+		const m = resolveSigningMessages(locale);
+		const said = (value: string | undefined, key: string) => {
+			expect(value, `${key} in ${locale}`).toBe(rawResolve(locale, key));
+			expect(value, `${key} in ${locale}`).not.toBe(key);
+		};
+		said(m.status.notSentTitle, 'componentsUi.signing.notSentTitle');
+		said(
+			m.receipt.refusals['componentsUi.signing.notSentBody'],
+			'componentsUi.signing.notSentBody'
+		);
+		said(m.feePayWithAnotherCoin, 'componentsUi.gas.payWithAnotherCoin');
+		const wouldFail = 'componentsUi.signing.confirmBlock.feeWouldFail';
+		said(m.confirmBlock[wouldFail], wouldFail);
+	});
+});

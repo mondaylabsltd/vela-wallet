@@ -138,7 +138,12 @@ const CORE_LOST_VIEW: FeeView = {
 		auto_retry: false,
 		retrying: false,
 		figure_key: 'componentsUi.gas.estimateFailed',
-		footer_key: 'componentsUi.signing.confirmBlock.feeFailed'
+		footer_key: 'componentsUi.signing.confirmBlock.feeFailed',
+		// A tap loads the core again and asks (`requote`). No run, so no chain
+		// or coin it answered: every surface takes it as its own.
+		tap: 'retry',
+		chain_id: null,
+		fee_token: null
 	}
 };
 

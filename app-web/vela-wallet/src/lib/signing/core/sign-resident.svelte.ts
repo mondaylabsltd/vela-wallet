@@ -80,6 +80,7 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	failure_refused: false,
 	failure_retryable: false,
 	failure_refusal_key: null,
+	failure_not_sent: false,
 	notice: null,
 	blocked: null,
 	global_chain_id: 1

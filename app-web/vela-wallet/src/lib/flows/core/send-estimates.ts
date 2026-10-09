@@ -8,6 +8,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import type { TransactionFeeEstimate } from '$lib/services/safe-transaction';
 import { fromWireAmount } from '$lib/services/amount-codec';
+import { failureForChain } from '../fee-failure';
 
 // ---------------------------------------------------------------------------
 // Fee codec
@@ -162,20 +163,29 @@ export class FeeTokenWord {
  * Each word is said when it changes. The send machine starts not busy, so a
  * journey's first "not busy" is not said; its first word of the failure is
  * always said ({@link forget} starts a journey told nothing).
+ *
+ * PR 2 polish: only a failure for the form's own chain is "failed"
+ * (`FeeFailureView::is_for_chain`). Right after a token switch the form names
+ * another chain before the fee machine has been asked about it; the old
+ * chain's failure is not this form's, and must not hold its confirm.
  */
 export class FeeStateWord {
 	#busy = false;
 	/** What this journey was last told of the failure; `null` = nothing yet. */
 	#failed: boolean | null = null;
 
-	/** The events to dispatch for the card's view, in order — empty when nothing changed. */
-	news(view: Pick<FeeView, 'busy' | 'failure'>): SendEvent[] {
+	/**
+	 * The events to dispatch for the card's view, in order — empty when
+	 * nothing changed. `formChain`: the send form's chain (the core's
+	 * `form_chain`), `null` while it names none.
+	 */
+	news(view: Pick<FeeView, 'busy' | 'failure'>, formChain: number | null): SendEvent[] {
 		const out: SendEvent[] = [];
 		if (view.busy !== this.#busy) {
 			this.#busy = view.busy;
 			out.push({ type: 'fee_busy_changed', busy: view.busy });
 		}
-		const failed = view.failure !== null;
+		const failed = failureForChain(view.failure, formChain) !== null;
 		if (failed !== this.#failed) {
 			this.#failed = failed;
 			out.push({ type: 'fee_failed_changed', failed });

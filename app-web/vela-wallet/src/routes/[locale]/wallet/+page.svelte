@@ -108,6 +108,7 @@
 	import type { MtokView } from '$lib/core/generated/MtokView';
 	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
+		formChainOf,
 		makeRecipientId,
 		sendTokenId,
 		visibleSendTokens,
@@ -848,7 +849,10 @@
 		// recipient row dispatches, and a pick — or `close_contact_picker` —
 		// is what takes it down.
 		if (view.show_contact_picker) return 'sd2e' as const;
-		if (feeSheetOpen) return 'sd2f' as const;
+		// The fee coins opened from the confirm's failed fee line (PR 2 polish:
+		// "Pay with another coin") rise over the confirm, not over the form
+		// two steps back — see `mobileFlowModel`.
+		if (feeSheetOpen && view.stage !== 'confirm') return 'sd2f' as const;
 		if (batchView) return 'sd2c' as const;
 		switch (view.stage) {
 			case 'select_token':
@@ -1065,6 +1069,19 @@
 	});
 
 	/**
+	 * The phone's screen for a state: the prerendered model — and, on the
+	 * confirm, the fee-coin sheet over it while it is open (PR 2 polish: the
+	 * failed fee line's "Pay with another coin" opens the coins there). The
+	 * sheet is SD2f's own; only the screen under it is the confirm's.
+	 */
+	function mobileFlowBase(state: NonNullable<typeof shownFlowState>) {
+		const base = data.flows[state];
+		if (!feeSheetOpen || sendView?.stage !== 'confirm') return base;
+		const sheet = data.flows.sd2f.sheet;
+		return sheet?.kind === 'fee-token' ? { ...base, sheet } : base;
+	}
+
+	/**
 	 * The fee session's later word, mirrored into the send machine — the
 	 * `sync_fee_to_send` the desktop has had since it was wired, and Android's
 	 * `SendController.init` collector. This shell never had it: the send
@@ -1096,13 +1113,15 @@
 		// Read so a late answer landing in the send machine re-runs this.
 		const held = sendView?.fee ?? null;
 		if (!sendSession || !view) return;
+		// The form's chain: the selected token's, else the sweep's (the core's
+		// `form_chain`).
+		const formChain = sendView ? formChainOf(sendView) : null;
 		// A measurement out, and the card's failure (PR 2 integration:
 		// `fee_failed_changed`) — the send machine holds its confirm on either,
 		// and drops the figure it kept on the confirm page when the card fails.
-		for (const event of feeStateWord.news(view)) sendSession.dispatch(event);
-		// The form's chain: the selected token's, else the sweep's (the core's
-		// `form_chain`).
-		const formChain = sendView?.selected_token?.chain_id ?? sendView?.multi_chain_id ?? null;
+		// Only a failure for the form's own chain counts (PR 2 polish): right
+		// after a token switch the old chain's is not this form's.
+		for (const event of feeStateWord.news(view, formChain)) sendSession.dispatch(event);
 		const coinNews = feeTokenWord.news(view.fee_token, feeQuote.pricingChainId, formChain);
 		if (coinNews !== null) sendSession.dispatch(coinNews);
 		const estimate = view.fee;
@@ -2208,7 +2227,7 @@
 			{#if shownFlowState !== undefined}
 				<FlowsMobile
 					model={withLiveTxDetailMobile(
-						withLiveFlow(data.flows[shownFlowState], flowInputs),
+						withLiveFlow(mobileFlowBase(shownFlowState), flowInputs),
 						txDetail
 					)}
 					onback={() => {

@@ -104,7 +104,11 @@ describe('the core retries a failed fee through the session’s own timer', () =
 			auto_retry: true,
 			retrying: false,
 			figure_key: null,
-			footer_key: 'componentsUi.signing.confirmBlock.feeRetrying'
+			footer_key: 'componentsUi.signing.confirmBlock.feeRetrying',
+			// PR 2 polish: a tap asks again; the question it answered.
+			tap: 'retry',
+			chain_id: 1,
+			fee_token: null
 		});
 
 		await vi.advanceTimersByTimeAsync(2_999);
@@ -171,7 +175,10 @@ describe('the core retries a failed fee through the session’s own timer', () =
 			auto_retry: false,
 			retrying: false,
 			figure_key: 'componentsUi.gas.estimateFailed',
-			footer_key: 'componentsUi.signing.confirmBlock.feeFailed'
+			footer_key: 'componentsUi.signing.confirmBlock.feeFailed',
+			tap: 'retry',
+			chain_id: 1,
+			fee_token: null
 		});
 		await vi.advanceTimersByTimeAsync(60_000);
 		await settle();

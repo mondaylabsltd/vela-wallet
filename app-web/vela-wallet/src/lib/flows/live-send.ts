@@ -41,6 +41,7 @@ import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
 import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
 import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
@@ -286,10 +287,12 @@ function feeRowMark(coin: SendFeeCoin | null, template: FeeRowModel): TokenMarkM
 
 /**
  * A failed fee's words, as the core says them (`FeeView.failure`, PR 2 note
- * 1): the row's figure — "Tap to retry" only when a tap is the one way
- * (`figure_key`), else the dash — and the reason under it, by the core's key
- * (`{{chain}}`: the form's chain). Copy is the corpus's only: a key this build
- * does not carry draws the dash, or no line, never a dotted path.
+ * 1): the row's figure, saying what a tap does (`figure_key`) — "Tap to
+ * retry" only when a tap is the one way, "Pay with another coin" when the tap
+ * opens the coins (PR 2 polish), else the dash — and the reason under it, by
+ * the core's key (`{{chain}}`: the form's chain). Copy is the corpus's only: a
+ * key this build does not carry draws the dash, or no line, never a dotted
+ * path.
  */
 export function feeFailureWords(
 	failure: FeeFailureView,
@@ -307,8 +310,20 @@ export function feeFailureWords(
 }
 
 /** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
-function formChainOf(send: SendView): number | null {
+export function formChainOf(
+	send: Pick<SendView, 'selected_token' | 'multi_chain_id'>
+): number | null {
 	return send.selected_token?.chain_id ?? send.multi_chain_id ?? null;
+}
+
+/**
+ * The fee's failure, as the send form and its confirm may draw it (PR 2
+ * polish): only when it answered the form's own chain. Right after a token
+ * switch the form names another chain before the fee machine has been asked
+ * about it — the old chain's failure is not this form's, and is not drawn.
+ */
+function sendFeeFailure(inputs: Pick<SendLiveInputs, 'send' | 'fee'>): FeeFailureView | null {
+	return failureForChain(inputs.fee.failure, formChainOf(inputs.send));
 }
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
@@ -318,7 +333,7 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	// itself. Nothing in hand is drawn over it: the send machine may still
 	// hold the last figure, and a figure the fee machine could not stand by
 	// is not one to show beside a reason it failed.
-	const failure = fee.failure;
+	const failure = sendFeeFailure(inputs);
 	if (failure) {
 		const words = feeFailureWords(failure, formChainOf(send), m);
 		return {
@@ -333,8 +348,10 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			refreshing: fee.busy || failure.retrying,
 			// In the line the row keeps for its note, so nothing below moves.
 			reason: words.reason,
-			// A tap on the row asks again at once (`requote`).
-			retries: true
+			// PR 2 polish: the tap does exactly what the figure says — asks
+			// again at once (`requote`), opens the fee coins (after the relay
+			// answered that it would fail), or nothing at all.
+			tap: failure.tap === 'retry' ? 'retry' : failure.tap === 'choose_coin' ? 'open' : 'none'
 		};
 	}
 	const inHand = send.fee ?? fee.fee;
@@ -1153,12 +1170,17 @@ function confirmHolds(
 	if (send.tx_status === 'error' && send.tx_error !== null) {
 		switch (send.tx_error) {
 			case 'previous_pending':
-				// Another operation of this account holds the nonce: not a failure
-				// of the network. Try again waits for it like any held confirm.
+				// Another operation of this account holds the nonce: nothing was
+				// sent and nothing went wrong (PR 2 polish) — "Not sent yet",
+				// calmly, as the signing sheet says it, and Try again waits for it
+				// like any held confirm. Said once: the held line is not drawn
+				// beside it.
 				return {
 					error: {
-						text: m['componentsUi.signing.confirmBlock.previousPending'],
-						retry: m['send.txRetryBtn']
+						title: m['componentsUi.signing.notSentTitle'],
+						text: m['componentsUi.signing.notSentBody'],
+						retry: m['send.txRetryBtn'],
+						calm: true
 					}
 				};
 			case 'bundler_fund':
@@ -1181,8 +1203,10 @@ function confirmHolds(
 		// PR 2 note 1: else the fee's failure, in the line the signing sheet
 		// draws under its held confirm (`FeeView.failure.footer_key`) —
 		// "Retrying…" while the core asks again by itself (through the re-ask
-		// too), "Tap it to retry" only when a tap is the one way.
-		const footer = fee.failure?.footer_key;
+		// too), "Tap it to retry" only when a tap is the one way, "This would
+		// fail if sent as it is." when the relay answered so (PR 2 polish) —
+		// and only for the form's own chain.
+		const footer = failureForChain(fee.failure, formChainOf(send))?.footer_key;
 		const words =
 			footer === undefined ? undefined : (m as Readonly<Record<string, string>>)[footer];
 		return words === undefined ? {} : { held: words };
@@ -1198,13 +1222,22 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	const { send, m, currency, identity, identicon } = inputs;
 	const holds = confirmHolds(send, m, inputs.fee);
 	// PR 2 note 1: a failed fee on the last screen says so in its own row —
-	// the dash and the core's reason — never the last figure the send machine
-	// still holds. The dash even where the form's row would say "Tap to
-	// retry": this row is a fact, not a control, and a tap it cannot honour
-	// is not offered (spec 081); the line under the confirm says the rest.
-	const feeFailure = inputs.fee.failure
-		? { ...feeFailureWords(inputs.fee.failure, formChainOf(send), m), figure: '—' }
-		: null;
+	// the core's figure and reason — never the last figure the send machine
+	// still holds. PR 2 polish: and the line is the control its words and the
+	// line under the confirm promise — "Tap to retry" over "Tap it to retry"
+	// asks again, "Pay with another coin" opens the fee coins, and a dash
+	// with nothing behind it is a fact. Only the form's own chain's failure.
+	const failure = sendFeeFailure(inputs);
+	const feeFailure = failure ? feeFailureWords(failure, formChainOf(send), m) : null;
+	const feeTap: FactRowModel['tap'] =
+		failure === null || failure.tap === 'nothing'
+			? undefined
+			: {
+					does: failure.tap,
+					label: failure.tap === 'retry' ? m['send.feeRefresh'] : m['send.feeTokenLabel'],
+					// A re-ask is out: it is the answer awaited — a tap asks nothing.
+					busy: failure.tap === 'retry' && (inputs.fee.busy || failure.retrying)
+				};
 	const token = send.selected_token;
 	const usd =
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
@@ -1247,7 +1280,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
 			value: feeFailure ? feeFailure.figure : feeText(send.fee ?? inputs.fee.fee, inputs),
-			note: feeFailure?.reason
+			note: feeFailure?.reason,
+			tap: feeTap
 		}
 	];
 

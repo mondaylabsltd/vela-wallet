@@ -18,9 +18,20 @@
 		fact: FactRowModel;
 		copied?: boolean;
 		oncopy?: () => void;
+		/**
+		 * The row's own action, when the model makes it a control (`fact.tap`,
+		 * PR 2 polish: the send confirm's failed fee line). Absent, the row is
+		 * drawn as the fact it is, whatever the model says.
+		 */
+		ontap?: () => void;
 	}
 
-	let { fact, copied = false, oncopy }: Props = $props();
+	let { fact, copied = false, oncopy, ontap }: Props = $props();
+
+	/** A control only when the model says what a tap does AND something will do it. */
+	const pressable = $derived(
+		fact.tap !== undefined && ontap !== undefined && fact.copy === undefined
+	);
 </script>
 
 {#snippet lead()}
@@ -47,28 +58,58 @@
 	{/if}
 {/snippet}
 
-<div class="fact">
-	<span class="label">{fact.label}</span>
-	<span class="value-wrap">
-		{#if fact.detail !== undefined}
-			<span class="lines">
-				<span class="first">
-					{@render lead()}
-					<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
-				</span>
-				<span class="detail">{fact.detail}</span>
-			</span>
-		{:else}
+{#snippet value()}
+	<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+{/snippet}
+
+{#if pressable && fact.tap !== undefined}
+	<!-- PR 2 polish: the confirm's failed fee line is the control its words
+	     and the line under the confirm promise — "Tap to retry" asks again,
+	     "Pay with another coin" opens the coins (its chevron says so). While a
+	     re-ask is out it is the answer awaited: the press asks nothing. -->
+	<button
+		type="button"
+		class="fact pressable"
+		aria-label={fact.tap.label}
+		aria-busy={fact.tap.busy === true}
+		data-does={fact.tap.does}
+		onclick={() => {
+			if (fact.tap?.busy !== true) ontap?.();
+		}}
+	>
+		<span class="label">{fact.label}</span>
+		<span class="value-wrap">
 			{@render lead()}
-			<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
-		{/if}
-		{#if fact.copy !== undefined}
-			<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
-				<Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
-			</button>
-		{/if}
-	</span>
-</div>
+			{@render value()}
+			{#if fact.tap.does === 'choose_coin'}
+				<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
+			{/if}
+		</span>
+	</button>
+{:else}
+	<div class="fact">
+		<span class="label">{fact.label}</span>
+		<span class="value-wrap">
+			{#if fact.detail !== undefined}
+				<span class="lines">
+					<span class="first">
+						{@render lead()}
+						<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+					</span>
+					<span class="detail">{fact.detail}</span>
+				</span>
+			{:else}
+				{@render lead()}
+				<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+			{/if}
+			{#if fact.copy !== undefined}
+				<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
+					<Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
+				</button>
+			{/if}
+		</span>
+	</div>
+{/if}
 
 <style>
 	.fact {
@@ -166,7 +207,31 @@
 		color: var(--color-success-base);
 	}
 
-	button {
+	/* The whole row is the target (PR 2 polish): the same row, unstyled as a
+	   button, so a pressable fact reads exactly as the facts beside it. */
+	.pressable {
+		width: 100%;
+		margin: 0;
+		padding-inline: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		text-align: start;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.pressable[aria-busy='true'] {
+		cursor: progress;
+	}
+
+	.chevron {
+		display: flex;
+		flex-shrink: 0;
+		color: var(--color-fg-subtle);
+	}
+
+	.value-wrap > button {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -179,7 +244,7 @@
 		cursor: pointer;
 	}
 
-	button:hover {
+	.value-wrap > button:hover {
 		color: var(--color-fg-base);
 	}
 

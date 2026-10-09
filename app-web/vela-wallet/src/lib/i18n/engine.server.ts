@@ -978,7 +978,11 @@ export { FEE_REASON_KEYS };
 export const REFUSAL_KEYS = [
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
-	'componentsUi.signing.refused'
+	'componentsUi.signing.refused',
+	// PR 2 polish: at submit, the relay turned it back because the account's
+	// previous operation on this network still holds the nonce
+	// (`SignView.failure_refusal_key` under `failure_not_sent`).
+	'componentsUi.signing.notSentBody'
 ] as const;
 
 /** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
@@ -997,7 +1001,10 @@ export const CONFIRM_BLOCK_KEYS = [
 	// PR 2 note 1: the core asks a failed fee again by itself — the footer
 	// says so (`FeeFailureView.footer_key`), never "tap it" under a row that
 	// asks for no tap.
-	'componentsUi.signing.confirmBlock.feeRetrying'
+	'componentsUi.signing.confirmBlock.feeRetrying',
+	// PR 2 polish: the relay answered that the operation would fail — a fact,
+	// asking for no tap; the row says what a tap does.
+	'componentsUi.signing.confirmBlock.feeWouldFail'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1136,6 +1143,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeLabel: k('componentsUi.gas.networkFee'),
 		feeEstimating: k('componentsUi.gas.estimating'),
 		feeRetry: k('componentsUi.gas.estimateFailed'),
+		feePayWithAnotherCoin: k('componentsUi.gas.payWithAnotherCoin'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
@@ -1214,7 +1222,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
 			failedHint: k('send.txErrorGeneric'),
-			retry: k('send.txRetryBtn')
+			retry: k('send.txRetryBtn'),
+			notSentTitle: k('componentsUi.signing.notSentTitle')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

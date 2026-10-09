@@ -26,7 +26,10 @@ const view = (failure: FeeFailure, auto_retry: boolean, retrying = false): FeeFa
 	auto_retry,
 	retrying,
 	figure_key: null,
-	footer_key: 'componentsUi.signing.confirmBlock.feeRetrying'
+	footer_key: 'componentsUi.signing.confirmBlock.feeRetrying',
+	tap: 'retry',
+	chain_id: 1,
+	fee_token: null
 });
 const failed = (failure: FeeFailure, auto = true): FeeFailureInput => ({
 	busy: false,

@@ -47,6 +47,7 @@
 	import { explorerBaseURL } from '$lib/services/networks';
 	import { landingPace, typicalInclusionSeconds } from '$lib/core/kernels';
 	import { FeeFailureLog } from '$lib/signing/fee-failure-log';
+	import { feeRowTap } from '$lib/flows/fee-failure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
@@ -235,7 +236,9 @@
 		return {
 			event: signingCloseEvent(status),
 			requestId: signView.request?.id ?? null,
-			inFlight: status !== undefined && status.stage !== 'failed'
+			// A failure, or "not sent yet" (PR 2 polish): either way the page is
+			// answered on close and nothing is on its way.
+			inFlight: status !== undefined && status.stage !== 'failed' && status.stage !== 'not_sent'
 		};
 	}
 
@@ -592,15 +595,26 @@
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {
-			// Failed → ask again, at once (the core drops its own pending re-ask
-			// with the attempt this moves on). More than one coin → open the
-			// list, here in the sheet. Otherwise the host's own surface, if any.
-			// While a re-ask is out (`retrying`), it is the answer awaited: a
-			// second tap asks nothing.
-			if (feeShown.failure) {
-				if (!feeShown.busy) fee.requote();
-			} else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
-			else onfee();
+			// Exactly what the row says (`feeRowTap`, PR 2 polish). Failed, by the
+			// core's `tap`: ask again, at once (the core drops its own pending
+			// re-ask with the attempt this moves on) — and while a re-ask is out
+			// it is the answer awaited, a second tap asks nothing; or, after the
+			// relay answered that it would fail, open the coins; or nothing.
+			// Otherwise more than one coin opens the list, here in the sheet, and
+			// one coin is the host's own surface, if any.
+			switch (feeRowTap(feeShown, fee.view?.options.length ?? 0)) {
+				case 'requote':
+					fee.requote();
+					break;
+				case 'toggle_coins':
+					feeOpen = !feeOpen;
+					break;
+				case 'host':
+					onfee();
+					break;
+				case 'none':
+					break;
+			}
 		}}
 		onfeepick={(id) => {
 			// The pick is a quote PARAMETER, and part of the operation every

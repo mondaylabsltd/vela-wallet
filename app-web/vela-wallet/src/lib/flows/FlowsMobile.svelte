@@ -304,6 +304,8 @@
 				ctaDisabled={send?.confirmDisabled ?? false}
 				ctaBusy={send?.confirmBusy ?? false}
 				onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
+				onfeeretry={send?.refreshFee ? () => send.refreshFee?.() : undefined}
+				onfeecoins={send ? () => go('fee-token') : undefined}
 			/>
 		</FlowScreen>
 	{:else}

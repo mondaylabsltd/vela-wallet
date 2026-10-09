@@ -52,12 +52,14 @@ import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
+import { failedFeeTappable } from '$lib/flows/fee-failure';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
 	Block,
 	FeeModel,
+	FeeTokenOption,
 	KeyValueRow,
 	SigningModel,
 	SigningStatus,
@@ -684,11 +686,15 @@ function feeOfAnotherTier({ fee, speed }: SigningLiveInputs): boolean {
 
 /**
  * The row's figure on a failed fee, by the key the core names
- * (`FeeFailureView.figure_key`): "Tap to retry" when a tap is the one way.
- * A key this build does not carry draws the dash, never a dotted path.
+ * (`FeeFailureView.figure_key`): "Tap to retry" when a tap is the one way,
+ * "Pay with another coin" when the tap opens the fee coins (PR 2 polish). A
+ * key this build does not carry draws the dash, never a dotted path.
  */
 function feeFigures(m: SigningMessages): Readonly<Record<string, string>> {
-	return { 'componentsUi.gas.estimateFailed': m.feeRetry };
+	return {
+		'componentsUi.gas.estimateFailed': m.feeRetry,
+		'componentsUi.gas.payWithAnotherCoin': m.feePayWithAnotherCoin
+	};
 }
 
 /** The fee, in the shape the drawn row renders. Off-chain requests have none. */
@@ -732,19 +738,25 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	if (failure) {
 		const words = failure.reason_key === null ? undefined : m.feeReasons[failure.reason_key];
 		const chain = sign.request ? chainName(sign.request.chain_id) : '';
+		// PR 2 polish: the row does exactly what its figure says
+		// (`FeeFailureView.tap`) — "Tap to retry" asks again at once
+		// (`requote`), and the row stays the same control through the re-ask,
+		// so nothing under a thumb changes; "Pay with another coin" opens the
+		// coins, behind the chevron that promises them, and the list is drawn
+		// here while open; a dash with no coin left to try is no control.
+		const tap = failure.tap;
 		return {
 			kind: 'onchain',
 			label: m.feeLabel,
 			value: failure.figure_key === null ? '—' : (feeFigures(m)[failure.figure_key] ?? '—'),
 			speed,
-			// A tap asks again at once (`requote`) — the row stays the same
-			// control through the re-ask, so nothing under a thumb changes.
-			tappable: true,
+			selector: tap === 'choose_coin' ? feeSelector(inputs) : undefined,
+			tappable: failedFeeTappable(failure),
 			warning: words === undefined ? undefined : fill(words, { chain }),
 			...refresh,
 			// Turning while the core's re-ask (or a tap's) is out.
 			refreshing: measuring || failure.retrying,
-			chevron: false
+			chevron: tap === 'choose_coin'
 		};
 	}
 	if (!fee.fee || ofAnotherTier) {
@@ -776,43 +788,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// sheet is explicit that these two surfaces must not drift.
 	const parts = feeParts(fee.fee, fee.options);
 	const value = feeLine(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
-	// The coins the relay will take the fee in — the SAME rows, amounts and
-	// "cannot pay" verdict the Send screen shows (founder, 2026-09-19: a fee a
-	// person can switch when sending and not when signing is two products).
-	const amount = (raw: string, decimals: number) =>
-		trimBalance((Number(raw) / 10 ** decimals).toString(), 4);
-	// The fee itself goes through the shared formatter, at the same decimal
-	// budget as the row above it (issue 682): the four-decimal trim printed an
-	// 0.000083 OKB fee as "~0 OKB", and a fee that reads as free is the one
-	// thing this sheet may never say.
-	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
-		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
-	const chainId = sign.request?.chain_id ?? 1;
-	const selector =
-		inputs.feeOpen === true && fee.options.length > 1
-			? {
-					title: m.feeTokenTitle,
-					options: fee.options.map((option) => ({
-						id: option.contract ?? 'native',
-						// The REQUEST's chain: the coin is paid on the chain this
-						// transaction runs on, whatever the estimate says or lacks.
-						mark: tokenMarkFor(chainId, option.symbol, option.contract),
-						name: option.symbol,
-						balance: `${amount(option.balance, option.decimals)} ${option.symbol}`,
-						fee:
-							option.amount === null
-								? '—'
-								: `~${feeAmount(option.amount, option.decimals, option.contract)} ${option.symbol}`,
-						selected: option.selected,
-						insufficient: option.insufficient,
-						// Issue 408: a refused coin says why — the core's numbers.
-						reason:
-							option.insufficient && option.short !== null && option.short !== undefined
-								? fill(m.feeRowShort, { need: option.short.need, have: option.short.have })
-								: undefined
-					}))
-				}
-			: undefined;
+	const selector = feeSelector(inputs);
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
 	// other coins are one tap away — a shut confirm with no reason is issue 204.
@@ -844,6 +820,54 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		// wrong — said calmly, and not while a fresh measurement is out.
 		staleNote: fee.stale && !measuring ? m.feeStale : undefined
 	};
+}
+
+/**
+ * The fee coins, drawn in the sheet while their list is open (`feeOpen`) and
+ * there is more than one to choose — the normal row's list, and (PR 2
+ * polish) the one "Pay with another coin" opens after the relay answered
+ * that the operation would fail with the coin in force.
+ */
+function feeSelector(
+	inputs: SigningLiveInputs
+): { title: string; options: FeeTokenOption[] } | undefined {
+	const { sign, fee, m } = inputs;
+	// The coins the relay will take the fee in — the SAME rows, amounts and
+	// "cannot pay" verdict the Send screen shows (founder, 2026-09-19: a fee a
+	// person can switch when sending and not when signing is two products).
+	const amount = (raw: string, decimals: number) =>
+		trimBalance((Number(raw) / 10 ** decimals).toString(), 4);
+	// The fee itself goes through the shared formatter, at the same decimal
+	// budget as the row above it (issue 682): the four-decimal trim printed an
+	// 0.000083 OKB fee as "~0 OKB", and a fee that reads as free is the one
+	// thing this sheet may never say.
+	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
+		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
+	const chainId = sign.request?.chain_id ?? 1;
+	return inputs.feeOpen === true && fee.options.length > 1
+		? {
+				title: m.feeTokenTitle,
+				options: fee.options.map((option) => ({
+					id: option.contract ?? 'native',
+					// The REQUEST's chain: the coin is paid on the chain this
+					// transaction runs on, whatever the estimate says or lacks.
+					mark: tokenMarkFor(chainId, option.symbol, option.contract),
+					name: option.symbol,
+					balance: `${amount(option.balance, option.decimals)} ${option.symbol}`,
+					fee:
+						option.amount === null
+							? '—'
+							: `~${feeAmount(option.amount, option.decimals, option.contract)} ${option.symbol}`,
+					selected: option.selected,
+					insufficient: option.insufficient,
+					// Issue 408: a refused coin says why — the core's numbers.
+					reason:
+						option.insufficient && option.short !== null && option.short !== undefined
+							? fill(m.feeRowShort, { need: option.short.need, have: option.short.have })
+							: undefined
+				}))
+			}
+		: undefined;
 }
 
 /**
@@ -1031,9 +1055,10 @@ export function summaryOf(blocks: Block[]): string | undefined {
 
 /**
  * The sentence for the core's refusal key (`SignView.failure_refusal_key`,
- * PR 2 note 9): a refusal by its reason (`receipt.refusals`), or the held
- * nonce's own line (`confirmBlock.previousPending`). A key this build does
- * not carry is the plain refusal — never a dotted path; no key, no sentence.
+ * PR 2 note 9): a refusal by its reason (`receipt.refusals`) — the held
+ * nonce at submit among them (`componentsUi.signing.notSentBody`, PR 2
+ * polish) — or a confirm block's line. A key this build does not carry is
+ * the plain refusal — never a dotted path; no key, no sentence.
  */
 export function refusalWords(
 	key: string | null | undefined,
@@ -1090,9 +1115,14 @@ export function signingStatus(
 		error.kind !== 'user_rejected' &&
 		(sign.pending_op_hash !== null || error.kind === 'submit_failed' || signerReason !== undefined)
 	) {
+		// PR 2 polish: the relay turned it back because the account's previous
+		// operation on this network still holds the nonce. Nothing was sent and
+		// nothing went wrong — "Not sent yet", calmly (the waiting disc, never
+		// the failure's red), over the core's sentence, with Try again.
+		const notSent = sign.failure_not_sent;
 		return {
-			stage: 'failed',
-			title: m.receipt.failed,
+			stage: notSent ? 'not_sent' : 'failed',
+			title: notSent ? m.status.notSentTitle : m.receipt.failed,
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
 			// again": the same op is refused the same way. PR 2 note 9: and say
 			// WHY, by the core's one sentence for both ways a refusal arrives

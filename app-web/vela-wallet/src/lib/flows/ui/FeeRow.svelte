@@ -29,49 +29,67 @@
 	}
 
 	let { fee, onopen, onrefresh }: Props = $props();
+
+	/** What a tap does (PR 2 polish): the core's word for a failed fee, else the coins. */
+	const tap = $derived(fee.tap ?? 'open');
 </script>
 
-<div class="fee">
-	<div class="row">
-		<!-- A failed fee (PR 2 note 1): the row asks again at once — the
-		     refresh's own path — and promises no list. While a re-ask is out
-		     it is the answer awaited: a second tap asks nothing. -->
-		<button
-			type="button"
-			class="open"
-			aria-label={fee.retries ? fee.refreshLabel : fee.openLabel}
-			onclick={fee.retries ? () => fee.refreshing !== true && onrefresh?.() : onopen}
-		>
-			<span class="label">{fee.label}</span>
-			<!-- The label and the fee are two wholes (078 round 3): side by side
+{#snippet face()}
+	<span class="label">{fee.label}</span>
+	<!-- The label and the fee are two wholes (078 round 3): side by side
 			     while both fit; otherwise the label keeps a line of its own, WHOLE,
 			     and the fee goes under it at the row's end. German at the largest
 			     size cut the label mid-word ("Netzwerkg…") and the value with it;
 			     a label is never elided and never broken inside a word. -->
-			<span class="amount">
-				<TokenIcon
-					ticker={fee.mark.ticker}
-					badgeColor={fee.mark.badgeColor}
-					logoUrls={fee.mark.logoUrls}
-					badgeLogoUrl={fee.mark.badgeLogoUrl}
-					badgeHidden={fee.mark.badgeHidden}
-					size="inline"
-				/>
-				<!-- Two pieces, each unbreakable (issue 231): when even the fee's own
+	<span class="amount">
+		<TokenIcon
+			ticker={fee.mark.ticker}
+			badgeColor={fee.mark.badgeColor}
+			logoUrls={fee.mark.logoUrls}
+			badgeLogoUrl={fee.mark.badgeLogoUrl}
+			badgeHidden={fee.mark.badgeHidden}
+			size="inline"
+		/>
+		<!-- Two pieces, each unbreakable (issue 231): when even the fee's own
 				     line is tight, the money drops under the coin WHOLE, right-aligned.
 				     No "·" between them: "≈" already joins a coin to its money, and a
 				     dropped line that began "· ≈ $0.55" read as a rendering leftover. -->
-				<span class="values">
-					<span class="value">{fee.value}</span>
-					{#if fee.valueFiat}
-						<span class="value">{fee.valueFiat}</span>
-					{/if}
-				</span>
-				{#if !fee.retries}
-					<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-				{/if}
-			</span>
-		</button>
+		<span class="values">
+			<span class="value">{fee.value}</span>
+			{#if fee.valueFiat}
+				<span class="value">{fee.valueFiat}</span>
+			{/if}
+		</span>
+		<!-- The chevron promises the list of coins: only where a tap opens it. -->
+		{#if tap === 'open'}
+			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+		{/if}
+	</span>
+{/snippet}
+
+<div class="fee">
+	<div class="row">
+		{#if tap === 'none'}
+			<!-- PR 2 polish: the relay answered that it would fail and no other
+			     coin is left to pay with — the dash, stated: no control, no
+			     chevron, no press (spec 081, a control that cannot act is not
+			     drawn as one). The line under the confirm says what happened. -->
+			<div class="open stated" data-testid="fee-row-stated">{@render face()}</div>
+		{:else}
+			<!-- A failed fee (PR 2 note 1) the core says a tap asks again: the
+			     refresh's own path, no list promised; while a re-ask is out it is
+			     the answer awaited — a second tap asks nothing. Otherwise the coins
+			     (and, PR 2 polish, "Pay with another coin" after the relay
+			     answered that it would fail). -->
+			<button
+				type="button"
+				class="open"
+				aria-label={tap === 'retry' ? fee.refreshLabel : fee.openLabel}
+				onclick={tap === 'retry' ? () => fee.refreshing !== true && onrefresh?.() : onopen}
+			>
+				{@render face()}
+			</button>
+		{/if}
 		<FeeRefreshButton label={fee.refreshLabel} refreshing={fee.refreshing === true} {onrefresh} />
 	</div>
 	<!-- `FeeView.stale`, which had no consumer in this shell at all (spec
@@ -112,6 +130,11 @@
 		color: var(--color-fg-muted);
 		text-align: start;
 		cursor: pointer;
+	}
+
+	/* The same row, stated: nothing to press. */
+	.stated {
+		cursor: default;
 	}
 
 	/* The label is WHOLE: it may wrap between words when a line cannot hold

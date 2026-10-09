@@ -232,8 +232,12 @@ export const WALLET_FLOW_KEYS = [
 	'send.txRetryBtn',
 	// Correctness batch item 3: the account's previous transaction on this
 	// network still holds the nonce — the held confirm's one line
-	// (`SendView.previous_pending.key`), and the submit refused for it.
+	// (`SendView.previous_pending.key`)…
 	'componentsUi.signing.confirmBlock.previousPending',
+	// …and, PR 2 polish, the submit the relay turned back for it
+	// (`tx_error` `previous_pending`): "Not sent yet", calmly, as on the sheet.
+	'componentsUi.signing.notSentTitle',
+	'componentsUi.signing.notSentBody',
 	// …and a refusal told by its reason (`SendReceiptView.refusal_key`): the
 	// fee sentence only for a fee refusal, "another transaction went first"
 	// for a spent nonce, else the plain refusal (listed with the dApp rows).
@@ -254,6 +258,10 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.gas.estimateFailed',
 	'componentsUi.signing.confirmBlock.feeRetrying',
 	'componentsUi.signing.confirmBlock.feeFailed',
+	// …and, PR 2 polish, after the relay answered that it would fail: the
+	// figure when a tap opens the fee coins, and the line under the confirm.
+	'componentsUi.gas.payWithAnotherCoin',
+	'componentsUi.signing.confirmBlock.feeWouldFail',
 
 	// send · fee token
 	'send.feeTokenLabel',
