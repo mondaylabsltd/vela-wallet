@@ -1,31 +1,33 @@
 #!/usr/bin/env bash
 #
 # The Trusted Signer, end to end, against the real page in a real browser
-# (specs 071 and 075). A local check — never CI: it needs Chrome.
+# (specs 071, 075, 076 and 102). A local check — never CI: it needs Chrome.
 #
 # What runs: the desktop's own attempt (`executor::trusted_signer`) builds the
-# request with the core, listens on 127.0.0.1:0 and hands over the launch URL;
-# headless Chrome opens it on `app-web/trusted-signer` served from this checkout
-# at http://localhost:<port>/; the page connects BACK over the loopback
-# WebSocket (spec 075 — the desktop's old URL fragment and HTTP callback are
-# gone) and stays connected, a CDP virtual authenticator plays the vault, the
-# page's slide is confirmed through its automation hook, and the wallet
-# verifies what comes back against the digest or the challenge form it
-# expected.
+# request with the core and hands over the launch URL — the request in the
+# fragment, the answer address `velawallet://sign-result`; headless Chrome
+# opens it on `app-web/trusted-signer/src/` served from this checkout at
+# http://localhost:<port>/src/; a CDP virtual authenticator plays the vault,
+# the page's slide is confirmed through its automation hook, and the page's
+# navigation to `velawallet://sign-result?…` is caught through DevTools and
+# delivered as the OS would (`deliver_callback`). The wallet then verifies
+# what came back against the digest or the challenge form it expected. The
+# page answers that address and no other (spec 102 R7), so nothing here
+# needs a test exception in the page.
 #
 # Five cases:
 #   · the wallet's own send (SafeOp)
 #   · a dApp's personal_sign (SafeMessage → EIP-1271)
-#   · a tab closed unsigned (declined)
-#   · an operation that is not the request (the page refuses, at once)
-#   · a create AND the sign-in after it, on ONE page visit — the case the URL
-#     fragment could not carry, and the reason the desktop moved
+#   · a tab closed unsigned (nothing signed, nothing reaches the wallet)
+#   · an operation that is not the request (the page refuses before any
+#     passkey prompt)
+#   · a create, then the sign-in that finds the key — two visits, one flow
 # See `src/executor/trusted_signer_e2e.rs`.
 #
 # Needs Chrome for Testing — stable Chrome works too; this is the build the
 # page's own suites use (app-web/trusted-signer/HANDOVER.md). EVERY port is
-# picked by the OS — the page's server, Chrome's DevTools and the wallet's own
-# listener — so this can run beside other agents and other browsers.
+# picked by the OS — the page's server and Chrome's DevTools — so this can run
+# beside other agents and other browsers.
 #
 # Usage: scripts/trusted-signer-e2e.sh            (CHROME_BIN overrides the path)
 set -euo pipefail

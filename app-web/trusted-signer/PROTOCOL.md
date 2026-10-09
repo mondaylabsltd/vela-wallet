@@ -36,7 +36,7 @@ USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
 
 | 请求方 | 签名方 | 通道 | 来源可验证 | 一个会话几个请求 |
 | --- | --- | --- | --- | --- |
-| 同浏览器的网页钱包 / dApp | 本页 | `window.postMessage`（7.1） | ✅ 浏览器背书 | 多个 |
+| 同浏览器的网页钱包 / dApp | 本页 | `window.postMessage`（7.1）—— **签名一律拒签**（规格 102 R7） | ✅ 浏览器背书 | 多个 |
 | Android / iOS / 桌面 App（**现行**） | 本页 | URL 片段 + `velawallet://sign-result`（7.2 + 下文） | ❌ 自述；一次性 token 证明「是打开本页的那个 App」 | 一个 |
 | ~~同机 App~~ | ~~本页~~ | ~~回环 WebSocket（7.4）~~ | **2026-09-24 让给自定义 scheme**；代码留给测试 | |
 | ~~任何一端，跨设备~~ | ~~另一台设备上的本页~~ | ~~隧道（7.5）~~ | **已撤回 2026-09-23** | |
@@ -109,8 +109,9 @@ Custom Tab 就压在它上面、同一个 task 里。`singleTop` 只在目标已
 url 通道，而 url 通道上**没有任何东西能证明是谁打开了这一页** —— 于是创建钱包
 被直接拒掉。创始人当天就撞上了：「创建钱包时，滑动签名不可用，无法滑动」。
 
-现在的规则：**`cb` 是钱包自己的 scheme（`velawallet://`），才允许创建钥匙和成员
-证明。** 理由是这一条能站住：
+现在的规则：**`cb` 是钱包自己的地址，才允许创建钥匙和成员证明。**（2026-10-09 起
+比较的是整串 `velawallet://sign-result`，不只是 scheme，并且对签名和每一种仪式都适用
+—— 见下一节。）理由是这一条能站住：
 
 - 想拿到本页创建的钥匙，就得**收得到**答复，就得把 `cb` 写成自己能收的地址；
 - 写成 `velawallet://`，钥匙就交给了 Vela 钱包，对他没用；
@@ -123,6 +124,54 @@ url 通道，而 url 通道上**没有任何东西能证明是谁打开了这一
 自报的名字和图标 —— 创始人：「这个页面展示的『某个钱包』logo、无法确认身份的
 请求方，感觉不太合适」。现在写的是**本页将要做的事**：「答复交回本机的 Vela
 钱包」，或者目的地的 scheme。前者可以被人核对，后者是事实。
+
+### 答复只交给钱包，页面不进框架（规格 102 R7，2026-10-09）
+
+**签名也按「答复去哪里」来判，而且只有一个合格的地址：`velawallet://sign-result`。**
+
+这条规则原先只管创建钥匙和成员证明；签名对任何打开者、任何答复地址都照签。
+于是钓鱼站可以打开**真的** `sign.getvela.app/b/<hash>/sign`，带上自己拼的操作
+（比如把账户里的 USDC 全转走）和自己的 `cb=https://attacker…`：卡片在 Vela 的真
+域名上如实描述那笔操作，人一滑，攻击者就拿到一份能用的签名。postMessage 同理
+（谁 `window.open` 了本页，答复就回给谁）。`samples/answer-test.mjs` 在 0ba8ee8c 及
+之前的每一版上都能复现：evil.example 收到账户钥匙对攻击者 SafeOp 的有效签名。
+
+现在（`resolve.answersToWallet`，签名、仪式、发送三处共用这一个函数）：
+
+- **只有 url 通道、且 `cb` 恰好是 `velawallet://sign-result`**，答复才算交给钱包。
+  比较的是整串，不是 scheme：`velawallet://open?url=…` 也是钱包，答复拼在它后面
+  会被带去那个链接打开的页面。
+- 签名不满足这一条 → 卡片拒签（不给滑条、不弹 passkey），并写明答复本来要去哪里
+  （`refuse.answerElsewhere`，或 `refuse.answerNotToWallet`）。postMessage 上的签名
+  一律拒签，哪怕打开者是 `*.getvela.app`；打开者只会收到 `{vela:'error', code:'refused'}`。
+- url 通道上的**每一种**仪式同样如此（不再只是创建与成员证明）：答复送不到，登录、
+  证明弹出 passkey 也没有意义。
+- `lib/intake.js` 在发出去的那一刻再按同一规则检查：不合格的地址**什么都收不到**
+  —— 没有答复、没有拒签码、关页时也没有信标。
+- **规则判不出来就是拒**：上下文里没有通道、没有地址，都算不合格（预览和测试要
+  按 App 的样子带上 `channel: 'url', callback: 'velawallet://sign-result'`）。请求方
+  在 `context` 里自己写的 `channel` / `callback` 照旧被通道的事实覆盖。
+
+**测试例外，只在测试页里。** 桌面演示（`samples/desktop-demo.mjs`）的手动模式开的是
+人自己的默认浏览器，`velawallet://` 会交给装好的 Vela 而不是演示进程，所以它要在
+本机回环上收答复。它打开的是 `samples/loopback-sign.html`：`src/sign.html` 的全部脚本
+再加 `samples/loopback-answer.js`（把规则放宽到 `http://127.0.0.1|localhost:<port>/…`）。
+这个文件在 `src/` 之外，`build-single.mjs` 只读 `src/sign.html` 点名的文件，所以
+**发布出去的页面里没有它**；`answer-test.mjs` 每次都核对：发布页拒绝回环地址、字节里
+没有这段代码、测试页的脚本清单就是 `src/sign.html` 的清单加这一个文件。其余自动化
+测试不需要例外：它们用 `velawallet://sign-result`，经 DevTools 的
+`Page.frameRequestedNavigation` 截到页面发往钱包的那次导航。
+
+**不进框架。** 框架里的页面可以被外层网页盖住、改写、在滑条的位置放一个它自己的
+按钮，而 passkey 弹窗照样写着 Vela 的域名。所以：
+
+- 托管方对所有路径发 `Content-Security-Policy: frame-ancestors 'none'` 和
+  `X-Frame-Options: DENY`（`dist/_headers`，由 `build-single.mjs` 的 `HEADERS` 生成）。
+  `frame-ancestors` 必须是响应头 —— 写在页面自己的 `<meta>` CSP 里浏览器会忽略。
+  响应头不在版本的哈希里，所以部署后对旧版本同样生效。
+- 页面自己再查一次：`window.top !== window.self` 就什么都不做 —— 不读片段、不画卡、
+  不应答，只说一句「本页不能嵌在别的网页里使用」。这一条管的是不发这些响应头的托管
+  方和不认它们的浏览器。
 
 ### 这一页发不出网络请求（规格 076）
 
@@ -346,14 +395,20 @@ dApp `window.open` 打开 `https://sign.getvela.app/sign.html?ch=post`，然后�
 **意图不要放在 URL 里**：先开空页面再 post，既没有长度上限，又能拿到浏览器填的
 `event.origin`。两边都必须核对对方 origin —— 参考 `samples/dapp-sim.js`。
 
+**签名意图在这条通道上一律拒签**（规格 102 R7，见第 0 节「答复只交给钱包」）：
+答复回给打开者，而任何网站都能打开本页。打开者只收到 `{vela:'error', code:'refused'}`。
+钥匙仪式照旧按第 10.2 节。
+
 **一个会话多个请求**（第 11 节）：第一条 intent 必须来自 `window.opener`，之后只听这个窗口、
 这个 origin；答完一个继续等下一个，直到对方发 `{vela:'bye'}`、关窗或空闲 5 分钟。
 参考 `samples/wallet-sim.js`。
 
 ### 7.2 URL 片段 + 回调链接（原生 App，无服务器）
 
-> 现行的回调是 `velawallet://sign-result`（上文「自定义 scheme 回传」）；下面的
-> `http://127.0.0.1:<port>/vela` 是最早的桌面形状，测试与 `samples/desktop-demo.mjs` 还在用。
+> 现行的回调是 `velawallet://sign-result`（上文「自定义 scheme 回传」），而且发布页
+> **只**答复这一个地址（规格 102 R7）。下面的 `http://127.0.0.1:<port>/vela` 是最早的
+> 桌面形状，现在只有测试页 `samples/loopback-sign.html`（`samples/desktop-demo.mjs`
+> 用它）还接受。
 
 App 用系统能力打开浏览器：
 
@@ -564,8 +619,10 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 - 或浏览器背书的 origin（postMessage、扩展端口）是 `https://getvela.app` / `https://*.getvela.app`，
   或本机回环（开发与测试时网页钱包跑在这里）。
 
-URL 片段不算：任何网页都能用它打开本页。请求方在 `context` 里写的 `channel` / `requester` /
-`originVerified` 一律被通道自己的事实覆盖。登录和证明对其他请求方也显示，但挂一条
+URL 片段本身不算（任何网页都能用它打开本页）；url 通道上算数的是答复地址：恰好是
+`velawallet://sign-result` 才放行，否则**每一种**仪式都拒（规格 102 R7）。请求方在
+`context` 里写的 `channel` / `requester` / `originVerified` / `callback` 一律被通道自己的
+事实覆盖。postMessage 上，登录和证明对其他请求方也显示，但挂一条
 「这不是 Vela 钱包发来的请求，请求方会知道你挑了哪把 passkey」。
 
 ### 10.3 答复（字段放在信封顶层）

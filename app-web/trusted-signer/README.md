@@ -27,7 +27,7 @@ App 用的只有**一条**通道，一种意图格式，**没有服务器**。�
 | 请求方 | 通道 | 状态 |
 | --- | --- | --- |
 | 桌面 App（macOS / Windows / Linux）、iPhone、Android | 请求放在 URL 片段里（`sign.html?ch=url#i=…`），回答走 `velawallet://sign-result` 自定义 scheme 交回 App | ✅ Android、Windows 11 有端到端记录；macOS / iOS / Linux 接线相同、尚无完整跑通记录 |
-| 同浏览器网页 | `postMessage`（代码还在，没有 App 使用） | 仅测试用 |
+| 同浏览器网页 | `postMessage`（代码还在，没有 App 使用） | 仅测试用；签名一律拒签（规格 102 R7） |
 | 同机 App | 回环 WebSocket（`?ch=ws`，代码还在，没有 App 使用） | 仅测试用：发布页的 CSP 连不出去 |
 
 已砍掉：跨设备的 BLE 与 WebSocket 隧道（075，「只留回环这个，这样更加安全」）；
@@ -35,9 +35,15 @@ App 用的只有**一条**通道，一种意图格式，**没有服务器**。�
 scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，页面里的 WebSocket 连不出去）。
 网页版钱包不用签名页（075）。
 
+**答复只交给 `velawallet://sign-result`**（规格 102 R7）：签名、以及 url 通道上的每一种
+仪式，答复地址不是这一串就拒签，不弹 passkey，也不往别的地址发任何东西；页面不在
+框架里运行（托管方另发 `frame-ancestors 'none'` / `X-Frame-Options: DENY`）。理由与
+测试例外见 [PROTOCOL.md](PROTOCOL.md) 第 0 节「答复只交给钱包」。
+
 ```sh
+bun samples/answer-test.mjs     # 31 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上
 node samples/hostile-test.mjs   # 32 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
-node samples/channels-test.mjs  # 19 项：postMessage / URL 片段 + 真 WebAuthn + 交易 + 篡改拒签
+node samples/channels-test.mjs  # 19 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则

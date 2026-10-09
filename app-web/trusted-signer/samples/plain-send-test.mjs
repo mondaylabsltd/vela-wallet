@@ -43,9 +43,12 @@ const RELAYER = '0x4d2c7a3b1e9f0a8b7c6d5e4f3a2b1c0d9e8f7a6b';
 const MULTI_SEND = '0x38869bf66a61cf6bdb996a6ae40d5853fd43b526';
 const GNOSIS = 100;
 
+// Over the URL, answered to the wallet's own address, as the apps send it —
+// otherwise every signature is refused for that alone (spec 102 R7).
+const AS_THE_APPS = { channel: 'url', callback: 'velawallet://sign-result' };
 const tx = (call, ctx = {}) => ns.resolve(
   { method: 'eth_sendTransaction', origin: 'http://127.0.0.1:8137', params: [call] },
-  { account: SAFE, chainId: GNOSIS, ...ctx },
+  { account: SAFE, chainId: GNOSIS, ...AS_THE_APPS, ...ctx },
 );
 const draw = (view) => ns.render(view, {});
 const heroText = (sheet) => sheet.find('.amount').map((n) => n.textContent).join();
@@ -145,7 +148,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   const batch = ns.resolve({
     method: 'wallet_sendCalls', origin: 'http://127.0.0.1:8137',
     params: [{ calls: [{ to: USDC, value: '0x0', data: transfer }, { to: TO, value: '0x0', data: '0x' }] }],
-  }, { account: SAFE, chainId: GNOSIS });
+  }, { account: SAFE, chainId: GNOSIS, ...AS_THE_APPS });
   const leg = batch.legs[1].view;
   check('wallet_sendCalls: a 0-value empty leg is a send', isSend(leg) && noDanger(leg), `${leg.intentKey} ${leg.risk}`);
   check('wallet_sendCalls: no danger reaches the batch', noDanger(batch), JSON.stringify(batch.warnings.map((w) => w.key)));

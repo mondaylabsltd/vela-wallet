@@ -52,8 +52,9 @@ const asked = (call) => ({
   origin: 'https://app.example',
   params: [{ to: call.to, value: '0x0', data: call.data }],
 });
+// As the apps send it: over the URL, answered to the wallet (spec 102 R7).
 const ctxOf = (calls, feeLegIndex) => ({
-  account: SAFE, chainId: 1, currency: '$', rates: { USDC: 1 },
+  account: SAFE, chainId: 1, currency: '$', rates: { USDC: 1 }, channel: 'url', callback: 'velawallet://sign-result',
   operation: { userOp: userOpOf(calls), feeLegIndex },
 });
 

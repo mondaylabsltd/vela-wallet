@@ -119,7 +119,8 @@ export function build() {
 
 	// `frame-ancestors` is deliberately absent: a <meta> CSP cannot carry it
 	// (browsers ignore it there), so writing it would be a claim this file
-	// cannot keep. It belongs on the response header where the page is served.
+	// cannot keep. It is on the response header where the page is served
+	// (`HEADERS`, spec 102).
 	const csp = [
 		"default-src 'none'",
 		`script-src ${cspHash(scriptText)}`,
@@ -223,7 +224,7 @@ function main() {
 		}
 		const headers = join(DIST, '_headers');
 		if (!existsSync(headers) || readFileSync(headers, 'utf8') !== HEADERS) {
-			console.error('build-single --check: dist/_headers is missing or not this build\'s cache rules');
+			console.error('build-single --check: dist/_headers is missing or not this build\'s header rules');
 			process.exit(1);
 		}
 		const root = join(DIST, 'sign.html');
@@ -266,7 +267,8 @@ function main() {
 	// Spec 079: a version at `b/<sha256>/` never changes — its path IS its
 	// content — so the browser may keep it for a year and open it with no
 	// network (a signature needs none). The root stays revalidated: it moves
-	// with every release. Cloudflare Pages reads this file from the deploy root.
+	// with every release. Spec 102: no page here may be framed (`HEADERS`).
+	// Cloudflare Pages reads this file from the deploy root.
 	writeFileSync(join(DIST, '_headers'), HEADERS);
 	console.log(
 		`build-single: ${fresh ? 'published' : 'already published'} ` +
@@ -279,8 +281,36 @@ function main() {
 	console.log(`  CSP ${built.csp}`);
 }
 
-/** The host's header rules (Cloudflare Pages `_headers`). */
+/**
+ * The host's header rules (Cloudflare Pages `_headers`). Every matching rule
+ * applies, so a version under `/b/` gets both blocks.
+ *
+ * `/*` — never inside another page (spec 102 R7). A frame lets the page around
+ * it draw over the card and the slide while the passkey prompt still names
+ * Vela's domain. `frame-ancestors` has to be a response header: browsers
+ * ignore it in the page's own `<meta>` CSP (see `build()`). `X-Frame-Options`
+ * says the same to browsers that predate `frame-ancestors`. A header CSP is
+ * enforced alongside the `<meta>` one, so this adds a restriction and lifts
+ * none. Headers are not part of a version's hash, so this reaches every
+ * version the host serves, old ones included.
+ *
+ * `/*` also says `no-transform`: the host must hand the browser the published
+ * bytes. Cloudflare Web Analytics injected its beacon `<script>` before
+ * `</body>` of every response a browser asked for as HTML, so the bytes a tab
+ * ran hashed to a version nobody published (and the page was no longer
+ * zero-dependency). `no-transform` tells the host not to rewrite the
+ * response; the owner also turns the injection off for this site.
+ *
+ * `/b/*` — spec 079: a version never changes, so the browser may keep it for
+ * a year and open it with no network. Pages joins this `Cache-Control` with
+ * the one under `/*`.
+ */
 export const HEADERS = [
+	'/*',
+	"  Content-Security-Policy: frame-ancestors 'none'",
+	'  X-Frame-Options: DENY',
+	'  Cache-Control: no-transform',
+	'',
 	'/b/*',
 	'  Cache-Control: public, max-age=31536000, immutable',
 	'',

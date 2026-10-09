@@ -20,6 +20,14 @@
 > 最前面 → ③ **部署 `dist/`** → ④ 确认 `curl -I …/b/<新哈希>/sign` 为 200 且带
 > `cache-control: public, max-age=31536000, immutable` → ⑤ 再把 `LAUNCH` 改成新哈希。
 > ⑤ 早于 ③ = 手机打开一个还不存在的页面，签不了名。
+>
+> **102 R7（2026-10-09）：答复只交给 `velawallet://sign-result`。** 之前的每一版都给
+> 任何打开者签名：钓鱼站带着自己的操作和 `cb=https://它自己`（或用 postMessage）打开
+> 真的签名页，人一滑，签名就到了它手里。现在签名、以及 url 通道上的每一种仪式，答复
+> 地址必须恰好是这一串（`resolve.answersToWallet`，三处共用），否则拒签、不弹 passkey、
+> 什么都不发；页面不在框架里运行，`dist/_headers` 对所有路径加
+> `frame-ancestors 'none'` + `X-Frame-Options: DENY`。桌面演示要的回环例外只在测试页
+> `samples/loopback-sign.html` 里（`src/` 之外，发布页里没有）。见 PROTOCOL.md 第 0 节。
 
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 
@@ -46,14 +54,15 @@ cd app-web/trusted-signer
 export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
+bun samples/answer-test.mjs        # 31/31 答复只交给钱包（102 R7），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
 bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
 bun samples/hostile-test.mjs       # 32/32 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
-bun samples/channels-test.mjs      # 19/19 各通道 + 真 WebAuthn + 交易 + 篡改拒签
+bun samples/channels-test.mjs      # 19/19 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
 bun samples/slider-test.mjs        # 19/19 真触摸拖动滑块：签名与创建，以及答复要交去别处就拖不动
 bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实测、自定义 scheme 不被 CSP 拦
-bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签
+bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 17/17 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）
@@ -201,6 +210,12 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
   证明、隧道都用这一把 —— 所以它们必须在同一个标签页里。
 - 只改片段的导航是同文档导航，页面不会重载：测试换通道时要改查询串（`&s=2`）。
 - 测试缩短空闲时钟：导航前 `Page.addScriptToEvaluateOnNewDocument('window.__velaIdleMs = 1500')`。
+- 页面发往 `velawallet://sign-result?…` 的答复，无头 Chrome 交不给任何 App，但 DevTools 看得见：
+  开 `Page.enable`，读 `Page.frameRequestedNavigation` 的 `url`（`channels-test`、`answer-test`）。
+  别为了收答复再把回环地址放进页面 —— 发布页只认这一个地址（102 R7）。
+- 跨源 iframe 是 DevTools 里单独的 `iframe` target，列表里的 URL 是**请求的**地址，
+  被 `X-Frame-Options` 拦下的也照样列出；要连进去看 `location.href`（拦下的是
+  `chrome-error://chromewebdata/`）。
 - 系统 socks5 代理会绕开 `--host-resolver-rules`，测试会静默打到线上真站 →
   加 `--no-proxy-server`。
 - 本仓库多会话共用工作树：**提交前先看 `git status`，只提交自己的路径**。

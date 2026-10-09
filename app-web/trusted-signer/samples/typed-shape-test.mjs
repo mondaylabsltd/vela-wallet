@@ -13,7 +13,8 @@ const ns = loadPageLibs([
 ]);
 const check = makeChecks();
 const ACCOUNT = '0x88cca0eedbf2c4426110bbfc998f048689266894';
-const ctx = { account: ACCOUNT, chainId: 100 };
+// As the apps send it: over the URL, answered to the wallet (spec 102 R7).
+const ctx = { account: ACCOUNT, chainId: 100, channel: 'url', callback: 'velawallet://sign-result' };
 const mail = { types: { EIP712Domain: [{ name: 'name', type: 'string' }], Mail: [{ name: 'contents', type: 'string' }] }, primaryType: 'Mail', domain: { name: 'Ether Mail' }, message: { contents: 'Hello' } };
 const permit = { types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }], Permit: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }] }, primaryType: 'Permit', domain: { name: 'USD Coin', chainId: 100, verifyingContract: '0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0' }, message: { owner: ACCOUNT, spender: '0x000000000000000000000000000000000000dEaD', value: '1000000', nonce: '0', deadline: '99999999999' } };
 const intent = (method, params) => ({ method, origin: 'https://site.test', params });

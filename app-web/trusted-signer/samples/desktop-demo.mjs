@@ -10,7 +10,9 @@
 //   1. assemble the operation and a one-time token
 //   2. listen on a loopback port for the answer
 //   3. open the default browser at the signing page (localhost is a valid
-//      rpId and a secure context, so the passkey ceremony is real)
+//      rpId and a secure context, so the passkey ceremony is real) — the
+//      harness copy, `samples/loopback-sign.html`, because the real one
+//      answers only to `velawallet://sign-result` (spec 102 R7)
 //   4. verify what comes back — the signature, the challenge binding, and that
 //      the digest is the one vela-core would have computed
 import { spawn } from 'node:child_process';
@@ -221,7 +223,12 @@ console.log('  钥匙     :', key.credentialId.slice(0, 16) + '… (' + key.sour
 request.context.allowCredentials = [key.credentialId];
 
 const payload = JSON.stringify({ intent: request.intent, context: request.context });
-const signUrl = `http://localhost:${PAGE_PORT}/src/sign.html?ch=url&lang=zh` +
+// The harness page, not `src/sign.html`: the published page answers only to
+// `velawallet://sign-result` (spec 102 R7), and a manual run's default browser
+// would hand that to an installed Vela, not to this process. The harness page
+// is the same page plus `loopback-answer.js`, which lets it answer this
+// loopback listener too — test only, never in `dist/` (samples/answer-test.mjs).
+const signUrl = `http://localhost:${PAGE_PORT}/samples/loopback-sign.html?ch=url&lang=zh` +
   `#i=${b64url(payload)}&cb=${b64url(`http://127.0.0.1:${CALLBACK_PORT}/vela`)}&t=${token}`;
 
 console.log('');
