@@ -58,22 +58,33 @@ final class SigningVenueScreenshotTests: XCTestCase {
         ("zh", "light"), ("en", "light"), ("zh", "dark"), ("en", "dark"),
     ]
 
-    /// The hand-off card as the core round left it: "Confirm with …" (the
-    /// plan's key label), the fee and speed the page will sign, "checked
-    /// {{time}}"; while checking (no fee row, Open shut); a self-hosted build
-    /// asking to be trusted, with its answer; a sign-time venue refusal said
-    /// in the person's language; the page's own sheet, and a ceremony's own
-    /// title.
+    /// The hand-off card after the integration round: the key row
+    /// 「确认方式 | YubiKey 5C」 (the plan's key label), "checked {{time}}",
+    /// and the sheet's OWN fee row and speed above Open — the card draws no
+    /// fee (said once); while checking, Open shut and in the same place; a
+    /// self-hosted build asking to be trusted, with its answer; a sign-time
+    /// venue refusal said in the person's language; the page's own sheet; a
+    /// ceremony's own title and key row (「新钥匙存在 | 这台设备」 to create,
+    /// 「确认方式 | 手机或平板」 to sign in); and the send confirm, whose own
+    /// figures carry the fee, with the card under them.
     func testTheHandoffBoardsAfterTheCoreRound() throws {
         let boards: [(state: String, id: String)] = [
-            ("sheet", "handoff.fee"),
+            ("sheet", "handoff.key"),
             ("sheet-checking", "integrity.checking"),
             ("sheet-ask", "handoff.trust"),
             ("sheet-blocked", "handoff.none"),
             ("card", "handoff.open"),
+            ("checking", "integrity.checking"),
             ("ask", "handoff.trust"),
-            ("ceremony", "handoff.title"),
+            ("ceremony", "handoff.key"),
+            ("ceremony-signin", "handoff.key"),
+            ("send", "handoff.card"),
+            ("send-checking", "integrity.checking"),
         ]
+        // Where Open stands (and where the card ends), by board: checking
+        // and checked must agree.
+        var openTop: [String: CGFloat] = [:]
+        var cardBottom: [String: CGFloat] = [:]
         for look in Self.looks {
             for (state, id) in boards {
                 let app = launch(env: ["VELA_PAGE": "handoff", "VELA_STATE": state], lang: look.lang, theme: look.theme)
@@ -88,10 +99,32 @@ final class SigningVenueScreenshotTests: XCTestCase {
                     XCTAssertTrue(app.descendants(matching: .any)[id].firstMatch.waitForExistence(timeout: 15),
                                   "\(state) \(look): no \(id)")
                 }
-                if state == "sheet" {
-                    let mine = look.lang == "zh" ? "用 YubiKey 5C 确认" : "Confirm with YubiKey 5C"
-                    XCTAssertTrue(app.staticTexts[mine].exists, "the key is not named: \(mine)")
+                if let (label, value) = Self.keyRow(state, lang: look.lang) {
+                    // A row: the label and the value, never "用 X 确认".
+                    let row = app.descendants(matching: .any)["handoff.key"].firstMatch
+                    XCTAssertTrue(row.exists, "\(state) \(look): no key row")
+                    XCTAssertTrue(row.label.contains(label) && row.label.contains(value),
+                                  "\(state) \(look): the key row says \(row.label)")
                 }
+                if state.hasPrefix("sheet"), state != "sheet-blocked" {
+                    // The fee is said once: the sheet's own row (figure and
+                    // speed), never a second one on the card.
+                    XCTAssertFalse(app.descendants(matching: .any)["handoff.fee"].exists,
+                                   "\(state) \(look): the card said the fee again")
+                    XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "USDC"))
+                        .firstMatch.exists, "\(state) \(look): the sheet lost its fee row")
+                }
+                if state.hasPrefix("send") {
+                    XCTAssertFalse(app.descendants(matching: .any)["handoff.fee"].exists,
+                                   "\(state) \(look): the card said the fee again")
+                }
+                let board = "\(state)-\(look.lang)-\(look.theme)"
+                for open in ["signing.openSigner", "handoff.open"] {
+                    let button = app.buttons[open].firstMatch
+                    if button.exists { openTop[board] = button.frame.minY }
+                }
+                let card = app.descendants(matching: .any)["handoff.card"].firstMatch
+                if card.exists { cardBottom[board] = card.frame.maxY }
                 if state == "sheet-blocked", look.lang == "zh" {
                     let reason = app.staticTexts.containing(
                         NSPredicate(format: "label CONTAINS %@", "这个页面在 getvela.app")
@@ -101,9 +134,40 @@ final class SigningVenueScreenshotTests: XCTestCase {
                 if state == "sheet-checking" {
                     XCTAssertFalse(app.buttons["signing.openSigner"].isEnabled, "Open was on while checking")
                 }
-                attach("2b-handoff-\(state)-\(look.lang)-\(look.theme)")
+                attach("2c-handoff-\(state)-\(look.lang)-\(look.theme)")
                 app.terminate()
             }
+        }
+        // Polish 4: the check landing never moves Open — nor, on the send
+        // confirm (whose Open is pinned in its footer), what is under the card.
+        for look in Self.looks {
+            let key = "\(look.lang)-\(look.theme)"
+            for (checked, checking) in [("sheet", "sheet-checking"), ("card", "checking")] {
+                guard let before = openTop["\(checking)-\(key)"], let after = openTop["\(checked)-\(key)"] else {
+                    XCTFail("\(checked) \(key): Open was not found")
+                    continue
+                }
+                XCTAssertEqual(before, after, accuracy: 0.01, "\(checked) \(key): Open moved when the check landed")
+            }
+            if let before = cardBottom["send-checking-\(key)"], let after = cardBottom["send-\(key)"] {
+                XCTAssertEqual(before, after, accuracy: 0.01, "send \(key): the card grew when the check landed")
+            } else {
+                XCTFail("send \(key): the card was not found")
+            }
+        }
+        print("OPEN-TOPS", openTop.sorted { $0.key < $1.key })
+        print("CARD-BOTTOMS", cardBottom.sorted { $0.key < $1.key })
+    }
+
+    /// The key row each board draws, by language: (label, value).
+    private static func keyRow(_ state: String, lang: String) -> (String, String)? {
+        let zh = lang == "zh"
+        switch state {
+        case "sheet": return (zh ? "确认方式" : "Confirm with", "YubiKey 5C")
+        case "card", "send": return zh ? ("确认方式", "这台设备") : ("Confirm with", "This device")
+        case "ceremony": return zh ? ("新钥匙存在", "这台设备") : ("New key on", "This device")
+        case "ceremony-signin": return zh ? ("确认方式", "手机或平板") : ("Confirm with", "Phone or tablet")
+        default: return nil
         }
     }
 
@@ -120,7 +184,7 @@ final class SigningVenueScreenshotTests: XCTestCase {
                           "the self-hosted page's question has no answer")
             let official = look.lang == "zh" ? "Vela 官方签名页" : "Vela's official signing page"
             XCTAssertTrue(app.staticTexts[official].exists, "the official page is not named \(official)")
-            attach("2b-signing-pages-\(look.lang)-\(look.theme)")
+            attach("2c-signing-pages-\(look.lang)-\(look.theme)")
 
             let menu = app.descendants(matching: .any)["signingPage.menu.sign.work.example"].firstMatch
             XCTAssertTrue(menu.exists)
@@ -128,10 +192,10 @@ final class SigningVenueScreenshotTests: XCTestCase {
             let rename = app.buttons[look.lang == "zh" ? "重命名" : "Rename"].firstMatch
             XCTAssertTrue(rename.waitForExistence(timeout: 5), "no rename")
             XCTAssertTrue(app.buttons[look.lang == "zh" ? "移除" : "Remove"].firstMatch.exists, "no remove")
-            attach("2b-signing-pages-menu-\(look.lang)-\(look.theme)")
+            attach("2c-signing-pages-menu-\(look.lang)-\(look.theme)")
             rename.tap()
             XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5), "no rename field")
-            attach("2b-signing-pages-rename-\(look.lang)-\(look.theme)")
+            attach("2c-signing-pages-rename-\(look.lang)-\(look.theme)")
             app.terminate()
         }
     }
@@ -141,18 +205,33 @@ final class SigningVenueScreenshotTests: XCTestCase {
     /// core's reason under it.
     func testTheVenueBoards() throws {
         for look in Self.looks {
+            // An account made on the self-hosted page: its page asks to be
+            // trusted, with the answer on the row (polish 9); the rest refused.
+            let own = launch(env: ["VELA_PAGE": "settings", "VELA_STATE": "signing-venue-own"],
+                             lang: look.lang, theme: look.theme)
+            let ownRow = own.descendants(matching: .any)["settings.venue"].firstMatch
+            XCTAssertTrue(ownRow.waitForExistence(timeout: 15), "no venue row")
+            scrollIntoReach(ownRow, in: own)
+            ownRow.tap()
+            XCTAssertTrue(own.descendants(matching: .any)["venue.trust.sign.example.com"].firstMatch
+                .waitForExistence(timeout: 10), "the venue row's question has no answer")
+            attach("2c-venue-own-trust-\(look.lang)-\(look.theme)")
+            own.swipeUp()
+            attach("2c-venue-own-trust-reasons-\(look.lang)-\(look.theme)")
+            own.terminate()
+
             let app = launch(env: ["VELA_PAGE": "settings", "VELA_STATE": "signing-venue"],
                              lang: look.lang, theme: look.theme)
             let row = app.descendants(matching: .any)["settings.venue"].firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 15), "no venue row")
             scrollIntoReach(row, in: app)
-            attach("2b-venue-row-\(look.lang)-\(look.theme)")
+            attach("2c-venue-row-\(look.lang)-\(look.theme)")
             row.tap()
             XCTAssertTrue(app.descendants(matching: .any)["venue.reason"].firstMatch.waitForExistence(timeout: 10),
                           "a page that cannot reach the keys is not explained")
-            attach("2b-venue-sheet-\(look.lang)-\(look.theme)")
+            attach("2c-venue-sheet-\(look.lang)-\(look.theme)")
             app.swipeUp()
-            attach("2b-venue-sheet-reasons-\(look.lang)-\(look.theme)")
+            attach("2c-venue-sheet-reasons-\(look.lang)-\(look.theme)")
             app.terminate()
         }
     }
@@ -167,18 +246,28 @@ final class SigningVenueScreenshotTests: XCTestCase {
             XCTAssertTrue(entry.waitForExistence(timeout: 15))
             let words = look.lang == "zh" ? "使用可信签名页" : "Use a trusted signing page"
             XCTAssertTrue(app.staticTexts[words].exists, "the entry is not worded \(words)")
-            attach("2b-create-chooser-\(look.lang)-\(look.theme)")
+            attach("2c-create-chooser-\(look.lang)-\(look.theme)")
             entry.tap()
             XCTAssertTrue(app.descendants(matching: .any)["signingPagePicker"].firstMatch.waitForExistence(timeout: 10))
             let selfHosted = look.lang == "zh" ? "自己部署的签名页 · sign.example.com" : "Self-hosted · sign.example.com"
             XCTAssertTrue(app.staticTexts[selfHosted].waitForExistence(timeout: 5), "no \(selfHosted)")
-            attach("2b-create-picker-\(look.lang)-\(look.theme)")
+            // "Keys on …" only where it is news: the official page's, not the
+            // self-hosted page's own host (polish 3).
+            let keysOn = look.lang == "zh" ? "钥匙在 " : "Keys on "
+            XCTAssertTrue(app.staticTexts[keysOn + "getvela.app"].exists, "the official page's keys are not said")
+            XCTAssertFalse(app.staticTexts[keysOn + "sign.example.com"].exists, "the page's own host was said again")
+            XCTAssertTrue(app.descendants(matching: .any)["signingPage.trust.sign.example.com"].firstMatch.exists,
+                          "the list's question has no answer")
+            attach("2c-create-picker-\(look.lang)-\(look.theme)")
             app.terminate()
 
             app = launch(env: ["VELA_GALLERY": "1", "VELA_GALLERY_FIXTURE": "keys · on a self-hosted page"],
                          lang: look.lang, theme: look.theme)
             XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen"].firstMatch.waitForExistence(timeout: 15))
-            attach("2b-create-on-a-self-hosted-page-\(look.lang)-\(look.theme)")
+            XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen.trust"].firstMatch.exists,
+                          "the chosen page's question has no answer")
+            XCTAssertFalse(app.staticTexts[keysOn + "sign.example.com"].exists, "the page's own host was said again")
+            attach("2c-create-on-a-self-hosted-page-\(look.lang)-\(look.theme)")
             app.terminate()
         }
     }
@@ -197,7 +286,8 @@ final class SigningVenueScreenshotTests: XCTestCase {
 
         app = launch(env: ["VELA_GALLERY": "1", "VELA_GALLERY_FIXTURE": "keys · on a self-hosted page"])
         XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen"].firstMatch.waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["钥匙在 sign.example.com"].exists)
+        // Its keys live on its own host, which its name already says.
+        XCTAssertFalse(app.staticTexts["钥匙在 sign.example.com"].exists)
         attach("create-on-a-self-hosted-page")
         app.terminate()
     }
