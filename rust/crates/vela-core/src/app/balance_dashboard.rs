@@ -716,6 +716,14 @@ pub enum BalanceShellResult {
         /// then only a chain with tokens counts as having answered.
         #[serde(default)]
         read_chain_ids: Vec<u32>,
+        /// The failed chains whose read never left the app (PR 2 note 11,
+        /// issue 483): a fault inside Vela — a request pool nobody started, a
+        /// request the app could not build — not the network. A subset of
+        /// `failed_chain_ids`, as `rate_limited_chain_ids` is: the total stays
+        /// honest about what did not answer, and none of them is ever said as
+        /// "can't reach" ([`BalanceView::internal_key`]).
+        #[serde(default)]
+        internal_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -723,6 +731,10 @@ pub enum BalanceShellResult {
     FetchErrored {
         address: String,
         pull: bool,
+        /// It threw inside the app before anything left it (PR 2 note 11):
+        /// said as Vela's own fault, never "can't reach".
+        #[serde(default)]
+        internal: bool,
     },
     /// A switcher row's assets; `None` = per-account best-effort failure
     /// (`useHomeController.ts:457-463`) — the row keeps its cached value.
@@ -853,6 +865,10 @@ pub struct Model {
     /// NOT cleared on account change — ported verbatim (the reset effect at
     /// `useHomeController.ts:399-416` never touches it).
     rate_limited_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `internal_chain_ids`.
+    internal_chain_ids: Vec<u32>,
+    /// The last round threw inside the app ([`BalanceShellResult::FetchErrored`]).
+    errored_internally: bool,
     /// Per chain, what it held the last time it answered for this account
     /// (spec 092) — empty for one that answered holding nothing. A chain
     /// missing here has not been read since the account opened.
@@ -1024,6 +1040,17 @@ pub struct BalanceView {
     /// (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
     /// `None` when every network answered.
     pub unreachable_key: Option<String>,
+    /// The failed chains whose read never left the app (PR 2 note 11) — not
+    /// in `unreachable_networks`: nothing there is the network's doing.
+    #[serde(default)]
+    pub internal_chain_ids: Vec<u32>,
+    /// The home line when the last read failed inside Vela itself
+    /// (`fee_policy::REASON_INTERNAL_KEY`, the fee's own sentence for the same
+    /// fault): drawn where the unreachable line goes, and in place of any
+    /// "can't reach" a chain-down would say — an internal fault never reads
+    /// "Can't reach Ethereum" (issue 483). `None` otherwise.
+    #[serde(default)]
+    pub internal_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
     /// The last total this account settled on, painted under a skeleton
@@ -1187,6 +1214,9 @@ impl App for BalanceDashboard {
             rate_limited_chain_ids: model.rate_limited_chain_ids.clone(),
             unreachable_networks,
             unreachable_key,
+            internal_chain_ids: model.internal_chain_ids.clone(),
+            internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
+                .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
             holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
             cached_total_usd: if model.hidden {
                 None
@@ -1225,6 +1255,8 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     // switch, ported verbatim.
     model.tokens.clear();
     model.failed_chain_ids.clear();
+    model.internal_chain_ids.clear();
+    model.errored_internally = false;
     model.last_read.clear();
     model.cached_total = None;
     model.bootstrapped = false;
@@ -1370,6 +1402,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             failed_chain_ids,
             rate_limited_chain_ids,
             read_chain_ids,
+            internal_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1393,6 +1426,8 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
+            model.internal_chain_ids = internal_chain_ids;
+            model.errored_internally = false;
             model.fetch_in_flight = false;
             model.errored_without_data = false;
 
@@ -1460,7 +1495,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             requests(model, operations)
         }
 
-        BalanceShellResult::FetchErrored { address, pull } => {
+        BalanceShellResult::FetchErrored {
+            address,
+            pull,
+            internal,
+        } => {
             if model.address.as_deref() != Some(address.as_str()) {
                 return Command::done();
             }
@@ -1471,6 +1510,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // `setBootstrapped(true)` (`:367-369`).
             model.bootstrapped = true;
             model.fetch_in_flight = false;
+            model.errored_internally = internal;
             // Nothing known at all: the home must say so rather than show a
             // settled-looking $0.00 (spec 038 finding 15).
             model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
@@ -1655,6 +1695,8 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
         .iter()
         .copied()
         .filter(|id| !model.rate_limited_chain_ids.contains(id))
+        // A fault inside the app is not the network's (PR 2 note 11).
+        .filter(|id| !model.internal_chain_ids.contains(id))
         .collect();
     let mut rows: Vec<(f64, UnreachableNetwork)> = chains
         .into_iter()
