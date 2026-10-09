@@ -90,7 +90,10 @@ enum WalletLive {
         if let feed {
             // The feed's own flag, and the balance's while the two machines
             // catch up with one tap: a figure is never shown for a frame.
-            copy.activityGroups = activityGroups(feed, loc: loc, hidden: feed.hidden || view.hidden,
+            // The home draws the core's cut (issue #469: the newest three);
+            // "All" opens History, which draws every row.
+            copy.activityGroups = activityGroups(feed.homeRows, loc: loc,
+                                                 hidden: feed.hidden || view.hidden,
                                                  networks: networks)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
                                            fallback: model.activitySection,
@@ -490,11 +493,15 @@ extension WalletLive {
     ///
     /// What is the shell's: the day's WORDING (今天 / 昨天 / a date), the
     /// counterparty's label, and how an amount reads.
+    ///
+    /// **Which rows is the caller's, never this helper's** (issue #469): the
+    /// home passes `feed.homeRows` (the core's newest three), History passes
+    /// `feed.rows`. A cap here would silently cut History too.
     static func activityGroups(
-        _ feed: FeedViewWire, loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
+        _ rows: [FeedRowWire], loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
     ) -> [ActivityGroupModel] {
         var groups: [(label: String, rows: [ActivityRowModel])] = []
-        for row in feed.rows {
+        for row in rows {
             switch row {
             case .header(_, let dayStartMs, let timestamp):
                 groups.append((dayLabel(dayStartMs: dayStartMs, timestamp: timestamp, loc: loc), []))

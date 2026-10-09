@@ -170,10 +170,11 @@ enum FlowsLive {
 
     /// The whole feed, in the drawn history screen.
     ///
-    /// The same rows the home shows, from the same machine — the home stops at
-    /// three and this one does not. Building it twice from two sources is how
-    /// a person taps 全部 and sees a different history than the one they were
-    /// looking at.
+    /// The same rows the home shows, from the same machine — the home draws
+    /// the core's cut (`FeedView.home_rows`, the newest three; issue #469)
+    /// and this one draws every row. Building it twice from two sources is
+    /// how a person taps 全部 and sees a different history than the one they
+    /// were looking at.
     static func history(
         _ feed: FeedViewWire,
         selected: Int? = nil,
@@ -189,7 +190,7 @@ enum FlowsLive {
             pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
                        networks: networks)
         )
-        let groups = WalletLive.activityGroups(feed, loc: loc, hidden: hidden, networks: networks)
+        let groups = WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks)
         return HistoryModel(
             header: header,
             mode: groups.isEmpty ? .empty : .rows,

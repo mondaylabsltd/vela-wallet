@@ -273,7 +273,7 @@ struct ActivityRowTests {
             .item(item(id: "b", direction: .out, dayStartMs: dayStart, timestamp: today)),
             .header(id: "day-\(yesterday)", dayStartMs: yesterday, timestamp: today - 86_400),
             .item(item(id: "c", dayStartMs: yesterday, timestamp: today - 86_400)),
-        ]), loc: loc, hidden: false)
+        ]).rows, loc: loc, hidden: false)
 
         #expect(groups.count == 2)
         #expect(groups[0].label == loc.t("componentsUi.dayGroup.today"))
@@ -288,7 +288,7 @@ struct ActivityRowTests {
         let dayStart = TxRecords.dayStartMs(Date().timeIntervalSince1970)
         let groups = WalletLive.activityGroups(feed([
             .header(id: "day-\(dayStart)", dayStartMs: dayStart, timestamp: 0),
-        ]), loc: loc, hidden: false)
+        ]).rows, loc: loc, hidden: false)
         #expect(groups.isEmpty)
     }
 

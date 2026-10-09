@@ -244,4 +244,21 @@ struct PrivacyFixtureTests {
             #expect(!WalletLive.activityRow(item, loc: loc, hidden: false).masked)
         }
     }
+
+    /// 5. The home draws the core's cut (issue #469): the newest three, the
+    /// same rows History opens with; History draws every row.
+    @Test func theHomeDrawsTheCoresNewestThreeAndHistoryEveryRow() throws {
+        let (balance, feed) = try views("shown")
+        let all = FlowsLive.items(feed)
+        let homeItems: [FeedItemWire] = feed.homeRows.compactMap {
+            if case .item(let item) = $0 { return item } else { return nil }
+        }
+        #expect(all.count > 3, "the fixture must hold more than the home draws")
+        #expect(homeItems.map(\.id) == all.prefix(3).map(\.id))
+        let applied = WalletLive.apply(balance, feed: feed, feedRead: true, on: home, loc: loc)
+        #expect(applied.activityGroups.flatMap(\.rows).compactMap(\.itemId) == homeItems.map(\.id))
+        #expect(applied.activityGroups.allSatisfy { !$0.rows.isEmpty }, "a header with no row under it")
+        let history = FlowsLive.history(feed, on: drawnHistory, loc: loc, hidden: false)
+        #expect(history.groups.flatMap(\.rows).count == all.count)
+    }
 }

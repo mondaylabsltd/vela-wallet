@@ -48,15 +48,16 @@ struct WalletFixturesTests {
         #expect(model.assetRows[0].balance == "0.8533")
     }
 
-    @Test func h1sShowsAllDayGroups() {
+    /// H1s is the home scrolled: the newest three (issue #469, the core's
+    /// `home_rows`) — yesterday's receipt lives in History, behind "All".
+    @Test func h1sShowsTheNewestThree() {
         let model = WalletFixtures.buildMobileState(.h1s, loc: loc)
-        #expect(model.activityGroups.count == 2)
+        #expect(model.activityGroups.count == 1)
         #expect(model.activityGroups[0].label == "今天")
         #expect(model.activityGroups[0].rows.count == 3)
-        #expect(model.activityGroups[1].label == "昨天")
-        #expect(model.activityGroups[1].rows.count == 1)
-        #expect(model.activityGroups[1].rows[0].amount == "+50")
-        #expect(model.activityGroups[1].rows[0].unit == "USDC")
+        #expect(model.activityGroups.flatMap(\.rows).count == 3)
+        #expect(!model.activityGroups.flatMap(\.rows).contains { $0.amount == "+50" })
+        #expect(model.activitySection.action == "全部", "the \"All\" link opens History")
     }
 
     @Test func h2EmptyZeroLive() {

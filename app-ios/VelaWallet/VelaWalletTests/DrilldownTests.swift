@@ -90,7 +90,7 @@ struct DrilldownTests {
         #expect(live.groups[0].rows.count == 2)
         // The same rows, built by the same function — compared on what a
         // person reads, since the display models carry fresh identities.
-        let home = WalletLive.activityGroups(view, loc: loc, hidden: false)
+        let home = WalletLive.activityGroups(view.rows, loc: loc, hidden: false)
         #expect(live.groups.map { $0.rows.map(\.amount) }
                 == home.map { $0.rows.map(\.amount) })
         #expect(live.groups.map(\.label) == home.map(\.label))
