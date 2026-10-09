@@ -873,6 +873,10 @@ pub enum SendSubmitFailure {
     VenueBlocked {
         block: crate::signing_venue::VenueBlock,
     },
+    /// The relay refused it: another transaction of this account holds the
+    /// nonce (`RelayRejection::NonceHeld` — the relay's `nonce_in_flight`, or
+    /// an older relay's `[existingHash:…]`). Nothing was sent.
+    PreviousPending,
 }
 
 /// Post-submit receipt convergence, fed by the shell from `tx_tracker`
@@ -892,6 +896,14 @@ pub enum SendReceiptOutcome {
         /// spec 082 RA4): "not sent", never the fee-rejected words.
         #[serde(default)]
         not_sent: bool,
+        /// `rejected` only: why the relay refused it (the tracker entry's
+        /// `refusal`). Only [`RefusalReason::FeeBelowMarket`] is told as
+        /// "network fees stayed above the amount you approved"; `None` is the
+        /// plain refusal.
+        ///
+        /// [`RefusalReason::FeeBelowMarket`]: super::tx_tracker::RefusalReason::FeeBelowMarket
+        #[serde(default)]
+        refusal: Option<super::tx_tracker::RefusalReason>,
     },
     /// The relay parked the op until fees settle — pending, new wording only
     /// (invariant ⑦).
@@ -920,14 +932,17 @@ pub fn receipt_outcome_of(entry: &TrackEntryView) -> Option<SendReceiptOutcome> 
         TrackStatus::Dropped => Some(SendReceiptOutcome::Failed {
             rejected: false,
             not_sent: false,
+            refusal: None,
         }),
         TrackStatus::Rejected => Some(SendReceiptOutcome::Failed {
             rejected: true,
             not_sent: false,
+            refusal: entry.refusal,
         }),
         TrackStatus::NotSent => Some(SendReceiptOutcome::Failed {
             rejected: false,
             not_sent: true,
+            refusal: None,
         }),
         TrackStatus::FeeHeld => Some(SendReceiptOutcome::FeeHeld),
         TrackStatus::RelayFunding => Some(SendReceiptOutcome::RelayFunding),
@@ -1140,6 +1155,11 @@ pub enum SendOperation {
         /// relay accepted the op the write-ahead hand-off announced.
         #[serde(default)]
         admitted: bool,
+        /// The account that signed it, forwarded to
+        /// `tx_tracker::Event::Submitted` — what makes it an op this account
+        /// must wait for on this chain (`tx_tracker::in_flight_ops`).
+        #[serde(default)]
+        sender: Option<String>,
     },
     /// The write-ahead records are on disk and the tracker holds them (spec
     /// 082 RJ1): the shell may now POST `user_op_hash`, and only now. With no
@@ -1488,6 +1508,14 @@ pub enum Event {
     DismissRelayUnreachable,
     /// The error panel's retry — back to idle.
     RetryAfterError,
+    /// Every operation in flight on this device, as the tracker last said
+    /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
+    /// tracker render). While the account has one on the form's chain, the
+    /// confirm is held ([`SendView::previous_pending`]): a second send signed
+    /// now would take the same nonce. It opens once the first is final.
+    InFlightOps {
+        ops: Vec<super::tx_tracker::InFlightOp>,
+    },
     /// Receipt convergence from the tracker (shell-mapped, typed).
     ReceiptUpdate {
         user_op_hash: String,
@@ -1540,6 +1568,12 @@ pub enum SendTxStatus {
 pub enum SendTxErrorKey {
     /// `send.txErrorGeneric`.
     Generic,
+    /// The relay refused the submit because another transaction of this
+    /// account holds the nonce (`RelayRejection::NonceHeld`, from another
+    /// device, or one this device could not follow): nothing was sent. The
+    /// line is [`super::sign_confirm::PREVIOUS_PENDING_KEY`]'s; "Try again"
+    /// waits for it like any held confirm.
+    PreviousPending,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
     /// Spec 102: the account cannot sign here — the line is
@@ -1878,6 +1912,12 @@ pub struct Model {
     /// The submit result's clock (#D3); `None` until the relay accepted.
     submitted_at_ms: Option<f64>,
     fee_rejected: bool,
+    /// The relay refused the submitted op (the tracker's `Rejected`).
+    refused: bool,
+    /// Why the relay refused the submitted op, when it did and said.
+    refusal: Option<super::tx_tracker::RefusalReason>,
+    /// [`Event::InFlightOps`]: every operation in flight on this device.
+    in_flight: Vec<super::tx_tracker::InFlightOp>,
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
     sim_json: Option<String>,
@@ -2033,11 +2073,29 @@ pub enum SendHoldReason {
     RelayFunding,
 }
 
+/// [`SendView::previous_pending`]: the transaction this send waits for.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendPreviousPending {
+    pub chain_id: u32,
+    pub user_op_hash: String,
+    /// The line under the held confirm
+    /// ([`super::sign_confirm::PREVIOUS_PENDING_KEY`]).
+    pub key: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SendReceiptView {
     pub status: SendReceiptStatus,
     pub hold_reason: Option<SendHoldReason>,
+    /// The relay refused it: the corpus key of the sentence that says why
+    /// (`tx_tracker::RefusalReason::key` — the fee words only for a fee
+    /// refusal, "another transaction from this account went first" for a
+    /// spent nonce, else the plain "refused, nothing was sent"). Drawn in
+    /// place of `hold_reason`'s words. `None` unless refused.
+    #[serde(default)]
+    pub refusal_key: Option<String>,
     pub kind: Option<SendReceiptKind>,
     pub transfers: Vec<SendReceiptTransfer>,
     /// Every coin the operation sent, in the order signed (spec 097 F, S3).
@@ -2239,6 +2297,12 @@ pub struct SendView {
     /// refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
     /// the same predicate; a shell adds nothing to it (issue 424).
     pub can_confirm: bool,
+    /// The account's previous transaction on this network is still going
+    /// through, so the confirm is held (part of `can_confirm`): this one
+    /// would take the same nonce. Drawn as its `key` under the confirm; the
+    /// confirm opens by itself once the first is final. `None` otherwise.
+    #[serde(default)]
+    pub previous_pending: Option<SendPreviousPending>,
     pub sending: bool,
     pub tx_status: SendTxStatus,
     pub tx_error: Option<SendTxErrorKey>,
@@ -2492,6 +2556,13 @@ impl Send {
                 model.tx_error = None;
                 render()
             }
+            Event::InFlightOps { ops } => {
+                if model.in_flight == ops {
+                    return Command::done();
+                }
+                model.in_flight = ops;
+                render()
+            }
             Event::ReceiptUpdate {
                 user_op_hash,
                 outcome,
@@ -2714,6 +2785,14 @@ impl Send {
             same_asset_fee_issue: issue,
             can_continue,
             can_confirm,
+            previous_pending: (stage == SendStage::Confirm)
+                .then(|| previous_in_flight(model))
+                .flatten()
+                .map(|op| SendPreviousPending {
+                    chain_id: op.chain_id,
+                    user_op_hash: op.user_op_hash.clone(),
+                    key: super::sign_confirm::PREVIOUS_PENDING_KEY.to_owned(),
+                }),
             sending: model.lock.busy(),
             tx_status: model.tx,
             tx_error: model.tx_error,
@@ -5313,6 +5392,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.fee_held = false;
     model.relay_funding = false;
     model.fee_rejected = false;
+    model.refused = false;
+    model.refusal = None;
 
     match model.public_key_hex.clone() {
         Some(pk) => submit_treasury_recheck(model, gen, pk),
@@ -5717,7 +5798,11 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         // on the admitted hand-off; the receipt waits for that verdict
         // (082 round-2 review).
         SendReceiptOutcome::Failed { not_sent: true, .. } if !model.receipt_maybe_sent => {}
-        SendReceiptOutcome::Failed { rejected, not_sent } => {
+        SendReceiptOutcome::Failed {
+            rejected,
+            not_sent,
+            refusal,
+        } => {
             // A definitive failure stamps the receipt — it never turns the
             // submitted payment back into an error state (invariant ⑤).
             model.receipt_failed = true;
@@ -5726,7 +5811,14 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
                 // fee-rejected one whatever else the shell says.
                 model.receipt_not_sent = true;
             } else if rejected {
-                model.fee_rejected = true;
+                // Told by its reason: the fee words only when fees were the
+                // reason — a nonce another send spent, a simulation that
+                // fails, a relay that gave up are not "network fees stayed
+                // above the amount you approved".
+                model.refusal = refusal;
+                model.fee_rejected =
+                    refusal == Some(super::tx_tracker::RefusalReason::FeeBelowMarket);
+                model.refused = true;
             }
         }
         SendReceiptOutcome::FeeHeld => {
@@ -5843,6 +5935,10 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
                     maybe_sent: ctx.maybe_sent,
                     submit_block: ctx.submit_block,
                     admitted: false,
+                    sender: model
+                        .account
+                        .as_ref()
+                        .map(|account| account.address.clone()),
                 },
             );
             match clear {
@@ -6402,6 +6498,20 @@ fn confirm_gate_open(model: &Model) -> bool {
         && !model.estimating_gas
         && !model.fee_busy
         && !relay_stopped(model)
+        && previous_in_flight(model).is_none()
+}
+
+/// The operation this send must wait for: the account's previous one on the
+/// form's chain, still in flight on this device — never the op this journey
+/// itself submitted ([`Event::InFlightOps`]).
+fn previous_in_flight(model: &Model) -> Option<&super::tx_tracker::InFlightOp> {
+    let sender = &model.account.as_ref()?.address;
+    super::tx_tracker::previous_in_flight(
+        &model.in_flight,
+        sender,
+        form_chain(model)?,
+        model.user_op_hash.as_deref(),
+    )
 }
 
 /// Open the "relay can't reach this network" sheet (spec 098 §2).
@@ -6746,6 +6856,10 @@ fn accept_submitted(
                 maybe_sent,
                 submit_block: wa.submit_block.or(submit_block),
                 admitted: !maybe_sent,
+                sender: model
+                    .account
+                    .as_ref()
+                    .map(|account| account.address.clone()),
             },
         ));
         commands.push(render());
@@ -6831,6 +6945,20 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             // (invariant ⑮).
             model.tx = SendTxStatus::Error;
             model.tx_error = Some(SendTxErrorKey::Generic);
+            model.lock.end(gen);
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
+        }
+        SendSubmitFailure::PreviousPending => {
+            // Not a failure of the network: the account's previous
+            // transaction still holds the nonce. Said as such, and "Try
+            // again" waits for it like any held confirm.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::PreviousPending);
             model.lock.end(gen);
             fire(
                 model,
@@ -6998,6 +7126,9 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         } else {
             SendReceiptStatus::Submitted
         },
+        refusal_key: model
+            .refused
+            .then(|| super::tx_tracker::refusal_key(model.refusal).to_owned()),
         hold_reason: if model.fee_rejected {
             Some(SendHoldReason::FeeRejected)
         } else if model.fee_held {

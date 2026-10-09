@@ -570,6 +570,11 @@ pub enum SignNotice {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignTrackerHandoff {
     pub user_op_hash: String,
+    /// The account that signed it, forwarded to `tx_tracker::Event::Submitted`
+    /// — what makes it an op this account must wait for on this chain
+    /// (`tx_tracker::in_flight_ops`).
+    #[serde(default)]
+    pub sender: Option<String>,
     /// The records the tracker patches. EMPTY on the write-ahead hand-off
     /// (spec 082 RJ1, second review): a POST of the op is about to leave and
     /// the tracker holds it off "not sent" until the POST's verdict, whose
@@ -820,6 +825,14 @@ pub enum SignEffect {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignEvent"))]
 pub enum Event {
+    /// Every operation in flight on this device, as the tracker last said
+    /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
+    /// tracker render). A transaction of an account with one already in
+    /// flight on the request's chain waits for it: the confirm is held with
+    /// [`ConfirmBlock::PreviousPending`] and opens once the first is final.
+    InFlightOps {
+        ops: Vec<super::tx_tracker::InFlightOp>,
+    },
     /// The supported network set (`getAllNetworksSync`). Until this arrives
     /// every chain is unsupported — fail-closed, so a shell that forgets to
     /// send it fails loudly instead of signing on an unvetted chain.
@@ -1467,6 +1480,8 @@ struct Inflight {
 struct WriteAhead {
     user_op_hash: String,
     record_id: String,
+    /// The account that signed it — the tracker hand-off's `sender`.
+    sender: String,
     submit_block: Option<u64>,
     /// `ClearToPost` went out (the record's persist was acked).
     cleared: bool,
@@ -1490,6 +1505,8 @@ struct FundingState {
 
 #[derive(Default)]
 pub struct Model {
+    /// [`Event::InFlightOps`]: every operation in flight on this device.
+    in_flight: Vec<super::tx_tracker::InFlightOp>,
     supported_chains: Vec<u32>,
     /// `chainId` state; TS initialises to 1 — mirrored in `global_chain_id()`.
     global_chain: Option<u32>,
@@ -1529,6 +1546,30 @@ impl Model {
 
     fn chain_supported(&self, chain_id: u32) -> bool {
         self.supported_chains.contains(&chain_id)
+    }
+
+    /// The operation the request on the sheet must wait for: the signing
+    /// account's previous transaction on the request's chain, still in
+    /// flight on this device (never the one this sheet submitted). Only a
+    /// transaction or a batch takes a nonce; a signature waits for nothing.
+    fn previous_in_flight(&self) -> Option<&super::tx_tracker::InFlightOp> {
+        let pending = self.pending.as_ref()?;
+        if !matches!(
+            method_kind(&pending.method),
+            SignMethodKind::Transaction | SignMethodKind::Batch
+        ) {
+            return None;
+        }
+        let sender = &self.accounts.get(self.active_index as usize)?.address;
+        let chain_id = pending
+            .per_request_chain
+            .unwrap_or_else(|| self.global_chain_id());
+        super::tx_tracker::previous_in_flight(
+            &self.in_flight,
+            sender,
+            chain_id,
+            self.pending_op_hash.as_deref(),
+        )
     }
 
     fn inflight_matches_pending(&self) -> bool {
@@ -1803,6 +1844,13 @@ impl App for SignRequest {
 
     fn update(&self, event: Event, model: &mut Model) -> Command<SignEffect, Event> {
         match event {
+            Event::InFlightOps { ops } => {
+                if model.in_flight == ops {
+                    return Command::done();
+                }
+                model.in_flight = ops;
+                render()
+            }
             Event::NetworksChanged { chain_ids } => {
                 model.supported_chains = chain_ids;
                 render()
@@ -2024,6 +2072,8 @@ impl App for SignRequest {
             .is_some_and(|p| p.responded || p.held.is_some())
         {
             Some(ConfirmBlock::Answered)
+        } else if model.previous_in_flight().is_some() {
+            Some(ConfirmBlock::PreviousPending)
         } else {
             None
         };
@@ -2586,6 +2636,12 @@ fn approve_with(
     if !model.reconciled {
         return Command::done();
     }
+    // The account's previous transaction on this chain is still in flight:
+    // this one would take its nonce. The confirm is held
+    // ([`ConfirmBlock::PreviousPending`]); a tap from a stale frame waits too.
+    if model.previous_in_flight().is_some() {
+        return Command::done();
+    }
     let Some(signer) = model.accounts.get(model.active_index as usize).cloned() else {
         return Command::done();
     };
@@ -3086,6 +3142,7 @@ fn on_op_signed(
         fl.write_ahead = Some(WriteAhead {
             user_op_hash: user_op_hash.clone(),
             record_id: record_id.clone(),
+            sender: fl.address.clone(),
             submit_block,
             cleared: false,
         });
@@ -3094,7 +3151,9 @@ fn on_op_signed(
             fl.chain_id,
         )
     };
+    let sender = model.inflight.as_ref().map(|fl| fl.address.clone());
     model.tracker_handoff = Some(SignTrackerHandoff {
+        sender,
         user_op_hash,
         record_ids: Vec::new(),
         chain_id,
@@ -3112,6 +3171,7 @@ fn on_op_signed(
 /// the tracker's hold on the op (its not-found grace counts from here).
 fn handoff_of(wa: &WriteAhead, chain_id: u32, admitted: bool) -> SignTrackerHandoff {
     SignTrackerHandoff {
+        sender: Some(wa.sender.clone()),
         user_op_hash: wa.user_op_hash.clone(),
         record_ids: vec![wa.record_id.clone()],
         chain_id,
@@ -3303,7 +3363,9 @@ fn on_op_submitted(
     // the moment the bundler accepts, before the receipt wait
     // (`dapp-connection.tsx:718-746`). The tracker handoff rides the view;
     // the shell feeds `tx_tracker::Event::Submitted` (idempotent per hash).
+    let sender = model.inflight.as_ref().map(|fl| fl.address.clone());
     model.tracker_handoff = Some(SignTrackerHandoff {
+        sender,
         user_op_hash,
         record_ids: vec![record_id],
         chain_id,
@@ -3960,6 +4022,7 @@ fn persist_pending_then(
         ..kept_request(fl)
     };
     model.tracker_handoff = Some(SignTrackerHandoff {
+        sender: Some(fl.address.clone()),
         user_op_hash: user_op_hash.clone(),
         record_ids: vec![record.record_id.clone()],
         chain_id: fl.chain_id,

@@ -177,6 +177,7 @@ const HEAD: u64 = 1_010;
 fn submitted() -> Tracker {
     let mut sut = Tracker::new();
     sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -207,6 +208,7 @@ fn drain(sut: &mut Tracker, now: f64, status: TrackLifecycle, tx_hash: Option<&s
                 now_ms: now,
             },
             Op::PollStatus { .. } => Res::Status {
+                rejection_reason: None,
                 user_op_hash: HASH.to_owned(),
                 status,
                 stage: None,

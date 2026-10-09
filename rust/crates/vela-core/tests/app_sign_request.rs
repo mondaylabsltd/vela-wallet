@@ -745,6 +745,7 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
     // The shell feeds the handoff to the tracker.
     let mut tracker = support::DomainDriver::<TxTracker>::new();
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash.clone(),
         record_ids: handoff.record_ids.clone(),
         chain_id: handoff.chain_id,
@@ -2556,6 +2557,9 @@ fn the_phase_of_a_message_and_of_an_accepted_op() {
 
 fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> TrackEntryView {
     TrackEntryView {
+        refusal: None,
+        refusal_key: None,
+        sender: None,
         user_op_hash: LOCAL_OP.to_owned(),
         chain_id: 100,
         record_ids: vec!["dapp-5000-tx".to_owned()],
@@ -2838,6 +2842,7 @@ fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record
 
     let mut tracker = support::DomainDriver::<TxTracker>::new();
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash.clone(),
         record_ids: handoff.record_ids.clone(),
         chain_id: handoff.chain_id,
@@ -3959,6 +3964,7 @@ fn a_maybe_sent_verdict_hands_the_record_over() {
     assert_eq!(
         handoff_of(&sut),
         SignTrackerHandoff {
+            sender: Some(ACCT0.to_owned()),
             user_op_hash: LOCAL_OP.to_owned(),
             record_ids: vec![record.record_id],
             chain_id: 1,
@@ -5258,4 +5264,73 @@ fn a_failed_passkey_prompt_can_be_tried_again() {
 fn a_cancel_reported_as_a_failure_is_a_cancel() {
     let sut = passkey_failed(vela_core::app::FailureKind::Cancelled);
     assert!(sut.view().error.is_none(), "a cancel is never an error");
+}
+
+// ===========================================================================
+// One transaction in flight per account and network: wait for the first
+// ===========================================================================
+
+fn in_flight(sender: &str, chain_id: u32) -> Event {
+    Event::InFlightOps {
+        ops: vec![vela_core::app::tx_tracker::InFlightOp {
+            sender: sender.to_lowercase(),
+            chain_id,
+            user_op_hash: "0xfirst".to_owned(),
+        }],
+    }
+}
+
+/// A transaction of an account whose previous one on the request's chain is
+/// still going through waits for it: the gate is shut with its own block
+/// (and line), a stale tap signs nothing, and it opens once the first is
+/// final.
+#[test]
+fn a_transaction_waits_for_the_account_s_previous_one_on_its_chain() {
+    use vela_core::app::sign_confirm::ConfirmBlock;
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 1));
+    sut.dispatch(Arrive::global("req-wait", "eth_sendTransaction", &plain_send_params()).event());
+    let view = sut.view();
+    assert!(!view.confirm_gate_open);
+    assert_eq!(view.confirm_block, Some(ConfirmBlock::PreviousPending));
+    assert_eq!(
+        ConfirmBlock::PreviousPending.key(false),
+        Some("componentsUi.signing.confirmBlock.previousPending")
+    );
+    assert!(
+        sut.dispatch(approve(SignApproveOpts::default())).is_empty(),
+        "a tap from a stale frame starts nothing"
+    );
+
+    sut.dispatch(Event::InFlightOps { ops: vec![] });
+    let view = sut.view();
+    assert!(
+        view.confirm_gate_open,
+        "opens by itself once the first is final"
+    );
+    assert_eq!(
+        sut.dispatch(approve(SignApproveOpts::default())).len(),
+        1,
+        "and signs"
+    );
+}
+
+/// Another chain, another account, or a signature (which takes no nonce)
+/// waits for nothing.
+#[test]
+fn only_a_transaction_of_the_same_account_on_the_same_chain_waits() {
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 137));
+    sut.dispatch(Arrive::global("req-a", "eth_sendTransaction", &plain_send_params()).event());
+    assert!(sut.view().confirm_gate_open, "another chain");
+
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT1, 1));
+    sut.dispatch(Arrive::global("req-b", "eth_sendTransaction", &plain_send_params()).event());
+    assert!(sut.view().confirm_gate_open, "another account");
+
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 1));
+    sut.dispatch(Arrive::global("req-c", "personal_sign", r#"["0x68656c6c6f","0x0"]"#).event());
+    assert!(sut.view().confirm_gate_open, "a signature takes no nonce");
 }

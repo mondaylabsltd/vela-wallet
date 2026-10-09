@@ -46,6 +46,11 @@ pub enum ConfirmBlock {
     /// This request was answered, or its failure is held: Try again (when
     /// `SignView.failure_retryable`) or close.
     Answered,
+    /// The account's previous transaction on this network is still going
+    /// through ([`super::tx_tracker::InFlightOp`]): this one would take the
+    /// same nonce, so it waits, and the confirm opens by itself once the
+    /// first is final. The send confirm says the same line.
+    PreviousPending,
     /// The request is still being read.
     Reading,
     /// An approval needs its amount chosen.
@@ -65,6 +70,10 @@ pub enum ConfirmBlock {
     /// only repeated it (issue #438).
     FeeShort,
 }
+
+/// The line while the account's previous transaction on this network is
+/// still going through — under a held confirm, the dApp sheet's and Send's.
+pub const PREVIOUS_PENDING_KEY: &str = "componentsUi.signing.confirmBlock.previousPending";
 
 /// What the gate decides from: the four views as the shell last had them,
 /// and the speed in force (`None` — no speed control).
@@ -104,6 +113,7 @@ impl ConfirmBlock {
             Self::AccountSwitching => "componentsUi.signing.confirmBlock.accountSwitching",
             Self::Answered if retryable => "componentsUi.signing.confirmBlock.answeredRetry",
             Self::Answered => "componentsUi.signing.confirmBlock.answered",
+            Self::PreviousPending => PREVIOUS_PENDING_KEY,
             Self::Reading => "componentsUi.signing.confirmBlock.reading",
             Self::ApprovalChoice => "componentsUi.signing.confirmBlock.approvalChoice",
             Self::BatchUnsettled => "componentsUi.signing.confirmBlock.batchUnsettled",

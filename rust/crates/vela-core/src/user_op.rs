@@ -829,6 +829,26 @@ pub fn existing_op(message: &str, own_user_op_hash: &str) -> Option<ExistingOp> 
     })
 }
 
+/// The relay's structured "another operation holds this nonce" refusal
+/// (relay contract §1, `fix/held-nonce-and-floor`): `error.data.reason` is
+/// `nonce_in_flight` and `error.data.existingHash` names the holder. The same
+/// relay also writes the `[existingHash:…]` marker into `message`, which every
+/// shipped client reads; this reads the structured form, so a relay that ever
+/// words its message differently is still understood. `error_json` is the
+/// JSON-RPC `error` member, or a whole body carrying one.
+#[must_use]
+pub fn nonce_in_flight_hash(error_json: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(error_json).ok()?;
+    let error = value.get("error").unwrap_or(&value);
+    let data = error.get("data")?;
+    if data.get("reason").and_then(Value::as_str) != Some("nonce_in_flight") {
+        return None;
+    }
+    let hash = data.get("existingHash").and_then(Value::as_str)?;
+    let hex = hash.strip_prefix("0x")?;
+    (!hex.is_empty() && hex.bytes().all(|b| b.is_ascii_hexdigit())).then(|| hash.to_owned())
+}
+
 /// `EntryPoint.getUserOpHash` (v0.7): keccak256 of the packed operation's
 /// hash, the EntryPoint and the chain — the id the relay answers
 /// `eth_sendUserOperation` with and names in `[existingHash:…]`.
@@ -2128,7 +2148,8 @@ fn is_busy_wording(text: &str) -> bool {
 ///
 /// 1. a result hash → `Accepted` with the relay's hash (a result that is not a
 ///    hash is an answer nobody can read: `MaybeSent`, never "not sent");
-/// 2. an `[existingHash:0x…]` marker, read from the raw error JSON first and
+/// 2. an `[existingHash:0x…]` marker, read from the raw error JSON first, then
+///    the relay's structured `nonce_in_flight` ([`nonce_in_flight_hash`]),
 ///    then from [`relay_error_message`], judged by [`existing_op`]: this
 ///    operation's own hash → `Accepted` with it; another's (083) → `MaybeSent`
 ///    while `maybe_delivered`, else `NotSent` with
@@ -2164,7 +2185,15 @@ pub fn submit_step(
         }
         SubmitReply::Error(error_json) => {
             let sentence = relay_error_message(error_json);
+            let structured = nonce_in_flight_hash(error_json).map(|hash| {
+                if hash.eq_ignore_ascii_case(local_user_op_hash) {
+                    ExistingOp::ThisOne(hash)
+                } else {
+                    ExistingOp::Another(hash)
+                }
+            });
             match existing_op(error_json, local_user_op_hash)
+                .or(structured)
                 .or_else(|| existing_op(&sentence, local_user_op_hash))
             {
                 // The relay already holds THIS operation (a retried POST that

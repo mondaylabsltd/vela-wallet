@@ -912,6 +912,15 @@ pub fn sign_confirm_state(
     )
 }
 
+/// Every operation in flight on this device: the tracker's view (JSON) in, an
+/// `InFlightOp` JSON array out. Forward it on every tracker render to the send
+/// and signing machines (`InFlightOps`). See `vela_core::app::tx_tracker`.
+#[wasm_bindgen(js_name = inFlightOps)]
+#[must_use]
+pub fn in_flight_ops(track_view_json: &str) -> String {
+    vela_core::app::tx_tracker::in_flight_ops_json(track_view_json)
+}
+
 /// The landing's countdown (spec 099 R6), from the relay's send time: a
 /// `LandingPace` JSON. `typical_s` 0 = unknown, as `typicalInclusionSeconds`
 /// answers it.

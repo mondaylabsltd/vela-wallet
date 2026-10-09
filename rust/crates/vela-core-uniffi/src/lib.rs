@@ -686,6 +686,19 @@ pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> 
     vela_core::app::sign_confirm::handoff_fee_json(fee_json.as_deref(), speed_json.as_deref())
 }
 
+/// Every operation in flight on this device — the tracker's view (JSON) in,
+/// an `InFlightOp` JSON array out (`[]` when the view does not read). Forward
+/// it on every tracker render to the send machine and the signing machine
+/// (`Event::InFlightOps`): a second transaction of an account on a chain
+/// where it already has one in flight waits for it (the confirm is held with
+/// `componentsUi.signing.confirmBlock.previousPending`). See
+/// `vela_core::app::tx_tracker::in_flight_ops`.
+#[uniffi::export]
+#[must_use]
+pub fn in_flight_ops(track_view_json: String) -> String {
+    vela_core::app::tx_tracker::in_flight_ops_json(&track_view_json)
+}
+
 /// The landing's countdown (spec 099 R6), counted from when the relay put the
 /// bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
 /// JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.

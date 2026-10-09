@@ -297,6 +297,12 @@ pub struct TrackStatusAnswer {
     /// The bundle transaction the relay names, when it has one — an explorer
     /// link for an op that is still pending (079 D2).
     pub tx_hash: Option<String>,
+    /// Why the relay refused or failed it (`rejection_reason`, relay
+    /// `fix/held-nonce-and-floor`): present on `rejected` / `failed` from a
+    /// relay that says. Older relays send none; [`RefusalReason::of`] then
+    /// reads the stage.
+    #[serde(default)]
+    pub rejection_reason: Option<String>,
 }
 
 /// Parse the `result` of [`USER_OP_STATUS_METHOD`] — the one parser every
@@ -323,7 +329,87 @@ pub fn parse_user_op_status(result_json: &str) -> Option<TrackStatusAnswer> {
         status,
         stage: text("last_executor_stage"),
         tx_hash: text("transactionHash"),
+        rejection_reason: text("rejection_reason"),
     })
+}
+
+/// Why the relay refused an operation, in the relay's own vocabulary
+/// (`rejection_reason`, relay contract §2). A refusal is told by its reason —
+/// never every one as "network fees stayed above the amount you approved",
+/// which was true of one reason in eleven.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum RefusalReason {
+    /// Network fees stayed above what the signed fee covers through the hold.
+    FeeBelowMarket,
+    /// The fee was under the relay's minimum at settlement.
+    FeeBelowMinimum,
+    /// The fee payment is missing, unreadable or unproven.
+    FeePaymentInvalid,
+    /// Another operation of this account already used this nonce on-chain.
+    NonceUsed,
+    /// The operation fails when simulated.
+    SimulationFailed,
+    /// The queued payload is malformed.
+    InvalidOperation,
+    /// Tempo: a fee token other than pathUSD.
+    UnsupportedFeeToken,
+    /// The relay stopped retrying without sending (dead letter).
+    RelayGaveUp,
+    /// Mined, and its execution failed.
+    RevertedOnchain,
+    /// The whole bundle transaction reverted.
+    BundleFailed,
+    /// Anything else — a reason a newer relay names that this core does not.
+    #[serde(other)]
+    Unknown,
+}
+
+/// The sentence for a refusal whose reason is unknown, or has no words of its
+/// own: "The network refused it — nothing was sent."
+pub const REFUSED_KEY: &str = "componentsUi.signing.refused";
+/// The sentence for [`RefusalReason::FeeBelowMarket`].
+pub const REFUSED_FEES_KEY: &str = "send.txRejectedFees";
+/// The sentence for [`RefusalReason::NonceUsed`]: another transaction of the
+/// account went first.
+pub const REFUSED_NONCE_KEY: &str = "componentsUi.signing.wentFirst";
+
+impl RefusalReason {
+    /// The reason the relay named, else the one its executor stage implies
+    /// (an older relay names none: relay contract §2's own derivation).
+    /// `None` when neither says.
+    #[must_use]
+    pub fn of(rejection_reason: Option<&str>, stage: Option<&str>) -> Option<Self> {
+        if let Some(reason) = rejection_reason.filter(|reason| !reason.is_empty()) {
+            return serde_json::from_value(serde_json::Value::String(reason.to_owned())).ok();
+        }
+        Some(match stage? {
+            "nonce" => Self::NonceUsed,
+            "simulation" => Self::SimulationFailed,
+            "dead_letter" => Self::RelayGaveUp,
+            "queue" => Self::InvalidOperation,
+            "tempo_fee_token" => Self::UnsupportedFeeToken,
+            "in_band_settlement" | FEE_HOLD_STAGE => Self::FeeBelowMarket,
+            _ => return None,
+        })
+    }
+
+    /// The corpus key of the sentence that tells a person this refusal.
+    #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::FeeBelowMarket => REFUSED_FEES_KEY,
+            Self::NonceUsed => REFUSED_NONCE_KEY,
+            _ => REFUSED_KEY,
+        }
+    }
+}
+
+/// The sentence for a refusal, whatever is known of it.
+#[must_use]
+pub fn refusal_key(reason: Option<RefusalReason>) -> &'static str {
+    reason.map_or(REFUSED_KEY, RefusalReason::key)
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +548,10 @@ pub enum TrackShellResult {
         /// The relay's bundle tx, when it names one ([`TrackStatusAnswer`]).
         #[serde(default)]
         tx_hash: Option<String>,
+        /// [`TrackStatusAnswer::rejection_reason`], passed through. Absent
+        /// (an older shell or relay): the reason is read from `stage`.
+        #[serde(default)]
+        rejection_reason: Option<String>,
     },
     /// The status endpoint yielded nothing (unreachable or an older relay).
     StatusUnavailable {
@@ -553,6 +643,11 @@ pub struct TrackPendingRecord {
     #[serde(default)]
     #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
     pub submit_block: Option<u64>,
+    /// The account that signed it (the stored record's `from`) — so after a
+    /// restart the device still knows this account has an operation in
+    /// flight on this chain ([`in_flight_ops`]). `None` from an older shell.
+    #[serde(default)]
+    pub sender: Option<String>,
 }
 
 /// Storage vocabulary is `pending | confirmed | failed` — a relay rejection
@@ -681,6 +776,11 @@ pub enum Event {
         /// no longer counts against it.
         #[serde(default)]
         admitted: bool,
+        /// The account that signed it — `SendOperation::TrackSubmitted` /
+        /// `SignTrackerHandoff`'s `sender`, forwarded. What makes the op one
+        /// this account must wait for ([`in_flight_ops`]).
+        #[serde(default)]
+        sender: Option<String>,
     },
     /// The op was proven never sent after its write-ahead hand-off (spec 082
     /// RJ1): the submit failed before any POST, or the relay answered with
@@ -759,6 +859,10 @@ impl EntryStatus {
 #[derive(Clone, Debug)]
 struct Entry {
     chain_id: u32,
+    /// The account that signed it, lower-cased; `None` when no shell said.
+    sender: Option<String>,
+    /// Why the relay refused it, once it has ([`RefusalReason::of`]).
+    refusal: Option<RefusalReason>,
     /// Stored-record ids patched on resolution — in place, same ids, never a
     /// second record (`dapp-history` rule; batch siblings patched together).
     record_ids: Vec<String>,
@@ -936,6 +1040,17 @@ impl Entry {
             relay_sent_at_ms: None,
             forgotten_since_ms: None,
             forgotten_streak: 0,
+            sender: None,
+            refusal: None,
+        }
+    }
+
+    /// The first sender anyone named for this op wins (one op, one account).
+    fn merge_sender(&mut self, sender: Option<String>) {
+        if self.sender.is_none() {
+            self.sender = sender
+                .map(|sender| sender.trim().to_lowercase())
+                .filter(|sender| !sender.is_empty());
         }
     }
 
@@ -1110,6 +1225,19 @@ pub struct TrackEntryView {
     /// says what the relay is doing, and counts nothing down.
     #[serde(default)]
     pub relay_sent_at_ms: Option<f64>,
+    /// The account that signed it, lower-cased; `None` when no shell said.
+    #[serde(default)]
+    pub sender: Option<String>,
+    /// `Rejected` only: why the relay refused it, when the relay (or its
+    /// stage) says.
+    #[serde(default)]
+    pub refusal: Option<RefusalReason>,
+    /// `Rejected` only: the corpus key of the sentence that says why —
+    /// [`RefusalReason::key`], or the plain "refused, nothing was sent" when
+    /// the reason is unknown. Every surface that tells a refusal (the send
+    /// receipt, the signing sheet's ending, a row's detail) draws THIS.
+    #[serde(default)]
+    pub refusal_key: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1117,6 +1245,92 @@ pub struct TrackEntryView {
 pub struct TrackView {
     /// Newest first.
     pub entries: Vec<TrackEntryView>,
+}
+
+// ---------------------------------------------------------------------------
+// One operation in flight per account and network (wait for the first)
+// ---------------------------------------------------------------------------
+
+/// An operation of an account that holds its nonce on a chain: accepted by
+/// the relay and not yet final. A second operation of the same account on
+/// the same chain signed now would take the SAME nonce (every client reads it
+/// from the chain, where the first has not landed) — the relay refuses it, or
+/// one of the two is dropped after the other lands. So the second waits:
+/// every confirm that would sign one is held while this exists
+/// (`ConfirmBlock::PreviousPending`), and opens once the first is final.
+///
+/// Read from the tracker, which persists every pending record — a restart
+/// still knows (`TrackPendingRecord::sender`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct InFlightOp {
+    /// The account, lower-cased.
+    pub sender: String,
+    pub chain_id: u32,
+    pub user_op_hash: String,
+}
+
+/// Every operation in [`TrackView`] that holds its account's nonce: the
+/// sender is known, it is not final, the tracker still follows it, and the
+/// relay has it. One whose submit reply was lost and that the relay has not
+/// shown it holds ([`TrackOutcome::MaybeSent`]) reserves nothing: a retry of
+/// THE SAME op reuses its nonce (RA5), and a different op at that nonce is
+/// one of two that cannot both land — the relay refuses it while the first
+/// is live. Nor does one past the 24 h line, which nothing follows any more.
+#[must_use]
+pub fn in_flight_ops(view: &TrackView) -> Vec<InFlightOp> {
+    view.entries
+        .iter()
+        .filter(|entry| {
+            entry.polling
+                && matches!(
+                    entry.outcome,
+                    TrackOutcome::Landing | TrackOutcome::StillConfirming
+                )
+                && matches!(
+                    entry.status,
+                    TrackStatus::Pending
+                        | TrackStatus::FeeHeld
+                        | TrackStatus::RelayFunding
+                        | TrackStatus::AcceptedNotLanded
+                        | TrackStatus::Unreachable
+                )
+        })
+        .filter_map(|entry| {
+            Some(InFlightOp {
+                sender: entry.sender.clone()?,
+                chain_id: entry.chain_id,
+                user_op_hash: entry.user_op_hash.clone(),
+            })
+        })
+        .collect()
+}
+
+/// [`in_flight_ops`] over the tracker's view as JSON (UniFFI, wasm): a JSON
+/// array, `[]` when the view does not read. A shell forwards it to the send
+/// and signing machines (`Event::InFlightOps`) on every tracker render.
+#[must_use]
+pub fn in_flight_ops_json(view_json: &str) -> String {
+    let ops = serde_json::from_str::<TrackView>(view_json)
+        .map(|view| in_flight_ops(&view))
+        .unwrap_or_default();
+    serde_json::to_string(&ops).unwrap_or_else(|_| "[]".to_owned())
+}
+
+/// The operation `sender` must wait for on `chain_id`, if any — never `own`,
+/// the operation the asking surface itself submitted.
+#[must_use]
+pub fn previous_in_flight<'a>(
+    ops: &'a [InFlightOp],
+    sender: &str,
+    chain_id: u32,
+    own: Option<&str>,
+) -> Option<&'a InFlightOp> {
+    ops.iter().find(|op| {
+        op.chain_id == chain_id
+            && op.sender.eq_ignore_ascii_case(sender.trim())
+            && !own.is_some_and(|own| own.eq_ignore_ascii_case(&op.user_op_hash))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,12 +1355,14 @@ impl App for TxTracker {
                 maybe_sent,
                 submit_block,
                 admitted,
+                sender,
             } => submitted(
                 model,
                 &user_op_hash,
                 record_ids,
                 chain_id,
                 (maybe_sent, submit_block, admitted),
+                sender,
             ),
             Event::Withdrawn {
                 user_op_hash,
@@ -1250,6 +1466,12 @@ impl App for TxTracker {
                     outcome,
                     relay_tx_hash: entry.relay_tx_hash.clone(),
                     relay_sent_at_ms: entry.relay_sent_at_ms,
+                    sender: entry.sender.clone(),
+                    refusal: (status == TrackStatus::Rejected)
+                        .then_some(entry.refusal)
+                        .flatten(),
+                    refusal_key: (status == TrackStatus::Rejected)
+                        .then(|| refusal_key(entry.refusal).to_owned()),
                 }
             })
             .collect();
@@ -1273,6 +1495,7 @@ fn submitted(
     record_ids: Vec<String>,
     chain_id: u32,
     (maybe_sent, submit_block, admitted): (bool, Option<u64>, bool),
+    sender: Option<String>,
 ) -> Command<TrackEffect, Event> {
     let key = normalize(user_op_hash);
     let attempt = model.attempt;
@@ -1337,6 +1560,7 @@ fn submitted(
         entry.merge_record_id(id);
     }
     entry.merge_submit_facts(maybe_sent, submit_block);
+    entry.merge_sender(sender);
     if admitted {
         // The relay took it (RJ1): an ordinary op from here on.
         entry.acknowledged = true;
@@ -1496,6 +1720,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             stage,
             now_ms,
             tx_hash,
+            rejection_reason,
         } => {
             let key = normalize(&user_op_hash);
             let rejected_ids = {
@@ -1519,6 +1744,11 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 if status != TrackLifecycle::NotFound {
                     entry.forgotten_since_ms = None;
                     entry.forgotten_streak = 0;
+                }
+                if matches!(status, TrackLifecycle::Rejected | TrackLifecycle::Failed) {
+                    entry.refusal =
+                        RefusalReason::of(rejection_reason.as_deref(), stage.as_deref())
+                            .or(entry.refusal);
                 }
                 entry.last_status = Some((status, stage));
                 if status == TrackLifecycle::Rejected && entry.relay_tx_hash.is_some() {
@@ -1640,6 +1870,9 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 entry.merge_record_id(record.record_id);
                 // A restart keeps a may-have-been-sent op one (spec 082).
                 entry.merge_submit_facts(record.maybe_sent, record.submit_block);
+                // …and still knows whose op it is (one in flight per account
+                // and chain, `in_flight_ops`).
+                entry.merge_sender(record.sender);
             }
             run_scheduler(model, now_ms)
         }
