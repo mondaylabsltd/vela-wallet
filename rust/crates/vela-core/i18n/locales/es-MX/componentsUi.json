@@ -220,6 +220,7 @@
       "stillConfirming": "Todavía no está en la cadena. Vela sigue revisando; no la envíes otra vez.",
       "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
       "refused": "La red la rechazó; no se envió nada.",
+      "wentFirst": "Otra transacción de esta cuenta pasó primero; no se envió nada.",
       "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
       "openSigner": "Confirmar en la página de firma",
       "signerDown": "No se abrió la página de firma. Revisa tu conexión.",
@@ -243,7 +244,8 @@
         "approvalChoice": "Primero elige un monto de aprobación",
         "batchUnsettled": "Revisando cada llamada del lote…",
         "feeMeasuring": "Calculando la comisión de red…",
-        "feeFailed": "No se pudo calcular la comisión: tócala para reintentar"
+        "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
+        "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
       }
     },
     "signingApprove": {
@@ -333,6 +335,8 @@
       "reasonFeeToken": "El relay no puede cotizar esta moneda por ahora. Reintentando; también puedes pagar con otra moneda.",
       "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
       "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
+      "reasonChainDown": "No se puede conectar con {{chain}} para calcular la comisión. Reintentando automáticamente.",
+      "reasonInternal": "Algo falló dentro de Vela. Reintentando; si sigue fallando, vuelve a abrir la app.",
       "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
       "noCoinPays": "Ningún token alcanza para esta comisión"
     },

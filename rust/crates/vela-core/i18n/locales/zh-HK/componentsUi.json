@@ -220,6 +220,7 @@
       "stillConfirming": "仲未上鏈。Vela 會繼續睇住，唔好重複發送。",
       "maybeSent": "可能已經發出咗。Vela 會繼續睇住，唔好重複發送。",
       "refused": "網絡拒絕咗呢筆交易，乜都冇發出。",
+      "wentFirst": "呢個帳戶嘅另一筆交易行先咗，呢筆乜都冇發出。",
       "unknownOutcome": "過咗 24 小時仍然未確認。",
       "openSigner": "去簽名頁確認",
       "signerDown": "簽名頁開唔到，請檢查網絡。",
@@ -243,7 +244,8 @@
         "approvalChoice": "請先揀授權額度",
         "batchUnsettled": "正在逐一檢查呢批調用…",
         "feeMeasuring": "正在計算網絡費用…",
-        "feeFailed": "計唔到費用——撳費用重試"
+        "feeFailed": "計唔到費用——撳費用重試",
+        "previousPending": "正在等這個網絡上的上一筆交易完成…"
       }
     },
     "currency": {
@@ -294,6 +296,8 @@
       "reasonFeeToken": "中繼暫時未能為這個幣報價。正在重試——亦可改用其他幣支付手續費。",
       "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
       "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。",
+      "reasonChainDown": "暫時連唔到 {{chain}}，計唔到費用，正在自動重試。",
+      "reasonInternal": "Vela 內部出咗問題，正在重試。如果一直失敗，請重新開啟 App。",
       "rowShort": "需要 ~{{need}}，而家有 {{have}}",
       "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
     },

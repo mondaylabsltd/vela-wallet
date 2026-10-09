@@ -262,6 +262,7 @@
       "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
       "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
       "refused": "The network refused it — nothing was sent.",
+      "wentFirst": "Another transaction from this account went first — nothing was sent.",
       "unknownOutcome": "Still unconfirmed after 24 hours.",
       "openSigner": "Continue to signing page",
       "signerDown": "Couldn't open the signing page. Check your connection.",
@@ -285,7 +286,8 @@
         "approvalChoice": "Choose an approval amount first",
         "batchUnsettled": "Checking each call in this batch…",
         "feeMeasuring": "Working out the network fee…",
-        "feeFailed": "Couldn't work out the fee. Tap it to retry"
+        "feeFailed": "Couldn't work out the fee. Tap it to retry",
+        "previousPending": "Waiting for your last transaction on this network…"
       }
     },
     "currency": {
@@ -336,6 +338,8 @@
       "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
       "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
       "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
+      "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
+      "reasonInternal": "Something went wrong inside Vela. Retrying — if it keeps failing, reopen the app.",
       "rowShort": "Need ~{{need}}, have {{have}}",
       "noCoinPays": "No token can pay this fee"
     },

@@ -220,6 +220,7 @@
       "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
       "maybeSent": "Potrebbe essere già stata inviata. Vela continua a controllare: non inviarla di nuovo.",
       "refused": "La rete l’ha rifiutata: non è stato inviato nulla.",
+      "wentFirst": "Un’altra transazione di questo account è passata prima: non è stato inviato nulla.",
       "unknownOutcome": "Ancora non confermata dopo 24 ore.",
       "openSigner": "Conferma nella pagina di firma",
       "signerDown": "Impossibile aprire la pagina di firma. Controlla la connessione.",
@@ -243,7 +244,8 @@
         "approvalChoice": "Scegli prima un importo di approvazione",
         "batchUnsettled": "Controllo di ogni chiamata del batch…",
         "feeMeasuring": "Calcolo della commissione di rete…",
-        "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare"
+        "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare",
+        "previousPending": "In attesa della tua transazione precedente su questa rete…"
       }
     },
     "signingApprove": {
@@ -333,6 +335,8 @@
       "reasonFeeToken": "Il relay non riesce a quotare questa moneta per ora. Nuovo tentativo in corso, oppure paga la commissione con un'altra moneta.",
       "reasonSimulation": "Il relay non è ancora riuscito a simulare questa transazione. Nuovo tentativo automatico.",
       "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico.",
+      "reasonChainDown": "Impossibile raggiungere {{chain}} per calcolare la commissione. Nuovo tentativo automatico.",
+      "reasonInternal": "Qualcosa è andato storto in Vela. Nuovo tentativo: se continua, riapri l’app.",
       "rowShort": "Servono ~{{need}}, hai {{have}}",
       "noCoinPays": "Nessun token basta per questa commissione"
     },

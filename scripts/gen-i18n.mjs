@@ -715,8 +715,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `field.keyOn`, word for word in all fifteen). `handoffTitle` loses its
 //   possessive (D6: only a self-hosted page is "your own").
 //   1813 − 1 + 2 = 1814 leaves, 101 branches.
-if (PATHS.length !== 1915) fail(`expected 1915 paths (1814 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1814) fail(`expected 1814 leaf paths, got ${leafSet.size}`);
+// 1867 (correctness batch, 2026-10-09): − the 54 `clearSigning.scenario*`
+//   leaves (the retired clear-signing test page's scenario names; no reader
+//   in the core or any shell — git grep, every worktree), which pays the
+//   ja + en room for six new lines under SC-005 rather than a budget move:
+//   + `onboarding.login.registryUnreachable{Title,Body}` (sign-in could not
+//   look up the passkey's wallet: a free retry, never the rebuild),
+//   + `componentsUi.signing.confirmBlock.previousPending` (one transaction
+//   in flight per account and network), + `componentsUi.signing.wentFirst`
+//   (the relay's `nonce_used`), + `componentsUi.gas.reason{ChainDown,
+//   Internal}` (issue #483: the fee row's own sentences).
+//   1814 − 54 + 6 = 1766 leaves, 101 branches.
+if (PATHS.length !== 1867) fail(`expected 1867 paths (1766 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1766) fail(`expected 1766 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
