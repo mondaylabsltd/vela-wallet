@@ -373,16 +373,16 @@ fn is_hex_address(s: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Gas speed tier (`safe-transaction.ts:242-249`). Labels are UI words and
-/// stay in the shell. Both flows run `fast` today; the vocabulary is kept
-/// because the multiplier table is load-bearing math.
+/// stay in the shell. The default is `standard`, the factory default of the
+/// speed preference (`fee_tier_pref::FACTORY_DEFAULT`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum FeeTier {
     Slow,
+    #[default]
     Standard,
     Rapid,
-    #[default]
     Fast,
 }
 

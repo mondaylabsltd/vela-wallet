@@ -15,12 +15,17 @@
 //!
 //! Three rules paid for the branches below.
 //!
-//! **The factory default is [`FeeTier::Fast`], not the enum's first variant.**
-//! Every shell hard-coded `fast` before this machine existed, so a fresh
-//! install — and any device whose storage cannot be read — behaves exactly as
-//! it did. A preference that cannot be read is "never chose", never "chose
-//! slow": an unreadable key must not make somebody's transaction quietly
-//! cheaper and slower than the one they sent yesterday.
+//! **The factory default is [`FeeTier::Standard`]** (owner decision
+//! 2026-10-09, the Ethereum fee fix). It was `fast` while a dearer tier bought
+//! no real priority — on Ethereum the relay signed a tip of about nothing at
+//! every tier — so the dearest one cost little and was the safest default.
+//! Since a tier's tip is real
+//! (CONTRACT v2: slow, standard and fast tip a low percentile, the median
+//! and a high percentile of recent blocks), `fast` is genuinely faster and
+//! dearer, and a person who never chose pays the median. A stored choice is
+//! kept exactly as it was, `fast` included. A preference that cannot be read
+//! is "never chose", never "chose slow": an unreadable key must not make
+//! somebody's transaction quietly cheaper and slower than the default.
 //!
 //! **A stored name is validated, never trusted.** Storage is a string, and a
 //! string that is not one of the three offered names is not a tier. It reads
@@ -51,10 +56,9 @@ use super::fee_policy::FeeTier;
 // What is offered
 // ---------------------------------------------------------------------------
 
-/// The factory default. `fast` because that is what every shell hard-coded
-/// before this preference existed — so this feature cannot regress a send
-/// nobody asked it to change.
-pub const FACTORY_DEFAULT: FeeTier = FeeTier::Fast;
+/// The factory default: `standard` — the median tip, at the relay's own `2×`
+/// cap (see the module note for why it is no longer `fast`).
+pub const FACTORY_DEFAULT: FeeTier = FeeTier::Standard;
 
 /// The tiers a person may choose, fastest first, in the order the picker
 /// draws them.
