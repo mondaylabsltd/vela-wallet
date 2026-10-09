@@ -1094,6 +1094,14 @@ export function prefsMigrations(entries_json: string): string;
 export function prefsRead(entries_json: string): string;
 
 /**
+ * The curated public RPCs of a built-in network, in order — the RPC pool's
+ * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+ * none. One list for every shell: each used to hold its own copy, and a
+ * dead endpoint had to be found and dropped in each.
+ */
+export function publicRpcUrls(chain_id: number): string[];
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -1763,6 +1771,7 @@ export interface InitOutput {
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly prefsMigrations: (a: number, b: number) => [number, number];
     readonly prefsRead: (a: number, b: number) => [number, number];
+    readonly publicRpcUrls: (a: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

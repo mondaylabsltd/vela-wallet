@@ -15651,6 +15651,20 @@ public func peggedNativeUsd(symbol: String) -> Double?  {
 })
 }
 /**
+ * The curated public RPCs of a built-in network, in order — the RPC pool's
+ * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+ * none. One list for every shell: each used to hold its own copy, and a
+ * dead endpoint had to be found and dropped in each.
+ */
+public func publicRpcUrls(chainId: UInt32) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_public_rpc_urls(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
  * A displayed quote is usable when it is positive and names a real address.
  */
 public func quotedFeeUsable(amount: String, recipient: String) -> Bool  {
@@ -17613,6 +17627,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_pegged_native_usd() != 48722) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_public_rpc_urls() != 50620) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_quoted_fee_usable() != 26912) {

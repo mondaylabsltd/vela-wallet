@@ -241,6 +241,7 @@ export * from './MtokOperation';
 export * from './MtokShellResult';
 export * from './MtokTokenMeta';
 export * from './MtokView';
+export * from './NetBlocker';
 export * from './NetChainIndexEntry';
 export * from './NetChainInfo';
 export * from './NetChainMismatch';

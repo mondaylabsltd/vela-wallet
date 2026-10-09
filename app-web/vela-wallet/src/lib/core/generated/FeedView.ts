@@ -6,9 +6,19 @@ import type { FeedTxRecord } from "./FeedTxRecord";
 
 export type FeedView = { 
 /**
- * Date headers + items, chain-filtered, in render order.
+ * Date headers + items, chain-filtered, in render order. History draws
+ * these, every one.
  */
 rows: Array<FeedRow>, 
+/**
+ * The wallet home's Activity (issue 469): the first
+ * [`HOME_ACTIVITY_ITEMS`] items of `rows` and the day headers over them
+ * — nothing else. The same rows, worded and filtered the same, so a row
+ * on the home is the row History opens with; never a header with no row
+ * under it. A fresh send or receipt is the newest item, so it is always
+ * here (and `new_item_id` names one of these).
+ */
+home_rows: Array<FeedRow>, 
 /**
  * Raw account-scoped records for the detail sheet
  * (`loadActivityTransactions`).

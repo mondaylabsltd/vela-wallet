@@ -42,6 +42,20 @@ can_choose_page: boolean,
  */
 add_methods: Array<KeyMethod>, 
 /**
+ * The corpus key of the heading over them (issue 475):
+ * [`ADD_HEADING_FIRST`] ("Add a passkey") with no key yet,
+ * [`ADD_HEADING_ANOTHER`] ("Add another") with room for one more,
+ * [`ADD_HEADING_FULL`] ("Limit of 7 reached") at the cap. It is the
+ * screen's only add affordance — no "+ Add a passkey" row beside it.
+ */
+add_heading_key: string, 
+/**
+ * The three places are drawn open, with no fold to tap: no key yet and
+ * one may be added. Otherwise they fold under the heading (closed until
+ * tapped) — or, at the cap, are not drawn.
+ */
+methods_pinned: boolean, 
+/**
  * May the key set be frozen and published (≥1 key, nothing in flight)?
  */
 can_finish: boolean, 
