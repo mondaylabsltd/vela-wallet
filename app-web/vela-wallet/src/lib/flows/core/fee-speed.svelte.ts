@@ -21,18 +21,18 @@ import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { NumberPreset } from '$lib/core/generated/NumberPreset';
 import type { TierPreviewQuote } from '$lib/core/generated/TierPreviewQuote';
-import type { FeeQuote } from './fee-quote.svelte';
+import { DEFAULT_TIER, type FeeQuote } from './fee-quote.svelte';
 import type { TierPreview } from './tier-preview.svelte';
 
 /**
  * The machine's own initial view, mirrored until the core has loaded: the
- * factory `fast`, folded, nothing priced beside it — exactly what every send
- * did before there was a choice, so a surface drawn before the wasm lands
- * shows today's behaviour rather than a guess.
+ * factory `standard` (`fee_tier_pref::FACTORY_DEFAULT`), folded, nothing
+ * priced beside it, so a surface drawn before the wasm lands shows the
+ * default rather than a guess.
  */
 export const IDLE_SPEED_VIEW: FeeSpeedView = {
-	tier: 'fast',
-	preferred: 'fast',
+	tier: 'standard',
+	preferred: 'standard',
 	previews: [],
 	open: false,
 	picked: false,
@@ -42,7 +42,7 @@ export const IDLE_SPEED_VIEW: FeeSpeedView = {
 	gas_price_line: true,
 	options: (['fast', 'standard', 'slow'] as const).map((tier) => ({
 		tier,
-		selected: tier === 'fast',
+		selected: tier === 'standard',
 		fee: null,
 		measuring: true,
 		gas_price: null
@@ -172,7 +172,7 @@ export function reconcileSpeed(
 	tierPreview: TierPreview
 ): 'promoted' | 'requoted' | null {
 	const base = feeQuote.lastRequest;
-	if (base === null || (base.tier ?? 'fast') === tier) return null;
+	if (base === null || (base.tier ?? DEFAULT_TIER) === tier) return null;
 	if (tierPreview.promote(feeQuote, tier)) return 'promoted';
 	if (feeQuote.pending) return null;
 	void feeQuote.requestQuote({ ...base, tier });

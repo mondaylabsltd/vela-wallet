@@ -157,11 +157,11 @@ describe('FeeQuote — the tier is the caller’s (spec 068)', () => {
 		expect(tierOf(seams.start)).toBe('slow');
 	});
 
-	it('prices at `fast` when the request names none — the pre-068 behaviour, unchanged', async () => {
+	it('prices at the factory default, `standard`, when the request names none', async () => {
 		const quote = new FeeQuote();
 		void quote.requestQuote(REQUEST);
 		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
-		expect(tierOf(seams.start)).toBe('fast');
+		expect(tierOf(seams.start)).toBe('standard');
 	});
 
 	it('carries the new tier on a re-ask, so a speed change re-prices the same operation', async () => {

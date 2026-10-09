@@ -43,6 +43,7 @@ import {
 	toHex,
 	userOpHash as localUserOpHash,
 	userOpEstimateFailure,
+	userOpGasLimits,
 	userOpNotSentDetail,
 	userOpPreviousPendingDetail,
 	userOpSubmitStep,
@@ -78,8 +79,9 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
+// The gas a draft asks the estimator about. The limits SIGNED come from the
+// core's one rule (`userOpGasLimits`), never from padding here.
 const VERIFICATION_GAS_DEPLOYED = 300_000n;
-// Undeployed: sendUserOp uses bigintMax(estimated, 2_000_000n), so estimate must match.
 const VERIFICATION_GAS_UNDEPLOYED = 2_000_000n;
 const CALL_GAS_LIMIT = 200_000n; // 200k — simple transfers; bundler estimation may increase
 const PRE_VERIFICATION_GAS = 100_000n; // 100k — must exceed bundler's calculated preVerificationGas
@@ -141,6 +143,13 @@ interface GasEstimate {
 	verificationGasLimit: bigint;
 	callGasLimit: bigint;
 	preVerificationGas: bigint;
+	/**
+	 * `settlementGas`: the gas the relay bills this operation against (the gas
+	 * it used plus its documented buffer). `null` from a relay that does not
+	 * publish it — never 0 as a stand-in. The core reads it for the fee
+	 * (`fee_policy`) and for the limits signed (`userOpGasLimits`).
+	 */
+	settlementGas: bigint | null;
 }
 
 /**
@@ -1062,15 +1071,10 @@ export async function estimateTransactionFee(
 			signature: dummySig
 		};
 		const est = await estimateGas(dummyOp, chainId);
-		const estVgl = deployed
-			? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
-			: bigintMax((est.verificationGasLimit * 15n) / 10n, 2_000_000n);
-		const estCgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
-		const estPvg = est.preVerificationGas + 10_000n;
-		totalGas = estVgl + estCgl + estPvg;
-		console.log(
-			`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`
-		);
+		// Priced on the limits the submit signs — the core's one rule.
+		const limits = userOpGasLimits(chainId, deployed, estCalls.length + 1, est, null);
+		totalGas = limits.verificationGasLimit + limits.callGasLimit + limits.preVerificationGas;
+		console.log(`[FeeEstimate] Bundler gas: total=${totalGas}`);
 	} catch (err) {
 		// For a large/complex op the static fallback would show a misleading number and
 		// the submit would be refused anyway (see sendUserOp). Surface the failure so the
@@ -1368,6 +1372,12 @@ export interface RawBundlerQuote {
 	/** `null` when a generic bundler omits the Vela extension field. */
 	networkFeePerGas: string | null;
 	relayerFeePerGas: string | null;
+	/**
+	 * The relay's published in-band price for this tier (`inBandFeePerGas`),
+	 * per unit of the operation's `settlementGas`; `null` from a relay that
+	 * does not publish one. What it means is the core's (`fee_policy`).
+	 */
+	inBandFeePerGas: string | null;
 }
 
 /**
@@ -1438,6 +1448,7 @@ function parseRawBundlerRow(row: {
 	maxPriorityFeePerGas?: string;
 	networkFeePerGas?: string;
 	relayerFeePerGas?: string;
+	inBandFeePerGas?: string;
 }): RawBundlerQuote | null {
 	if (!row?.maxFeePerGas) return null;
 	const decimal = (value: unknown): string | null =>
@@ -1446,7 +1457,8 @@ function parseRawBundlerRow(row: {
 		maxFeePerGas: parseHexUInt64(row.maxFeePerGas).toString(),
 		maxPriorityFeePerGas: decimal(row.maxPriorityFeePerGas),
 		networkFeePerGas: decimal(row.networkFeePerGas),
-		relayerFeePerGas: decimal(row.relayerFeePerGas)
+		relayerFeePerGas: decimal(row.relayerFeePerGas),
+		inBandFeePerGas: decimal(row.inBandFeePerGas)
 	};
 }
 
@@ -1504,26 +1516,11 @@ async function readRawBundlerQuote(
 			}
 		};
 	}
-	const t = (
-		resp.result as Record<
-			string,
-			{
-				maxFeePerGas?: string;
-				maxPriorityFeePerGas?: string;
-				networkFeePerGas?: string;
-				relayerFeePerGas?: string;
-			}
-		> | null
-	)?.[tier];
-	if (resp.error || !t?.maxFeePerGas) return null;
-	const decimal = (value: unknown): string | null =>
-		typeof value === 'string' ? parseHexUInt64(value).toString() : null;
-	return {
-		maxFeePerGas: parseHexUInt64(t.maxFeePerGas as string).toString(),
-		maxPriorityFeePerGas: decimal(t.maxPriorityFeePerGas),
-		networkFeePerGas: decimal(t.networkFeePerGas),
-		relayerFeePerGas: decimal(t.relayerFeePerGas)
-	};
+	const t = (resp.result as Record<string, Parameters<typeof parseRawBundlerRow>[0]> | null)?.[
+		tier
+	];
+	if (resp.error || !t) return null;
+	return parseRawBundlerRow(t);
 }
 
 export type UserOpGasSimulation =
@@ -1532,6 +1529,8 @@ export type UserOpGasSimulation =
 			verificationGasLimit: bigint;
 			callGasLimit: bigint;
 			preVerificationGas: bigint;
+			/** The relay's `settlementGas`, `null` when it published none. */
+			settlementGas: bigint | null;
 	  }
 	| { kind: 'context_unavailable' }
 	| { kind: 'simulation_failed' };
@@ -1679,174 +1678,6 @@ export { isDeployed as accountIsDeployed };
 // formatWeiToEth was duplicated byte-for-byte across 4+ files; it now lives in
 // ./format-eth and is re-exported here to keep the public API (and its tests) stable.
 export { formatWeiToEth } from './format-eth';
-
-// ---------------------------------------------------------------------------
-// Core UserOp Flow
-// ---------------------------------------------------------------------------
-
-async function sendUserOp(
-	safeAddress: string,
-	callData: Uint8Array,
-	chainId: number,
-	publicKeyHex: WalletSigner,
-	signFn: SignFn,
-	maxFeeOverride?: bigint
-): Promise<SubmitResult> {
-	// 0. Pre-check: verify critical contracts exist on this chain (cached after first success)
-	await verifyChainReady(chainId);
-
-	// 1-4. Fetch deployment status, nonce, and gas prices in parallel
-	// Clear gas price cache to get fresh values — stale prices cause
-	// "gas price too low" rejections on chains with volatile gas (e.g. Gnosis).
-	_gasPriceCache.delete(chainId);
-	invalidateFeeSignals(chainId);
-	const [deployed, nonceResult, gasPrices] = await Promise.all([
-		isDeployed(safeAddress, chainId),
-		getNonce(safeAddress, chainId).catch(() => null),
-		getGasPrices(chainId)
-	]);
-
-	// Build initCode if needed
-	const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCodeFor(publicKeyHex);
-
-	// Use fetched nonce for deployed wallets, 0 for undeployed. A failed nonce fetch
-	// is only tolerable for an undeployed wallet (its nonce IS 0); for a deployed one,
-	// submitting 0x0 would burn a passkey prompt on an op the bundler must reject
-	// (AA25 invalid nonce) — fail fast with a retryable error before signing instead.
-	if (deployed && nonceResult === null) {
-		throw new Error(
-			'Could not fetch the account nonce — the network may be unstable. Please try again.'
-		);
-	}
-	const nonce: string = deployed ? (nonceResult as string) : '0x0';
-
-	// Price the op. Priority order:
-	//  1. Caller-supplied override (the confirm screen's displayed bundler quote).
-	//     Guard: maxFeeOverride is typed bigint, but the type is erased at runtime — a
-	//     mis-wired caller (e.g. onPress={approveRequest} passing a gesture event) could
-	//     hand us a non-bigint, which would serialize to "0x[object Object]" and blow up
-	//     bundler estimation and the SafeOp hash. And a zero/negative override (a
-	//     degenerate upstream quote leaking through the confirm screen) would sign an
-	//     op the bundler MUST reject ("maxFeePerGas must be > 0") — so validate, don't
-	//     just type-check, and re-derive the price instead of trusting it.
-	//  2. The bundler's OWN quote (tip-inclusive, the same source that accepts/rejects).
-	//     This covers override-less callers — notably dApp wallet_sendCalls — so they
-	//     never under-price on chains where the wallet's per-chain RPC drops the tip.
-	//  3. Local estimate off getGasPrices(), only if the bundler can't quote.
-	let maxFee: bigint;
-	if (isUsableFeeOverride(maxFeeOverride)) {
-		maxFee = maxFeeOverride;
-	} else {
-		const quote = await getBundlerGasQuote(chainId).catch(() => null);
-		maxFee = quote?.maxFeePerGas ?? calcMaxFeePerGas(gasPrices.gasPrice);
-	}
-	const maxPriority = maxFee;
-
-	// 5. Initial gas estimates
-	const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
-
-	// 6. Build dummy UserOp for gas estimation
-	const dummySig = buildDummySignature();
-	const userOp: UserOperation = {
-		sender: safeAddress,
-		nonce,
-		initCode,
-		callData,
-		verificationGasLimit: verificationGas,
-		callGasLimit: CALL_GAS_LIMIT,
-		preVerificationGas: PRE_VERIFICATION_GAS,
-		maxFeePerGas: maxFee,
-		maxPriorityFeePerGas: maxPriority,
-		paymasterAndData: new Uint8Array(0),
-		signature: dummySig
-	};
-
-	// 7. Estimate gas via bundler
-	// Skip estimation only for deployed wallets with small calldata (simple transfers).
-	// DApp transactions have large/complex calldata that needs accurate gas estimation,
-	// especially for preVerificationGas which scales with calldata size.
-	const needsEstimation = !deployed || callData.length > 200;
-	if (needsEstimation) {
-		try {
-			const estimated = await estimateGas(userOp, chainId);
-			console.log('[UserOp] Gas estimate:', {
-				verificationGasLimit: estimated.verificationGasLimit.toString(),
-				callGasLimit: estimated.callGasLimit.toString(),
-				preVerificationGas: estimated.preVerificationGas.toString()
-			});
-			const estVerification = (estimated.verificationGasLimit * 15n) / 10n;
-			// 2M floor is only needed for undeployed wallets (account creation).
-			// For deployed wallets, use the estimated value — inflating to 2M
-			// causes the bundler's balance check to require ~4x more gas reserve.
-			userOp.verificationGasLimit = deployed
-				? bigintMax(estVerification, VERIFICATION_GAS_DEPLOYED)
-				: bigintMax(estVerification, 2_000_000n);
-			userOp.callGasLimit = bigintMax((estimated.callGasLimit * 15n) / 10n, 100_000n);
-			userOp.preVerificationGas = estimated.preVerificationGas + 10_000n;
-		} catch (err) {
-			console.error(
-				'[UserOp] Gas estimation failed:',
-				err instanceof Error ? err.message : String(err)
-			);
-			// For a large/complex op the static defaults below can't cover the real
-			// callGasLimit/preVerificationGas — submitting anyway yields an op the bundler
-			// accepts but can't land, i.e. a silent 2-minute receipt timeout. Refuse so the
-			// user gets an immediate, retryable error. Small ops keep the known-good defaults.
-			if (callData.length > ESTIMATION_REQUIRED_CALLDATA) {
-				throw new Error(
-					'Could not estimate gas for this transaction. The network may be busy — please try again.'
-				);
-			}
-			console.error('[UserOp] Falling back to default gas limits (small calldata).');
-		}
-	}
-	console.log('[UserOp] Final gas:', {
-		verificationGasLimit: userOp.verificationGasLimit.toString(),
-		callGasLimit: userOp.callGasLimit.toString(),
-		preVerificationGas: userOp.preVerificationGas.toString(),
-		maxFeePerGas: userOp.maxFeePerGas.toString()
-	});
-
-	// 8. Calculate SafeOp hash (EIP-712) — and have the core attest it (spec 028
-	//    Phase 8). This path is handed finished calldata, so the core checks the
-	//    hash alone.
-	const safeOpHash = attestedSafeOpHash(
-		userOp,
-		chainId,
-		null,
-		calculateSafeOpHash(userOp, chainId)
-	);
-
-	// 9. Sign with passkey — and refuse an assertion over any other challenge.
-	const assertion = await signFn(safeOpHash);
-	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
-
-	// 10. Build real signature
-	const rawSig = derSignatureToRaw(assertion.signature);
-	if (!rawSig) {
-		throw new Error('Failed to create signature: DER to raw conversion failed');
-	}
-
-	const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
-
-	const sigR = rawSig.slice(0, 32);
-	const sigS = rawSig.slice(32);
-
-	const realSig = buildUserOpSignature(
-		assertion.authenticatorData,
-		clientDataFields,
-		sigR,
-		sigS,
-		signerAddressFor(publicKeyHex, assertion.credentialId ?? null)
-	);
-	userOp.signature = realSig;
-
-	// 11. Submit to bundler — the core's submit loop decides accepted / may
-	//     have been sent / not sent (spec 082 RA1).
-	// 12. The nonce moves on only when the relay has the op (RA5).
-	//     Returns immediately — the caller can await txHash separately.
-	return submitSigned(userOp, chainId, safeAddress, undefined, undefined, signFn.beforePost);
-}
 
 // ---------------------------------------------------------------------------
 // Tempo UserOp Flow (no native coin — gas paid in a stablecoin)
@@ -2074,15 +1905,12 @@ async function sendUserOpTempo(
 	try {
 		const est = await estimateGas(userOp, chainId);
 		estActualGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
-		userOp.verificationGasLimit = deployed
-			? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
-			: bigintMax((est.verificationGasLimit * 15n) / 10n, TEMPO_VERIFICATION_GAS_UNDEPLOYED);
-		userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, callGasFloor);
-		if (hasContractCall) {
-			const floor = await innerCallsGasFloor(chainId, safeAddress, innerCalls);
-			if (floor !== null && floor > userOp.callGasLimit) userOp.callGasLimit = floor;
-		}
-		userOp.preVerificationGas = est.preVerificationGas + 10_000n;
+		// The limits signed are the core's rule (Tempo's padding, held to its
+		// floors), raised to the inner calls' own measured floor.
+		const floor = hasContractCall
+			? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
+			: null;
+		Object.assign(userOp, userOpGasLimits(chainId, deployed, innerCalls.length + 1, est, floor));
 	} catch (err) {
 		console.error(
 			'[Tempo] Gas estimation failed, using defaults:',
@@ -2305,21 +2133,21 @@ async function sendUserOpInBand(
 	const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
 	try {
 		const est = await estimateGas(userOp, chainId);
-		userOp.verificationGasLimit = deployed
-			? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
-			: bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_UNDEPLOYED);
-		userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, CALL_GAS_LIMIT);
-		if (hasContractCall) {
-			const floor = await innerCallsGasFloor(chainId, safeAddress, innerCalls);
-			if (floor !== null && floor > userOp.callGasLimit) {
-				console.log("[InBand] callGasLimit raised to the inner calls' own estimate", {
-					bundler: userOp.callGasLimit.toString(),
-					inner: floor.toString()
-				});
-				userOp.callGasLimit = floor;
-			}
-		}
-		userOp.preVerificationGas = est.preVerificationGas + 10_000n;
+		// The limits signed are the core's one rule (`userOpGasLimits`): the
+		// relay's limits as returned — no second ×1.5 on top of the relay's own,
+		// no 300k verification floor — raised to the inner calls' own measured
+		// floor, and held to an undeployed Safe's floors. The fee the person saw
+		// was priced on exactly these (or on the relay's settlement gas).
+		const floor = hasContractCall
+			? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
+			: null;
+		Object.assign(userOp, userOpGasLimits(chainId, deployed, innerCalls.length + 1, est, floor));
+		console.log('[InBand] signed limits', {
+			verification: userOp.verificationGasLimit.toString(),
+			call: userOp.callGasLimit.toString(),
+			preVerification: userOp.preVerificationGas.toString(),
+			settlement: est.settlementGas?.toString() ?? null
+		});
 	} catch (err) {
 		// What the relay said, as the core reads it (spec 082 RJ19): a revert is
 		// not "the network is busy". The sheet warned about it before the slide
@@ -3303,7 +3131,15 @@ async function estimateGas(userOp: UserOperation, chainId: number): Promise<GasE
 	return {
 		verificationGasLimit: parseHexUInt64(result.verificationGasLimit),
 		callGasLimit: parseHexUInt64(result.callGasLimit),
-		preVerificationGas: parseHexUInt64(result.preVerificationGas)
+		preVerificationGas: parseHexUInt64(result.preVerificationGas),
+		// Optional: a relay older than the field omits it, and a figure that is
+		// not a positive hex quantity is no figure (never a 0 stand-in).
+		settlementGas: (() => {
+			const value = result.settlementGas;
+			if (typeof value !== 'string' || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
+			const gas = BigInt(value);
+			return gas > 0n ? gas : null;
+		})()
 	};
 }
 

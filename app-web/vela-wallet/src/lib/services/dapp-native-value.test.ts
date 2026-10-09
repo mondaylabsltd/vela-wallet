@@ -149,6 +149,37 @@ beforeEach(() => {
 	signed.operations.length = 0;
 });
 
+/** The gas limits of the one op POSTed. */
+function postedLimits(): { verification: bigint; call: bigint; preVerification: bigint } {
+	const posts = asked.get('eth_sendUserOperation') ?? [];
+	expect(posts).toHaveLength(1);
+	const op = (posts[0] as [Record<string, string>])[0];
+	return {
+		verification: BigInt(op.verificationGasLimit),
+		call: BigInt(op.callGasLimit),
+		preVerification: BigInt(op.preVerificationGas)
+	};
+}
+
+describe('the limits an op is signed with are the core’s one rule', () => {
+	it("signs the relay's limits as returned, raised only to the inner call's own floor", async () => {
+		await run(
+			'eth_sendTransaction',
+			[{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' + '00'.repeat(64) }],
+			56
+		);
+		expect(postedLimits()).toEqual({
+			// The relay's 0x30000 — no ×1.5 on top, no 300k floor.
+			verification: 0x30000n,
+			// The call measured 200,000 on its own: × 1.25 + 60,000 + 50,000 per
+			// call = 360,000, above the relay's 0x40000.
+			call: 360_000n,
+			// As returned — no +10,000.
+			preVerification: 0x10000n
+		});
+	});
+});
+
 describe('a native value reaches the signature (spec 096 F1)', () => {
 	it('PancakeSwap BNB → USDC on BNB Chain: priced, signed and sent as 0.003 BNB', async () => {
 		const signSpy = vi.spyOn(safeTransaction, 'buildUserOpSignature');
