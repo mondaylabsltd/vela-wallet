@@ -452,6 +452,8 @@ enum SigningLive {
             // Spec 099 R8: the passkey failed — the signer layer's own line.
             case .signerUnavailable, .signerNotDiscoverable, .signerFailed:
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
+            // Spec 102: this account cannot sign here — the venue's reason.
+            case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
             // The relay refused it (spec 082 RJ3): nothing was sent, and
             // "try again" would send the same refusal.
             default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
@@ -524,10 +526,14 @@ enum SigningLive {
         // ending — said in the signer's words, and tried again when the core
         // says a retry can help (`failure_retryable`).
         if let error = sign.error, error.kind != .userRejected,
-           sign.pendingOpHash != nil || error.kind == .submitFailed || error.kind.signerReasonKey != nil {
+           sign.pendingOpHash != nil || error.kind == .submitFailed || error.kind.signerReasonKey != nil
+            || error.kind == .venueBlocked {
             // Spec 096 F8: the core holds the page's answer until this closes;
             // a failure that sent nothing may be tried again.
-            let reason = error.kind.signerReasonKey.map { loc.t($0) }
+            // Spec 102: a venue that cannot be used here says why (and the
+            // core never offers a retry for it).
+            let reason = error.venueReason(loc)
+                ?? error.kind.signerReasonKey.map { loc.t($0) }
                 ?? (sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"))
             return SendReceiptModel(
                 header: header, stage: .failed,

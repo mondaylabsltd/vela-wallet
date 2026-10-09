@@ -88,6 +88,10 @@ enum SignErrorKind: String, Decodable {
     case signerNotDiscoverable = "signer_not_discoverable"
     /// -32603 — the passkey prompt failed for another reason (`other`).
     case signerFailed = "signer_failed"
+    /// -32603 — this account cannot sign here (spec 102): nothing on this
+    /// device can reach its keys. Never retried; the notice's `venueBlock`
+    /// says why.
+    case venueBlocked = "venue_blocked"
 
     /// A kind this build has never heard of reads as a failed submission —
     /// the generic failure, never a view that cannot be drawn.
@@ -158,6 +162,29 @@ struct SignDappIdentityWire: Decodable, Equatable {
 struct SignErrorNoticeWire: Decodable, Equatable {
     let kind: SignErrorKind
     let detail: String?
+    /// Spec 102: for `venueBlocked`, why — drawn as `VenueBlock::key()` with
+    /// its domains, in the person's language.
+    var venueBlock: VenueBlockWire? = nil
+
+    private enum CodingKeys: String, CodingKey { case kind, detail, venueBlock }
+
+    init(kind: SignErrorKind, detail: String?, venueBlock: VenueBlockWire? = nil) {
+        self.kind = kind
+        self.detail = detail
+        self.venueBlock = venueBlock
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try values.decode(SignErrorKind.self, forKey: .kind)
+        detail = try values.decodeIfPresent(String.self, forKey: .detail)
+        venueBlock = try? values.decodeIfPresent(VenueBlockWire.self, forKey: .venueBlock)
+    }
+
+    /// The venue's reason, for a `venueBlocked` notice — `nil` for any other.
+    func venueReason(_ loc: Loc) -> String? {
+        kind == .venueBlocked ? venueBlock?.text(loc) : nil
+    }
 }
 
 /// Bundler gas-account funding facts. Amounts are decimal wei strings.

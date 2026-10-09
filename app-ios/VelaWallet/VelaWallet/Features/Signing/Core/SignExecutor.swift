@@ -354,6 +354,10 @@ final class SignExecutor {
             case .trustedSigner(let notice):
                 ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
+            // Spec 102: this account cannot sign here. The core answers the
+            // page and draws the reason (`SignErrorNotice.venue_block`).
+            case .venueBlocked(let block):
+                return Self.venueBlocked(block)
             case .askerGone:
                 VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
                 return ["type": "asker_gone"]
@@ -394,6 +398,12 @@ final class SignExecutor {
             "type": "failed", "message": message, "refused": refused,
             "signer": signer.map { $0.rawValue as Any } ?? NSNull(),
         ]
+    }
+
+    /// `SignSubmitOutcome::VenueBlocked` (spec 102): nothing was signed, and
+    /// the block travels whole so the sheet says why in the person's language.
+    static func venueBlocked(_ block: VenueBlockWire) -> [String: Any] {
+        ["type": "venue_blocked", "block": block.wire]
     }
 
     /// The passkey ceremony failed (spec 099 R8): `failed` with the
@@ -450,6 +460,7 @@ final class SignExecutor {
                 ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
             }
+            if case .venueBlocked(let block) = refused.failure { return Self.venueBlocked(block) }
             if case .other(let message) = refused.failure {
                 return Self.failed(message ?? "Signing failed")
             }

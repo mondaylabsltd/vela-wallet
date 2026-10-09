@@ -117,10 +117,14 @@ final class UserOpSpine {
         /// `passkeyCancelled`. Nothing was signed.
         case signer(kind: FailureKind, message: String)
         /// The trusted page ended without an answer the wallet accepts — or
-        /// was never opened (its check refused it, or nothing on this device
-        /// can reach the account's keys). Nothing was signed; the sheet says
-        /// which of its sentences applies.
+        /// was never opened (its check refused it). Nothing was signed; the
+        /// sheet says which of its sentences applies.
         case trustedSigner(TrustedSignerNotice)
+        /// Spec 102: this account cannot sign here — nothing on this device
+        /// can reach its keys (the plan's `blocked`). Nothing was signed, and
+        /// trying again would not help: the machines are told `venue_blocked`
+        /// and say why in the person's language.
+        case venueBlocked(VenueBlockWire)
         case relayerUnavailable
         case bundlerUnderfunded
         case other(String?)
@@ -534,8 +538,10 @@ final class UserOpSpine {
         // it lives, and where this account reviews and signs (R4, R5).
         let plan = await plan(account: account)
         if let blocked = plan?.blocked {
-            // R1: nothing on this device can reach the account's keys.
-            throw Refused(failure: .trustedSigner(.blocked(blocked)))
+            // R1: nothing on this device can reach the account's keys. Said
+            // by the sign and send machines in the person's language
+            // (`venue_blocked`), never retried.
+            throw Refused(failure: .venueBlocked(blocked))
         }
         guard let plan, let page = plan.venue.pageUrl else {
             let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)

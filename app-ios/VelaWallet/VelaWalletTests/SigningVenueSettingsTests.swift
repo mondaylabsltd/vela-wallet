@@ -233,6 +233,45 @@ struct SigningVenueSettingsTests {
         #expect(signingModel(line: line(official), page: official, gateOpen: false).confirm?.enabled == false)
     }
 
+    /// Core round 5: the fee row the context carries is the card's — and a
+    /// message (no fee) has none.
+    @Test func theCardCarriesTheFeeRow() throws {
+        var model = signingModel(line: line(official), page: official)
+        #expect(model.handoff?.fee == nil)
+        let fee = try #require(HandoffFeeModel.of(
+            feeJson: HandoffFeeFixtures.feeJson, speedJson: HandoffFeeFixtures.speedJson,
+            fee: nil, display: .usd, networks: .builtin, loc: loc
+        ))
+        model = signingModel(line: line(official), page: official, fee: fee)
+        #expect(model.handoff?.fee == fee)
+        #expect(fee.tier == "Standard")
+    }
+
+    /// Core round 7: a sign-time venue refusal is said in the person's
+    /// language from the core's notice — never an English sentence, never a
+    /// retry.
+    @Test func aVenueRefusalSaysWhyInThePersonsLanguage() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let block = VenueBlockWire.pageOnOtherDomain(pageDomain: "getvela.app", domain: "example.com")
+        let notice = try CoreJSON.decoder.decode(
+            SignErrorNoticeWire.self,
+            from: Data(#"{"kind":"venue_blocked","detail":null,"venue_block":{"type":"page_on_other_domain","page_domain":"getvela.app","domain":"example.com"}}"#.utf8)
+        )
+        #expect(notice.kind == .venueBlocked && notice.venueBlock == block)
+        #expect(notice.venueReason(zh) == "这个页面在 getvela.app，这个账户的钥匙在 example.com。")
+        let sign = SignViewWire(
+            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
+            pendingOpHash: nil, error: notice, funding: nil, confirmGateOpen: true,
+            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
+            notice: nil, globalChainId: 100, blocked: nil
+        )
+        let blocks = SigningLive.statusBlocks(sign: sign, loc: zh)
+        #expect(blocks.contains { if case .warning(_, let text) = $0 { return text == block.text(zh) }; return false })
+        // The wire the executors send, read back by the core's own JSON.
+        #expect(CoreJSON.string(SignExecutor.venueBlocked(block)).contains(#""type":"venue_blocked""#))
+        #expect(VenueBlockWire.notOnWeb.text(zh) == "签名页只能从 Vela 应用打开，网页版不支持。")
+    }
+
     /// In Vela: the sheet as it always was — no card.
     @Test func inVelaTheSheetIsUnchanged() {
         let model = signingModel(line: nil, page: nil)

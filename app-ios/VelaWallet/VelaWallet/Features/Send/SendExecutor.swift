@@ -681,6 +681,9 @@ final class SendExecutor {
         // core's cancelled ceremony, which keeps the confirmation on screen.
         // The words are the screen's (`trustedSignerEnded`).
         case .trustedSigner: return ["type": "passkey_cancelled"]
+        // Spec 102: this account cannot sign here — the confirm screen says
+        // why (`tx_venue_block`), in the person's language.
+        case .venueBlocked(let block): return ["type": "venue_blocked", "block": block.wire]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         // The send machine words every other refusal itself; the relay's own

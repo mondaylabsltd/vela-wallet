@@ -120,8 +120,6 @@ enum TrustedSignerNotice: Equatable {
     case unavailable
     /// R6: the page's check did not admit it; it was never opened.
     case notOpened(SignerIntegrityLine)
-    /// R1: nothing on this device can reach the account's keys.
-    case blocked(VenueBlockWire)
 
     init(_ refusal: TrustedSignerRefusal) {
         switch refusal {
@@ -153,7 +151,6 @@ enum TrustedSignerNotice: Equatable {
         case .timeout: "componentsUi.signing.trustedSignerTimeout"
         case .unavailable: "componentsUi.signing.signerDown"
         case .notOpened(let line): line.key
-        case .blocked(let block): block.key
         }
     }
 
@@ -161,7 +158,6 @@ enum TrustedSignerNotice: Equatable {
     func text(_ loc: Loc) -> String {
         switch self {
         case .notOpened(let line): line.text(loc)
-        case .blocked(let block): block.text(loc)
         default: loc.t(key)
         }
     }

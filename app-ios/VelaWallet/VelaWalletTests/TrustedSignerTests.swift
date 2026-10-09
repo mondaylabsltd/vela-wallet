@@ -564,11 +564,12 @@ struct TrustedSignerSpineTests {
             )
             Issue.record("an account nothing can reach signed")
         } catch let refused as UserOpSpine.Refused {
-            #expect(refused.failure == .trustedSigner(.blocked(blocked)))
+            // Its own failure, told to the machines as `venue_blocked`.
+            #expect(refused.failure == .venueBlocked(blocked))
         }
         #expect(signer.calls == 0 && page.asked.isEmpty)
         let loc = Loc(overrideTag: "en", preferredLanguages: [])
-        #expect(TrustedSignerNotice.blocked(blocked).text(loc).contains("sign.example.com"))
+        #expect(blocked.text(loc).contains("sign.example.com"))
     }
 
     /// The wallet's own send: the core builds `wallet_sendCalls` from the
