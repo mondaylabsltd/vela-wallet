@@ -49,7 +49,10 @@ pub enum ConfirmBlock {
     /// The account's previous transaction on this network is still going
     /// through ([`super::tx_tracker::InFlightOp`]): this one would take the
     /// same nonce, so it waits, and the confirm opens by itself once the
-    /// first is final. The send confirm says the same line.
+    /// first is final or has made no progress for ten minutes
+    /// ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). One plain line for as long
+    /// as it holds — it sits ahead of every fee block, so a re-quote never
+    /// swaps it out. The send confirm says the same line.
     PreviousPending,
     /// The request is still being read.
     Reading,

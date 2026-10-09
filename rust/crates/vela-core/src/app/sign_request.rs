@@ -829,7 +829,9 @@ pub enum Event {
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
     /// tracker render). A transaction of an account with one already in
     /// flight on the request's chain waits for it: the confirm is held with
-    /// [`ConfirmBlock::PreviousPending`] and opens once the first is final.
+    /// [`ConfirmBlock::PreviousPending`] and opens once the first is final,
+    /// or has made no progress for ten minutes (`tx_tracker::IN_FLIGHT_STALL_MS`
+    /// — the tracker then leaves it out of the list).
     InFlightOps {
         ops: Vec<super::tx_tracker::InFlightOp>,
     },

@@ -1512,7 +1512,9 @@ pub enum Event {
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
     /// tracker render). While the account has one on the form's chain, the
     /// confirm is held ([`SendView::previous_pending`]): a second send signed
-    /// now would take the same nonce. It opens once the first is final.
+    /// now would take the same nonce. It opens once the first is final, or
+    /// has made no progress for ten minutes (`tx_tracker::IN_FLIGHT_STALL_MS`
+    /// — the tracker then leaves it out of the list).
     InFlightOps {
         ops: Vec<super::tx_tracker::InFlightOp>,
     },
@@ -2299,8 +2301,11 @@ pub struct SendView {
     pub can_confirm: bool,
     /// The account's previous transaction on this network is still going
     /// through, so the confirm is held (part of `can_confirm`): this one
-    /// would take the same nonce. Drawn as its `key` under the confirm; the
-    /// confirm opens by itself once the first is final. `None` otherwise.
+    /// would take the same nonce. Drawn as its `key` under the confirm — the
+    /// one line for as long as it holds, unchanged while the fee re-measures,
+    /// no countdown; the confirm opens by itself once the first is final or
+    /// has made no progress for ten minutes
+    /// ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). `None` otherwise.
     #[serde(default)]
     pub previous_pending: Option<SendPreviousPending>,
     pub sending: bool,

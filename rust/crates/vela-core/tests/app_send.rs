@@ -6217,6 +6217,7 @@ fn track_entry(
         outcome,
         relay_tx_hash: None,
         relay_sent_at_ms: None,
+        stalled: false,
     }
 }
 
@@ -8472,6 +8473,40 @@ fn the_confirm_waits_for_the_account_s_previous_transaction() {
     assert!(view.can_confirm, "opens by itself");
     assert_eq!(view.previous_pending, None);
     assert!(matches!(slide_to_submit(&mut sut), Op::SubmitUserOp { .. }));
+}
+
+/// While held, the line is one line and stays put: a fee re-measure, the
+/// tracker's list sent again unchanged, its end — the hold says the same
+/// sentence about the same transaction until the list lets it go (final, or
+/// ten minutes with no progress: `tx_tracker::IN_FLIGHT_STALL_MS`).
+#[test]
+fn the_held_line_stays_one_line_until_the_hold_is_released() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let ops = vec![in_flight(ACCOUNT, 1, "0xfirst")];
+    sut.dispatch(Event::InFlightOps { ops: ops.clone() });
+    let held = sut.view().previous_pending.expect("held");
+
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    assert_eq!(
+        sut.view().previous_pending.as_ref(),
+        Some(&held),
+        "re-measuring"
+    );
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    assert_eq!(sut.view().previous_pending.as_ref(), Some(&held));
+    sut.dispatch(Event::InFlightOps { ops });
+    assert_eq!(
+        sut.view().previous_pending.as_ref(),
+        Some(&held),
+        "the same list again"
+    );
+    assert!(!sut.view().can_confirm);
+
+    // The tracker released it (final, or stalled): the list no longer has it.
+    sut.dispatch(Event::InFlightOps { ops: vec![] });
+    assert_eq!(sut.view().previous_pending, None);
+    assert!(sut.view().can_confirm);
 }
 
 /// Only the same account on the same chain waits: another chain, another

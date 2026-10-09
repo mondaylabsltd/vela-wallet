@@ -691,7 +691,10 @@ pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> 
 /// it on every tracker render to the send machine and the signing machine
 /// (`Event::InFlightOps`): a second transaction of an account on a chain
 /// where it already has one in flight waits for it (the confirm is held with
-/// `componentsUi.signing.confirmBlock.previousPending`). See
+/// `componentsUi.signing.confirmBlock.previousPending`) until it is final or
+/// has made no progress for ten minutes. Pass the core's view JSON as it
+/// came: the stall is a field of it (`stalled`), and a copy re-encoded from
+/// a shell type that lacks the field holds until final. See
 /// `vela_core::app::tx_tracker::in_flight_ops`.
 #[uniffi::export]
 #[must_use]

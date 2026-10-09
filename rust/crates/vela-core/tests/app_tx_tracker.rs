@@ -3144,6 +3144,239 @@ fn a_restart_still_knows_the_op_in_flight() {
     assert_eq!(ops[0].sender, SENDER.to_lowercase());
 }
 
+// ---------------------------------------------------------------------------
+// The hold's time limit: final, or ten minutes without progress
+// ---------------------------------------------------------------------------
+
+const MIN: f64 = 60_000.0;
+
+/// One tick at `now_ms`, answering every receipt and status poll it (or an
+/// earlier tick) left out: receipts `pending`; statuses with `word`, the
+/// relay's `(lifecycle, stage)` — `None` = the relay could not be reached.
+fn advance(sut: &mut Sut, now_ms: f64, word: Option<(TrackLifecycle, Option<&str>)>) {
+    tick(sut, now_ms);
+    while sut.outstanding().iter().any(is_receipt) {
+        let answer = match word {
+            Some(_) => receipt_pending(now_ms),
+            None => Res::ReceiptUnreachable {
+                user_op_hash: HASH.to_owned(),
+                now_ms,
+            },
+        };
+        sut.resolve_matching(is_receipt, answer);
+    }
+    while sut.outstanding().iter().any(is_status) {
+        let answer = match word {
+            Some((status, stage)) => Res::Status {
+                user_op_hash: HASH.to_owned(),
+                status,
+                stage: stage.map(str::to_owned),
+                now_ms,
+                tx_hash: None,
+                rejection_reason: None,
+            },
+            None => Res::StatusUnavailable {
+                user_op_hash: HASH.to_owned(),
+                now_ms,
+            },
+        };
+        sut.resolve_matching(is_status, answer);
+    }
+}
+
+fn holds(sut: &Sut) -> bool {
+    !vela_core::app::tx_tracker::in_flight_ops(&sut.view()).is_empty()
+}
+
+const QUEUED: Option<(TrackLifecycle, Option<&str>)> = Some((TrackLifecycle::Queued, None));
+
+/// The limit is ten minutes, and the rule's boundary is inclusive.
+#[test]
+fn the_hold_s_time_limit_is_ten_minutes() {
+    use vela_core::app::tx_tracker::{in_flight_stalled, IN_FLIGHT_STALL_MS};
+    assert_eq!(IN_FLIGHT_STALL_MS, 600_000.0);
+    assert!(!in_flight_stalled(T0, T0 + IN_FLIGHT_STALL_MS - 1.0));
+    assert!(in_flight_stalled(T0, T0 + IN_FLIGHT_STALL_MS));
+}
+
+/// The relay unreachable after its first answer: no progress, so the hold
+/// is released ten minutes after the submission — not at the 24 h line. The
+/// tracker keeps following the op; only the nonce is no longer held. While
+/// it holds, what the send and signing machines are handed does not change
+/// from one render to the next: one line, nothing to flicker.
+#[test]
+fn ten_minutes_without_progress_releases_the_hold() {
+    use vela_core::app::tx_tracker::{in_flight_ops, in_flight_ops_json};
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    let first = in_flight_ops(&sut.view());
+    assert_eq!(first.len(), 1);
+    for minute in 1..10 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, None);
+        assert_eq!(in_flight_ops(&sut.view()), first, "minute {minute}");
+    }
+    advance(&mut sut, T0 + 10.0 * MIN - 1_000.0, None);
+    assert!(holds(&sut), "not yet");
+    assert!(!sut.view().entries[0].stalled);
+
+    advance(&mut sut, T0 + 10.0 * MIN, None);
+    assert!(!holds(&sut), "ten minutes without progress");
+    let entry = &sut.view().entries[0];
+    assert!(entry.stalled);
+    assert!(entry.polling, "still followed");
+    assert_eq!(entry.outcome, TrackOutcome::StillConfirming);
+    let json = serde_json::to_string(&sut.view()).unwrap();
+    assert_eq!(
+        in_flight_ops_json(&json),
+        "[]",
+        "the JSON bridge says the same"
+    );
+
+    // The relay answering the same thing again is not progress.
+    advance(&mut sut, T0 + 11.0 * MIN, QUEUED);
+    assert!(!holds(&sut));
+}
+
+/// Every move of the relay's word restarts the ten minutes: a stage, a new
+/// lifecycle. Once released, a move takes the hold up again — the op is
+/// moving, its nonce is spoken for.
+#[test]
+fn progress_keeps_the_hold() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    for minute in 1..=5 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, QUEUED);
+    }
+    // 6 min: the relay is topping up its gas — a move.
+    let funding = Some((TrackLifecycle::Queued, Some(RELAY_FUNDING_STAGE)));
+    advance(&mut sut, T0 + 6.0 * MIN, funding);
+    for minute in 7..=14 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, funding);
+        assert!(holds(&sut), "minute {minute}: 6 + 10 not reached");
+    }
+    // 15 min: on the network — a move. (Past ten minutes of age the relay is
+    // asked once a minute: a move is heard on the minute.)
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    for minute in 15..=24 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, submitted);
+        assert!(holds(&sut), "minute {minute}: it moved at six and fifteen");
+    }
+    advance(&mut sut, T0 + 25.0 * MIN, submitted);
+    assert!(!holds(&sut), "ten minutes since the last move");
+
+    // It moves again: held again.
+    advance(
+        &mut sut,
+        T0 + 26.0 * MIN,
+        Some((TrackLifecycle::Included, None)),
+    );
+    assert!(holds(&sut));
+    assert!(!sut.view().entries[0].stalled);
+}
+
+/// An op seen submitted starts where the relay takes one, queued: when the
+/// relay's first word after a silence says it is on the network, that is a
+/// move, and the ten minutes start again from it.
+#[test]
+fn a_first_answer_past_queued_is_a_move_for_an_op_seen_submitted() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    for minute in 1..=8 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, None);
+    }
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    for minute in 9..=18 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, submitted);
+        assert!(holds(&sut), "minute {minute}: it moved at nine");
+    }
+    advance(&mut sut, T0 + 19.0 * MIN, submitted);
+    assert!(!holds(&sut), "ten minutes since the move");
+}
+
+/// Final releases at once, long before the ten minutes: confirmed, or
+/// refused.
+#[test]
+fn final_releases_the_hold_at_once() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    advance(&mut sut, T0 + MIN, QUEUED);
+    assert!(holds(&sut));
+    tick(&mut sut, T0 + 2.0 * MIN);
+    sut.resolve_matching(is_receipt, receipt_confirmed(T0 + 2.0 * MIN + 200.0));
+    assert_eq!(sut.view().entries[0].outcome, TrackOutcome::Final);
+    assert!(!holds(&sut), "confirmed");
+    assert!(!sut.view().entries[0].stalled, "final, not stalled");
+
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    assert!(holds(&sut));
+    refused(&mut sut, Some("simulation_failed"), None);
+    assert!(!holds(&sut), "refused");
+}
+
+/// After a restart the tracker knows of no progress since the submission:
+/// an op submitted more than ten minutes ago is released at once, and the
+/// relay's first answer — where the op is, not a move — leaves it so, so
+/// the confirm does not shut again seconds after it opened. A real move
+/// holds it again. One submitted five minutes ago holds for five more.
+#[test]
+fn a_restart_counts_from_the_submission_and_its_first_answer_is_no_move() {
+    let reload = |sut: &mut Sut, age_ms: f64| {
+        sut.dispatch(Event::AppResumed);
+        sut.resolve(Res::Clock { now_ms: T0 });
+        sut.resolve(Res::RecordsLoaded {
+            records: vec![TrackPendingRecord {
+                record_id: "rec-1".to_owned(),
+                user_op_hash: HASH.to_owned(),
+                chain_id: CHAIN,
+                submitted_at_ms: T0 - age_ms,
+                maybe_sent: false,
+                submit_block: None,
+                sender: Some(SENDER.to_owned()),
+            }],
+            now_ms: T0,
+        });
+    };
+
+    let mut sut = Sut::new();
+    reload(&mut sut, 30.0 * MIN);
+    assert!(!holds(&sut), "half an hour with no progress known");
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    advance(&mut sut, T0 + 3_000.0, submitted);
+    advance(&mut sut, T0 + MIN, submitted);
+    assert!(!holds(&sut), "the first answer is where it is, not a move");
+    advance(
+        &mut sut,
+        T0 + 2.0 * MIN,
+        Some((TrackLifecycle::Included, None)),
+    );
+    assert!(holds(&sut), "a move");
+
+    let mut sut = Sut::new();
+    reload(&mut sut, 5.0 * MIN);
+    assert!(holds(&sut));
+    advance(&mut sut, T0 + 5.0 * MIN - 1_000.0, None);
+    assert!(holds(&sut));
+    advance(&mut sut, T0 + 5.0 * MIN, None);
+    assert!(!holds(&sut), "ten minutes from the submission");
+}
+
+/// A released hold stays released when the device's clock steps back: only
+/// progress takes it up again.
+#[test]
+fn a_clock_that_steps_back_never_re_holds() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, None);
+    advance(&mut sut, T0 + 10.0 * MIN, None);
+    assert!(!holds(&sut));
+    advance(&mut sut, T0 + 9.0 * MIN, None);
+    assert!(!holds(&sut));
+}
+
 /// A shell that predates the fields still decodes.
 #[test]
 fn the_sender_and_reason_default_on_the_wire() {
@@ -3168,4 +3401,11 @@ fn the_sender_and_reason_default_on_the_wire() {
             ..
         }
     ));
+    // A live op's view says nothing of the stall until it has one.
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    let wire = serde_json::to_value(&sut.view().entries[0]).unwrap();
+    assert!(wire.get("stalled").is_none(), "{wire}");
+    let entry: vela_core::app::tx_tracker::TrackEntryView = serde_json::from_value(wire).unwrap();
+    assert!(!entry.stalled);
 }

@@ -397,3 +397,26 @@ fn a_previous_transaction_in_flight_holds_the_confirm_with_its_line() {
         Some("componentsUi.signing.confirmBlock.previousPending")
     );
 }
+
+/// The held line is one line: a fee being measured again under it does not
+/// swap it for "measuring the fee" and back — the hold sits ahead of every
+/// fee block until the tracker lets it go.
+#[test]
+fn the_previous_transaction_s_line_holds_through_a_re_measure() {
+    let mut input = ready();
+    input.sign.confirm_gate_open = false;
+    input.sign.confirm_block = Some(ConfirmBlock::PreviousPending);
+    for busy in [true, false, true] {
+        input.fee.as_mut().unwrap().busy = busy;
+        let state = confirm_state(&input);
+        assert_eq!(
+            state.block,
+            Some(ConfirmBlock::PreviousPending),
+            "busy {busy}"
+        );
+        assert_eq!(
+            state.key.as_deref(),
+            Some("componentsUi.signing.confirmBlock.previousPending")
+        );
+    }
+}

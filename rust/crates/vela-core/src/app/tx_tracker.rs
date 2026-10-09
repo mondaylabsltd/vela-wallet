@@ -948,6 +948,20 @@ struct Entry {
     /// expired. Since when, and how many such answers in a row (099 R6).
     forgotten_since_ms: Option<f64>,
     forgotten_streak: u32,
+    /// Where the relay last said the op is — its lifecycle, its stage, and
+    /// whether it has named a bundle tx. `not_found` places it nowhere and
+    /// is not kept. A change of it is progress ([`Entry::heard`]). An op seen
+    /// submitted starts at `queued`; one reloaded after a restart starts
+    /// nowhere, and its first word is only where it is.
+    progress_mark: Option<(TrackLifecycle, Option<String>, bool)>,
+    /// When the relay's word last moved; `None` = not since the submission
+    /// (`submitted_at_ms` then). The hold's time limit counts from here
+    /// ([`in_flight_stalled`]).
+    progressed_at_ms: Option<f64>,
+    /// [`IN_FLIGHT_STALL_MS`] has passed with no progress: the op no longer
+    /// holds its account's nonce ([`in_flight_ops`]). Kept until the next
+    /// progress, so a clock that steps back never re-holds a released one.
+    stalled: bool,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -1044,7 +1058,38 @@ impl Entry {
             forgotten_streak: 0,
             sender: None,
             refusal: None,
+            progress_mark: None,
+            progressed_at_ms: None,
+            stalled: false,
         }
+    }
+
+    /// The relay's word on the op now: `(status, stage)`, with or without a
+    /// bundle tx named. A word that differs from the last one is progress —
+    /// the hold's ten minutes start again, and a released hold is taken up
+    /// again (the op is moving, so its nonce is spoken for). With no mark
+    /// yet (a reload) the first word is only a starting point: after a
+    /// restart it says where the op is, not that it moved, and taking a
+    /// released hold back on it would flip the confirm shut seconds after it
+    /// opened.
+    fn heard(&mut self, status: TrackLifecycle, stage: Option<&str>, now_ms: f64) {
+        if status == TrackLifecycle::NotFound {
+            return;
+        }
+        let mark = (
+            status,
+            stage.map(str::to_owned),
+            self.relay_tx_hash.is_some(),
+        );
+        if self
+            .progress_mark
+            .as_ref()
+            .is_some_and(|last| *last != mark)
+        {
+            self.progressed_at_ms = Some(now_ms);
+            self.stalled = false;
+        }
+        self.progress_mark = Some(mark);
     }
 
     /// The first sender anyone named for this op wins (one op, one account).
@@ -1240,6 +1285,11 @@ pub struct TrackEntryView {
     /// receipt, the signing sheet's ending, a row's detail) draws THIS.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal_key: Option<String>,
+    /// Not final, and the relay has said nothing new of it for
+    /// [`IN_FLIGHT_STALL_MS`]: it no longer holds its account's nonce
+    /// ([`in_flight_ops`]). Off the wire while false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stalled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1259,7 +1309,8 @@ pub struct TrackView {
 /// from the chain, where the first has not landed) — the relay refuses it, or
 /// one of the two is dropped after the other lands. So the second waits:
 /// every confirm that would sign one is held while this exists
-/// (`ConfirmBlock::PreviousPending`), and opens once the first is final.
+/// (`ConfirmBlock::PreviousPending`), and opens once the first is final — or
+/// once the relay has said nothing new of it for [`IN_FLIGHT_STALL_MS`].
 ///
 /// Read from the tracker, which persists every pending record — a restart
 /// still knows (`TrackPendingRecord::sender`).
@@ -1272,13 +1323,37 @@ pub struct InFlightOp {
     pub user_op_hash: String,
 }
 
+/// How long an operation in flight holds its account's nonce with no
+/// progress: ten minutes (owner's decision, 2026-10-09). Before it, the hold
+/// lasted until the tracker's verdict — up to the 24 h line while the relay
+/// was unreachable, with a second send held all that time.
+///
+/// Releasing is safe because the relay keeps the rule too: a second op at a
+/// nonce still live there is refused (`nonce_in_flight`; an older relay's
+/// `[existingHash:…]`), and both read as `RelayRejection::NonceHeld` — the
+/// "previous transaction pending" refusal, with Try again. The worst case is
+/// that clear refusal, never a silent drop of either operation.
+pub const IN_FLIGHT_STALL_MS: f64 = 10.0 * 60.0 * 1000.0;
+
+/// The hold's time limit, the one rule: an operation whose relay status last
+/// moved at `progressed_at_ms` (its submission, before any move) has stalled
+/// by `now_ms` once [`IN_FLIGHT_STALL_MS`] has passed, and holds no nonce
+/// from then until it moves again. Progress is a change in what the relay
+/// says of it — its lifecycle or stage, or a bundle tx named; a poll that
+/// fails, `not_found`, or the same answer again is none.
+#[must_use]
+pub fn in_flight_stalled(progressed_at_ms: f64, now_ms: f64) -> bool {
+    now_ms - progressed_at_ms >= IN_FLIGHT_STALL_MS
+}
+
 /// Every operation in [`TrackView`] that holds its account's nonce: the
-/// sender is known, it is not final, the tracker still follows it, and the
-/// relay has it. One whose submit reply was lost and that the relay has not
-/// shown it holds ([`TrackOutcome::MaybeSent`]) reserves nothing: a retry of
-/// THE SAME op reuses its nonce (RA5), and a different op at that nonce is
-/// one of two that cannot both land — the relay refuses it while the first
-/// is live. Nor does one past the 24 h line, which nothing follows any more.
+/// sender is known, it is not final, the tracker still follows it, the
+/// relay has it, and it has not stalled ([`in_flight_stalled`]). One whose
+/// submit reply was lost and that the relay has not shown it holds
+/// ([`TrackOutcome::MaybeSent`]) reserves nothing: a retry of THE SAME op
+/// reuses its nonce (RA5), and a different op at that nonce is one of two
+/// that cannot both land — the relay refuses it while the first is live.
+/// Nor does one past the 24 h line, which nothing follows any more.
 #[must_use]
 pub fn in_flight_ops(view: &TrackView) -> Vec<InFlightOp> {
     view.entries
@@ -1297,6 +1372,7 @@ pub fn in_flight_ops(view: &TrackView) -> Vec<InFlightOp> {
                         | TrackStatus::AcceptedNotLanded
                         | TrackStatus::Unreachable
                 )
+                && !entry.stalled
         })
         .filter_map(|entry| {
             Some(InFlightOp {
@@ -1474,6 +1550,7 @@ impl App for TxTracker {
                         .flatten(),
                     refusal_key: (status == TrackStatus::Rejected)
                         .then(|| refusal_key(entry.refusal).to_owned()),
+                    stalled: entry.stalled && !entry.status.is_terminal(),
                 }
             })
             .collect();
@@ -1536,6 +1613,11 @@ fn submitted(
         .entries
         .entry(key.clone())
         .or_insert_with(|| Entry::new(chain_id, None));
+    if fresh {
+        // Seen submitted: it starts where the relay takes an op, queued — so
+        // a first answer that says more (on the network) is a move.
+        entry.progress_mark = Some((TrackLifecycle::Queued, None, false));
+    }
     if posting {
         // A POST of this op is about to leave: held off from "not sent"
         // until its verdict. An earlier POST's entry of the identical op
@@ -1752,6 +1834,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                         RefusalReason::of(rejection_reason.as_deref(), stage.as_deref())
                             .or(entry.refusal);
                 }
+                entry.heard(status, stage.as_deref(), now_ms);
                 entry.last_status = Some((status, stage));
                 if status == TrackLifecycle::Rejected && entry.relay_tx_hash.is_some() {
                     // The relay marks every op of a MINED bundle `rejected`
@@ -1952,6 +2035,12 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         if age >= ABANDON_AGE_MS {
             entry.abandoned = true;
             continue;
+        }
+
+        // The hold's time limit: no progress for ten minutes releases the
+        // account's nonce (`in_flight_ops`).
+        if in_flight_stalled(entry.progressed_at_ms.unwrap_or(submitted_at), now_ms) {
+            entry.stalled = true;
         }
 
         // The wait window ended without a definitive receipt — classify,

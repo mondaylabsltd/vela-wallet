@@ -2570,6 +2570,7 @@ fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> T
         outcome,
         relay_tx_hash: None,
         relay_sent_at_ms: None,
+        stalled: false,
     }
 }
 
