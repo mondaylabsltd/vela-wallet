@@ -629,7 +629,7 @@ pub enum FeeOperation {
     /// chain's pool)? Asked first when the request named
     /// `Event::QuoteRequested::read_deployment`, so a read that fails is the
     /// fee's own failure — said on the fee row, the footer and the retry the
-    /// same way on every shell (issue #483) — and asked again on every retry.
+    /// same way on every shell (issue 483) — and asked again on every retry.
     /// Answered [`FeeShellResult::Deployment`]. `fresh`: as
     /// [`Self::FetchGasPrice`]'s.
     ReadDeployment {
@@ -677,7 +677,9 @@ pub enum FeeOperation {
     },
     /// The re-pricing timer: answer [`FeeShellResult::TtlElapsed`] after `ms`
     /// ([`requote_interval_ms`], the chain's block time) and the machine
-    /// prices the quote on screen again.
+    /// prices the quote on screen again. After a failure that can pass it is
+    /// the machine's own re-ask, `ms` = [`requote_delay_ms`] (PR 2 note 1):
+    /// the shell runs it like any other wait and schedules nothing itself.
     StartTtl { ms: u32 },
     /// The bound on this whole run ([`QUOTE_DEADLINE_MS`], spec 094 S9):
     /// answer [`FeeShellResult::DeadlineElapsed`] after `ms`. A run still
@@ -739,7 +741,7 @@ pub enum DeploymentRead {
     /// (`rate_limited`). The chain is out of reach, not Vela.
     Unreachable { rate_limited: bool },
     /// The read never left the app: something inside it failed (issue
-    /// #483 — a request pool nobody started). Never told as "can't reach
+    /// 483 — a request pool nobody started). Never told as "can't reach
     /// the chain". `kind` is diagnostics for the report, never shown.
     Internal { kind: String },
 }
@@ -810,7 +812,7 @@ pub enum Event {
         /// Read the account's deployment here, first
         /// ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
         /// — the read's failure is then the fee's, with the fee's words and
-        /// retry (issue #483). Absent (or `false`): the shell reads the
+        /// retry (issue 483). Absent (or `false`): the shell reads the
         /// deployment itself and passes `deployed`, as before.
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(optional))]
@@ -892,7 +894,7 @@ pub enum FeeFailure {
     /// (and becomes [`FeeFailure::EstimateFailed`]).
     WouldFail,
     /// Something inside the app failed before a read could leave it
-    /// ([`DeploymentRead::Internal`], issue #483). Never "can't reach the
+    /// ([`DeploymentRead::Internal`], issue 483). Never "can't reach the
     /// chain": the chain was never asked. Retried on the usual schedule — a
     /// shell that heals itself (a late-started pool) recovers without a tap.
     Internal,
@@ -987,7 +989,7 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
-        // The fee row's own sentence (issue #483): the browser's "page data
+        // The fee row's own sentence (issue 483): the browser's "page data
         // may be incomplete" meant nothing under a fee.
         FeeFailure::ChainRead {
             rate_limited: false,
@@ -2226,6 +2228,14 @@ pub struct Model {
     /// The number preset the request was asked in — what the view writes a
     /// shortfall's amounts in ([`FeeShortfall`]).
     number: NumberPreset,
+    /// Re-asks this machine fired by itself since the fee last stood
+    /// ([`requote_delay_ms`]'s `attempt` is this plus one).
+    retries: u32,
+    /// The run out now is a re-ask after this failure — the machine's own
+    /// ([`FeeShellResult::TtlElapsed`] in [`Phase::Failed`]) or a tap
+    /// ([`Event::Requote`]): the row keeps saying why while it runs
+    /// ([`FeeFailureView::retrying`]). Cleared when the run ends.
+    retrying_after: Option<FeeFailure>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2396,6 +2406,83 @@ pub struct FeeView {
     /// reader that predates it reads `false`.
     #[serde(default)]
     pub provisional: bool,
+    /// The failure, said once for the fee row AND the line under the held
+    /// confirm (PR 2 note 1): the row's reason, whether the core is asking
+    /// again by itself, whether that ask is out now, the row's figure and the
+    /// footer's line — one state, so the two can never disagree ("Retrying
+    /// automatically" over "Tap it to retry"). Present while `failed` is, and
+    /// through the re-ask that follows it (`failed` is `None` then and `busy`
+    /// true). `#[serde(default)]`: a reader that predates it reads `None`.
+    #[serde(default)]
+    pub failure: Option<FeeFailureView>,
+}
+
+/// The fee's failure as the row and the footer draw it ([`FeeView::failure`]).
+///
+/// The core owns the retry: a failure [`requote_delay_ms`] says can pass is
+/// asked again by the machine itself, on that schedule, through the timer
+/// every shell already runs ([`FeeOperation::StartTtl`]) — on the send form
+/// and the signing sheet alike, with no scheduler of the shell's own. So the
+/// words are the machine's to choose: while it retries, nothing asks for a
+/// tap; a tap on the row still asks at once ([`Event::Requote`]), a real new
+/// read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeeFailureView {
+    /// What failed: the run on screen's, or — while [`Self::retrying`] — the
+    /// run before the one out now.
+    pub failure: FeeFailure,
+    /// The line under the row ([`failure_reason_key`]); for
+    /// [`REASON_CHAIN_DOWN_KEY`] the shell fills `{{chain}}` with the chain's
+    /// name. `None`: no line (not the network's doing), the row keeps its
+    /// dash.
+    pub reason_key: Option<String>,
+    /// The machine asks again by itself ([`requote_delay_ms`] is `Some`): the
+    /// row and the footer both say it is retrying, and nothing asks for a
+    /// tap.
+    pub auto_retry: bool,
+    /// A re-ask after this failure is out now: the row keeps its reason and
+    /// draws its measuring sign beside it — never "Estimating…" in its place
+    /// — so nothing on screen flips while it retries.
+    pub retrying: bool,
+    /// The row's figure: [`ESTIMATE_FAILED_KEY`] ("Tap to retry") when only
+    /// a tap asks again, else `None` — the dash.
+    pub figure_key: Option<String>,
+    /// The line under the held confirm, the signing sheet's and Send's:
+    /// [`FEE_RETRYING_KEY`] while the machine retries (or a re-ask is out),
+    /// else [`FEE_FAILED_KEY`] — tap the row.
+    pub footer_key: String,
+}
+
+/// The row's figure when only a tap asks again: "Tap to retry".
+pub const ESTIMATE_FAILED_KEY: &str = "componentsUi.gas.estimateFailed";
+/// The line under the held confirm while the machine asks again by itself:
+/// "Couldn't work out the fee yet. Retrying…".
+pub const FEE_RETRYING_KEY: &str = "componentsUi.signing.confirmBlock.feeRetrying";
+/// The line under the held confirm when only a tap asks again: "Couldn't
+/// work out the fee. Tap it to retry".
+pub const FEE_FAILED_KEY: &str = "componentsUi.signing.confirmBlock.feeFailed";
+
+impl FeeFailureView {
+    /// The failure as the row and the footer say it; `retrying` — a re-ask
+    /// after it is out now.
+    #[must_use]
+    pub fn of(failure: FeeFailure, retrying: bool) -> Self {
+        let auto_retry = requote_delay_ms(failure, 1).is_some();
+        Self {
+            failure,
+            reason_key: failure_reason_key(failure).map(str::to_owned),
+            auto_retry,
+            retrying,
+            figure_key: (!auto_retry && !retrying).then(|| ESTIMATE_FAILED_KEY.to_owned()),
+            footer_key: if auto_retry || retrying {
+                FEE_RETRYING_KEY
+            } else {
+                FEE_FAILED_KEY
+            }
+            .to_owned(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2455,6 +2542,9 @@ impl App for FeePolicy {
                 // again right after asking it.
                 model.measured = None;
                 model.origin = Origin::Initial;
+                // A new question: no failure of the last one is retried here.
+                model.retries = 0;
+                model.retrying_after = None;
                 begin_pipeline(model)
             }
             Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
@@ -2476,6 +2566,12 @@ impl App for FeePolicy {
                 if is_busy(&model.phase) {
                     return Command::done();
                 }
+                // A tap on a failed row is a retry at once: the row keeps
+                // saying why while it runs, and the machine's own timer for
+                // the next one is dropped with the attempt below.
+                if let Phase::Failed(failure) = model.phase {
+                    model.retrying_after = Some(failure);
+                }
                 model.attempt += 1;
                 // A figure already older than a block is not kept on a
                 // failed refresh ([`Origin::Catchup`]).
@@ -2495,6 +2591,8 @@ impl App for FeePolicy {
                 model.attempt += 1; // in-flight card work is abandoned
                 model.pending = Pending::default();
                 model.origin = Origin::Initial;
+                model.retries = 0;
+                model.retrying_after = None;
                 model.fee_token = None;
                 if matches!(
                     model.estimate.as_ref().map(|e| &e.fee_asset),
@@ -2518,6 +2616,8 @@ impl App for FeePolicy {
                 model.form_chain_id = Some(chain_id);
                 model.pending = Pending::default();
                 model.origin = Origin::Initial;
+                model.retries = 0;
+                model.retrying_after = None;
                 model.quotes.clear();
                 model.fee_token = None;
                 model.phase = if model.estimate.is_some() {
@@ -2561,6 +2661,13 @@ impl App for FeePolicy {
         let busy = is_busy(&model.phase) && model.origin != Origin::Tick;
         let failed = match &model.phase {
             Phase::Failed(kind) => Some(*kind),
+            _ => None,
+        };
+        // One state for the row and the footer (PR 2 note 1): the failure on
+        // screen, or the one the run out now is retrying.
+        let failure = match (failed, model.retrying_after) {
+            (Some(kind), _) => Some(FeeFailureView::of(kind, false)),
+            (None, Some(kind)) if is_busy(&model.phase) => Some(FeeFailureView::of(kind, true)),
             _ => None,
         };
         // A quote is valid only for the network it was calculated on
@@ -2610,6 +2717,7 @@ impl App for FeePolicy {
             no_coin_pays,
             nothing_to_pay_from,
             provisional,
+            failure,
         }
     }
 }
@@ -2631,7 +2739,7 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
     };
     // A retry after a failure reads again, past anything the shell holds.
     let fresh = std::mem::take(&mut model.fresh_reads);
-    // Issue #483: the account read is the fee's own — its failure is said on
+    // Issue 483: the account read is the fee's own — its failure is said on
     // the fee row, the footer and the retry the same way on every shell, and
     // every retry reads it again. An account read as not deployed is read on
     // every run: its first operation may land while the sheet is open (the
@@ -2713,7 +2821,7 @@ fn begin_gathering(model: &mut Model) -> Command<FeeEffect, Event> {
 
 fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event> {
     match (&model.phase, result) {
-        // -- the account read (issue #483) -----------------------------------
+        // -- the account read (issue 483) -----------------------------------
         (Phase::ReadingAccount, FeeShellResult::Deployment { read }) => match read {
             DeploymentRead::Read { deployed } => {
                 if let Some(ctx) = model.ctx.as_mut() {
@@ -2812,6 +2920,24 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             }
             model.attempt += 1;
             model.origin = Origin::Tick;
+            begin_pipeline(model)
+        }
+        // The machine's own re-ask after a failure that can pass (PR 2 note
+        // 1): the timer [`after_failure`] set ran out. A tap since has moved
+        // the attempt on, so its answer never gets here.
+        (Phase::Failed(failure), FeeShellResult::TtlElapsed) => {
+            let failure = *failure;
+            if model.ctx.is_none() || requote_delay_ms(failure, 1).is_none() {
+                return Command::done();
+            }
+            model.attempt += 1;
+            model.retries = model.retries.saturating_add(1);
+            model.retrying_after = Some(failure);
+            model.origin = if model.stale {
+                Origin::Catchup
+            } else {
+                Origin::Initial
+            };
             begin_pipeline(model)
         }
         // The run did not price in time (spec 094 S9): it ends here, and
@@ -4166,6 +4292,8 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.phase = Phase::Quoted;
     model.stale = false;
     model.origin = Origin::Initial;
+    model.retries = 0;
+    model.retrying_after = None;
     resume_ticking(model)
 }
 
@@ -4237,6 +4365,32 @@ fn cancel_tick(model: &mut Model) -> bool {
 /// A quote that stays on screen keeps its own coin too ([`keep_quote_coin`]):
 /// the run may have moved the coin in force before it failed.
 fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
+    // The run that retried ends here, whichever way.
+    model.retrying_after = None;
+    let command = fail_now(model, kind);
+    match after_failure(model) {
+        Some(retry) => Command::all([command, retry]),
+        None => command,
+    }
+}
+
+/// The machine's own re-ask (PR 2 note 1): a run that ended on a failure
+/// [`requote_delay_ms`] says can pass is asked again after that wait, on the
+/// timer every shell already runs for this machine ([`FeeOperation::StartTtl`],
+/// answered [`FeeShellResult::TtlElapsed`] in [`Phase::Failed`]). So the send
+/// form and the signing sheet retry alike, on every shell, and the row and
+/// the footer can say so ([`FeeFailureView`]). `None` while nothing failed, or
+/// for a failure no retry fixes.
+fn after_failure(model: &Model) -> Option<Command<FeeEffect, Event>> {
+    let Phase::Failed(failure) = model.phase else {
+        return None;
+    };
+    model.ctx.as_ref()?;
+    let ms = requote_delay_ms(failure, model.retries.saturating_add(1))?;
+    Some(requests(model, vec![FeeOperation::StartTtl { ms }]))
+}
+
+fn fail_now(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
     // Whatever runs next — a catch-up now, the retry later — reads afresh.
     model.fresh_reads = true;
     match std::mem::take(&mut model.origin) {

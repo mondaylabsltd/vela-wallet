@@ -420,3 +420,36 @@ fn the_previous_transaction_s_line_holds_through_a_re_measure() {
         );
     }
 }
+
+/// PR 2 note 1: the line under the confirm says what the fee row says — the
+/// core is retrying (never "tap it" then), through the re-ask too, so the
+/// line does not flip to "working out the fee" and back; "tap it" is left for
+/// a failure only a tap retries.
+#[test]
+fn the_footer_says_what_the_fee_row_says() {
+    use vela_core::app::fee_policy::{FeeFailureView, FEE_FAILED_KEY, FEE_RETRYING_KEY};
+    let mut input = ready();
+    let fee = input.fee.as_mut().unwrap();
+    fee.failed = Some(FeeFailure::QuoteUnavailable);
+    fee.confirm_fee_ready = false;
+    fee.failure = Some(FeeFailureView::of(FeeFailure::QuoteUnavailable, false));
+    let state = confirm_state(&input);
+    assert_eq!(state.block, Some(ConfirmBlock::FeeFailed));
+    assert_eq!(state.key.as_deref(), Some(FEE_RETRYING_KEY));
+
+    // The re-ask is out: busy, `failed` gone — still the same line.
+    let fee = input.fee.as_mut().unwrap();
+    fee.failed = None;
+    fee.busy = true;
+    fee.failure = Some(FeeFailureView::of(FeeFailure::QuoteUnavailable, true));
+    let state = confirm_state(&input);
+    assert_eq!(state.block, Some(ConfirmBlock::FeeFailed));
+    assert_eq!(state.key.as_deref(), Some(FEE_RETRYING_KEY));
+
+    // Only a tap retries it.
+    let fee = input.fee.as_mut().unwrap();
+    fee.busy = false;
+    fee.failed = Some(FeeFailure::MissingPublicKey);
+    fee.failure = Some(FeeFailureView::of(FeeFailure::MissingPublicKey, false));
+    assert_eq!(confirm_state(&input).key.as_deref(), Some(FEE_FAILED_KEY));
+}

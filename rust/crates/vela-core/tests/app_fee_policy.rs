@@ -5155,7 +5155,8 @@ fn an_unanswered_simulation_is_still_the_estimate_failure() {
             outcome: FeeGasOutcome::SimulationFailed,
         },
     );
-    assert!(ops.is_empty(), "{ops:?}");
+    // Only the machine's own re-ask, on the schedule (PR 2 note 1).
+    assert_eq!(ops, vec![Op::StartTtl { ms: 3_000 }], "{ops:?}");
     assert_eq!(sut.view().failed, Some(FeeFailure::EstimateFailed));
 }
 
@@ -6180,9 +6181,10 @@ fn a_run_with_no_chain_price_by_the_deadline_is_a_chain_read_failure() {
     sut.dispatch(request(CHAIN, vec![]));
     assert!(sut.view().busy);
     let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
-    assert!(
-        ops.is_empty(),
-        "nothing more is asked by the deadline itself"
+    assert_eq!(
+        ops,
+        vec![Op::StartTtl { ms: 3_000 }],
+        "nothing more is asked by the deadline itself than the machine's own re-ask"
     );
     let view = sut.view();
     assert!(!view.busy, "no longer Estimating…");
@@ -6514,11 +6516,16 @@ fn an_unanswered_account_read_is_the_fee_s_failure_and_every_retry_reads_again()
     for rate_limited in [false, true] {
         let mut sut = Sut::new();
         sut.dispatch(reading_request());
-        assert!(sut
-            .resolve(Res::Deployment {
+        assert_eq!(
+            sut.resolve(Res::Deployment {
                 read: DeploymentRead::Unreachable { rate_limited },
-            })
-            .is_empty());
+            }),
+            vec![Op::StartTtl { ms: 3_000 }],
+            "the machine's own re-ask is set"
+        );
+        // A tap asks before the timer runs out (it is dropped with the
+        // attempt the tap moves on).
+        sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
         let view = sut.view();
         assert_eq!(view.failed, Some(FeeFailure::ChainRead { rate_limited }));
         assert!(!view.busy && !view.confirm_fee_ready && view.fee.is_none());
@@ -6627,4 +6634,169 @@ fn a_request_without_the_field_reads_nothing_itself() {
     .unwrap();
     let mut sut = Sut::new();
     assert_eq!(sut.dispatch(event), gathering_reads());
+}
+
+// ===========================================================================
+// PR 2 note 1: the core retries a failed fee itself, and says so once
+// ===========================================================================
+
+fn is_ttl(op: &Op) -> bool {
+    matches!(op, Op::StartTtl { .. })
+}
+
+/// A failure that can pass is asked again by the machine itself, on the
+/// schedule (3 s, 6 s, then every 8 s), through the timer every shell already
+/// runs — so the send form and the signing sheet retry alike, with nothing
+/// scheduled by a shell. Each re-ask is a real new read.
+#[test]
+fn a_failure_that_can_pass_is_retried_by_the_machine_itself() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    };
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 3_000 }]);
+    for wait in [6_000, 8_000, 8_000] {
+        // The timer runs out: the account is read again, afresh.
+        assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+        assert!(sut.view().busy);
+        assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: wait }]);
+    }
+    // It comes back: the fee lands, and the schedule starts over next time.
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, fresh_gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    assert_eq!(view.failure, None);
+}
+
+/// The row and the footer say ONE truth (the owner's rule): while the
+/// machine retries by itself the footer never asks for a tap, and through
+/// the re-ask the row keeps its reason — nothing flips to "Estimating…" and
+/// back every few seconds.
+#[test]
+fn the_row_and_the_footer_say_the_same_thing_through_the_retry() {
+    use vela_core::app::fee_policy::{FeeFailureView, FEE_RETRYING_KEY, REASON_CHAIN_DOWN_KEY};
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    let failed = sut.view();
+    let failure = failed.failure.clone().expect("the failure is said");
+    assert_eq!(
+        failure,
+        FeeFailureView {
+            failure: FeeFailure::ChainRead {
+                rate_limited: false
+            },
+            reason_key: Some(REASON_CHAIN_DOWN_KEY.to_owned()),
+            auto_retry: true,
+            retrying: false,
+            figure_key: None,
+            footer_key: FEE_RETRYING_KEY.to_owned(),
+        }
+    );
+    // The re-ask is out: `failed` is gone and `busy` is up, as before — but
+    // the failure stays said, now marked as being retried.
+    sut.resolve(Res::TtlElapsed);
+    let retrying = sut.view();
+    assert!(retrying.busy && retrying.failed.is_none());
+    let during = retrying.failure.expect("still said while it retries");
+    assert!(during.retrying);
+    assert_eq!(during.reason_key, failure.reason_key);
+    assert_eq!(during.footer_key, failure.footer_key);
+    assert_eq!(during.figure_key, None);
+}
+
+/// A tap on a failed row asks at once, and the machine's own timer for the
+/// next ask is dropped with the attempt the tap moved on — never a second run
+/// on top.
+#[test]
+fn a_tap_asks_at_once_and_the_pending_timer_is_dropped() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Internal {
+            kind: "rpc: before_boot".to_owned(),
+        },
+    });
+    assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+    let view = sut.view();
+    assert!(view.failure.is_some_and(|failure| failure.retrying));
+    // The old timer runs out late: its attempt is over, nothing starts.
+    assert!(sut.resolve_matching(is_ttl, Res::TtlElapsed).is_empty());
+    assert!(sut.view().busy);
+}
+
+/// A failure no retry fixes is not retried, and only then does the footer ask
+/// for the tap — and the row's figure says "Tap to retry".
+#[test]
+fn a_failure_only_a_tap_retries_asks_for_the_tap() {
+    use vela_core::app::fee_policy::{ESTIMATE_FAILED_KEY, FEE_FAILED_KEY};
+    let mut sut = Sut::new();
+    let Event::QuoteRequested {
+        chain_id,
+        account,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment,
+        ..
+    } = request(CHAIN, vec![])
+    else {
+        unreachable!()
+    };
+    // An undeployed account without its public key can never be estimated.
+    let ops = sut.dispatch(Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed: false,
+        public_key_available: false,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment,
+    });
+    assert!(!ops.iter().any(is_ttl), "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::MissingPublicKey));
+    let failure = view.failure.expect("said");
+    assert!(!failure.auto_retry && !failure.retrying);
+    assert_eq!(failure.reason_key, None);
+    assert_eq!(failure.figure_key.as_deref(), Some(ESTIMATE_FAILED_KEY));
+    assert_eq!(failure.footer_key, FEE_FAILED_KEY);
+}
+
+/// A new question forgets the old one's failure and its schedule.
+#[test]
+fn a_new_request_starts_the_schedule_over() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable { rate_limited: true },
+    };
+    sut.resolve(unreachable());
+    sut.resolve(Res::TtlElapsed);
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 6_000 }]);
+    sut.drop_matching(is_ttl);
+    // Read afresh, as anything after a failure is.
+    assert_eq!(sut.dispatch(reading_request()), read_deployment(true));
+    assert!(sut.view().failure.is_none(), "nothing retried here");
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 3_000 }]);
 }
