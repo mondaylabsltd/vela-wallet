@@ -616,7 +616,28 @@ pub enum FeeOperation {
     /// The three chain price signals (`safe-transaction.ts:1949-1985`).
     /// `want_tip` is false on Tempo, where `eth_maxPriorityFeePerGas` is
     /// meaningless and would corrupt the stablecoin reimbursement.
-    FetchGasPrice { chain_id: u32, want_tip: bool },
+    FetchGasPrice {
+        chain_id: u32,
+        want_tip: bool,
+        /// A retry after a failure: read the chain again, past any reading
+        /// the shell holds (its fee-signal cache) — a retry is a real new
+        /// read, never the answer that just failed. `#[serde(default)]`.
+        #[serde(default)]
+        fresh: bool,
+    },
+    /// Is the account deployed on this chain (`eth_getCode` through the
+    /// chain's pool)? Asked first when the request named
+    /// `Event::QuoteRequested::read_deployment`, so a read that fails is the
+    /// fee's own failure — said on the fee row, the footer and the retry the
+    /// same way on every shell (issue #483) — and asked again on every retry.
+    /// Answered [`FeeShellResult::Deployment`]. `fresh`: as
+    /// [`Self::FetchGasPrice`]'s.
+    ReadDeployment {
+        chain_id: u32,
+        account: String,
+        #[serde(default)]
+        fresh: bool,
+    },
     /// `pimlico_getUserOperationGasPrice` for one tier.
     FetchBundlerQuote { chain_id: u32, tier: FeeTier },
     /// `vela_getInBandGasQuote` — every fee asset in one address-only call.
@@ -701,6 +722,26 @@ pub enum FeeShellResult {
     TtlElapsed,
     /// [`FeeOperation::StartDeadline`]'s time ran out.
     DeadlineElapsed,
+    /// The answer to [`FeeOperation::ReadDeployment`].
+    Deployment {
+        read: DeploymentRead,
+    },
+}
+
+/// What the account read came back with ([`FeeOperation::ReadDeployment`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum DeploymentRead {
+    /// The chain answered.
+    Read { deployed: bool },
+    /// The chain's nodes did not answer — or answered only with rate limits
+    /// (`rate_limited`). The chain is out of reach, not Vela.
+    Unreachable { rate_limited: bool },
+    /// The read never left the app: something inside it failed (issue
+    /// #483 — a request pool nobody started). Never told as "can't reach
+    /// the chain". `kind` is diagnostics for the report, never shown.
+    Internal { kind: String },
 }
 
 impl Operation for FeeOperation {
@@ -766,6 +807,14 @@ pub enum Event {
         /// shell that does not send it reads `1,234.56`.
         #[serde(default)]
         number: NumberPreset,
+        /// Read the account's deployment here, first
+        /// ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
+        /// — the read's failure is then the fee's, with the fee's words and
+        /// retry (issue #483). `#[serde(default)]`: a shell that does not
+        /// send it reads the deployment itself and passes `deployed`, as
+        /// before.
+        #[serde(default)]
+        read_deployment: bool,
     },
     /// A fee-asset chip tap. `None` = native.
     SelectFeeAsset { token: Option<String> },
@@ -842,6 +891,11 @@ pub enum FeeFailure {
     /// ANSWER, where [`FeeGasOutcome::SimulationFailed`] is no answer at all
     /// (and becomes [`FeeFailure::EstimateFailed`]).
     WouldFail,
+    /// Something inside the app failed before a read could leave it
+    /// ([`DeploymentRead::Internal`], issue #483). Never "can't reach the
+    /// chain": the chain was never asked. Retried on the usual schedule — a
+    /// shell that heals itself (a late-started pool) recovers without a tap.
+    Internal,
 }
 
 /// The bound on one whole quote (spec 094 S9, 089 F06). Offline, a run's
@@ -875,7 +929,8 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         | FeeFailure::FeeTokenUnavailable
         | FeeFailure::EstimateFailed
         | FeeFailure::GasQuoteTooHigh
-        | FeeFailure::ChainRead { .. } => Some(match attempt {
+        | FeeFailure::ChainRead { .. }
+        | FeeFailure::Internal => Some(match attempt {
             0 | 1 => 3_000,
             2 => 6_000,
             _ => 8_000,
@@ -885,6 +940,15 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         }
     }
 }
+
+/// The fee row's reason when the chain's nodes cannot be reached
+/// (`{{chain}}` = the chain's name): "Can't reach {{chain}} to price this.
+/// Trying again…" — the fee's own words, never the browser's.
+pub const REASON_CHAIN_DOWN_KEY: &str = "componentsUi.gas.reasonChainDown";
+
+/// The fee row's reason when the read never left the app
+/// ([`FeeFailure::Internal`]).
+pub const REASON_INTERNAL_KEY: &str = "componentsUi.gas.reasonInternal";
 
 /// The line under a refused fee coin's row: `{{need}}` and `{{have}}` are its
 /// [`FeeShortfall`]'s, written by the core (issue #408).
@@ -907,8 +971,9 @@ pub const NO_COIN_PAYS_KEY: &str = "componentsUi.gas.noCoinPays";
 /// - the relay's gas price is past the chain's by more than
 ///   `MAX_QUOTE_VS_CHAIN_MULTIPLE` → `componentsUi.gas.reasonQuoteHigh`;
 /// - a chain node rate-limits the read → `home.balanceDetailStatusRetrying`;
-/// - a chain node cannot be reached → `explore.chainDown`, whose `{{chain}}`
-///   the shell fills with the chain's name.
+/// - a chain node cannot be reached → [`REASON_CHAIN_DOWN_KEY`], whose
+///   `{{chain}}` the shell fills with the chain's name;
+/// - the read never left the app → [`REASON_INTERNAL_KEY`].
 ///
 /// G48: a public node's `eth_getCode` rate limit on Ethereum read "无法连接
 /// Vela 服务" with no fault anywhere near Vela. The four relay failures used to
@@ -922,9 +987,12 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
+        // The fee row's own sentence (issue #483): the browser's "page data
+        // may be incomplete" meant nothing under a fee.
         FeeFailure::ChainRead {
             rate_limited: false,
-        } => Some("explore.chainDown"),
+        } => Some(REASON_CHAIN_DOWN_KEY),
+        FeeFailure::Internal => Some(REASON_INTERNAL_KEY),
         // Not the network's doing (083): the shell draws the relay's answer
         // as the operation's own warning, never as a fee that failed to load.
         FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed | FeeFailure::WouldFail => {
@@ -1967,6 +2035,12 @@ struct RequestCtx {
     chain_id: u32,
     account: String,
     deployed: bool,
+    /// The request asked this machine to read the deployment
+    /// (`read_deployment`).
+    reads_deployment: bool,
+    /// …and it has not been read yet, or the last read failed. Cleared by a
+    /// read that answers.
+    needs_deployment_read: bool,
     public_key_available: bool,
     tier: FeeTier,
     calls: Vec<FeeCall>,
@@ -2092,6 +2166,8 @@ enum PricePlan {
 enum Phase {
     #[default]
     Idle,
+    /// Waiting for the account read ([`FeeOperation::ReadDeployment`]).
+    ReadingAccount,
     /// Waiting for the parallel context reads.
     Gathering,
     /// Waiting for the UserOp gas simulation.
@@ -2102,6 +2178,9 @@ enum Phase {
 
 #[derive(Default)]
 pub struct Model {
+    /// The next run follows a failure: its reads go past anything the shell
+    /// holds ([`FeeOperation::FetchGasPrice::fresh`]).
+    fresh_reads: bool,
     /// The chain the form currently targets — the estimate is exposed only
     /// while its own `chain_id` matches (invariant ①,
     /// `useSendController.ts:119-121`).
@@ -2344,6 +2423,7 @@ impl App for FeePolicy {
                 fee_token,
                 auto_fee_token,
                 number,
+                read_deployment,
             } => {
                 model.attempt += 1;
                 model.number = number;
@@ -2352,6 +2432,8 @@ impl App for FeePolicy {
                     chain_id,
                     account,
                     deployed,
+                    reads_deployment: read_deployment,
+                    needs_deployment_read: read_deployment,
                     public_key_available,
                     tier,
                     calls,
@@ -2533,7 +2615,10 @@ impl App for FeePolicy {
 }
 
 fn is_busy(phase: &Phase) -> bool {
-    matches!(phase, Phase::Gathering | Phase::Estimating(_))
+    matches!(
+        phase,
+        Phase::ReadingAccount | Phase::Gathering | Phase::Estimating(_)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -2544,7 +2629,44 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
     let Some(ctx) = model.ctx.clone() else {
         return Command::done();
     };
+    // A retry after a failure reads again, past anything the shell holds.
+    let fresh = std::mem::take(&mut model.fresh_reads);
+    // Issue #483: the account read is the fee's own — its failure is said on
+    // the fee row, the footer and the retry the same way on every shell, and
+    // every retry reads it again. An account read as not deployed is read on
+    // every run: its first operation may land while the sheet is open (the
+    // one this request waited for), and its initCode is then no longer this
+    // one's to pay for.
+    if ctx.reads_deployment && (ctx.needs_deployment_read || !ctx.deployed) {
+        model.pending = Pending::default();
+        model.refused.clear();
+        model.phase = Phase::ReadingAccount;
+        model.fresh_reads = fresh;
+        return requests(
+            model,
+            vec![
+                FeeOperation::ReadDeployment {
+                    chain_id: ctx.chain_id,
+                    account: ctx.account.clone(),
+                    fresh,
+                },
+                FeeOperation::StartDeadline {
+                    ms: QUOTE_DEADLINE_MS,
+                },
+            ],
+        );
+    }
+    model.fresh_reads = fresh;
+    begin_gathering(model)
+}
+
+/// The run past the account read: the context reads, in parallel.
+fn begin_gathering(model: &mut Model) -> Command<FeeEffect, Event> {
+    let Some(ctx) = model.ctx.clone() else {
+        return Command::done();
+    };
     let tempo = is_tempo_chain(ctx.chain_id);
+    let fresh = std::mem::take(&mut model.fresh_reads);
     // Invariant ⑤ (`safe-transaction.ts:634-642`): an undeployed account
     // without its public key cannot build the real initCode — a draft that
     // cannot match the final operation must never be estimated.
@@ -2566,6 +2688,7 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
         // Tempo is excluded from the tip query — attodollar gas makes
         // eth_maxPriorityFeePerGas meaningless (`safe-transaction.ts:1943`).
         want_tip: !tempo,
+        fresh,
     }];
     if tempo {
         operations.push(FeeOperation::FetchFeeRecipient {
@@ -2590,6 +2713,36 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
 
 fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event> {
     match (&model.phase, result) {
+        // -- the account read (issue #483) -----------------------------------
+        (Phase::ReadingAccount, FeeShellResult::Deployment { read }) => match read {
+            DeploymentRead::Read { deployed } => {
+                if let Some(ctx) = model.ctx.as_mut() {
+                    ctx.deployed = deployed;
+                    ctx.needs_deployment_read = false;
+                }
+                // The read's own deadline is spent: anything still out for it
+                // belongs to the read, not to the run that follows.
+                model.attempt += 1;
+                begin_gathering(model)
+            }
+            DeploymentRead::Unreachable { rate_limited } => {
+                model.attempt += 1;
+                fail(model, FeeFailure::ChainRead { rate_limited })
+            }
+            DeploymentRead::Internal { .. } => {
+                model.attempt += 1;
+                fail(model, FeeFailure::Internal)
+            }
+        },
+        (Phase::ReadingAccount, FeeShellResult::DeadlineElapsed) => {
+            model.attempt += 1;
+            fail(
+                model,
+                FeeFailure::ChainRead {
+                    rate_limited: false,
+                },
+            )
+        }
         (
             Phase::Gathering,
             FeeShellResult::GasPrice {
@@ -4084,6 +4237,8 @@ fn cancel_tick(model: &mut Model) -> bool {
 /// A quote that stays on screen keeps its own coin too ([`keep_quote_coin`]):
 /// the run may have moved the coin in force before it failed.
 fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
+    // Whatever runs next — a catch-up now, the retry later — reads afresh.
+    model.fresh_reads = true;
     match std::mem::take(&mut model.origin) {
         Origin::Initial => {
             model.phase = Phase::Failed(kind);

@@ -23,8 +23,8 @@ use vela_core::app::fee_policy::{
     reserve_fee_token, reserve_native_gas, same_asset_fee_limit, tempo_call_gas_limit,
     tempo_expected_gas, tempo_fee_token_units, tempo_minimum_fee_token_units, tempo_quote_is_stale,
     tempo_reimbursement, tempo_settlement_split, tempo_split_safety_gas, tier_multiplier,
-    to_base_units, usd_price_scaled, AssetPricing, Event, FeeAsset, FeeAssetKind, FeeAssetQuote,
-    FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
+    to_base_units, usd_price_scaled, AssetPricing, DeploymentRead, Event, FeeAsset, FeeAssetKind,
+    FeeAssetQuote, FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
     FeeOperation as Op, FeePolicy, FeeShellResult as Res, FeeShortfall, FeeTier, GasSignals,
     MultiTokenSpec, TEMPO_BASE_FEE_ATTO, TEMPO_CALL_GAS_PER_SUBCALL, TEMPO_COST_BUFFER_GAS,
     TEMPO_DEFAULT_FEE_TOKEN, TEMPO_DEPLOYED_GAS_EST, TEMPO_DEPLOY_GAS_EST,
@@ -145,6 +145,7 @@ fn request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
 /// and signing surfaces use once a chip has been tapped.
 fn request_in(chain_id: u32, calls: Vec<FeeCall>, fee_token: Option<&str>) -> Event {
     Event::QuoteRequested {
+        read_deployment: false,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -221,6 +222,7 @@ fn quoted_native(calls: Vec<FeeCall>) -> Sut {
         ops,
         vec![
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: CHAIN,
                 want_tip: true
             },
@@ -1681,6 +1683,7 @@ fn request_with_preset(number: NumberPreset) -> Event {
         unreachable!("request() builds a QuoteRequested")
     };
     Event::QuoteRequested {
+        read_deployment: false,
         chain_id,
         account,
         deployed,
@@ -2374,6 +2377,7 @@ fn requote_reuses_the_same_transaction_shape() {
 fn gathering_reads() -> Vec<Op> {
     vec![
         Op::FetchGasPrice {
+            fresh: false,
             chain_id: CHAIN,
             want_tip: true,
         },
@@ -2386,6 +2390,17 @@ fn gathering_reads() -> Vec<Op> {
             account: ACCOUNT.to_owned(),
         },
     ]
+}
+
+/// [`gathering_reads`] of a run that follows a failure: it reads the chain
+/// afresh, past anything the shell holds (issue #483 — a retry is a real new
+/// read).
+fn fresh_gathering_reads() -> Vec<Op> {
+    let mut reads = gathering_reads();
+    if let Some(Op::FetchGasPrice { fresh, .. }) = reads.first_mut() {
+        *fresh = true;
+    }
+    reads
 }
 
 fn gas_at(wei: u128) -> Res {
@@ -2453,7 +2468,11 @@ fn a_failed_tick_catches_up_visibly_and_a_failed_catch_up_takes_the_figure_away(
     let mut sut = quoted_native(vec![]);
     sut.resolve(Res::TtlElapsed);
     let ops = sut.resolve(gas_unread());
-    assert_eq!(ops, gathering_reads(), "the catch-up starts at once");
+    assert_eq!(
+        ops,
+        fresh_gathering_reads(),
+        "the catch-up starts at once, reading afresh"
+    );
     // The failed tick's two other reads were superseded: drop them.
     sut.drop_oldest();
     sut.drop_oldest();
@@ -2579,7 +2598,7 @@ fn a_tick_keeps_the_coin_on_screen_and_the_catch_up_picks_again() {
     assert_eq!(sut.view().fee_token, picked);
     assert!(!sut.view().busy);
     // Priced: the USDC cannot pay → the tick fails → a visible catch-up.
-    assert_eq!(sut.resolve(estimated()), gathering_reads());
+    assert_eq!(sut.resolve(estimated()), fresh_gathering_reads());
     assert!(sut.view().busy);
     sut.resolve(gas_ok());
     sut.resolve(bundler_ok());
@@ -2924,6 +2943,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
 fn undeployed_without_public_key_never_estimates() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2942,6 +2962,7 @@ fn undeployed_without_public_key_never_estimates() {
     // With the key available, the undeployed account estimates normally.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2960,6 +2981,7 @@ fn undeployed_without_public_key_never_estimates() {
     // Tempo send on web while native quoted it.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3267,6 +3289,7 @@ fn tempo_transfer_prices_the_stablecoin_reimbursement_statically() {
         vec![
             // attodollar gas makes eth_maxPriorityFeePerGas meaningless.
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: TEMPO_CHAIN,
                 want_tip: false
             },
@@ -3426,6 +3449,7 @@ fn tempo_undeployed_contract_call_keeps_the_static_model() {
     };
     let mut sut = Sut::new();
     sut.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3504,6 +3528,7 @@ fn tempo_fee_asset_switch_reprices_through_the_tempo_model() {
         ops,
         vec![
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: TEMPO_CHAIN,
                 want_tip: false
             },
@@ -3964,6 +3989,7 @@ fn erc20_transfer_call() -> FeeCall {
 
 fn request_undeployed(calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
+        read_deployment: false,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -4347,6 +4373,7 @@ fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
 
 fn auto_request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
+        read_deployment: false,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -4710,11 +4737,18 @@ fn the_fee_row_s_reason_is_the_core_s_key() {
         failure_reason_key(FeeFailure::ChainRead { rate_limited: true }),
         Some("home.balanceDetailStatusRetrying")
     );
+    // Issue #483: the fee row's own sentence, never the browser's "page
+    // data may be incomplete" — and an internal fault is never "can't reach
+    // the chain".
     assert_eq!(
         failure_reason_key(FeeFailure::ChainRead {
             rate_limited: false
         }),
-        Some("explore.chainDown")
+        Some("componentsUi.gas.reasonChainDown")
+    );
+    assert_eq!(
+        failure_reason_key(FeeFailure::Internal),
+        Some("componentsUi.gas.reasonInternal")
     );
     for failure in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
         assert_eq!(failure_reason_key(failure), None, "{failure:?}");
@@ -5095,6 +5129,7 @@ fn a_refusal_of_a_chosen_coin_fails_as_itself_and_the_picker_still_works() {
     assert_eq!(
         ops.first(),
         Some(&Op::FetchGasPrice {
+            fresh: true,
             chain_id: CHAIN,
             want_tip: true
         }),
@@ -5190,6 +5225,7 @@ fn balance_changes_that_land_on_a_failed_quote_price_it_again_in_a_coin_that_pay
     assert_eq!(
         ops.first(),
         Some(&Op::FetchGasPrice {
+            fresh: true,
             chain_id: CHAIN,
             want_tip: true
         }),
@@ -6398,4 +6434,197 @@ fn an_unpriced_coin_with_a_published_dust_floor_still_pays_a_cent() {
     let sut = dust_quote(vec![okb], None);
     // $0.01 at $125 = 0.00008 OKB.
     assert_eq!(amount_of(&sut), "80000000000000");
+}
+
+// ===========================================================================
+// Issue #483: the account read is the fee's own
+// ===========================================================================
+
+fn reading_request() -> Event {
+    let Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed,
+        public_key_available,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        ..
+    } = request(CHAIN, vec![])
+    else {
+        unreachable!()
+    };
+    Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed,
+        public_key_available,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment: true,
+    }
+}
+
+fn read_deployment(fresh: bool) -> Vec<Op> {
+    vec![Op::ReadDeployment {
+        chain_id: CHAIN,
+        account: ACCOUNT.to_owned(),
+        fresh,
+    }]
+}
+
+/// Asked to, the machine reads the account first, then prices on what it
+/// read — the read is part of the quote, not the shell's prelude to it.
+#[test]
+fn the_account_read_comes_first_and_the_quote_follows_it() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.dispatch(reading_request()), read_deployment(false));
+    assert!(sut.view().busy, "the fee is being worked out");
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateUserOpGas { deployed: true, .. }]
+        ),
+        "priced on the deployment read: {ops:?}"
+    );
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    assert!(sut.view().confirm_fee_ready);
+    // A deployed account is not read again by the tick.
+    assert_eq!(sut.resolve(Res::TtlElapsed), gathering_reads());
+}
+
+/// The chain's nodes do not answer the account read: the fee says so, on the
+/// fee row, in the fee's own words — the same failure, footer and retry on
+/// every shell — and the retry reads the account again, afresh.
+#[test]
+fn an_unanswered_account_read_is_the_fee_s_failure_and_every_retry_reads_again() {
+    use vela_core::app::fee_policy::{failure_reason_key, requote_delay_ms};
+    for rate_limited in [false, true] {
+        let mut sut = Sut::new();
+        sut.dispatch(reading_request());
+        assert!(sut
+            .resolve(Res::Deployment {
+                read: DeploymentRead::Unreachable { rate_limited },
+            })
+            .is_empty());
+        let view = sut.view();
+        assert_eq!(view.failed, Some(FeeFailure::ChainRead { rate_limited }));
+        assert!(!view.busy && !view.confirm_fee_ready && view.fee.is_none());
+        assert!(failure_reason_key(FeeFailure::ChainRead { rate_limited }).is_some());
+        assert!(requote_delay_ms(FeeFailure::ChainRead { rate_limited }, 1).is_some());
+        // The retry (a tap, or the schedule's own) is a real new read.
+        assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+        let ops = sut.resolve(Res::Deployment {
+            read: DeploymentRead::Read { deployed: true },
+        });
+        assert_eq!(ops, fresh_gathering_reads(), "and the chain is read afresh");
+    }
+}
+
+/// A read that never left the app is an internal fault — never "can't reach
+/// the chain" — with its own sentence, and it is retried like the rest.
+#[test]
+fn an_internal_fault_is_never_told_as_the_chain_being_down() {
+    use vela_core::app::fee_policy::{failure_reason_key, requote_delay_ms};
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Internal {
+            kind: "rpc: before_boot".to_owned(),
+        },
+    });
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::Internal));
+    assert_eq!(
+        failure_reason_key(FeeFailure::Internal),
+        Some("componentsUi.gas.reasonInternal")
+    );
+    assert!(requote_delay_ms(FeeFailure::Internal, 3).is_some());
+    assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+}
+
+/// A read that never answers is bounded like the rest of the run: the chain
+/// is out of reach.
+#[test]
+fn an_account_read_that_never_answers_is_bounded() {
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(reading_request());
+    assert!(ops.contains(&Op::StartDeadline {
+        ms: vela_core::app::fee_policy::QUOTE_DEADLINE_MS
+    }));
+    sut.resolve_matching(
+        |op| matches!(op, Op::StartDeadline { .. }),
+        Res::DeadlineElapsed,
+    );
+    assert_eq!(
+        sut.view().failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        })
+    );
+    // The read's late answer changes nothing.
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert!(sut.view().failed.is_some());
+}
+
+/// An account read as not deployed is read again on every run: its first
+/// operation may land while the sheet is open.
+#[test]
+fn an_undeployed_account_is_read_again_on_every_run() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: false },
+    });
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateUserOpGas {
+                deployed: false,
+                ..
+            }]
+        ),
+        "{ops:?}"
+    );
+    sut.resolve(estimated());
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(false));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, gathering_reads(), "now deployed");
+}
+
+/// A shell that predates the field reads the deployment itself, as before.
+#[test]
+fn a_request_without_the_field_reads_nothing_itself() {
+    let event: Event = serde_json::from_value(serde_json::json!({
+        "type": "quote_requested",
+        "chain_id": CHAIN,
+        "account": ACCOUNT,
+        "deployed": true,
+        "public_key_available": true,
+        "tier": "fast",
+        "calls": [],
+        "fee_token": null,
+    }))
+    .unwrap();
+    let mut sut = Sut::new();
+    assert_eq!(sut.dispatch(event), gathering_reads());
 }

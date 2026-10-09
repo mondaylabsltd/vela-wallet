@@ -286,6 +286,7 @@ fn quote(
 ) -> Result<Quote, FeeFailure> {
     let mut sut = Sut::new();
     sut.0.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: CHAIN,
         account: SAFE.to_owned(),
         deployed: op.deployed,
@@ -782,6 +783,7 @@ fn a_quote_on_ethereum_is_priced_again_every_slot() {
     let op = measured_ops().remove(0);
     let mut sut = Sut::new();
     sut.0.dispatch(Event::QuoteRequested {
+        read_deployment: false,
         chain_id: CHAIN,
         account: SAFE.to_owned(),
         deployed: true,
