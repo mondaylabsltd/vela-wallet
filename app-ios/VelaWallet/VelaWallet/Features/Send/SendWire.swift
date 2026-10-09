@@ -342,6 +342,11 @@ struct SendReceiptWire: Decodable, Equatable {
     let status: String
     /// `fee_hold` / `fee_rejected` / `relay_funding`.
     let holdReason: String?
+    /// The relay refused it (PR 2 §3): the corpus key of the sentence that
+    /// says why — the fee words only for a fee refusal, "another transaction
+    /// from this account went first" for a spent nonce, else "the network
+    /// refused it, nothing was sent". Drawn in place of `holdReason`'s words.
+    var refusalKey: String? = nil
     /// `split` / `multi_select`; absent for a plain transfer.
     let kind: String?
     let transfers: [SendReceiptTransferWire]
@@ -356,6 +361,14 @@ struct SendReceiptWire: Decodable, Equatable {
     let usdValue: Double
     let submittedAtMs: Double?
     let typicalInclusionS: Int?
+}
+
+/// `SendView.previous_pending`: the transaction this send waits for.
+struct SendPreviousPendingWire: Decodable, Equatable {
+    let chainId: Int
+    let userOpHash: String
+    /// `componentsUi.signing.confirmBlock.previousPending`.
+    let key: String
 }
 
 /// A relay stop's report, whole (issue #466): `what` (its first line is the
@@ -480,8 +493,13 @@ struct SendViewWire: Decodable, Equatable {
     let sending: Bool
     /// `idle` / `preparing` / `signing` / `submitting` / `confirmed` / `error`.
     let txStatus: String
-    /// `generic` / `bundler_fund` / `venue_blocked`.
+    /// `generic` / `bundler_fund` / `venue_blocked` / `previous_pending`.
     let txError: String?
+    /// PR 2 §3: this account's previous transaction on this network is still
+    /// in flight, so the confirm is held (`can_confirm` false) and says so —
+    /// `key`, one line under the held confirm, whatever the fee says. Opens by
+    /// itself when the tracker says the first is final or stalled.
+    var previousPending: SendPreviousPendingWire?
     /// Spec 102: with `txError` = `venue_blocked`, why this account cannot
     /// sign here (`VenueBlock::key()` with its domains). Optional on the wire.
     var txVenueBlock: VenueBlockWire?

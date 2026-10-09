@@ -218,7 +218,9 @@ final class SendExecutor {
                 chainId: (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
                 maybeSent: operation["maybe_sent"] as? Bool ?? false,
                 submitBlock: (operation["submit_block"] as? NSNumber)?.intValue,
-                admitted: operation["admitted"] as? Bool ?? false
+                admitted: operation["admitted"] as? Bool ?? false,
+                // Who signed it (PR 2 §3) — what holds this account's nonce.
+                sender: operation["sender"] as? String
             ))
             return CoreJSON.string(["type": "track_handed_off"])
 
@@ -719,6 +721,10 @@ final class SendExecutor {
             return ["type": "other", "message": userOpNotSentDetail()]
         // The wallet's own send has no page to lose; kept total.
         case .askerGone: return ["type": "passkey_cancelled"]
+        // PR 2 §3: the relay holds this account's nonce for an earlier op —
+        // the confirm says "waiting for your last transaction on this
+        // network" with Try again, never "other".
+        case .previousPending: return ["type": "previous_pending"]
         }
     }
 

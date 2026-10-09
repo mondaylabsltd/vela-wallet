@@ -904,7 +904,7 @@ final class SigningController {
         ports.trackSubmitted(TrackSubmission(
             userOpHash: handoff.userOpHash, recordIds: handoff.recordIds, chainId: handoff.chainId,
             maybeSent: handoff.maybeSent, submitBlock: handoff.submitBlock,
-            admitted: handoff.admitted
+            admitted: handoff.admitted, sender: handoff.sender
         ))
     }
 
@@ -935,6 +935,16 @@ final class SigningController {
     func trackerChanged(_ view: TrackViewWire) {
         trackerView = view
         forwardTracked()
+    }
+
+    /// The tracker's `in_flight_ops` (PR 2 §3), as the core computed it from
+    /// its own view: the sheet's confirm is held — `previous_pending`, one
+    /// line ahead of every fee block — while this account's previous op on
+    /// the request's chain is in flight. Signatures never wait. Forwarded on
+    /// every render; the machine dedupes an identical list.
+    func inFlightChanged(_ opsJson: String) {
+        guard let ops = (try? JSONSerialization.jsonObject(with: Data(opsJson.utf8))) as? [Any] else { return }
+        dispatchSign(["type": "in_flight_ops", "ops": ops])
     }
 
     /// Only past `op_submitted` (the core takes it no earlier) and only while

@@ -51,11 +51,28 @@ struct TrackEntryWire: Decodable, Equatable {
     /// (spec 099 R6). `nil` while the relay still holds it: the landing says
     /// what the relay is doing and counts nothing down (`landingPace`).
     var relaySentAtMs: Double? = nil
+    /// The account that signed it, lower-cased (PR 2 §3). The hold reads it
+    /// from the core's own view JSON (`TrackerStore.inFlightOpsJson`); it is
+    /// here so a re-encoded entry still says it.
+    var sender: String? = nil
+    /// `rejected` only: why the relay refused it — `RefusalReason`'s wire
+    /// name (`fee_below_market`, `nonce_used`, …, `unknown`).
+    var refusal: String? = nil
+    /// `rejected` only: the corpus key of the sentence that says why — the
+    /// fee sentence only for `fee_below_market`, `componentsUi.signing.wentFirst`
+    /// for `nonce_used`, else `componentsUi.signing.refused`. Every surface
+    /// that tells a refusal draws THIS.
+    var refusalKey: String? = nil
+    /// Not final, and the relay has said nothing new of it for ten minutes:
+    /// it no longer holds its account's nonce. Off the wire while false.
+    var stalled: Bool? = nil
 
     /// This entry as the core's own `TrackEntryView` JSON — what
-    /// `signEndingState` and `sendReceiptOutcomeOf` read.
+    /// `signEndingState` and `sendReceiptOutcomeOf` read. Carries every field
+    /// the core's view does (PR 2: the refusal's reason and key, the sender
+    /// and the stall), so a re-encoded entry tells a refusal by its reason.
     var coreJSON: String {
-        CoreJSON.string([
+        var object: [String: Any] = [
             "user_op_hash": userOpHash,
             "chain_id": chainId,
             "record_ids": recordIds,
@@ -66,7 +83,12 @@ struct TrackEntryWire: Decodable, Equatable {
             "outcome": outcome ?? "landing",
             "relay_tx_hash": relayTxHash.map { $0 as Any } ?? NSNull(),
             "relay_sent_at_ms": relaySentAtMs.map { $0 as Any } ?? NSNull(),
-        ])
+        ]
+        if let sender { object["sender"] = sender }
+        if let refusal { object["refusal"] = refusal }
+        if let refusalKey { object["refusal_key"] = refusalKey }
+        if stalled == true { object["stalled"] = true }
+        return CoreJSON.string(object)
     }
 }
 

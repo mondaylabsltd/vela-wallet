@@ -1574,7 +1574,12 @@ struct RootView: View {
         // The answer follows what the tracker knows (spec 082 RJ4): every
         // view reaches this request for as long as it lives — a sheet closed
         // mid-submit included (`retiredSigning`), whose page still waits.
-        tracker.follow(controller) { [weak controller] view in controller?.trackerChanged(view) }
+        tracker.follow(controller) { [weak controller, tracker] view in
+            controller?.trackerChanged(view)
+            // The ops holding a nonce (PR 2 §3): the sheet's confirm waits
+            // for this account's previous op on the request's chain.
+            controller?.inFlightChanged(tracker.inFlightOpsJson)
+        }
     }
 
     // MARK: - Split (spec 054)
@@ -1689,7 +1694,7 @@ struct RootView: View {
                                 // rows, narrowed by the core to this address
                                 // (`contact_filter_changed`, spec 093).
                                 rows: activity.feed?.contactRows ?? [],
-                                hidden: wallet.balance?.hidden ?? false, loc: loc,
+                                hidden: activity.feed?.hidden ?? (wallet.balance?.hidden ?? false), loc: loc,
                                 form: contactForm(), groupPick: groupPick,
                                 networks: walletNetworks
                             ),
@@ -2226,7 +2231,9 @@ struct RootView: View {
         if case .history(let history) = model.base, let feed = activity.feed {
             model.base = .history(FlowsLive.history(
                 feed, selected: chainFilter, on: history, loc: loc,
-                hidden: wallet.balance?.hidden ?? false, networks: walletNetworks
+                // The feed's own flag (PR 2), not one threaded from the
+                // balance machine.
+                hidden: feed.hidden, networks: walletNetworks
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -2235,6 +2242,7 @@ struct RootView: View {
                 item,
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
+                hidden: feed.hidden,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2247,7 +2255,9 @@ struct RootView: View {
                 balance.tokens[assetRow],
                 feed: activity.feed,
                 display: WalletLive.Display.from(settings.currency),
-                on: detail, loc: loc, networks: walletNetworks
+                on: detail, loc: loc,
+                hidden: balance.hidden || (activity.feed?.hidden ?? false),
+                networks: walletNetworks
             ))
         }
         // The send journey. SD1's rows are the holdings the balance machine
@@ -3432,6 +3442,9 @@ struct RootView: View {
         model = SettingsLive.withAccounts(
             session: session.view,
             balances: wallet.balance?.switcher.balances ?? [],
+            // PR 2: hidden, the core withholds the figures — every row and
+            // the total draw the mask instead of summing nothing to $0.00.
+            hidden: wallet.balance?.switcher.hidden ?? false,
             display: WalletLive.Display.from(settings.currency),
             on: model,
             loc: loc

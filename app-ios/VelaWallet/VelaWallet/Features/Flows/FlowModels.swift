@@ -881,6 +881,10 @@ struct SendConfirmModel {
     /// Spec 102: this account reviews and signs on a trusted page — the
     /// page, the key, its integrity line — and the CTA goes there.
     var handoff: HandoffCardModel? = nil
+    /// PR 2 §3: the confirm is held while this account's previous
+    /// transaction on this network is in flight — the core's one line, drawn
+    /// under the held CTA for as long as it holds, whatever the fee says.
+    var heldNote: String? = nil
 }
 
 enum ReceiptStage {

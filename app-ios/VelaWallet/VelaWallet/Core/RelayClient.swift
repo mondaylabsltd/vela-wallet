@@ -413,7 +413,20 @@ final class RelayClient {
             "symbol": symbol,
             "usd_balance": decimalText(row["usdBalance"]) ?? "0",
             "usd_price": usdPrice.map { $0 as Any } ?? NSNull(),
+            // PR 2 §5: the relay's own minimum for this coin, VERBATIM (hex
+            // as the relay writes it; the core also reads a decimal). With
+            // it the native fee floors at the relay's minimum; without it (an
+            // older relay) today's rule holds.
+            "minimum_amount": minimumAmount(row["minimumAmount"]).map { $0 as Any } ?? NSNull(),
         ]
+    }
+
+    /// The row's `minimumAmount` as the core takes it: a string verbatim (hex
+    /// or decimal), a JSON number as its decimal text, else none.
+    static func minimumAmount(_ raw: Any?) -> String? {
+        if let text = raw as? String { return text.isEmpty ? nil : text }
+        if raw is NSNumber { return decimalText(raw) }
+        return nil
     }
 
     /// `pimlico_getUserOperationGasPrice`, one tier.
@@ -687,13 +700,35 @@ final class RelayClient {
     /// G13). `nil` for an older relay, a failure or a status the core does not
     /// know — which it reads as `status_unavailable`, never as a verdict.
     func userOpStatus(chainId: Int, userOpHash: String) async -> TrackStatusAnswer? {
+        await userOpStatusWithReason(chainId: chainId, userOpHash: userOpHash)?.answer
+    }
+
+    /// `userOpStatus`, with why the relay refused or failed the op — its
+    /// `rejection_reason`, verbatim (relay PR #23; older relays send none, and
+    /// the core then reads the stage). Read beside the core's parse because
+    /// the UniFFI `TrackStatusAnswer` does not carry it yet (vela-core's own
+    /// `parse_user_op_status` reads the same field the same way: a non-empty
+    /// string on the result object). The core words it (`RefusalReason`).
+    func userOpStatusWithReason(
+        chainId: Int, userOpHash: String
+    ) async -> (answer: TrackStatusAnswer, rejectionReason: String?)? {
         guard !userOpHash.isEmpty,
               let result = await bundlerValue(
                   chainId: chainId, method: userOpStatusMethod(), params: [userOpHash]
               ),
-              let json = Self.jsonText(result)
+              let json = Self.jsonText(result),
+              let answer = parseUserOpStatus(json: json)
         else { return nil }
-        return parseUserOpStatus(json: json)
+        return (answer, Self.rejectionReason(json))
+    }
+
+    /// The status answer's `rejection_reason`, as the core's parser reads it:
+    /// a non-empty string on the result (or on a whole body's `result`).
+    static func rejectionReason(_ json: String) -> String? {
+        guard let object = object(fromJSON: json) else { return nil }
+        let result = object["status"] != nil ? object : (object["result"] as? [String: Any] ?? [:])
+        guard let reason = result["rejection_reason"] as? String, !reason.isEmpty else { return nil }
+        return reason
     }
 
     /// The relay-independent landing check (spec 082 ruling 8): the

@@ -366,7 +366,11 @@ final class AppGraph {
         }
         // Every verdict — confirmed, failed, not sent, held, acknowledged —
         // reaches the receipt through the core's one mapping (spec 082), once.
-        trackerStore.onView = { [weak sendStore] view in sendStore?.trackerChanged(view) }
+        trackerStore.onView = { [weak sendStore, weak trackerStore] view in
+            sendStore?.trackerChanged(view)
+            // The ops holding a nonce (PR 2 §3), from the core's own view.
+            sendStore?.inFlightChanged(trackerStore?.inFlightOpsJson ?? "[]")
+        }
         // The payroll importer. Its fiat column is priced through the DISPLAY
         // machine's own waterfall — chain feed, then endpoint, then nothing —
         // so a currency the wallet cannot price stays unpriced here too. A

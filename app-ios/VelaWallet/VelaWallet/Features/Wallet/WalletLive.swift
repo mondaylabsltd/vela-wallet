@@ -88,7 +88,10 @@ enum WalletLive {
         copy.assetRows = assetRows(view, display: display, networks: networks)
         copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
         if let feed {
-            copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden, networks: networks)
+            // The feed's own flag, and the balance's while the two machines
+            // catch up with one tap: a figure is never shown for a frame.
+            copy.activityGroups = activityGroups(feed, loc: loc, hidden: feed.hidden || view.hidden,
+                                                 networks: networks)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
                                            fallback: model.activitySection,
                                            empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
@@ -304,7 +307,9 @@ enum WalletLive {
                 // picker, the token card and the figure Max writes agree digit
                 // for digit. The core's full precision ("0.00067035411363817")
                 // pushed the ticker and chain out of the row on a phone.
-                balance: tokenAmountText(token.balance),
+                // Hidden, the quantity is money too (PR 2): 418.25 xDAI is
+                // the balance in another unit. Send's picker keeps it.
+                balance: view.hidden ? WalletFixtures.mask : tokenAmountText(token.balance),
                 fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
@@ -509,14 +514,17 @@ extension WalletLive {
         }
         let incoming = item.direction == .in
         let figure = (incoming ? "+" : "\u{2212}") + compactAmount(item.value, batch: item.batch)
+        // The core's rule (PR 2): the row's figure masks exactly when it is
+        // money — `figure_maskable`.
+        let masked = hidden && item.figureMaskable
         return ActivityRowModel(
             kind: incoming ? .received : .sent,
             title: loc.t(incoming ? "history.labelReceived" : "history.labelSent"),
             subtitle: subtitle,
-            amount: hidden ? WalletFixtures.mask : figure,
+            amount: masked ? WalletFixtures.mask : figure,
             unit: item.symbol,
             positive: incoming,
-            masked: hidden,
+            masked: masked,
             badgeColor: chainColor(item.chainId),
             badgeLogoURL: Marks.chainLogoURL(item.chainId),
             itemId: item.id
@@ -530,8 +538,10 @@ extension WalletLive {
         let money = dappFigure(item, dapp: dapp)
         let allowance = money == nil ? dapp.allowance.flatMap { allowanceText($0, loc: loc) } : nil
         // Privacy masks a figure and keeps its unit; "无限额" is a risk to see,
-        // not an amount, so it is never masked. Nothing to show, nothing to mask.
-        let masked = hidden && (money != nil || (allowance.map { !$0.unlimited } ?? false))
+        // not an amount, so it is never masked. Nothing to show, nothing to
+        // mask. Which is which is the core's (`figure_maskable`, PR 2) — the
+        // shell's own rule is retired; a row with no figure masks nothing.
+        let masked = hidden && item.figureMaskable && (money != nil || allowance != nil)
         let amount: String
         let unit: String
         if let money {

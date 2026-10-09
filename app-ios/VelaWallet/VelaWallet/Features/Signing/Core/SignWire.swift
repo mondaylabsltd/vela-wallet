@@ -243,6 +243,9 @@ struct SignTrackerHandoffWire: Decodable, Equatable {
     /// reads "may have been sent". Same hash and ids as the write-ahead
     /// hand-off — which is why the shell's de-duplication key carries it.
     var admitted: Bool = false
+    /// The account that signed it (PR 2 §3), forwarded to the tracker's
+    /// `submitted`: what makes the op one this account must wait for.
+    var sender: String? = nil
 }
 
 /// A write-ahead record proven never sent (spec 082 RJ1): fed to the

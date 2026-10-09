@@ -422,14 +422,21 @@ struct FlowHost: View {
                 )
             } footer: {
                 FlowFooter {
-                    // A BUTTON — the same primary button the signing sheet
-                    // confirms with since issue #461, so the two confirm
-                    // screens are one control.
-                    VelaButton(title: m.cta, kind: .primary) {
-                        if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
+                    VStack(spacing: Tokens.Space.s8) {
+                        // A BUTTON — the same primary button the signing sheet
+                        // confirms with since issue #461, so the two confirm
+                        // screens are one control.
+                        VelaButton(title: m.cta, kind: .primary) {
+                            if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
+                        }
+                        .disabled(sendCtaDisabled)
+                        .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
+                        // PR 2 §3: why the confirm is held — the previous
+                        // transaction on this network — one plain line under it.
+                        if let held = m.heldNote {
+                            HeldConfirmNote(text: held)
+                        }
                     }
-                    .disabled(sendCtaDisabled)
-                    .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
                 }
             }
         case .sendReceipt(let m):
@@ -459,6 +466,24 @@ struct FlowHost: View {
                 }
             }
         }
+    }
+}
+
+/// The line under a held confirm (PR 2 §3): the core's words, muted, centred
+/// — no countdown, no timer, nothing that moves while it holds.
+struct HeldConfirmNote: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgMuted)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("send.confirm.held")
     }
 }
 

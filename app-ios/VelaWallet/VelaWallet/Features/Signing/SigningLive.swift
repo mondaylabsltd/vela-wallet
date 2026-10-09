@@ -698,11 +698,14 @@ enum SigningLive {
             )
         // The relay refused it (spec 082 RJ3): nothing was sent, and the
         // same op would be refused again — no "try again", no explorer.
+        // PR 2 §3: told by its REASON — the tracker entry's `refusal_key`
+        // ("another transaction went first", the fee words only for a fee
+        // refusal, else the plain refusal), never one sentence for all.
         case .refused:
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
-                captions: [summary, s(loc, "refused")].compactMap { $0 },
+                captions: [summary, track?.refusalKey.map { loc.t($0) } ?? s(loc, "refused")].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
         case .following(let op, let outcome, let feeHeld, let relayFunding):
@@ -1430,7 +1433,11 @@ enum SigningLive {
     /// while a measurement is out. None where there is no network fee.
     static func feeRefresh(clear: ClearSigningViewWire, fee: FeeViewWire?, loc: Loc) -> FeeRefreshModel? {
         guard !isOffChain(clear) else { return nil }
-        return FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: fee?.busy ?? false)
+        // A figure switched to another coin is measured again before it can
+        // be confirmed (PR 2 §4): the measuring sign stays on until it has.
+        return FeeRefreshModel(
+            label: loc.t("send.feeRefresh"), refreshing: (fee?.busy ?? false) || (fee?.provisional ?? false)
+        )
     }
 
     /// The confirm's label (issue #461: the action alone, no "slide to"
