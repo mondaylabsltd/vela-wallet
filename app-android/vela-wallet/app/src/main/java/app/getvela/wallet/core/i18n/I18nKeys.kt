@@ -409,7 +409,6 @@ object I18nKeys {
         const val RECENT_ACTIVITY = "contacts.recentActivity"
         const val VIEW_ALL_ACTIVITY = "contacts.viewAllActivity"
         const val DELETE_CONTACT = "contacts.deleteContact"
-        const val ACTION_QR = "contacts.actionQr"
         const val EDIT = "contacts.edit"
         const val MOVE_GROUP = "contacts.moveGroup"
 
@@ -460,7 +459,6 @@ object I18nKeys {
 
         // Reused from the spec-015 map (same keys, no corpus change).
         const val ACTION_SEND = "componentsUi.dock.send"
-        const val ACTION_RECEIVE = "componentsUi.dock.receive"
         const val COPY_ADDRESS = "componentsUi.identiconViewer.copyAddress"
         const val LABEL_SENT = "history.labelSent"
         const val LABEL_RECEIVED = "history.labelReceived"

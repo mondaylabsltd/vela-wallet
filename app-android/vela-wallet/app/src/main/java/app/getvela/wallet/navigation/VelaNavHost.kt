@@ -20,7 +20,6 @@ import app.getvela.wallet.feature.contacts.core.ContactGroupInput
 import app.getvela.wallet.feature.contacts.components.GroupMenuSheet
 import app.getvela.wallet.feature.contacts.components.GroupEditSheet
 import app.getvela.wallet.feature.contacts.components.GroupDeleteConfirmSheet
-import app.getvela.wallet.feature.contacts.components.ContactQrSheet
 import app.getvela.wallet.feature.contacts.components.MultiPickSheet
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
@@ -1892,7 +1891,6 @@ fun VelaNavHost(
 
                 var confirmingDelete by rememberSaveable { mutableStateOf(false) }
                 // Spec 048: the doors the contacts machine had no drawing for on the phone.
-                var contactQr by remember { mutableStateOf<String?>(null) }
                 var groupEdit by remember { mutableStateOf<Pair<String?, String>?>(null) }
                 var groupMenu by remember { mutableStateOf(false) }
                 var confirmingGroupDelete by remember { mutableStateOf(false) }
@@ -1993,16 +1991,6 @@ fun VelaNavHost(
                             contacts.exportBook(format = if (format == "csv") ContactFileFormat.Csv else ContactFileFormat.Json)
                         },
                         onDismiss = { exportChoice = false },
-                    )
-                }
-                contactQr?.let { address ->
-                    ContactQrSheet(
-                        name = book.contacts.firstOrNull { it.address == address }?.name ?: address,
-                        address = address,
-                        copyLabel = strings.t(I18nKeys.Flows.COPY_ADDRESS),
-                        copiedLabel = strings.t(I18nKeys.Flow.COPIED),
-                        closeLabel = strings.t(I18nKeys.Flows.DONE),
-                        onDismiss = { contactQr = null },
                     )
                 }
                 groupEdit?.let { (id, initial) ->
@@ -2138,11 +2126,6 @@ fun VelaNavHost(
                                 if (Clipboard.copy(context, "address", contact.address)) haptic(VelaHaptic.Select)
                             }
                             "contacts.action.Send" -> selected?.let { contact -> openSendTo(contact.address) }
-                            "contacts.action.Receive" -> {
-                                application.container.pendingFlow.value = WalletFlowEntry.Receive
-                                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
-                            }
-                            "contacts.action.Qr" -> contactQr = selected?.address
                             "contacts.batchSend" -> group?.let { g ->
                                 val members = g.members
                                 if (members.size == 1) {

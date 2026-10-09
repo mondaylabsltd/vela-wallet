@@ -42,7 +42,7 @@ data class SearchFieldModel(val placeholder: String, val query: String = "") {
 }
 
 /** Which glyph an action row/menu item draws (models stay UI-type free). */
-enum class ContactsIcon { AddContact, Import, Export, Edit, Delete, Send, Receive, Qr, MoveGroup }
+enum class ContactsIcon { AddContact, Import, Export, Edit, Delete, Send, MoveGroup }
 
 @Immutable
 data class MenuItemModel(
