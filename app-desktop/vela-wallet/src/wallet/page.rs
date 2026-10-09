@@ -199,26 +199,54 @@ fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
     }
 }
 
-/// Where a click on 探索 in the sidebar lands (spec 099 navigation, the
-/// core's `explore_landing`): from another section, or again while Explore
-/// is up, its start page — the dApp's tab kept, live and unlit in the strip,
-/// one click from its page as it was left. A signing column that comes back
-/// with Explore (RJ18, `panel` is `Signing` again) comes back with the page
-/// whose request it holds: `signing_tab`, `None` for the wallet's own.
+/// Where a click on 探索 in the sidebar lands, and the column that comes
+/// with it (spec 099 navigation, the core's `explore_landing`): from another
+/// section, or again while Explore is up, its start page — the dApp's tab
+/// kept, live and unlit in the strip, one click from its page as it was
+/// left — and `panel` as the switch left it.
+///
+/// A request waiting on the person is never left with nothing on screen:
+/// - a signing column that comes back with Explore (RJ18, `panel` is
+///   `Signing` again) comes back with the page whose request it holds:
+///   `signing_tab`, `None` for the wallet's own;
+/// - otherwise what the browser machine holds in front of the person
+///   (`dapp`, the core's `waiting_tab`: a consent, then a signature, then an
+///   add-network) brings its page, and its column: the Connection column for
+///   a consent or an add-network — the one place the desktop asks them — and
+///   for a signature its own column, when one is open (`signing_column`).
 fn explore_landing_from_sidebar(
     view: &vela_core::app::explore_sites::ExploreView,
     from: Section,
     panel: PanelId,
     signing_tab: Option<&str>,
-) -> vela_core::app::browser_tabs::ExploreLanding {
-    use vela_core::app::browser_tabs::{ExploreEntry, explore_landing};
+    dapp: Option<&vela_core::app::dapp_browser::DbrView>,
+    signing_column: bool,
+) -> (vela_core::app::browser_tabs::ExploreLanding, PanelId) {
+    use vela_core::app::browser_tabs::{
+        ExploreEntry, ExploreLanding, explore_landing, waiting_tab,
+    };
     let entry = if from == Section::Explore {
         ExploreEntry::Reselect
     } else {
         ExploreEntry::Section
     };
-    let waiting = signing_tab.filter(|_| panel == PanelId::Signing);
-    explore_landing(view, entry, waiting)
+    if panel == PanelId::Signing {
+        return (explore_landing(view, entry, signing_tab), panel);
+    }
+    let waiting = dapp.and_then(waiting_tab);
+    let landing = explore_landing(view, entry, waiting.as_deref());
+    let column = match (&landing, dapp) {
+        (ExploreLanding::Tab { id }, Some(dapp)) if waiting.as_deref() == Some(id.as_str()) => {
+            let signature = dapp.consent.is_none() && dapp.signing.is_some();
+            match (signature, signing_column) {
+                (true, true) => PanelId::Signing,
+                (true, false) => panel,
+                (false, _) => PanelId::Connection,
+            }
+        }
+        _ => panel,
+    };
+    (landing, column)
 }
 
 /// What becomes of a send parked under "Report this" (issue 466) once the
@@ -12872,12 +12900,37 @@ impl WalletPage {
     /// Explore, chosen in the sidebar (spec 099 navigation): where it lands
     /// is the core's (`explore_landing_from_sidebar`). The start page only
     /// hides the page: its tab stays selected, live and unlit, and a click on
-    /// it is `switch_to_tab` — the page as it was left, no load.
+    /// it is `switch_to_tab` — the page as it was left, no load. A tab whose
+    /// connect or add-network waits on the person comes up instead, with
+    /// the Connection column that asks it.
     fn land_in_explore(&mut self, from: Section, cx: &mut Context<Self>) {
         use vela_core::app::browser_tabs::ExploreLanding;
         let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
         let signing_tab = self.signing_column_tab(cx);
-        match explore_landing_from_sidebar(&explore, from, self.panel, signing_tab.as_deref()) {
+        #[cfg(not(target_os = "linux"))]
+        let signing_column = self.signing_host.is_some();
+        #[cfg(target_os = "linux")]
+        let signing_column = false;
+        let host = self.browser_host.clone();
+        let (landing, column) = explore_landing_from_sidebar(
+            &explore,
+            from,
+            self.panel,
+            signing_tab.as_deref(),
+            host.as_ref().map(|host| &host.read(cx).view),
+            signing_column,
+        );
+        if column != self.panel {
+            crate::diag::vlog!(
+                "browser",
+                "explore lands with a request waiting ({column:?})"
+            );
+            self.panel = column;
+            if column == PanelId::Signing {
+                self.signing_hidden = false;
+            }
+        }
+        match landing {
             ExploreLanding::Home => {
                 if self.browsing {
                     crate::diag::vlog!(
@@ -20239,26 +20292,11 @@ mod tests {
     #[test]
     fn explore_from_the_sidebar_lands_home_unless_a_signing_column_comes_back() {
         use vela_core::app::browser_tabs::ExploreLanding;
-        use vela_core::app::explore_sites::{ExploreTab, ExploreView};
-        let tab = |id: &str, url: &str| ExploreTab {
-            id: id.to_owned(),
-            url: Some(url.to_owned()),
-            title: String::new(),
-            host: crate::diag::host_of(url),
-        };
-        let view = ExploreView {
-            tabs: vec![
-                tab("t1", "https://app.uniswap.org/"),
-                tab("t2", "https://polymarket.com/"),
-            ],
-            selected_tab: Some("t1".to_owned()),
-            ready: true,
-            ..ExploreView::default()
-        };
+        let view = landing_strip();
         let home = ExploreLanding::Home;
         let page = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
         let land = |from, panel, signing_tab| {
-            explore_landing_from_sidebar(&view, from, panel, signing_tab)
+            explore_landing_from_sidebar(&view, from, panel, signing_tab, None, false).0
         };
         // From the wallet, and a re-click while a page shows: the start page.
         assert_eq!(land(Section::Wallet, PanelId::None, None), home);
@@ -20274,6 +20312,134 @@ mod tests {
         // The wallet's own request (no page asked), or a tab since closed.
         assert_eq!(land(Section::Wallet, back, None), home);
         assert_eq!(land(Section::Wallet, back, Some("gone")), home);
+    }
+
+    /// The strip the landing tests land in: two dApps, t1 selected.
+    fn landing_strip() -> vela_core::app::explore_sites::ExploreView {
+        use vela_core::app::explore_sites::{ExploreTab, ExploreView};
+        let tab = |id: &str, url: &str| ExploreTab {
+            id: id.to_owned(),
+            url: Some(url.to_owned()),
+            title: String::new(),
+            host: crate::diag::host_of(url),
+        };
+        ExploreView {
+            tabs: vec![
+                tab("t1", "https://app.uniswap.org/"),
+                tab("t2", "https://polymarket.com/"),
+            ],
+            selected_tab: Some("t1".to_owned()),
+            ready: true,
+            ..ExploreView::default()
+        }
+    }
+
+    /// Spec 099 navigation (desktop): a connect or an add-network waiting on
+    /// the person is never left behind a start page with nothing on screen.
+    /// The desktop asks both in the Connection column, which a switch of
+    /// section closes; 探索 brings back the page that asked AND that column
+    /// (the core's `waiting_tab`: a consent, then a signature, then an
+    /// add-network). A signature comes back in its own column when one is
+    /// open. A signing column RJ18 brings back still wins.
+    #[test]
+    fn explore_from_the_sidebar_brings_back_a_request_waiting_with_its_column() {
+        use vela_core::app::browser_tabs::ExploreLanding;
+        use vela_core::app::dapp_browser::{DbrConsentView, DbrSigningView, DbrView};
+        let view = landing_strip();
+        let page = |id: &str| ExploreLanding::Tab { id: id.to_owned() };
+        let consent = |tab: &str| DbrConsentView {
+            tab: tab.to_owned(),
+            origin: "https://polymarket.com".to_owned(),
+            methods: vec!["eth_requestAccounts".to_owned()],
+            address: None,
+            chain_id: 1,
+        };
+        let sheet = |tab: &str| DbrSigningView {
+            tab: tab.to_owned(),
+            id: "7".to_owned(),
+        };
+        let asking = DbrView {
+            consent: Some(consent("t2")),
+            ..DbrView::default()
+        };
+        let adding = DbrView {
+            adding_network: Some(sheet("t2")),
+            ..DbrView::default()
+        };
+        let signing = DbrView {
+            signing: Some(sheet("t2")),
+            ..DbrView::default()
+        };
+        let land = |from, panel, dapp: &DbrView, signing_column| {
+            explore_landing_from_sidebar(&view, from, panel, None, Some(dapp), signing_column)
+        };
+        let none = panel_after_switch(Section::Explore, false);
+        for from in [Section::Wallet, Section::Explore] {
+            // A consent for t2 — from 钱包, or a re-click that closed its
+            // column: t2's page and the Connection column that asks it.
+            assert_eq!(
+                land(from, none, &asking, false),
+                (page("t2"), PanelId::Connection),
+                "{from:?}"
+            );
+            // An add-network for t2 (spec 100): the same column.
+            assert_eq!(
+                land(from, none, &adding, false),
+                (page("t2"), PanelId::Connection),
+                "{from:?}"
+            );
+            // A signature for t2 comes back in its own column…
+            assert_eq!(
+                land(from, none, &signing, true),
+                (page("t2"), PanelId::Signing),
+                "{from:?}"
+            );
+            // …and with none open, the page alone (the Connection column
+            // would not show it).
+            assert_eq!(
+                land(from, none, &signing, false),
+                (page("t2"), PanelId::None),
+                "{from:?}"
+            );
+        }
+        // The consent is asked first, whatever else waits.
+        let both = DbrView {
+            consent: Some(consent("t2")),
+            signing: Some(sheet("t1")),
+            ..DbrView::default()
+        };
+        assert_eq!(
+            land(Section::Wallet, none, &both, true),
+            (page("t2"), PanelId::Connection)
+        );
+        // Nothing waiting, or a request from a tab the strip no longer has:
+        // the start page, no column.
+        assert_eq!(
+            land(Section::Wallet, none, &DbrView::default(), true),
+            (ExploreLanding::Home, PanelId::None)
+        );
+        let gone = DbrView {
+            consent: Some(consent("gone")),
+            ..DbrView::default()
+        };
+        assert_eq!(
+            land(Section::Wallet, none, &gone, false),
+            (ExploreLanding::Home, PanelId::None)
+        );
+        // RJ18: a signing column that comes back keeps its own page and
+        // column, over a consent waiting elsewhere.
+        let back = panel_after_switch(Section::Explore, true);
+        assert_eq!(
+            explore_landing_from_sidebar(
+                &view,
+                Section::Wallet,
+                back,
+                Some("t1"),
+                Some(&asking),
+                true
+            ),
+            (page("t1"), PanelId::Signing)
+        );
     }
 
     /// Issue 466: "Report this" parks the send under Settings → Feedback.
