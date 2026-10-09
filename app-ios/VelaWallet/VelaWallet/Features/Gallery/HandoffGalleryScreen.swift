@@ -21,6 +21,8 @@
 //    page's own sheet before anything opens; `ceremony` is a self-hosted
 //    page's create — its own title and 「新钥匙存在 | 这台设备」 — and
 //    `ceremony-signin` its sign-in, 「确认方式 | 手机或平板」, both the core's;
+//    `ceremony-waiting` / `ceremony-signin-waiting` — the same two once the
+//    page has them: the ceremony's own title as the waiting card's hint;
 //  - `waiting`, `down` — the page has the request, or could not open;
 //  - `send` / `send-checking` — the send confirm (SD3) for such an account:
 //    its own figures, the estimated fee among them, then the card — which
@@ -56,7 +58,8 @@ struct HandoffGalleryScreen: View {
     /// The board's page: a self-hosted one where the board is about it.
     private var page: String {
         switch state {
-        case "ask", "sheet-ask", "ceremony", "ceremony-signin": Self.selfHosted
+        case "ask", "sheet-ask", "ceremony", "ceremony-signin", "ceremony-waiting", "ceremony-signin-waiting":
+            Self.selfHosted
         default: Self.official
         }
     }
@@ -82,7 +85,7 @@ struct HandoffGalleryScreen: View {
                 state: .askToTrust, version: "3f9a1c22", checkedAtMs: Self.checkedAt,
                 key: "componentsUi.signing.integrity.askTrust", opens: false
             )
-        case "ceremony", "ceremony-signin":
+        case "ceremony", "ceremony-signin", "ceremony-waiting", "ceremony-signin-waiting":
             SignerIntegrityLine(
                 state: .trustedHere, version: "3f9a1c22", checkedAtMs: Self.checkedAt,
                 key: "componentsUi.signing.integrity.trusted", opens: true
@@ -107,13 +110,15 @@ struct HandoffGalleryScreen: View {
             model.stage = .waiting
             model.reopen = {}
             model.unreachable = true
-        case "ceremony", "ceremony-signin":
+        case "ceremony", "ceremony-signin", "ceremony-waiting", "ceremony-signin-waiting":
             // A self-hosted page's create or sign-in: its own title and its
-            // key row, both through the core.
-            let operation = state == "ceremony"
-                ? #"{"type":"register_passkey","method":"platform","page":"\#(Self.selfHosted)","name":"Everyday wallet"}"#
-                : #"{"type":"authenticate_passkey","method":"hybrid","page":"\#(Self.selfHosted)"}"#
-            model.stage = .handoff
+            // key row, both through the core — and, once the page has it,
+            // that title as the waiting card's hint.
+            let operation = state.hasPrefix("ceremony-signin")
+                ? #"{"type":"authenticate_passkey","method":"hybrid","page":"\#(Self.selfHosted)"}"#
+                : #"{"type":"register_passkey","method":"platform","page":"\#(Self.selfHosted)","name":"Everyday wallet"}"#
+            model.stage = state.hasSuffix("-waiting") ? .waiting : .handoff
+            if state.hasSuffix("-waiting") { model.reopen = {} }
             model.title = trustedSignerCeremonyTitleKey(operationJson: operation).map { loc.t($0) }
             model.keyLabel = KeyLabelWire.ofCeremony(operationJson: operation)
         default:

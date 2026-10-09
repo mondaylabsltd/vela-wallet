@@ -74,7 +74,13 @@ final class TrustedSignerSheetModel {
     /// The waiting card's words (Android's `SigningLive.trustedSignerWait`):
     /// waiting for the page, or — the page never opened — "签名页没能打开，
     /// 请检查网络。" with Retry. Cancel either way; the request stays open.
-    static func copy(unreachable: Bool, loc: Loc) -> Copy {
+    ///
+    /// `ceremonyTitle` is a ceremony's own title (create / sign in / confirm,
+    /// `trustedSignerCeremonyTitleKey`): while a ceremony waits on its page,
+    /// that is the hint — "在你的签名页上创建钥匙" — never the signature's
+    /// "check the request and sign it there", which a key being made has
+    /// nothing to match. `nil`: a signature.
+    static func copy(unreachable: Bool, ceremonyTitle: String? = nil, loc: Loc) -> Copy {
         unreachable
             ? Copy(
                 title: loc.t("componentsUi.signing.signerDown"), hint: nil,
@@ -83,7 +89,7 @@ final class TrustedSignerSheetModel {
             )
             : Copy(
                 title: loc.t("componentsUi.signing.trustedSignerWaiting"),
-                hint: loc.t("componentsUi.signing.trustedSignerWaitingHint"),
+                hint: ceremonyTitle ?? loc.t("componentsUi.signing.trustedSignerWaitingHint"),
                 reopen: loc.t("componentsUi.signing.trustedSignerReopen"), reopenPrimary: false,
                 cancel: loc.t("common.cancel"), busy: true
             )
@@ -144,7 +150,7 @@ struct TrustedSignerSheet: View {
     // MARK: - Waiting
 
     private var copy: TrustedSignerSheetModel.Copy {
-        TrustedSignerSheetModel.copy(unreachable: model.unreachable, loc: loc)
+        TrustedSignerSheetModel.copy(unreachable: model.unreachable, ceremonyTitle: model.title, loc: loc)
     }
 
     private var waiting: some View {

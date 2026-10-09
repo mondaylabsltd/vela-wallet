@@ -78,6 +78,8 @@ final class SigningVenueScreenshotTests: XCTestCase {
             ("ask", "handoff.trust"),
             ("ceremony", "handoff.key"),
             ("ceremony-signin", "handoff.key"),
+            ("ceremony-waiting", "trustedSigner.waiting"),
+            ("ceremony-signin-waiting", "trustedSigner.waiting"),
             ("send", "handoff.card"),
             ("send-checking", "integrity.checking"),
         ]
@@ -113,6 +115,18 @@ final class SigningVenueScreenshotTests: XCTestCase {
                                    "\(state) \(look): the card said the fee again")
                     XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "USDC"))
                         .firstMatch.exists, "\(state) \(look): the sheet lost its fee row")
+                }
+                if state.hasSuffix("-waiting") {
+                    // A ceremony waiting on its page says what it is doing
+                    // there — never "check the request and sign it there".
+                    let zh = look.lang == "zh"
+                    let hint = state == "ceremony-waiting"
+                        ? (zh ? "在你的签名页上创建钥匙" : "Create your key on your signing page")
+                        : (zh ? "在你的签名页上登录" : "Sign in on your signing page")
+                    XCTAssertTrue(app.staticTexts[hint].exists, "\(state) \(look): no \(hint)")
+                    let signature = zh ? "请在打开的页面上核对这笔请求，并在那里签名。"
+                        : "Check the request on the page that opened, and sign it there."
+                    XCTAssertFalse(app.staticTexts[signature].exists, "\(state) \(look): a signature's hint")
                 }
                 if state.hasPrefix("send") {
                     XCTAssertFalse(app.descendants(matching: .any)["handoff.fee"].exists,
