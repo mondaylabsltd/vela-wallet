@@ -170,13 +170,12 @@ object SigningLive {
             )
         }
         return TrustedSignerWaitModel(
+            title = s.s("trustedSignerWaiting"),
             // Spec 102: a ceremony says what it is doing there — create, sign
-            // in, confirm (`trustedSignerCeremonyTitleKey`); a signature waits.
-            title = ctx.trustedSignerTitle?.let(s::t) ?: s.s("trustedSignerWaiting"),
-            // "Check the request on the page and sign it there" is a
-            // signature's: a ceremony has no request to check — its title and
-            // key row say what happens there.
-            hint = if (ctx.trustedSignerTitle != null) "" else s.s("trustedSignerWaitingHint"),
+            // in, confirm (`trustedSignerCeremonyTitleKey`) — where a
+            // signature says "check the request on the page and sign it
+            // there": a ceremony has no request to check. Every shell's line.
+            hint = ctx.trustedSignerTitle?.let(s::t) ?: s.s("trustedSignerWaitingHint"),
             reopen = s.s("trustedSignerReopen"),
             cancel = s.t("common.cancel"),
             // A ceremony names the key it makes or uses, as the page does.

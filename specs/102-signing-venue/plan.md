@@ -526,3 +526,47 @@ Wire summary (what changes for every shell):
 | `node scripts/gen-i18n.mjs` (pins 1913 = 1812 + 101), `dump:vectors`, `lint-i18n-corpus`, `verify-i18n-parity` | regenerated; no new defects; 77,180 comparisons, 0 divergences |
 | `tests/i18n_residency.rs` | ja + en **144,550 B** runtime-JSON route (was 144,269), 140,242 B compiled (was 139,979), budget 145,400 unmoved; reduction 85.84 % (≥ 85.8) |
 | `app-desktop/vela-wallet/scripts/check-windows.sh` | ok |
+
+## Integration (102c, 2026-10-09) — five branches, main, and the review's polish
+
+Merged into `102-signing-venue`, in order: `wip/102-page` (fast-forward; page build f14e755a = LAUNCH),
+`wip/102-web`, `wip/102-desktop`, `wip/102-android`, `wip/102-ios`, then `origin/main` (#481, #482, #484 —
+the Phase 0 page fix — and #485). Conflicts: `trusted_signer_e2e.rs` keeps the desktop's version (b40122120
+ported #484's d6f77c454 onto the checked page); Android/iOS `SettingsPage` keep 102's pages and gain main's
+`back`/`keepsItsPlace`; the iOS signing sheet keeps 102's hand-off branch and passes main's fee `reserve`;
+gen-i18n's pins add main's `alertSignInFailedBodyAndroid`; every generated file was regenerated after.
+`BUILD_ALLOWED` lists f14e755a, 245c9ea1, 2d19fa49, 364b8737, then every earlier build; `dist/` carries all 16.
+
+### What the review's polish changed
+
+| # | Rule now | Where |
+|---|---|---|
+| a | The hand-off title owns no page: 「在可信签名页上预览并签名」 / "Review and sign on a trusted signing page" (D6) | corpus, 15 locales |
+| b | The key is a ROW — 「确认方式 \| 这台设备」 / "Confirm with \| This device" — as the page draws it; `handoffKey` ("Confirm with {{key}}") retired; `KeyLabel.label_key` names the row's label (`confirmWithLabel`, or `newKeyOnLabel` while a ceremony makes the key — the page's own `field.confirmWith` / `field.keyOn`) | core + all four shells |
+| c | A ceremony card has its key row: `Ceremony::key_label()` — `trusted_signer_ceremony_key_label` (UniFFI), `trustedSignerCeremonyKeyLabel` (wasm); by place, never a name. A waiting ceremony's line is its own title, not the signature's "check the request" | core, desktop, Android, iOS |
+| d | The fee is visible exactly once per screen: the screen keeps its own fee row (with the speed control — D-18, chosen in the app before the hand-off) and the card draws none; dApp sheet order on every shell: header → fee → signing account → hand-off block → Open. `handoff_fee` stays in the core for a screen with no fee of its own (none today) | all four shells |
+| e | A row never names a host its title already says; "Keys on {{domain}}" only when that domain is not the page's host; the integrity line reserves two lines (a mono version no longer grows a line by a pixel); AskToTrust is a caution, refusals stay red; one accent (Rename / Remove are quiet text actions) | all four shells |
+| f | "Trust this version" wherever a check asks: Signing pages, the account's venue rows, the choosers' list and chosen page, the hand-off card, and (desktop) the ended card. The web checks and opens no page, so no AskToTrust line can appear there | desktop, Android, iOS |
+| g | A refusal's sentence is the core's: `VenueBlock::vars()` beside `key()`; `venue_block_line` (UniFFI), `venueBlockLine` / `signErrorWords` (wasm); the web's, Android's, iOS's and desktop's key/vars mirrors and the web's -32603 literal are gone | core + all four shells |
+
+### Gates (final tree)
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all --check`; clippy `--workspace --all-targets --features vela-core/dev-fixtures -D warnings`; clippy wasm32 `-D warnings`; wasm canary | clean / ok |
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,832 passed, 0 failed, 2 ignored (`signing_venue_102b`: 24) |
+| `build-web.mjs --check` / `verify-web.mjs` | current (wasm 4,869,244 B) / 51,541 cases + 5 boundary regressions |
+| `gen-core-types --check` / `gen-onboarding-types --check` | 437 / 27 types current |
+| `smoke-swift.sh` / `smoke-kotlin.sh` | 51,496 / 51,496 cases green; Swift bindings committed |
+| `check-android-core-fresh` / `check-ios-core-fresh` | ok (854763b6…) |
+| `gen-i18n.mjs` (pins 1915 = 1814 + 101), `dump:vectors`, `lint-i18n-corpus`, `verify-i18n-parity` | regenerated; no new defects; 77,210 comparisons, 0 divergences |
+| `tests/i18n_residency.rs` | ja + en **144,830 B** runtime-JSON, 140,518 B compiled; budget 145,400 unmoved |
+| app job: identicon table + parity, Lottie, expo residue, release-version, event payloads, reachability, dead controls | clean (0 mismatches / 574 sites; 0 dead controls) |
+| page suites (`run-suites.sh`) | all green (answer 31, confirm 33, hostile 32, ceremony 47, plain-send 153×2, key-route 50×2, locales 84×2, origin-line 24×2, …; desktop-demo 8/8, 7/7, tamper refused) |
+| desktop: fmt, `cargo test`, clippy, `check-windows.sh`, trusted-signer e2e, gallery sweep | clean; 1,028 passed / 0 failed / 51 ignored; 61 clippy locations (unchanged, CI runs without -D); ok; 5/5 twice; 55 states |
+| web: svelte-check, vitest, eslint, prettier, `pnpm run build`, Playwright `--retries=0` | 1 error (`dapp/background.test.ts:1719`, on main since d61abddb4); 2,952 passed / 5 skipped; clean; the same 10 baseline files; ok; 102b subset 112 passed / 3 failed (the 102b baseline's messages), fee-speed 5 failed (main's messages) |
+| Android: `:app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild`; signing UI tests on the emulator | 1,173 tests, 0 failures; 7/7 |
+| iOS: simulator build; unit leg; `SigningVenueScreenshotTests`; `SigningVenueChooserDeviceTests`; iOS 17 metadata | ok; 1,435 run (1,421 passed, 14 skipped, 0 failed); 8/8; 2/2; ok (25 Mach-O) |
+
+Before an app that launches f14e755a ships, `app-web/trusted-signer/dist/` must be deployed: sign.getvela.app
+still serves 364b8737 (the live walks on iOS, desktop and Android checked and opened it).

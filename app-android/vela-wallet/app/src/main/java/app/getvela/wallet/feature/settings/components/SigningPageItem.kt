@@ -292,13 +292,17 @@ fun SigningPageAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-/** A row's text action on the name's line: "Rename", "Remove". */
+/**
+ * A row's text action on the name's line: "Rename", "Remove" — quiet, in the
+ * muted ink (D7: one accent on the screen, and a list of red "Remove"s is
+ * not a warning anybody needs).
+ */
 @Composable
-fun SigningPageTextAction(label: String, danger: Boolean = false, onClick: () -> Unit) {
+fun SigningPageTextAction(label: String, onClick: () -> Unit) {
     val colors = VelaTheme.colors
     Text(
         text = label,
-        color = if (danger) colors.errorBase else colors.accentBase,
+        color = colors.fgMuted,
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.medium,
         fontSize = VelaTextSize.sm,

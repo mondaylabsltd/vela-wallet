@@ -836,6 +836,38 @@ fn an_address_is_a_real_scheme_an_ascii_host_and_a_port() {
 // The words — every key this round names exists in all fifteen languages
 // ---------------------------------------------------------------------------
 
+/// The titles a page is opened under (D6): the hand-off card's and each
+/// ceremony's. None of them owns the page.
+const OWNS_NO_PAGE: [&str; 4] = [
+    "componentsUi.signing.handoffTitle",
+    "componentsUi.signing.ceremonyCreate",
+    "componentsUi.signing.ceremonySignIn",
+    "componentsUi.signing.ceremonyConfirm",
+];
+
+/// A possessive, per language, as it is written in a lowercased line padded
+/// with a space at each end — whole words where the language has them, the
+/// possessive suffix where it is one (Turkish).
+fn possessives(lang: &str) -> &'static [&'static str] {
+    match lang {
+        "en" => &[" your ", " my ", " own "],
+        "de" => &[" dein", " ihr ", " ihre", " mein"],
+        "es-MX" => &[" tu ", " tus ", " su ", " sus ", " mi "],
+        "fr" => &[" votre ", " vos ", " ta ", " ton ", " ma ", " mon "],
+        "id" => &[" anda", "-mu ", " saya "],
+        "it" => &[" tua ", " tuo ", " sua ", " suo ", " mia ", " mio "],
+        "ja" => &["あなたの", "自分の", "私の"],
+        "ko" => &["당신의", " 내 ", "나의"],
+        "pt-BR" => &[" sua ", " seu ", " minha ", " meu "],
+        "ru" => &[" сво", " ваш", " тво", " мой ", " моей ", " мою "],
+        "tr" => &["ınız", "iniz", "unuz", "ünüz", "nız", "niz", " benim "],
+        "vi" => &["của bạn", "của tôi"],
+        "zh" | "zh-TW" => &["你的", "您的", "我的", "自己的"],
+        "zh-HK" => &["你嘅", "您嘅", "我嘅", "自己嘅", "你的"],
+        other => unreachable!("a sixteenth language: {other}"),
+    }
+}
+
 #[test]
 fn every_new_line_is_in_fifteen_languages() {
     let keys = [
@@ -893,10 +925,21 @@ fn every_new_line_is_in_fifteen_languages() {
                 assert!(!line.to_lowercase().contains(" my own"), "{line}");
             }
             // D6: the hand-off card opens Vela's page as often as a
-            // self-hosted one, so its title owns neither.
-            if key == "componentsUi.signing.handoffTitle" {
-                for possessive in [" your ", "你的", "你嘅"] {
-                    assert!(!line.to_lowercase().contains(possessive), "{line}");
+            // self-hosted one, so its title owns neither — nor does a
+            // ceremony's ("Create a key on the signing page", never "your
+            // key on your signing page"): the page is the one the account
+            // signs on, Vela's or self-deployed.
+            if OWNS_NO_PAGE.contains(&key) {
+                let lang = dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default();
+                let lower = format!(" {} ", line.to_lowercase());
+                for possessive in possessives(lang) {
+                    assert!(
+                        !lower.contains(possessive),
+                        "{lang}: {key} = {line:?} owns the page ({possessive:?})"
+                    );
                 }
             }
         }

@@ -276,6 +276,10 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         _ ask: TrustedSignerAsk, page: String, title: String?, keyLabel: KeyLabelWire?, waitForOpen: Bool
     ) async -> TrustedSignerChannel.Ending {
         if let conversation {
+            // The flow's next ceremony on the open page: the waiting card's
+            // hint is THIS one's title, not the first one's.
+            model?.title = title
+            model?.keyLabel = keyLabel
             model?.stage = .waiting
             let ending = await conversation.send(ask)
             hideTab()

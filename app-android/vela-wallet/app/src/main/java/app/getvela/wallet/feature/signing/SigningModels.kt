@@ -48,8 +48,9 @@ enum class SigningScreenState {
     CS40, CS41, CS42,
 
     /**
-     * Spec 102 integration: a key ceremony waiting on a self-hosted page — its
-     * own title and its key row, as the page draws its own: a key being made
+     * Spec 102 integration: a key ceremony waiting on a self-hosted page — what
+     * it is doing there (its own title, as the card's line under "Waiting
+     * for the signing page…") and its key row, as the page draws its own: a key being made
      * there ("New key on | Phone or tablet", CS43) and a sign-in ("Confirm
      * with | This device", CS44). The card a create or a sign-in raises on
      * its own (`TrustedSignerWaitingSheet`).

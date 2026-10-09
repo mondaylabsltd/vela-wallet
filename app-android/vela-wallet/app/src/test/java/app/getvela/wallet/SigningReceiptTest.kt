@@ -132,12 +132,13 @@ class SigningReceiptTest {
     }
 
     /**
-     * P2b-A8: a key ceremony on a page waits under its own title, not a
-     * signature's — and names its key in a row, as the page does ("New key on
-     * | Phone or tablet"). A signature's card already named its key.
+     * P2b-A8: a key ceremony on a page waits saying what it does there — its
+     * own title as the card's line, not a signature's "check the request" —
+     * and names its key in a row, as the page does ("New key on | Phone or
+     * tablet"). A signature's card already named its key.
      */
     @Test
-    fun `a ceremony waits under its own title, with its key row`() {
+    fun `a ceremony waits saying what it does, with its key row`() {
         val op = """{"type":"register_passkey","name":"Savings","method":"hybrid"}"""
         val create = SigningLive.trustedSignerWait(
             ctx.copy(
@@ -146,10 +147,10 @@ class SigningReceiptTest {
                 trustedSignerKey = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel.ofCeremony(op),
             ),
         )
-        assertEquals("Create your key on your signing page", create?.title)
+        // Desktop's line, every shell's: the card waits, and says what for.
+        assertEquals("Waiting for the signing page…", create?.title)
+        assertEquals("Create a key on the signing page", create?.hint)
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("New key on", "Phone or tablet"), create?.key)
-        // No "check the request" line: a ceremony has no request to check.
-        assertEquals("", create?.hint)
         val signature = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true))
         assertEquals("Waiting for the signing page…", signature?.title)
         assertNull(signature?.key)

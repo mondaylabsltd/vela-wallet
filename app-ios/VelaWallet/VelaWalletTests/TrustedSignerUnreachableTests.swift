@@ -140,6 +140,33 @@ struct TrustedSignerUnreachableTests {
         #expect(waiting.busy)
     }
 
+    /// A ceremony waiting on its page says what it is doing there — its own
+    /// title as the hint ("在签名页上创建钥匙") — never the signature's
+    /// "check the request and sign it there": a key being made has no
+    /// request to check. A page that never opened still says only that.
+    @Test func aWaitingCeremonySaysItsOwnTitleNotTheSignaturesHint() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        let create = try #require(trustedSignerCeremonyTitleKey(
+            operationJson: #"{"type":"register_passkey","name":"Mine","method":"platform"}"#
+        ))
+        let signIn = try #require(trustedSignerCeremonyTitleKey(
+            operationJson: #"{"type":"authenticate_passkey","method":"hybrid"}"#
+        ))
+        let creating = TrustedSignerSheetModel.copy(unreachable: false, ceremonyTitle: zh.t(create), loc: zh)
+        #expect(creating.title == "正在等待签名页…")
+        #expect(creating.hint == "在签名页上创建钥匙")
+        let signingIn = TrustedSignerSheetModel.copy(unreachable: false, ceremonyTitle: en.t(signIn), loc: en)
+        #expect(signingIn.title == "Waiting for the signing page…")
+        #expect(signingIn.hint == "Sign in on the signing page")
+        for copy in [creating, signingIn] {
+            #expect(copy.hint != zh.t("componentsUi.signing.trustedSignerWaitingHint"))
+            #expect(copy.hint != en.t("componentsUi.signing.trustedSignerWaitingHint"))
+            #expect(copy.busy && !copy.reopenPrimary)
+        }
+        #expect(TrustedSignerSheetModel.copy(unreachable: true, ceremonyTitle: zh.t(create), loc: zh).hint == nil)
+    }
+
     /// Under the waiting card the signing sheet says nothing of its own about
     /// the signature: no "签名中…" and no receipt — the card speaks for it.
     @Test func noSigningSentenceSitsUnderTheWaitingCard() {
