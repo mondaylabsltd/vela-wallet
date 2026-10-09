@@ -32,14 +32,15 @@
 //! on [`Verdict::Refused`] are "this page does not match the published list",
 //! never "a distribution attack was prevented" (spec 076, threat model).
 //!
-//! # Checking, not yet refusing
+//! # Checking, and refusing
 //!
-//! [`BUILD_ALLOWED`] lists the published pages and the shells run this check
-//! on every launch, but [`ENFORCE`] is still `false`: a verdict is recorded
-//! and shown, and the page opens either way. The two are deliberately
-//! separate, because the commit that lists a hash must not be the commit that
-//! starts turning people away — see [`ENFORCE`] for why, and the tripwire test
-//! that makes flipping it a deliberate act.
+//! [`BUILD_ALLOWED`] lists the published pages, and since spec 102 [`ENFORCE`]
+//! is on: a page whose check failed, or never ran, is not opened — and the
+//! only way to open one at all is through [`super::launch`], which opens the
+//! version it checked. The two stay deliberately separate, because the commit
+//! that lists a hash must not be the commit that starts turning people away —
+//! see [`ENFORCE`] for why, and the tripwire test that makes flipping it back
+//! a deliberate act.
 //!
 //! The ordering of [`BUILD_ALLOWED`] is load-bearing: [`choose_version`] takes
 //! the first entry the endpoint still serves, so the front of the list is what
@@ -135,9 +136,15 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// published. That is a self-inflicted outage in the shape of a security
 /// feature.
 ///
-/// Flip this in the commit that publishes the page at the official address,
-/// and not before. Until then the shells check, log and open.
-pub const ENFORCE: bool = false;
+/// On since spec 102 (R6, owner 2026-10-09: "a failed check refuses to
+/// open"): the page has been published at the official address since spec
+/// 079, every listed hash is committed at its own path in `dist/` (tested),
+/// and a version is only ever chosen from what the endpoint lists — or, with
+/// no index, [`LAUNCH`], which is deployed by definition — so a hash listed
+/// before its page is deployed is never asked for. Turning it off again is
+/// the kill switch: [`super::launch::admit`] then opens a refused page with
+/// its refusal drawn, as before 102.
+pub const ENFORCE: bool = true;
 
 /// The version the phone apps open (spec 079). Content-addressed, so the host's
 /// `/b/*` immutable rule lets the browser keep it and open it with no network —
@@ -709,17 +716,16 @@ mod tests {
 
     #[test]
     // The assertion IS on a constant, and that is the point: this is a tripwire
-    // on `ENFORCE`, so that turning refusals on is a deliberate act with a
+    // on `ENFORCE`, so that turning refusals off is a deliberate act with a
     // failing test attached rather than a one-character edit nobody reviews.
     #[allow(clippy::assertions_on_constants)]
-    fn refusing_is_still_switched_off() {
-        // The guard against a self-inflicted outage: listing a hash must not,
-        // by itself, start refusing pages that are not published yet. Flip
-        // `ENFORCE` in the commit that publishes, and change this test with it.
+    fn refusing_is_switched_on() {
+        // Spec 102 R6: a failed or missing check opens nothing. Turning this
+        // off opens refused pages again — change this test with it, and say
+        // why in the commit.
         assert!(
-            !ENFORCE,
-            "076: enforcement is on — the page must be published at the official \
-             address first, and every listed hash reachable at its own path"
+            ENFORCE,
+            "102: enforcement is off — a page that failed its check would open"
         );
     }
 }

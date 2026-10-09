@@ -1,0 +1,20 @@
+{
+  "id": "e0e0e0e0",
+  "name": "Daily",
+  "address": "0x4444444444444444444444444444444444444444",
+  "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "created_at_iso": "2026-09-28T09:30:00.000Z",
+  "keys": [
+    {
+      "credential_id": "e0e0e0e0",
+      "public_key_hex": "04a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "Daily",
+      "transports": "internal"
+    }
+  ],
+  "signed_in_with": {
+    "credential_id": "e0e0e0e0",
+    "method": "trusted_signer",
+    "signer_origin": ""
+  }
+}

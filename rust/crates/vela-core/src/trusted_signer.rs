@@ -1,26 +1,29 @@
-//! The Trusted Signer (spec 071): what a clear-signing page receives, what it
-//! answers, and the channels between — one implementation for every wallet.
+//! The trusted signing page (spec 071): what a clear-signing page receives,
+//! what it answers, and the channels between — one implementation for every
+//! wallet.
 //!
-//! The page (`app-web/trusted-signer`) is the fourth way to sign. The three
-//! others answer *where the passkey is*; this one answers *where the person
-//! checks what they sign*: a separate, zero-dependency page that decodes the
-//! request from the operation's own bytes, derives the digest itself, runs
-//! the passkey ceremony in the browser and returns the assertion. The wallet
-//! then trusts nothing it did not check:
+//! The page (`app-web/trusted-signer`) answers *where the person checks what
+//! they sign*, not where a passkey is (spec 102: it is an account's signing
+//! VENUE, beside Vela's own sheet — [`crate::signing_venue`] — and no longer a
+//! fourth key method). A separate, zero-dependency page decodes the request
+//! from the operation's own bytes, derives the digest itself, runs the passkey
+//! ceremony in the browser and returns the assertion. The wallet then trusts
+//! nothing it did not check:
 //!
 //! - [`request`] — the page's `{intent, context}`, built from what the shell
 //!   already holds when it would sign: the method and params, the ASSEMBLED
 //!   user operation (the digest covers that, not the site's call), the fee
-//!   leg's index, the account and its credential ids.
+//!   leg's index, the account, and the key to use and where it lives (R5).
 //! - [`verify`] — the page's answer, accepted only when the client data is a
 //!   `webauthn.get` over exactly the digest the WALLET computed, the user was
 //!   verified, the credential is one of this wallet's, and the P-256 signature
 //!   verifies under that credential's key. It returns the DER signature the
 //!   existing Safe envelope takes, so nothing downstream changes.
-//! - The channels: [`url_launch`] + [`parse_callback`] (URL fragment in,
-//!   loopback redirect or beacon out — the desktop), [`ws_launch`] + [`ws`]
-//!   (a WebSocket on the phone's own loopback, served byte for byte by this
-//!   crate — the phones), per `app-web/trusted-signer/PROTOCOL.md`.
+//! - The channels: [`launch::CheckedPage::url_launch`] with [`parse_callback`]
+//!   (URL fragment in, `velawallet://` out), and
+//!   [`launch::CheckedPage::ws_launch`] with [`ws`] (a WebSocket on the
+//!   loopback), per `app-web/trusted-signer/PROTOCOL.md`. Both are reached
+//!   only through a page that was checked and admitted ([`launch`], R6).
 //!
 //! Pure: no I/O, no clock, no randomness — the one-time token comes from the
 //! shell.
@@ -39,10 +42,14 @@ use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 pub mod ceremony;
 /// Spec 076: whether the page may be opened at all — one decision, every shell.
 pub mod integrity;
+/// Spec 102 R6: the one rule for which page is opened and checked, and the
+/// only way to build a launch URL.
+pub mod launch;
 pub mod ws;
 
-/// The official signer page (spec 071 [D]) — the host PROTOCOL.md names.
-/// A person may point Settings at their own deployment.
+/// The official signing page (spec 071 [D]) — the host PROTOCOL.md names. It
+/// is always the first of the saved signing pages (spec 102), and a person
+/// may add their own deployments beside it.
 pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
 
 /// Where the page sends a signature back to (spec 076, owner 2026-09-23:
@@ -78,10 +85,6 @@ pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
 ///
 /// The one-time token travels with it and is checked by [`parse_callback`].
 pub const CALLBACK_URL: &str = "velawallet://sign-result";
-
-/// The "Sign with" value that routes a request to the Trusted Signer, next to
-/// `platform` | `hybrid` | `security_key` (`wallet_keys::SIGN_METHODS`).
-pub const METHOD: &str = "trusted_signer";
 
 /// Why a signer page address cannot be used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,19 +129,6 @@ pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
         authority.to_ascii_lowercase(),
         path
     ))
-}
-
-/// Whether a page at `url` can reach this wallet's passkeys. They were made
-/// for `getvela.app`, and a browser only lets a page use a passkey made for
-/// its own domain or a parent of it — a copy deployed anywhere else can show
-/// a request but cannot sign it (Settings says so).
-pub fn uses_wallet_passkeys(url: &str) -> bool {
-    let Some((scheme, rest)) = url.trim().split_once("://") else {
-        return false;
-    };
-    let host = host_of(rest.split(['/', '?', '#']).next().unwrap_or_default());
-    scheme.eq_ignore_ascii_case("https")
-        && (host == "getvela.app" || host.ends_with(".getvela.app"))
 }
 
 /// The relying party a key behind `signer_origin` belongs to — the rpId the
@@ -298,8 +288,14 @@ pub struct RequestInput<'a> {
     pub account: &'a str,
     /// The account's name — it points the person at a passkey.
     pub account_name: Option<&'a str>,
-    /// The account's credential ids, hex (every shell stores them so).
+    /// The account's credential ids, hex (every shell stores them so). Offered
+    /// to the page only when there is no [`Self::key_route`].
     pub credential_ids_hex: &'a [String],
+    /// Spec 102 R5: the key this account signs with and where it lives
+    /// ([`crate::app::Account::key_route`]). With it the page offers that one
+    /// key, with its transports and hints, so the browser goes straight to it
+    /// instead of asking where the passkey is.
+    pub key_route: Option<&'a crate::signing_venue::KeyRoute>,
     /// The assembled operation, for transactions. The digest covers THIS.
     pub user_op: Option<&'a UserOperation>,
     /// For a transaction, the calls the operation carries BEFORE its fee leg.
@@ -332,14 +328,44 @@ pub fn request(input: &RequestInput<'_>) -> Value {
             .unwrap_or_default();
         context.insert("signer".into(), json!({ "name": name, "letter": letter }));
     }
-    let allow: Vec<Value> = input
-        .credential_ids_hex
-        .iter()
-        .filter_map(|id| crate::primitives::from_hex(id).ok())
-        .map(|bytes| json!(URL_SAFE_NO_PAD.encode(bytes)))
-        .collect();
+    let b64 = |hex: &str| {
+        crate::primitives::from_hex(hex)
+            .ok()
+            .map(|bytes| URL_SAFE_NO_PAD.encode(bytes))
+    };
+    let route = input
+        .key_route
+        .and_then(|route| Some((route, b64(&route.credential_id)?)));
+    let allow: Vec<Value> = match &route {
+        // Only the key this device signs with: the browser has nothing to
+        // choose between (iOS and the desktop already narrowed to it).
+        Some((_, id)) => vec![json!(id)],
+        None => input
+            .credential_ids_hex
+            .iter()
+            .filter_map(|id| b64(id))
+            .map(|id| json!(id))
+            .collect(),
+    };
     if !allow.is_empty() {
         context.insert("allowCredentials".into(), Value::Array(allow));
+    }
+    if let Some((route, id)) = route {
+        let transports: Vec<&str> = route
+            .transports
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .collect();
+        context.insert(
+            "keyRoute".into(),
+            json!({
+                "credentialId": id,
+                "place": route.method,
+                "transports": transports,
+                "hints": route.hints,
+            }),
+        );
     }
     if input.origin_seen_by_browser && !input.origin.is_empty() {
         let host = input
@@ -552,56 +578,21 @@ pub fn verify(
 // Channels
 // ---------------------------------------------------------------------------
 
-/// The URL channel's page: the bare official host opens the pinned,
-/// content-addressed version (spec 079: [`integrity::LAUNCH`] — cacheable, so it
-/// opens offline); a base that already names a version (`/b/…`, the desktop's
-/// verified pick) or another host goes through [`sign_page`] as given.
-fn launch_page(base: &str, query: &str) -> String {
-    let bare_official = base
-        .trim()
-        .strip_prefix("https://")
-        .map(|rest| rest.trim_end_matches('/'))
-        .is_some_and(|rest| rest == integrity::OFFICIAL_HOST);
-    if bare_official {
-        format!(
-            "https://{}/b/{}/sign?{query}",
-            integrity::OFFICIAL_HOST,
-            integrity::LAUNCH
-        )
-    } else {
-        sign_page(base, query)
-    }
-}
-
-/// `<base>sign.html?<query>` — the base may or may not end in `/`, or already
-/// name `sign.html`.
-fn sign_page(base: &str, query: &str) -> String {
-    let trimmed = base.trim();
-    let page = if trimmed.ends_with(".html") {
-        trimmed.to_owned()
-    } else if trimmed.ends_with('/') {
-        format!("{trimmed}sign.html")
-    } else {
-        format!("{trimmed}/sign.html")
-    };
-    format!("{page}?{query}")
-}
-
-/// URL fragment + loopback callback (PROTOCOL.md §7.2): the request deflated
+/// `<page>?ch=url#i=…&cb=…&t=…&z=1` (PROTOCOL.md §7.2): the request deflated
 /// (`z=1`) and base64url'd into the fragment, which never reaches a server
-/// and which the page wipes from history at once.
-pub fn url_launch(base: &str, request: &Value, callback: &str, token: &str) -> String {
+/// and which the page wipes from history at once. `page` is a checked page's
+/// own URL — only [`launch::CheckedPage`] calls this.
+pub(crate) fn fragment_launch(page: &str, request: &Value, callback: &str, token: &str) -> String {
     let deflated = miniz_oxide::deflate::compress_to_vec(request.to_string().as_bytes(), 9);
     format!(
-        "{}#i={}&cb={}&t={}&z=1",
-        launch_page(base, "ch=url"),
+        "{page}?ch=url#i={}&cb={}&t={}&z=1",
         URL_SAFE_NO_PAD.encode(deflated),
         URL_SAFE_NO_PAD.encode(callback.as_bytes()),
         percent(token),
     )
 }
 
-/// The path the loopback callback is served on — `url_launch`'s `callback`
+/// The path the loopback callback is served on — a launch's `callback`
 /// is `http://127.0.0.1:<port>` + this.
 pub const CALLBACK_PATH: &str = "/vela";
 
@@ -688,10 +679,11 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, TrustedSignerEr
         .map_err(|_| TrustedSignerError::Malformed("result is not JSON".into()))
 }
 
-/// The page, told to connect to the wallet's loopback WebSocket (spec 071):
-/// `sign.html?ch=ws#p=<port>&t=<token>`.
-pub fn ws_launch(base: &str, port: u16, token: &str) -> String {
-    format!("{}#p={port}&t={}", sign_page(base, "ch=ws"), percent(token))
+/// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
+/// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
+/// this.
+pub(crate) fn socket_launch(page: &str, port: u16, token: &str) -> String {
+    format!("{page}?ch=ws#p={port}&t={}", percent(token))
 }
 
 /// `user_rejected` (the person) vs everything else (the page's rules).
@@ -759,7 +751,12 @@ mod tests {
     #[test]
     fn a_custom_scheme_callback_survives_the_round_trip() {
         let request = json!({ "intent": { "kind": "sign" } });
-        let launch = url_launch("https://sign.getvela.app/", &request, CALLBACK_URL, "tok-1");
+        let launch = fragment_launch(
+            "https://sign.getvela.app/b/x/sign",
+            &request,
+            CALLBACK_URL,
+            "tok-1",
+        );
         // The callback rides in the FRAGMENT, base64url, never in a query: a
         // query is sent to the server and logged there, and the whole point is
         // that the server never sees what is being signed.
