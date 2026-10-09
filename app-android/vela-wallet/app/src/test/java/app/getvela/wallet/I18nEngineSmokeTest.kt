@@ -162,6 +162,10 @@ class I18nEngineSmokeTest {
         I18nKeys.Flows.SIGN_WENT_FIRST,
         I18nKeys.Flows.FEE_REASON_CHAIN_DOWN,
         I18nKeys.Flows.FEE_REASON_INTERNAL,
+        I18nKeys.Flows.FEE_RETRYING,
+        I18nKeys.Flows.FEE_FAILED,
+        I18nKeys.Flows.FEE_TAP_TO_RETRY,
+        I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY,
         I18nKeys.Flow.HEADER_SHARED,
         I18nKeys.Flow.STEP_COUNTER,
         I18nKeys.Flow.CONFIRM_IN_PROMPT,
@@ -273,6 +277,28 @@ class I18nEngineSmokeTest {
         }
         runtime.setLocale("zh")
         assertEquals("代理没有响应。", runtime.t(I18nKeys.Explore.LOAD_PROXY))
+    }
+
+    /**
+     * PR 2 notes 1, 11, 13: the fee's failure in one truth ("Retrying…" under
+     * the held confirm), the fault inside the app (the fee row, home and the
+     * Continue alert), and Continue's chain-down alert — in every locale.
+     */
+    @Test
+    fun thePr2FailureKeysResolveInEveryLocale() {
+        val runtime = newRuntime()
+        runtime.initialize("en")
+        for (tag in LocaleResolver.SUPPORTED) {
+            runtime.setLocale(tag)
+            for (key in listOf(I18nKeys.Flows.FEE_RETRYING, I18nKeys.Flows.FEE_REASON_INTERNAL, I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY)) {
+                val value = runtime.t(key, mapOf("chain" to "Gnosis"))
+                assertNotEquals("key echoed for locale $tag", key, value)
+                assertTrue("blank or unfilled $key for locale $tag: $value", value.isNotBlank() && !value.contains("{{"))
+            }
+        }
+        runtime.setLocale("en")
+        assertEquals("Couldn't work out the fee yet. Retrying…", runtime.t(I18nKeys.Flows.FEE_RETRYING))
+        assertTrue(runtime.t(I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY, mapOf("chain" to "Gnosis")).startsWith("Can't reach Gnosis"))
     }
 
     @Test

@@ -175,16 +175,6 @@ class SigningReceiptTest {
     }
 
     @Test
-    fun `a failed quote is asked again only until the approval`() {
-        val open = SignView(surface = SignSurface.Sheet)
-        assertTrue(app.getvela.wallet.feature.signing.core.SigningController.mayRequote(open, answered = false))
-        for (after in listOf(open.copy(is_signing = true), open.copy(is_submitting = true), open.copy(pending_op_hash = op), SignView(surface = SignSurface.Hidden))) {
-            assertTrue("no re-quote once approved or closed: $after", !app.getvela.wallet.feature.signing.core.SigningController.mayRequote(after, answered = false))
-        }
-        assertTrue(!app.getvela.wallet.feature.signing.core.SigningController.mayRequote(open, answered = true))
-    }
-
-    @Test
     fun `a site whose name is its host says it once`() {
         val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
         val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
@@ -425,6 +415,44 @@ class SigningReceiptTest {
         assertEquals(ReceiptStage.Failed, ending.stage)
         assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), ending.title)
         assertEquals(listOf("Send", refusedWords), ending.captions)
+    }
+
+    /**
+     * PR 2 note 9: the sheet's failure says why the relay did not take it —
+     * the core's `failure_refusal_key`, one field for a refusal at submit
+     * (another operation of the account holds the nonce: Try again stays) and
+     * one the tracker reported after it (another transaction went first) —
+     * in place of the plain refusal, never beside it.
+     */
+    @Test
+    fun `a refusal on the sheet is told by its reason`() {
+        val plain = strings.t(I18nKeys.Flows.SIGN_REFUSED)
+        val wentFirst = strings.t(I18nKeys.Flows.SIGN_WENT_FIRST)
+        val tracked = SignView(
+            surface = SignSurface.Sheet,
+            error = SignErrorNotice(SignErrorKind.SubmitFailed, "the network refused this transaction; nothing was sent"),
+            failure_refused = true,
+            failure_refusal_key = I18nKeys.Flows.SIGN_WENT_FIRST,
+            pending_op_hash = op,
+        )
+        val receipt = SigningLive.receipt(tracked, blocks, ctx)!!
+        assertEquals(ReceiptStage.Failed, receipt.stage)
+        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), receipt.title)
+        assertTrue(receipt.captions.toString(), receipt.captions.contains(wentFirst))
+        assertTrue("one line, not the plain refusal beside it", !receipt.captions.contains(plain))
+        assertEquals(null, receipt.retry)
+        assertEquals(wentFirst, SigningLive.statusBlocks(tracked, strings).filterIsInstance<SigningBlock.Warning>().single().text)
+
+        val held = SignView(
+            surface = SignSurface.Sheet,
+            error = SignErrorNotice(SignErrorKind.SubmitFailed, "previous transaction pending"),
+            failure_retryable = true,
+            failure_refusal_key = I18nKeys.Flows.PREVIOUS_PENDING,
+        )
+        val retry = SigningLive.receipt(held, blocks, ctx)!!
+        assertTrue(retry.captions.toString(), retry.captions.contains(strings.t(I18nKeys.Flows.PREVIOUS_PENDING)))
+        assertTrue("never the generic \"try again\" sentence", !retry.captions.contains(strings.t("send.txErrorGeneric")))
+        assertEquals("Try again stays", strings.t(I18nKeys.Flows.TX_RETRY), retry.retry)
     }
 
     /**

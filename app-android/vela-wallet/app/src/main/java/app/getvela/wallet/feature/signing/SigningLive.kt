@@ -587,7 +587,7 @@ object SigningLive {
                     title = s.t(I18nKeys.Flows.STATUS_FAILED),
                     // Spec 082 RJ3: a relay refusal is "refused, nothing was
                     // sent" — never "try again": it would be refused again.
-                    captions = listOfNotNull(summary, failureWords(sign, s, ctx.track)),
+                    captions = listOfNotNull(summary, failureWords(sign, s)),
                     cta = s.t(I18nKeys.Flows.DONE),
                     // Spec 096 F8: the core holds the page's answer until this
                     // closes; a failure that sent nothing may be tried again.
@@ -942,12 +942,17 @@ object SigningLive {
         track?.refusal_key?.takeIf { it.isNotBlank() }?.let { s.t(it) } ?: s.t(I18nKeys.Flows.SIGN_REFUSED)
 
     /**
-     * The failure's sentence: the core's `failure_refused` (spec 082 RJ3) is
-     * `componentsUi.signing.refused` — nothing was sent, and no Retry words;
-     * anything else is the plain "not submitted, try again".
+     * The failure's sentence. A refusal is told by its reason — the core's
+     * `failure_refusal_key` (PR 2 note 9), the one field for a refusal at
+     * submit (another operation of the account holds the nonce, with Try
+     * again) and one the tracker reported after it (the entry's `refusal`,
+     * worded as its `refusal_key` is). Without one, a refusal (spec 082 RJ3)
+     * is `componentsUi.signing.refused` — nothing was sent, and no Retry
+     * words; anything else is the plain "not submitted, try again".
      */
-    private fun failureWords(sign: SignView, s: VelaStrings, track: app.getvela.wallet.feature.send.core.TrackEntryView? = null): String = when {
-        sign.failure_refused -> refusedWords(track?.takeIf { it.user_op_hash.equals(sign.pending_op_hash, ignoreCase = true) }, s)
+    private fun failureWords(sign: SignView, s: VelaStrings): String = when {
+        sign.failure_refusal_key != null -> s.t(sign.failure_refusal_key)
+        sign.failure_refused -> s.t(I18nKeys.Flows.SIGN_REFUSED)
         // Spec 099 R8: the passkey failed — the signer is named, and how
         // (the core's kind, from the app's own passkey classifier).
         sign.error?.kind == SignErrorKind.SignerUnavailable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_UNAVAILABLE)
@@ -1223,21 +1228,27 @@ object SigningLive {
         // For the moment between a speed being picked and its own figure
         // landing, the fee in hand is the previous speed's: "estimating".
         val estimate = fee.fee.takeIf { !ofAnotherTier(fee, speed) }
+        // PR 2 note 1: the failure, said once for the row and the footer —
+        // through the re-ask that follows it too, so the row never flips to
+        // "Estimating…" and back while the core retries by itself.
+        val failure = fee.failure
         val value = when {
+            // The figure: "Tap to retry" only when a tap is the one way,
+            // else the dash — never a tap asked for while the core retries.
+            failure != null -> failure.figure_key?.let { ctx.strings.t(it) } ?: "—"
             // The send screens' own line (issue 201): the coin that is ACTUALLY
             // paying — an in-band ERC-20 fee is its own amount under its own
             // ticker, never the native figure — and what it costs in money.
             // One formatter, because two surfaces pricing one operation must
             // not give two answers.
             estimate != null -> "~" + feeLine(estimate, fee, ctx)
-            fee.failed != null -> ctx.strings.t("componentsUi.gas.estimateFailed")
             else -> ctx.strings.t("componentsUi.gas.estimating")
         }
         val choosable = fee.options.size > 1
         val selected = fee.options.firstOrNull { it.selected }
         // Issue #262: the core shut the gate because the coin that pays is not
         // there — the send form's own sentence (#211), about the same shortfall.
-        val short = estimate != null && !fee.busy && fee.failed == null && !fee.confirm_fee_ready && selected?.insufficient == true
+        val short = estimate != null && !fee.busy && failure == null && !fee.confirm_fee_ready && selected?.insufficient == true
         // Issue #408: and not one coin on offer can pay — the core's verdict,
         // said as that rather than naming the coin in force ("Insufficient ETH"
         // over a wallet whose USDT was short too).
@@ -1267,20 +1278,22 @@ object SigningLive {
             value = value,
             selectorTitle = if (options.isEmpty()) null else ctx.strings.s("feeTokenTitle"),
             options = options,
-            tappable = fee.failed != null || choosable,
+            // A failed fee's row is its retry — at once, also while the core retries.
+            tappable = failure != null || choosable,
             warning = when {
                 noCoinPays -> ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS)
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
                 // Spec 096 F2: the person chose a coin the transaction itself
                 // spends (the PancakeSwap USDC swap, fee in USDC); the core
                 // flags it, said under the fee while that coin pays.
-                !fee.busy && fee.failed == null && selected?.spent_by_operation == true ->
+                !fee.busy && failure == null && selected?.spent_by_operation == true ->
                     ctx.strings.t("componentsUi.gas.feeCoinSpent", mapOf("sym" to selected.symbol))
-                // Spec 079: why there is no fee, and that it will be asked
-                // again — in the core's words (spec 082 RJ13): the relay's
-                // failure, or the chain's node (rate-limited, or out of reach,
-                // named), or no reason line at all.
-                else -> fee.failed?.let { failed -> feeReason(failed, ctx) }
+                // Spec 079: why there is no fee, in the core's words (spec 082
+                // RJ13, PR 2 note 1): the relay's failure, the chain's node
+                // (rate-limited, or out of reach, named), a fault inside the
+                // app — or no reason line at all. Kept through the re-ask, the
+                // measuring sign turning beside it.
+                else -> failure?.reason_key?.let { key -> ctx.strings.t(key, mapOf("chain" to ctx.chainName)) }
             },
             refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
             // A coin switched and being measured again with its own fee leg
@@ -1299,10 +1312,6 @@ object SigningLive {
             },
         )
     }
-
-    /** The reason line under a failed fee: the core's key (`feeFailureReasonKey`), `{{chain}}` the chain's name; `null` = none. */
-    fun feeReason(failed: app.getvela.wallet.feature.send.core.FeeFailure, ctx: Context): String? =
-        uniffi.vela_core_uniffi.feeFailureReasonKey(failed.wire)?.let { key -> ctx.strings.t(key, mapOf("chain" to ctx.chainName)) }
 
     private fun feeLine(estimate: FeeEstimateView, fee: FeeView, ctx: Context): String {
         val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)

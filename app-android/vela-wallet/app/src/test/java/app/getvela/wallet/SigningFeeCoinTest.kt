@@ -267,8 +267,8 @@ class SigningFeeCoinTest {
         speed.balanceChanges(swapCalls, swapChanges)
         val first = speed.ask() as SpeedControl.Quoted.Settled
         assertTrue("pUSD from the start: ${first.view}", first.view.fee_token.equals(PUSD, ignoreCase = true))
-        // A stale quote's re-ask, a refresh's: the machine forgot it, and was told again.
-        val again = runBlocking { withTimeout(15_000) { speed.requote(10_000) } } as SpeedControl.Quoted.Settled
+        // The same question asked again: the machine forgot it, and was told again.
+        val again = speed.ask() as SpeedControl.Quoted.Settled
         assertTrue("still pUSD: ${again.view}", again.view.fee_token.equals(PUSD, ignoreCase = true))
         assertTrue(again.view.confirm_fee_ready)
     }

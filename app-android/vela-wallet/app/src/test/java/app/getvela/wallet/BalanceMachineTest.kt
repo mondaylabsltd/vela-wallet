@@ -83,6 +83,8 @@ class BalanceMachineTest {
         stall: (url: String) -> Boolean = { false },
         /** The per-chain deadline; the core's 18 s unless a test needs it short. */
         chainDeadlineMs: Long? = null,
+        /** Chains whose read throws inside the shell before anything is sent (PR 2 note 11). */
+        faultyChains: Set<Int> = emptySet(),
         answer: (url: String, method: String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -99,7 +101,10 @@ class BalanceMachineTest {
             pool = pool,
             networks = networks,
             store = store,
-            chainInfo = { chainId -> chains[chainId] },
+            chainInfo = { chainId ->
+                if (chainId in faultyChains) throw IllegalStateException("a fault inside the app")
+                chains[chainId]
+            },
             mainnetPrices = { mainnet },
             chainDeadlineMs = chainDeadlineMs ?: uniffi.vela_core_uniffi.balanceChainReadDeadlineMs().toLong(),
         )
@@ -231,6 +236,47 @@ class BalanceMachineTest {
         val view = h.host.settle { it.failed_chain_ids.isNotEmpty() }
         assertEquals(listOf("ETH"), view.tokens.map { it.symbol })
         assertTrue("the silent chain is named", view.failed_chain_ids.contains(100))
+    }
+
+    /**
+     * PR 2 note 11 (issue 483): a read that threw inside the app before it
+     * was sent is the app's fault, not the network's. The executor names it
+     * (`internal_chain_ids`, a subset of the failed chains), the core leaves
+     * it out of `unreachable_networks` and says its own sentence
+     * (`internal_key`), and home draws that where the unreachable line goes —
+     * never "Can't reach Ethereum", even beside a chain that really is down.
+     */
+    @Test
+    fun aReadThatNeverLeftTheAppIsNeverCantReach() {
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis")),
+            faultyChains = setOf(1),
+        ) { _, _ -> FakeRpcTransport.body("0x14d1120d7b160000") }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.failed_chain_ids.contains(1) && it.tokens.isNotEmpty() }
+        assertEquals(listOf(1), view.internal_chain_ids)
+        assertEquals("componentsUi.gas.reasonInternal", view.internal_key)
+        assertTrue("not the network's doing: ${view.unreachable_networks}", view.unreachable_networks.none { it.chain_id == 1 })
+        assertFalse("Ethereum was never asked", h.transport.asked.any { it.contains("chain-1.example") })
+
+        val strings = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
+            java.io.File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes()
+        }.apply { initialize("en") }
+        val line = app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(view, strings, mapOf(1 to "Ethereum", 100 to "Gnosis"))
+        assertEquals(strings.t("componentsUi.gas.reasonInternal"), line?.text)
+        assertFalse("never the chain's words: ${line?.text}", line?.text.orEmpty().contains("Ethereum"))
+    }
+
+    /** PR 2 note 11: the whole fetch threw inside the shell — `internal`, said as the app's fault, never "can't reach". */
+    @Test
+    fun aFetchThatThrewInsideTheAppIsInternal() {
+        val executor = BalanceExecutor(
+            pool = RpcPool(FakeStore(), PerChainEndpoints(), CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }, FakeRpcTransport { _, _ -> FakeRpcTransport.body("0x0") }),
+            networks = MutableStateFlow(NetView(loaded = true)),
+            store = FakeStore(),
+        )
+        val answer = executor.neutralAnswer(app.getvela.wallet.feature.wallet.core.BalanceOperation.FetchTokens(ADDRESS, force = false, pull = false))
+        assertEquals(BalanceShellResult.FetchErrored(ADDRESS, pull = false, internal = true), answer)
     }
 
     /**

@@ -1258,12 +1258,14 @@ fun FeeRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
         }
-        if (fee.refreshLabel != null) {
+        if (fee.refreshLabel != null || fee.reason != null) {
             // Calm and muted: an old figure is not a fault. Always the line's
-            // full height, so nothing jumps when it appears.
+            // full height, so nothing jumps when it appears. A failed fee's
+            // reason (PR 2 note 1) takes the same line, in the error tone the
+            // signing sheet says it in, and stays while the core retries.
             Text(
-                text = fee.staleNote ?: " ",
-                color = colors.fgSubtle,
+                text = fee.reason ?: fee.staleNote ?: " ",
+                color = if (fee.reason != null) colors.errorBase else colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.sm,
                 modifier = Modifier.padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.xs),

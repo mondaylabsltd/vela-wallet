@@ -1,7 +1,16 @@
 package app.getvela.wallet.feature.send.core
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The `send` machine's wire, transcribed from
@@ -85,23 +94,61 @@ sealed class SendAddNetworkMsg {
     data object NetAddError : SendAddNetworkMsg()
 }
 
-@Serializable
-enum class SendEstimateFailure {
-    @SerialName("missing_public_key") MissingPublicKey,
+/**
+ * Why Continue's estimate failed (PR 2 note 13): every [FeeFailure], in the
+ * fee machine's own wire shape and passed through as it is ([Fee]) — never
+ * mapped to a nearer word here — plus the send side's [Timeout] and [Other].
+ * The alert's body is the core's (`sendEstimateFailureBodyKey`), from [wire].
+ */
+@Serializable(with = SendEstimateFailure.WireSerializer::class)
+sealed class SendEstimateFailure {
+    /** What the core's `sendEstimateFailureBodyKey` takes: the wire name, or the whole JSON of one that carries data. */
+    abstract val wire: String
 
-    @SerialName("fee_token_unavailable") FeeTokenUnavailable,
+    /** The fee machine's failure, verbatim. */
+    data class Fee(val failure: FeeFailure) : SendEstimateFailure() {
+        override val wire: String get() = failure.wire
+    }
 
-    @SerialName("quote_unavailable") QuoteUnavailable,
+    /** The 15 s race lost. */
+    data object Timeout : SendEstimateFailure() { override val wire = TIMEOUT }
 
-    @SerialName("calculation_failed") CalculationFailed,
+    /** Nothing the fee machine said: the question was superseded, or no estimate came. */
+    data object Other : SendEstimateFailure() { override val wire = OTHER }
 
-    @SerialName("estimate_failed") EstimateFailed,
+    object WireSerializer : KSerializer<SendEstimateFailure> {
+        override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
 
-    @SerialName("gas_quote_too_high") GasQuoteTooHigh,
+        override fun deserialize(decoder: Decoder): SendEstimateFailure {
+            val json = decoder as? JsonDecoder ?: throw SerializationException("SendEstimateFailure crosses as JSON only")
+            val element = json.decodeJsonElement()
+            if (element is JsonPrimitive && element.isString) {
+                when (element.content) {
+                    TIMEOUT -> return Timeout
+                    OTHER -> return Other
+                }
+            }
+            // Anything else is a fee failure, in its own shape — or nothing this build knows (strict).
+            return Fee(json.json.decodeFromJsonElement(FeeFailure.WireSerializer, element))
+        }
 
-    @SerialName("timeout") Timeout,
+        override fun serialize(encoder: Encoder, value: SendEstimateFailure) {
+            val json = encoder as? JsonEncoder ?: throw SerializationException("SendEstimateFailure crosses as JSON only")
+            when (value) {
+                is Fee -> json.encodeSerializableValue(FeeFailure.WireSerializer, value.failure)
+                Timeout -> json.encodeJsonElement(JsonPrimitive(TIMEOUT))
+                Other -> json.encodeJsonElement(JsonPrimitive(OTHER))
+            }
+        }
+    }
 
-    @SerialName("other") Other,
+    companion object {
+        private const val TIMEOUT = "timeout"
+        private const val OTHER = "other"
+
+        /** The two words of the send side's own — what the drift test holds beside [FeeFailure.PLAIN]. */
+        val SEND_ONLY: List<String> = listOf(TIMEOUT, OTHER)
+    }
 }
 
 @Serializable

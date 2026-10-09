@@ -812,6 +812,17 @@ object I18nKeys {
         /** The fee's own reasons (issue #483): the chain's nodes out of reach (`{{chain}}`), or a fault inside the app. */
         const val FEE_REASON_CHAIN_DOWN = "componentsUi.gas.reasonChainDown"
         const val FEE_REASON_INTERNAL = "componentsUi.gas.reasonInternal"
+        /**
+         * PR 2 note 1: the line under a confirm held by a failed fee while
+         * the core asks again by itself ("Couldn't work out the fee yet.
+         * Retrying…") — the core's `FeeFailureView.footer_key`, beside
+         * `confirmBlock.feeFailed` when only a tap retries. Listed so the
+         * smoke test holds both in the corpus.
+         */
+        const val FEE_RETRYING = "componentsUi.signing.confirmBlock.feeRetrying"
+        const val FEE_FAILED = "componentsUi.signing.confirmBlock.feeFailed"
+        /** The fee row's figure when only a tap asks again ("Tap to retry"): `FeeFailureView.figure_key`. */
+        const val FEE_TAP_TO_RETRY = "componentsUi.gas.estimateFailed"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
@@ -825,6 +836,13 @@ object I18nKeys {
         const val TX_REJECTED_FEES = "send.txRejectedFees"
         const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
         const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
+        /**
+         * PR 2 note 13: Continue's estimate failed because the chain's nodes
+         * did not answer ("Can't reach {{chain}} to price this transaction…")
+         * — the core's `sendEstimateFailureBodyKey` names it; listed for the
+         * smoke test.
+         */
+        const val ALERT_ESTIMATE_CHAIN_DOWN_BODY = "send.alertEstimateChainDownBody"
         const val ALERT_LOAD_TOKENS = "send.alertLoadTokensError"
         const val TX_ERROR_GENERIC = "send.txErrorGeneric"
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"

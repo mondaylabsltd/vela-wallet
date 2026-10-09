@@ -428,7 +428,9 @@ object WalletLive {
                 decimals = null,
                 status = BalanceStatusModel(
                     kind = BalanceStatusKind.Warning,
-                    text = strings.t(I18nKeys.Wallet.BALANCE_UNREACHABLE),
+                    // A read that failed inside Vela (PR 2 note 11) is said as
+                    // that — never "the request never arrived".
+                    text = strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
                 ),
             )
         }
@@ -514,6 +516,10 @@ object WalletLive {
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
         val unreachable = unreachableLine(view, strings, chainNames)
         return when {
+            // PR 2 note 11 (issue 483): a read that never left the app is
+            // Vela's own fault — the core's sentence for it, where the
+            // unreachable line goes and in place of any "Can't reach …".
+            view.internal_key != null -> BalanceStatusModel(BalanceStatusKind.Warning, strings.t(view.internal_key))
             unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
             onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))

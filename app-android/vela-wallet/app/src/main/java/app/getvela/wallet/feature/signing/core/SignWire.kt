@@ -554,6 +554,14 @@ data class SignView(
      * Done, which answers the page.
      */
     val failure_retryable: Boolean = false,
+    /**
+     * PR 2 note 9: why the relay did not take it, drawn under the failure —
+     * at submit (another operation of the account holds the nonce:
+     * `confirmBlock.previousPending`, with Try again; else the plain
+     * refusal), or after it, the tracker's reason ([SignEvent.OpTracked]'s
+     * `refusal`). `null` for a failure that was no refusal.
+     */
+    val failure_refusal_key: String? = null,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
     val blocked: SignBlockedView? = null,
@@ -770,6 +778,12 @@ sealed class SignEvent {
         val status: app.getvela.wallet.feature.send.core.TrackStatus,
         val tx_hash: String? = null,
         val now_ms: Double,
+        /**
+         * PR 2 note 9: why the relay refused it — the tracker entry's
+         * `refusal`, for [SignView.failure_refusal_key]. `null`: the plain
+         * refusal sentence.
+         */
+        val refusal: app.getvela.wallet.feature.send.core.RefusalReason? = null,
     ) : SignEvent()
 
     /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */

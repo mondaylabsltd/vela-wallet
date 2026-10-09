@@ -281,11 +281,21 @@ sealed class FeeFailure {
     companion object {
         private const val CHAIN_READ = "chain_read"
 
-        /** Every word that crosses as a plain string — what the drift test holds against the mirror. */
-        val PLAIN: List<FeeFailure> = listOf(
-            MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
-            WouldFail, Internal,
-        )
+        /**
+         * Every word that crosses as a plain string — what the drift test holds against the mirror.
+         *
+         * Lazy, not eager: these objects are this class's own subclasses, so a
+         * process whose FIRST touch is one of them (`FeeFailure.Internal`)
+         * initialises this companion while that object is still being built —
+         * an eager list then holds `null` in its place, and every later decode
+         * of a plain word throws.
+         */
+        val PLAIN: List<FeeFailure> by lazy {
+            listOf(
+                MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
+                WouldFail, Internal,
+            )
+        }
     }
 }
 
@@ -353,6 +363,37 @@ data class FeeView(
      * meanwhile too; the gate is the core's).
      */
     val provisional: Boolean = false,
+    /**
+     * PR 2 note 1: the failure, said ONCE for the fee row and the line under
+     * the held confirm — the row's reason, whether the core asks again by
+     * itself, whether that re-ask is out now, the row's figure and the
+     * footer's line. Present while [failed] is, and through the re-ask that
+     * follows it ([failed] `null` then, [busy] true), so nothing on screen
+     * flips to "Estimating…" and back while the core retries. The retry is
+     * the core's own (`StartTtl` after a failure that can pass, answered by
+     * [FeeExecutor]); this shell schedules nothing.
+     */
+    val failure: FeeFailureView? = null,
+)
+
+/**
+ * [FeeView.failure]: what failed and how the row and the footer say it, each
+ * word the core's (`fee_policy::FeeFailureView`).
+ */
+@Serializable
+data class FeeFailureView(
+    /** What failed — the run on screen's, or, while [retrying], the run before the one out now. */
+    val failure: FeeFailure,
+    /** The line under the row; `{{chain}}` is the chain's name. `null`: no line. */
+    val reason_key: String? = null,
+    /** The core asks again by itself: nothing may ask for a tap. */
+    val auto_retry: Boolean = false,
+    /** A re-ask is out now: the reason stays, beside the row's measuring sign. */
+    val retrying: Boolean = false,
+    /** The row's figure — "Tap to retry" only when a tap is the one way; `null` = the dash. */
+    val figure_key: String? = null,
+    /** The line under the held confirm: "Retrying…" while the core retries, else "Tap it to retry". */
+    val footer_key: String,
 )
 
 // -- what the machine asks for -----------------------------------------------
@@ -408,6 +449,12 @@ sealed class FeeOperation {
         val calls: List<FeeCall> = emptyList(),
     ) : FeeOperation()
 
+    /**
+     * The machine's timer: the block-time re-pricing of a quote on screen,
+     * and — PR 2 note 1 — its own re-ask after a failure that can pass (3 s,
+     * 6 s, then every 8 s). Answered [FeeShellResult.TtlElapsed] after `ms`;
+     * cancelled with the attempt it belongs to, or the session.
+     */
     @Serializable
     @SerialName("start_ttl")
     data class StartTtl(val ms: Int) : FeeOperation()

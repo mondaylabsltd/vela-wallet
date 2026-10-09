@@ -777,15 +777,23 @@ object SendLive {
         is SendAmountWarning.CannotConvert -> s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol))
     }
 
-    /** Title and body for every `SendAlertKind` — the core's refusal, in the core's words. */
-    fun alertText(kind: SendAlertKind, s: VelaStrings): Pair<String, String> = when (kind) {
+    /**
+     * Title and body for every `SendAlertKind` — the core's refusal, in the
+     * core's words. [chainName]: the selected token's chain, for a sentence
+     * that names it (`{{chain}}`).
+     */
+    fun alertText(kind: SendAlertKind, s: VelaStrings, chainName: String = ""): Pair<String, String> = when (kind) {
         SendAlertKind.InvalidAddress -> s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_BODY)
         SendAlertKind.InvalidAmount -> s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_BODY)
         is SendAlertKind.InsufficientBalance ->
             s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to (kind.warning?.let { warningText(it, s) } ?: s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY))
         SendAlertKind.SplitOverBalance -> s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY)
         SendAlertKind.LoadTokensFailed -> s.t(I18nKeys.Flows.ALERT_LOAD_TOKENS) to ""
-        is SendAlertKind.EstimateFailed -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY)
+        // PR 2 note 13: worded by its cause — the core's key for this failure
+        // (the chain out of reach by its name, a fault inside the app, else
+        // the general sentence).
+        is SendAlertKind.EstimateFailed -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to
+            s.t(uniffi.vela_core_uniffi.sendEstimateFailureBodyKey(kind.kind.wire), mapOf("chain" to chainName))
         SendAlertKind.AccountUnavailable -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ACCOUNT_UNAVAILABLE_BODY)
     }
 
@@ -806,6 +814,22 @@ object SendLive {
         val estimate = inHand.takeIf { !ofAnotherTier }
         val text = feeText(estimate, view, fee, ctx).first
         val s = ctx.strings
+        // PR 2 note 1: a failed fee, said once for the row and the line under
+        // a held confirm — kept through the core's own re-ask (busy then),
+        // with the measuring sign turning beside it, so nothing flips to
+        // "Estimating…" and back while it retries.
+        val failure = fee?.failure
+        if (failure != null) {
+            return fallback.copy(
+                mark = feeRowMark(view.fee_coin, fallback.mark),
+                // "Tap to retry" only when a tap is the one way; else the dash.
+                value = failure.figure_key?.let { s.t(it) } ?: "—",
+                refreshLabel = speed?.let { s.t(I18nKeys.Flows.FEE_REFRESH) },
+                refreshing = busy,
+                // Why, in the line the row already keeps — the chain by its name.
+                reason = failure.reason_key?.let { s.t(it, mapOf("chain" to feeChainName(view, ctx))) },
+            )
+        }
         return fallback.copy(
             // The coin is the core's, in every state (SendView.fee_coin): the
             // estimate in hand — the speed just left's while a newly picked
@@ -831,6 +855,12 @@ object SendLive {
             // not over a row with no figure of its own on it.
             staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
         )
+    }
+
+    /** The chain the fee is priced on, by name — the form's own (a sweep's, else the picked coin's). */
+    private fun feeChainName(view: SendView, ctx: Context): String {
+        val chainId = (if (view.multi_select_mode) view.multi_chain_id else null) ?: view.selected_token?.chain_id
+        return chainId?.let { ctx.chainNames[it] } ?: view.selected_token?.network.orEmpty()
     }
 
     /**
@@ -1147,7 +1177,15 @@ object SendLive {
                 ),
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.EST_FEE),
-                    value = if (view.fee != null) "~$feeLine" else s.t(I18nKeys.Flows.FEE_ESTIMATING),
+                    // PR 2 note 1: a fee the session failed to price again is
+                    // said as the row says it (the figure's dash, its reason),
+                    // never the figure the session dropped.
+                    value = when {
+                        fee?.failure != null -> fee.failure.figure_key?.let { s.t(it) } ?: "—"
+                        view.fee != null -> "~$feeLine"
+                        else -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
+                    },
+                    note = fee?.failure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
                 ),
             ) + listOfNotNull(
                 // The speed, but only when it was CHOSEN for this send, or taken
@@ -1187,9 +1225,15 @@ object SendLive {
             // this one line under it — whatever `fee_busy` says, no timer, no
             // countdown — until the tracker says it is final or has stalled.
             // The relay's own refusal of the same kind is the notice instead.
-            ctaHold = view.previous_pending?.key
-                ?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }
-                ?.let { s.t(it) },
+            //
+            // ONE line under the held confirm: the previous transaction's,
+            // else a failed fee's — the core's `footer_key`, the very line
+            // the signing sheet draws ("Retrying…" while the core asks again
+            // by itself, "Tap it to retry" only when a tap is the one way).
+            ctaHold = (
+                view.previous_pending?.key?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }
+                    ?: fee?.failure?.footer_key
+                )?.let { s.t(it) },
             notice = confirmNotice(view, ctx),
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),

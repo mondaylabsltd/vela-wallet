@@ -501,6 +501,12 @@ data class FeeRowModel(
     val refreshing: Boolean = false,
     /** The quote's 30 s TTL ran out — calm, never a fault. Its line is kept either way. */
     val staleNote: String? = null,
+    /**
+     * PR 2 note 1: why the fee failed, in the core's words — drawn in the
+     * line [staleNote] keeps, so nothing moves when it comes and goes, and
+     * kept while the core asks again by itself.
+     */
+    val reason: String? = null,
 )
 
 /** One option of the speed control (spec 068). */

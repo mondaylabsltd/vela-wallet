@@ -400,36 +400,19 @@ class SendController(
         publicKeyAvailable: Boolean,
         autoFeeToken: Boolean,
     ): SendFeeOutcome = when (val quoted = speedControl.quote(chainId, account, publicKeyAvailable, calls, gasFeeToken, autoFeeToken)) {
-        SpeedControl.Quoted.Superseded -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
         SpeedControl.Quoted.TimedOut -> SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
         is SpeedControl.Quoted.Settled -> {
             val settled = quoted.view
             val estimate = settled.fee
             when {
-                settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
+                // PR 2 note 13: the fee machine's failure as it is — the
+                // chain out of reach, a fault inside the app, a relay that
+                // would not price — so the alert says the real cause.
+                settled.failed != null -> SendFeeOutcome.Failed(SendEstimateFailure.Fee(settled.failed))
                 estimate != null -> SendFeeOutcome.Ok(estimate)
                 else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
             }
         }
-    }
-
-    private fun failure(failed: FeeFailure): SendEstimateFailure = when (failed) {
-        FeeFailure.MissingPublicKey -> SendEstimateFailure.MissingPublicKey
-        FeeFailure.FeeTokenUnavailable -> SendEstimateFailure.FeeTokenUnavailable
-        FeeFailure.QuoteUnavailable -> SendEstimateFailure.QuoteUnavailable
-        FeeFailure.CalculationFailed -> SendEstimateFailure.CalculationFailed
-        FeeFailure.EstimateFailed -> SendEstimateFailure.EstimateFailed
-        FeeFailure.GasQuoteTooHigh -> SendEstimateFailure.GasQuoteTooHigh
-        // The send machine's vocabulary has no word for a chain node that did
-        // not answer (spec 082 RJ13 is the signing sheet's fee row): the quote
-        // could not be had, and asking again is right.
-        is FeeFailure.ChainRead -> SendEstimateFailure.QuoteUnavailable
-        // Spec 083 fee: the relay's "this operation fails", as the send
-        // screen has always said that refusal.
-        FeeFailure.WouldFail -> SendEstimateFailure.EstimateFailed
-        // Issue #483: the account read never left the app — a fault of this
-        // app's, never "the quote is unavailable" (the relay's word).
-        FeeFailure.Internal -> SendEstimateFailure.Other
     }
 
     // -- intents ---------------------------------------------------------------------
@@ -461,32 +444,33 @@ class SendController(
         // once the form is on the chain the fee session prices.
         synchronized(feeTokenWord) {
             feeTokenWord.forget()
+            // What is in flight survives the Open in the core (PR 2 note 6):
+            // a second send is held from its first frame, told once.
             openEvent = sendHost.dispatchNumbered(
                 SendEvent.Open(account = account, params = params, display = display),
                 SendEvent.serializer(),
             )
-            // The core forgets what is in flight on Open: told again at once,
-            // so a second send is held from its first frame — not only after
-            // the tracker next renders.
-            dispatch(SendEvent.InFlightOps(inFlight))
         }
     }
 
-    /** What the tracker last said is in flight — re-told after every [open]. */
-    @Volatile
-    private var inFlight: List<InFlightOp> = emptyList()
+    /**
+     * The person left Send — closed, backed out of the picker or the
+     * receipt, or went elsewhere. Its fee sessions stop answering: the
+     * block-time re-pricing and the core's own re-ask after a failure (PR 2
+     * note 1) belong to a form or a confirm on screen, never to one that is
+     * gone. The next [open] asks afresh.
+     */
+    fun left() = speedControl.end()
 
     /**
      * Every operation in flight on this device (`inFlightOps` of the
      * tracker's own view JSON), on every tracker render: while this account
      * has one on the form's chain, the confirm is held with the one line
      * `previous_pending` names, and opens once it is final or has stalled.
-     * The machine dedupes an identical list, so nothing flickers.
+     * The machine dedupes an identical list, so nothing flickers, and keeps
+     * it across [open] — the one source of what is in flight.
      */
-    fun inFlightOps(ops: List<InFlightOp>) = synchronized(feeTokenWord) {
-        inFlight = ops
-        dispatch(SendEvent.InFlightOps(ops))
-    }
+    fun inFlightOps(ops: List<InFlightOp>) = dispatch(SendEvent.InFlightOps(ops))
 
     // -- the speed control (spec 069) -----------------------------------------------
 
@@ -504,6 +488,17 @@ class SendController(
 
     /** The refresh control: measure again, the held readings dropped first (issue 212). */
     fun refreshFee() = speedControl.refresh()
+
+    /**
+     * A tap on the fee row. Over a failed fee it is the retry — at once, a
+     * real new read, the core's own timer for the next one dropped (PR 2
+     * note 1) — and `true`; otherwise `false`, and the row opens its coins.
+     */
+    fun feeTapped(): Boolean {
+        if (fee.value.failure == null) return false
+        speedControl.refresh()
+        return true
+    }
 
     fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))
 

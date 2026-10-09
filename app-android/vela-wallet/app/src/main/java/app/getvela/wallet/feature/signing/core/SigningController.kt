@@ -162,8 +162,8 @@ class SigningController(
     /** The withdrawals already fed to the tracker, once per value (guarded by [handoffLock]). */
     private val withdrawn = HashSet<SignTrackerWithdraw>()
 
-    /** The last `(status, tx hash)` forwarded per op (guarded by [handoffLock]). */
-    private val forwarded = HashMap<String, Pair<app.getvela.wallet.feature.send.core.TrackStatus, String?>>()
+    /** The last `(status, tx hash, refusal)` forwarded per op (guarded by [handoffLock]). */
+    private val forwarded = HashMap<String, Triple<app.getvela.wallet.feature.send.core.TrackStatus, String?, app.getvela.wallet.feature.send.core.RefusalReason?>>()
 
     @Volatile
     private var following: kotlinx.coroutines.Job? = null
@@ -183,12 +183,11 @@ class SigningController(
                     val changed = synchronized(handoffLock) {
                         view.entries.filter { entry ->
                             val op = entry.user_op_hash.lowercase()
-                            op in handedOps && forwarded.put(op, entry.status to entry.tx_hash) != (entry.status to entry.tx_hash)
+                            val said = Triple(entry.status, entry.tx_hash, entry.refusal)
+                            op in handedOps && forwarded.put(op, said) != said
                         }
                     }
-                    changed.forEach { entry ->
-                        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
-                    }
+                    changed.forEach { entry -> dispatchSign(tracked(entry)) }
                 }
             }
         }
@@ -212,12 +211,14 @@ class SigningController(
             ?.takeIf { !it.tx_hash.isNullOrBlank() }
             ?: return
         val handed = synchronized(handoffLock) {
-            (op in handedOps).also { if (it) forwarded[op] = entry.status to entry.tx_hash }
+            (op in handedOps).also { if (it) forwarded[op] = Triple(entry.status, entry.tx_hash, entry.refusal) }
         }
         if (!handed) return
         VelaLog.event("sign.tracker", "landing seen during the POST: forwarded again", "op" to op.take(12), "status" to entry.status)
-        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
+        dispatchSign(tracked(entry))
     }
+
+    private fun tracked(entry: app.getvela.wallet.feature.send.core.TrackEntryView) = opTracked(entry, now())
 
     /**
      * Every committed sign view, in the core's order (`CoreHost.onCommit`):
@@ -462,69 +463,17 @@ class SigningController(
      */
     val feeOpen = MutableStateFlow(false)
 
-    @Volatile
-    private var requoting: kotlinx.coroutines.Job? = null
-
     /**
-     * The automatic re-quotes after [first] (spec 079 FR-008, spec 082 RJ12):
-     * the core's wait before each (`feeRequoteDelayMs`), each re-ask bounded
-     * by `feeRequoteTimeoutMs()` — one that has not answered by then is a
-     * failure again, and the schedule goes on (the next ask abandons it).
-     * Ends when the fee is back, when a failure no retry fixes is reached, or
-     * once the sheet is approved or closed. Every step is a `fee:` line.
+     * A tap on the fee row: a failed quote is asked again at once (the core's
+     * own timer for the next re-ask goes with the attempt, PR 2 note 1) —
+     * also while the core retries by itself; with more than one coin, the
+     * list opens or closes.
      */
-    private suspend fun requoteLoop(chainId: Int, first: app.getvela.wallet.feature.send.core.FeeFailure) {
-        val timeoutMs = uniffi.vela_core_uniffi.feeRequoteTimeoutMs().toLong()
-        var failure = first
-        var cause = causeOf(first)
-        var attempt = 0
-        while (true) {
-            attempt += 1
-            val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(failure.wire, attempt.toUInt())?.toLong()
-            if (wait == null) {
-                VelaLog.event("fee", "quote failed chain=$chainId cause=$cause: no re-quote fixes it")
-                return
-            }
-            VelaLog.event("fee", "quote failed chain=$chainId cause=$cause re-quote #$attempt in $wait ms")
-            kotlinx.coroutines.delay(wait)
-            if (!mayRequote(signHost.view.value, answered)) return
-            // A tap on the row (or a coin picked) asked meanwhile, and it came back.
-            if (fee.value.failed == null && fee.value.fee != null) {
-                VelaLog.event("fee", "quote back chain=$chainId after ${attempt - 1} re-quotes")
-                return
-            }
-            val started = System.currentTimeMillis()
-            when (val quoted = speedControl.requote(timeoutMs)) {
-                is SpeedControl.Quoted.Settled -> {
-                    val next = quoted.view.failed
-                    if (next == null) {
-                        VelaLog.event("fee", "quote back chain=$chainId after $attempt re-quotes", "ms" to (System.currentTimeMillis() - started))
-                        return
-                    }
-                    failure = next
-                    cause = causeOf(next)
-                }
-                // Not answered in time: a failure again, of the same kind the
-                // schedule was following.
-                SpeedControl.Quoted.TimedOut -> cause = "timeout"
-                // Somebody asked another question (a speed, a coin): its own answer drives the row.
-                SpeedControl.Quoted.Superseded -> return
-            }
-        }
-    }
-
-    /** A failure as the `fee:` lines name it: the core's word, and whether a chain read was rate-limited. */
-    private fun causeOf(failure: app.getvela.wallet.feature.send.core.FeeFailure): String = when (failure) {
-        is app.getvela.wallet.feature.send.core.FeeFailure.ChainRead -> if (failure.rate_limited) "chain_read(rate_limited)" else "chain_read"
-        else -> failure.name
-    }
-
-    /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
     fun feeTapped() {
         val view = fee.value
         when {
             // Measured again for real — the held readings dropped first.
-            view.failed != null -> speedControl.refresh()
+            view.failure != null -> speedControl.refresh()
             view.options.size > 1 -> feeOpen.value = !feeOpen.value
         }
     }
@@ -597,26 +546,14 @@ class SigningController(
             }
             // A quote on the sheet is priced again by the fee core itself, once
             // a block (`requote_interval_ms`) and at once when that fails —
-            // `stale` is only ever up while it does — so nothing here re-asks.
-            // Spec 079: a quote that failed for a reason that can pass (the
-            // relay unreachable, a busy estimate, the chain's node) is asked
-            // again on the core's schedule while the sheet is up and nothing
-            // is signing. On the Xiaomi the row said "点击重试" with the relay
-            // down and stayed that way after it came back. Spec 082 RJ12: 3 s,
-            // 6 s, then every 8 s, each re-ask bounded by the core's
-            // `feeRequoteTimeoutMs()` — the fee is back within 14 s of the
-            // relay returning — and every step on the log.
-            scope.launch {
-                // The sheet's own state too: a failure that landed before the
-                // sheet was up is asked about once it is.
-                kotlinx.coroutines.flow.combine(fee, signHost.view) { fee, view -> fee to view }.collect { (fee, view) ->
-                    if (fee.failed == null || fee.busy || requoting?.isActive == true) return@collect
-                    if (!mayRequote(view, answered)) return@collect
-                    // A failure no retry fixes (a missing key, a calculation): the row says so once.
-                    if (uniffi.vela_core_uniffi.feeRequoteDelayMs(fee.failed.wire, 1u) == null) return@collect
-                    requoting = scope.launch { requoteLoop(request.chainId, fee.failed) }
-                }
-            }
+            // `stale` is only ever up while it does — and a quote that failed
+            // for a reason that can pass (the relay unreachable, a busy
+            // estimate, the chain's node, a fault inside the app) is asked
+            // again by the core on its own schedule — 3 s, 6 s, then every 8 s
+            // (PR 2 note 1), through the same `StartTtl` the fee executor
+            // answers — until the sheet closes and its sessions with it. On
+            // the Xiaomi the row said "点击重试" with the relay down and stayed
+            // that way after it came back; nothing here re-asks.
         }
         // The controller's own scope (the container's is Main.immediate); no
         // dispatcher is forced so the JVM test can drive it too.
@@ -691,9 +628,10 @@ class SigningController(
     }
 
     init {
-        // One request, one controller: its fee sessions end with it, and so
-        // do its ear on the tracker and its re-quotes.
-        scope.launch { closed.first { it }; requoting?.cancel(); speedControl.dispose(); following?.cancel() }
+        // One request, one controller: its fee sessions end with it — their
+        // re-pricing and the core's re-asks after a failure — and so does its
+        // ear on the tracker.
+        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel() }
     }
 
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
@@ -740,12 +678,13 @@ class SigningController(
 
     companion object {
         /**
-         * Spec 079: a failed quote is asked again only while the sheet is up and
-         * nothing has been approved — not signing, not submitting, not submitted,
-         * and the page not yet answered.
+         * The tracker's entry as the core is told it: its status and tx hash,
+         * and — PR 2 note 9 — why the relay refused it (`refusal`), so the
+         * sheet's failure says the reason (`SignView.failure_refusal_key`)
+         * from the one field the entry's own `refusal_key` is worded from.
          */
-        fun mayRequote(view: SignView, answered: Boolean): Boolean =
-            view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && view.pending_op_hash == null && !answered
+        fun opTracked(entry: app.getvela.wallet.feature.send.core.TrackEntryView, nowMs: Double): SignEvent.OpTracked =
+            SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, nowMs, refusal = entry.refusal)
 
         /**
          * What the confirm slides into: the fee as quoted, the guard's rewrite,

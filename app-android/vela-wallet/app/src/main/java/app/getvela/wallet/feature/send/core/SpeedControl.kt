@@ -114,9 +114,6 @@ class SpeedControl(
         /** Settled: a new estimate, or the core's failure. */
         data class Settled(val view: FeeView) : Quoted()
 
-        /** A newer question took this one's place before it was asked. */
-        data object Superseded : Quoted()
-
         data object TimedOut : Quoted()
     }
 
@@ -284,6 +281,26 @@ class SpeedControl(
         // previews in line — the other way round would dispose the very
         // session somebody tapped.
         scope.launch { speedHost.view.collect { speedPass() } }
+        // The device log's `fee:` lines (spec 082 RJ12): the core retries a
+        // failure itself now (PR 2 note 1), so the shell only says what it
+        // sees — each failure, each re-ask, and the fee back.
+        scope.launch {
+            var last: FeeFailureView? = null
+            fee.collect { view ->
+                val failure = view.failure
+                if (failure == last) return@collect
+                val chain = synchronized(sessionLock) { inForce.value.ask?.chainId }
+                when {
+                    failure == null && last != null -> VelaLog.event("fee", "quote back chain=$chain")
+                    failure != null && failure.retrying -> VelaLog.event("fee", "re-ask out chain=$chain cause=${failure.failure.wire}")
+                    failure != null -> VelaLog.event(
+                        "fee", "quote failed chain=$chain cause=${failure.failure.wire}",
+                        "auto" to failure.auto_retry,
+                    )
+                }
+                last = failure
+            }
+        }
         return this
     }
 
@@ -309,20 +326,6 @@ class SpeedControl(
         // has in force — the stored default, a one-shot pick, a free upgrade.
         val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, feeToken, autoFeeToken)
         return askAndWait(ask, QUOTE_TIMEOUT_MS)
-    }
-
-    /**
-     * Spec 082 RJ12: ask the question in force again — the held readings
-     * dropped first, a fresh `QuoteRequested` that abandons whatever pipeline
-     * is still out (the core reads the deployment again, past what it held,
-     * issue #483) — and wait at most [timeoutMs] for its answer. `TimedOut`
-     * is a failure again, and the caller's schedule goes on; the next ask
-     * replaces the one that hung.
-     */
-    suspend fun requote(timeoutMs: Long): Quoted {
-        val ask = inForce.value.ask ?: return Quoted.Superseded
-        relay.invalidateFeeSignals(ask.chainId)
-        return askAndWait(ask.copy(tier = speed.value.tier), timeoutMs)
     }
 
     private suspend fun askAndWait(ask: QuoteAsk, timeoutMs: Long): Quoted {
@@ -619,6 +622,29 @@ class SpeedControl(
         }
         session.host.dispatch(FeeEvent.Requote, FeeEvent.serializer())
         speedPass()
+    }
+
+    /**
+     * The surface was left but this control lives on (the send form, one per
+     * process): every session stops — its block-time re-pricing and the
+     * core's own re-ask after a failure (PR 2 note 1) are cancelled with it —
+     * and a fresh session, asked nothing, takes the one in force's place. The
+     * next question starts there. Nothing to do when nothing was asked.
+     */
+    fun end() {
+        val gone = synchronized(sessionLock) {
+            val current = inForce.value
+            if (current.ask == null && previews.isEmpty()) return
+            generation += 1
+            measured = null
+            val stopped = previews.toList() + current
+            previews.clear()
+            inForce.value = newSession().start()
+            stopped
+        }
+        gone.forEach { it.dispose() }
+        VelaLog.event("$area.fee", "sessions ended", "sessions" to gone.size)
+        reportQuotes()
     }
 
     /** The surface is gone: every session, and every watcher, with it. */
